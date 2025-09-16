@@ -1,21 +1,12 @@
 import React from 'react'
-import { Bell, Search, LogOut, Moon, Sun, User, Menu } from 'lucide-react'
+import { Bell, Search, LogOut, User } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
-interface TopBarProps {
-  darkMode: boolean
-  setDarkMode: (darkMode: boolean) => void
-}
-
-export default function TopBar({ darkMode, setDarkMode }: TopBarProps) {
+export default function TopBar() {
   const { signOut, user } = useAuth()
 
-  const handleSignOut = async () => {
-    try {
-      await signOut()
-    } catch (error) {
-      console.error('Error signing out:', error)
-    }
+  const handleSignOut = () => {
+    signOut()
   }
 
   return (
@@ -33,15 +24,6 @@ export default function TopBar({ darkMode, setDarkMode }: TopBarProps) {
         </div>
 
         <div className="flex items-center space-x-3">
-          {/* Theme toggle */}
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className="p-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
-            title={darkMode ? 'Modo claro' : 'Modo escuro'}
-          >
-            {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-          </button>
-
           {/* Notifications */}
           <button 
             className="relative p-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
@@ -58,12 +40,12 @@ export default function TopBar({ darkMode, setDarkMode }: TopBarProps) {
                 {user?.full_name || 'Usuário'}
               </p>
               <p className="text-xs text-gray-500 capitalize">
-                {user?.role?.replace('_', ' ') || 'Carregando...'}
+                {user?.role?.replace('_', ' ') || 'Administrador'}
               </p>
             </div>
             <div className="h-10 w-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-sm">
               <span className="text-sm font-medium text-white">
-                {user?.full_name?.charAt(0) || 'U'}
+                {user?.full_name?.charAt(0) || 'A'}
               </span>
             </div>
             <button
