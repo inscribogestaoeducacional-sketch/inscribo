@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { supabase, User, DatabaseService } from '../lib/supabase'
+import { supabase, User } from '../lib/supabase'
 import type { Session } from '@supabase/supabase-js'
 
 interface AuthContextType {
@@ -32,8 +32,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let mounted = true
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return
+      
       setSession(session)
       if (session?.user) {
         fetchUserProfile(session.user.id)
@@ -46,6 +50,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return
+      
       setSession(session)
       if (session?.user) {
         await fetchUserProfile(session.user.id)
@@ -55,7 +61,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
   }, [])
 
   const fetchUserProfile = async (userId: string) => {
@@ -64,46 +73,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
         .from('users')
         .select('*')
         .eq('id', userId)
-        .single()
+        .maybeSingle()
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          // User doesn't exist in users table, show setup
-          setUser(null)
-          setLoading(false)
-          return
-        }
+      if (error && error.code !== 'PGRST116') {
         throw error
       }
       
-      // Update last login
-      try {
-        await supabase
-        .from('users')
-        .update({ last_login: new Date().toISOString() })
-        .eq('id', userId)
-      } catch (updateError) {
-        // Ignore update errors
-      }
-      
       setUser(data)
-      
-      // Log login activity only if institution_id exists
-      if (data.institution_id) {
-        try {
-          await DatabaseService.logActivity({
-            user_id: userId,
-            action: 'login',
-            entity_type: 'auth',
-            details: { timestamp: new Date().toISOString() },
-            institution_id: data.institution_id
-          })
-        } catch (logError) {
-          // Ignore logging errors
-        }
-      }
-      
     } catch (error) {
+      console.error('Error fetching user profile:', error)
       setUser(null)
     } finally {
       setLoading(false)
@@ -119,17 +97,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   const signOut = async () => {
-    // Log logout activity
-    if (user) {
-      await DatabaseService.logActivity({
-        user_id: user.id,
-        action: 'logout',
-        entity_type: 'auth',
-        details: { timestamp: new Date().toISOString() },
-        institution_id: user.institution_id
-      })
-    }
-    
     const { error } = await supabase.auth.signOut()
     if (error) throw error
   }
@@ -144,18 +111,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const updateProfile = async (userData: Partial<User>) => {
     if (!user) throw new Error('No user logged in')
     
-    const updatedUser = await DatabaseService.updateUser(user.id, userData)
-    setUser(updatedUser)
+    const { data, error } = await supabase
+      .from('users')
+      .update(userData)
+      .eq('id', user.id)
+      .select()
+      .single()
     
-    // Log profile update
-    await DatabaseService.logActivity({
-      user_id: user.id,
-      action: 'update_profile',
-      entity_type: 'user',
-      entity_id: user.id,
-      details: { updated_fields: Object.keys(userData) },
-      institution_id: user.institution_id
-    })
+    if (error) throw error
+    setUser(data)
   }
 
   const value: AuthContextType = {

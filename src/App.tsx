@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
-import { supabase } from './lib/supabase'
 import LoginForm from './components/auth/LoginForm'
 import InitialSetup from './components/auth/InitialSetup'
 import Sidebar from './components/layout/Sidebar'
@@ -15,8 +14,8 @@ import UserManagement from './components/management/UserManagement'
 import SystemSettings from './components/management/SystemSettings'
 
 function Dashboard() {
-  const [activeTab, setActiveTab] = useState('dashboard')
-  const [darkMode, setDarkMode] = useState(false)
+  const [activeTab, setActiveTab] = React.useState('dashboard')
+  const [darkMode, setDarkMode] = React.useState(false)
 
   const renderContent = () => {
     switch (activeTab) {
@@ -129,7 +128,6 @@ function Dashboard() {
 
 function AppContent() {
   const { user, loading } = useAuth()
-  const [needsSetup, setNeedsSetup] = useState(false)
 
   if (loading) {
     return (
@@ -147,12 +145,6 @@ function AppContent() {
         </div>
       </div>
     )
-  }
-
-  if (needsSetup) {
-    return <InitialSetup onComplete={() => {
-      setNeedsSetup(false)
-    }} />
   }
 
   if (!user) {
