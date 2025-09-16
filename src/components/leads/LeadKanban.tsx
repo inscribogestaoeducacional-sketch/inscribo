@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Phone, Mail, Calendar, MoreHorizontal, User, GraduationCap, Tag, Edit, Trash2, X } from 'lucide-react'
+import { Plus, Phone, Mail, Calendar, Edit, Trash2, X, User, MapPin, Tag } from 'lucide-react'
 import { DatabaseService, Lead } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 
 const KANBAN_COLUMNS = [
-  { id: 'new', title: 'Novo', color: 'bg-gray-100 border-gray-300' },
-  { id: 'contact', title: 'Contato', color: 'bg-blue-100 border-blue-300' },
-  { id: 'scheduled', title: 'Agendado', color: 'bg-yellow-100 border-yellow-300' },
-  { id: 'visit', title: 'Visita', color: 'bg-orange-100 border-orange-300' },
-  { id: 'proposal', title: 'Proposta', color: 'bg-purple-100 border-purple-300' },
-  { id: 'enrolled', title: 'Matrícula', color: 'bg-green-100 border-green-300' },
+  { id: 'novo', title: 'Novo', color: 'bg-gray-100 border-gray-300' },
+  { id: 'contato', title: 'Contato', color: 'bg-blue-100 border-blue-300' },
+  { id: 'agendado', title: 'Agendado', color: 'bg-yellow-100 border-yellow-300' },
+  { id: 'visita', title: 'Visita', color: 'bg-orange-100 border-orange-300' },
+  { id: 'proposta', title: 'Proposta', color: 'bg-purple-100 border-purple-300' },
+  { id: 'matricula', title: 'Matrícula', color: 'bg-green-100 border-green-300' },
 ]
 
 interface LeadCardProps {
@@ -41,7 +41,7 @@ function LeadCard({ lead, onEdit, onDelete, onStatusChange }: LeadCardProps) {
       }`}
     >
       <div className="flex items-start justify-between mb-2">
-        <h4 className="font-medium text-gray-900 text-sm">{lead.student_name}</h4>
+        <h4 className="font-medium text-gray-900 text-sm">{lead.nome}</h4>
         <div className="flex items-center space-x-1">
           <button 
             onClick={() => onEdit(lead)}
@@ -61,28 +61,33 @@ function LeadCard({ lead, onEdit, onDelete, onStatusChange }: LeadCardProps) {
       <div className="space-y-2 text-sm text-gray-600">
         <div className="flex items-center">
           <User className="h-3 w-3 mr-2 flex-shrink-0" />
-          <span className="truncate">{lead.responsible_name}</span>
+          <span className="truncate">{lead.responsavel}</span>
         </div>
         <div className="flex items-center">
-          <GraduationCap className="h-3 w-3 mr-2 flex-shrink-0" />
-          <span className="truncate">{lead.grade_interest}</span>
+          <MapPin className="h-3 w-3 mr-2 flex-shrink-0" />
+          <span className="truncate">{lead.serie_interesse}</span>
         </div>
         <div className="flex items-center">
           <Tag className="h-3 w-3 mr-2 flex-shrink-0" />
           <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs truncate">
-            {lead.source}
+            {lead.origem}
           </span>
         </div>
+        {lead.valor_estimado > 0 && (
+          <div className="text-green-600 font-medium">
+            R$ {lead.valor_estimado.toLocaleString('pt-BR')}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
         <div className="flex space-x-2">
-          {lead.phone && (
+          {lead.contato?.telefone && (
             <button className="text-green-600 hover:text-green-700 transition-colors">
               <Phone className="h-4 w-4" />
             </button>
           )}
-          {lead.email && (
+          {lead.contato?.email && (
             <button className="text-blue-600 hover:text-blue-700 transition-colors">
               <Mail className="h-4 w-4" />
             </button>
@@ -107,7 +112,7 @@ interface KanbanColumnProps {
 function KanbanColumn({ column, leads, onEdit, onDelete, onStatusChange }: KanbanColumnProps) {
   const [isDragOver, setIsDragOver] = useState(false)
   
-  const columnLeads = leads.filter(lead => lead.status === column.id)
+  const columnLeads = leads.filter(lead => lead.etapa === column.id)
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -174,42 +179,57 @@ interface NewLeadModalProps {
 
 function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProps) {
   const [formData, setFormData] = useState({
-    student_name: '',
-    responsible_name: '',
-    phone: '',
+    nome: '',
+    responsavel: '',
+    telefone: '',
     email: '',
-    grade_interest: '',
-    source: '',
-    notes: ''
+    serie_interesse: '',
+    origem: '',
+    valor_estimado: 0,
+    notas: ''
   })
 
   useEffect(() => {
     if (editingLead) {
       setFormData({
-        student_name: editingLead.student_name,
-        responsible_name: editingLead.responsible_name,
-        phone: editingLead.phone || '',
-        email: editingLead.email || '',
-        grade_interest: editingLead.grade_interest,
-        source: editingLead.source,
-        notes: editingLead.notes || ''
+        nome: editingLead.nome,
+        responsavel: editingLead.responsavel,
+        telefone: editingLead.contato?.telefone || '',
+        email: editingLead.contato?.email || '',
+        serie_interesse: editingLead.serie_interesse,
+        origem: editingLead.origem,
+        valor_estimado: editingLead.valor_estimado,
+        notas: editingLead.notas
       })
     } else {
       setFormData({
-        student_name: '',
-        responsible_name: '',
-        phone: '',
+        nome: '',
+        responsavel: '',
+        telefone: '',
         email: '',
-        grade_interest: '',
-        source: '',
-        notes: ''
+        serie_interesse: '',
+        origem: '',
+        valor_estimado: 0,
+        notas: ''
       })
     }
   }, [editingLead, isOpen])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onSave(formData)
+    const leadData = {
+      nome: formData.nome,
+      responsavel: formData.responsavel,
+      contato: {
+        telefone: formData.telefone,
+        email: formData.email
+      },
+      serie_interesse: formData.serie_interesse,
+      origem: formData.origem,
+      valor_estimado: formData.valor_estimado,
+      notas: formData.notas
+    }
+    onSave(leadData)
     onClose()
   }
 
@@ -237,8 +257,8 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
               <input
                 type="text"
                 required
-                value={formData.student_name}
-                onChange={(e) => setFormData({ ...formData, student_name: e.target.value })}
+                value={formData.nome}
+                onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
@@ -249,8 +269,8 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
               <input
                 type="text"
                 required
-                value={formData.responsible_name}
-                onChange={(e) => setFormData({ ...formData, responsible_name: e.target.value })}
+                value={formData.responsavel}
+                onChange={(e) => setFormData({ ...formData, responsavel: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
@@ -260,8 +280,8 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
               </label>
               <input
                 type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                value={formData.telefone}
+                onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
@@ -282,8 +302,8 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
               </label>
               <select
                 required
-                value={formData.grade_interest}
-                onChange={(e) => setFormData({ ...formData, grade_interest: e.target.value })}
+                value={formData.serie_interesse}
+                onChange={(e) => setFormData({ ...formData, serie_interesse: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">Selecionar série...</option>
@@ -308,8 +328,8 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
               </label>
               <select
                 required
-                value={formData.source}
-                onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+                value={formData.origem}
+                onChange={(e) => setFormData({ ...formData, origem: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">Selecionar origem...</option>
@@ -326,12 +346,27 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
+              Valor Estimado (R$)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData.valor_estimado}
+              onChange={(e) => setFormData({ ...formData, valor_estimado: parseFloat(e.target.value) || 0 })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="0,00"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               Observações
             </label>
             <textarea
               rows={3}
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              value={formData.notas}
+              onChange={(e) => setFormData({ ...formData, notas: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Observações sobre o lead..."
             />
@@ -388,7 +423,8 @@ export default function LeadKanban() {
       const dataWithInstitution = {
         ...leadData,
         institution_id: user!.institution_id,
-        status: editingLead?.status || 'new'
+        owner_id: user!.id,
+        etapa: editingLead?.etapa || 'novo'
       }
 
       if (editingLead) {
@@ -412,8 +448,8 @@ export default function LeadKanban() {
   const handleDeleteLead = async (id: string) => {
     if (confirm('Tem certeza que deseja excluir este lead?')) {
       try {
-        // Implementation would delete from Supabase
-        await loadLeads()
+        // Remove from local state for demo
+        setLeads(leads.filter(lead => lead.id !== id))
       } catch (error) {
         console.error('Error deleting lead:', error)
       }
@@ -422,7 +458,7 @@ export default function LeadKanban() {
 
   const handleStatusChange = async (leadId: string, newStatus: string) => {
     try {
-      await DatabaseService.updateLead(leadId, { status: newStatus as any })
+      await DatabaseService.updateLead(leadId, { etapa: newStatus as any })
       await loadLeads()
     } catch (error) {
       console.error('Error updating lead status:', error)

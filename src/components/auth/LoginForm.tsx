@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
-import { Eye, EyeOff, Mail, Lock, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, AlertCircle, GraduationCap } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 export default function LoginForm() {
-  const [email, setEmail] = useState('admin@escola.com')
+  const [email, setEmail] = useState('admin@inscribo.com')
   const [password, setPassword] = useState('123456')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
@@ -26,18 +26,14 @@ export default function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center px-4">
       <div className="max-w-md w-full space-y-8">
-        {/* Header with Logo */}
+        {/* Header */}
         <div className="text-center">
-          <div className="mx-auto h-24 w-24 mb-6 rounded-2xl overflow-hidden bg-white shadow-xl">
-            <img 
-              src="/Inscribo.jpeg" 
-              alt="Inscribo" 
-              className="w-full h-full object-cover"
-            />
+          <div className="mx-auto h-20 w-20 mb-6 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-xl">
+            <GraduationCap className="h-10 w-10 text-white" />
           </div>
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">Bem-vindo ao Inscribo</h2>
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">Inscribo</h2>
           <p className="text-gray-600">Sistema de Gestão Educacional</p>
         </div>
 
@@ -45,7 +41,7 @@ export default function LoginForm() {
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
           <h3 className="text-sm font-medium text-blue-800 mb-2">Credenciais de Demonstração:</h3>
           <div className="text-sm text-blue-700">
-            <p><strong>Email:</strong> admin@escola.com</p>
+            <p><strong>Email:</strong> admin@inscribo.com</p>
             <p><strong>Senha:</strong> 123456</p>
             <p className="text-xs mt-2 text-blue-600">* Qualquer email/senha funciona para demonstração</p>
           </div>
@@ -110,7 +106,7 @@ export default function LoginForm() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
               >
                 {loading ? (
                   <div className="flex items-center">

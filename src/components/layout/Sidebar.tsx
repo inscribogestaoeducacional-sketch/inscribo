@@ -7,12 +7,10 @@ import {
   Target, 
   RefreshCw, 
   CheckSquare, 
-  BarChart3,
+  FileText,
   Settings,
   UserPlus,
-  FileText,
   GraduationCap,
-  BookOpen,
   UserCheck
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
@@ -26,20 +24,17 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
   const { user } = useAuth()
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'pedagogical_manager', 'commercial_manager', 'consultant', 'teacher', 'support'] },
-    { id: 'leads', label: 'Leads', icon: UserPlus, roles: ['admin', 'commercial_manager', 'consultant', 'support'] },
-    { id: 'calendar', label: 'Agenda', icon: Calendar, roles: ['admin', 'commercial_manager', 'consultant', 'support'] },
-    { id: 'students', label: 'Alunos', icon: UserCheck, roles: ['admin', 'pedagogical_manager', 'commercial_manager', 'teacher'] },
-    { id: 'courses', label: 'Cursos', icon: BookOpen, roles: ['admin', 'pedagogical_manager'] },
-    { id: 'teachers', label: 'Professores', icon: GraduationCap, roles: ['admin', 'pedagogical_manager'] },
-    { id: 'enrollments', label: 'Matrículas', icon: UserCheck, roles: ['admin', 'pedagogical_manager', 'commercial_manager'] },
-    { id: 'marketing', label: 'Marketing & CPA', icon: TrendingUp, roles: ['admin', 'commercial_manager'] },
-    { id: 'funnel', label: 'Funil', icon: Target, roles: ['admin', 'commercial_manager'] },
-    { id: 'reenrollments', label: 'Rematrículas', icon: RefreshCw, roles: ['admin', 'pedagogical_manager', 'commercial_manager'] },
-    { id: 'actions', label: 'Ações', icon: CheckSquare, roles: ['admin', 'pedagogical_manager', 'commercial_manager', 'consultant'] },
-    { id: 'reports', label: 'Relatórios', icon: FileText, roles: ['admin', 'pedagogical_manager', 'commercial_manager'] },
-    { id: 'users', label: 'Usuários', icon: Users, roles: ['admin'] },
-    { id: 'settings', label: 'Configurações', icon: Settings, roles: ['admin'] },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'gestor', 'comercial'] },
+    { id: 'leads', label: 'Kanban de Leads', icon: UserPlus, roles: ['admin', 'gestor', 'comercial'] },
+    { id: 'calendar', label: 'Calendário de Visitas', icon: Calendar, roles: ['admin', 'gestor', 'comercial'] },
+    { id: 'matriculas', label: 'Matrículas', icon: UserCheck, roles: ['admin', 'gestor', 'comercial'] },
+    { id: 'marketing', label: 'Marketing & CPA', icon: TrendingUp, roles: ['admin', 'gestor'] },
+    { id: 'funil', label: 'Planejamento & Funil', icon: Target, roles: ['admin', 'gestor'] },
+    { id: 'rematriculas', label: 'Rematrículas', icon: RefreshCw, roles: ['admin', 'gestor'] },
+    { id: 'acoes', label: 'Ações Automáticas', icon: CheckSquare, roles: ['admin', 'gestor', 'comercial'] },
+    { id: 'relatorios', label: 'Relatórios', icon: FileText, roles: ['admin', 'gestor'] },
+    { id: 'usuarios', label: 'Usuários', icon: Users, roles: ['admin'] },
+    { id: 'configuracoes', label: 'Configurações', icon: Settings, roles: ['admin'] },
   ]
 
   const filteredItems = menuItems.filter(item => 
@@ -51,12 +46,8 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
       {/* Logo */}
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center space-x-3">
-          <div className="h-12 w-12 rounded-xl overflow-hidden bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg">
-            <img 
-              src="/Inscribo.jpeg" 
-              alt="Inscribo" 
-              className="w-full h-full object-cover"
-            />
+          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg">
+            <GraduationCap className="h-6 w-6 text-white" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900">Inscribo</h1>
@@ -99,17 +90,18 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
       {/* User info */}
       <div className="p-4 border-t border-gray-200 bg-gray-50">
         <div className="flex items-center space-x-3 p-3 bg-white rounded-xl shadow-sm">
-          <div className="h-10 w-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+          <div className="h-10 w-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-full flex items-center justify-center">
             <span className="text-sm font-medium text-white">
-              {user?.full_name?.charAt(0) || 'U'}
+              {user?.nome?.charAt(0) || 'U'}
             </span>
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-gray-900 truncate">
-              {user?.full_name || 'Usuário'}
+              {user?.nome || 'Usuário'}
             </p>
             <p className="text-xs text-gray-500 capitalize">
-              {user?.role?.replace('_', ' ') || 'Carregando...'}
+              {user?.role === 'admin' ? 'Administrador' :
+               user?.role === 'gestor' ? 'Gestor' : 'Comercial'}
             </p>
           </div>
         </div>

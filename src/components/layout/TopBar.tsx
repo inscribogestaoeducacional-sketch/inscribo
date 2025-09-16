@@ -1,5 +1,5 @@
 import React from 'react'
-import { Bell, Search, LogOut, User, Settings } from 'lucide-react'
+import { Bell, Search, LogOut, Settings } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 export default function TopBar() {
@@ -43,15 +43,16 @@ export default function TopBar() {
             </button>
             <div className="text-right">
               <p className="text-sm font-medium text-gray-900">
-                {user?.full_name || 'Usuário'}
+                {user?.nome || 'Usuário'}
               </p>
               <p className="text-xs text-gray-500 capitalize">
-                {user?.role?.replace('_', ' ') || 'Administrador'}
+                {user?.role === 'admin' ? 'Administrador' :
+                 user?.role === 'gestor' ? 'Gestor' : 'Comercial'}
               </p>
             </div>
-            <div className="h-10 w-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-sm">
+            <div className="h-10 w-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-full flex items-center justify-center shadow-sm">
               <span className="text-sm font-medium text-white">
-                {user?.full_name?.charAt(0) || 'A'}
+                {user?.nome?.charAt(0) || 'A'}
               </span>
             </div>
             <button

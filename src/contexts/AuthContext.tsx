@@ -2,9 +2,9 @@ import React, { createContext, useContext, useState, useEffect } from 'react'
 
 interface AppUser {
   id: string
+  nome: string
   email: string
-  full_name: string
-  role: 'admin' | 'manager' | 'user'
+  role: 'admin' | 'gestor' | 'comercial'
   institution_id: string
   active: boolean
 }
@@ -28,11 +28,11 @@ export function useAuth() {
 
 // Mock user data
 const MOCK_USER: AppUser = {
-  id: '1',
-  email: 'admin@escola.com',
-  full_name: 'Administrador',
+  id: 'user1',
+  nome: 'Administrador Sistema',
+  email: 'admin@inscribo.com',
   role: 'admin',
-  institution_id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+  institution_id: 'inst1',
   active: true
 }
 
@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Check if user is already logged in (localStorage)
+    // Check if user is already logged in
     const savedUser = localStorage.getItem('inscribo_user')
     if (savedUser) {
       try {
@@ -52,14 +52,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     
-    // Always set loading to false after check
+    // Simulate loading time
     setTimeout(() => {
       setLoading(false)
     }, 500)
   }, [])
 
   const signIn = async (email: string, password: string) => {
-    // Mock authentication - accept any email/password for demo
+    // Mock authentication - accept any email/password
     if (email && password) {
       const userData = {
         ...MOCK_USER,
