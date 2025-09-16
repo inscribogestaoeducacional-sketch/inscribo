@@ -1,129 +1,55 @@
-import { createClient } from '@supabase/supabase-js'
+import React, { createContext, useContext, useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
-
-// Create Supabase client
-export const supabase = createClient(supabaseUrl, supabaseKey)
-
-// Database Types
-export interface Lead {
-  id: string
-  student_name: string
-  responsible_name: string
-  phone?: string
-  email?: string
-  grade_interest: string
-  source: string
-  status: 'new' | 'contact' | 'scheduled' | 'visit' | 'proposal' | 'enrolled' | 'lost'
-  assigned_to?: string
-  notes?: string
-  institution_id: string
-  created_at: string
-  updated_at: string
-}
-
-export interface Visit {
-  id: string
-  lead_id?: string
-  scheduled_date: string
-  status: 'scheduled' | 'completed' | 'cancelled' | 'no_show'
-  assigned_to?: string
-  notes?: string
-  institution_id: string
-  created_at: string
-  updated_at: string
-}
-
-export interface Enrollment {
-  id: string
-  lead_id?: string
-  student_name: string
-  course_grade: string
-  enrollment_value?: number
-  discount_percentage?: number
-  final_value?: number
-  payment_method?: string
-  enrollment_date: string
-  status?: 'active' | 'suspended' | 'cancelled'
-  institution_id: string
-  created_at: string
-}
-
-export interface MarketingCampaign {
-  id: string
-  month_year: string
-  investment: number
-  leads_generated: number
-  cpa_target?: number
-  institution_id: string
-  created_at: string
-}
-
-export interface FunnelMetrics {
-  id: string
-  period: string
-  registrations: number
-  registrations_target: number
-  schedules: number
-  schedules_target: number
-  visits: number
-  visits_target: number
-  enrollments: number
-  enrollments_target: number
-  institution_id: string
-  created_at: string
-}
-
-export interface ReEnrollment {
-  id: string
-  period: string
-  total_base: number
-  re_enrolled: number
-  defaulters: number
-  transferred: number
-  target_percentage: number
-  institution_id: string
-  created_at: string
-}
-
-export interface Action {
-  id: string
-  title: string
-  description: string
-  action_type: 'marketing' | 'sales' | 'retention' | 'operations'
-  priority: 'low' | 'medium' | 'high' | 'urgent'
-  assigned_to?: string
-  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
-  due_date?: string
-  institution_id: string
-  created_at: string
-  updated_at: string
-}
-
-export interface User {
+interface AppUser {
   id: string
   full_name: string
   email: string
-  role: 'admin' | 'consultant'
-  phone?: string
+  role: 'admin' | 'manager' | 'user'
   institution_id: string
   active: boolean
-  last_login?: string
-  created_at: string
 }
 
-export interface Institution {
-  id: string
-  name: string
-  logo_url?: string
-  primary_color: string
-  secondary_color: string
-  created_at: string
-  updated_at: string
+interface AuthContextType {
+  user: AppUser | null
+  loading: boolean
+  signIn: (email: string, password: string) => Promise<void>
+  signOut: () => Promise<void>
+  signUp: (email: string, password: string, fullName: string, role: 'admin' | 'manager' | 'user') => Promise<void>
 }
 
-// Database Service with real Supabase integration
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider')
+  }
+  return context
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<AppUser | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+
+    const initializeAuth = async () => {
+      try {
+        // Check active session
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          console.error('Error getting session:', error)
+          if (mounted) {
+            setLoading(false)
+          }
+          return
+        }
+
+        if (session?.user && mounted) {
+// Database Service with complete Supabase integration
 export class DatabaseService {
   // Leads
   static async getLeads(institutionId: string): Promise<Lead[]> {
@@ -160,16 +86,33 @@ export class DatabaseService {
     return data
   }
 
+  static async deleteLead(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('leads')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+  }
+
   // Visits
   static async getVisits(institutionId: string): Promise<Visit[]> {
     const { data, error } = await supabase
       .from('visits')
-      .select('*')
+      .select(`
+        *,
+        leads(student_name, responsible_name)
+      `)
       .eq('institution_id', institutionId)
       .order('scheduled_date', { ascending: true })
 
     if (error) throw error
-    return data || []
+    
+    // Transform data to include student_name from lead or direct field
+    return (data || []).map(visit => ({
+      ...visit,
+      student_name: visit.leads?.student_name || visit.student_name || 'Visita avulsa'
+    }))
   }
 
   static async createVisit(visitData: Partial<Visit>): Promise<Visit> {
@@ -183,22 +126,54 @@ export class DatabaseService {
     return data
   }
 
+  static async updateVisit(id: string, visitData: Partial<Visit>): Promise<Visit> {
+    const { data, error } = await supabase
+      .from('visits')
+      .update(visitData)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  }
+
   // Enrollments
   static async getEnrollments(institutionId: string): Promise<Enrollment[]> {
     const { data, error } = await supabase
       .from('enrollments')
-      .select('*')
+      .select(`
+        *,
+        leads(student_name, responsible_name)
+      `)
       .eq('institution_id', institutionId)
       .order('enrollment_date', { ascending: false })
 
     if (error) throw error
-    return data || []
+    
+    // Transform data to include student_name from lead or direct field
+    return (data || []).map(enrollment => ({
+      ...enrollment,
+      student_name: enrollment.leads?.student_name || enrollment.student_name
+    }))
   }
 
   static async createEnrollment(enrollmentData: Partial<Enrollment>): Promise<Enrollment> {
     const { data, error } = await supabase
       .from('enrollments')
       .insert(enrollmentData)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  }
+
+  static async updateEnrollment(id: string, enrollmentData: Partial<Enrollment>): Promise<Enrollment> {
+    const { data, error } = await supabase
+      .from('enrollments')
+      .update(enrollmentData)
+      .eq('id', id)
       .select()
       .single()
 
@@ -292,6 +267,18 @@ export class DatabaseService {
     const { data, error } = await supabase
       .from('re_enrollments')
       .insert(reEnrollmentData)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  }
+
+  static async updateReEnrollment(id: string, reEnrollmentData: Partial<ReEnrollment>): Promise<ReEnrollment> {
+    const { data, error } = await supabase
+      .from('re_enrollments')
+      .update(reEnrollmentData)
+      .eq('id', id)
       .select()
       .single()
 
@@ -393,7 +380,7 @@ export class DatabaseService {
         .from('visits')
         .select('*', { count: 'exact', head: true })
         .eq('institution_id', institutionId)
-        .gte('scheduled_date', today)
+        .gte('scheduled_date', `${today}T00:00:00`)
         .lt('scheduled_date', `${today}T23:59:59`)
 
       // Get this month's enrollments
@@ -402,7 +389,7 @@ export class DatabaseService {
         .from('enrollments')
         .select('*', { count: 'exact', head: true })
         .eq('institution_id', institutionId)
-        .gte('enrollment_date', `${thisMonth}-01`)
+        .gte('enrollment_date', `${thisMonth}-01T00:00:00`)
 
       // Get conversion rate
       const { count: enrolledLeads } = await supabase
@@ -419,8 +406,8 @@ export class DatabaseService {
         .select('investment, leads_generated')
         .eq('institution_id', institutionId)
 
-      const totalInvestment = campaigns?.reduce((sum, c) => sum + c.investment, 0) || 0
-      const totalLeadsGenerated = campaigns?.reduce((sum, c) => sum + c.leads_generated, 0) || 0
+      const totalInvestment = campaigns?.reduce((sum, c) => sum + (c.investment || 0), 0) || 0
+      const totalLeadsGenerated = campaigns?.reduce((sum, c) => sum + (c.leads_generated || 0), 0) || 0
       const cpaAtual = totalLeadsGenerated > 0 ? totalInvestment / totalLeadsGenerated : 0
 
       // Get re-enrollment rate
@@ -432,7 +419,7 @@ export class DatabaseService {
         .limit(1)
 
       const latestReEnrollment = reEnrollments?.[0]
-      const taxaRematricula = latestReEnrollment 
+      const taxaRematricula = latestReEnrollment && latestReEnrollment.total_base > 0
         ? (latestReEnrollment.re_enrolled / latestReEnrollment.total_base) * 100 
         : 0
 
