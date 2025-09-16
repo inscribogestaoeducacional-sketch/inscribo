@@ -3,14 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
 
-// Only create real Supabase client if properly configured
-export const supabase = (supabaseUrl && 
-                        supabaseKey && 
-                        supabaseUrl !== 'https://demo.supabase.co' && 
-                        supabaseKey !== 'demo-key' &&
-                        supabaseUrl.includes('supabase.co'))
-  ? createClient(supabaseUrl, supabaseKey)
-  : createClient('https://demo.supabase.co', 'demo-key') // Fallback for demo mode
+// Create Supabase client
+export const supabase = createClient(supabaseUrl, supabaseKey)
 
 // Database Types
 export interface Lead {
