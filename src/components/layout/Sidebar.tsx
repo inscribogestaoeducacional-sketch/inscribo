@@ -1,122 +1,205 @@
-import React from 'react'
-import { useAuth } from '../../contexts/AuthContext'
-import { 
-  LayoutDashboard, 
-  Users, 
-  Calendar, 
-  GraduationCap, 
-  TrendingUp, 
-  RotateCcw, 
-  BarChart3, 
-  CheckSquare, 
-  FileText, 
-  Settings,
-  UserCog,
-  BookOpen
-} from 'lucide-react'
+import React, { createContext, useContext, useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Kanban de Leads', href: '/leads', icon: Users },
-  { name: 'Calendário de Visitas', href: '/calendar', icon: Calendar },
-  { name: 'Matrículas', href: '/enrollments', icon: GraduationCap },
-  { name: 'Marketing & CPA', href: '/marketing', icon: TrendingUp },
-  { name: 'Rematrículas', href: '/reenrollments', icon: RotateCcw },
-  { name: 'Planejamento & Funil', href: '/funnel', icon: BarChart3 },
-  { name: 'Ações Automáticas', href: '/actions', icon: CheckSquare },
-  { name: 'Relatórios', href: '/reports', icon: FileText },
-]
+interface AppUser {
+  id: string
+  full_name: string
+  email: string
+  role: 'admin' | 'manager' | 'user'
+  institution_id: string
+  active: boolean
+}
 
-const managementNavigation = [
-  { name: 'Usuários', href: '/users', icon: UserCog },
-  { name: 'Configurações', href: '/settings', icon: Settings },
-]
+interface AuthContextType {
+  user: AppUser | null
+  loading: boolean
+  signIn: (email: string, password: string) => Promise<void>
+  signOut: () => Promise<void>
+  signUp: (email: string, password: string, fullName: string, role: 'admin' | 'manager' | 'user') => Promise<void>
+}
 
-export default function Sidebar() {
-  const { user } = useAuth()
-  const currentPath = window.location.pathname
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-  return (
-    <div className="flex flex-col w-64 bg-white shadow-lg">
-      {/* Logo */}
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-200">
-        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-          <BookOpen className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Inscribo</h1>
-          <p className="text-xs text-gray-500">Gestão Educacional</p>
-        </div>
-      </div>
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider')
+  }
+  return context
+}
 
-      {/* Navigation */}
-      <nav className="flex-1 px-4 py-6 space-y-1">
-        {navigation.map((item) => {
-          const isActive = currentPath === item.href
-          return (
-            <a
-              key={item.name}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                isActive
-                  ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              <item.icon className="w-5 h-5" />
-              {item.name}
-            </a>
-          )
-        })}
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<AppUser | null>(null)
+  const [loading, setLoading] = useState(true)
 
-        {/* Management Section */}
-        {user?.role === 'admin' && (
-          <>
-            <div className="pt-6 pb-2">
-              <h3 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Gerenciamento
-              </h3>
-            </div>
-            {managementNavigation.map((item) => {
-              const isActive = currentPath === item.href
-              return (
-                <a
-                  key={item.name}
-                  href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <item.icon className="w-5 h-5" />
-                  {item.name}
-                </a>
-              )
-            })}
-          </>
-        )}
-      </nav>
+  useEffect(() => {
+    let mounted = true
 
-      {/* User Info */}
-      <div className="px-4 py-4 border-t border-gray-200">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-            <span className="text-white text-sm font-medium">
-              {user?.full_name?.charAt(0).toUpperCase() || 'U'}
-            </span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">
-              {user?.full_name || 'Usuário'}
-            </p>
-            <p className="text-xs text-gray-500 capitalize">
-              {user?.role === 'admin' ? 'Administrador' : 
-               user?.role === 'manager' ? 'Gerente' : 'Usuário'}
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
+    const initializeAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          console.error('Error getting session:', error)
+          if (mounted) {
+            setLoading(false)
+          }
+          return
+        }
+
+        if (session?.user && mounted) {
+          await loadUserProfile(session.user.id)
+        } else if (mounted) {
+          setLoading(false)
+        }
+      } catch (error) {
+        console.error('Error initializing auth:', error)
+        if (mounted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    initializeAuth()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return
+
+      if (session?.user) {
+        await loadUserProfile(session.user.id)
+      } else {
+        setUser(null)
+        setLoading(false)
+      }
+    })
+
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  const loadUserProfile = async (userId: string) => {
+    try {
+      // Check if there's pending user data to create profile (safely)
+      let pendingData = null
+      try {
+        pendingData = localStorage.getItem('pendingUserData')
+      } catch (e) {
+        console.log('localStorage not available')
+      }
+      
+      if (pendingData) {
+        try {
+          const userData = JSON.parse(pendingData)
+          if (userData.userId === userId) {
+            await createUserProfile(userData)
+            try {
+              localStorage.removeItem('pendingUserData')
+            } catch (e) {
+              console.log('Could not remove from localStorage')
+            }
+          }
+        } catch (e) {
+          console.log('Error parsing pending data')
+      
+      if (pendingData) {
+        try {
+          const userData = JSON.parse(pendingData)
+          if (userData.userId === userId) {
+            await createUserProfile(userData)
+            try {
+              localStorage.removeItem('pendingUserData')
+            } catch (e) {
+              console.log('Could not remove from localStorage')
+            }
+          }
+        } catch (e) {
+          console.log('Error parsing pending data')
+        if (error.code === '42501' || error.message.includes('permission denied')) {
+          // RLS is blocking - user profile doesn't exist, try to create it
+          const { data: authUser } = await supabase.auth.getUser()
+          if (authUser.user?.user_metadata) {
+            await createUserProfile({
+              userId: authUser.user.id,
+              email: authUser.user.email || '',
+              fullName: authUser.user.user_metadata.full_name || 'Usuário',
+      } else if (data) {
+        setUser(data)
+      } else {
+        setUser(null)
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error)
+      setUser(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const signIn = async (email: string, password: string) => {
+    setLoading(true)
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      })
+
+      if (error) {
+        if (error.code === '42501' || error.message.includes('permission denied')) {
+          // RLS is blocking - user profile doesn't exist, try to create it
+          const { data: authUser } = await supabase.auth.getUser()
+          if (authUser.user?.user_metadata) {
+            await createUserProfile({
+              userId: authUser.user.id,
+              email: authUser.user.email || '',
+              fullName: authUser.user.user_metadata.full_name || 'Usuário',
+    } catch (error) {
+      setLoading(false)
+      throw error
+    }
+  }
+
+  const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'manager' | 'user') => {
+    setLoading(true)
+    try {
+      // Sign up user with email confirmation disabled
+        email,
+        password,
+        options: {
+          emailRedirectTo: undefined,
+          data: {
+            full_name: fullName,
+            role: role
+          }
+          data: {
+            full_name: fullName,
+                </Link>
+          }
+            full_name: fullName,
+            role: role
+          }
+        }
+      })
+
+      if (authError) throw authError
+
+      // If user was created but not confirmed, try to create profile anyway
+      if (authData.user) {
+        try {
+          await createUserProfile({
+            userId: authData.user.id,
+            email,
+            fullName,
+            role
+          })
+        } catch (profileError) {
+          console.log('Profile creation will be handled on login')
+        }
+        
+        // Always throw success message to redirect to login
+        throw new Error('Conta criada com sucesso! Faça login com suas credenciais.')
+      {children}
+    </AuthContext.Provider>
   )
 }
