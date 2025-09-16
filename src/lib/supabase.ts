@@ -139,15 +139,13 @@ export interface Visit {
 export interface Enrollment {
   id: string
   lead_id?: string
-  student_id?: string
-  course_id: string
-  class_id?: string
+  student_name?: string
+  course_grade: string
   enrollment_value?: number
   discount_percentage: number
   final_value?: number
   payment_method?: string
   enrollment_date: string
-  start_date?: string
   status: 'active' | 'suspended' | 'cancelled' | 'completed'
   institution_id: string
   created_at: string

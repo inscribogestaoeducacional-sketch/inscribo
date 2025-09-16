@@ -9,6 +9,10 @@ import LeadKanban from './components/leads/LeadKanban'
 import VisitCalendar from './components/calendar/VisitCalendar'
 import MarketingCPA from './components/marketing/MarketingCPA'
 import FunnelAnalysis from './components/funnel/FunnelAnalysis'
+import ReEnrollments from './components/reenrollments/ReEnrollments'
+import ActionsManager from './components/actions/ActionsManager'
+import Reports from './components/reports/Reports'
+import EnrollmentManager from './components/enrollments/EnrollmentManager'
 import UserManagement from './components/management/UserManagement'
 import SystemSettings from './components/management/SystemSettings'
 
@@ -32,10 +36,18 @@ function Dashboard() {
         return <LeadKanban />
       case 'calendar':
         return <VisitCalendar />
+      case 'enrollments':
+        return <EnrollmentManager />
       case 'marketing':
         return <MarketingCPA />
       case 'funnel':
         return <FunnelAnalysis />
+      case 'reenrollments':
+        return <ReEnrollments />
+      case 'actions':
+        return <ActionsManager />
+      case 'reports':
+        return <Reports />
       case 'users':
         return <UserManagement />
       case 'settings':

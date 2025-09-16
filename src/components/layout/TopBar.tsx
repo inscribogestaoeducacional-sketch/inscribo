@@ -1,5 +1,5 @@
 import React from 'react'
-import { Bell, Search, LogOut, User } from 'lucide-react'
+import { Bell, Search, LogOut, User, Settings } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 export default function TopBar() {
@@ -35,6 +35,12 @@ export default function TopBar() {
 
           {/* User menu */}
           <div className="flex items-center space-x-3 pl-4 border-l border-gray-200">
+            <button 
+              className="p-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
+              title="Configurações"
+            >
+              <Settings className="h-5 w-5" />
+            </button>
             <div className="text-right">
               <p className="text-sm font-medium text-gray-900">
                 {user?.full_name || 'Usuário'}
