@@ -32,7 +32,7 @@ const MOCK_USER: AppUser = {
   email: 'admin@escola.com',
   full_name: 'Administrador',
   role: 'admin',
-  institution_id: '1',
+  institution_id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
   active: true
 }
 
