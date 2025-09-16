@@ -127,7 +127,9 @@ function Dashboard() {
 }
 
 function AppContent() {
-  const { user, loading } = useAuth()
+  const { session, loading } = useAuth()
+
+  console.log('AppContent render:', { session, loading })
 
   if (loading) {
     return (
@@ -147,7 +149,7 @@ function AppContent() {
     )
   }
 
-  if (!user) {
+  if (!session) {
     return <LoginForm />
   }
 

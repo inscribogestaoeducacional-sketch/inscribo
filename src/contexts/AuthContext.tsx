@@ -32,61 +32,39 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    let mounted = true
+    // Força o loading para false após 2 segundos no máximo
+    const timeout = setTimeout(() => {
+      console.log('Timeout reached, setting loading to false')
+      setLoading(false)
+    }, 2000)
 
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return
-      
+      console.log('Initial session:', session)
       setSession(session)
-      if (session?.user) {
-        fetchUserProfile(session.user.id)
-      } else {
-        setLoading(false)
-      }
+      setLoading(false)
+      clearTimeout(timeout)
+    }).catch((error) => {
+      console.error('Error getting session:', error)
+      setLoading(false)
+      clearTimeout(timeout)
     })
 
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!mounted) return
-      
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session)
       setSession(session)
-      if (session?.user) {
-        await fetchUserProfile(session.user.id)
-      } else {
-        setUser(null)
-        setLoading(false)
-      }
+      setUser(null) // Reset user for now
+      setLoading(false)
     })
 
     return () => {
-      mounted = false
+      clearTimeout(timeout)
       subscription.unsubscribe()
     }
   }, [])
-
-  const fetchUserProfile = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle()
-
-      if (error && error.code !== 'PGRST116') {
-        throw error
-      }
-      
-      setUser(data)
-    } catch (error) {
-      console.error('Error fetching user profile:', error)
-      setUser(null)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
