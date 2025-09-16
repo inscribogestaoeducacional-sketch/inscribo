@@ -283,8 +283,7 @@ export class DatabaseService {
       .from('leads')
       .select(`
         *,
-        assigned_user:users!leads_assigned_to_fkey(full_name),
-        course:courses(name)
+        assigned_user:users!leads_assigned_to_fkey(full_name)
       `)
       .eq('institution_id', institutionId)
       .order('created_at', { ascending: false })
