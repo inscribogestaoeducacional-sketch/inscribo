@@ -102,6 +102,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (e) {
           console.log('Error parsing pending data')
+        }
+      }
+
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single()
+
+      if (error) {
         if (error.code === '42501' || error.message.includes('permission denied')) {
           // RLS is blocking - user profile doesn't exist, try to create it
           const { data: authUser } = await supabase.auth.getUser()
@@ -110,6 +120,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               userId: authUser.user.id,
               email: authUser.user.email || '',
               fullName: authUser.user.user_metadata.full_name || 'Usuário',
+              role: authUser.user.user_metadata.role || 'user'
+            })
+          }
+        }
       } else if (data) {
         setUser(data)
       } else {
@@ -121,6 +135,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false)
     }
+  }
+
+  const createUserProfile = async (userData: any) => {
+    // Implementation for creating user profile
   }
 
   const signIn = async (email: string, password: string) => {
@@ -140,18 +158,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const signOut = async () => {
+    await supabase.auth.signOut()
+  }
+
   const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'manager' | 'user') => {
     setLoading(true)
     try {
       // Sign up user with email confirmation disabled
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: undefined,
           data: {
-            full_name: fullName,
-            role: role
-          }
             full_name: fullName,
             role: role
           }
@@ -175,6 +195,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Always throw success message to redirect to login
         throw new Error('Conta criada com sucesso! Faça login com suas credenciais.')
+      }
+    } catch (error) {
+      setLoading(false)
+      throw error
+    }
+  }
+
   return (
     <AuthContext.Provider value={{ user, loading, signIn, signOut, signUp }}>
       {children}
