@@ -1,118 +1,285 @@
-import React from 'react'
-import { 
-  LayoutDashboard, 
-  Users, 
-  Calendar, 
-  TrendingUp, 
-  Target, 
-  RefreshCw, 
-  CheckSquare, 
-  FileText,
-  Settings,
-  UserPlus,
-  GraduationCap,
-  UserCheck
-} from 'lucide-react'
-import { useAuth } from '../../contexts/AuthContext'
+import React, { createContext, useContext, useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
-interface SidebarProps {
-  activeTab: string
-  setActiveTab: (tab: string) => void
+interface AppUser {
+  id: string
+  full_name: string
+  email: string
+  role: 'admin' | 'manager' | 'user'
+  institution_id: string
+  active: boolean
 }
 
-export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
-  const { user } = useAuth()
+interface AuthContextType {
+  user: AppUser | null
+  loading: boolean
+  signIn: (email: string, password: string) => Promise<void>
+  signOut: () => Promise<void>
+  signUp: (email: string, password: string, fullName: string, role: 'admin' | 'manager' | 'user') => Promise<void>
+}
 
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'consultant'] },
-    { id: 'leads', label: 'Kanban de Leads', icon: UserPlus, roles: ['admin', 'consultant'] },
-    { id: 'calendar', label: 'Calendário de Visitas', icon: Calendar, roles: ['admin', 'consultant'] },
-    { id: 'matriculas', label: 'Matrículas', icon: UserCheck, roles: ['admin', 'consultant'] },
-    { id: 'marketing', label: 'Marketing & CPA', icon: TrendingUp, roles: ['admin'] },
-    { id: 'funil', label: 'Planejamento & Funil', icon: Target, roles: ['admin'] },
-    { id: 'rematriculas', label: 'Rematrículas', icon: RefreshCw, roles: ['admin'] },
-    { id: 'acoes', label: 'Ações Automáticas', icon: CheckSquare, roles: ['admin'] },
-    { id: 'relatorios', label: 'Relatórios', icon: FileText, roles: ['admin'] },
-    { id: 'usuarios', label: 'Usuários', icon: Users, roles: ['admin'] },
-    { id: 'configuracoes', label: 'Configurações', icon: Settings, roles: ['admin'] },
-  ]
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-  const filteredItems = menuItems.filter(item => 
-    !user || item.roles.includes(user.role)
-  )
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider')
+  }
+  return context
+}
 
-  const getRoleLabel = (role: string) => {
-    switch (role) {
-      case 'admin': return 'Administrador'
-      case 'consultant': return 'Consultor'
-      default: return 'Usuário'
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<AppUser | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+
+    const initializeAuth = async () => {
+      try {
+        // Check active session
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          console.error('Error getting session:', error)
+          if (mounted) {
+            setLoading(false)
+          }
+          return
+        }
+
+        if (session?.user && mounted) {
+          await loadUserProfile(session.user.id)
+        } else if (mounted) {
+          setLoading(false)
+        }
+      } catch (error) {
+        console.error('Error initializing auth:', error)
+        if (mounted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    initializeAuth()
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return
+
+      console.log('Auth state changed:', event, session?.user?.id)
+
+      if (session?.user) {
+        await loadUserProfile(session.user.id)
+      } else {
+        setUser(null)
+        setLoading(false)
+      }
+    })
+
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  const loadUserProfile = async (userId: string) => {
+    try {
+      // Check if there's pending user data to create profile (safely)
+      let pendingData = null
+      try {
+        pendingData = localStorage.getItem('pendingUserData')
+      } catch (e) {
+        console.log('localStorage not available')
+      }
+      
+      if (pendingData) {
+        try {
+          const userData = JSON.parse(pendingData)
+          if (userData.userId === userId) {
+            await createUserProfile(userData)
+            try {
+              localStorage.removeItem('pendingUserData')
+            } catch (e) {
+              console.log('Could not remove from localStorage')
+            }
+          }
+        } catch (e) {
+          console.log('Error parsing pending data')
+        }
+      }
+      
+      if (pendingData) {
+        try {
+          const userData = JSON.parse(pendingData)
+          if (userData.userId === userId) {
+            await createUserProfile(userData)
+            try {
+              localStorage.removeItem('pendingUserData')
+            } catch (e) {
+              console.log('Could not remove from localStorage')
+            }
+          }
+        } catch (e) {
+          console.log('Error parsing pending data')
+        }
+      }
+
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle()
+
+      if (error) {
+        if (error.code === '42501' || error.message.includes('permission denied')) {
+          // RLS is blocking - user profile doesn't exist, try to create it
+          const { data: authUser } = await supabase.auth.getUser()
+          if (authUser.user?.user_metadata) {
+            await createUserProfile({
+              userId: authUser.user.id,
+              email: authUser.user.email || '',
+              fullName: authUser.user.user_metadata.full_name || 'Usuário',
+            }
+            )
+          }
+          const { data: authUser } = await supabase.auth.getUser()
+          if (authUser.user?.user_metadata) {
+            await createUserProfile({
+              userId: authUser.user.id,
+              email: authUser.user.email || '',
+              fullName: authUser.user.user_metadata.full_name || 'Usuário',
+                  } else if (data) {
+        setUser(data)
+      } else {
+        console.log('No user profile found')
+        setUser(null)
+      }
+            )
+              } catch (error) {
+      console.error('Error loading user profile:', error)
+      setUser(null)
+    } finally {
+      setLoading(false)
+    }
+          }
+      }
     }
   }
 
+  const signIn = async (email: string, password: string) => {
+    setLoading(true)
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      })
+
+      if (error) {
+        throw new Error(error.message)
+      }
+    } catch (error) {
+      setLoading(false)
+      throw error
+    }
+  }
+
+  const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'manager' | 'user') => {
+    setLoading(true)
+    try {
+      // Sign up user with email confirmation disabled
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: undefined,
+          data: {
+            full_name: fullName,
+            role: role
+          }
+          data: {
+            full_name: fullName,
+            role: role
+          }
+        }
+      })
+
+      if (authError) throw authError
+
+      // If user was created but not confirmed, try to create profile anyway
+      if (authData.user) {
+        try {
+          await createUserProfile({
+            userId: authData.user.id,
+            email,
+            fullName,
+            role
+          })
+        } catch (profileError) {
+          console.log('Profile creation will be handled on login')
+        }
+        
+        // Always throw success message to redirect to login
+        throw new Error('Conta criada com sucesso! Faça login com suas credenciais.')
+          } catch (error) {
+      setLoading(false)
+      throw error
+    }
+      }
+  }
+
+  const createUserProfile = async (userData: any) => {
+    try {
+      // Create institution if admin
+      let institutionId = null
+      if (userData.role === 'admin') {
+        const { data: institution, error: instError } = await supabase
+          .from('institutions')
+          .insert({
+            name: `Instituição de ${userData.fullName}`,
+            primary_color: '#3B82F6',
+            secondary_color: '#10B981'
+          })
+          .select()
+          .single()
+
+        if (instError) throw instError
+        institutionId = institution.id
+      }
+
+      // Create user profile
+      const { error: profileError } = await supabase
+        .from('users')
+        .insert({
+          id: userData.userId,
+          email: userData.email,
+          full_name: userData.fullName,
+          role: userData.role,
+          institution_id: institutionId,
+          active: true
+        })
+
+      if (profileError) {
+        console.error('Error creating user profile:', profileError)
+        throw profileError
+      }
+    } catch (error) {
+      console.error('Error in createUserProfile:', error)
+      throw error
+    }
+  }
+
+  const signOut = async () => {
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      throw new Error(error.message)
+    }
+    setUser(null)
+  }
+
   return (
-    <div className="bg-white border-r border-gray-200 w-72 min-h-screen flex flex-col shadow-sm">
-      {/* Logo */}
-      <div className="p-6 border-b border-gray-200">
-        <div className="flex items-center space-x-3">
-          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg">
-            <GraduationCap className="h-6 w-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Inscribo</h1>
-            <p className="text-sm text-gray-500">Gestão Educacional</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 py-6">
-        <ul className="space-y-2 px-4">
-          {filteredItems.map((item) => {
-            const Icon = item.icon
-            const isActive = activeTab === item.id
-            
-            return (
-              <li key={item.id}>
-                <button
-                  onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 group ${
-                    isActive
-                      ? 'bg-blue-50 text-blue-700 shadow-sm border border-blue-100'
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <Icon className={`mr-3 h-5 w-5 transition-colors ${
-                    isActive ? 'text-blue-600' : 'text-gray-500 group-hover:text-gray-700'
-                  }`} />
-                  {item.label}
-                  {isActive && (
-                    <div className="ml-auto w-2 h-2 bg-blue-600 rounded-full"></div>
-                  )}
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      </nav>
-
-      {/* User info */}
-      <div className="p-4 border-t border-gray-200 bg-gray-50">
-        <div className="flex items-center space-x-3 p-3 bg-white rounded-xl shadow-sm">
-          <div className="h-10 w-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-full flex items-center justify-center">
-            <span className="text-sm font-medium text-white">
-              {user?.full_name?.charAt(0) || 'U'}
-            </span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">
-              {user?.full_name || 'Usuário'}
-            </p>
-            <p className="text-xs text-gray-500">
-              {getRoleLabel(user?.role || '')}
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
+    <AuthContext.Provider value={{ user, loading, signIn, signOut, signUp }}>
+      {children}
+    </AuthContext.Provider>
   )
 }

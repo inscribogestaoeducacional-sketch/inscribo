@@ -106,6 +106,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (e) {
           console.log('Error parsing pending data')
+        }
+      }
       
       if (pendingData) {
         try {
@@ -138,23 +140,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               userId: authUser.user.id,
               email: authUser.user.email || '',
               fullName: authUser.user.user_metadata.full_name || 'Usuário',
+            }
+            )
+          }
           const { data: authUser } = await supabase.auth.getUser()
           if (authUser.user?.user_metadata) {
             await createUserProfile({
               userId: authUser.user.id,
               email: authUser.user.email || '',
               fullName: authUser.user.user_metadata.full_name || 'Usuário',
-      } else if (data) {
+                  } else if (data) {
         setUser(data)
       } else {
         console.log('No user profile found')
         setUser(null)
       }
-    } catch (error) {
+            )
+              } catch (error) {
       console.error('Error loading user profile:', error)
       setUser(null)
     } finally {
       setLoading(false)
+    }
+          }
+      }
     }
   }
 
@@ -212,10 +221,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Always throw success message to redirect to login
         throw new Error('Conta criada com sucesso! Faça login com suas credenciais.')
-    } catch (error) {
+          } catch (error) {
       setLoading(false)
       throw error
     }
+      }
   }
 
   const createUserProfile = async (userData: any) => {

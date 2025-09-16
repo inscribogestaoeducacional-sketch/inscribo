@@ -124,17 +124,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               userId: authUser.user.id,
               email: authUser.user.email || '',
               fullName: authUser.user.user_metadata.full_name || 'Usuário',
-      } else if (data) {
+                  } else if (data) {
         setUser(data)
       } else {
         console.log('No user profile found')
         setUser(null)
       }
-    } catch (error) {
+            )
+              } catch (error) {
       console.error('Error loading user profile:', error)
       setUser(null)
     } finally {
       setLoading(false)
+    }
+          }
+      }
     }
   }
 
