@@ -7,7 +7,7 @@ export default function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
-  const [role, setRole] = useState<'admin' | 'consultant'>('admin')
+  const [role, setRole] = useState<'admin' | 'manager' | 'user'>('admin')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -21,22 +21,12 @@ export default function LoginForm() {
     setSuccess('')
     setLoading(true)
 
-    // Check if Supabase is configured
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-    
-    if (!supabaseUrl || !supabaseKey || supabaseUrl === 'https://demo.supabase.co' || supabaseKey === 'demo-key') {
-      setError('Supabase não configurado. Clique em "Connect to Supabase" no topo direito para configurar.')
-      setLoading(false)
-      return
-    }
-
     try {
       if (isLogin) {
         await signIn(email, password)
       } else {
         await signUp(email, password, fullName, role)
-        setSuccess('Conta criada com sucesso! Faça login para continuar.')
+        setSuccess('Conta criada com sucesso! Verifique seu email e faça login.')
         setIsLogin(true)
         setEmail('')
         setPassword('')
@@ -59,14 +49,6 @@ export default function LoginForm() {
           </div>
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Inscribo</h2>
           <p className="text-gray-600">Sistema de Gestão Educacional</p>
-          
-          {/* Demo Mode Indicator */}
-          {!import.meta.env.VITE_SUPABASE_URL || 
-           import.meta.env.VITE_SUPABASE_URL === 'https://demo.supabase.co' ? (
-            <div className="mt-2 px-3 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
-              Modo Demonstração
-            </div>
-          ) : null}
         </div>
 
         {/* Toggle Login/Register */}
@@ -118,16 +100,6 @@ export default function LoginForm() {
             {success && (
               <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-sm">
                 {success}
-              </div>
-            )}
-
-            {/* Demo Credentials Helper */}
-            {(!import.meta.env.VITE_SUPABASE_URL || 
-              import.meta.env.VITE_SUPABASE_URL === 'https://demo.supabase.co') && isLogin && (
-              <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-xl text-sm">
-                <p className="font-medium mb-1">Credenciais de demonstração:</p>
-                <p className="text-xs">👑 Admin: admin@demo.com / demo123</p>
-                <p className="text-xs">👤 Consultor: consultor@demo.com / demo123</p>
               </div>
             )}
 
@@ -202,16 +174,19 @@ export default function LoginForm() {
                 <select
                   id="role"
                   value={role}
-                  onChange={(e) => setRole(e.target.value as 'admin' | 'consultant')}
+                  onChange={(e) => setRole(e.target.value as 'admin' | 'manager' | 'user')}
                   className="block w-full px-3 py-3 border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 >
-                  <option value="admin">Administrador (Gestor da Instituição)</option>
-                  <option value="consultant">Consultor (Vendas e Atendimento)</option>
+                  <option value="admin">Administrador (Acesso Completo)</option>
+                  <option value="manager">Gestor (Gerenciamento)</option>
+                  <option value="user">Consultor (Vendas)</option>
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
                   {role === 'admin' 
                     ? 'Acesso completo ao sistema e gestão de usuários'
-                    : 'Acesso a leads, visitas, matrículas e relatórios básicos'
+                    : role === 'manager'
+                    ? 'Acesso a relatórios e gestão operacional'
+                    : 'Acesso a leads, visitas e matrículas'
                   }
                 </p>
               </div>
