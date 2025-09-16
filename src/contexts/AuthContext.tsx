@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
 interface AppUser {
   id: string
   full_name: string
   email: string
-  role: 'admin' | 'gestor_pedagogico' | 'comercial' | 'secretaria' | 'financeiro'
+  role: 'admin' | 'consultant'
   institution_id: string
   active: boolean
 }
@@ -14,6 +15,7 @@ interface AuthContextType {
   loading: boolean
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
+  signUp: (email: string, password: string, fullName: string, role: 'admin' | 'consultant') => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -26,60 +28,119 @@ export function useAuth() {
   return context
 }
 
-// Mock user data
-const MOCK_USER: AppUser = {
-  id: 'user1',
-  full_name: 'Administrador Sistema',
-  email: 'admin@inscribo.com',
-  role: 'admin',
-  institution_id: 'inst1',
-  active: true
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Check if user is already logged in
-    const savedUser = localStorage.getItem('inscribo_user')
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser))
-      } catch (error) {
-        console.error('Error parsing saved user:', error)
-        localStorage.removeItem('inscribo_user')
+    // Check active session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        loadUserProfile(session.user.id)
+      } else {
+        setLoading(false)
       }
-    }
-    
-    // Simulate loading time
-    setTimeout(() => {
-      setLoading(false)
-    }, 500)
+    })
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        await loadUserProfile(session.user.id)
+      } else {
+        setUser(null)
+        setLoading(false)
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
+  const loadUserProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single()
+
+      if (error) throw error
+
+      setUser(data)
+    } catch (error) {
+      console.error('Error loading user profile:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const signIn = async (email: string, password: string) => {
-    // Mock authentication - accept any email/password
-    if (email && password) {
-      const userData = {
-        ...MOCK_USER,
-        email: email
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    })
+
+    if (error) {
+      throw new Error(error.message)
+    }
+  }
+
+  const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'consultant') => {
+    // First create auth user
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password
+    })
+
+    if (authError) {
+      throw new Error(authError.message)
+    }
+
+    if (authData.user) {
+      // Create institution if admin
+      let institutionId = null
+      if (role === 'admin') {
+        const { data: institution, error: instError } = await supabase
+          .from('institutions')
+          .insert({
+            name: `Instituição de ${fullName}`,
+            primary_color: '#3B82F6',
+            secondary_color: '#10B981'
+          })
+          .select()
+          .single()
+
+        if (instError) throw instError
+        institutionId = institution.id
       }
-      
-      setUser(userData)
-      localStorage.setItem('inscribo_user', JSON.stringify(userData))
-    } else {
-      throw new Error('Email e senha são obrigatórios')
+
+      // Create user profile
+      const { error: profileError } = await supabase
+        .from('users')
+        .insert({
+          id: authData.user.id,
+          email,
+          full_name: fullName,
+          role,
+          institution_id: institutionId,
+          active: true
+        })
+
+      if (profileError) {
+        throw new Error(profileError.message)
+      }
     }
   }
 
   const signOut = async () => {
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      throw new Error(error.message)
+    }
     setUser(null)
-    localStorage.removeItem('inscribo_user')
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signOut, signUp }}>
       {children}
     </AuthContext.Provider>
   )
