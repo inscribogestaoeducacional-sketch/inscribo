@@ -1,274 +1,421 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { createClient } from '@supabase/supabase-js'
 
-interface AppUser {
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+// Types
+export interface Lead {
+  id: string
+  student_name: string
+  responsible_name: string
+  phone?: string
+  email?: string
+  grade_interest: string
+  source: string
+  status: 'new' | 'contact' | 'scheduled' | 'visit' | 'proposal' | 'enrolled' | 'lost'
+  assigned_to?: string
+  notes?: string
+  institution_id: string
+  created_at: string
+  updated_at: string
+  cpf?: string
+  whatsapp?: string
+  address?: string
+  budget_range?: string
+  preferred_period?: string
+}
+
+export interface Visit {
+  id: string
+  lead_id?: string
+  scheduled_date: string
+  status: 'scheduled' | 'completed' | 'cancelled' | 'no_show'
+  assigned_to?: string
+  notes?: string
+  institution_id: string
+  created_at: string
+  updated_at: string
+  student_name?: string
+}
+
+export interface Enrollment {
+  id: string
+  lead_id?: string
+  student_name: string
+  course_grade: string
+  enrollment_value?: number
+  enrollment_date?: string
+  institution_id: string
+  created_at: string
+}
+
+export interface MarketingCampaign {
+  id: string
+  month_year: string
+  investment: number
+  leads_generated: number
+  cpa_target?: number
+  institution_id: string
+  created_at: string
+}
+
+export interface ReEnrollment {
+  id: string
+  period: string
+  total_base: number
+  re_enrolled: number
+  defaulters: number
+  transferred: number
+  target_percentage: number
+  institution_id: string
+  created_at: string
+}
+
+export interface FunnelMetrics {
+  id: string
+  period: string
+  registrations: number
+  registrations_target: number
+  schedules: number
+  schedules_target: number
+  visits: number
+  visits_target: number
+  enrollments: number
+  enrollments_target: number
+  institution_id: string
+  created_at: string
+}
+
+export interface Action {
+  id: string
+  title: string
+  description: string
+  action_type: 'marketing' | 'sales' | 'retention' | 'operations'
+  priority: 'low' | 'medium' | 'high' | 'urgent'
+  assigned_to?: string
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+  due_date?: string
+  institution_id: string
+  created_at: string
+  updated_at: string
+}
+
+export interface User {
   id: string
   full_name: string
   email: string
   role: 'admin' | 'manager' | 'user'
   institution_id: string
   active: boolean
+  created_at: string
+  updated_at: string
 }
 
-interface AuthContextType {
-  user: AppUser | null
-  loading: boolean
-  signIn: (email: string, password: string) => Promise<void>
-  signOut: () => Promise<void>
-  signUp: (email: string, password: string, fullName: string, role: 'admin' | 'manager' | 'user') => Promise<void>
+export interface ActivityLog {
+  id: string
+  user_id: string
+  action: string
+  entity_type: string
+  entity_id?: string
+  details?: any
+  institution_id: string
+  created_at: string
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+// Database Service
+export class DatabaseService {
+  // Leads
+  static async getLeads(institutionId: string): Promise<Lead[]> {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .order('created_at', { ascending: false })
 
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
-  return context
-}
-
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AppUser | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let mounted = true
-
-    const initializeAuth = async () => {
-      try {
-        // Check active session
-        const { data: { session }, error } = await supabase.auth.getSession()
-        
-        if (error) {
-          console.error('Error getting session:', error)
-          if (mounted) {
-            setLoading(false)
-          }
-          return
-        }
-
-        if (session?.user && mounted) {
-          await loadUserProfile(session.user.id)
-        } else if (mounted) {
-          setLoading(false)
-        }
-      } catch (error) {
-        console.error('Error initializing auth:', error)
-        if (mounted) {
-          setLoading(false)
-        }
-      }
-    }
-
-    initializeAuth()
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return
-
-      console.log('Auth state changed:', event, session?.user?.id)
-
-      if (session?.user) {
-        await loadUserProfile(session.user.id)
-      } else {
-        setUser(null)
-        setLoading(false)
-      }
-    })
-
-    return () => {
-      mounted = false
-      subscription.unsubscribe()
-    }
-  }, [])
-
-  const loadUserProfile = async (userId: string) => {
-    try {
-      // Check if there's pending user data to create profile (safely)
-      let pendingData = null
-      try {
-        pendingData = localStorage.getItem('pendingUserData')
-      } catch (e) {
-        console.log('localStorage not available')
-      }
-      
-      if (pendingData) {
-        try {
-          const userData = JSON.parse(pendingData)
-          if (userData.userId === userId) {
-            await createUserProfile(userData)
-            try {
-              localStorage.removeItem('pendingUserData')
-            } catch (e) {
-              console.log('Could not remove from localStorage')
-            }
-          }
-        } catch (e) {
-          console.log('Error parsing pending data')
-        }
-      }
-      
-      if (pendingData) {
-        try {
-          const userData = JSON.parse(pendingData)
-          if (userData.userId === userId) {
-            await createUserProfile(userData)
-            try {
-              localStorage.removeItem('pendingUserData')
-            } catch (e) {
-              console.log('Could not remove from localStorage')
-            }
-          }
-        } catch (e) {
-          console.log('Error parsing pending data')
-        }
-      }
-
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle()
-
-      if (error) {
-        if (error.code === '42501' || error.message.includes('permission denied')) {
-          // RLS is blocking - user profile doesn't exist, try to create it
-          const { data: authUser } = await supabase.auth.getUser()
-          if (authUser.user?.user_metadata) {
-            await createUserProfile({
-              userId: authUser.user.id,
-              email: authUser.user.email || '',
-              fullName: authUser.user.user_metadata.full_name || 'Usuário',
-              role: 'user'
-            })
-          }
-        } else {
-          throw error
-        }
-      } else if (data) {
-        setUser(data)
-      } else {
-        console.log('No user profile found')
-        setUser(null)
-      }
-    } catch (error) {
-      console.error('Error loading user profile:', error)
-      setUser(null)
-    } finally {
-      setLoading(false)
-    }
+    if (error) throw error
+    return data || []
   }
 
-  const signIn = async (email: string, password: string) => {
-    setLoading(true)
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      })
+  static async createLead(lead: Partial<Lead>): Promise<Lead> {
+    const { data, error } = await supabase
+      .from('leads')
+      .insert(lead)
+      .select()
+      .single()
 
-      if (error) {
-        throw new Error(error.message)
-      }
-    } catch (error) {
-      setLoading(false)
-      throw error
-    }
+    if (error) throw error
+    return data
   }
 
-  const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'manager' | 'user') => {
-    setLoading(true)
-    try {
-      // Sign up user with email confirmation disabled
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: undefined,
-          data: {
-            full_name: fullName,
-            role: role
-          }
-        }
-      })
+  static async updateLead(id: string, updates: Partial<Lead>): Promise<void> {
+    const { error } = await supabase
+      .from('leads')
+      .update(updates)
+      .eq('id', id)
 
-      if (authError) throw authError
-
-      // If user was created but not confirmed, try to create profile anyway
-      if (authData.user) {
-        try {
-          await createUserProfile({
-            userId: authData.user.id,
-            email,
-            fullName,
-            role
-          })
-        } catch (profileError) {
-          console.log('Profile creation will be handled on login')
-        }
-        
-        // Always throw success message to redirect to login
-        throw new Error('Conta criada com sucesso! Faça login com suas credenciais.')
-      }
-    } catch (error) {
-      setLoading(false)
-      throw error
-    }
+    if (error) throw error
   }
 
-  const createUserProfile = async (userData: any) => {
-    try {
-      // Create institution if admin
-      let institutionId = null
-      if (userData.role === 'admin') {
-        const { data: institution, error: instError } = await supabase
-          .from('institutions')
-          .insert({
-            name: `Instituição de ${userData.fullName}`,
-            primary_color: '#3B82F6',
-            secondary_color: '#10B981'
-          })
-          .select()
-          .single()
+  // Visits
+  static async getVisits(institutionId: string): Promise<Visit[]> {
+    const { data, error } = await supabase
+      .from('visits')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .order('scheduled_date', { ascending: true })
 
-        if (instError) throw instError
-        institutionId = institution.id
-      }
-
-      // Create user profile
-      const { error: profileError } = await supabase
-        .from('users')
-        .insert({
-          id: userData.userId,
-          email: userData.email,
-          full_name: userData.fullName,
-          role: userData.role,
-          institution_id: institutionId,
-          active: true
-        })
-
-      if (profileError) {
-        console.error('Error creating user profile:', profileError)
-        throw profileError
-      }
-    } catch (error) {
-      console.error('Error in createUserProfile:', error)
-      throw error
-    }
+    if (error) throw error
+    return data || []
   }
 
-  const signOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    if (error) {
-      throw new Error(error.message)
-    }
-    setUser(null)
+  static async createVisit(visit: Partial<Visit>): Promise<Visit> {
+    const { data, error } = await supabase
+      .from('visits')
+      .insert(visit)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
   }
 
-  return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut, signUp }}>
-      {children}
-    </AuthContext.Provider>
-  )
+  static async updateVisit(id: string, updates: Partial<Visit>): Promise<void> {
+    const { error } = await supabase
+      .from('visits')
+      .update(updates)
+      .eq('id', id)
+
+    if (error) throw error
+  }
+
+  // Enrollments
+  static async getEnrollments(institutionId: string): Promise<Enrollment[]> {
+    const { data, error } = await supabase
+      .from('enrollments')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data || []
+  }
+
+  static async createEnrollment(enrollment: Partial<Enrollment>): Promise<Enrollment> {
+    const { data, error } = await supabase
+      .from('enrollments')
+      .insert(enrollment)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  }
+
+  static async updateEnrollment(id: string, updates: Partial<Enrollment>): Promise<void> {
+    const { error } = await supabase
+      .from('enrollments')
+      .update(updates)
+      .eq('id', id)
+
+    if (error) throw error
+  }
+
+  // Marketing Campaigns
+  static async getMarketingCampaigns(institutionId: string): Promise<MarketingCampaign[]> {
+    const { data, error } = await supabase
+      .from('marketing_campaigns')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data || []
+  }
+
+  static async createMarketingCampaign(campaign: Partial<MarketingCampaign>): Promise<MarketingCampaign> {
+    const { data, error } = await supabase
+      .from('marketing_campaigns')
+      .insert(campaign)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  }
+
+  static async updateMarketingCampaign(id: string, updates: Partial<MarketingCampaign>): Promise<void> {
+    const { error } = await supabase
+      .from('marketing_campaigns')
+      .update(updates)
+      .eq('id', id)
+
+    if (error) throw error
+  }
+
+  // Re-enrollments
+  static async getReEnrollments(institutionId: string): Promise<ReEnrollment[]> {
+    const { data, error } = await supabase
+      .from('re_enrollments')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data || []
+  }
+
+  static async createReEnrollment(reEnrollment: Partial<ReEnrollment>): Promise<ReEnrollment> {
+    const { data, error } = await supabase
+      .from('re_enrollments')
+      .insert(reEnrollment)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  }
+
+  static async updateReEnrollment(id: string, updates: Partial<ReEnrollment>): Promise<void> {
+    const { error } = await supabase
+      .from('re_enrollments')
+      .update(updates)
+      .eq('id', id)
+
+    if (error) throw error
+  }
+
+  // Funnel Metrics
+  static async getFunnelMetrics(institutionId: string): Promise<FunnelMetrics[]> {
+    const { data, error } = await supabase
+      .from('funnel_metrics')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data || []
+  }
+
+  static async createFunnelMetrics(metrics: Partial<FunnelMetrics>): Promise<FunnelMetrics> {
+    const { data, error } = await supabase
+      .from('funnel_metrics')
+      .insert(metrics)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  }
+
+  static async updateFunnelMetrics(id: string, updates: Partial<FunnelMetrics>): Promise<void> {
+    const { error } = await supabase
+      .from('funnel_metrics')
+      .update(updates)
+      .eq('id', id)
+
+    if (error) throw error
+  }
+
+  // Actions
+  static async getActions(institutionId: string): Promise<Action[]> {
+    const { data, error } = await supabase
+      .from('actions')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data || []
+  }
+
+  static async createAction(action: Partial<Action>): Promise<Action> {
+    const { data, error } = await supabase
+      .from('actions')
+      .insert(action)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  }
+
+  static async updateAction(id: string, updates: Partial<Action>): Promise<void> {
+    const { error } = await supabase
+      .from('actions')
+      .update(updates)
+      .eq('id', id)
+
+    if (error) throw error
+  }
+
+  // Users
+  static async getUsers(institutionId: string): Promise<User[]> {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data || []
+  }
+
+  // Activity Logs
+  static async logActivity(activity: Partial<ActivityLog>): Promise<void> {
+    const { error } = await supabase
+      .from('activity_logs')
+      .insert(activity)
+
+    if (error) throw error
+  }
+
+  static async getActivityLogs(institutionId: string, entityId?: string): Promise<ActivityLog[]> {
+    let query = supabase
+      .from('activity_logs')
+      .select('*')
+      .eq('institution_id', institutionId)
+
+    if (entityId) {
+      query = query.eq('entity_id', entityId)
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data || []
+  }
+
+  // Dashboard KPIs
+  static async getDashboardKPIs(institutionId: string) {
+    const [leads, visits, enrollments, campaigns] = await Promise.all([
+      this.getLeads(institutionId),
+      this.getVisits(institutionId),
+      this.getEnrollments(institutionId),
+      this.getMarketingCampaigns(institutionId)
+    ])
+
+    const today = new Date().toISOString().split('T')[0]
+    const thisMonth = new Date().toISOString().slice(0, 7)
+
+    const visitasHoje = visits.filter(v => v.scheduled_date.startsWith(today)).length
+    const matriculasMes = enrollments.filter(e => e.created_at.startsWith(thisMonth)).length
+    const totalLeads = leads.length
+    const leadsConvertidos = leads.filter(l => l.status === 'enrolled').length
+    const taxaConversao = totalLeads > 0 ? (leadsConvertidos / totalLeads) * 100 : 0
+
+    const totalInvestment = campaigns.reduce((sum, c) => sum + c.investment, 0)
+    const totalLeadsGenerated = campaigns.reduce((sum, c) => sum + c.leads_generated, 0)
+    const cpaAtual = totalLeadsGenerated > 0 ? totalInvestment / totalLeadsGenerated : 0
+
+    return {
+      totalLeads,
+      visitasHoje,
+      matriculasMes,
+      taxaConversao: Math.round(taxaConversao * 10) / 10,
+      cpaAtual: Math.round(cpaAtual),
+      taxaRematricula: 92.5 // Mock data
+    }
+  }
 }
