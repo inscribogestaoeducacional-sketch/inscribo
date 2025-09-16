@@ -430,12 +430,7 @@ export class DatabaseService {
   static async getEnrollments(institutionId: string) {
     const { data, error } = await supabase
       .from('enrollments')
-      .select(`
-        *,
-        student:students(full_name),
-        course:courses(name),
-        class:classes(name)
-      `)
+      .select('*')
       .eq('institution_id', institutionId)
       .order('enrollment_date', { ascending: false })
     
