@@ -13,9 +13,7 @@ export default function InitialSetup({ onComplete }: InitialSetupProps) {
   
   const [institutionData, setInstitutionData] = useState({
     name: '',
-    email: '',
-    phone: '',
-    address: ''
+    email: ''
   })
   
   const [adminData, setAdminData] = useState({
@@ -58,9 +56,7 @@ export default function InitialSetup({ onComplete }: InitialSetupProps) {
         .from('institutions')
         .insert([{
           name: institutionData.name,
-          email: institutionData.email,
-          phone: institutionData.phone,
-          address: institutionData.address
+          email: institutionData.email
         }])
         .select()
         .single()
@@ -177,31 +173,7 @@ export default function InitialSetup({ onComplete }: InitialSetupProps) {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Telefone
-                </label>
-                <input
-                  type="tel"
-                  value={institutionData.phone}
-                  onChange={(e) => setInstitutionData({ ...institutionData, phone: e.target.value })}
-                  className="w-full px-3 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="(11) 99999-9999"
-                />
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Endereço
-                </label>
-                <input
-                  type="text"
-                  value={institutionData.address}
-                  onChange={(e) => setInstitutionData({ ...institutionData, address: e.target.value })}
-                  className="w-full px-3 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Rua, número, bairro, cidade"
-                />
-              </div>
 
               <button
                 type="submit"
