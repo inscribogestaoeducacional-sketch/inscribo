@@ -1,6 +1,4 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
-import type { User } from '@supabase/supabase-js'
 
 interface AppUser {
   id: string
@@ -28,62 +26,56 @@ export function useAuth() {
   return context
 }
 
+// Mock user data
+const MOCK_USER: AppUser = {
+  id: '1',
+  email: 'admin@escola.com',
+  full_name: 'Administrador',
+  role: 'admin',
+  institution_id: '1',
+  active: true
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        loadUserProfile(session.user)
-      } else {
-        setLoading(false)
+    // Check if user is already logged in (localStorage)
+    const savedUser = localStorage.getItem('inscribo_user')
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser))
+      } catch (error) {
+        console.error('Error parsing saved user:', error)
+        localStorage.removeItem('inscribo_user')
       }
-    })
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        await loadUserProfile(session.user)
-      } else {
-        setUser(null)
-        setLoading(false)
-      }
-    })
-
-    return () => subscription.unsubscribe()
+    }
+    
+    // Always set loading to false after check
+    setTimeout(() => {
+      setLoading(false)
+    }, 500)
   }, [])
 
-  const loadUserProfile = async (authUser: User) => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', authUser.id)
-        .single()
-
-      if (error) throw error
-
-      setUser(data)
-    } catch (error) {
-      console.error('Error loading user profile:', error)
-    } finally {
-      setLoading(false)
+  const signIn = async (email: string, password: string) => {
+    // Mock authentication - accept any email/password for demo
+    if (email && password) {
+      const userData = {
+        ...MOCK_USER,
+        email: email
+      }
+      
+      setUser(userData)
+      localStorage.setItem('inscribo_user', JSON.stringify(userData))
+    } else {
+      throw new Error('Email e senha são obrigatórios')
     }
   }
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    if (error) throw error
-  }
-
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
+    setUser(null)
+    localStorage.removeItem('inscribo_user')
   }
 
   return (

@@ -90,7 +90,8 @@ function AppContent() {
             />
           </div>
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Entrando no sistema...</p>
+          <p className="text-gray-600 font-medium">Carregando Inscribo...</p>
+          <p className="text-sm text-gray-500">Sistema de Gestão Educacional</p>
         </div>
       </div>
     )

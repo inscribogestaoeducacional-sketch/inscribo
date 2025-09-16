@@ -7,17 +7,21 @@ export default function LoginForm() {
   const [password, setPassword] = useState('123456')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const { signIn, loading } = useAuth()
+  const { signIn } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setLoading(true)
 
     try {
       await signIn(email, password)
     } catch (err: any) {
       setError(err.message || 'Erro ao fazer login')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -43,6 +47,7 @@ export default function LoginForm() {
           <div className="text-sm text-blue-700">
             <p><strong>Email:</strong> admin@escola.com</p>
             <p><strong>Senha:</strong> 123456</p>
+            <p className="text-xs mt-2 text-blue-600">* Qualquer email/senha funciona para demonstração</p>
           </div>
         </div>
 
