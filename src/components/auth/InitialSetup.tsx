@@ -54,7 +54,11 @@ export default function InitialSetup({ onComplete }: InitialSetupProps) {
       // Create institution
       const { data: institution, error: instError } = await supabase
         .from('institutions')
-        .insert([{ name: institutionData.name }])
+        .insert([{ 
+          name: institutionData.name,
+          primary_color: '#3B82F6',
+          secondary_color: '#10B981'
+        }])
         .select()
         .single()
 
@@ -64,13 +68,6 @@ export default function InitialSetup({ onComplete }: InitialSetupProps) {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: adminData.email,
         password: adminData.password,
-        options: {
-          data: {
-            full_name: adminData.full_name,
-            role: 'admin',
-            institution_id: institution.id
-          }
-        }
       })
 
       if (authError) throw authError
