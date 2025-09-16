@@ -39,7 +39,7 @@ function AppContent() {
     return (
       <Router>
         <Routes>
-          <Route path="/setup" element={<InitialSetup />} />
+          <Route path="/setup" element={<InitialSetup onComplete={() => window.location.reload()} />} />
           <Route path="/login" element={<LoginForm />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
