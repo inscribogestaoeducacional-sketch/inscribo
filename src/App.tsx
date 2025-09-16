@@ -14,15 +14,6 @@ import ActionsManager from './components/actions/ActionsManager'
 import Reports from './components/reports/Reports'
 import UserManagement from './components/management/UserManagement'
 import SystemSettings from './components/management/SystemSettings'
-import VisitCalendar from './components/calendar/VisitCalendar'
-import EnrollmentManager from './components/enrollments/EnrollmentManager'
-import MarketingCPA from './components/marketing/MarketingCPA'
-import FunnelAnalysis from './components/funnel/FunnelAnalysis'
-import ReEnrollments from './components/reenrollments/ReEnrollments'
-import ActionsManager from './components/actions/ActionsManager'
-import Reports from './components/reports/Reports'
-import UserManagement from './components/management/UserManagement'
-import SystemSettings from './components/management/SystemSettings'
 
 function MainApp() {
   const [activeTab, setActiveTab] = useState('dashboard')
