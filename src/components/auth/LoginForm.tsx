@@ -65,7 +65,12 @@ export default function LoginForm() {
         <div className="bg-gray-100 p-1 rounded-xl">
           <div className="grid grid-cols-2 gap-1">
             <button
-              onClick={() => setIsLogin(true)}
+              type="button"
+              onClick={() => {
+                setIsLogin(true)
+                setError('')
+                setSuccess('')
+              }}
               className={`py-2 px-4 rounded-lg text-sm font-medium transition-all ${
                 isLogin
                   ? 'bg-white text-blue-600 shadow-sm'
@@ -75,7 +80,12 @@ export default function LoginForm() {
               Entrar
             </button>
             <button
-              onClick={() => setIsLogin(false)}
+              type="button"
+              onClick={() => {
+                setIsLogin(false)
+                setError('')
+                setSuccess('')
+              }}
               className={`py-2 px-4 rounded-lg text-sm font-medium transition-all ${
                 !isLogin
                   ? 'bg-white text-blue-600 shadow-sm'
@@ -134,7 +144,7 @@ export default function LoginForm() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 block w-full px-3 py-3 border border-gray-300 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  className="pl-10 block w-full px-3 py-2 border border-gray-300 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   placeholder="seu@email.com"
                 />
               </div>
@@ -153,7 +163,7 @@ export default function LoginForm() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 pr-10 block w-full px-3 py-3 border border-gray-300 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  className="pl-10 pr-10 block w-full px-3 py-2 border border-gray-300 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   placeholder="••••••••"
                 />
                 <button
