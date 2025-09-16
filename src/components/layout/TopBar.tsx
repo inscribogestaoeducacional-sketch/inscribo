@@ -9,6 +9,14 @@ export default function TopBar() {
     signOut()
   }
 
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case 'admin': return 'Administrador'
+      case 'consultant': return 'Consultor'
+      default: return 'Usuário'
+    }
+  }
+
   return (
     <header className="bg-white border-b border-gray-200 px-6 py-4 shadow-sm">
       <div className="flex items-center justify-between">
@@ -35,22 +43,20 @@ export default function TopBar() {
 
           {/* User menu */}
           <div className="flex items-center space-x-3 pl-4 border-l border-gray-200">
-            <button 
-              className="p-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
-              title="Configurações"
-            >
-              <Settings className="h-5 w-5" />
-            </button>
+            {user?.role === 'admin' && (
+              <button 
+                className="p-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
+                title="Configurações"
+              >
+                <Settings className="h-5 w-5" />
+              </button>
+            )}
             <div className="text-right">
               <p className="text-sm font-medium text-gray-900">
                 {user?.full_name || 'Usuário'}
               </p>
-              <p className="text-xs text-gray-500 capitalize">
-                {user?.role === 'admin' ? 'Administrador' :
-                 user?.role === 'gestor_pedagogico' ? 'Gestor Pedagógico' :
-                 user?.role === 'comercial' ? 'Comercial' :
-                 user?.role === 'secretaria' ? 'Secretaria' :
-                 user?.role === 'financeiro' ? 'Financeiro' : 'Usuário'}
+              <p className="text-xs text-gray-500">
+                {getRoleLabel(user?.role || '')}
               </p>
             </div>
             <div className="h-10 w-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-full flex items-center justify-center shadow-sm">

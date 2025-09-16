@@ -1,25 +1,39 @@
 import React, { useState } from 'react'
-import { Eye, EyeOff, Mail, Lock, AlertCircle, GraduationCap } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, AlertCircle, GraduationCap, UserPlus } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 export default function LoginForm() {
-  const [email, setEmail] = useState('admin@inscribo.com')
-  const [password, setPassword] = useState('123456')
+  const [isLogin, setIsLogin] = useState(true)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [fullName, setFullName] = useState('')
+  const [role, setRole] = useState<'admin' | 'consultant'>('admin')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState('')
 
-  const { signIn } = useAuth()
+  const { signIn, signUp } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setSuccess('')
     setLoading(true)
 
     try {
-      await signIn(email, password)
+      if (isLogin) {
+        await signIn(email, password)
+      } else {
+        await signUp(email, password, fullName, role)
+        setSuccess('Conta criada com sucesso! Faça login para continuar.')
+        setIsLogin(true)
+        setEmail('')
+        setPassword('')
+        setFullName('')
+      }
     } catch (err: any) {
-      setError(err.message || 'Erro ao fazer login')
+      setError(err.message || 'Erro ao processar solicitação')
     } finally {
       setLoading(false)
     }
@@ -37,13 +51,29 @@ export default function LoginForm() {
           <p className="text-gray-600">Sistema de Gestão Educacional</p>
         </div>
 
-        {/* Demo Credentials */}
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-          <h3 className="text-sm font-medium text-blue-800 mb-2">Credenciais de Demonstração:</h3>
-          <div className="text-sm text-blue-700">
-            <p><strong>Email:</strong> admin@inscribo.com</p>
-            <p><strong>Senha:</strong> 123456</p>
-            <p className="text-xs mt-2 text-blue-600">* Qualquer email/senha funciona para demonstração</p>
+        {/* Toggle Login/Register */}
+        <div className="bg-gray-100 p-1 rounded-xl">
+          <div className="grid grid-cols-2 gap-1">
+            <button
+              onClick={() => setIsLogin(true)}
+              className={`py-2 px-4 rounded-lg text-sm font-medium transition-all ${
+                isLogin
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Entrar
+            </button>
+            <button
+              onClick={() => setIsLogin(false)}
+              className={`py-2 px-4 rounded-lg text-sm font-medium transition-all ${
+                !isLogin
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Criar Conta
+            </button>
           </div>
         </div>
 
@@ -54,6 +84,30 @@ export default function LoginForm() {
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm flex items-center">
                 <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
                 {error}
+              </div>
+            )}
+
+            {success && (
+              <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-sm">
+                {success}
+              </div>
+            )}
+
+            {!isLogin && (
+              <div>
+                <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-2">
+                  Nome Completo
+                </label>
+                <input
+                  id="fullName"
+                  name="fullName"
+                  type="text"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="block w-full px-3 py-3 border border-gray-300 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  placeholder="Seu nome completo"
+                />
               </div>
             )}
 
@@ -102,6 +156,29 @@ export default function LoginForm() {
               </div>
             </div>
 
+            {!isLogin && (
+              <div>
+                <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-2">
+                  Tipo de Conta
+                </label>
+                <select
+                  id="role"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as 'admin' | 'consultant')}
+                  className="block w-full px-3 py-3 border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                >
+                  <option value="admin">Administrador (Gestor da Instituição)</option>
+                  <option value="consultant">Consultor (Vendas e Atendimento)</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {role === 'admin' 
+                    ? 'Acesso completo ao sistema e gestão de usuários'
+                    : 'Acesso a leads, visitas, matrículas e relatórios básicos'
+                  }
+                </p>
+              </div>
+            )}
+
             <div>
               <button
                 type="submit"
@@ -111,10 +188,19 @@ export default function LoginForm() {
                 {loading ? (
                   <div className="flex items-center">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Entrando...
+                    {isLogin ? 'Entrando...' : 'Criando conta...'}
                   </div>
                 ) : (
-                  'Entrar no Sistema'
+                  <div className="flex items-center">
+                    {isLogin ? (
+                      <>Entrar no Sistema</>
+                    ) : (
+                      <>
+                        <UserPlus className="h-4 w-4 mr-2" />
+                        Criar Conta
+                      </>
+                    )}
+                  </div>
                 )}
               </button>
             </div>

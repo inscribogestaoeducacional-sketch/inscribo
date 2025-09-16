@@ -24,15 +24,15 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
   const { user } = useAuth()
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'gestor', 'comercial'] },
-    { id: 'leads', label: 'Kanban de Leads', icon: UserPlus, roles: ['admin', 'gestor_pedagogico', 'comercial'] },
-    { id: 'calendar', label: 'Calendário de Visitas', icon: Calendar, roles: ['admin', 'gestor_pedagogico', 'comercial'] },
-    { id: 'matriculas', label: 'Matrículas', icon: UserCheck, roles: ['admin', 'gestor_pedagogico', 'comercial', 'secretaria'] },
-    { id: 'marketing', label: 'Marketing & CPA', icon: TrendingUp, roles: ['admin', 'gestor_pedagogico'] },
-    { id: 'funil', label: 'Planejamento & Funil', icon: Target, roles: ['admin', 'gestor_pedagogico'] },
-    { id: 'rematriculas', label: 'Rematrículas', icon: RefreshCw, roles: ['admin', 'gestor_pedagogico'] },
-    { id: 'acoes', label: 'Ações Automáticas', icon: CheckSquare, roles: ['admin', 'gestor_pedagogico', 'comercial'] },
-    { id: 'relatorios', label: 'Relatórios', icon: FileText, roles: ['admin', 'gestor_pedagogico'] },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'consultant'] },
+    { id: 'leads', label: 'Kanban de Leads', icon: UserPlus, roles: ['admin', 'consultant'] },
+    { id: 'calendar', label: 'Calendário de Visitas', icon: Calendar, roles: ['admin', 'consultant'] },
+    { id: 'matriculas', label: 'Matrículas', icon: UserCheck, roles: ['admin', 'consultant'] },
+    { id: 'marketing', label: 'Marketing & CPA', icon: TrendingUp, roles: ['admin'] },
+    { id: 'funil', label: 'Planejamento & Funil', icon: Target, roles: ['admin'] },
+    { id: 'rematriculas', label: 'Rematrículas', icon: RefreshCw, roles: ['admin'] },
+    { id: 'acoes', label: 'Ações Automáticas', icon: CheckSquare, roles: ['admin'] },
+    { id: 'relatorios', label: 'Relatórios', icon: FileText, roles: ['admin'] },
     { id: 'usuarios', label: 'Usuários', icon: Users, roles: ['admin'] },
     { id: 'configuracoes', label: 'Configurações', icon: Settings, roles: ['admin'] },
   ]
@@ -40,6 +40,14 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
   const filteredItems = menuItems.filter(item => 
     !user || item.roles.includes(user.role)
   )
+
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case 'admin': return 'Administrador'
+      case 'consultant': return 'Consultor'
+      default: return 'Usuário'
+    }
+  }
 
   return (
     <div className="bg-white border-r border-gray-200 w-72 min-h-screen flex flex-col shadow-sm">
@@ -99,12 +107,8 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
             <p className="text-sm font-medium text-gray-900 truncate">
               {user?.full_name || 'Usuário'}
             </p>
-            <p className="text-xs text-gray-500 capitalize">
-              {user?.role === 'admin' ? 'Administrador' :
-               user?.role === 'gestor_pedagogico' ? 'Gestor Pedagógico' :
-               user?.role === 'comercial' ? 'Comercial' :
-               user?.role === 'secretaria' ? 'Secretaria' :
-               user?.role === 'financeiro' ? 'Financeiro' : 'Usuário'}
+            <p className="text-xs text-gray-500">
+              {getRoleLabel(user?.role || '')}
             </p>
           </div>
         </div>
