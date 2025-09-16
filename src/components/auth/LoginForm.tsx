@@ -21,6 +21,16 @@ export default function LoginForm() {
     setSuccess('')
     setLoading(true)
 
+    // Check if Supabase is configured
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    
+    if (!supabaseUrl || !supabaseKey || supabaseUrl === 'https://demo.supabase.co' || supabaseKey === 'demo-key') {
+      setError('Supabase não configurado. Clique em "Connect to Supabase" no topo direito para configurar.')
+      setLoading(false)
+      return
+    }
+
     try {
       if (isLogin) {
         await signIn(email, password)
