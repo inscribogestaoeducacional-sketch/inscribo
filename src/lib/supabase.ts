@@ -62,6 +62,34 @@ export interface CampanhaMarketing {
   created_at: string
 }
 
+export interface Visit {
+  id: string
+  lead_id?: string
+  lead_name: string
+  scheduled_date: string
+  assigned_to?: string
+  assigned_user: string
+  status: 'scheduled' | 'completed' | 'cancelled'
+  notes?: string
+  institution_id: string
+  created_at: string
+}
+
+export interface FunnelMetrics {
+  id: string
+  period: string
+  registrations: number
+  registrations_target: number
+  schedules: number
+  schedules_target: number
+  visits: number
+  visits_target: number
+  enrollments: number
+  enrollments_target: number
+  institution_id: string
+  created_at: string
+}
+
 export interface Rematricula {
   id: string
   periodo: string
@@ -270,6 +298,76 @@ export class DatabaseService {
     }
   ]
 
+  private static mockVisits: Visit[] = [
+    {
+      id: '1',
+      lead_id: '3',
+      lead_name: 'Beatriz Costa',
+      scheduled_date: '2024-01-18T14:00:00Z',
+      assigned_to: 'user1',
+      assigned_user: 'João Oliveira',
+      status: 'scheduled',
+      notes: 'Primeira visita - apresentar metodologia',
+      institution_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+      created_at: '2024-01-15T10:00:00Z'
+    },
+    {
+      id: '2',
+      lead_id: '4',
+      lead_name: 'Diego Oliveira',
+      scheduled_date: '2024-01-16T10:30:00Z',
+      assigned_to: 'user1',
+      assigned_user: 'Maria Costa',
+      status: 'completed',
+      notes: 'Visita realizada com sucesso',
+      institution_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+      created_at: '2024-01-14T09:00:00Z'
+    },
+    {
+      id: '3',
+      lead_id: '1',
+      lead_name: 'Ana Silva Santos',
+      scheduled_date: new Date().toISOString(),
+      assigned_to: 'user2',
+      assigned_user: 'Pedro Santos',
+      status: 'scheduled',
+      notes: 'Visita hoje - confirmar presença',
+      institution_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+      created_at: new Date().toISOString()
+    }
+  ]
+
+  private static mockFunnelMetrics: FunnelMetrics[] = [
+    {
+      id: '1',
+      period: 'Janeiro 2024',
+      registrations: 150,
+      registrations_target: 120,
+      schedules: 85,
+      schedules_target: 90,
+      visits: 72,
+      visits_target: 80,
+      enrollments: 18,
+      enrollments_target: 24,
+      institution_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+      created_at: '2024-01-01T00:00:00Z'
+    },
+    {
+      id: '2',
+      period: 'Dezembro 2023',
+      registrations: 130,
+      registrations_target: 120,
+      schedules: 95,
+      schedules_target: 90,
+      visits: 82,
+      visits_target: 80,
+      enrollments: 24,
+      enrollments_target: 20,
+      institution_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+      created_at: '2023-12-01T00:00:00Z'
+    }
+  ]
+
   private static mockRematriculas: Rematricula[] = [
     {
       id: '1',
@@ -421,6 +519,74 @@ export class DatabaseService {
     return newCampanha
   }
 
+  static async updateMarketingCampaign(id: string, campaignData: Partial<CampanhaMarketing>): Promise<CampanhaMarketing> {
+    await new Promise(resolve => setTimeout(resolve, 300))
+    const index = this.mockCampanhas.findIndex(campaign => campaign.id === id)
+    if (index !== -1) {
+      this.mockCampanhas[index] = { ...this.mockCampanhas[index], ...campaignData }
+      return this.mockCampanhas[index]
+    }
+    throw new Error('Campanha não encontrada')
+  }
+
+  static async getVisits(institutionId: string): Promise<Visit[]> {
+    await new Promise(resolve => setTimeout(resolve, 300))
+    return this.mockVisits.filter(visit => visit.institution_id === institutionId)
+  }
+
+  static async createVisit(visitData: Partial<Visit>): Promise<Visit> {
+    await new Promise(resolve => setTimeout(resolve, 300))
+    const newVisit: Visit = {
+      id: Date.now().toString(),
+      lead_id: visitData.lead_id,
+      lead_name: visitData.lead_name || 'Lead',
+      scheduled_date: visitData.scheduled_date || new Date().toISOString(),
+      assigned_to: visitData.assigned_to,
+      assigned_user: visitData.assigned_user || 'Usuário',
+      status: visitData.status || 'scheduled',
+      notes: visitData.notes || '',
+      institution_id: visitData.institution_id || '',
+      created_at: new Date().toISOString()
+    }
+    this.mockVisits.unshift(newVisit)
+    return newVisit
+  }
+
+  static async getFunnelMetrics(institutionId: string): Promise<FunnelMetrics[]> {
+    await new Promise(resolve => setTimeout(resolve, 300))
+    return this.mockFunnelMetrics.filter(funnel => funnel.institution_id === institutionId)
+  }
+
+  static async createFunnelMetrics(funnelData: Partial<FunnelMetrics>): Promise<FunnelMetrics> {
+    await new Promise(resolve => setTimeout(resolve, 300))
+    const newFunnel: FunnelMetrics = {
+      id: Date.now().toString(),
+      period: funnelData.period || '',
+      registrations: funnelData.registrations || 0,
+      registrations_target: funnelData.registrations_target || 0,
+      schedules: funnelData.schedules || 0,
+      schedules_target: funnelData.schedules_target || 0,
+      visits: funnelData.visits || 0,
+      visits_target: funnelData.visits_target || 0,
+      enrollments: funnelData.enrollments || 0,
+      enrollments_target: funnelData.enrollments_target || 0,
+      institution_id: funnelData.institution_id || '',
+      created_at: new Date().toISOString()
+    }
+    this.mockFunnelMetrics.unshift(newFunnel)
+    return newFunnel
+  }
+
+  static async updateFunnelMetrics(id: string, funnelData: Partial<FunnelMetrics>): Promise<FunnelMetrics> {
+    await new Promise(resolve => setTimeout(resolve, 300))
+    const index = this.mockFunnelMetrics.findIndex(funnel => funnel.id === id)
+    if (index !== -1) {
+      this.mockFunnelMetrics[index] = { ...this.mockFunnelMetrics[index], ...funnelData }
+      return this.mockFunnelMetrics[index]
+    }
+    throw new Error('Funil não encontrado')
+  }
+
   static async getRematriculas(institutionId: string): Promise<Rematricula[]> {
     await new Promise(resolve => setTimeout(resolve, 300))
     return this.mockRematriculas.filter(rematricula => rematricula.institution_id === institutionId)
@@ -463,14 +629,14 @@ export class DatabaseService {
     await new Promise(resolve => setTimeout(resolve, 300))
     
     const leads = await this.getLeads(institutionId)
-    const visitas = await this.getVisitas(institutionId)
     const matriculas = await this.getMatriculas(institutionId)
     const campanhas = await this.getCampanhas(institutionId)
     const rematriculas = await this.getRematriculas(institutionId)
 
     // Visitas hoje
+    const visitas = await this.getVisits(institutionId)
     const hoje = new Date().toISOString().split('T')[0]
-    const visitasHoje = visitas.filter(v => v.data.startsWith(hoje)).length
+    const visitasHoje = visitas.filter(v => v.scheduled_date.startsWith(hoje) && v.status === 'scheduled').length
 
     // Matrículas do mês
     const mesAtual = new Date().toISOString().slice(0, 7)

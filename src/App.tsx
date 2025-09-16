@@ -5,6 +5,15 @@ import Sidebar from './components/layout/Sidebar'
 import TopBar from './components/layout/TopBar'
 import Dashboard from './components/dashboard/Dashboard'
 import LeadKanban from './components/leads/LeadKanban'
+import VisitCalendar from './components/calendar/VisitCalendar'
+import EnrollmentManager from './components/enrollments/EnrollmentManager'
+import MarketingCPA from './components/marketing/MarketingCPA'
+import FunnelAnalysis from './components/funnel/FunnelAnalysis'
+import ReEnrollments from './components/reenrollments/ReEnrollments'
+import ActionsManager from './components/actions/ActionsManager'
+import Reports from './components/reports/Reports'
+import UserManagement from './components/management/UserManagement'
+import SystemSettings from './components/management/SystemSettings'
 import { GraduationCap } from 'lucide-react'
 
 function MainApp() {
@@ -17,27 +26,23 @@ function MainApp() {
       case 'leads':
         return <LeadKanban />
       case 'calendar':
+        return <VisitCalendar />
       case 'matriculas':
+        return <EnrollmentManager />
       case 'marketing':
+        return <MarketingCPA />
       case 'funil':
+        return <FunnelAnalysis />
       case 'rematriculas':
+        return <ReEnrollments />
       case 'acoes':
+        return <ActionsManager />
       case 'relatorios':
+        return <Reports />
       case 'usuarios':
+        return <UserManagement />
       case 'configuracoes':
-        return (
-          <div className="p-6">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-              <div className="text-center">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <GraduationCap className="w-8 h-8 text-blue-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Módulo em Desenvolvimento</h3>
-                <p className="text-gray-600">Esta funcionalidade será implementada em breve</p>
-              </div>
-            </div>
-          </div>
-        )
+        return <SystemSettings />
       default:
         return <Dashboard />
     }
