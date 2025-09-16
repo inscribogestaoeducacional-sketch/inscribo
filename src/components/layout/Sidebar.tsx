@@ -102,20 +102,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (e) {
           console.log('Error parsing pending data')
+        }
+      }
       
-      if (pendingData) {
-        try {
-          const userData = JSON.parse(pendingData)
-          if (userData.userId === userId) {
-            await createUserProfile(userData)
-            try {
-              localStorage.removeItem('pendingUserData')
-            } catch (e) {
-              console.log('Could not remove from localStorage')
-            }
-          }
-        } catch (e) {
-          console.log('Error parsing pending data')
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single()
+
+      if (error) {
         if (error.code === '42501' || error.message.includes('permission denied')) {
           // RLS is blocking - user profile doesn't exist, try to create it
           const { data: authUser } = await supabase.auth.getUser()
@@ -124,6 +120,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               userId: authUser.user.id,
               email: authUser.user.email || '',
               fullName: authUser.user.user_metadata.full_name || 'Usuário',
+              role: authUser.user.user_metadata.role || 'user'
+            })
+          }
+        }
       } else if (data) {
         setUser(data)
       } else {
@@ -137,6 +137,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const createUserProfile = async (userData: { userId: string, email: string, fullName: string, role: string }) => {
+    // Implementation for creating user profile
+  }
+
   const signIn = async (email: string, password: string) => {
     setLoading(true)
     try {
@@ -146,36 +150,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       if (error) {
-        if (error.code === '42501' || error.message.includes('permission denied')) {
-          // RLS is blocking - user profile doesn't exist, try to create it
-          const { data: authUser } = await supabase.auth.getUser()
-          if (authUser.user?.user_metadata) {
-            await createUserProfile({
-              userId: authUser.user.id,
-              email: authUser.user.email || '',
-              fullName: authUser.user.user_metadata.full_name || 'Usuário',
+        throw error
+      }
     } catch (error) {
       setLoading(false)
       throw error
     }
   }
 
+  const signOut = async () => {
+    await supabase.auth.signOut()
+  }
+
   const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'manager' | 'user') => {
     setLoading(true)
     try {
       // Sign up user with email confirmation disabled
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: undefined,
           data: {
-            full_name: fullName,
-            role: role
-          }
-          data: {
-            full_name: fullName,
-                </Link>
-          }
             full_name: fullName,
             role: role
           }
@@ -199,6 +195,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Always throw success message to redirect to login
         throw new Error('Conta criada com sucesso! Faça login com suas credenciais.')
+      }
+    } catch (error) {
+      setLoading(false)
+      throw error
+    }
+  }
+
+  return (
+    <AuthContext.Provider value={{
+      user,
+      loading,
+      signIn,
+      signOut,
+      signUp
+    }}>
       {children}
     </AuthContext.Provider>
   )
