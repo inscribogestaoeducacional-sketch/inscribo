@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Eye, EyeOff, Mail, Lock, BookOpen } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 export default function LoginForm() {
@@ -46,10 +46,14 @@ export default function LoginForm() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 flex items-center justify-center px-4">
       <div className="max-w-md w-full space-y-8">
-        {/* Header */}
+        {/* Header with Logo */}
         <div className="text-center">
-          <div className="mx-auto h-16 w-16 bg-blue-600 rounded-full flex items-center justify-center mb-6">
-            <BookOpen className="h-8 w-8 text-white" />
+          <div className="mx-auto h-20 w-20 mb-6 rounded-full overflow-hidden bg-white shadow-lg">
+            <img 
+              src="/Inscribo.jpeg" 
+              alt="Inscribo" 
+              className="w-full h-full object-cover"
+            />
           </div>
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Inscribo</h2>
           <p className="text-gray-600">
@@ -58,7 +62,7 @@ export default function LoginForm() {
         </div>
 
         {/* Form */}
-        <div className="bg-white py-8 px-6 shadow-xl rounded-lg">
+        <div className="bg-white py-8 px-6 shadow-xl rounded-lg border border-gray-100">
           <form onSubmit={isResetMode ? handleResetPassword : handleSubmit} className="space-y-6">
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
@@ -85,7 +89,7 @@ export default function LoginForm() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className="pl-10 block w-full px-3 py-3 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   placeholder="seu@email.com"
                 />
               </div>
@@ -105,12 +109,12 @@ export default function LoginForm() {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 pr-10 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className="pl-10 pr-10 block w-full px-3 py-3 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     placeholder="••••••••"
                   />
                   <button
                     type="button"
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                     onClick={() => setShowPassword(!showPassword)}
                   >
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -123,7 +127,7 @@ export default function LoginForm() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isLoading
                   ? 'Carregando...'
@@ -142,7 +146,7 @@ export default function LoginForm() {
                   setError('')
                   setResetMessage('')
                 }}
-                className="text-sm text-blue-600 hover:text-blue-500"
+                className="text-sm text-blue-600 hover:text-blue-500 transition-colors"
               >
                 {isResetMode ? 'Voltar ao login' : 'Esqueci minha senha'}
               </button>
@@ -150,12 +154,11 @@ export default function LoginForm() {
           </form>
         </div>
 
-        {/* Demo credentials */}
-        <div className="bg-gray-50 p-4 rounded-lg text-sm text-gray-600">
-          <p className="font-medium mb-2">Credenciais de demo:</p>
-          <p>Admin: admin@inscribo.com / admin123</p>
-          <p>Gestor: gestor@inscribo.com / gestor123</p>
-          <p>Usuário: usuario@inscribo.com / user123</p>
+        {/* Footer */}
+        <div className="text-center">
+          <p className="text-xs text-gray-500">
+            © 2024 Inscribo. Sistema de Gestão Educacional.
+          </p>
         </div>
       </div>
     </div>

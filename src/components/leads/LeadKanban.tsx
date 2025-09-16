@@ -1,88 +1,75 @@
-import React, { useState } from 'react'
-import { Plus, Phone, Mail, Calendar, MoreHorizontal, User, GraduationCap, Tag } from 'lucide-react'
-
-interface Lead {
-  id: string
-  studentName: string
-  responsibleName: string
-  gradeInterest: string
-  source: string
-  phone?: string
-  email?: string
-  assignedTo?: string
-  status: string
-}
+import React, { useState, useEffect } from 'react'
+import { Plus, Phone, Mail, Calendar, MoreHorizontal, User, GraduationCap, Tag, Edit, Trash2 } from 'lucide-react'
+import { DatabaseService, Lead } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 
 const KANBAN_COLUMNS = [
-  { id: 'new', title: 'Novo', color: 'bg-gray-100 border-gray-300', count: 12 },
-  { id: 'contact', title: 'Contato', color: 'bg-blue-100 border-blue-300', count: 8 },
-  { id: 'scheduled', title: 'Agendado', color: 'bg-yellow-100 border-yellow-300', count: 5 },
-  { id: 'visit', title: 'Visita', color: 'bg-orange-100 border-orange-300', count: 3 },
-  { id: 'proposal', title: 'Proposta', color: 'bg-purple-100 border-purple-300', count: 4 },
-  { id: 'enrolled', title: 'Matrícula', color: 'bg-green-100 border-green-300', count: 7 },
-]
-
-const SAMPLE_LEADS: Lead[] = [
-  {
-    id: '1',
-    studentName: 'Ana Silva',
-    responsibleName: 'Maria Silva',
-    gradeInterest: '1º Ano Fundamental',
-    source: 'Facebook',
-    phone: '(11) 99999-9999',
-    email: 'maria@email.com',
-    status: 'new'
-  },
-  {
-    id: '2',
-    studentName: 'João Santos',
-    responsibleName: 'José Santos',
-    gradeInterest: '3º Ano Médio',
-    source: 'Indicação',
-    phone: '(11) 88888-8888',
-    status: 'contact'
-  },
-  {
-    id: '3',
-    studentName: 'Carolina Lima',
-    responsibleName: 'Patricia Lima',
-    gradeInterest: '5º Ano Fundamental',
-    source: 'Google Ads',
-    email: 'patricia@email.com',
-    status: 'scheduled'
-  }
+  { id: 'new', title: 'Novo', color: 'bg-gray-100 border-gray-300' },
+  { id: 'contact', title: 'Contato', color: 'bg-blue-100 border-blue-300' },
+  { id: 'scheduled', title: 'Agendado', color: 'bg-yellow-100 border-yellow-300' },
+  { id: 'visit', title: 'Visita', color: 'bg-orange-100 border-orange-300' },
+  { id: 'proposal', title: 'Proposta', color: 'bg-purple-100 border-purple-300' },
+  { id: 'enrolled', title: 'Matrícula', color: 'bg-green-100 border-green-300' },
 ]
 
 interface LeadCardProps {
   lead: Lead
   onEdit: (lead: Lead) => void
+  onDelete: (id: string) => void
+  onStatusChange: (id: string, status: string) => void
 }
 
-function LeadCard({ lead, onEdit }: LeadCardProps) {
+function LeadCard({ lead, onEdit, onDelete, onStatusChange }: LeadCardProps) {
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handleDragStart = (e: React.DragEvent) => {
+    setIsDragging(true)
+    e.dataTransfer.setData('text/plain', lead.id)
+  }
+
+  const handleDragEnd = () => {
+    setIsDragging(false)
+  }
+
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4 mb-3 hover:shadow-md transition-shadow cursor-pointer">
+    <div 
+      draggable
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      className={`bg-white rounded-lg border border-gray-200 p-4 mb-3 hover:shadow-md transition-all cursor-move ${
+        isDragging ? 'opacity-50 rotate-2' : ''
+      }`}
+    >
       <div className="flex items-start justify-between mb-2">
-        <h4 className="font-medium text-gray-900 text-sm">{lead.studentName}</h4>
-        <button 
-          onClick={() => onEdit(lead)}
-          className="text-gray-400 hover:text-gray-600"
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </button>
+        <h4 className="font-medium text-gray-900 text-sm">{lead.student_name}</h4>
+        <div className="flex items-center space-x-1">
+          <button 
+            onClick={() => onEdit(lead)}
+            className="text-gray-400 hover:text-blue-600 transition-colors"
+          >
+            <Edit className="h-3 w-3" />
+          </button>
+          <button 
+            onClick={() => onDelete(lead.id)}
+            className="text-gray-400 hover:text-red-600 transition-colors"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
       </div>
       
       <div className="space-y-2 text-sm text-gray-600">
         <div className="flex items-center">
-          <User className="h-3 w-3 mr-2" />
-          <span>{lead.responsibleName}</span>
+          <User className="h-3 w-3 mr-2 flex-shrink-0" />
+          <span className="truncate">{lead.responsible_name}</span>
         </div>
         <div className="flex items-center">
-          <GraduationCap className="h-3 w-3 mr-2" />
-          <span>{lead.gradeInterest}</span>
+          <GraduationCap className="h-3 w-3 mr-2 flex-shrink-0" />
+          <span className="truncate">{lead.grade_interest}</span>
         </div>
         <div className="flex items-center">
-          <Tag className="h-3 w-3 mr-2" />
-          <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
+          <Tag className="h-3 w-3 mr-2 flex-shrink-0" />
+          <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs truncate">
             {lead.source}
           </span>
         </div>
@@ -91,17 +78,17 @@ function LeadCard({ lead, onEdit }: LeadCardProps) {
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
         <div className="flex space-x-2">
           {lead.phone && (
-            <button className="text-green-600 hover:text-green-700">
+            <button className="text-green-600 hover:text-green-700 transition-colors">
               <Phone className="h-4 w-4" />
             </button>
           )}
           {lead.email && (
-            <button className="text-blue-600 hover:text-blue-700">
+            <button className="text-blue-600 hover:text-blue-700 transition-colors">
               <Mail className="h-4 w-4" />
             </button>
           )}
         </div>
-        <button className="text-orange-600 hover:text-orange-700">
+        <button className="text-orange-600 hover:text-orange-700 transition-colors">
           <Calendar className="h-4 w-4" />
         </button>
       </div>
@@ -113,31 +100,68 @@ interface KanbanColumnProps {
   column: typeof KANBAN_COLUMNS[0]
   leads: Lead[]
   onEdit: (lead: Lead) => void
+  onDelete: (id: string) => void
+  onStatusChange: (id: string, status: string) => void
 }
 
-function KanbanColumn({ column, leads, onEdit }: KanbanColumnProps) {
+function KanbanColumn({ column, leads, onEdit, onDelete, onStatusChange }: KanbanColumnProps) {
+  const [isDragOver, setIsDragOver] = useState(false)
+  
+  const columnLeads = leads.filter(lead => lead.status === column.id)
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragOver(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    const leadId = e.dataTransfer.getData('text/plain')
+    onStatusChange(leadId, column.id)
+  }
+
   return (
     <div className="flex-shrink-0 w-80">
-      <div className={`rounded-lg border-2 border-dashed ${column.color} p-4`}>
+      <div 
+        className={`rounded-lg border-2 border-dashed p-4 transition-all ${column.color} ${
+          isDragOver ? 'border-solid bg-opacity-50' : ''
+        }`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center">
             <h3 className="font-semibold text-gray-900">{column.title}</h3>
             <span className="ml-2 bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded-full">
-              {column.count}
+              {columnLeads.length}
             </span>
           </div>
-          <button className="text-gray-500 hover:text-gray-700">
+          <button className="text-gray-500 hover:text-gray-700 transition-colors">
             <Plus className="h-5 w-5" />
           </button>
         </div>
         
         <div className="space-y-3 max-h-96 overflow-y-auto">
-          {leads
-            .filter(lead => lead.status === column.id)
-            .map(lead => (
-              <LeadCard key={lead.id} lead={lead} onEdit={onEdit} />
-            ))
-          }
+          {columnLeads.map(lead => (
+            <LeadCard 
+              key={lead.id} 
+              lead={lead} 
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onStatusChange={onStatusChange}
+            />
+          ))}
+          {columnLeads.length === 0 && (
+            <div className="text-center py-8 text-gray-400">
+              <p className="text-sm">Nenhum lead</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -145,12 +169,67 @@ function KanbanColumn({ column, leads, onEdit }: KanbanColumnProps) {
 }
 
 export default function LeadKanban() {
-  const [leads] = useState<Lead[]>(SAMPLE_LEADS)
+  const { user } = useAuth()
+  const [leads, setLeads] = useState<Lead[]>([])
+  const [loading, setLoading] = useState(true)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [showNewLeadModal, setShowNewLeadModal] = useState(false)
 
+  useEffect(() => {
+    if (user?.institution_id) {
+      loadLeads()
+    }
+  }, [user])
+
+  const loadLeads = async () => {
+    try {
+      setLoading(true)
+      const data = await DatabaseService.getLeads(user!.institution_id)
+      setLeads(data)
+    } catch (error) {
+      console.error('Error loading leads:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleEditLead = (lead: Lead) => {
     setSelectedLead(lead)
+  }
+
+  const handleDeleteLead = async (id: string) => {
+    if (confirm('Tem certeza que deseja excluir este lead?')) {
+      try {
+        // Implementation would go here
+        await loadLeads()
+      } catch (error) {
+        console.error('Error deleting lead:', error)
+      }
+    }
+  }
+
+  const handleStatusChange = async (leadId: string, newStatus: string) => {
+    try {
+      await DatabaseService.updateLead(leadId, { status: newStatus as any })
+      await loadLeads()
+    } catch (error) {
+      console.error('Error updating lead status:', error)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-64 mb-6"></div>
+          <div className="flex space-x-6">
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <div key={i} className="w-80 h-96 bg-gray-200 rounded-lg"></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -163,7 +242,7 @@ export default function LeadKanban() {
         </div>
         <button 
           onClick={() => setShowNewLeadModal(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center shadow-sm"
         >
           <Plus className="h-4 w-4 mr-2" />
           Novo Lead
@@ -178,6 +257,8 @@ export default function LeadKanban() {
             column={column}
             leads={leads}
             onEdit={handleEditLead}
+            onDelete={handleDeleteLead}
+            onStatusChange={handleStatusChange}
           />
         ))}
       </div>
@@ -185,12 +266,12 @@ export default function LeadKanban() {
       {/* Lead Details Modal */}
       {selectedLead && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold">Detalhes do Lead</h2>
               <button 
                 onClick={() => setSelectedLead(null)}
-                className="text-gray-500 hover:text-gray-700"
+                className="text-gray-500 hover:text-gray-700 text-2xl"
               >
                 ×
               </button>
@@ -203,8 +284,8 @@ export default function LeadKanban() {
                 </label>
                 <input
                   type="text"
-                  value={selectedLead.studentName}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  value={selectedLead.student_name}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   readOnly
                 />
               </div>
@@ -214,8 +295,8 @@ export default function LeadKanban() {
                 </label>
                 <input
                   type="text"
-                  value={selectedLead.responsibleName}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  value={selectedLead.responsible_name}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   readOnly
                 />
               </div>
@@ -225,8 +306,8 @@ export default function LeadKanban() {
                 </label>
                 <input
                   type="text"
-                  value={selectedLead.gradeInterest}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  value={selectedLead.grade_interest}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   readOnly
                 />
               </div>
@@ -237,7 +318,7 @@ export default function LeadKanban() {
                 <input
                   type="text"
                   value={selectedLead.source}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   readOnly
                 />
               </div>
@@ -246,11 +327,11 @@ export default function LeadKanban() {
             <div className="mt-6 flex justify-end space-x-2">
               <button 
                 onClick={() => setSelectedLead(null)}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 Fechar
               </button>
-              <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+              <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
                 Editar
               </button>
             </div>

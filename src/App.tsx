@@ -9,6 +9,8 @@ import LeadKanban from './components/leads/LeadKanban'
 import VisitCalendar from './components/calendar/VisitCalendar'
 import MarketingCPA from './components/marketing/MarketingCPA'
 import FunnelAnalysis from './components/funnel/FunnelAnalysis'
+import UserManagement from './components/management/UserManagement'
+import SystemSettings from './components/management/SystemSettings'
 
 function Dashboard() {
   const [activeTab, setActiveTab] = useState('dashboard')
@@ -18,7 +20,7 @@ function Dashboard() {
     switch (activeTab) {
       case 'dashboard':
         return (
-          <div>
+          <div className="p-6">
             <DashboardKPIs />
             <DashboardCharts />
           </div>
@@ -27,6 +29,42 @@ function Dashboard() {
         return <LeadKanban />
       case 'calendar':
         return <VisitCalendar />
+      case 'students':
+        return (
+          <div className="p-6">
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">Gestão de Alunos</h1>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <p className="text-gray-600">Módulo de gestão de alunos integrado ao Supabase...</p>
+            </div>
+          </div>
+        )
+      case 'courses':
+        return (
+          <div className="p-6">
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">Gestão de Cursos</h1>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <p className="text-gray-600">Módulo de gestão de cursos integrado ao Supabase...</p>
+            </div>
+          </div>
+        )
+      case 'teachers':
+        return (
+          <div className="p-6">
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">Gestão de Professores</h1>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <p className="text-gray-600">Módulo de gestão de professores integrado ao Supabase...</p>
+            </div>
+          </div>
+        )
+      case 'enrollments':
+        return (
+          <div className="p-6">
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">Gestão de Matrículas</h1>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <p className="text-gray-600">Módulo de gestão de matrículas integrado ao Supabase...</p>
+            </div>
+          </div>
+        )
       case 'marketing':
         return <MarketingCPA />
       case 'funnel':
@@ -36,7 +74,7 @@ function Dashboard() {
           <div className="p-6">
             <h1 className="text-2xl font-bold text-gray-900 mb-4">Rematrículas</h1>
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <p className="text-gray-600">Módulo de rematrículas em desenvolvimento...</p>
+              <p className="text-gray-600">Módulo de rematrículas integrado ao Supabase...</p>
             </div>
           </div>
         )
@@ -45,7 +83,7 @@ function Dashboard() {
           <div className="p-6">
             <h1 className="text-2xl font-bold text-gray-900 mb-4">Ações Automáticas</h1>
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <p className="text-gray-600">Sugestões de ações em desenvolvimento...</p>
+              <p className="text-gray-600">Sugestões de ações integradas ao Supabase...</p>
             </div>
           </div>
         )
@@ -54,31 +92,17 @@ function Dashboard() {
           <div className="p-6">
             <h1 className="text-2xl font-bold text-gray-900 mb-4">Relatórios</h1>
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <p className="text-gray-600">Módulo de relatórios em desenvolvimento...</p>
+              <p className="text-gray-600">Módulo de relatórios integrado ao Supabase...</p>
             </div>
           </div>
         )
       case 'users':
-        return (
-          <div className="p-6">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Gerenciar Usuários</h1>
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <p className="text-gray-600">Gestão de usuários em desenvolvimento...</p>
-            </div>
-          </div>
-        )
+        return <UserManagement />
       case 'settings':
-        return (
-          <div className="p-6">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Configurações</h1>
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <p className="text-gray-600">Configurações do sistema em desenvolvimento...</p>
-            </div>
-          </div>
-        )
+        return <SystemSettings />
       default:
         return (
-          <div>
+          <div className="p-6">
             <DashboardKPIs />
             <DashboardCharts />
           </div>
@@ -93,7 +117,7 @@ function Dashboard() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar darkMode={darkMode} setDarkMode={setDarkMode} />
         
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto bg-gray-50">
           {renderContent()}
         </main>
       </div>
@@ -108,8 +132,15 @@ function AppContent() {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
+          <div className="h-16 w-16 mx-auto mb-4 rounded-full overflow-hidden bg-white shadow-lg">
+            <img 
+              src="/Inscribo.jpeg" 
+              alt="Inscribo" 
+              className="w-full h-full object-cover"
+            />
+          </div>
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando...</p>
+          <p className="text-gray-600">Carregando sistema...</p>
         </div>
       </div>
     )

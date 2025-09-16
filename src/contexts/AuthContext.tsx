@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { supabase, User } from '../lib/supabase'
+import { supabase, User, DatabaseService } from '../lib/supabase'
 import type { Session } from '@supabase/supabase-js'
 
 interface AuthContextType {
@@ -9,6 +9,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<void>
+  updateProfile: (userData: Partial<User>) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -44,10 +45,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session)
       if (session?.user) {
-        fetchUserProfile(session.user.id)
+        await fetchUserProfile(session.user.id)
+        // Log login activity
+        await DatabaseService.logActivity({
+          user_id: session.user.id,
+          action: 'login',
+          entity_type: 'auth',
+          details: { timestamp: new Date().toISOString() },
+          institution_id: user?.institution_id
+        })
       } else {
         setUser(null)
         setLoading(false)
@@ -66,6 +75,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
         .single()
 
       if (error) throw error
+      
+      // Update last login
+      await supabase
+        .from('users')
+        .update({ last_login: new Date().toISOString() })
+        .eq('id', userId)
+      
       setUser(data)
     } catch (error) {
       console.error('Error fetching user profile:', error)
@@ -83,13 +99,43 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   const signOut = async () => {
+    // Log logout activity
+    if (user) {
+      await DatabaseService.logActivity({
+        user_id: user.id,
+        action: 'logout',
+        entity_type: 'auth',
+        details: { timestamp: new Date().toISOString() },
+        institution_id: user.institution_id
+      })
+    }
+    
     const { error } = await supabase.auth.signOut()
     if (error) throw error
   }
 
   const resetPassword = async (email: string) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email)
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`
+    })
     if (error) throw error
+  }
+
+  const updateProfile = async (userData: Partial<User>) => {
+    if (!user) throw new Error('No user logged in')
+    
+    const updatedUser = await DatabaseService.updateUser(user.id, userData)
+    setUser(updatedUser)
+    
+    // Log profile update
+    await DatabaseService.logActivity({
+      user_id: user.id,
+      action: 'update_profile',
+      entity_type: 'user',
+      entity_id: user.id,
+      details: { updated_fields: Object.keys(userData) },
+      institution_id: user.institution_id
+    })
   }
 
   const value: AuthContextType = {
@@ -99,6 +145,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     signIn,
     signOut,
     resetPassword,
+    updateProfile,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
