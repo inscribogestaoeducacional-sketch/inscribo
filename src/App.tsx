@@ -130,34 +130,8 @@ function Dashboard() {
 function AppContent() {
   const { user, loading } = useAuth()
   const [needsSetup, setNeedsSetup] = useState(false)
-  const [checkingSetup, setCheckingSetup] = useState(true)
 
-  useEffect(() => {
-    checkInitialSetup()
-  }, [])
-
-  const checkInitialSetup = async () => {
-    try {
-      // Simplified check - just try to get institutions count
-      const { count, error } = await supabase
-        .from('institutions')
-        .select('*', { count: 'exact', head: true })
-
-      console.log('Setup check - count:', count, 'error:', error)
-      
-      // If count is 0 or null, we need setup
-      setNeedsSetup(!count || count === 0)
-    } catch (error) {
-      console.error('Error checking setup:', error)
-      // On error, assume setup is needed
-      setNeedsSetup(true)
-    } finally {
-      console.log('Setup check completed')
-      setCheckingSetup(false)
-    }
-  }
-
-  if (loading || checkingSetup) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
@@ -178,7 +152,6 @@ function AppContent() {
   if (needsSetup) {
     return <InitialSetup onComplete={() => {
       setNeedsSetup(false)
-      window.location.reload()
     }} />
   }
 
