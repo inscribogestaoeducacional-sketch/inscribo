@@ -49,6 +49,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (session?.user && mounted) {
+        }
+      }
+    }
+  }
+  )
+}
 // Database Service with complete Supabase integration
 export class DatabaseService {
   // Leads
