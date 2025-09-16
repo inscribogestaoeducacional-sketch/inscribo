@@ -480,6 +480,12 @@ export class DatabaseService {
 
   // Activity Logs
   static async logActivity(logData: Partial<ActivityLog>) {
+    // Skip logging if institution_id is missing
+    if (!logData.institution_id) {
+      console.warn('Activity log skipped: missing institution_id')
+      return
+    }
+    
     const { error } = await supabase
       .from('activity_logs')
       .insert([logData])

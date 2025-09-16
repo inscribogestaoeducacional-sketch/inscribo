@@ -49,14 +49,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setSession(session)
       if (session?.user) {
         await fetchUserProfile(session.user.id)
-        // Log login activity
-        await DatabaseService.logActivity({
-          user_id: session.user.id,
-          action: 'login',
-          entity_type: 'auth',
-          details: { timestamp: new Date().toISOString() },
-          institution_id: user?.institution_id
-        })
       } else {
         setUser(null)
         setLoading(false)
@@ -72,17 +64,34 @@ export function AuthProvider({ children }: AuthProviderProps) {
         .from('users')
         .select('*')
         .eq('id', userId)
-        .single()
+        .limit(1)
 
-      if (error) throw error
+      if (error) {
+        console.error('Error fetching user profile:', error)
+        return
+      }
       
-      // Update last login
-      await supabase
-        .from('users')
-        .update({ last_login: new Date().toISOString() })
-        .eq('id', userId)
+      if (data && data.length > 0) {
+        const userData = data[0]
+        
+        // Update last login
+        await supabase
+          .from('users')
+          .update({ last_login: new Date().toISOString() })
+          .eq('id', userId)
+        
+        setUser(userData)
+        
+        // Log login activity only after user data is set
+        await DatabaseService.logActivity({
+          user_id: userId,
+          action: 'login',
+          entity_type: 'auth',
+          details: { timestamp: new Date().toISOString() },
+          institution_id: userData.institution_id
+        })
+      }
       
-      setUser(data)
     } catch (error) {
       console.error('Error fetching user profile:', error)
     } finally {
