@@ -106,6 +106,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (e) {
           console.log('Error parsing pending data')
+      
+      if (pendingData) {
+        try {
+          const userData = JSON.parse(pendingData)
+          if (userData.userId === userId) {
+            await createUserProfile(userData)
+            try {
+              localStorage.removeItem('pendingUserData')
+            } catch (e) {
+              console.log('Could not remove from localStorage')
+            }
+          }
+        } catch (e) {
+          console.log('Error parsing pending data')
         }
       }
 
@@ -118,6 +132,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) {
         if (error.code === '42501' || error.message.includes('permission denied')) {
           // RLS is blocking - user profile doesn't exist, try to create it
+          const { data: authUser } = await supabase.auth.getUser()
+          if (authUser.user?.user_metadata) {
+            await createUserProfile({
+              userId: authUser.user.id,
+              email: authUser.user.email || '',
+              fullName: authUser.user.user_metadata.full_name || 'Usuário',
           const { data: authUser } = await supabase.auth.getUser()
           if (authUser.user?.user_metadata) {
             await createUserProfile({
@@ -172,6 +192,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             full_name: fullName,
             role: role
           }
+          data: {
+            full_name: fullName,
+            role: role
+          }
         }
       })
 
@@ -192,8 +216,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Always throw success message to redirect to login
         throw new Error('Conta criada com sucesso! Faça login com suas credenciais.')
-      }
-
     } catch (error) {
       setLoading(false)
       throw error
