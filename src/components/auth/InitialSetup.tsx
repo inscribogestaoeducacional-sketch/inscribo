@@ -14,7 +14,6 @@ export default function InitialSetup({ onComplete }: InitialSetupProps) {
   const [institutionData, setInstitutionData] = useState({
     name: '',
     email: ''
-  })
   
   const [adminData, setAdminData] = useState({
     full_name: '',
@@ -54,10 +53,7 @@ export default function InitialSetup({ onComplete }: InitialSetupProps) {
       // Create institution
       const { data: institution, error: instError } = await supabase
         .from('institutions')
-        .insert([{
-          name: institutionData.name,
-          email: institutionData.email
-        }])
+        .insert([{ name: institutionData.name }])
         .select()
         .single()
 
@@ -119,20 +115,6 @@ export default function InitialSetup({ onComplete }: InitialSetupProps) {
             {step === 1 ? 'Configure sua instituição' : 'Crie o usuário administrador'}
           </p>
         </div>
-
-        {/* Progress */}
-        <div className="flex items-center justify-center space-x-4 mb-8">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-            step >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'
-          }`}>
-            <Building className="h-4 w-4" />
-          </div>
-          <div className={`w-16 h-1 ${step >= 2 ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-            step >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'
-          }`}>
-            <User className="h-4 w-4" />
-          </div>
         </div>
 
         {/* Form */}
