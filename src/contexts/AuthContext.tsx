@@ -85,13 +85,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadUserProfile = async (userId: string) => {
     try {
-      // Check if there's pending user data to create profile
-      const pendingData = localStorage.getItem('pendingUserData')
+      // Check if there's pending user data to create profile (safely)
+      let pendingData = null
+      try {
+        pendingData = localStorage.getItem('pendingUserData')
+      } catch (e) {
+        console.log('localStorage not available')
+      }
+      
       if (pendingData) {
-        const userData = JSON.parse(pendingData)
-        if (userData.userId === userId) {
-          await createUserProfile(userData)
-          localStorage.removeItem('pendingUserData')
+        try {
+          const userData = JSON.parse(pendingData)
+          if (userData.userId === userId) {
+            await createUserProfile(userData)
+            try {
+              localStorage.removeItem('pendingUserData')
+            } catch (e) {
+              console.log('Could not remove from localStorage')
+            }
+          }
+        } catch (e) {
+          console.log('Error parsing pending data')
         }
       }
 
@@ -102,8 +116,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle()
 
       if (error) {
-        console.error('Error loading user profile:', error)
-        setUser(null)
+        if (error.code === '42501' || error.message.includes('permission denied')) {
+          // RLS is blocking - user profile doesn't exist, try to create it
+          const { data: authUser } = await supabase.auth.getUser()
+          if (authUser.user?.user_metadata) {
+            await createUserProfile({
+              userId: authUser.user.id,
+              email: authUser.user.email || '',
+              fullName: authUser.user.user_metadata.full_name || 'Usuário',
       } else if (data) {
         setUser(data)
       } else {
@@ -138,34 +158,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'manager' | 'user') => {
     setLoading(true)
     try {
-      // Sign up user without email confirmation
+      // Sign up user with email confirmation disabled
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: undefined // Disable email confirmation
+          emailRedirectTo: undefined,
+          data: {
+            full_name: fullName,
+            role: role
+          }
         }
       })
 
       if (authError) throw authError
 
-      // Create user profile immediately if we have a session
-      if (authData.user && authData.session) {
-        await createUserProfile({
-          userId: authData.user.id,
-          email,
-          fullName,
-          role
-        })
-      } else if (authData.user && !authData.session) {
-        // Store signup data for manual confirmation
-        localStorage.setItem('pendingUserData', JSON.stringify({
-          userId: authData.user.id,
-          email,
-          fullName,
-          role
-        }))
-        throw new Error('Conta criada! Faça login com suas credenciais.')
+      // If user was created but not confirmed, try to create profile anyway
+      if (authData.user) {
+        try {
+          await createUserProfile({
+            userId: authData.user.id,
+            email,
+            fullName,
+            role
+          })
+        } catch (profileError) {
+          console.log('Profile creation will be handled on login')
+        }
+        
+        // Always throw success message to redirect to login
+        throw new Error('Conta criada com sucesso! Faça login com suas credenciais.')
       }
 
     } catch (error) {
