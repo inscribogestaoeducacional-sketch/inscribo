@@ -85,6 +85,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadUserProfile = async (userId: string) => {
     try {
+      // Check if there's pending user data to create profile
+      const pendingData = localStorage.getItem('pendingUserData')
+      if (pendingData) {
+        const userData = JSON.parse(pendingData)
+        if (userData.userId === userId) {
+          await createUserProfile(userData)
+          localStorage.removeItem('pendingUserData')
+        }
+      }
+
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -128,13 +138,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'manager' | 'user') => {
     setLoading(true)
     try {
+      // Sign up user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+      })
+
+      if (authError) throw authError
+
+      if (authData.user && !authData.session) {
+        // User needs to confirm email
+        throw new Error('Verifique seu email para confirmar a conta antes de fazer login.')
+      }
+
+      // Store signup data for after email confirmation
+      localStorage.setItem('pendingUserData', JSON.stringify({
+        userId: authData.user?.id,
+        email,
+        fullName,
+        role
+      }))
+
+    } catch (error) {
+      setLoading(false)
+      throw error
+    }
+  }
+
+  const createUserProfile = async (userData: any) => {
+    try {
       // Create institution if admin
       let institutionId = null
-      if (role === 'admin') {
+      if (userData.role === 'admin') {
         const { data: institution, error: instError } = await supabase
           .from('institutions')
           .insert({
-            name: `Instituição de ${fullName}`,
+            name: `Instituição de ${userData.fullName}`,
             primary_color: '#3B82F6',
             secondary_color: '#10B981'
           })
@@ -145,40 +184,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         institutionId = institution.id
       }
 
-      // Sign up user
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            role: role,
-            institution_id: institutionId
-          }
-        }
-      })
+      // Create user profile
+      const { error: profileError } = await supabase
+        .from('users')
+        .insert({
+          id: userData.userId,
+          email: userData.email,
+          full_name: userData.fullName,
+          role: userData.role,
+          institution_id: institutionId,
+          active: true
+        })
 
-      if (authError) throw authError
-
-      if (authData.user) {
-        // Create user profile
-        const { error: profileError } = await supabase
-          .from('users')
-          .insert({
-            id: authData.user.id,
-            email,
-            full_name: fullName,
-            role,
-            institution_id: institutionId,
-            active: true
-          })
-
-        if (profileError) {
-          console.error('Error creating user profile:', profileError)
-        }
+      if (profileError) {
+        console.error('Error creating user profile:', profileError)
+        throw profileError
       }
     } catch (error) {
-      setLoading(false)
+      console.error('Error in createUserProfile:', error)
       throw error
     }
   }
