@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { GraduationCap } from 'lucide-react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import LoginForm from './components/auth/LoginForm'
 import Sidebar from './components/layout/Sidebar'
