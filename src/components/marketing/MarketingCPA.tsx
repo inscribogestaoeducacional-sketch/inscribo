@@ -203,7 +203,7 @@ export default function MarketingCPA() {
   const loadCampaigns = async () => {
     try {
       setLoading(true)
-      const data = await DatabaseService.getMarketingCampaigns(user!.institution_id)
+      const data = await DatabaseService.getCampanhas(user!.institution_id)
       
       // Calculate CPA and status for each campaign
       const campaignsWithCPA = data.map(campaign => {
