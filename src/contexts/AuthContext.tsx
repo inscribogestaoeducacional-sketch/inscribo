@@ -106,6 +106,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (e) {
           console.log('Error parsing pending data')
+        }
+      }
       
       if (pendingData) {
         try {
@@ -154,6 +156,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               userId: authUser.user.id,
               email: authUser.user.email || '',
               fullName: authUser.user.user_metadata.full_name || 'Usuário',
+            }
+            )
+          }
           const { data: authUser } = await supabase.auth.getUser()
           if (authUser.user?.user_metadata) {
             await createUserProfile({
@@ -234,6 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Always throw success message to redirect to login
         throw new Error('Conta criada com sucesso! Faça login com suas credenciais.')
+      }
       setLoading(false)
       throw error
     }
