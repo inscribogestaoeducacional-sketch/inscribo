@@ -79,32 +79,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const loadUserProfile = async (userId: string) => {
+  const loadUserProfile = async (userId: string, retryCount = 0) => {
     try {
-      // Check if there's pending user data to create profile (safely)
-      let pendingData = null
-      try {
-        pendingData = localStorage.getItem('pendingUserData')
-      } catch (e) {
-        console.log('localStorage not available')
-      }
+      console.log(`Loading user profile for ${userId}, attempt ${retryCount + 1}`)
       
-      if (pendingData) {
-        try {
-          const userData = JSON.parse(pendingData)
-          if (userData.userId === userId) {
-            await createUserProfile(userData)
-            try {
-              localStorage.removeItem('pendingUserData')
-            } catch (e) {
-              console.log('Could not remove from localStorage')
-            }
-          }
-        } catch (e) {
-          console.log('Error parsing pending data')
-        }
-      }
-
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -112,8 +90,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single()
 
       if (error) {
+        console.error('Error loading user profile:', error)
+        
+        if (error.code === '42P17' && retryCount < 3) {
+          console.log(`Retrying in 1 second... (attempt ${retryCount + 1}/3)`)
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          return loadUserProfile(userId, retryCount + 1)
+        }
+        
         if (error.code === '42501' || error.message.includes('permission denied')) {
-          // RLS is blocking - user profile doesn't exist, try to create it
           const { data: authUser } = await supabase.auth.getUser()
           if (authUser.user?.user_metadata) {
             await createUserProfile({
@@ -124,7 +109,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             })
           }
         }
+        
+        setUser(null)
       } else if (data) {
+        console.log('User profile loaded successfully:', data)
         setUser(data)
       } else {
         setUser(null)
@@ -138,7 +126,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const createUserProfile = async (userData: any) => {
-    // Implementation for creating user profile
+    try {
+      const { error } = await supabase
+        .from('users')
+        .insert({
+          id: userData.userId,
+          email: userData.email,
+          full_name: userData.fullName,
+          role: userData.role,
+          institution_id: null,
+          active: true
+        })
+
+      if (error) {
+        console.error('Error creating user profile:', error)
+      }
+    } catch (error) {
+      console.error('Error creating user profile:', error)
+    }
   }
 
   const signIn = async (email: string, password: string) => {
@@ -165,7 +170,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'manager' | 'user') => {
     setLoading(true)
     try {
-      // Sign up user with email confirmation disabled
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -180,7 +184,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (authError) throw authError
 
-      // If user was created but not confirmed, try to create profile anyway
       if (authData.user) {
         try {
           await createUserProfile({
@@ -193,7 +196,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log('Profile creation will be handled on login')
         }
         
-        // Always throw success message to redirect to login
         throw new Error('Conta criada com sucesso! Faça login com suas credenciais.')
       }
     } catch (error) {
