@@ -138,20 +138,26 @@ function AppContent() {
 
   const checkInitialSetup = async () => {
     try {
+      // Check if we have any institutions
       const { data, error } = await supabase
         .from('institutions')
         .select('id')
         .limit(1)
-      
-      if (error && error.code === '42P01') {
-        // Table doesn't exist, needs setup
+
+      if (error) {
+        console.error('Error checking institutions:', error)
+        // If there's any error, assume we need setup
         setNeedsSetup(true)
       } else if (!data || data.length === 0) {
-        // No institutions exist, needs setup
+        // No institutions found, needs setup
         setNeedsSetup(true)
+      } else {
+        // Institution exists, no setup needed
+        setNeedsSetup(false)
       }
     } catch (error) {
       console.error('Error checking setup:', error)
+      // On any error, assume setup is needed
       setNeedsSetup(true)
     } finally {
       setCheckingSetup(false)

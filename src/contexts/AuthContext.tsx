@@ -64,36 +64,44 @@ export function AuthProvider({ children }: AuthProviderProps) {
         .from('users')
         .select('*')
         .eq('id', userId)
-        .limit(1)
+        .single()
 
       if (error) {
-        console.error('Error fetching user profile:', error)
-        return
+        if (error.code === 'PGRST116') {
+          // User doesn't exist in users table, this is expected during signup
+          console.log('User profile not found, this is normal during initial setup')
+          setLoading(false)
+          return
+        }
+        throw error
       }
       
-      if (data && data.length > 0) {
-        const userData = data[0]
-        
-        // Update last login
-        await supabase
-          .from('users')
-          .update({ last_login: new Date().toISOString() })
-          .eq('id', userId)
-        
-        setUser(userData)
-        
-        // Log login activity only after user data is set
-        await DatabaseService.logActivity({
-          user_id: userId,
-          action: 'login',
-          entity_type: 'auth',
-          details: { timestamp: new Date().toISOString() },
-          institution_id: userData.institution_id
-        })
+      // Update last login
+      await supabase
+        .from('users')
+        .update({ last_login: new Date().toISOString() })
+        .eq('id', userId)
+      
+      setUser(data)
+      
+      // Log login activity only if institution_id exists
+      if (data.institution_id) {
+        try {
+          await DatabaseService.logActivity({
+            user_id: userId,
+            action: 'login',
+            entity_type: 'auth',
+            details: { timestamp: new Date().toISOString() },
+            institution_id: data.institution_id
+          })
+        } catch (logError) {
+          console.warn('Failed to log activity:', logError)
+        }
       }
       
     } catch (error) {
       console.error('Error fetching user profile:', error)
+      setUser(null)
     } finally {
       setLoading(false)
     }
