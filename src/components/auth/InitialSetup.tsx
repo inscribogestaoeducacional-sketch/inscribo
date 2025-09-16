@@ -14,6 +14,7 @@ export default function InitialSetup({ onComplete }: InitialSetupProps) {
   const [institutionData, setInstitutionData] = useState({
     name: '',
     email: ''
+  })
   
   const [adminData, setAdminData] = useState({
     full_name: '',
@@ -115,7 +116,6 @@ export default function InitialSetup({ onComplete }: InitialSetupProps) {
             {step === 1 ? 'Configure sua instituição' : 'Crie o usuário administrador'}
           </p>
         </div>
-        </div>
 
         {/* Form */}
         <div className="bg-white py-8 px-6 shadow-xl rounded-lg border border-gray-100">
@@ -154,8 +154,6 @@ export default function InitialSetup({ onComplete }: InitialSetupProps) {
                   placeholder="contato@colegio.com"
                 />
               </div>
-
-
 
               <button
                 type="submit"
