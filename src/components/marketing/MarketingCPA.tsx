@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { TrendingUp, DollarSign, Users, AlertTriangle, Plus, Edit, Eye, X } from 'lucide-react'
+import { TrendingUp, DollarSign, Users, AlertTriangle, Plus, Edit, X, BarChart3 } from 'lucide-react'
 import { DatabaseService, MarketingCampaign } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -17,7 +17,9 @@ interface NewCampaignModalProps {
 
 function NewCampaignModal({ isOpen, onClose, onSave, editingCampaign }: NewCampaignModalProps) {
   const [formData, setFormData] = useState({
-    month_year: '',
+    name: '',
+    period_start: '',
+    period_end: '',
     investment: 0,
     leads_generated: 0,
     cpa_target: 200
@@ -26,14 +28,18 @@ function NewCampaignModal({ isOpen, onClose, onSave, editingCampaign }: NewCampa
   useEffect(() => {
     if (editingCampaign) {
       setFormData({
-        month_year: editingCampaign.month_year,
+        name: editingCampaign.name,
+        period_start: editingCampaign.period_start,
+        period_end: editingCampaign.period_end,
         investment: editingCampaign.investment,
         leads_generated: editingCampaign.leads_generated,
         cpa_target: editingCampaign.cpa_target || 200
       })
     } else {
       setFormData({
-        month_year: '',
+        name: '',
+        period_start: '',
+        period_end: '',
         investment: 0,
         leads_generated: 0,
         cpa_target: 200
@@ -49,15 +55,14 @@ function NewCampaignModal({ isOpen, onClose, onSave, editingCampaign }: NewCampa
 
   if (!isOpen) return null
 
+  const actualCPA = formData.leads_generated > 0 ? formData.investment / formData.leads_generated : 0
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold">{editingCampaign ? 'Editar Campanha' : 'Nova Campanha'}</h2>
-          <button 
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-          >
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -65,15 +70,43 @@ function NewCampaignModal({ isOpen, onClose, onSave, editingCampaign }: NewCampa
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Período (Mês/Ano) *
+              Nome da Campanha *
             </label>
             <input
-              type="month"
+              type="text"
               required
-              value={formData.month_year}
-              onChange={(e) => setFormData({ ...formData, month_year: e.target.value })}
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Ex: Facebook Ads Janeiro"
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Data Início *
+              </label>
+              <input
+                type="date"
+                required
+                value={formData.period_start}
+                onChange={(e) => setFormData({ ...formData, period_start: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Data Fim *
+              </label>
+              <input
+                type="date"
+                required
+                value={formData.period_end}
+                onChange={(e) => setFormData({ ...formData, period_end: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
           </div>
 
           <div>
@@ -122,17 +155,28 @@ function NewCampaignModal({ isOpen, onClose, onSave, editingCampaign }: NewCampa
             />
           </div>
 
+          {formData.leads_generated > 0 && (
+            <div className="bg-blue-50 p-3 rounded-md">
+              <p className="text-sm text-blue-700">
+                <strong>CPA Atual:</strong> R$ {actualCPA.toFixed(2)}
+              </p>
+              <p className="text-xs text-blue-600 mt-1">
+                {actualCPA <= formData.cpa_target ? '✅ Dentro da meta!' : '⚠️ Acima da meta'}
+              </p>
+            </div>
+          )}
+
           <div className="flex justify-end space-x-2 pt-4">
             <button 
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
             >
               Cancelar
             </button>
             <button 
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
             >
               {editingCampaign ? 'Atualizar' : 'Salvar'} Campanha
             </button>
@@ -196,8 +240,7 @@ export default function MarketingCPA() {
       }
 
       if (editingCampaign) {
-        // Update existing campaign
-        // Implementation would update in Supabase
+        await DatabaseService.updateMarketingCampaign(editingCampaign.id, dataWithInstitution)
       } else {
         await DatabaseService.createMarketingCampaign(dataWithInstitution)
       }
@@ -302,13 +345,16 @@ export default function MarketingCPA() {
       {/* CPA Analysis Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Análise de CPA por Período</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Análise de CPA por Campanha</h3>
         </div>
         
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Campanha
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Período
                 </th>
@@ -328,9 +374,6 @@ export default function MarketingCPA() {
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Desvio
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Ações
                 </th>
               </tr>
@@ -342,7 +385,10 @@ export default function MarketingCPA() {
                 return (
                   <tr key={campaign.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {new Date(campaign.month_year + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                      {campaign.name}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {new Date(campaign.period_start).toLocaleDateString('pt-BR')} - {new Date(campaign.period_end).toLocaleDateString('pt-BR')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       R$ {campaign.investment.toLocaleString('pt-BR')}
@@ -373,22 +419,14 @@ export default function MarketingCPA() {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span className={`font-medium ${
-                        deviation > 0 ? 'text-red-600' : 'text-green-600'
-                      }`}>
-                        {deviation > 0 ? '+' : ''}{deviation.toFixed(1)}%
-                      </span>
-                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                        <button 
-                          onClick={() => handleEditCampaign(campaign)}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </button>
-                      </div>
+                      <button 
+                        onClick={() => handleEditCampaign(campaign)}
+                        className="text-blue-600 hover:text-blue-900 flex items-center"
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Editar
+                      </button>
                     </td>
                   </tr>
                 )
@@ -420,11 +458,11 @@ export default function MarketingCPA() {
                         campaign.status === 'success' ? 'bg-green-500' :
                         campaign.status === 'warning' ? 'bg-yellow-500' : 'bg-red-500'
                       }`}
-                      style={{ height: `${(campaign.actualCPA / 400) * 200}px` }}
+                      style={{ height: `${Math.min((campaign.actualCPA / 400) * 200, 200)}px` }}
                     ></div>
                     <div className="mt-2 text-xs text-gray-600 text-center">
                       <div className="font-semibold">R$ {campaign.actualCPA.toFixed(0)}</div>
-                      <div>{new Date(campaign.month_year + '-01').toLocaleDateString('pt-BR', { month: 'short' })}</div>
+                      <div className="truncate w-16">{campaign.name.split(' ')[0]}</div>
                     </div>
                   </div>
                 ))}
@@ -432,7 +470,7 @@ export default function MarketingCPA() {
             ) : (
               <div className="h-full flex items-center justify-center bg-gray-50 rounded-lg">
                 <div className="text-center">
-                  <TrendingUp className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                  <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-2" />
                   <p className="text-gray-500">Adicione campanhas para ver a evolução</p>
                 </div>
               </div>
@@ -445,25 +483,37 @@ export default function MarketingCPA() {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Investimento vs Resultados</h3>
           <div className="h-64">
             {campaigns.length > 0 ? (
-              <div className="h-full flex items-end justify-between space-x-2">
-                {campaigns.slice(-6).map((campaign, index) => (
-                  <div key={index} className="flex-1 flex flex-col items-center">
-                    <div className="w-full relative">
-                      <div 
-                        className="w-full bg-blue-500 rounded-t-lg"
-                        style={{ height: `${(campaign.investment / Math.max(...campaigns.map(c => c.investment))) * 150}px` }}
-                      ></div>
-                      <div 
-                        className="w-full bg-green-500 rounded-t-lg mt-1"
-                        style={{ height: `${(campaign.leads_generated / Math.max(...campaigns.map(c => c.leads_generated))) * 50}px` }}
-                      ></div>
+              <div className="h-full">
+                <div className="flex items-end justify-between space-x-2 h-48">
+                  {campaigns.slice(-6).map((campaign, index) => (
+                    <div key={index} className="flex-1 flex flex-col items-center">
+                      <div className="w-full relative">
+                        <div 
+                          className="w-full bg-blue-500 rounded-t-lg"
+                          style={{ height: `${(campaign.investment / Math.max(...campaigns.map(c => c.investment))) * 120}px` }}
+                        ></div>
+                        <div 
+                          className="w-full bg-green-500 rounded-t-lg mt-1"
+                          style={{ height: `${(campaign.leads_generated / Math.max(...campaigns.map(c => c.leads_generated))) * 30}px` }}
+                        ></div>
+                      </div>
+                      <div className="mt-2 text-xs text-gray-600 text-center">
+                        <div className="font-semibold">{campaign.leads_generated}</div>
+                        <div className="truncate w-16">{campaign.name.split(' ')[0]}</div>
+                      </div>
                     </div>
-                    <div className="mt-2 text-xs text-gray-600 text-center">
-                      <div className="font-semibold">{campaign.leads_generated}</div>
-                      <div>{new Date(campaign.month_year + '-01').toLocaleDateString('pt-BR', { month: 'short' })}</div>
-                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 flex items-center justify-center space-x-4 text-xs">
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 bg-blue-500 rounded mr-1"></div>
+                    <span>Investimento</span>
                   </div>
-                ))}
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 bg-green-500 rounded mr-1"></div>
+                    <span>Leads</span>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="h-full flex items-center justify-center bg-gray-50 rounded-lg">
