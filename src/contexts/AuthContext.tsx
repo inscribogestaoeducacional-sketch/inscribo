@@ -60,6 +60,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const fetchUserProfile = async (userId: string) => {
     try {
+      console.log('Fetching user profile for:', userId)
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -70,17 +71,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (error.code === 'PGRST116') {
           // User doesn't exist in users table, this is expected during signup
           console.log('User profile not found, this is normal during initial setup')
+          setUser(null)
           setLoading(false)
           return
         }
+        console.error('Error fetching user profile:', error)
         throw error
       }
       
+      console.log('User profile loaded:', data)
+      
       // Update last login
-      await supabase
+      try {
+        await supabase
         .from('users')
         .update({ last_login: new Date().toISOString() })
         .eq('id', userId)
+      } catch (updateError) {
+        console.warn('Failed to update last login:', updateError)
+      }
       
       setUser(data)
       
@@ -103,6 +112,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       console.error('Error fetching user profile:', error)
       setUser(null)
     } finally {
+      console.log('User profile fetch completed')
       setLoading(false)
     }
   }
