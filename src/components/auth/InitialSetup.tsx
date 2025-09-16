@@ -54,11 +54,11 @@ export default function InitialSetup({ onComplete }: InitialSetupProps) {
       // Create institution
       const { data: institution, error: instError } = await supabase
         .from('institutions')
-        .insert([{ 
+        .insert({ 
           name: institutionData.name,
           primary_color: '#3B82F6',
           secondary_color: '#10B981'
-        }])
+        })
         .select()
         .single()
 
@@ -76,14 +76,14 @@ export default function InitialSetup({ onComplete }: InitialSetupProps) {
       if (authData.user) {
         const { error: userError } = await supabase
           .from('users')
-          .insert([{
+          .insert({
             id: authData.user.id,
             email: adminData.email,
             full_name: adminData.full_name,
             role: 'admin',
             institution_id: institution.id,
             active: true
-          }])
+          })
 
         if (userError) throw userError
       }
