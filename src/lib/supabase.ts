@@ -104,11 +104,13 @@ export interface Rematricula {
 
 export interface User {
   id: string
-  nome: string
+  full_name: string
   email: string
-  role: 'admin' | 'gestor' | 'comercial'
+  role: 'admin' | 'gestor_pedagogico' | 'comercial' | 'secretaria' | 'financeiro'
+  phone?: string
   institution_id: string
   active: boolean
+  last_login?: string
   created_at: string
 }
 
@@ -415,6 +417,53 @@ export class DatabaseService {
     }
   ]
 
+  private static mockUsers: User[] = [
+    {
+      id: 'user1',
+      full_name: 'Administrador Sistema',
+      email: 'admin@inscribo.com',
+      role: 'admin',
+      phone: '(11) 99999-0001',
+      institution_id: 'inst1',
+      active: true,
+      last_login: '2024-01-15T10:00:00Z',
+      created_at: '2024-01-01T00:00:00Z'
+    },
+    {
+      id: 'user2',
+      full_name: 'Maria Silva Santos',
+      email: 'maria@inscribo.com',
+      role: 'gestor_pedagogico',
+      phone: '(11) 99999-0002',
+      institution_id: 'inst1',
+      active: true,
+      last_login: '2024-01-14T15:30:00Z',
+      created_at: '2024-01-02T00:00:00Z'
+    },
+    {
+      id: 'user3',
+      full_name: 'João Oliveira Costa',
+      email: 'joao@inscribo.com',
+      role: 'comercial',
+      phone: '(11) 99999-0003',
+      institution_id: 'inst1',
+      active: true,
+      last_login: '2024-01-15T09:15:00Z',
+      created_at: '2024-01-03T00:00:00Z'
+    },
+    {
+      id: 'user4',
+      full_name: 'Ana Paula Ferreira',
+      email: 'ana@inscribo.com',
+      role: 'secretaria',
+      phone: '(11) 99999-0004',
+      institution_id: 'inst1',
+      active: false,
+      last_login: '2024-01-10T14:20:00Z',
+      created_at: '2024-01-04T00:00:00Z'
+    }
+  ]
+
   // API Methods
   static async getLeads(institutionId: string): Promise<Lead[]> {
     await new Promise(resolve => setTimeout(resolve, 300))
@@ -622,6 +671,48 @@ export class DatabaseService {
       return this.mockAcoes[index]
     }
     throw new Error('Ação não encontrada')
+  }
+
+  static async getUsers(institutionId: string): Promise<User[]> {
+    await new Promise(resolve => setTimeout(resolve, 300))
+    return this.mockUsers.filter(user => user.institution_id === institutionId)
+  }
+
+  static async createUser(userData: Partial<User>): Promise<User> {
+    await new Promise(resolve => setTimeout(resolve, 300))
+    const newUser: User = {
+      id: Date.now().toString(),
+      full_name: userData.full_name || '',
+      email: userData.email || '',
+      role: userData.role || 'comercial',
+      phone: userData.phone,
+      institution_id: userData.institution_id || '',
+      active: userData.active !== undefined ? userData.active : true,
+      last_login: undefined,
+      created_at: new Date().toISOString()
+    }
+    this.mockUsers.unshift(newUser)
+    return newUser
+  }
+
+  static async updateUser(id: string, userData: Partial<User>): Promise<User> {
+    await new Promise(resolve => setTimeout(resolve, 300))
+    const index = this.mockUsers.findIndex(user => user.id === id)
+    if (index !== -1) {
+      this.mockUsers[index] = { ...this.mockUsers[index], ...userData }
+      return this.mockUsers[index]
+    }
+    throw new Error('Usuário não encontrado')
+  }
+
+  static async deleteUser(id: string): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, 300))
+    const index = this.mockUsers.findIndex(user => user.id === id)
+    if (index !== -1) {
+      this.mockUsers.splice(index, 1)
+    } else {
+      throw new Error('Usuário não encontrado')
+    }
   }
 
   // Dashboard KPIs

@@ -25,14 +25,14 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'gestor', 'comercial'] },
-    { id: 'leads', label: 'Kanban de Leads', icon: UserPlus, roles: ['admin', 'gestor', 'comercial'] },
-    { id: 'calendar', label: 'Calendário de Visitas', icon: Calendar, roles: ['admin', 'gestor', 'comercial'] },
-    { id: 'matriculas', label: 'Matrículas', icon: UserCheck, roles: ['admin', 'gestor', 'comercial'] },
-    { id: 'marketing', label: 'Marketing & CPA', icon: TrendingUp, roles: ['admin', 'gestor'] },
-    { id: 'funil', label: 'Planejamento & Funil', icon: Target, roles: ['admin', 'gestor'] },
-    { id: 'rematriculas', label: 'Rematrículas', icon: RefreshCw, roles: ['admin', 'gestor'] },
-    { id: 'acoes', label: 'Ações Automáticas', icon: CheckSquare, roles: ['admin', 'gestor', 'comercial'] },
-    { id: 'relatorios', label: 'Relatórios', icon: FileText, roles: ['admin', 'gestor'] },
+    { id: 'leads', label: 'Kanban de Leads', icon: UserPlus, roles: ['admin', 'gestor_pedagogico', 'comercial'] },
+    { id: 'calendar', label: 'Calendário de Visitas', icon: Calendar, roles: ['admin', 'gestor_pedagogico', 'comercial'] },
+    { id: 'matriculas', label: 'Matrículas', icon: UserCheck, roles: ['admin', 'gestor_pedagogico', 'comercial', 'secretaria'] },
+    { id: 'marketing', label: 'Marketing & CPA', icon: TrendingUp, roles: ['admin', 'gestor_pedagogico'] },
+    { id: 'funil', label: 'Planejamento & Funil', icon: Target, roles: ['admin', 'gestor_pedagogico'] },
+    { id: 'rematriculas', label: 'Rematrículas', icon: RefreshCw, roles: ['admin', 'gestor_pedagogico'] },
+    { id: 'acoes', label: 'Ações Automáticas', icon: CheckSquare, roles: ['admin', 'gestor_pedagogico', 'comercial'] },
+    { id: 'relatorios', label: 'Relatórios', icon: FileText, roles: ['admin', 'gestor_pedagogico'] },
     { id: 'usuarios', label: 'Usuários', icon: Users, roles: ['admin'] },
     { id: 'configuracoes', label: 'Configurações', icon: Settings, roles: ['admin'] },
   ]
@@ -92,16 +92,19 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
         <div className="flex items-center space-x-3 p-3 bg-white rounded-xl shadow-sm">
           <div className="h-10 w-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-full flex items-center justify-center">
             <span className="text-sm font-medium text-white">
-              {user?.nome?.charAt(0) || 'U'}
+              {user?.full_name?.charAt(0) || 'U'}
             </span>
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-gray-900 truncate">
-              {user?.nome || 'Usuário'}
+              {user?.full_name || 'Usuário'}
             </p>
             <p className="text-xs text-gray-500 capitalize">
               {user?.role === 'admin' ? 'Administrador' :
-               user?.role === 'gestor' ? 'Gestor' : 'Comercial'}
+               user?.role === 'gestor_pedagogico' ? 'Gestor Pedagógico' :
+               user?.role === 'comercial' ? 'Comercial' :
+               user?.role === 'secretaria' ? 'Secretaria' :
+               user?.role === 'financeiro' ? 'Financeiro' : 'Usuário'}
             </p>
           </div>
         </div>

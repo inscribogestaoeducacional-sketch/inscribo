@@ -2,9 +2,9 @@ import React, { createContext, useContext, useState, useEffect } from 'react'
 
 interface AppUser {
   id: string
-  nome: string
+  full_name: string
   email: string
-  role: 'admin' | 'gestor' | 'comercial'
+  role: 'admin' | 'gestor_pedagogico' | 'comercial' | 'secretaria' | 'financeiro'
   institution_id: string
   active: boolean
 }
@@ -29,7 +29,7 @@ export function useAuth() {
 // Mock user data
 const MOCK_USER: AppUser = {
   id: 'user1',
-  nome: 'Administrador Sistema',
+  full_name: 'Administrador Sistema',
   email: 'admin@inscribo.com',
   role: 'admin',
   institution_id: 'inst1',

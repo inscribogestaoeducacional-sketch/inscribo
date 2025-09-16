@@ -43,16 +43,19 @@ export default function TopBar() {
             </button>
             <div className="text-right">
               <p className="text-sm font-medium text-gray-900">
-                {user?.nome || 'Usuário'}
+                {user?.full_name || 'Usuário'}
               </p>
               <p className="text-xs text-gray-500 capitalize">
                 {user?.role === 'admin' ? 'Administrador' :
-                 user?.role === 'gestor' ? 'Gestor' : 'Comercial'}
+                 user?.role === 'gestor_pedagogico' ? 'Gestor Pedagógico' :
+                 user?.role === 'comercial' ? 'Comercial' :
+                 user?.role === 'secretaria' ? 'Secretaria' :
+                 user?.role === 'financeiro' ? 'Financeiro' : 'Usuário'}
               </p>
             </div>
             <div className="h-10 w-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-full flex items-center justify-center shadow-sm">
               <span className="text-sm font-medium text-white">
-                {user?.nome?.charAt(0) || 'A'}
+                {user?.full_name?.charAt(0) || 'A'}
               </span>
             </div>
             <button
