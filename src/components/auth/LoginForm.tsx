@@ -59,6 +59,14 @@ export default function LoginForm() {
           </div>
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Inscribo</h2>
           <p className="text-gray-600">Sistema de Gestão Educacional</p>
+          
+          {/* Demo Mode Indicator */}
+          {!import.meta.env.VITE_SUPABASE_URL || 
+           import.meta.env.VITE_SUPABASE_URL === 'https://demo.supabase.co' ? (
+            <div className="mt-2 px-3 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
+              Modo Demonstração
+            </div>
+          ) : null}
         </div>
 
         {/* Toggle Login/Register */}
@@ -110,6 +118,16 @@ export default function LoginForm() {
             {success && (
               <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-sm">
                 {success}
+              </div>
+            )}
+
+            {/* Demo Credentials Helper */}
+            {(!import.meta.env.VITE_SUPABASE_URL || 
+              import.meta.env.VITE_SUPABASE_URL === 'https://demo.supabase.co') && isLogin && (
+              <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-xl text-sm">
+                <p className="font-medium mb-1">Credenciais de demonstração:</p>
+                <p className="text-xs">👑 Admin: admin@demo.com / demo123</p>
+                <p className="text-xs">👤 Consultor: consultor@demo.com / demo123</p>
               </div>
             )}
 
