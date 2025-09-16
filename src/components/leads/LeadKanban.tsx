@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Phone, Mail, Calendar, MoreHorizontal, User, GraduationCap, Tag, Edit, Trash2 } from 'lucide-react'
+import { Plus, Phone, Mail, Calendar, MoreHorizontal, User, GraduationCap, Tag, Edit, Trash2, X } from 'lucide-react'
 import { DatabaseService, Lead } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -142,9 +142,6 @@ function KanbanColumn({ column, leads, onEdit, onDelete, onStatusChange }: Kanba
               {columnLeads.length}
             </span>
           </div>
-          <button className="text-gray-500 hover:text-gray-700 transition-colors">
-            <Plus className="h-5 w-5" />
-          </button>
         </div>
         
         <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -168,12 +165,205 @@ function KanbanColumn({ column, leads, onEdit, onDelete, onStatusChange }: Kanba
   )
 }
 
+interface NewLeadModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onSave: (leadData: Partial<Lead>) => void
+  editingLead?: Lead | null
+}
+
+function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProps) {
+  const [formData, setFormData] = useState({
+    student_name: '',
+    responsible_name: '',
+    phone: '',
+    email: '',
+    grade_interest: '',
+    source: '',
+    notes: ''
+  })
+
+  useEffect(() => {
+    if (editingLead) {
+      setFormData({
+        student_name: editingLead.student_name,
+        responsible_name: editingLead.responsible_name,
+        phone: editingLead.phone || '',
+        email: editingLead.email || '',
+        grade_interest: editingLead.grade_interest,
+        source: editingLead.source,
+        notes: editingLead.notes || ''
+      })
+    } else {
+      setFormData({
+        student_name: '',
+        responsible_name: '',
+        phone: '',
+        email: '',
+        grade_interest: '',
+        source: '',
+        notes: ''
+      })
+    }
+  }, [editingLead, isOpen])
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSave(formData)
+    onClose()
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold">{editingLead ? 'Editar Lead' : 'Novo Lead'}</h2>
+          <button 
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700 text-2xl"
+          >
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Nome do Aluno *
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.student_name}
+                onChange={(e) => setFormData({ ...formData, student_name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Nome do Responsável *
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.responsible_name}
+                onChange={(e) => setFormData({ ...formData, responsible_name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Telefone
+              </label>
+              <input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                E-mail
+              </label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Série de Interesse *
+              </label>
+              <select
+                required
+                value={formData.grade_interest}
+                onChange={(e) => setFormData({ ...formData, grade_interest: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Selecionar série...</option>
+                <option value="Infantil">Educação Infantil</option>
+                <option value="1º Ano">1º Ano</option>
+                <option value="2º Ano">2º Ano</option>
+                <option value="3º Ano">3º Ano</option>
+                <option value="4º Ano">4º Ano</option>
+                <option value="5º Ano">5º Ano</option>
+                <option value="6º Ano">6º Ano</option>
+                <option value="7º Ano">7º Ano</option>
+                <option value="8º Ano">8º Ano</option>
+                <option value="9º Ano">9º Ano</option>
+                <option value="1º Médio">1º Ano Médio</option>
+                <option value="2º Médio">2º Ano Médio</option>
+                <option value="3º Médio">3º Ano Médio</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Origem *
+              </label>
+              <select
+                required
+                value={formData.source}
+                onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Selecionar origem...</option>
+                <option value="Facebook">Facebook</option>
+                <option value="Instagram">Instagram</option>
+                <option value="Google">Google</option>
+                <option value="Indicação">Indicação</option>
+                <option value="Site">Site</option>
+                <option value="WhatsApp">WhatsApp</option>
+                <option value="Outros">Outros</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Observações
+            </label>
+            <textarea
+              rows={3}
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Observações sobre o lead..."
+            />
+          </div>
+
+          <div className="flex justify-end space-x-2 pt-4">
+            <button 
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button 
+              type="submit"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              {editingLead ? 'Atualizar' : 'Criar'} Lead
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function LeadKanban() {
   const { user } = useAuth()
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [showNewLeadModal, setShowNewLeadModal] = useState(false)
+  const [editingLead, setEditingLead] = useState<Lead | null>(null)
 
   useEffect(() => {
     if (user?.institution_id) {
@@ -193,14 +383,36 @@ export default function LeadKanban() {
     }
   }
 
+  const handleSaveLead = async (leadData: Partial<Lead>) => {
+    try {
+      const dataWithInstitution = {
+        ...leadData,
+        institution_id: user!.institution_id,
+        status: editingLead?.status || 'new'
+      }
+
+      if (editingLead) {
+        await DatabaseService.updateLead(editingLead.id, dataWithInstitution)
+      } else {
+        await DatabaseService.createLead(dataWithInstitution)
+      }
+
+      await loadLeads()
+      setEditingLead(null)
+    } catch (error) {
+      console.error('Error saving lead:', error)
+    }
+  }
+
   const handleEditLead = (lead: Lead) => {
-    setSelectedLead(lead)
+    setEditingLead(lead)
+    setShowNewLeadModal(true)
   }
 
   const handleDeleteLead = async (id: string) => {
     if (confirm('Tem certeza que deseja excluir este lead?')) {
       try {
-        // Implementation would go here
+        // Implementation would delete from Supabase
         await loadLeads()
       } catch (error) {
         console.error('Error deleting lead:', error)
@@ -215,6 +427,11 @@ export default function LeadKanban() {
     } catch (error) {
       console.error('Error updating lead status:', error)
     }
+  }
+
+  const handleNewLead = () => {
+    setEditingLead(null)
+    setShowNewLeadModal(true)
   }
 
   if (loading) {
@@ -241,7 +458,7 @@ export default function LeadKanban() {
           <p className="text-gray-600">Gerencie o funil de vendas</p>
         </div>
         <button 
-          onClick={() => setShowNewLeadModal(true)}
+          onClick={handleNewLead}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center shadow-sm"
         >
           <Plus className="h-4 w-4 mr-2" />
@@ -263,81 +480,16 @@ export default function LeadKanban() {
         ))}
       </div>
 
-      {/* Lead Details Modal */}
-      {selectedLead && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold">Detalhes do Lead</h2>
-              <button 
-                onClick={() => setSelectedLead(null)}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
-              >
-                ×
-              </button>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nome do Aluno
-                </label>
-                <input
-                  type="text"
-                  value={selectedLead.student_name}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  readOnly
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Responsável
-                </label>
-                <input
-                  type="text"
-                  value={selectedLead.responsible_name}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  readOnly
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Série de Interesse
-                </label>
-                <input
-                  type="text"
-                  value={selectedLead.grade_interest}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  readOnly
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Origem
-                </label>
-                <input
-                  type="text"
-                  value={selectedLead.source}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  readOnly
-                />
-              </div>
-            </div>
-
-            <div className="mt-6 flex justify-end space-x-2">
-              <button 
-                onClick={() => setSelectedLead(null)}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Fechar
-              </button>
-              <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
-                Editar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* New/Edit Lead Modal */}
+      <NewLeadModal
+        isOpen={showNewLeadModal}
+        onClose={() => {
+          setShowNewLeadModal(false)
+          setEditingLead(null)
+        }}
+        onSave={handleSaveLead}
+        editingLead={editingLead}
+      />
     </div>
   )
 }

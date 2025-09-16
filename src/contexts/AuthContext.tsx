@@ -1,18 +1,21 @@
-import React, { createContext, useContext, useState } from 'react'
+import React, { createContext, useContext, useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
+import type { User } from '@supabase/supabase-js'
 
-interface User {
+interface AppUser {
   id: string
   email: string
   full_name: string
-  role: string
+  role: 'admin' | 'manager' | 'user'
   institution_id: string
+  active: boolean
 }
 
 interface AuthContextType {
-  user: User | null
+  user: AppUser | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<void>
-  signOut: () => void
+  signOut: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -25,44 +28,67 @@ export function useAuth() {
   return context
 }
 
-interface AuthProviderProps {
-  children: React.ReactNode
-}
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<AppUser | null>(null)
+  const [loading, setLoading] = useState(true)
 
-export function AuthProvider({ children }: AuthProviderProps) {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(false)
-
-  const signIn = async (email: string, password: string) => {
-    setLoading(true)
-    
-    // Simular login - em produção conectaria com Supabase
-    if (email === 'admin@escola.com' && password === '123456') {
-      const mockUser: User = {
-        id: '1',
-        email: 'admin@escola.com',
-        full_name: 'Administrador',
-        role: 'admin',
-        institution_id: '1'
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        loadUserProfile(session.user)
+      } else {
+        setLoading(false)
       }
-      setUser(mockUser)
+    })
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        await loadUserProfile(session.user)
+      } else {
+        setUser(null)
+        setLoading(false)
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const loadUserProfile = async (authUser: User) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authUser.id)
+        .single()
+
+      if (error) throw error
+
+      setUser(data)
+    } catch (error) {
+      console.error('Error loading user profile:', error)
+    } finally {
       setLoading(false)
-    } else {
-      setLoading(false)
-      throw new Error('Email ou senha incorretos')
     }
   }
 
-  const signOut = () => {
-    setUser(null)
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+    if (error) throw error
   }
 
-  const value: AuthContextType = {
-    user,
-    loading,
-    signIn,
-    signOut,
+  const signOut = async () => {
+    const { error } = await supabase.auth.signOut()
+    if (error) throw error
   }
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
+      {children}
+    </AuthContext.Provider>
+  )
 }
