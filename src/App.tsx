@@ -75,6 +75,9 @@ function AppContent() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600 font-medium">Carregando Inscribo...</p>
           <p className="text-sm text-gray-500">Sistema de Gestão Educacional</p>
+          <div className="mt-4 text-xs text-gray-400">
+            {import.meta.env.VITE_SUPABASE_URL ? 'Conectando ao banco...' : 'Modo demonstração'}
+          </div>
         </div>
       </div>
     )
