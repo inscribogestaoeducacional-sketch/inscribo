@@ -138,26 +138,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'manager' | 'user') => {
     setLoading(true)
     try {
-      // Sign up user
+      // Sign up user without email confirmation
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: undefined // Disable email confirmation
+        }
       })
 
       if (authError) throw authError
 
-      if (authData.user && !authData.session) {
-        // User needs to confirm email
-        throw new Error('Verifique seu email para confirmar a conta antes de fazer login.')
+      // Create user profile immediately if we have a session
+      if (authData.user && authData.session) {
+        await createUserProfile({
+          userId: authData.user.id,
+          email,
+          fullName,
+          role
+        })
+      } else if (authData.user && !authData.session) {
+        // Store signup data for manual confirmation
+        localStorage.setItem('pendingUserData', JSON.stringify({
+          userId: authData.user.id,
+          email,
+          fullName,
+          role
+        }))
+        throw new Error('Conta criada! Faça login com suas credenciais.')
       }
-
-      // Store signup data for after email confirmation
-      localStorage.setItem('pendingUserData', JSON.stringify({
-        userId: authData.user?.id,
-        email,
-        fullName,
-        role
-      }))
 
     } catch (error) {
       setLoading(false)

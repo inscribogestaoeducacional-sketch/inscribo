@@ -105,7 +105,7 @@ export default function LoginForm() {
 
             {!isLogin && (
               <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-xl text-sm">
-                <strong>Importante:</strong> Após criar a conta, verifique seu email para confirmar antes de fazer login.
+                <strong>Desenvolvimento:</strong> Após criar a conta, você pode fazer login imediatamente.
               </div>
             )}
 
