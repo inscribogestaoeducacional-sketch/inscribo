@@ -49,14 +49,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (session?.user && mounted) {
           await loadUserProfile(session.user.id)
-        }
-      } catch (error) {
-        console.error('Error initializing auth:', error)
-        if (mounted) {
-          setLoading(false)
-        }
-      }
-      
       // Check if there's pending user data to create profile (safely)
       let pendingData = null
       try {
@@ -68,7 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (pendingData) {
         try {
           const userData = JSON.parse(pendingData)
-          if (userData.userId === session?.user?.id) {
+          if (userData.userId === userId) {
             await createUserProfile(userData)
             try {
               localStorage.removeItem('pendingUserData')
@@ -112,6 +104,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single()
 
       if (error) {
+        if (error.code === '42501' || error.message.includes('permission denied')) {
+          // RLS is blocking - user profile doesn't exist, try to create it
+          const { data: authUser } = await supabase.auth.getUser()
+          if (authUser.user?.user_metadata) {
+            await createUserProfile({
+              userId: authUser.user.id,
+              email: authUser.user.email || '',
+              fullName: authUser.user.user_metadata.full_name || 'Usuário',
         if (error.code === '42P17' && retryCount < 3) {
           console.log(`Retrying in 1 second... (attempt ${retryCount + 1}/3)`)
           await new Promise(resolve => setTimeout(resolve, 1000))
@@ -119,7 +119,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         
         if (error.code === '42501' || error.message.includes('permission denied')) {
-          // RLS is blocking - user profile doesn't exist, try to create it
           const { data: authUser } = await supabase.auth.getUser()
           if (authUser.user?.user_metadata) {
             await createUserProfile({
@@ -192,11 +191,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true)
     try {
       // Sign up user with email confirmation disabled
-      const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: undefined,
+          data: {
+            full_name: fullName,
+            role: role
+          }
           data: {
             full_name: fullName,
             role: role
@@ -221,10 +223,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Always throw success message to redirect to login
         throw new Error('Conta criada com sucesso! Faça login com suas credenciais.')
-      }
-    } catch (error) {
-      setLoading(false)
-      throw error
     }
   }
 

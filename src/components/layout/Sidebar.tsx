@@ -49,38 +49,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (session?.user && mounted) {
           await loadUserProfile(session.user.id)
-        } else if (mounted) {
-          setLoading(false)
-        }
-      } catch (error) {
-        console.error('Error initializing auth:', error)
-        if (mounted) {
-          setLoading(false)
-        }
-      }
-    }
-
-    initializeAuth()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return
-
-      if (session?.user) {
-        await loadUserProfile(session.user.id)
-      } else {
-        setUser(null)
-        setLoading(false)
-      }
-    })
-
-    return () => {
-      mounted = false
-      subscription.unsubscribe()
-    }
-  }, [])
-
-  const loadUserProfile = async (userId: string) => {
-    try {
       // Check if there's pending user data to create profile (safely)
       let pendingData = null
       try {
@@ -104,6 +72,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log('Error parsing pending data')
         }
       }
+    }
+
+    initializeAuth()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return
+
+      if (session?.user) {
+        await loadUserProfile(session.user.id)
+      } else {
+        setUser(null)
+        setLoading(false)
+      }
+    })
+
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  const loadUserProfile = async (userId: string, retryCount = 0) => {
+    try {
+      console.log(`Loading user profile for ${userId}, attempt ${retryCount + 1}`)
       
       const { data, error } = await supabase
         .from('users')
@@ -120,11 +112,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               userId: authUser.user.id,
               email: authUser.user.email || '',
               fullName: authUser.user.user_metadata.full_name || 'Usuário',
+        if (error.code === '42P17' && retryCount < 3) {
+          console.log(`Retrying in 1 second... (attempt ${retryCount + 1}/3)`)
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          return loadUserProfile(userId, retryCount + 1)
+        }
+        
+        if (error.code === '42501' || error.message.includes('permission denied')) {
+          const { data: authUser } = await supabase.auth.getUser()
+          if (authUser.user?.user_metadata) {
+            await createUserProfile({
+              userId: authUser.user.id,
+              email: authUser.user.email || '',
+              fullName: authUser.user.user_metadata.full_name || 'Usuário',
               role: authUser.user.user_metadata.role || 'user'
             })
           }
         }
+        
+        setUser(null)
       } else if (data) {
+        console.log('User profile loaded successfully:', data)
         setUser(data)
       } else {
         setUser(null)
@@ -137,8 +145,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const createUserProfile = async (userData: { userId: string, email: string, fullName: string, role: string }) => {
-    // Implementation for creating user profile
+  const createUserProfile = async (userData: any) => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .insert({
+          id: userData.userId,
+          email: userData.email,
+          full_name: userData.fullName,
+          role: userData.role,
+          institution_id: null,
+          active: true
+        })
+
+      if (error) {
+        console.error('Error creating user profile:', error)
+      }
+    } catch (error) {
+      console.error('Error creating user profile:', error)
+    }
   }
 
   const signIn = async (email: string, password: string) => {
@@ -150,7 +175,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       if (error) {
-        throw error
+        throw new Error(error.message)
       }
     } catch (error) {
       setLoading(false)
@@ -166,11 +191,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true)
     try {
       // Sign up user with email confirmation disabled
-      const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: undefined,
+          data: {
+            full_name: fullName,
+            role: role
+          }
           data: {
             full_name: fullName,
             role: role
@@ -195,21 +223,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Always throw success message to redirect to login
         throw new Error('Conta criada com sucesso! Faça login com suas credenciais.')
-      }
-    } catch (error) {
-      setLoading(false)
-      throw error
     }
   }
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      loading,
-      signIn,
-      signOut,
-      signUp
-    }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signOut, signUp }}>
       {children}
     </AuthContext.Provider>
   )
