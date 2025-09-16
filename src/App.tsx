@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { supabase } from './lib/supabase'
 import LoginForm from './components/auth/LoginForm'
+import InitialSetup from './components/auth/InitialSetup'
 import Sidebar from './components/layout/Sidebar'
 import TopBar from './components/layout/TopBar'
 import DashboardKPIs from './components/dashboard/DashboardKPIs'
@@ -127,8 +129,36 @@ function Dashboard() {
 
 function AppContent() {
   const { user, loading } = useAuth()
+  const [needsSetup, setNeedsSetup] = useState(false)
+  const [checkingSetup, setCheckingSetup] = useState(true)
 
-  if (loading) {
+  useEffect(() => {
+    checkInitialSetup()
+  }, [])
+
+  const checkInitialSetup = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('institutions')
+        .select('id')
+        .limit(1)
+      
+      if (error && error.code === '42P01') {
+        // Table doesn't exist, needs setup
+        setNeedsSetup(true)
+      } else if (!data || data.length === 0) {
+        // No institutions exist, needs setup
+        setNeedsSetup(true)
+      }
+    } catch (error) {
+      console.error('Error checking setup:', error)
+      setNeedsSetup(true)
+    } finally {
+      setCheckingSetup(false)
+    }
+  }
+
+  if (loading || checkingSetup) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
@@ -144,6 +174,13 @@ function AppContent() {
         </div>
       </div>
     )
+  }
+
+  if (needsSetup) {
+    return <InitialSetup onComplete={() => {
+      setNeedsSetup(false)
+      window.location.reload()
+    }} />
   }
 
   if (!user) {
