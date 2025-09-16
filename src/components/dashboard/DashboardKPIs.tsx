@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Users, Calendar, GraduationCap, TrendingUp, RefreshCw } from 'lucide-react'
+import { Users, Calendar, GraduationCap, TrendingUp, RefreshCw, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { DatabaseService } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -16,19 +16,24 @@ function KPICard({ title, value, change, icon, color, loading }: KPICardProps) {
   const isPositive = change >= 0
   
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-200">
       <div className="flex items-center justify-between">
         <div className="flex-1">
-          <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
+          <p className="text-sm font-medium text-gray-600 mb-2">{title}</p>
           {loading ? (
             <div className="animate-pulse">
-              <div className="h-8 bg-gray-200 rounded w-20 mb-2"></div>
-              <div className="h-4 bg-gray-200 rounded w-16"></div>
+              <div className="h-8 bg-gray-200 rounded-lg w-20 mb-2"></div>
+              <div className="h-4 bg-gray-200 rounded-lg w-16"></div>
             </div>
           ) : (
             <>
-              <p className="text-2xl font-bold text-gray-900 mb-2">{value}</p>
+              <p className="text-3xl font-bold text-gray-900 mb-2">{value}</p>
               <div className="flex items-center">
+                {isPositive ? (
+                  <ArrowUpRight className="h-4 w-4 text-green-500 mr-1" />
+                ) : (
+                  <ArrowDownRight className="h-4 w-4 text-red-500 mr-1" />
+                )}
                 <span
                   className={`text-xs font-medium ${
                     isPositive ? 'text-green-600' : 'text-red-600'
@@ -36,12 +41,12 @@ function KPICard({ title, value, change, icon, color, loading }: KPICardProps) {
                 >
                   {isPositive ? '+' : ''}{change}%
                 </span>
-                <span className="text-xs text-gray-500 ml-1">vs. mês anterior</span>
+                <span className="text-xs text-gray-500 ml-2">vs. mês anterior</span>
               </div>
             </>
           )}
         </div>
-        <div className={`p-3 rounded-full ${color} flex-shrink-0`}>
+        <div className={`p-4 rounded-2xl ${color} flex-shrink-0 shadow-sm`}>
           {icon}
         </div>
       </div>
@@ -116,7 +121,7 @@ export default function DashboardKPIs() {
   ]
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
       {kpiData.map((kpi, index) => (
         <KPICard key={index} {...kpi} loading={loading} />
       ))}

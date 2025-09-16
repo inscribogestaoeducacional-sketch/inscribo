@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, AlertCircle } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 export default function LoginForm() {
@@ -48,30 +48,34 @@ export default function LoginForm() {
       <div className="max-w-md w-full space-y-8">
         {/* Header with Logo */}
         <div className="text-center">
-          <div className="mx-auto h-20 w-20 mb-6 rounded-full overflow-hidden bg-white shadow-lg">
+          <div className="mx-auto h-24 w-24 mb-6 rounded-2xl overflow-hidden bg-white shadow-xl">
             <img 
               src="/Inscribo.jpeg" 
               alt="Inscribo" 
               className="w-full h-full object-cover"
             />
           </div>
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">Inscribo</h2>
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">Bem-vindo ao Inscribo</h2>
           <p className="text-gray-600">
             {isResetMode ? 'Recuperar senha' : 'Sistema de Gestão Educacional'}
           </p>
         </div>
 
         {/* Form */}
-        <div className="bg-white py-8 px-6 shadow-xl rounded-lg border border-gray-100">
+        <div className="bg-white py-8 px-6 shadow-2xl rounded-2xl border border-gray-100">
           <form onSubmit={isResetMode ? handleResetPassword : handleSubmit} className="space-y-6">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm flex items-center">
+                <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
                 {error}
               </div>
             )}
 
             {resetMessage && (
-              <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md text-sm">
+              <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-sm flex items-center">
+                <svg className="h-4 w-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
                 {resetMessage}
               </div>
             )}
@@ -89,7 +93,7 @@ export default function LoginForm() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 block w-full px-3 py-3 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  className="pl-10 block w-full px-3 py-3 border border-gray-300 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   placeholder="seu@email.com"
                 />
               </div>
@@ -109,7 +113,7 @@ export default function LoginForm() {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 pr-10 block w-full px-3 py-3 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    className="pl-10 pr-10 block w-full px-3 py-3 border border-gray-300 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     placeholder="••••••••"
                   />
                   <button
@@ -127,14 +131,16 @@ export default function LoginForm() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
               >
-                {isLoading
-                  ? 'Carregando...'
-                  : isResetMode
-                  ? 'Enviar link de recuperação'
-                  : 'Entrar'
-                }
+                {isLoading ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Carregando...
+                  </div>
+                ) : (
+                  isResetMode ? 'Enviar link de recuperação' : 'Entrar'
+                )}
               </button>
             </div>
 
@@ -146,7 +152,7 @@ export default function LoginForm() {
                   setError('')
                   setResetMessage('')
                 }}
-                className="text-sm text-blue-600 hover:text-blue-500 transition-colors"
+                className="text-sm text-blue-600 hover:text-blue-500 transition-colors font-medium"
               >
                 {isResetMode ? 'Voltar ao login' : 'Esqueci minha senha'}
               </button>
