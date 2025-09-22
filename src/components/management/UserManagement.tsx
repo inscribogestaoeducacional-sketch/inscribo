@@ -268,13 +268,6 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
               ) : (
                 editingUser ? 'Atualizar Usuário' : 'Criar Usuário'
               )}
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  {editingUser ? 'Atualizando...' : 'Criando...'}
-                </div>
-              ) : (
-                editingUser ? 'Atualizar Usuário' : 'Criar Usuário'
-              )}
             </button>
           </div>
         </form>
