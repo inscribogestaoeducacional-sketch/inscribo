@@ -898,20 +898,20 @@ export default function LeadKanban() {
                   <span className="ml-3 text-gray-600">Carregando histórico...</span>
                 </div>
               ) : leadHistory.length > 0 ? (
-                leadHistory.map((item, index) => (
+                leadHistory.map((item) => (
                   <div key={item.id} className="flex items-start space-x-4 p-4 bg-gray-50 rounded-lg">
                     <div className="flex-shrink-0">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                        item.action.includes('criado') ? 'bg-green-100' :
-                        item.action.includes('Status') ? 'bg-blue-100' :
-                        item.action.includes('atualizado') ? 'bg-yellow-100' :
-                        item.action.includes('excluído') ? 'bg-red-100' :
+                        item.action.includes('criado') || item.action.includes('Lead criado') ? 'bg-green-100' :
+                        item.action.includes('Status') || item.action.includes('status') ? 'bg-blue-100' :
+                        item.action.includes('atualizado') || item.action.includes('Lead atualizado') ? 'bg-yellow-100' :
+                        item.action.includes('excluído') || item.action.includes('Lead excluído') ? 'bg-red-100' :
                         'bg-gray-100'
                       }`}>
-                        {item.action.includes('criado') ? <Plus className="w-5 h-5 text-green-600" /> :
-                         item.action.includes('Status') ? <TrendingUp className="w-5 h-5 text-blue-600" /> :
-                         item.action.includes('atualizado') ? <Edit className="w-5 h-5 text-yellow-600" /> :
-                         item.action.includes('excluído') ? <Trash2 className="w-5 h-5 text-red-600" /> :
+                        {item.action.includes('criado') || item.action.includes('Lead criado') ? <Plus className="w-5 h-5 text-green-600" /> :
+                         item.action.includes('Status') || item.action.includes('status') ? <TrendingUp className="w-5 h-5 text-blue-600" /> :
+                         item.action.includes('atualizado') || item.action.includes('Lead atualizado') ? <Edit className="w-5 h-5 text-yellow-600" /> :
+                         item.action.includes('excluído') || item.action.includes('Lead excluído') ? <Trash2 className="w-5 h-5 text-red-600" /> :
                          <Clock className="w-5 h-5 text-gray-600" />}
                       </div>
                     </div>
@@ -926,17 +926,17 @@ export default function LeadKanban() {
                       {/* Detalhes específicos por tipo de ação */}
                       {item.details && (
                         <div className="text-sm text-gray-600 mb-2">
-                          {item.action.includes('Status') && item.details.from && item.details.to && (
-                            <p>Status alterado de <strong>{item.details.from}</strong> para <strong>{item.details.to}</strong></p>
+                          {(item.action.includes('Status') || item.action.includes('status')) && item.details.changes && (
+                            <p>Status alterado para <strong>{item.details.changes.status || 'N/A'}</strong></p>
                           )}
-                          {item.action.includes('criado') && (
-                            <p>Lead criado para <strong>{item.details.student_name}</strong> via <strong>{item.details.source}</strong></p>
+                          {(item.action.includes('criado') || item.action.includes('Lead criado')) && (
+                            <p>Lead criado para <strong>{item.details.student_name || 'N/A'}</strong> via <strong>{item.details.source || 'N/A'}</strong></p>
                           )}
-                          {item.action.includes('atualizado') && (
+                          {(item.action.includes('atualizado') || item.action.includes('Lead atualizado')) && (
                             <p>Informações do lead foram atualizadas</p>
                           )}
-                          {item.action.includes('excluído') && (
-                            <p>Lead <strong>{item.details.student_name}</strong> foi excluído permanentemente</p>
+                          {(item.action.includes('excluído') || item.action.includes('Lead excluído')) && (
+                            <p>Lead <strong>{item.details.student_name || 'N/A'}</strong> foi excluído permanentemente</p>
                           )}
                         </div>
                       )}
@@ -960,6 +960,7 @@ export default function LeadKanban() {
               <button
                 onClick={() => {
                   setShowHistory(false)
+                  setSelectedLead(null)
                   setLeadHistory([])
                 }}
                 className="px-6 py-3 bg-gray-600 text-white rounded-xl hover:bg-gray-700 transition-all font-medium"
