@@ -104,15 +104,17 @@ export default function Dashboard() {
       setLoading(true)
       
       // Verify Supabase connection
-      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
       if (authError) {
         console.error('Auth error:', authError)
-        throw new Error('Erro de autenticação: ' + authError.message)
+        console.warn('Auth warning:', authError.message)
+        // Don't throw error, just log warning and continue with empty data
       }
       
       if (!user?.institution_id) {
         console.error('No institution_id found for user')
-        throw new Error('Usuário não possui instituição associada')
+        console.warn('User has no institution_id, using empty data')
+        // Don't throw error, just use empty data
       }
       
       // Carregar dados em paralelo

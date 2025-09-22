@@ -44,7 +44,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initializeAuth = async () => {
       try {
-        // Get current session without any delays
+        console.log('Initializing auth...')
+        
+        // Get current session
         const { data: { session: currentSession }, error } = await supabase.auth.getSession()
         
         if (!mounted) return
@@ -54,6 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setSession(null)
           setUser(null)
         } else {
+          console.log('Session loaded:', !!currentSession)
           setSession(currentSession)
           
           if (currentSession?.user) {
@@ -75,15 +78,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Initialize immediately
+    // Initialize auth
     initializeAuth()
     
     // Set timeout for initialization
     timeoutId = setTimeout(() => {
       if (mounted && initializing) {
+        console.log('Auth initialization timeout')
         setInitTimeout(true)
+        setInitializing(false)
       }
-    }, 5000) // 5 seconds timeout
+    }, 8000) // 8 seconds timeout
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -98,6 +103,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setUser(null)
       }
+      
+      // Clear initialization state on auth change
+      if (initializing) {
+        setInitializing(false)
+      }
     })
 
     return () => {
@@ -109,6 +119,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadUserProfile = async (userId: string) => {
     try {
+      console.log('Loading user profile for:', userId)
+      
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -116,16 +128,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single()
 
       if (error) {
+        console.error('Error loading user profile:', error)
+        
         if (error.code === 'PGRST116') {
           // User doesn't exist in users table, create it
           const { data: { user: authUser } } = await supabase.auth.getUser()
           
           if (authUser) {
+            console.log('Creating user profile...')
             const newUserData = {
               id: authUser.id,
               email: authUser.email!,
               full_name: authUser.user_metadata?.full_name || authUser.email!.split('@')[0],
-              role: authUser.user_metadata?.role || 'admin',
+              role: (authUser.user_metadata?.role || 'admin') as 'admin' | 'manager' | 'user',
               institution_id: null,
               active: true
             }
@@ -137,6 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               .single()
 
             if (!createError && createdUser) {
+              console.log('User profile created successfully')
               setUser(createdUser)
             } else {
               console.error('Error creating user profile:', createError)
@@ -144,10 +160,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           }
         } else {
-          console.error('Error loading user profile:', error)
           setUser(null)
         }
       } else if (data) {
+        console.log('User profile loaded successfully')
         setUser(data)
       }
     } catch (error) {
@@ -177,15 +193,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       setLoading(true)
-      const { error } = await supabase.auth.signInWithPassword({
+      console.log('Attempting sign in for:', email)
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       })
 
       if (error) {
+        console.error('Sign in error:', error)
         throw new Error(error.message)
       }
+
+      console.log('Sign in successful')
+      // The onAuthStateChange will handle setting the user
     } catch (error) {
+      console.error('Sign in failed:', error)
       throw error
     } finally {
       setLoading(false)
@@ -195,6 +218,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       setLoading(true)
+      console.log('Signing out...')
       
       // Clear local state first
       setSession(null)
@@ -204,6 +228,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { error } = await supabase.auth.signOut()
       if (error) {
         console.error('Error signing out:', error)
+      } else {
+        console.log('Sign out successful')
       }
     } catch (error) {
       console.error('Error signing out:', error)
@@ -215,6 +241,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'manager' | 'user') => {
     try {
       setLoading(true)
+      console.log('Attempting sign up for:', email)
+      
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -226,9 +254,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       })
 
-      if (authError) throw authError
+      if (authError) {
+        console.error('Sign up error:', authError)
+        throw authError
+      }
 
       if (authData.user) {
+        console.log('Sign up successful')
         throw new Error('Conta criada com sucesso! Faça login com suas credenciais.')
       }
     } catch (error) {
@@ -239,6 +271,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const forceLogin = () => {
+    console.log('Forcing login...')
     setUser(null)
     setSession(null)
     setInitializing(false)
@@ -246,31 +279,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false)
   }
 
-  // Show loading only during initialization
+  // Show loading during initialization
   if (initializing && !initTimeout) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-          <p className="text-gray-600 text-sm">Carregando...</p>
+          <p className="text-gray-600 text-sm">Inicializando sistema...</p>
         </div>
       </div>
     )
   }
   
   // Show timeout screen with force login option
-  if (initializing && initTimeout) {
+  if (initTimeout && !session && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center max-w-md mx-auto p-6">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Carregando sistema...</h2>
-          <p className="text-gray-600 text-sm mb-4">Verificando autenticação</p>
+          <div className="mb-4">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Problema de Conexão</h2>
+          <p className="text-gray-600 text-sm mb-6">
+            O sistema está demorando para carregar. Isso pode ser devido a problemas de rede ou configuração.
+          </p>
           <button
             onClick={forceLogin}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
           >
-            Forçar Login
+            Ir para Login
           </button>
         </div>
       </div>

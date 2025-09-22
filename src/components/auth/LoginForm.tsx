@@ -23,12 +23,11 @@ export default function LoginForm() {
 
     try {
       if (isLogin) {
-        console.log('Attempting login...')
-        // Clear any existing session data before login
-        await signOut()
+        console.log('Attempting login for:', email)
         await signIn(email, password)
         console.log('Login successful')
       } else {
+        console.log('Attempting signup for:', email)
         await signUp(email, password, fullName, role)
         setSuccess('Conta criada com sucesso! Verifique seu email e faça login.')
         setIsLogin(true)
@@ -38,7 +37,23 @@ export default function LoginForm() {
       }
     } catch (err: any) {
       console.error('Login error:', err)
-      setError(err.message || 'Erro ao processar solicitação')
+      
+      // Handle specific error messages
+      let errorMessage = 'Erro ao processar solicitação'
+      
+      if (err.message) {
+        if (err.message.includes('Invalid login credentials')) {
+          errorMessage = 'Email ou senha incorretos'
+        } else if (err.message.includes('Email not confirmed')) {
+          errorMessage = 'Email não confirmado. Verifique sua caixa de entrada.'
+        } else if (err.message.includes('Too many requests')) {
+          errorMessage = 'Muitas tentativas. Tente novamente em alguns minutos.'
+        } else {
+          errorMessage = err.message
+        }
+      }
+      
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
