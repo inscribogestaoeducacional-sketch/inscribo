@@ -16,6 +16,7 @@ import {
 import { DatabaseService } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../../lib/supabase'
 
 interface KPICardProps {
   title: string
@@ -102,54 +103,45 @@ export default function Dashboard() {
   const loadDashboardData = async () => {
     try {
       setLoading(true)
-      
-      // Verify Supabase connection
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
-      if (authError) {
-        console.error('Auth error:', authError)
-        console.warn('Auth warning:', authError.message)
-        // Don't throw error, just log warning and continue with empty data
-      }
-      
-      if (!user?.institution_id) {
-        console.error('No institution_id found for user')
-        console.warn('User has no institution_id, using empty data')
-        // Don't throw error, just use empty data
-      }
+      console.log('📊 Carregando dados do dashboard...')
       
       // Carregar dados em paralelo
       let leads = [], visits = [], enrollments = [], campaigns = []
       
-      try {
-        console.log('Loading leads...')
-        leads = await DatabaseService.getLeads(user.institution_id)
-      } catch (error) {
-        console.error('Error loading leads:', error)
-        leads = []
-      }
-      
-      try {
-        console.log('Loading visits...')
-        visits = await DatabaseService.getVisits(user.institution_id)
-      } catch (error) {
-        console.error('Error loading visits:', error)
-        visits = []
-      }
-      
-      try {
-        console.log('Loading enrollments...')
-        enrollments = await DatabaseService.getEnrollments(user.institution_id)
-      } catch (error) {
-        console.error('Error loading enrollments:', error)
-        enrollments = []
-      }
-      
-      try {
-        console.log('Loading campaigns...')
-        campaigns = await DatabaseService.getMarketingCampaigns(user.institution_id)
-      } catch (error) {
-        console.error('Error loading campaigns:', error)
-        campaigns = []
+      if (user?.institution_id) {
+        try {
+          console.log('📈 Carregando leads...')
+          leads = await DatabaseService.getLeads(user.institution_id)
+        } catch (error) {
+          console.warn('⚠️ Erro ao carregar leads:', error)
+          leads = []
+        }
+        
+        try {
+          console.log('📅 Carregando visitas...')
+          visits = await DatabaseService.getVisits(user.institution_id)
+        } catch (error) {
+          console.warn('⚠️ Erro ao carregar visitas:', error)
+          visits = []
+        }
+        
+        try {
+          console.log('🎓 Carregando matrículas...')
+          enrollments = await DatabaseService.getEnrollments(user.institution_id)
+        } catch (error) {
+          console.warn('⚠️ Erro ao carregar matrículas:', error)
+          enrollments = []
+        }
+        
+        try {
+          console.log('📢 Carregando campanhas...')
+          campaigns = await DatabaseService.getMarketingCampaigns(user.institution_id)
+        } catch (error) {
+          console.warn('⚠️ Erro ao carregar campanhas:', error)
+          campaigns = []
+        }
+      } else {
+        console.warn('⚠️ Usuário sem institution_id, usando dados vazios')
       }
 
       // Datas para cálculos
@@ -219,8 +211,10 @@ export default function Dashboard() {
         matriculas: matriculasCount
       })
 
+      console.log('✅ Dashboard carregado com sucesso!')
     } catch (error) {
-      console.error('Error loading dashboard data:', error)
+      console.error('❌ Erro ao carregar dashboard:', error)
+      // Não quebra a aplicação, apenas usa dados vazios
     } finally {
       setLoading(false)
     }
