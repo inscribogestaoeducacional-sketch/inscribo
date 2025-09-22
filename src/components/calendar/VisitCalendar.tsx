@@ -397,9 +397,19 @@ export default function VisitCalendar() {
     try {
       console.log('🔄 Iniciando salvamento da visita:', data)
       
+      // Validação mais robusta
+      if (!data.scheduled_date) {
+        throw new Error('Data da visita é obrigatória')
+      }
+      
+      if (!data.lead_id && !data.student_name) {
+        throw new Error('É necessário selecionar um lead ou informar o nome do visitante')
+      }
+      
       const visitData = {
         ...data,
-        institution_id: user!.institution_id!
+        institution_id: user!.institution_id!,
+        status: 'scheduled' as const
       }
 
       console.log('📝 Dados finais para salvar:', visitData)
