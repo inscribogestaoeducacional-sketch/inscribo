@@ -46,7 +46,8 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
     role: 'user' as 'admin' | 'manager' | 'user',
     password: '',
     confirmPassword: '',
-    active: true
+    active: true,
+    institution_id: ''
   })
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -60,7 +61,8 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
         role: editingUser.role,
         password: '',
         confirmPassword: '',
-        active: editingUser.active
+        active: editingUser.active,
+        institution_id: editingUser.institution_id || ''
       })
     } else {
       setFormData({
@@ -69,7 +71,8 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
         role: 'user',
         password: '',
         confirmPassword: '',
-        active: true
+        active: true,
+        institution_id: ''
       })
     }
   }, [editingUser, isOpen])
@@ -396,14 +399,12 @@ export default function UserManagement() {
 
       if (editingUser) {
         // Update existing user
-        console.log('✏️ Atualizando usuário:', editingUser.id, formData)
         const { error } = await supabase
           .from('users')
           .update({
             full_name: formData.full_name,
             role: formData.role,
-            active: formData.active,
-            institution_id: formData.institution_id || null
+            active: formData.active
           })
           .eq('id', editingUser.id)
 
