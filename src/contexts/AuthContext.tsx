@@ -80,34 +80,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) {
         console.error('❌ Erro ao carregar perfil:', error)
         
-        // Se usuário não existe, criar perfil básico
-        if (error.code === 'PGRST116') {
-          const { data: { user: authUser } } = await supabase.auth.getUser()
-          
-          if (authUser) {
-            const newUser = {
-              id: authUser.id,
-              email: authUser.email!,
-              full_name: authUser.user_metadata?.full_name || authUser.email!.split('@')[0],
-              role: 'admin' as const,
-              institution_id: authUser.id, // Usar o próprio ID do usuário como institution_id
-              active: true
-            }
-
-            const { data: createdUser, error: createError } = await supabase
-              .from('users')
-              .insert(newUser)
-              .select()
-              .single()
-
-            if (!createError && createdUser) {
-              console.log('✅ Perfil criado')
-              setUser(createdUser)
-              setInitializing(false)
-              return
-            }
-          }
-        }
+        // Se usuário não existe na tabela users, isso é normal
+        // Os usuários são criados dentro do sistema, não automaticamente
+        console.log('ℹ️ Usuário não encontrado na tabela users - isso é esperado')
         
         // Em caso de erro de rede, não limpa o usuário imediatamente
         if (error.message && error.message.includes('Failed to fetch')) {
@@ -116,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return
         }
         
-        console.log('❌ Erro crítico, limpando usuário')
+        console.log('ℹ️ Usuário não tem perfil no sistema ainda')
         setUser(null)
         setInitializing(false)
       } else if (data) {
