@@ -46,7 +46,8 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
     role: 'user' as 'admin' | 'manager' | 'user',
     password: '',
     confirmPassword: '',
-    active: true
+    active: true,
+    institution_id: ''
   })
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -60,7 +61,8 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
         role: editingUser.role,
         password: '',
         confirmPassword: '',
-        active: editingUser.active
+        active: editingUser.active,
+        institution_id: editingUser.institution_id || ''
       })
     } else {
       setFormData({
@@ -69,7 +71,8 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
         role: 'user',
         password: '',
         confirmPassword: '',
-        active: true
+        active: true,
+        institution_id: ''
       })
     }
   }, [editingUser, isOpen])
@@ -131,21 +134,6 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Instituição
-              </label>
-              <input
-                type="text"
-                value={formData.institution_id}
-                onChange={(e) => setFormData({ ...formData, institution_id: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                placeholder="ID da instituição (deixe vazio para usuário global)"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Deixe vazio para criar um usuário global (sem instituição específica)
-              </p>
-            </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 E-mail *
