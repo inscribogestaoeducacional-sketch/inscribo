@@ -228,6 +228,25 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
             </label>
           </div>
 
+          {!editingUser && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                    <span className="text-blue-600 text-xs font-bold">ℹ</span>
+                  </div>
+                </div>
+                <div className="ml-3">
+                  <h4 className="text-sm font-medium text-blue-900">Informações importantes:</h4>
+                  <ul className="mt-2 text-xs text-blue-700 space-y-1">
+                    <li>• O usuário receberá acesso ao sistema com o email e senha informados</li>
+                    <li>• Se o email já existir no sistema, será vinculado à sua instituição</li>
+                    <li>• A senha deve ter pelo menos 6 caracteres</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
             <button
               type="button"
@@ -238,9 +257,17 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
             </button>
             <button
               type="submit"
-              className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all font-medium shadow-lg"
+              disabled={loading}
+              className={`px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all font-medium shadow-lg ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {loading ? (
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  {editingUser ? 'Atualizando...' : 'Criando...'}
+                </div>
+              ) : (
+                editingUser ? 'Atualizar Usuário' : 'Criar Usuário'
+              )}
                 <div className="flex items-center">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                   {editingUser ? 'Atualizando...' : 'Criando...'}
