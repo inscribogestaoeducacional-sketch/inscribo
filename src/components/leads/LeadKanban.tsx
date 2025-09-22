@@ -425,71 +425,71 @@ export default function LeadKanban() {
       if (editingLead) {
         console.log('✏️ Atualizando lead existente:', editingLead.id)
         
-        // Identificar mudanças específicas
+        await DatabaseService.updateLead(editingLead.id, leadData)
+        
+        // Registrar atividade de edição com mudanças específicas
         const changes: any = {}
         const previousData: any = {}
         
-        if (data.student_name !== editingLead.student_name) {
-          changes.student_name = data.student_name
-          previousData.student_name = editingLead.student_name
-        }
-        if (data.responsible_name !== editingLead.responsible_name) {
-          changes.responsible_name = data.responsible_name
-          previousData.responsible_name = editingLead.responsible_name
-        }
-        if (data.phone !== editingLead.phone) {
-          changes.phone = data.phone
-          previousData.phone = editingLead.phone
-        }
-        if (data.email !== editingLead.email) {
-          changes.email = data.email
-          previousData.email = editingLead.email
-        }
-        if (data.grade_interest !== editingLead.grade_interest) {
-          changes.grade_interest = data.grade_interest
-          previousData.grade_interest = editingLead.grade_interest
-        }
-        if (data.source !== editingLead.source) {
-          changes.source = data.source
-          previousData.source = editingLead.source
-        }
-        
-        await DatabaseService.updateLead(editingLead.id, leadData)
-        
-        // Registrar atividade de edição
-        await DatabaseService.logActivity({
-          user_id: user!.id,
-          action: 'Lead atualizado',
-          entity_type: 'lead',
-          entity_id: editingLead.id,
-          details: {
-            changes: changes,
-            previous: previousData,
-            student_name: editingLead.student_name,
-            responsible_name: editingLead.responsible_name
-          },
-          institution_id: user!.institution_id
+        // Comparar todos os campos
+        Object.keys(data).forEach(key => {
+          const newValue = (data as any)[key]
+          const oldValue = (editingLead as any)[key]
+          if (newValue !== oldValue && newValue !== undefined && newValue !== null && newValue !== '') {
+            changes[key] = newValue
+            previousData[key] = oldValue
+          }
         })
+        
+        // Só registra se houve mudanças
+        if (Object.keys(changes).length > 0) {
+          try {
+            await DatabaseService.logActivity({
+              user_id: user!.id,
+              action: 'Lead editado',
+              entity_type: 'lead',
+              entity_id: editingLead.id,
+              details: {
+                changes: changes,
+                previous: previousData,
+                student_name: data.student_name || editingLead.student_name,
+                responsible_name: data.responsible_name || editingLead.responsible_name
+              },
+              institution_id: user!.institution_id
+            })
+            console.log('✅ Atividade de edição registrada')
+          } catch (logError) {
+            console.error('❌ Erro ao registrar atividade:', logError)
+          }
+        }
       } else {
         console.log('➕ Criando novo lead')
         const newLead = await DatabaseService.createLead(leadData)
         
         // Registrar atividade de criação
-        await DatabaseService.logActivity({
-          user_id: user!.id,
-          action: 'Lead criado',
-          entity_type: 'lead',
-          entity_id: newLead.id,
-          details: {
-            student_name: newLead.student_name,
-            responsible_name: newLead.responsible_name,
-            source: newLead.source,
-            grade_interest: newLead.grade_interest,
-            phone: newLead.phone,
-            email: newLead.email
-          },
-          institution_id: user!.institution_id
-        })
+        try {
+          await DatabaseService.logActivity({
+            user_id: user!.id,
+            action: 'Lead criado',
+            entity_type: 'lead',
+            entity_id: newLead.id,
+            details: {
+              student_name: newLead.student_name,
+              responsible_name: newLead.responsible_name,
+              source: newLead.source,
+              grade_interest: newLead.grade_interest,
+              phone: newLead.phone || '',
+              email: newLead.email || '',
+              address: newLead.address || '',
+              budget_range: newLead.budget_range || '',
+              notes: newLead.notes || ''
+            },
+            institution_id: user!.institution_id
+          })
+          console.log('✅ Atividade de criação registrada')
+        } catch (logError) {
+          console.error('❌ Erro ao registrar atividade:', logError)
+        }
       }
 
       console.log('✅ Lead salvo com sucesso!')
@@ -532,24 +532,31 @@ export default function LeadKanban() {
        // Buscar lead atual para registrar mudança
        const currentLead = leads.find(l => l.id === leadId)
        const previousStatus = currentLead?.status
+          console.error('❌ Erro ao registrar atividade:', logError)
+        }
        
       await DatabaseService.updateLead(leadId, { status: newStatus })
        
        // Registrar mudança de status
        if (currentLead && previousStatus !== newStatus) {
-         await DatabaseService.logActivity({
-           user_id: user!.id,
-           action: 'Status alterado',
-           entity_type: 'lead',
-           entity_id: leadId,
-           details: {
-             previous_status: previousStatus,
-             new_status: newStatus,
-             student_name: currentLead.student_name,
-             responsible_name: currentLead.responsible_name
-           },
-           institution_id: user!.institution_id
-         })
+         try {
+           await DatabaseService.logActivity({
+             user_id: user!.id,
+             action: 'Status alterado',
+             entity_type: 'lead',
+             entity_id: leadId,
+             details: {
+               previous_status: previousStatus,
+               new_status: newStatus,
+               student_name: currentLead.student_name,
+               responsible_name: currentLead.responsible_name
+             },
+             institution_id: user!.institution_id
+           })
+           console.log('✅ Mudança de status registrada')
+         } catch (logError) {
+           console.error('❌ Erro ao registrar mudança de status:', logError)
+         }
        }
        
       await loadData()
@@ -587,7 +594,9 @@ export default function LeadKanban() {
   const loadLeadHistory = async (leadId: string) => {
     try {
       setLoadingHistory(true)
-      const history = await DatabaseService.getActivityLogs(leadId)
+      console.log('📊 Carregando histórico do lead:', leadId)
+      const history = await DatabaseService.getActivityLogs(user!.institution_id, leadId)
+      console.log('📊 Histórico carregado:', history.length, 'registros')
       setLeadHistory(history)
     } catch (error) {
       console.error('❌ Erro ao carregar histórico:', error)
