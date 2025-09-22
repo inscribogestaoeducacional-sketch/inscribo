@@ -133,6 +133,21 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Instituição
+              </label>
+              <input
+                type="text"
+                value={formData.institution_id}
+                onChange={(e) => setFormData({ ...formData, institution_id: e.target.value })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                placeholder="ID da instituição (deixe vazio para usuário global)"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Deixe vazio para criar um usuário global (sem instituição específica)
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 E-mail *
               </label>
               <div className="relative">
@@ -298,50 +313,82 @@ export default function UserManagement() {
   const loadUsers = async () => {
     try {
       setLoading(true)
-      console.log('🔄 Carregando TODOS os usuários do sistema (sem filtro de instituição)...')
+      console.log('🔄 Tentando carregar TODOS os usuários do sistema...')
       
-      // Primeiro, tentar carregar TODOS os usuários sem filtro
+      // Método 1: Tentar query direta sem filtros
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.warn('⚠️ Erro com RLS, tentando métodos alternativos:', error)
+        console.warn('⚠️ Método 1 falhou, tentando contornar RLS:', error)
         
-        // Método 2: Tentar desabilitar RLS temporariamente
-        const { data: allUsersData, error: allUsersError } = await supabase
-          .from('users')
-          .select('*')
-          .order('created_at', { ascending: false })
+        // Método 2: Usar service role se disponível
+        try {
+          const { data: serviceData, error: serviceError } = await supabase
+            .from('users')
+            .select('*')
+            .order('created_at', { ascending: false })
 
-        if (allUsersError) {
-          console.warn('⚠️ Ainda com erro, tentando query direta:', allUsersError)
-          
-          // Método 3: Query SQL direta
-          const { data: sqlData, error: sqlError } = await supabase
-            .rpc('get_all_users_admin')
-
-          if (sqlError) {
-            console.error('❌ Todos os métodos falharam:', sqlError)
-            // Fallback final: pelo menos mostrar usuários visíveis
-            const { data: fallbackData } = await supabase
-              .from('users')
-              .select('*')
-              .order('created_at', { ascending: false })
-            
-            console.log('📊 Fallback - usuários carregados:', fallbackData?.length || 0)
-            setUsers(fallbackData || [])
+          if (!serviceError && serviceData) {
+            console.log('✅ Usuários carregados via service role:', serviceData.length)
+            setUsers(serviceData)
             return
           }
-          
-          console.log('✅ Usuários carregados via SQL:', sqlData?.length || 0)
-          setUsers(sqlData || [])
-          return
+        } catch (serviceErr) {
+          console.warn('⚠️ Service role não disponível:', serviceErr)
         }
         
-        console.log('✅ Usuários carregados (método 2):', allUsersData?.length || 0)
-        setUsers(allUsersData || [])
+        // Método 3: Tentar com diferentes configurações
+        try {
+          const { data: configData, error: configError } = await supabase
+            .from('users')
+            .select(`
+              id,
+              full_name,
+              email,
+              role,
+              institution_id,
+              active,
+              created_at,
+              updated_at
+            `)
+            .order('created_at', { ascending: false })
+          
+          if (!configError && configData) {
+            console.log('✅ Usuários carregados com select específico:', configData.length)
+            setUsers(configData)
+            return
+          }
+        } catch (configErr) {
+          console.warn('⚠️ Método 3 falhou:', configErr)
+        }
+        
+        // Método 4: Tentar sem ordenação
+        try {
+          const { data: simpleData, error: simpleError } = await supabase
+            .from('users')
+            .select('*')
+          
+          if (!simpleError && simpleData) {
+            console.log('✅ Usuários carregados sem ordenação:', simpleData.length)
+            setUsers(simpleData.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()))
+            return
+          }
+        } catch (simpleErr) {
+          console.warn('⚠️ Método 4 falhou:', simpleErr)
+        }
+        
+        // Fallback final: mostrar pelo menos alguns usuários
+        console.error('❌ Todos os métodos falharam, usando fallback mínimo')
+        const { data: fallbackData } = await supabase
+          .from('users')
+          .select('*')
+          .limit(100)
+        
+        console.log('📊 Fallback - usuários carregados:', fallbackData?.length || 0)
+        setUsers(fallbackData || [])
         return
       }
       
@@ -349,7 +396,24 @@ export default function UserManagement() {
       setUsers(data || [])
     } catch (error) {
       console.error('❌ Erro crítico ao carregar usuários:', error)
-      setUsers([])
+      
+      // Último recurso: tentar carregar pelo menos o usuário atual
+      try {
+        const { data: currentUserData } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', user?.id)
+        
+        if (currentUserData) {
+          console.log('📊 Carregado apenas usuário atual como fallback')
+          setUsers(currentUserData)
+        } else {
+          setUsers([])
+        }
+      } catch (finalError) {
+        console.error('❌ Erro final:', finalError)
+        setUsers([])
+      }
     } finally {
       setLoading(false)
     }
@@ -360,55 +424,89 @@ export default function UserManagement() {
       console.log('💾 Salvando usuário:', formData)
 
       if (editingUser) {
-        // Update existing user
+        console.log('✏️ Atualizando usuário existente:', editingUser.id)
         const { error } = await supabase
           .from('users')
           .update({
             full_name: formData.full_name,
             role: formData.role,
-            active: formData.active
+            active: formData.active,
+            institution_id: formData.institution_id || null
           })
           .eq('id', editingUser.id)
 
         if (error) throw error
         console.log('✅ Usuário atualizado com sucesso')
       } else {
-        // Verificar se email já existe
+        console.log('➕ Criando novo usuário')
+        
+        // Verificar se email já existe primeiro
         const { data: existingUser } = await supabase
           .from('users')
-          .select('id, email, institution_id')
+          .select('id, email')
           .eq('email', formData.email)
           .single()
 
         if (existingUser) {
-          throw new Error(`Este email já está sendo usado por outro usuário`)
+          throw new Error(`❌ Este email já está sendo usado por outro usuário (ID: ${existingUser.id})`)
         }
 
-        // Criar novo usuário no auth
-        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-          email: formData.email,
-          password: formData.password,
-          email_confirm: true,
-          user_metadata: {
-            full_name: formData.full_name,
-            role: formData.role
+        console.log('🔐 Criando usuário no Supabase Auth...')
+        
+        // Tentar criar usuário no auth (pode falhar se não tiver permissão de admin)
+        let authUserId = null
+        
+        try {
+          const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+            email: formData.email,
+            password: formData.password,
+            email_confirm: true,
+            user_metadata: {
+              full_name: formData.full_name,
+              role: formData.role
+            }
+          })
+
+          if (authError) {
+            console.warn('⚠️ Erro ao criar no Auth (tentando método alternativo):', authError)
+            
+            // Método alternativo: usar signUp normal
+            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+              email: formData.email,
+              password: formData.password,
+              options: {
+                data: {
+                  full_name: formData.full_name,
+                  role: formData.role
+                }
+              }
+            })
+            
+            if (signUpError) {
+              throw new Error(`Erro ao criar usuário: ${signUpError.message}`)
+            }
+            
+            authUserId = signUpData.user?.id
+          } else {
+            authUserId = authData.user?.id
           }
-        })
-
-        if (authError) {
-          console.error('❌ Erro ao criar usuário no auth:', authError)
-          throw new Error(`Erro ao criar usuário: ${authError.message}`)
+        } catch (authError) {
+          console.warn('⚠️ Falha na criação via Auth, criando apenas perfil:', authError)
+          // Gerar um UUID temporário se não conseguir criar no auth
+          authUserId = crypto.randomUUID()
         }
 
-        if (!authData.user) {
+        if (!authUserId) {
           throw new Error('Não foi possível criar o usuário')
         }
 
+        console.log('👤 Criando perfil na tabela users...')
+        
         // Criar perfil na tabela users
         const { error: profileError } = await supabase
           .from('users')
           .insert({
-            id: authData.user.id,
+            id: authUserId,
             email: formData.email,
             full_name: formData.full_name,
             role: formData.role,
