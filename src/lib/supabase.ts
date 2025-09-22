@@ -242,13 +242,29 @@ export class DatabaseService {
   }
 
   static async createVisit(visit: Partial<Visit>): Promise<Visit> {
+    console.log('🔄 DatabaseService.createVisit chamado com:', visit)
+    
+    // Validação dos campos obrigatórios
+    if (!visit.scheduled_date) {
+      throw new Error('Data da visita é obrigatória')
+    }
+    
+    if (!visit.institution_id) {
+      throw new Error('ID da instituição é obrigatório')
+    }
+    
     const { data, error } = await supabase
       .from('visits')
       .insert(visit)
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('❌ Erro no Supabase ao criar visita:', error)
+      throw error
+    }
+    
+    console.log('✅ Visita criada no banco:', data)
     return data
   }
 

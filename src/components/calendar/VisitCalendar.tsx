@@ -63,16 +63,30 @@ function NewVisitModal({ isOpen, onClose, onSave, editingVisit, leads }: NewVisi
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const scheduledDateTime = `${formData.scheduled_date}T${formData.scheduled_time}:00`
     
-    const visitData = {
-      ...formData,
-      scheduled_date: scheduledDateTime,
-      lead_id: formData.lead_id || null
+    // Validação dos campos obrigatórios
+    if (!formData.scheduled_date || !formData.scheduled_time) {
+      alert('Data e horário são obrigatórios!')
+      return
     }
     
+    if (!formData.lead_id && !formData.student_name) {
+      alert('Selecione um lead ou informe o nome do visitante!')
+      return
+    }
+    
+    const scheduledDateTime = `${formData.scheduled_date}T${formData.scheduled_time}:00.000Z`
+    
+    const visitData = {
+      scheduled_date: scheduledDateTime,
+      lead_id: formData.lead_id || null,
+      student_name: formData.student_name || null,
+      notes: formData.notes || '',
+      status: 'scheduled' as const
+    }
+    
+    console.log('💾 Salvando visita:', visitData)
     onSave(visitData)
-    onClose()
   }
 
   const nextStep = () => {
@@ -381,23 +395,30 @@ export default function VisitCalendar() {
 
   const handleSubmit = async (data: Partial<Visit>) => {
     try {
+      console.log('🔄 Iniciando salvamento da visita:', data)
+      
       const visitData = {
         ...data,
-        status: 'scheduled' as const,
         institution_id: user!.institution_id!
       }
 
+      console.log('📝 Dados finais para salvar:', visitData)
+
       if (editingVisit) {
+        console.log('✏️ Atualizando visita existente:', editingVisit.id)
         await DatabaseService.updateVisit(editingVisit.id, visitData)
       } else {
+        console.log('➕ Criando nova visita')
         await DatabaseService.createVisit(visitData)
       }
 
+      console.log('✅ Visita salva com sucesso!')
       await loadData()
       setShowForm(false)
       setEditingVisit(null)
     } catch (error) {
-      console.error('Error saving visit:', error)
+      console.error('❌ Erro ao salvar visita:', error)
+      alert('Erro ao salvar visita: ' + (error as Error).message)
     }
   }
 
