@@ -20,7 +20,13 @@ import TopBar from './components/layout/TopBar'
 
 function AppContent() {
   const { user } = useAuth()
-    )
+
+  if (!user) {
+    return <LoginForm />
+  }
+
+  if (!user.isSetupComplete) {
+    return <InitialSetup />
   }
 
   return (
