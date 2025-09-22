@@ -71,11 +71,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('👤 Carregando perfil:', userId)
       
-      // Check if Supabase is properly configured
-      if (!supabase.supabaseUrl || !supabase.supabaseKey) {
-        throw new Error('Supabase não configurado. Verifique as variáveis de ambiente.')
-      }
-
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -108,15 +103,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (!createError && createdUser) {
               console.log('✅ Perfil criado')
               setUser(createdUser)
+              setInitializing(false)
               return
             }
           }
         }
         
+        // Em caso de erro de rede, não limpa o usuário imediatamente
+        if (error.message && error.message.includes('Failed to fetch')) {
+          console.error('🌐 Erro de conexão - mantendo estado atual')
+          setInitializing(false)
+          return
+        }
+        
+        console.log('❌ Erro crítico, limpando usuário')
         setUser(null)
+        setInitializing(false)
       } else if (data) {
         console.log('✅ Perfil carregado')
         setUser(data)
+        setInitializing(false)
       }
     } catch (error) {
       console.error('❌ Erro no perfil:', error)
@@ -128,12 +134,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error('2. Conexão com internet')
         console.error('3. Status do projeto Supabase')
         
-        // Don't set user to null immediately on network errors
-        // Let the user try to force login instead
+        // Não limpa usuário em erro de rede - permite usar botão "Forçar Login"
+        setInitializing(false)
         return
       }
       
       setUser(null)
+      setInitializing(false)
     }
   }
 
@@ -154,13 +161,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (data.user) {
         console.log('✅ Login OK, carregando perfil...')
-        await loadUserProfile(data.user.id)
-        console.log('✅ Login completo!')
-        
-        // Redirecionamento forçado
-        setTimeout(() => {
-          window.location.href = '/dashboard'
-        }, 100)
+        // Não chama loadUserProfile aqui - deixa o onAuthStateChange fazer isso
+        console.log('✅ Login completo, aguardando carregamento do perfil...')
       }
     } catch (error) {
       console.error('❌ Falha no login:', error)
