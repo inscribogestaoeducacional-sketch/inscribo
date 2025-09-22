@@ -142,34 +142,55 @@ export interface ActivityLog {
 export class DatabaseService {
   // Leads
   static async getLeads(institutionId: string): Promise<Lead[]> {
+    console.log('Loading leads for institution:', institutionId)
     const { data, error } = await supabase
       .from('leads')
       .select('*')
       .eq('institution_id', institutionId)
       .order('created_at', { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      console.error('Error loading leads:', error)
+      throw error
+    }
+    console.log('Leads loaded successfully:', data?.length || 0, 'leads')
     return data || []
   }
 
   static async createLead(lead: Partial<Lead>): Promise<Lead> {
+    console.log('Creating lead with data:', lead)
+    
+    // Ensure required fields are present
+    if (!lead.student_name || !lead.responsible_name || !lead.phone || !lead.grade_interest || !lead.source || !lead.institution_id) {
+      throw new Error('Campos obrigatórios não preenchidos')
+    }
+    
     const { data, error } = await supabase
       .from('leads')
       .insert(lead)
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('Error creating lead:', error)
+      throw error
+    }
+    console.log('Lead created successfully:', data)
     return data
   }
 
   static async updateLead(id: string, updates: Partial<Lead>): Promise<void> {
+    console.log('Updating lead:', id, 'with data:', updates)
     const { error } = await supabase
       .from('leads')
       .update(updates)
       .eq('id', id)
 
-    if (error) throw error
+    if (error) {
+      console.error('Error updating lead:', error)
+      throw error
+    }
+    console.log('Lead updated successfully')
   }
 
   static async deleteLead(id: string): Promise<void> {

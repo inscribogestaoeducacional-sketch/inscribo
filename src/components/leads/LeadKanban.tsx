@@ -452,12 +452,53 @@ export default function LeadKanban() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setLoading(true)
+
     try {
-      const leadData = {
-        ...formData,
-        institution_id: user!.institution_id!,
-        status: 'new' as const
+      // Validate all required fields before saving
+      if (!formData.student_name.trim()) {
+        setError('Nome do aluno é obrigatório')
+        setLoading(false)
+        return
       }
+      if (!formData.responsible_name.trim()) {
+        setError('Nome do responsável é obrigatório')
+        setLoading(false)
+        return
+      }
+      if (!formData.phone.trim()) {
+        setError('Telefone é obrigatório')
+        setLoading(false)
+        return
+      }
+      if (!formData.grade_interest.trim()) {
+        setError('Série/Ano de interesse é obrigatório')
+        setLoading(false)
+        return
+      }
+      if (!formData.source.trim()) {
+        setError('Origem é obrigatória')
+        setLoading(false)
+        return
+      }
+
+      // Prepare lead data
+      const leadData = {
+        student_name: formData.student_name.trim(),
+        responsible_name: formData.responsible_name.trim(),
+        phone: formData.phone.trim(),
+        email: formData.email.trim() || null,
+        grade_interest: formData.grade_interest.trim(),
+        source: formData.source.trim(),
+        address: formData.address.trim() || null,
+        budget_range: formData.budget_range.trim() || null,
+        cpf: formData.cpf.trim() || null,
+        notes: formData.notes.trim() || null,
+        status: 'new' as const,
+        institution_id: user!.institution_id!
+      }
+
+      console.log('Saving lead with data:', leadData)
 
       if (editingLead) {
         await DatabaseService.updateLead(editingLead.id, leadData)
@@ -476,7 +517,8 @@ export default function LeadKanban() {
         })
       } else {
         const newLead = await DatabaseService.createLead(leadData)
-        
+        console.log('Lead created successfully:', newLead)
+        // Log creation activity
         await DatabaseService.logActivity({
           user_id: user!.id,
           action: 'created',
@@ -503,14 +545,51 @@ export default function LeadKanban() {
       }
 
       await loadLeads()
+      console.log('Leads reloaded successfully')
       setShowForm(false)
       setEditingLead(null)
       setFormStep(1)
       resetForm()
-    } catch (error) {
-      console.error('Error saving lead:', error)
-      alert('Erro ao salvar lead. Tente novamente.')
+    } catch (err: any) {
+      console.error('Error saving lead:', err)
+      
+      // More detailed error handling
+      if (err.message?.includes('duplicate key')) {
+        setError('Já existe um lead com essas informações')
+      } else if (err.message?.includes('violates foreign key')) {
+        setError('Erro de referência no banco de dados')
+      } else if (err.message?.includes('column') && err.message?.includes('does not exist')) {
+        setError('Erro de estrutura do banco de dados. Contate o suporte.')
+      } else {
+        setError(err.message || 'Erro ao salvar lead. Tente novamente.')
+      }
+    } finally {
+      setLoading(false)
     }
+  }
+
+  const handleNextStep = () => {
+    setError('')
+    
+    // Validate current step before proceeding
+    if (currentStep === 1) {
+      if (!formData.student_name.trim() || !formData.grade_interest.trim()) {
+        setError('Nome do aluno e série/ano são obrigatórios')
+        return
+      }
+    } else if (currentStep === 2) {
+      if (!formData.responsible_name.trim() || !formData.phone.trim()) {
+        setError('Nome do responsável e telefone são obrigatórios')
+        return
+      }
+    }
+    
+    setCurrentStep(currentStep + 1)
+  }
+
+  const handlePrevStep = () => {
+    setError('')
+    setCurrentStep(currentStep - 1)
   }
 
   const handleStatusChange = async (leadId: string, newStatus: Lead['status'], reason?: string) => {
@@ -1172,7 +1251,7 @@ export default function LeadKanban() {
                   {formStep > 1 && (
                     <button
                       type="button"
-                      onClick={() => setFormStep(formStep - 1)}
+                      onClick={handlePrevStep}
                       className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
                     >
                       Anterior
@@ -1197,7 +1276,7 @@ export default function LeadKanban() {
                   {formStep < 3 ? (
                     <button
                       type="button"
-                      onClick={() => setFormStep(formStep + 1)}
+                      onClick={handleNextStep}
                       className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                     >
                       Próximo
@@ -1205,10 +1284,20 @@ export default function LeadKanban() {
                   ) : (
                     <button
                       type="submit"
-                      className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center gap-2"
+                      disabled={loading}
+                      className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <CheckCircle className="w-4 h-4" />
-                      {editingLead ? 'Atualizar' : 'Salvar'} Lead
+                      {loading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          Salvando...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4" />
+                          {editingLead ? 'Atualizar' : 'Criar'} Lead
+                        </>
+                      )}
                     </button>
                   )}
                 </div>
