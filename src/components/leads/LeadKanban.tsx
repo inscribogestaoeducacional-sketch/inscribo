@@ -24,19 +24,23 @@ const sourceOptions = [
 ]
 
 const gradeOptions = [
-  'Educação Infantil',
-  '1º Ano',
-  '2º Ano', 
-  '3º Ano',
-  '4º Ano',
-  '5º Ano',
-  '6º Ano',
-  '7º Ano',
-  '8º Ano',
-  '9º Ano',
-  '1º Ano EM',
-  '2º Ano EM',
-  '3º Ano EM'
+  'Infantil I',
+  'Infantil II',
+  'Infantil III',
+  'Infantil IV',
+  'Infantil V',
+  '1º Ano EF',
+  '2º Ano EF',
+  '3º Ano EF',
+  '4º Ano EF',
+  '5º Ano EF',
+  '6º Ano EF',
+  '7º Ano EF',
+  '8º Ano EF',
+  '9º Ano EF',
+  '1ª Série EM',
+  '2ª Série EM',
+  '3ª Série EM'
 ]
 
 interface NewLeadModalProps {
@@ -420,6 +424,36 @@ export default function LeadKanban() {
 
       if (editingLead) {
         console.log('✏️ Atualizando lead existente:', editingLead.id)
+        
+        // Identificar mudanças específicas
+        const changes: any = {}
+        const previousData: any = {}
+        
+        if (data.student_name !== editingLead.student_name) {
+          changes.student_name = data.student_name
+          previousData.student_name = editingLead.student_name
+        }
+        if (data.responsible_name !== editingLead.responsible_name) {
+          changes.responsible_name = data.responsible_name
+          previousData.responsible_name = editingLead.responsible_name
+        }
+        if (data.phone !== editingLead.phone) {
+          changes.phone = data.phone
+          previousData.phone = editingLead.phone
+        }
+        if (data.email !== editingLead.email) {
+          changes.email = data.email
+          previousData.email = editingLead.email
+        }
+        if (data.grade_interest !== editingLead.grade_interest) {
+          changes.grade_interest = data.grade_interest
+          previousData.grade_interest = editingLead.grade_interest
+        }
+        if (data.source !== editingLead.source) {
+          changes.source = data.source
+          previousData.source = editingLead.source
+        }
+        
         await DatabaseService.updateLead(editingLead.id, leadData)
         
         // Registrar atividade de edição
@@ -429,13 +463,10 @@ export default function LeadKanban() {
           entity_type: 'lead',
           entity_id: editingLead.id,
           details: {
-            changes: data,
-            previous: {
-              student_name: editingLead.student_name,
-              responsible_name: editingLead.responsible_name,
-              status: editingLead.status,
-              source: editingLead.source
-            }
+            changes: changes,
+            previous: previousData,
+            student_name: editingLead.student_name,
+            responsible_name: editingLead.responsible_name
           },
           institution_id: user!.institution_id
         })
@@ -453,7 +484,9 @@ export default function LeadKanban() {
             student_name: newLead.student_name,
             responsible_name: newLead.responsible_name,
             source: newLead.source,
-            grade_interest: newLead.grade_interest
+            grade_interest: newLead.grade_interest,
+            phone: newLead.phone,
+            email: newLead.email
           },
           institution_id: user!.institution_id
         })
@@ -495,7 +528,30 @@ export default function LeadKanban() {
   const handleStatusChange = async (leadId: string, newStatus: Lead['status']) => {
     try {
       console.log('🔄 Alterando status do lead:', leadId, 'para:', newStatus)
+       
+       // Buscar lead atual para registrar mudança
+       const currentLead = leads.find(l => l.id === leadId)
+       const previousStatus = currentLead?.status
+       
       await DatabaseService.updateLead(leadId, { status: newStatus })
+       
+       // Registrar mudança de status
+       if (currentLead && previousStatus !== newStatus) {
+         await DatabaseService.logActivity({
+           user_id: user!.id,
+           action: 'Status alterado',
+           entity_type: 'lead',
+           entity_id: leadId,
+           details: {
+             previous_status: previousStatus,
+             new_status: newStatus,
+             student_name: currentLead.student_name,
+             responsible_name: currentLead.responsible_name
+           },
+           institution_id: user!.institution_id
+         })
+       }
+       
       await loadData()
       console.log('✅ Status alterado com sucesso!')
     } catch (error) {
@@ -919,13 +975,13 @@ export default function LeadKanban() {
                     <div className="flex-shrink-0">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                         item.action.includes('criado') || item.action.includes('Lead criado') ? 'bg-green-100' :
-                        item.action.includes('Status') || item.action.includes('status') ? 'bg-blue-100' :
+                        item.action.includes('Status') || item.action.includes('status') || item.action.includes('alterado') ? 'bg-blue-100' :
                         item.action.includes('atualizado') || item.action.includes('Lead atualizado') ? 'bg-yellow-100' :
                         item.action.includes('excluído') || item.action.includes('Lead excluído') ? 'bg-red-100' :
                         'bg-gray-100'
                       }`}>
                         {item.action.includes('criado') || item.action.includes('Lead criado') ? <Plus className="w-5 h-5 text-green-600" /> :
-                         item.action.includes('Status') || item.action.includes('status') ? <TrendingUp className="w-5 h-5 text-blue-600" /> :
+                         item.action.includes('Status') || item.action.includes('status') || item.action.includes('alterado') ? <TrendingUp className="w-5 h-5 text-blue-600" /> :
                          item.action.includes('atualizado') || item.action.includes('Lead atualizado') ? <Edit className="w-5 h-5 text-yellow-600" /> :
                          item.action.includes('excluído') || item.action.includes('Lead excluído') ? <Trash2 className="w-5 h-5 text-red-600" /> :
                          <Clock className="w-5 h-5 text-gray-600" />}
@@ -942,17 +998,44 @@ export default function LeadKanban() {
                       {/* Detalhes específicos por tipo de ação */}
                       {item.details && (
                         <div className="text-sm text-gray-600 mb-2">
-                          {(item.action.includes('Status') || item.action.includes('status')) && item.details.changes && (
-                            <p>Status alterado para <strong>{item.details.changes.status || 'N/A'}</strong></p>
+                          {(item.action.includes('Status') || item.action.includes('status') || item.action.includes('alterado')) && (
+                            <p>
+                              Status alterado de <strong>{statusConfig[item.details.previous_status as keyof typeof statusConfig]?.label || item.details.previous_status}</strong> 
+                              {' '}para <strong>{statusConfig[item.details.new_status as keyof typeof statusConfig]?.label || item.details.new_status}</strong>
+                            </p>
                           )}
                           {(item.action.includes('criado') || item.action.includes('Lead criado')) && (
-                            <p>Lead criado para <strong>{item.details.student_name || 'N/A'}</strong> via <strong>{item.details.source || 'N/A'}</strong></p>
+                            <div>
+                              <p>Lead criado para <strong>{item.details.student_name || 'N/A'}</strong></p>
+                              <p className="text-xs">Responsável: <strong>{item.details.responsible_name || 'N/A'}</strong></p>
+                              <p className="text-xs">Origem: <strong>{item.details.source || 'N/A'}</strong> | Série: <strong>{item.details.grade_interest || 'N/A'}</strong></p>
+                            </div>
                           )}
                           {(item.action.includes('atualizado') || item.action.includes('Lead atualizado')) && (
-                            <p>Informações do lead foram atualizadas</p>
+                            <div>
+                              <p>Informações atualizadas:</p>
+                              {item.details.changes && Object.keys(item.details.changes).length > 0 && (
+                                <ul className="text-xs mt-1 space-y-1">
+                                  {Object.entries(item.details.changes).map(([key, value]) => (
+                                    <li key={key}>
+                                      <strong>{key === 'student_name' ? 'Nome do Aluno' : 
+                                               key === 'responsible_name' ? 'Responsável' :
+                                               key === 'phone' ? 'Telefone' :
+                                               key === 'email' ? 'Email' :
+                                               key === 'grade_interest' ? 'Série' :
+                                               key === 'source' ? 'Origem' : key}:</strong> {value as string}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
                           )}
                           {(item.action.includes('excluído') || item.action.includes('Lead excluído')) && (
-                            <p>Lead <strong>{item.details.student_name || 'N/A'}</strong> foi excluído permanentemente</p>
+                            <div>
+                              <p>Lead <strong>{item.details.student_name || 'N/A'}</strong> foi excluído permanentemente</p>
+                              <p className="text-xs">Responsável: <strong>{item.details.responsible_name || 'N/A'}</strong></p>
+                              <p className="text-xs">Status: <strong>{statusConfig[item.details.status as keyof typeof statusConfig]?.label || item.details.status}</strong></p>
+                            </div>
                           )}
                         </div>
                       )}
@@ -967,7 +1050,13 @@ export default function LeadKanban() {
               ) : (
                 <div className="text-center py-8">
                   <Clock className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500">Nenhum histórico encontrado para este lead</p>
+                  <p className="text-gray-500 mb-2">Nenhum histórico encontrado para este lead</p>
+                  <button
+                    onClick={() => loadLeadHistory(selectedLead!.id)}
+                    className="text-blue-600 hover:text-blue-700 text-sm"
+                  >
+                    Tentar carregar novamente
+                  </button>
                 </div>
               )}
             </div>
