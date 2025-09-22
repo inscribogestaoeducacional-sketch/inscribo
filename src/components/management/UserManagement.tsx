@@ -46,8 +46,7 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
     role: 'user' as 'admin' | 'manager' | 'user',
     password: '',
     confirmPassword: '',
-    active: true,
-    institution_id: ''
+    active: true
   })
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -61,8 +60,7 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
         role: editingUser.role,
         password: '',
         confirmPassword: '',
-        active: editingUser.active,
-        institution_id: editingUser.institution_id || ''
+        active: editingUser.active
       })
     } else {
       setFormData({
@@ -71,8 +69,7 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
         role: 'user',
         password: '',
         confirmPassword: '',
-        active: true,
-        institution_id: ''
+        active: true
       })
     }
   }, [editingUser, isOpen])
@@ -806,7 +803,11 @@ export default function UserManagement() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="text-sm text-gray-900">
-                      {(user as any).institutions?.name || 'Sem instituição'}
+                      {user.institution_id ? (
+                        <span className="text-blue-600">🏢 {user.institution_id}</span>
+                      ) : (
+                        <span className="text-gray-500">🌐 Usuário Global</span>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4">
