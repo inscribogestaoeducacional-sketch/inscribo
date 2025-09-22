@@ -186,8 +186,7 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Senha *
                 </label>
-                <li>• Você pode atribuir qualquer instituição ao usuário</li>
-                <li>• Deixe instituição vazia para usuários globais</li>
+                <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
@@ -398,7 +397,7 @@ export default function UserManagement() {
             email: formData.email,
             full_name: formData.full_name,
             role: formData.role,
-            institution_id: user?.institution_id || null,
+            institution_id: formData.institution_id || null,
             active: formData.active
           })
 
