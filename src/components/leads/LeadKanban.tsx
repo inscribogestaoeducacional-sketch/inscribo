@@ -201,6 +201,7 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                     placeholder="000.000.000-00"
                   />
+                </div>
               </div>
             </div>
           )}
@@ -772,7 +773,7 @@ export default function LeadKanban() {
         onSave={handleSave}
         editingLead={editingLead}
       />
-    </div>
+
       {/* History Modal */}
       {showHistory && selectedLead && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -813,7 +814,6 @@ export default function LeadKanban() {
 
             {/* Timeline */}
             <div className="space-y-4">
-    </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Timeline de Ações</h3>
               {getLeadHistory(selectedLead).map((item, index) => (
                 <div key={item.id} className="flex items-start space-x-4">
@@ -847,5 +847,6 @@ export default function LeadKanban() {
           </div>
         </div>
       )}
+    </div>
   )
 }
