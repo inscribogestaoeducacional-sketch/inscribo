@@ -36,11 +36,7 @@ export interface Lead {
   institution_id: string
   created_at: string
   updated_at: string
-  cpf?: string
-  whatsapp?: string
   address?: string
-  budget_range?: string
-  preferred_period?: string
 }
 
 export interface Visit {
