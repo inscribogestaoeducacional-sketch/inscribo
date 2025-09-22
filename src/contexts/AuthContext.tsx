@@ -213,12 +213,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Force load user profile immediately after successful login
       if (data.user) {
         await loadUserProfile(data.user.id)
+        console.log('✅ Perfil carregado - login completo')
       }
     } catch (error) {
       console.error('❌ Falha no login:', error)
-      throw error
-    } finally {
       setLoading(false)
+      throw error
     }
   }
 

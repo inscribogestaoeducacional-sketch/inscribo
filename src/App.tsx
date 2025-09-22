@@ -22,13 +22,6 @@ import TopBar from './components/layout/TopBar'
 function AppContent() {
   const { user, loading } = useAuth()
 
-  // Force redirect to dashboard if user exists but we're on login page
-  React.useEffect(() => {
-    if (user && (window.location.pathname === '/login' || window.location.pathname === '/setup')) {
-      window.location.href = '/dashboard'
-    }
-  }, [user])
-
   if (!user) {
     return (
       <Routes>
@@ -59,6 +52,8 @@ function AppContent() {
             <Route path="/users" element={<UserManagement />} />
             <Route path="/settings" element={<SystemSettings />} />
             <Route path="/profile" element={<UserProfile />} />
+            <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/setup" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </main>
