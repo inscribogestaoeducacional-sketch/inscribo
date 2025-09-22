@@ -439,6 +439,24 @@ export default function LeadKanban() {
     setShowNewLeadModal(true)
   }
 
+  const handleDelete = async (leadId: string) => {
+    const lead = leads.find(l => l.id === leadId)
+    if (!lead) return
+
+    const confirmMessage = `Tem certeza que deseja excluir o lead "${lead.student_name}"?\n\nEsta ação não pode ser desfeita.`
+    
+    if (!confirm(confirmMessage)) return
+
+    try {
+      console.log('🗑️ Excluindo lead:', leadId)
+      await DatabaseService.deleteLead(leadId)
+      await loadData()
+      console.log('✅ Lead excluído com sucesso!')
+    } catch (error) {
+      console.error('❌ Erro ao excluir lead:', error)
+      setError('Erro ao excluir lead: ' + (error as Error).message)
+    }
+  }
   const handleStatusChange = async (leadId: string, newStatus: Lead['status']) => {
     try {
       console.log('🔄 Alterando status do lead:', leadId, 'para:', newStatus)
