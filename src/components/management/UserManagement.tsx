@@ -186,7 +186,8 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Senha *
                 </label>
-                <div className="relative">
+                <li>• Você pode atribuir qualquer instituição ao usuário</li>
+                <li>• Deixe instituição vazia para usuários globais</li>
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
