@@ -11,9 +11,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true,
-    storageKey: 'inscribo-auth-token',
-    debug: true
+    detectSessionInUrl: false,
+    storageKey: 'sb-' + supabaseUrl.split('//')[1].split('.')[0] + '-auth-token'
   },
   global: {
     headers: {

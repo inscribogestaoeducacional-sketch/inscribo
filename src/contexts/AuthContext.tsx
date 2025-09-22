@@ -35,52 +35,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null)
   const [session, setSession] = useState<any>(null)
   const [loading, setLoading] = useState(false)
-  const [initialized, setInitialized] = useState(false)
+  const [initializing, setInitializing] = useState(true)
 
   useEffect(() => {
     let mounted = true
 
     const initializeAuth = async () => {
       try {
-        // Get current session
-        const { data: { session: currentSession } } = await supabase.auth.getSession()
+        // Get current session without any delays
+        const { data: { session: currentSession }, error } = await supabase.auth.getSession()
         
-        if (mounted) {
+        if (!mounted) return
+
+        if (error) {
+          console.error('Session error:', error)
+          setSession(null)
+          setUser(null)
+        } else {
           setSession(currentSession)
           
           if (currentSession?.user) {
             await loadUserProfile(currentSession.user.id)
+          } else {
+            setUser(null)
           }
-          
-          setInitialized(true)
         }
       } catch (error) {
         console.error('Auth initialization error:', error)
         if (mounted) {
           setSession(null)
           setUser(null)
-          setInitialized(true)
+        }
+      } finally {
+        if (mounted) {
+          setInitializing(false)
         }
       }
     }
 
-    // Initialize auth immediately
+    // Initialize immediately
     initializeAuth()
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return
 
+      console.log('Auth state changed:', event, !!session)
+      
       setSession(session)
 
       if (session?.user) {
         await loadUserProfile(session.user.id)
       } else {
         setUser(null)
-      }
-      
-      if (!initialized) {
-        setInitialized(true)
       }
     })
 
@@ -99,8 +106,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single()
 
       if (error) {
-        // If user doesn't exist in users table, create it from auth user
         if (error.code === 'PGRST116') {
+          // User doesn't exist in users table, create it
           const { data: { user: authUser } } = await supabase.auth.getUser()
           
           if (authUser) {
@@ -122,18 +129,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (!createError && createdUser) {
               setUser(createdUser)
             } else {
+              console.error('Error creating user profile:', createError)
               setUser(null)
             }
-          } else {
-            setUser(null)
           }
         } else {
+          console.error('Error loading user profile:', error)
           setUser(null)
         }
       } else if (data) {
         setUser(data)
-      } else {
-        setUser(null)
       }
     } catch (error) {
       console.error('Profile loading error:', error)
@@ -180,12 +185,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       setLoading(true)
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
       
-      // Clear local state
+      // Clear local state first
       setSession(null)
       setUser(null)
+      
+      // Then sign out from Supabase
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        console.error('Error signing out:', error)
+      }
     } catch (error) {
       console.error('Error signing out:', error)
     } finally {
@@ -219,8 +228,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Show loading only if not initialized yet
-  if (!initialized) {
+  // Show loading only during initialization
+  if (initializing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
