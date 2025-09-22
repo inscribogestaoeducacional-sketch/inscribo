@@ -180,6 +180,9 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  A senha deve ter pelo menos 6 caracteres
+                </p>
               </div>
 
               <div>
@@ -203,6 +206,11 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
                     {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
+                {formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                  <p className="text-xs text-red-500 mt-1">
+                    As senhas não coincidem
+                  </p>
+                )}
               </div>
             </div>
           )}
