@@ -103,13 +103,52 @@ export default function Dashboard() {
     try {
       setLoading(true)
       
+      // Verify Supabase connection
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      if (authError) {
+        console.error('Auth error:', authError)
+        throw new Error('Erro de autenticação: ' + authError.message)
+      }
+      
+      if (!user?.institution_id) {
+        console.error('No institution_id found for user')
+        throw new Error('Usuário não possui instituição associada')
+      }
+      
       // Carregar dados em paralelo
-      const [leads, visits, enrollments, campaigns] = await Promise.all([
-        DatabaseService.getLeads(user!.institution_id!),
-        DatabaseService.getVisits(user!.institution_id!),
-        DatabaseService.getEnrollments(user!.institution_id!),
-        DatabaseService.getMarketingCampaigns(user!.institution_id!)
-      ])
+      let leads = [], visits = [], enrollments = [], campaigns = []
+      
+      try {
+        console.log('Loading leads...')
+        leads = await DatabaseService.getLeads(user.institution_id)
+      } catch (error) {
+        console.error('Error loading leads:', error)
+        leads = []
+      }
+      
+      try {
+        console.log('Loading visits...')
+        visits = await DatabaseService.getVisits(user.institution_id)
+      } catch (error) {
+        console.error('Error loading visits:', error)
+        visits = []
+      }
+      
+      try {
+        console.log('Loading enrollments...')
+        enrollments = await DatabaseService.getEnrollments(user.institution_id)
+      } catch (error) {
+        console.error('Error loading enrollments:', error)
+        enrollments = []
+      }
+      
+      try {
+        console.log('Loading campaigns...')
+        campaigns = await DatabaseService.getMarketingCampaigns(user.institution_id)
+      } catch (error) {
+        console.error('Error loading campaigns:', error)
+        campaigns = []
+      }
 
       // Datas para cálculos
       const today = new Date()

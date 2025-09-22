@@ -236,13 +236,20 @@ export class DatabaseService {
 
   // Enrollments
   static async getEnrollments(institutionId: string): Promise<Enrollment[]> {
+    if (!institutionId) {
+      throw new Error('Institution ID is required')
+    }
+    
     const { data, error } = await supabase
       .from('enrollments')
       .select('*')
       .eq('institution_id', institutionId)
       .order('created_at', { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      console.error('Error loading enrollments:', error)
+      throw error
+    }
     return data || []
   }
 
