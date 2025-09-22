@@ -209,7 +209,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       console.log('✅ Login realizado com sucesso')
-      // The onAuthStateChange will handle setting the user
+      
+      // Force load user profile immediately after successful login
+      if (data.user) {
+        await loadUserProfile(data.user.id)
+      }
     } catch (error) {
       console.error('❌ Falha no login:', error)
       throw error
