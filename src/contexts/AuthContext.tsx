@@ -155,16 +155,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       setLoading(true)
+      console.log('🚪 Fazendo logout forçado...')
       setUser(null)
+      
+      // Limpa localStorage
+      localStorage.clear()
+      
+      // Limpa sessionStorage
+      sessionStorage.clear()
       
       const { error } = await supabase.auth.signOut()
       if (error) {
         console.error('❌ Erro no logout:', error)
       }
       
+      console.log('✅ Logout completo, redirecionando...')
       window.location.href = '/login'
     } catch (error) {
       console.error('❌ Erro no logout:', error)
+      // Força redirecionamento mesmo com erro
+      window.location.href = '/login'
     } finally {
       setLoading(false)
     }

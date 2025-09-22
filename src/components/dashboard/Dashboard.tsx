@@ -11,12 +11,12 @@ import {
   Plus,
   BarChart3,
   Target,
-  Eye
+  Eye,
+  LogOut
 } from 'lucide-react'
 import { DatabaseService } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabase'
 
 interface KPICardProps {
   title: string
@@ -66,7 +66,7 @@ function KPICard({ title, value, change, icon, color, onClick }: KPICardProps) {
 }
 
 export default function Dashboard() {
-  const { user } = useAuth()
+  const { user, signOut } = useAuth()
   const navigate = useNavigate()
   const [kpis, setKpis] = useState({
     totalLeads: 0,
@@ -244,6 +244,18 @@ export default function Dashboard() {
     }
   }
 
+  const handleForceLogin = async () => {
+    if (confirm('Deseja fazer logout e forçar um novo login?')) {
+      try {
+        await signOut()
+      } catch (error) {
+        console.error('Erro no logout:', error)
+        // Força limpeza mesmo com erro
+        window.location.href = '/login'
+      }
+    }
+  }
+
   if (loading) {
     return (
       <div className="p-6">
@@ -314,8 +326,20 @@ export default function Dashboard() {
     <div className="p-6">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600">Visão geral do sistema Inscribo</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+            <p className="text-gray-600">Visão geral do sistema Inscribo</p>
+          </div>
+          <button
+            onClick={handleForceLogin}
+            className="flex items-center px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg border border-red-200 hover:border-red-300 transition-colors"
+            title="Forçar novo login (limpa sessão e cookies)"
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Forçar Login
+          </button>
+        </div>
       </div>
 
       {/* KPI Cards */}
