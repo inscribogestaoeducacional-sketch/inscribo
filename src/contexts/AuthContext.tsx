@@ -90,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               email: authUser.email!,
               full_name: authUser.user_metadata?.full_name || authUser.email!.split('@')[0],
               role: 'admin' as const,
-              institution_id: '00000000-0000-0000-0000-000000000000', // ID temporário
+              institution_id: authUser.id, // Usar o próprio ID do usuário como institution_id
               active: true
             }
 
