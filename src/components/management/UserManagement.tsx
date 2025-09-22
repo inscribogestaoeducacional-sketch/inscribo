@@ -240,7 +240,14 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
               type="submit"
               className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all font-medium shadow-lg"
             >
-              {editingUser ? 'Atualizar Usuário' : 'Criar Usuário'}
+              {loading ? (
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  {editingUser ? 'Atualizando...' : 'Criando...'}
+                </div>
+              ) : (
+                editingUser ? 'Atualizar Usuário' : 'Criar Usuário'
+              )}
             </button>
           </div>
         </form>
@@ -301,75 +308,65 @@ export default function UserManagement() {
 
         if (error) throw error
       } else {
-        // Check if user already exists in our users table
-        const { data: existingUser, error: checkError } = await supabase
+        // Check if user already exists in our users table first
+        const { data: existingUserInTable, error: checkTableError } = await supabase
           .from('users')
           .select('id, email')
           .eq('email', formData.email)
           .eq('institution_id', user?.institution_id)
           .single()
 
-        if (checkError && checkError.code !== 'PGRST116') {
-          throw checkError
+        if (checkTableError && checkTableError.code !== 'PGRST116') {
+          throw checkTableError
         }
 
-        if (existingUser) {
+        if (existingUserInTable) {
           throw new Error('Este email já está sendo usado por outro usuário nesta instituição')
         }
 
-        // Try to create new user with admin privileges
-        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-          email: formData.email,
-          password: formData.password,
-          email_confirm: true,
-          user_metadata: {
-            full_name: formData.full_name,
-            role: formData.role
+        // Try to get existing auth user first
+        const { data: existingAuthUsers, error: listError } = await supabase.auth.admin.listUsers()
+        
+        let authUserId = null
+        let userAlreadyExists = false
+        
+        if (!listError && existingAuthUsers?.users) {
+          const existingAuthUser = existingAuthUsers.users.find(u => u.email === formData.email)
+          if (existingAuthUser) {
+            authUserId = existingAuthUser.id
+            userAlreadyExists = true
+            console.log('User already exists in auth, using existing ID:', authUserId)
           }
-        })
+        }
 
-        if (authError) {
-          // If admin.createUser fails, try regular signUp
-          console.log('Admin create failed, trying regular signup:', authError)
-          
-          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        // If user doesn't exist in auth, create new one
+        if (!userAlreadyExists) {
+          const { data: newAuthData, error: createError } = await supabase.auth.admin.createUser({
             email: formData.email,
             password: formData.password,
-            options: {
-              data: {
-                full_name: formData.full_name,
-                role: formData.role
-              }
+            email_confirm: true,
+            user_metadata: {
+              full_name: formData.full_name,
+              role: formData.role
             }
           })
 
-          if (signUpError) {
-            if (signUpError.message.includes('already registered')) {
-              throw new Error('Este email já possui uma conta. Use um email diferente.')
-            }
-            throw signUpError
+          if (createError) {
+            console.error('Error creating auth user:', createError)
+            throw new Error(`Erro ao criar usuário: ${createError.message}`)
           }
 
-          if (signUpData.user) {
-            const { error: profileError } = await supabase
-              .from('users')
-              .insert({
-                id: signUpData.user.id,
-                email: formData.email,
-                full_name: formData.full_name,
-                role: formData.role,
-                institution_id: user?.institution_id,
-                active: formData.active
-              })
-
-            if (profileError) throw profileError
+          if (newAuthData.user) {
+            authUserId = newAuthData.user.id
           }
-        } else if (authData.user) {
-          // Admin create succeeded
+        }
+
+        // Create user profile in our table
+        if (authUserId) {
           const { error: profileError } = await supabase
             .from('users')
             .insert({
-              id: authData.user.id,
+              id: authUserId,
               email: formData.email,
               full_name: formData.full_name,
               role: formData.role,
@@ -377,7 +374,12 @@ export default function UserManagement() {
               active: formData.active
             })
 
-          if (profileError) throw profileError
+          if (profileError) {
+            console.error('Error creating user profile:', profileError)
+            throw new Error(`Erro ao criar perfil do usuário: ${profileError.message}`)
+          }
+        } else {
+          throw new Error('Não foi possível obter ID do usuário')
         }
       }
 
@@ -389,13 +391,7 @@ export default function UserManagement() {
       
       let errorMessage = 'Erro ao salvar usuário'
       if (error instanceof Error) {
-        if (error.message.includes('already registered')) {
-          errorMessage = 'Este email já possui uma conta. Use um email diferente.'
-        } else if (error.message.includes('já está sendo usado')) {
-          errorMessage = error.message
-        } else {
-          errorMessage = error.message
-        }
+        errorMessage = error.message
       }
       
       alert(errorMessage)
