@@ -301,21 +301,71 @@ export default function UserManagement() {
 
         if (error) throw error
       } else {
-        // Create new user
-        const { data: authData, error: authError } = await supabase.auth.signUp({
+        // Check if user already exists in our users table
+        const { data: existingUser, error: checkError } = await supabase
+          .from('users')
+          .select('id, email')
+          .eq('email', formData.email)
+          .eq('institution_id', user?.institution_id)
+          .single()
+
+        if (checkError && checkError.code !== 'PGRST116') {
+          throw checkError
+        }
+
+        if (existingUser) {
+          throw new Error('Este email já está sendo usado por outro usuário nesta instituição')
+        }
+
+        // Try to create new user with admin privileges
+        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
           email: formData.email,
           password: formData.password,
-          options: {
-            data: {
-              full_name: formData.full_name,
-              role: formData.role
-            }
+          email_confirm: true,
+          user_metadata: {
+            full_name: formData.full_name,
+            role: formData.role
           }
         })
 
-        if (authError) throw authError
+        if (authError) {
+          // If admin.createUser fails, try regular signUp
+          console.log('Admin create failed, trying regular signup:', authError)
+          
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+            email: formData.email,
+            password: formData.password,
+            options: {
+              data: {
+                full_name: formData.full_name,
+                role: formData.role
+              }
+            }
+          })
 
-        if (authData.user) {
+          if (signUpError) {
+            if (signUpError.message.includes('already registered')) {
+              throw new Error('Este email já possui uma conta. Use um email diferente.')
+            }
+            throw signUpError
+          }
+
+          if (signUpData.user) {
+            const { error: profileError } = await supabase
+              .from('users')
+              .insert({
+                id: signUpData.user.id,
+                email: formData.email,
+                full_name: formData.full_name,
+                role: formData.role,
+                institution_id: user?.institution_id,
+                active: formData.active
+              })
+
+            if (profileError) throw profileError
+          }
+        } else if (authData.user) {
+          // Admin create succeeded
           const { error: profileError } = await supabase
             .from('users')
             .insert({
@@ -336,7 +386,19 @@ export default function UserManagement() {
       setEditingUser(null)
     } catch (error) {
       console.error('Error saving user:', error)
-      alert('Erro ao salvar usuário: ' + (error as Error).message)
+      
+      let errorMessage = 'Erro ao salvar usuário'
+      if (error instanceof Error) {
+        if (error.message.includes('already registered')) {
+          errorMessage = 'Este email já possui uma conta. Use um email diferente.'
+        } else if (error.message.includes('já está sendo usado')) {
+          errorMessage = error.message
+        } else {
+          errorMessage = error.message
+        }
+      }
+      
+      alert(errorMessage)
     } finally {
       setLoading(false)
     }
