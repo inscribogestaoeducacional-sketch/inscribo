@@ -19,15 +19,12 @@ export default function LoginForm() {
     e.preventDefault()
     setError('')
     setSuccess('')
-    setLoading(true)
 
     try {
       if (isLogin) {
         console.log('Attempting login for:', email)
         await signIn(email, password)
-        console.log('Login successful')
-        // Force immediate redirect
-        window.location.replace('/dashboard')
+        // signIn já faz o redirecionamento
       } else {
         console.log('Attempting signup for:', email)
         await signUp(email, password, fullName, role)
@@ -56,7 +53,6 @@ export default function LoginForm() {
       }
       
       setError(errorMessage)
-      setLoading(false)
     }
   }
 

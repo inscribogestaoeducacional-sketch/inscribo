@@ -1,7 +1,6 @@
 import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
-import { useEffect } from 'react'
 import LoginForm from './components/auth/LoginForm'
 import InitialSetup from './components/auth/InitialSetup'
 import Dashboard from './components/dashboard/Dashboard'
@@ -20,15 +19,7 @@ import Sidebar from './components/layout/Sidebar'
 import TopBar from './components/layout/TopBar'
 
 function AppContent() {
-  const { user, loading } = useAuth()
-
-  if (!user) {
-    return (
-      <Routes>
-        <Route path="/login" element={<LoginForm />} />
-        <Route path="/setup" element={<InitialSetup />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
+  const { user } = useAuth()
     )
   }
 
