@@ -813,6 +813,7 @@ export default function LeadKanban() {
 
             {/* Timeline */}
             <div className="space-y-4">
+    </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Timeline de Ações</h3>
               {getLeadHistory(selectedLead).map((item, index) => (
                 <div key={item.id} className="flex items-start space-x-4">
