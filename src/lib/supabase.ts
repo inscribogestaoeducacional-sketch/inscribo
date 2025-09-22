@@ -3,8 +3,16 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
+console.log('🔧 Supabase Config Check:')
+console.log('URL:', supabaseUrl ? '✅ Configurada' : '❌ Não encontrada')
+console.log('Key:', supabaseAnonKey ? '✅ Configurada' : '❌ Não encontrada')
+
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables')
+  console.error('❌ Variáveis de ambiente do Supabase não encontradas!')
+  console.error('Certifique-se de que existe um arquivo .env com:')
+  console.error('VITE_SUPABASE_URL=sua_url_aqui')
+  console.error('VITE_SUPABASE_ANON_KEY=sua_chave_aqui')
+  throw new Error('Variáveis de ambiente do Supabase não configuradas. Verifique o arquivo .env')
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -20,6 +28,18 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     }
   }
 })
+
+// Test connection on startup
+supabase.from('users').select('count', { count: 'exact', head: true }).then(
+  ({ error }) => {
+    if (error) {
+      console.error('❌ Erro de conexão com Supabase:', error.message)
+      console.error('Verifique se o projeto Supabase está ativo e as configurações estão corretas')
+    } else {
+      console.log('✅ Conexão com Supabase estabelecida')
+    }
+  }
+)
 
 // Types
 export interface Lead {

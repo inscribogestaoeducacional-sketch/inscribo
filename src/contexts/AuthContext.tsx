@@ -71,6 +71,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('👤 Carregando perfil:', userId)
       
+      // Check if Supabase is properly configured
+      if (!supabase.supabaseUrl || !supabase.supabaseKey) {
+        throw new Error('Supabase não configurado. Verifique as variáveis de ambiente.')
+      }
+
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -115,6 +120,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error('❌ Erro no perfil:', error)
+      
+      // If it's a network error, show helpful message
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        console.error('🌐 Erro de conexão com Supabase. Verifique:')
+        console.error('1. Variáveis de ambiente (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)')
+        console.error('2. Conexão com internet')
+        console.error('3. Status do projeto Supabase')
+        
+        // Don't set user to null immediately on network errors
+        // Let the user try to force login instead
+        return
+      }
+      
       setUser(null)
     }
   }
