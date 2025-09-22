@@ -11,7 +11,7 @@ import {
   RefreshCw
 } from 'lucide-react'
 
-export function TopBar() {
+export default function TopBar() {
   const { user, signOut } = useAuth()
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
@@ -140,5 +140,3 @@ export function TopBar() {
     </header>
   )
 }
-
-export default TopBar
