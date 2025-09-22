@@ -13,7 +13,7 @@ export default function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState('')
 
-  const { signIn, signUp } = useAuth()
+  const { signIn, signUp, signOut } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -25,7 +25,7 @@ export default function LoginForm() {
       if (isLogin) {
         console.log('Attempting login...')
         // Clear any existing session data before login
-        await supabase.auth.signOut()
+        await signOut()
         await signIn(email, password)
         console.log('Login successful')
       } else {
