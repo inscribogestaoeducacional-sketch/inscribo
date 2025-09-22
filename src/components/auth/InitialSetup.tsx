@@ -1,12 +1,8 @@
 import React, { useState } from 'react'
-import { Building, User, Mail, Lock, Shield } from 'lucide-react'
+import { Building, User, Mail, Lock, Shield, GraduationCap } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
-interface InitialSetupProps {
-  onComplete: () => void
-}
-
-export default function InitialSetup({ onComplete }: InitialSetupProps) {
+export default function InitialSetup() {
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -88,7 +84,8 @@ export default function InitialSetup({ onComplete }: InitialSetupProps) {
         if (userError) throw userError
       }
 
-      onComplete()
+      // Redirect will be handled by auth state change
+      window.location.href = '/dashboard'
     } catch (err: any) {
       setError(err.message || 'Erro ao criar configuração inicial')
     } finally {
@@ -101,12 +98,8 @@ export default function InitialSetup({ onComplete }: InitialSetupProps) {
       <div className="max-w-md w-full space-y-8">
         {/* Header */}
         <div className="text-center">
-          <div className="mx-auto h-20 w-20 mb-6 rounded-full overflow-hidden bg-white shadow-lg">
-            <img 
-              src="/Inscribo.jpeg" 
-              alt="Inscribo" 
-              className="w-full h-full object-cover"
-            />
+          <div className="mx-auto h-20 w-20 mb-6 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-xl">
+            <GraduationCap className="h-10 w-10 text-white" />
           </div>
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Configuração Inicial</h2>
           <p className="text-gray-600">

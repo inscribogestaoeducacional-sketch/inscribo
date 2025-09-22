@@ -1,6 +1,7 @@
 import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { useEffect } from 'react'
 import LoginForm from './components/auth/LoginForm'
 import InitialSetup from './components/auth/InitialSetup'
 import Dashboard from './components/dashboard/Dashboard'
@@ -19,12 +20,39 @@ import Sidebar from './components/layout/Sidebar'
 import TopBar from './components/layout/TopBar'
 
 function AppContent() {
-  const { user, loading } = useAuth()
+  const { user, loading, session, refreshSession } = useAuth()
+
+  // Handle page refresh and direct URL access
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && !user && !loading) {
+        // Page became visible and we don't have a user - try to refresh session
+        refreshSession()
+      }
+    }
+
+    const handleFocus = () => {
+      if (!user && !loading) {
+        refreshSession()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [user, loading, refreshSession])
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando...</p>
+        </div>
       </div>
     )
   }
@@ -49,7 +77,7 @@ function AppContent() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/leads" element={<LeadKanban />} />
-            <Route path="/calendar" element={<VisitCalendar />} />
+            <Route path="/visits" element={<VisitCalendar />} />
             <Route path="/enrollments" element={<EnrollmentManager />} />
             <Route path="/marketing" element={<MarketingCPA />} />
             <Route path="/reenrollments" element={<ReEnrollments />} />

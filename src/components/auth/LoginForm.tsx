@@ -23,7 +23,9 @@ export default function LoginForm() {
 
     try {
       if (isLogin) {
+        console.log('Attempting login...')
         await signIn(email, password)
+        console.log('Login successful')
       } else {
         await signUp(email, password, fullName, role)
         setSuccess('Conta criada com sucesso! Verifique seu email e faça login.')
@@ -33,6 +35,7 @@ export default function LoginForm() {
         setFullName('')
       }
     } catch (err: any) {
+      console.error('Login error:', err)
       setError(err.message || 'Erro ao processar solicitação')
     } finally {
       setLoading(false)

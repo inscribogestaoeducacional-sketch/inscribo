@@ -17,7 +17,9 @@ export function TopBar() {
 
   const handleSignOut = async () => {
     try {
+      console.log('Signing out...')
       await signOut()
+      console.log('Sign out successful')
     } catch (error) {
       console.error('Error signing out:', error)
     }
