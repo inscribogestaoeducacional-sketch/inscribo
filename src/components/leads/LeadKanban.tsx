@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Edit, Trash2, Phone, Mail, Calendar, User, MapPin, DollarSign, Clock, MessageSquare, Search, Filter, X, CheckCircle, AlertCircle, Eye, FileText } from 'lucide-react'
+import { Plus, Edit, Trash2, Phone, Mail, Calendar, User, MapPin, DollarSign, Clock, MessageSquare, Search, Filter, X, CheckCircle, AlertCircle, Eye, FileText, History, GripVertical } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { DatabaseService, Lead } from '../../lib/supabase'
+import { DatabaseService, Lead, ActivityLog } from '../../lib/supabase'
 
 const statusConfig = {
   new: { 
@@ -91,6 +91,287 @@ const periods = [
   'Integral'
 ]
 
+interface LeadDetailsModalProps {
+  lead: Lead | null
+  isOpen: boolean
+  onClose: () => void
+  onEdit: (lead: Lead) => void
+}
+
+function LeadDetailsModal({ lead, isOpen, onClose, onEdit }: LeadDetailsModalProps) {
+  const [activeTab, setActiveTab] = useState('details')
+  const [activities, setActivities] = useState<ActivityLog[]>([])
+  const [loadingActivities, setLoadingActivities] = useState(false)
+  const { user } = useAuth()
+
+  useEffect(() => {
+    if (isOpen && lead) {
+      loadActivities()
+    }
+  }, [isOpen, lead])
+
+  const loadActivities = async () => {
+    if (!lead || !user?.institution_id) return
+    
+    try {
+      setLoadingActivities(true)
+      const data = await DatabaseService.getActivityLogs(user.institution_id, lead.id)
+      setActivities(data)
+    } catch (error) {
+      console.error('Error loading activities:', error)
+    } finally {
+      setLoadingActivities(false)
+    }
+  }
+
+  const getActivityIcon = (action: string) => {
+    switch (action) {
+      case 'created': return <Plus className="w-4 h-4 text-green-600" />
+      case 'updated': return <Edit className="w-4 h-4 text-blue-600" />
+      case 'status_changed': return <CheckCircle className="w-4 h-4 text-purple-600" />
+      case 'deleted': return <Trash2 className="w-4 h-4 text-red-600" />
+      default: return <History className="w-4 h-4 text-gray-600" />
+    }
+  }
+
+  const formatActivityDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString('pt-BR')
+  }
+
+  if (!isOpen || !lead) return null
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">{lead.student_name}</h2>
+              <p className="text-blue-100">Responsável: {lead.responsible_name}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onEdit(lead)}
+                className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-lg transition-colors"
+              >
+                <Edit className="w-5 h-5" />
+              </button>
+              <button
+                onClick={onClose}
+                className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="border-b border-gray-200">
+          <nav className="flex space-x-8 px-6">
+            <button
+              onClick={() => setActiveTab('details')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'details'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <User className="h-4 w-4 inline mr-2" />
+              Detalhes
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'history'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <History className="h-4 w-4 inline mr-2" />
+              Histórico ({activities.length})
+            </button>
+          </nav>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto max-h-[60vh]">
+          {activeTab === 'details' && (
+            <div className="space-y-6">
+              {/* Student Info */}
+              <div className="bg-blue-50 p-6 rounded-xl border border-blue-200">
+                <h3 className="font-semibold text-blue-800 mb-4 flex items-center gap-2">
+                  <User className="w-5 h-5" />
+                  Informações do Aluno
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Nome do Aluno</label>
+                    <p className="text-gray-900 font-medium">{lead.student_name}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Série/Ano</label>
+                    <p className="text-gray-900">{lead.grade_interest}</p>
+                  </div>
+                  {lead.cpf && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">CPF</label>
+                      <p className="text-gray-900">{lead.cpf}</p>
+                    </div>
+                  )}
+                  {lead.preferred_period && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">Período Preferido</label>
+                      <p className="text-gray-900">{lead.preferred_period}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Responsible Info */}
+              <div className="bg-green-50 p-6 rounded-xl border border-green-200">
+                <h3 className="font-semibold text-green-800 mb-4 flex items-center gap-2">
+                  <User className="w-5 h-5" />
+                  Informações do Responsável
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Nome</label>
+                    <p className="text-gray-900 font-medium">{lead.responsible_name}</p>
+                  </div>
+                  {lead.phone && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">Telefone</label>
+                      <p className="text-gray-900">{lead.phone}</p>
+                    </div>
+                  )}
+                  {lead.whatsapp && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">WhatsApp</label>
+                      <p className="text-gray-900">{lead.whatsapp}</p>
+                    </div>
+                  )}
+                  {lead.email && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">E-mail</label>
+                      <p className="text-gray-900">{lead.email}</p>
+                    </div>
+                  )}
+                  {lead.address && (
+                    <div className="md:col-span-2">
+                      <label className="text-sm font-medium text-gray-600">Endereço</label>
+                      <p className="text-gray-900">{lead.address}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Commercial Info */}
+              <div className="bg-purple-50 p-6 rounded-xl border border-purple-200">
+                <h3 className="font-semibold text-purple-800 mb-4 flex items-center gap-2">
+                  <DollarSign className="w-5 h-5" />
+                  Informações Comerciais
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Origem</label>
+                    <p className="text-gray-900">{lead.source}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Status</label>
+                    <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${statusConfig[lead.status].bgColor} ${statusConfig[lead.status].textColor}`}>
+                      {statusConfig[lead.status].label}
+                    </span>
+                  </div>
+                  {lead.budget_range && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">Faixa de Orçamento</label>
+                      <p className="text-gray-900">{lead.budget_range}</p>
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">Data de Criação</label>
+                    <p className="text-gray-900">{new Date(lead.created_at).toLocaleString('pt-BR')}</p>
+                  </div>
+                  {lead.notes && (
+                    <div className="md:col-span-2">
+                      <label className="text-sm font-medium text-gray-600">Observações</label>
+                      <p className="text-gray-900">{lead.notes}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'history' && (
+            <div className="space-y-4">
+              {loadingActivities ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : activities.length > 0 ? (
+                <div className="space-y-4">
+                  {activities.map((activity) => (
+                    <div key={activity.id} className="flex items-start space-x-3 p-4 bg-gray-50 rounded-lg">
+                      <div className="flex-shrink-0">
+                        {getActivityIcon(activity.action)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-gray-900">
+                            {activity.action === 'created' && 'Lead criado'}
+                            {activity.action === 'updated' && 'Lead atualizado'}
+                            {activity.action === 'status_changed' && `Status alterado para ${statusConfig[activity.details?.new_status as keyof typeof statusConfig]?.label || activity.details?.new_status}`}
+                            {activity.action === 'deleted' && 'Lead excluído'}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {formatActivityDate(activity.created_at)}
+                          </p>
+                        </div>
+                        {activity.details && (
+                          <div className="mt-1">
+                            {activity.details.lead_name && (
+                              <p className="text-sm text-gray-600">
+                                Lead: {activity.details.lead_name}
+                              </p>
+                            )}
+                            {activity.details.source && (
+                              <p className="text-sm text-gray-600">
+                                Origem: {activity.details.source}
+                              </p>
+                            )}
+                            {activity.details.reason && (
+                              <p className="text-sm text-gray-600">
+                                Motivo: {activity.details.reason}
+                              </p>
+                            )}
+                            {activity.details.changed_by && (
+                              <p className="text-sm text-gray-600">
+                                Por: {activity.details.changed_by}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <History className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">Nenhuma atividade registrada</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function LeadKanban() {
   const { user } = useAuth()
   const [leads, setLeads] = useState<Lead[]>([])
@@ -103,6 +384,9 @@ export default function LeadKanban() {
   const [filterGrade, setFilterGrade] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [formStep, setFormStep] = useState(1)
+  const [showDetails, setShowDetails] = useState(false)
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
+  const [draggedLead, setDraggedLead] = useState<Lead | null>(null)
   const [formData, setFormData] = useState({
     student_name: '',
     responsible_name: '',
@@ -183,7 +467,11 @@ export default function LeadKanban() {
           action: 'updated',
           entity_type: 'lead',
           entity_id: editingLead.id,
-          details: { lead_name: formData.student_name, changes: 'Lead atualizado' },
+          details: { 
+            lead_name: formData.student_name, 
+            changes: 'Lead atualizado',
+            changed_by: user!.full_name
+          },
           institution_id: user!.institution_id!
         })
       } else {
@@ -194,7 +482,11 @@ export default function LeadKanban() {
           action: 'created',
           entity_type: 'lead',
           entity_id: newLead.id,
-          details: { lead_name: formData.student_name, source: formData.source },
+          details: { 
+            lead_name: formData.student_name, 
+            source: formData.source,
+            created_by: user!.full_name
+          },
           institution_id: user!.institution_id!
         })
 
@@ -217,6 +509,7 @@ export default function LeadKanban() {
       resetForm()
     } catch (error) {
       console.error('Error saving lead:', error)
+      alert('Erro ao salvar lead. Tente novamente.')
     }
   }
 
@@ -231,7 +524,7 @@ export default function LeadKanban() {
         entity_id: leadId,
         details: { 
           new_status: newStatus, 
-          reason: reason || 'Status alterado',
+          reason: reason || 'Status alterado via kanban',
           changed_by: user!.full_name
         },
         institution_id: user!.institution_id!
@@ -264,6 +557,11 @@ export default function LeadKanban() {
     })
     setFormStep(1)
     setShowForm(true)
+  }
+
+  const handleViewDetails = (lead: Lead) => {
+    setSelectedLead(lead)
+    setShowDetails(true)
   }
 
   const resetForm = () => {
@@ -307,6 +605,27 @@ export default function LeadKanban() {
       counts[status as keyof typeof counts].count = getLeadsByStatus(status as Lead['status']).length
     })
     return counts
+  }
+
+  // Drag and Drop handlers
+  const handleDragStart = (e: React.DragEvent, lead: Lead) => {
+    setDraggedLead(lead)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDrop = async (e: React.DragEvent, newStatus: Lead['status']) => {
+    e.preventDefault()
+    
+    if (draggedLead && draggedLead.status !== newStatus) {
+      await handleStatusChange(draggedLead.id, newStatus, `Status alterado via drag & drop de ${statusConfig[draggedLead.status].label} para ${statusConfig[newStatus].label}`)
+    }
+    
+    setDraggedLead(null)
   }
 
   const statusCounts = getStatusCounts()
@@ -422,7 +741,7 @@ export default function LeadKanban() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
         {Object.entries(statusCounts).map(([status, config]) => (
-          <div key={status} className={`${config.bgColor} ${config.borderColor} border-2 rounded-xl p-4 text-center`}>
+          <div key={status} className={`${config.bgColor} ${config.borderColor} border-2 rounded-xl p-4 text-center transition-all hover:shadow-md`}>
             <div className={`w-3 h-3 rounded-full ${config.color} mx-auto mb-2`}></div>
             <div className="text-2xl font-bold text-gray-900">{config.count}</div>
             <div className={`text-sm font-medium ${config.textColor}`}>{config.label}</div>
@@ -433,7 +752,12 @@ export default function LeadKanban() {
       {/* Kanban Board */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-6 overflow-x-auto">
         {Object.entries(statusConfig).map(([status, config]) => (
-          <div key={status} className={`${config.bgColor} rounded-xl p-4 min-h-[600px] border-2 ${config.borderColor}`}>
+          <div 
+            key={status} 
+            className={`${config.bgColor} rounded-xl p-4 min-h-[600px] border-2 ${config.borderColor} transition-all`}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, status as Lead['status'])}
+          >
             <div className="flex items-center gap-2 mb-4">
               <div className={`w-3 h-3 rounded-full ${config.color}`}></div>
               <h3 className={`font-semibold ${config.textColor}`}>{config.label}</h3>
@@ -446,22 +770,30 @@ export default function LeadKanban() {
               {getLeadsByStatus(status as Lead['status']).map((lead) => (
                 <div
                   key={lead.id}
-                  className="bg-white p-4 rounded-xl shadow-sm border hover:shadow-md transition-all cursor-pointer group"
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, lead)}
+                  className="bg-white p-4 rounded-xl shadow-sm border hover:shadow-md transition-all cursor-move group relative"
                 >
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <GripVertical className="w-4 h-4 text-gray-400" />
+                  </div>
+
                   <div className="flex justify-between items-start mb-3">
-                    <h4 className="font-semibold text-gray-900 text-sm group-hover:text-blue-600 transition-colors">
+                    <h4 className="font-semibold text-gray-900 text-sm group-hover:text-blue-600 transition-colors pr-6">
                       {lead.student_name}
                     </h4>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => handleEdit(lead)}
                         className="text-gray-400 hover:text-blue-600 p-1 rounded"
+                        title="Editar"
                       >
                         <Edit className="w-3 h-3" />
                       </button>
                       <button
-                        onClick={() => {/* Add view details */}}
+                        onClick={() => handleViewDetails(lead)}
                         className="text-gray-400 hover:text-green-600 p-1 rounded"
+                        title="Ver detalhes"
                       >
                         <Eye className="w-3 h-3" />
                       </button>
@@ -885,6 +1217,20 @@ export default function LeadKanban() {
           </div>
         </div>
       )}
+
+      {/* Lead Details Modal */}
+      <LeadDetailsModal
+        lead={selectedLead}
+        isOpen={showDetails}
+        onClose={() => {
+          setShowDetails(false)
+          setSelectedLead(null)
+        }}
+        onEdit={(lead) => {
+          setShowDetails(false)
+          handleEdit(lead)
+        }}
+      />
     </div>
   )
 }

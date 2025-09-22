@@ -174,6 +174,15 @@ export class DatabaseService {
     if (error) throw error
   }
 
+  static async deleteLead(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('leads')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+  }
+
   // Visits
   static async getVisits(institutionId: string): Promise<Visit[]> {
     const { data, error } = await supabase
