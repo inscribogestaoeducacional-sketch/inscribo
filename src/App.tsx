@@ -18,6 +18,21 @@ import UserProfile from './components/management/UserProfile'
 import Sidebar from './components/layout/Sidebar'
 import TopBar from './components/layout/TopBar'
 
+// Route protection component
+function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: string[] }) {
+  const { user } = useAuth()
+  
+  if (!user) {
+    return <Navigate to="/login" replace />
+  }
+  
+  if (!allowedRoles.includes(user.role)) {
+    return <Navigate to="/dashboard" replace />
+  }
+  
+  return <>{children}</>
+}
+
 function AppContent() {
   const { user } = useAuth()
 
@@ -37,13 +52,41 @@ function AppContent() {
             <Route path="/leads" element={<LeadKanban />} />
             <Route path="/visits" element={<VisitCalendar />} />
             <Route path="/enrollments" element={<EnrollmentManager />} />
-            <Route path="/marketing" element={<MarketingCPA />} />
-            <Route path="/reenrollments" element={<ReEnrollments />} />
-            <Route path="/funnel" element={<FunnelAnalysis />} />
-            <Route path="/actions" element={<ActionsManager />} />
-            <Route path="/reports" element={<Reports />} />
-            <Route path="/users" element={<UserManagement />} />
-            <Route path="/settings" element={<SystemSettings />} />
+            <Route path="/marketing" element={
+              <ProtectedRoute allowedRoles={['manager', 'admin']}>
+                <MarketingCPA />
+              </ProtectedRoute>
+            } />
+            <Route path="/reenrollments" element={
+              <ProtectedRoute allowedRoles={['manager', 'admin']}>
+                <ReEnrollments />
+              </ProtectedRoute>
+            } />
+            <Route path="/funnel" element={
+              <ProtectedRoute allowedRoles={['manager', 'admin']}>
+                <FunnelAnalysis />
+              </ProtectedRoute>
+            } />
+            <Route path="/actions" element={
+              <ProtectedRoute allowedRoles={['manager', 'admin']}>
+                <ActionsManager />
+              </ProtectedRoute>
+            } />
+            <Route path="/reports" element={
+              <ProtectedRoute allowedRoles={['manager', 'admin']}>
+                <Reports />
+              </ProtectedRoute>
+            } />
+            <Route path="/users" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <UserManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/settings" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <SystemSettings />
+              </ProtectedRoute>
+            } />
             <Route path="/profile" element={<UserProfile />} />
             <Route path="/setup" element={<InitialSetup />} />
             <Route path="/login" element={<Navigate to="/dashboard" replace />} />

@@ -10,28 +10,64 @@ import {
   UserCheck,
   CheckSquare,
   BarChart3,
-  Settings
+  Settings,
+  GraduationCap
 } from 'lucide-react'
 
 const Sidebar = () => {
   const location = useLocation()
   const { user } = useAuth()
 
-  const menuItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-    { icon: Users, label: 'Leads', path: '/leads' },
-    { icon: Calendar, label: 'Visitas', path: '/visits' },
-    { icon: UserCheck, label: 'Matrículas', path: '/enrollments' },
-    { icon: TrendingUp, label: 'Marketing', path: '/marketing' },
-    { icon: Target, label: 'Funil', path: '/funnel' },
-    { icon: CheckSquare, label: 'Rematrículas', path: '/reenrollments' },
-    { icon: CheckSquare, label: 'Ações', path: '/actions' },
-    { icon: BarChart3, label: 'Relatórios', path: '/reports' },
-   { icon: Users, label: 'Usuários', path: '/users' },
-    { icon: Settings, label: 'Configurações', path: '/settings' }
-  ]
+  // Define menu items based on user role
+  const getMenuItemsByRole = (role: string) => {
+    const baseItems = [
+      { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+      { icon: Users, label: 'Leads', path: '/leads' },
+      { icon: Calendar, label: 'Visitas', path: '/visits' },
+      { icon: GraduationCap, label: 'Matrículas', path: '/enrollments' }
+    ]
+
+    const managerItems = [
+      { icon: TrendingUp, label: 'Marketing', path: '/marketing' },
+      { icon: Target, label: 'Funil', path: '/funnel' },
+      { icon: CheckSquare, label: 'Rematrículas', path: '/reenrollments' },
+      { icon: CheckSquare, label: 'Ações', path: '/actions' },
+      { icon: BarChart3, label: 'Relatórios', path: '/reports' }
+    ]
+
+    const adminItems = [
+      { icon: Users, label: 'Usuários', path: '/users' },
+      { icon: Settings, label: 'Configurações', path: '/settings' }
+    ]
+
+    switch (role) {
+      case 'admin':
+        return [...baseItems, ...managerItems, ...adminItems]
+      case 'manager':
+        return [...baseItems, ...managerItems]
+      case 'user':
+      default:
+        return baseItems
+    }
+  }
+
+  const menuItems = getMenuItemsByRole(user?.role || 'user')
 
   const isActive = (path: string) => location.pathname === path
+
+  const getRoleInfo = (role: string) => {
+    switch (role) {
+      case 'admin':
+        return { label: '🛡️ Administrador', color: 'text-red-600', bg: 'bg-red-50' }
+      case 'manager':
+        return { label: '👨‍💼 Gestor', color: 'text-blue-600', bg: 'bg-blue-50' }
+      case 'user':
+      default:
+        return { label: '👤 Consultor', color: 'text-gray-600', bg: 'bg-gray-50' }
+    }
+  }
+
+  const roleInfo = getRoleInfo(user?.role || 'user')
 
   return (
     <div className="bg-white shadow-lg h-full w-64 fixed left-0 top-0 z-40">
@@ -62,18 +98,17 @@ const Sidebar = () => {
           })}
         </ul>
         
-        {/* Indicador de Perfil */}
+        {/* Role Indicator */}
         <div className="mt-8 px-6">
-          <div className="bg-gray-100 rounded-lg p-3">
+          <div className={`${roleInfo.bg} rounded-lg p-3 border`}>
             <div className="text-xs font-medium text-gray-600 mb-1">Seu Perfil:</div>
-            <div className={`text-sm font-semibold ${
-              user?.role === 'admin' ? 'text-red-600' :
-              user?.role === 'manager' ? 'text-blue-600' :
-              'text-gray-600'
-            }`}>
-              {user?.role === 'admin' ? '🛡️ Administrador' :
-               user?.role === 'manager' ? '👨‍💼 Gestor' :
-               '👤 Consultor'}
+            <div className={`text-sm font-semibold ${roleInfo.color}`}>
+              {roleInfo.label}
+            </div>
+            <div className="text-xs text-gray-500 mt-1">
+              {user?.role === 'admin' && 'Acesso completo ao sistema'}
+              {user?.role === 'manager' && 'Gestão e relatórios'}
+              {user?.role === 'user' && 'Leads, visitas e matrículas'}
             </div>
           </div>
         </div>
@@ -91,7 +126,10 @@ const Sidebar = () => {
             </div>
             <div className="ml-3">
               <p className="text-sm font-medium text-gray-700">{user.full_name}</p>
-              <p className="text-xs text-gray-500 capitalize">{user.role}</p>
+              <p className="text-xs text-gray-500 capitalize">
+                {user.role === 'admin' ? 'Administrador' : 
+                 user.role === 'manager' ? 'Gestor' : 'Consultor'}
+              </p>
             </div>
           </div>
         </div>
