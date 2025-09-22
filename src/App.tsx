@@ -25,10 +25,6 @@ function AppContent() {
     return <LoginForm />
   }
 
-  if (!user.isSetupComplete) {
-    return <InitialSetup />
-  }
-
   return (
     <div className="min-h-screen bg-gray-50">
       <Sidebar />
@@ -49,8 +45,8 @@ function AppContent() {
             <Route path="/users" element={<UserManagement />} />
             <Route path="/settings" element={<SystemSettings />} />
             <Route path="/profile" element={<UserProfile />} />
+            <Route path="/setup" element={<InitialSetup />} />
             <Route path="/login" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/setup" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </main>
