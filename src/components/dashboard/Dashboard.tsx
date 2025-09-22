@@ -244,18 +244,6 @@ export default function Dashboard() {
     }
   }
 
-  const handleForceLogin = async () => {
-    if (confirm('Deseja fazer logout e forçar um novo login?')) {
-      try {
-        await signOut()
-      } catch (error) {
-        console.error('Erro no logout:', error)
-        // Força limpeza mesmo com erro
-        window.location.href = '/login'
-      }
-    }
-  }
-
   if (loading) {
     return (
       <div className="p-6">

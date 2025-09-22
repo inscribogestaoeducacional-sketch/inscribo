@@ -46,16 +46,6 @@ export default function TopBar() {
 
         {/* Right side - Notifications and User Menu */}
         <div className="flex items-center space-x-4">
-          {/* Force Login Button */}
-          <button
-            onClick={handleSignOut}
-            className="flex items-center px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-            title="Forçar novo login (limpa sessão)"
-          >
-            <RefreshCw className="w-4 h-4 mr-1" />
-            Forçar Login
-          </button>
-
           {/* Notifications */}
           <button className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 relative">
             <Bell className="w-5 h-5" />
