@@ -52,7 +52,6 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
     student_name: '',
     grade_interest: '',
     cpf: '',
-    preferred_period: '',
     responsible_name: '',
     phone: '',
     email: '',
@@ -68,7 +67,6 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
         student_name: editingLead.student_name,
         grade_interest: editingLead.grade_interest,
         cpf: editingLead.cpf || '',
-        preferred_period: '',
         responsible_name: editingLead.responsible_name,
         phone: editingLead.phone || '',
         email: editingLead.email || '',
@@ -82,7 +80,6 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
         student_name: '',
         grade_interest: '',
         cpf: '',
-        preferred_period: '',
         responsible_name: '',
         phone: '',
         email: '',
@@ -204,22 +201,6 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                     placeholder="000.000.000-00"
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Período Preferido
-                  </label>
-                  <select
-                    value={formData.preferred_period}
-                    onChange={(e) => setFormData({ ...formData, preferred_period: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                  >
-                    <option value="">Selecione o período</option>
-                    <option value="Manhã">Manhã</option>
-                    <option value="Tarde">Tarde</option>
-                    <option value="Integral">Integral</option>
-                  </select>
-                </div>
               </div>
             </div>
           )}
@@ -392,6 +373,8 @@ export default function LeadKanban() {
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [filterSource, setFilterSource] = useState('')
+  const [showHistory, setShowHistory] = useState(false)
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
 
   useEffect(() => {
     if (user?.institution_id) {
@@ -485,6 +468,30 @@ export default function LeadKanban() {
     })
   }
 
+  const handleViewHistory = (lead: Lead) => {
+    setSelectedLead(lead)
+    setShowHistory(true)
+  }
+
+  const getLeadHistory = (lead: Lead) => {
+    // Mock history data - em produção viria do banco
+    return [
+      {
+        id: '1',
+        action: 'Lead criado',
+        user: 'Victor Almeida',
+        date: lead.created_at,
+        details: `Lead ${lead.student_name} foi criado via ${lead.source}`
+      },
+      {
+        id: '2',
+        action: 'Status alterado',
+        user: 'Victor Almeida',
+        date: lead.updated_at,
+        details: `Status alterado para ${statusConfig[lead.status]?.label}`
+      }
+    ]
+  }
   const getUserName = (userId: string) => {
     const user = users.find(u => u.id === userId)
     return user ? user.full_name : 'Não atribuído'
@@ -633,21 +640,33 @@ export default function LeadKanban() {
                   <div
                     key={lead.id}
                     className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer group"
-                    onClick={() => handleEdit(lead)}
                   >
                     <div className="flex justify-between items-start mb-3">
                       <h4 className="font-semibold text-gray-900 text-sm group-hover:text-blue-600 transition-colors">
                         {lead.student_name}
                       </h4>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleEdit(lead)
-                        }}
-                        className="text-gray-400 hover:text-blue-600 p-1 opacity-0 group-hover:opacity-100 transition-all"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleViewHistory(lead)
+                          }}
+                          className="text-gray-400 hover:text-green-600 p-1"
+                          title="Ver histórico"
+                        >
+                          <Clock className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEdit(lead)
+                          }}
+                          className="text-gray-400 hover:text-blue-600 p-1"
+                          title="Editar lead"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
 
                     <div className="space-y-2 mb-4">
@@ -754,5 +773,78 @@ export default function LeadKanban() {
         editingLead={editingLead}
       />
     </div>
+      {/* History Modal */}
+      {showHistory && selectedLead && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-8 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">
+                Histórico - {selectedLead.student_name}
+              </h2>
+              <button 
+                onClick={() => setShowHistory(false)} 
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Lead Info */}
+            <div className="bg-gray-50 rounded-xl p-4 mb-6">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="font-medium text-gray-700">Responsável:</span>
+                  <p className="text-gray-900">{selectedLead.responsible_name}</p>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-700">Série:</span>
+                  <p className="text-gray-900">{selectedLead.grade_interest}</p>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-700">Telefone:</span>
+                  <p className="text-gray-900">{selectedLead.phone}</p>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-700">Origem:</span>
+                  <p className="text-gray-900">{selectedLead.source}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Timeline */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Timeline de Ações</h3>
+              {getLeadHistory(selectedLead).map((item, index) => (
+                <div key={item.id} className="flex items-start space-x-4">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                      <Clock className="w-4 h-4 text-blue-600" />
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-gray-900">{item.action}</p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(item.date).toLocaleString('pt-BR')}
+                      </p>
+                    </div>
+                    <p className="text-sm text-gray-600">{item.details}</p>
+                    <p className="text-xs text-gray-500 mt-1">por {item.user}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end pt-6 border-t border-gray-200 mt-6">
+              <button
+                onClick={() => setShowHistory(false)}
+                className="px-6 py-3 bg-gray-600 text-white rounded-xl hover:bg-gray-700 transition-all font-medium"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
   )
 }
