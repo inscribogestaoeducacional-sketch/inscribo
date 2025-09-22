@@ -22,6 +22,18 @@ import TopBar from './components/layout/TopBar'
 function AppContent() {
   const { user, loading, session, refreshSession } = useAuth()
 
+  // Add timeout for loading state
+  useEffect(() => {
+    if (loading) {
+      const timeout = setTimeout(() => {
+        console.log('⏰ Loading timeout reached, forcing redirect to login')
+        window.location.href = '/login'
+      }, 10000) // 10 seconds timeout
+
+      return () => clearTimeout(timeout)
+    }
+  }, [loading])
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -29,6 +41,17 @@ function AppContent() {
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600 text-lg">Carregando sistema...</p>
           <p className="text-gray-500 text-sm mt-2">Verificando autenticação</p>
+          <button 
+            onClick={() => {
+              console.log('🔄 Manual refresh triggered')
+              localStorage.clear()
+              sessionStorage.clear()
+              window.location.href = '/login'
+            }}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+          >
+            Forçar Login
+          </button>
         </div>
       </div>
     )

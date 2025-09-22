@@ -41,12 +41,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initializeAuth = async () => {
       try {
-        console.log('Initializing auth...')
+        console.log('🔄 Initializing auth...')
         
-        const { data: { session }, error } = await supabase.auth.getSession()
+        // Get current session
+        const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession()
         
-        if (error) {
-          console.error('Error getting session:', error)
+        if (sessionError) {
+          console.error('❌ Session error:', sessionError)
           if (mounted) {
             setSession(null)
             setUser(null)
@@ -55,22 +56,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return
         }
 
-        console.log('Session found:', !!session)
+        console.log('📋 Session status:', currentSession ? 'Found' : 'Not found')
         
         if (mounted) {
-          setSession(session)
+          setSession(currentSession)
         }
 
-        if (session?.user) {
-          await loadUserProfile(session.user.id)
+        if (currentSession?.user) {
+          console.log('👤 Loading user profile...')
+          await loadUserProfile(currentSession.user.id)
         } else {
+          console.log('🚫 No session, setting loading to false')
           if (mounted) {
             setUser(null)
             setLoading(false)
           }
         }
       } catch (error) {
-        console.error('Error initializing auth:', error)
+        console.error('💥 Auth initialization error:', error)
         if (mounted) {
           setSession(null)
           setUser(null)
@@ -79,24 +82,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    // Initialize auth
     initializeAuth()
 
+    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return
 
-      console.log('Auth state changed:', event, !!session)
+      console.log('🔔 Auth state changed:', event, session ? 'Session exists' : 'No session')
       
-      if (mounted) {
-        setSession(session)
-      }
+      setSession(session)
 
       if (session?.user) {
+        console.log('👤 Auth change - loading user profile...')
         await loadUserProfile(session.user.id)
       } else {
-        if (mounted) {
-          setUser(null)
-          setLoading(false)
-        }
+        console.log('🚫 Auth change - no session, clearing user')
+        setUser(null)
+        setLoading(false)
       }
     })
 
@@ -108,7 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadUserProfile = async (userId: string) => {
     try {
-      console.log(`Loading user profile for ${userId}`)
+      console.log(`🔍 Loading profile for user: ${userId}`)
       
       const { data, error } = await supabase
         .from('users')
@@ -117,24 +120,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single()
 
       if (error) {
-        console.error('Error loading user profile:', error)
-        setUser(null)
+        console.error('❌ Profile load error:', error)
+        
+        // If user doesn't exist in users table, create it from auth user
+        if (error.code === 'PGRST116') {
+          console.log('👤 User not found in users table, checking auth user...')
+          
+          const { data: { user: authUser } } = await supabase.auth.getUser()
+          
+          if (authUser) {
+            console.log('✨ Creating user profile from auth data...')
+            
+            const newUserData = {
+              id: authUser.id,
+              email: authUser.email!,
+              full_name: authUser.user_metadata?.full_name || authUser.email!.split('@')[0],
+              role: authUser.user_metadata?.role || 'admin',
+              institution_id: null,
+              active: true
+            }
+
+            const { data: createdUser, error: createError } = await supabase
+              .from('users')
+              .insert(newUserData)
+              .select()
+              .single()
+
+            if (createError) {
+              console.error('❌ Error creating user profile:', createError)
+              setUser(null)
+            } else {
+              console.log('✅ User profile created successfully')
+              setUser(createdUser)
+            }
+          } else {
+            console.error('❌ No auth user found')
+            setUser(null)
+          }
+        } else {
+          setUser(null)
+        }
       } else if (data) {
-        console.log('User profile loaded successfully:', data)
+        console.log('✅ User profile loaded successfully')
         setUser(data)
       } else {
+        console.log('⚠️ No user data returned')
         setUser(null)
       }
     } catch (error) {
-      console.error('Error loading user profile:', error)
+      console.error('💥 Profile loading error:', error)
       setUser(null)
     } finally {
+      console.log('🏁 Setting loading to false')
       setLoading(false)
     }
   }
 
   const refreshSession = async () => {
     try {
+      console.log('🔄 Refreshing session...')
       const { data, error } = await supabase.auth.refreshSession()
       if (error) throw error
       
@@ -145,36 +189,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (error) {
-      console.error('Error refreshing session:', error)
+      console.error('❌ Error refreshing session:', error)
       setSession(null)
       setUser(null)
-    }
-  }
-
-  const createUserProfile = async (userData: any) => {
-    try {
-      const { error } = await supabase
-        .from('users')
-        .insert({
-          id: userData.userId,
-          email: userData.email,
-          full_name: userData.fullName,
-          role: userData.role,
-          institution_id: null,
-          active: true
-        })
-
-      if (error) {
-        console.error('Error creating user profile:', error)
-      }
-    } catch (error) {
-      console.error('Error creating user profile:', error)
+      setLoading(false)
     }
   }
 
   const signIn = async (email: string, password: string) => {
     setLoading(true)
     try {
+      console.log('🔐 Signing in...')
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password
@@ -184,7 +209,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(error.message)
       }
       
-      // Session will be handled by the auth state change listener
+      console.log('✅ Sign in successful')
     } catch (error) {
       setLoading(false)
       throw error
@@ -194,14 +219,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     setLoading(true)
     try {
+      console.log('🚪 Signing out...')
       const { error } = await supabase.auth.signOut()
       if (error) throw error
       
       // Clear local state
       setSession(null)
       setUser(null)
+      console.log('✅ Sign out successful')
     } catch (error) {
-      console.error('Error signing out:', error)
+      console.error('❌ Error signing out:', error)
     } finally {
       setLoading(false)
     }
@@ -210,11 +237,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'manager' | 'user') => {
     setLoading(true)
     try {
+      console.log('📝 Signing up...')
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: undefined,
           data: {
             full_name: fullName,
             role: role
@@ -225,17 +252,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (authError) throw authError
 
       if (authData.user) {
-        try {
-          await createUserProfile({
-            userId: authData.user.id,
-            email,
-            fullName,
-            role
-          })
-        } catch (profileError) {
-          console.log('Profile creation will be handled on login')
-        }
-        
+        console.log('✅ Sign up successful')
         throw new Error('Conta criada com sucesso! Faça login com suas credenciais.')
       }
     } catch (error) {

@@ -24,6 +24,8 @@ export default function LoginForm() {
     try {
       if (isLogin) {
         console.log('Attempting login...')
+        // Clear any existing session data before login
+        await supabase.auth.signOut()
         await signIn(email, password)
         console.log('Login successful')
       } else {
