@@ -225,6 +225,12 @@ export default function Dashboard() {
     return Math.round(((current - previous) / previous) * 100)
   }
 
+  const handleForceLogin = async () => {
+    if (confirm('Tem certeza que deseja fazer logout e limpar todos os dados da sessão?')) {
+      await signOut()
+    }
+  }
+
   const handleQuickAction = (action: string) => {
     switch (action) {
       case 'new-lead':
