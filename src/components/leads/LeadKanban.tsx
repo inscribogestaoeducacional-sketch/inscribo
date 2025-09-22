@@ -376,6 +376,8 @@ export default function LeadKanban() {
   const [filterSource, setFilterSource] = useState('')
   const [showHistory, setShowHistory] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [leadHistory, setLeadHistory] = useState<any[]>([])
 
   useEffect(() => {
     if (user?.institution_id) {
@@ -523,6 +525,20 @@ export default function LeadKanban() {
   const handleViewHistory = (lead: Lead) => {
     setSelectedLead(lead)
     setShowHistory(true)
+    loadLeadHistory(lead.id)
+  }
+
+  const loadLeadHistory = async (leadId: string) => {
+    try {
+      setLoadingHistory(true)
+      const history = await DatabaseService.getActivityLogs(leadId)
+      setLeadHistory(history)
+    } catch (error) {
+      console.error('❌ Erro ao carregar histórico:', error)
+      setLeadHistory([])
+    } finally {
+      setLoadingHistory(false)
+    }
   }
 
   const getLeadHistory = (lead: Lead) => {
