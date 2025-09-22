@@ -22,36 +22,13 @@ import TopBar from './components/layout/TopBar'
 function AppContent() {
   const { user, loading, session, refreshSession } = useAuth()
 
-  // Handle page refresh and direct URL access
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && !user && !loading) {
-        // Page became visible and we don't have a user - try to refresh session
-        refreshSession()
-      }
-    }
-
-    const handleFocus = () => {
-      if (!user && !loading) {
-        refreshSession()
-      }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    window.addEventListener('focus', handleFocus)
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      window.removeEventListener('focus', handleFocus)
-    }
-  }, [user, loading, refreshSession])
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando...</p>
+          <p className="text-gray-600 text-lg">Carregando sistema...</p>
+          <p className="text-gray-500 text-sm mt-2">Verificando autenticação</p>
         </div>
       </div>
     )
