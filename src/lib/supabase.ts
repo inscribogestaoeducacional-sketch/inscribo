@@ -468,6 +468,5 @@ export class DatabaseService {
       cpaAtual: Math.round(cpaAtual),
       taxaRematricula: 92.5 // Mock data
     }
-    }
   }
 }
