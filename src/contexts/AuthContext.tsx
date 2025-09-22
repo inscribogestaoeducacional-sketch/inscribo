@@ -34,7 +34,7 @@ export function useAuth() {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null)
   const [session, setSession] = useState<any>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
@@ -42,7 +42,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initializeAuth = async () => {
       try {
-        setLoading(true)
         console.log('🔄 Initializing auth...')
         
         // Get current session
@@ -53,8 +52,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (mounted) {
             setSession(null)
             setUser(null)
-            setLoading(false)
             setInitialized(true)
+            setLoading(false)
           }
           return
         }
@@ -72,8 +71,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log('🚫 No session, setting loading to false')
           if (mounted) {
             setUser(null)
-            setLoading(false)
             setInitialized(true)
+            setLoading(false)
           }
         }
       } catch (error) {
@@ -81,8 +80,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (mounted) {
           setSession(null)
           setUser(null)
-          setLoading(false)
           setInitialized(true)
+          setLoading(false)
         }
       }
     }
@@ -104,8 +103,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         console.log('🚫 Auth change - no session, clearing user')
         setUser(null)
-        setLoading(false)
         setInitialized(true)
+        setLoading(false)
       }
     })
 
@@ -178,8 +177,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null)
     } finally {
       console.log('🏁 Setting loading to false')
-      setLoading(false)
       setInitialized(true)
+      setLoading(false)
     }
   }
 
@@ -199,14 +198,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('❌ Error refreshing session:', error)
       setSession(null)
       setUser(null)
-      setLoading(false)
       setInitialized(true)
+      setLoading(false)
     }
   }
 
   const signIn = async (email: string, password: string) => {
-    setLoading(true)
     try {
+      setLoading(true)
       console.log('🔐 Signing in...')
       const { error } = await supabase.auth.signInWithPassword({
         email,
@@ -220,14 +219,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('✅ Sign in successful')
     } catch (error) {
       setLoading(false)
-      setInitialized(true)
       throw error
     }
   }
 
   const signOut = async () => {
-    setLoading(true)
     try {
+      setLoading(true)
       console.log('🚪 Signing out...')
       const { error } = await supabase.auth.signOut()
       if (error) throw error
@@ -240,13 +238,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('❌ Error signing out:', error)
     } finally {
       setLoading(false)
-      setInitialized(true)
     }
   }
 
   const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'manager' | 'user') => {
-    setLoading(true)
     try {
+      setLoading(true)
       console.log('📝 Signing up...')
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
@@ -267,13 +264,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       setLoading(false)
-      setInitialized(true)
       throw error
     }
   }
 
   // Don't render anything until auth is initialized
-  if (!initialized) {
+  if (!initialized || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
