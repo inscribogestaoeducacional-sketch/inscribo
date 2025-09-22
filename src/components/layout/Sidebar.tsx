@@ -61,6 +61,22 @@ const Sidebar = () => {
             )
           })}
         </ul>
+        
+        {/* Indicador de Perfil */}
+        <div className="mt-8 px-6">
+          <div className="bg-gray-100 rounded-lg p-3">
+            <div className="text-xs font-medium text-gray-600 mb-1">Seu Perfil:</div>
+            <div className={`text-sm font-semibold ${
+              user?.role === 'admin' ? 'text-red-600' :
+              user?.role === 'manager' ? 'text-blue-600' :
+              'text-gray-600'
+            }`}>
+              {user?.role === 'admin' ? '🛡️ Administrador' :
+               user?.role === 'manager' ? '👨‍💼 Gestor' :
+               '👤 Consultor'}
+            </div>
+          </div>
+        </div>
       </nav>
 
       {user && (

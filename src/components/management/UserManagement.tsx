@@ -50,6 +50,7 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
   })
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (editingUser) {
@@ -73,7 +74,7 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
     }
   }, [editingUser, isOpen])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!editingUser && formData.password !== formData.confirmPassword) {
@@ -86,7 +87,15 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
       return
     }
     
-    onSave(formData)
+    setLoading(true)
+    try {
+      await onSave(formData)
+      onClose()
+    } catch (error) {
+      console.error('Error saving user:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   if (!isOpen) return null
@@ -133,10 +142,18 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
                   required
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="pl-10 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  disabled={!!editingUser}
+                  className={`pl-10 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+                    editingUser ? 'bg-gray-100 cursor-not-allowed' : ''
+                  }`}
                   placeholder="usuario@email.com"
                 />
               </div>
+              {editingUser && (
+                <p className="text-xs text-gray-500 mt-1">
+                  O email não pode ser alterado
+                </p>
+              )}
             </div>
           </div>
 
@@ -154,6 +171,13 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
               <option value="manager">👨‍💼 Gestor - Acesso a relatórios e gestão</option>
               <option value="admin">🛡️ Administrador - Acesso completo</option>
             </select>
+            <div className="mt-2 text-xs text-gray-600">
+              <div className="space-y-1">
+                <p><strong>Consultor:</strong> Leads, Visitas, Matrículas</p>
+                <p><strong>Gestor:</strong> + Marketing, Funil, Rematrículas, Ações, Relatórios</p>
+                <p><strong>Admin:</strong> + Gestão de Usuários, Configurações</p>
+              </div>
+            </div>
           </div>
 
           {!editingUser && (
@@ -228,25 +252,6 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
             </label>
           </div>
 
-          {!editingUser && (
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-              <div className="flex items-start">
-                <div className="flex-shrink-0">
-                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                    <span className="text-blue-600 text-xs font-bold">ℹ</span>
-                  </div>
-                </div>
-                <div className="ml-3">
-                  <h4 className="text-sm font-medium text-blue-900">Informações importantes:</h4>
-                  <ul className="mt-2 text-xs text-blue-700 space-y-1">
-                    <li>• O usuário receberá acesso ao sistema com o email e senha informados</li>
-                    <li>• Se o email já existir no sistema, será vinculado à sua instituição</li>
-                    <li>• A senha deve ter pelo menos 6 caracteres</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          )}
           <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
             <button
               type="button"
@@ -287,24 +292,42 @@ export default function UserManagement() {
   const [filterStatus, setFilterStatus] = useState('')
 
   useEffect(() => {
-    if (user?.institution_id) {
-      loadUsers()
-    }
-  }, [user])
+    loadUsers()
+  }, [])
 
   const loadUsers = async () => {
     try {
       setLoading(true)
+      console.log('🔄 Carregando todos os usuários do sistema...')
+      
+      // Carregar TODOS os usuários do sistema, não apenas da instituição
       const { data, error } = await supabase
         .from('users')
-        .select('*')
-        .eq('institution_id', user?.institution_id)
+        .select(`
+          *,
+          institutions!inner(name)
+        `)
         .order('created_at', { ascending: false })
 
-      if (error) throw error
+      if (error) {
+        console.error('❌ Erro ao carregar usuários:', error)
+        throw error
+      }
+      
+      console.log('✅ Usuários carregados:', data?.length || 0)
       setUsers(data || [])
     } catch (error) {
       console.error('Error loading users:', error)
+      // Fallback: carregar apenas usuários da instituição atual
+      if (user?.institution_id) {
+        const { data } = await supabase
+          .from('users')
+          .select('*')
+          .eq('institution_id', user.institution_id)
+          .order('created_at', { ascending: false })
+        
+        setUsers(data || [])
+      }
     } finally {
       setLoading(false)
     }
@@ -312,7 +335,7 @@ export default function UserManagement() {
 
   const handleSave = async (formData: any) => {
     try {
-      setLoading(true)
+      console.log('💾 Salvando usuário:', formData)
 
       if (editingUser) {
         // Update existing user
@@ -320,103 +343,76 @@ export default function UserManagement() {
           .from('users')
           .update({
             full_name: formData.full_name,
-            email: formData.email,
             role: formData.role,
             active: formData.active
           })
           .eq('id', editingUser.id)
 
         if (error) throw error
+        console.log('✅ Usuário atualizado com sucesso')
       } else {
-        // Check if user already exists in our users table first
-        const { data: existingUserInTable, error: checkTableError } = await supabase
+        // Verificar se email já existe
+        const { data: existingUser } = await supabase
           .from('users')
-          .select('id, email')
+          .select('id, email, institution_id')
           .eq('email', formData.email)
-          .eq('institution_id', user?.institution_id)
           .single()
 
-        if (checkTableError && checkTableError.code !== 'PGRST116') {
-          throw checkTableError
+        if (existingUser) {
+          throw new Error(`Este email já está sendo usado por outro usuário`)
         }
 
-        if (existingUserInTable) {
-          throw new Error('Este email já está sendo usado por outro usuário nesta instituição')
-        }
-
-        // Try to get existing auth user first
-        const { data: existingAuthUsers, error: listError } = await supabase.auth.admin.listUsers()
-        
-        let authUserId = null
-        let userAlreadyExists = false
-        
-        if (!listError && existingAuthUsers?.users) {
-          const existingAuthUser = existingAuthUsers.users.find(u => u.email === formData.email)
-          if (existingAuthUser) {
-            authUserId = existingAuthUser.id
-            userAlreadyExists = true
-            console.log('User already exists in auth, using existing ID:', authUserId)
+        // Criar novo usuário no auth
+        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+          email: formData.email,
+          password: formData.password,
+          email_confirm: true,
+          user_metadata: {
+            full_name: formData.full_name,
+            role: formData.role
           }
+        })
+
+        if (authError) {
+          console.error('❌ Erro ao criar usuário no auth:', authError)
+          throw new Error(`Erro ao criar usuário: ${authError.message}`)
         }
 
-        // If user doesn't exist in auth, create new one
-        if (!userAlreadyExists) {
-          const { data: newAuthData, error: createError } = await supabase.auth.admin.createUser({
+        if (!authData.user) {
+          throw new Error('Não foi possível criar o usuário')
+        }
+
+        // Criar perfil na tabela users
+        const { error: profileError } = await supabase
+          .from('users')
+          .insert({
+            id: authData.user.id,
             email: formData.email,
-            password: formData.password,
-            email_confirm: true,
-            user_metadata: {
-              full_name: formData.full_name,
-              role: formData.role
-            }
+            full_name: formData.full_name,
+            role: formData.role,
+            institution_id: user?.institution_id || null,
+            active: formData.active
           })
 
-          if (createError) {
-            console.error('Error creating auth user:', createError)
-            throw new Error(`Erro ao criar usuário: ${createError.message}`)
-          }
-
-          if (newAuthData.user) {
-            authUserId = newAuthData.user.id
-          }
+        if (profileError) {
+          console.error('❌ Erro ao criar perfil:', profileError)
+          throw new Error(`Erro ao criar perfil: ${profileError.message}`)
         }
 
-        // Create user profile in our table
-        if (authUserId) {
-          const { error: profileError } = await supabase
-            .from('users')
-            .insert({
-              id: authUserId,
-              email: formData.email,
-              full_name: formData.full_name,
-              role: formData.role,
-              institution_id: user?.institution_id,
-              active: formData.active
-            })
-
-          if (profileError) {
-            console.error('Error creating user profile:', profileError)
-            throw new Error(`Erro ao criar perfil do usuário: ${profileError.message}`)
-          }
-        } else {
-          throw new Error('Não foi possível obter ID do usuário')
-        }
+        console.log('✅ Usuário criado com sucesso')
       }
 
       await loadUsers()
-      setShowModal(false)
       setEditingUser(null)
     } catch (error) {
-      console.error('Error saving user:', error)
+      console.error('❌ Erro ao salvar usuário:', error)
       
       let errorMessage = 'Erro ao salvar usuário'
       if (error instanceof Error) {
         errorMessage = error.message
       }
       
-      alert(errorMessage)
-    } finally {
-      setLoading(false)
+      throw new Error(errorMessage)
     }
   }
 
@@ -623,6 +619,9 @@ export default function UserManagement() {
                   Perfil
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Instituição
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -660,6 +659,11 @@ export default function UserManagement() {
                       <span className={`ml-2 px-3 py-1 text-xs font-semibold rounded-full border ${getRoleBadge(user.role)}`}>
                         {getRoleLabel(user.role)}
                       </span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-sm text-gray-900">
+                      {(user as any).institutions?.name || 'Sem instituição'}
                     </div>
                   </td>
                   <td className="px-6 py-4">
