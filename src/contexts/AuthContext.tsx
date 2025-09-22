@@ -36,9 +36,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [initializing, setInitializing] = useState(true)
+  const [initTimeout, setInitTimeout] = useState(false)
 
   useEffect(() => {
     let mounted = true
+    let timeoutId: NodeJS.Timeout
 
     const initializeAuth = async () => {
       try {
@@ -75,6 +77,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Initialize immediately
     initializeAuth()
+    
+    // Set timeout for initialization
+    timeoutId = setTimeout(() => {
+      if (mounted && initializing) {
+        setInitTimeout(true)
+      }
+    }, 5000) // 5 seconds timeout
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -93,6 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       mounted = false
+      if (timeoutId) clearTimeout(timeoutId)
       subscription.unsubscribe()
     }
   }, [])
@@ -228,13 +238,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const forceLogin = () => {
+    setUser(null)
+    setSession(null)
+    setInitializing(false)
+    setInitTimeout(false)
+    setLoading(false)
+  }
+
   // Show loading only during initialization
-  if (initializing) {
+  if (initializing && !initTimeout) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
           <p className="text-gray-600 text-sm">Carregando...</p>
+        </div>
+      </div>
+    )
+  }
+  
+  // Show timeout screen with force login option
+  if (initializing && initTimeout) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Carregando sistema...</h2>
+          <p className="text-gray-600 text-sm mb-4">Verificando autenticação</p>
+          <button
+            onClick={forceLogin}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Forçar Login
+          </button>
         </div>
       </div>
     )
