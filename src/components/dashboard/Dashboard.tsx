@@ -9,10 +9,13 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Plus,
-  BarChart3
+  BarChart3,
+  Target,
+  Eye
 } from 'lucide-react'
 import { DatabaseService } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
+import { useNavigate } from 'react-router-dom'
 
 interface KPICardProps {
   title: string
@@ -20,13 +23,17 @@ interface KPICardProps {
   change?: number
   icon: React.ReactNode
   color: string
+  onClick?: () => void
 }
 
-function KPICard({ title, value, change, icon, color }: KPICardProps) {
+function KPICard({ title, value, change, icon, color, onClick }: KPICardProps) {
   const isPositive = change ? change >= 0 : true
   
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-200">
+    <div 
+      className={`bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-200 ${onClick ? 'cursor-pointer' : ''}`}
+      onClick={onClick}
+    >
       <div className="flex items-center justify-between">
         <div className="flex-1">
           <p className="text-sm font-medium text-gray-600 mb-2">{title}</p>
@@ -59,31 +66,146 @@ function KPICard({ title, value, change, icon, color }: KPICardProps) {
 
 export default function Dashboard() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [kpis, setKpis] = useState({
     totalLeads: 0,
     visitasHoje: 0,
     matriculasMes: 0,
     taxaConversao: 0,
     cpaAtual: 0,
-    taxaRematricula: 0
+    taxaRematricula: 0,
+    leadsNovos: 0,
+    visitasSemana: 0
+  })
+  const [funnelData, setFunnelData] = useState({
+    leads: 0,
+    contatos: 0,
+    agendamentos: 0,
+    visitas: 0,
+    propostas: 0,
+    matriculas: 0
   })
   const [loading, setLoading] = useState(true)
+  const [previousMonthKpis, setPreviousMonthKpis] = useState({
+    totalLeads: 0,
+    visitasHoje: 0,
+    matriculasMes: 0,
+    taxaConversao: 0
+  })
 
   useEffect(() => {
     if (user?.institution_id) {
-      loadKPIs()
+      loadDashboardData()
     }
   }, [user])
 
-  const loadKPIs = async () => {
+  const loadDashboardData = async () => {
     try {
       setLoading(true)
-      const data = await DatabaseService.getDashboardKPIs(user!.institution_id)
-      setKpis(data)
+      
+      // Carregar dados em paralelo
+      const [leads, visits, enrollments, campaigns] = await Promise.all([
+        DatabaseService.getLeads(user!.institution_id!),
+        DatabaseService.getVisits(user!.institution_id!),
+        DatabaseService.getEnrollments(user!.institution_id!),
+        DatabaseService.getMarketingCampaigns(user!.institution_id!)
+      ])
+
+      // Datas para cálculos
+      const today = new Date()
+      const todayStr = today.toISOString().split('T')[0]
+      const thisMonth = today.toISOString().slice(0, 7)
+      const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().slice(0, 7)
+      
+      // Início da semana (domingo)
+      const startOfWeek = new Date(today)
+      startOfWeek.setDate(today.getDate() - today.getDay())
+      const startOfWeekStr = startOfWeek.toISOString().split('T')[0]
+
+      // KPIs atuais
+      const totalLeads = leads.length
+      const leadsNovos = leads.filter(l => l.created_at.startsWith(thisMonth)).length
+      const visitasHoje = visits.filter(v => v.scheduled_date.startsWith(todayStr)).length
+      const visitasSemana = visits.filter(v => v.scheduled_date >= startOfWeekStr).length
+      const matriculasMes = enrollments.filter(e => e.created_at.startsWith(thisMonth)).length
+      
+      // Taxa de conversão
+      const leadsConvertidos = leads.filter(l => l.status === 'enrolled').length
+      const taxaConversao = totalLeads > 0 ? (leadsConvertidos / totalLeads) * 100 : 0
+
+      // CPA
+      const totalInvestment = campaigns.reduce((sum, c) => sum + c.investment, 0)
+      const totalLeadsGenerated = campaigns.reduce((sum, c) => sum + c.leads_generated, 0)
+      const cpaAtual = totalLeadsGenerated > 0 ? totalInvestment / totalLeadsGenerated : 0
+
+      // KPIs do mês anterior para comparação
+      const leadsLastMonth = leads.filter(l => l.created_at.startsWith(lastMonth)).length
+      const enrollmentsLastMonth = enrollments.filter(e => e.created_at.startsWith(lastMonth)).length
+      const taxaConversaoLastMonth = leadsLastMonth > 0 ? (enrollmentsLastMonth / leadsLastMonth) * 100 : 0
+
+      // Dados do funil
+      const leadsCount = leads.length
+      const contatosCount = leads.filter(l => ['contact', 'scheduled', 'visit', 'proposal', 'enrolled'].includes(l.status)).length
+      const agendamentosCount = leads.filter(l => ['scheduled', 'visit', 'proposal', 'enrolled'].includes(l.status)).length
+      const visitasCount = leads.filter(l => ['visit', 'proposal', 'enrolled'].includes(l.status)).length
+      const propostasCount = leads.filter(l => ['proposal', 'enrolled'].includes(l.status)).length
+      const matriculasCount = leads.filter(l => l.status === 'enrolled').length
+
+      setKpis({
+        totalLeads,
+        visitasHoje,
+        matriculasMes,
+        taxaConversao: Math.round(taxaConversao * 10) / 10,
+        cpaAtual: Math.round(cpaAtual),
+        taxaRematricula: 92.5, // Valor fixo por enquanto
+        leadsNovos,
+        visitasSemana
+      })
+
+      setPreviousMonthKpis({
+        totalLeads: leadsLastMonth,
+        visitasHoje: 0, // Não faz sentido comparar visitas de hoje com mês anterior
+        matriculasMes: enrollmentsLastMonth,
+        taxaConversao: Math.round(taxaConversaoLastMonth * 10) / 10
+      })
+
+      setFunnelData({
+        leads: leadsCount,
+        contatos: contatosCount,
+        agendamentos: agendamentosCount,
+        visitas: visitasCount,
+        propostas: propostasCount,
+        matriculas: matriculasCount
+      })
+
     } catch (error) {
-      console.error('Error loading KPIs:', error)
+      console.error('Error loading dashboard data:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const calculateChange = (current: number, previous: number) => {
+    if (previous === 0) return current > 0 ? 100 : 0
+    return Math.round(((current - previous) / previous) * 100)
+  }
+
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'new-lead':
+        navigate('/leads')
+        break
+      case 'schedule-visit':
+        navigate('/visits')
+        break
+      case 'new-enrollment':
+        navigate('/enrollments')
+        break
+      case 'view-reports':
+        navigate('/reports')
+        break
+      default:
+        break
     }
   }
 
@@ -106,44 +228,50 @@ export default function Dashboard() {
     {
       title: 'Total de Leads',
       value: kpis.totalLeads,
-      change: 12.5,
+      change: calculateChange(kpis.leadsNovos, previousMonthKpis.totalLeads),
       icon: <Users className="h-6 w-6 text-blue-600" />,
-      color: 'bg-blue-100'
+      color: 'bg-blue-100',
+      onClick: () => navigate('/leads')
     },
     {
       title: 'Visitas Hoje',
       value: kpis.visitasHoje,
-      change: 5.2,
+      change: undefined, // Não faz sentido comparar visitas de hoje
       icon: <Calendar className="h-6 w-6 text-green-600" />,
-      color: 'bg-green-100'
+      color: 'bg-green-100',
+      onClick: () => navigate('/visits')
     },
     {
       title: 'Matrículas do Mês',
       value: kpis.matriculasMes,
-      change: 8.1,
+      change: calculateChange(kpis.matriculasMes, previousMonthKpis.matriculasMes),
       icon: <GraduationCap className="h-6 w-6 text-purple-600" />,
-      color: 'bg-purple-100'
+      color: 'bg-purple-100',
+      onClick: () => navigate('/enrollments')
     },
     {
       title: 'Taxa de Conversão',
       value: `${kpis.taxaConversao}%`,
-      change: 1.4,
+      change: calculateChange(kpis.taxaConversao, previousMonthKpis.taxaConversao),
       icon: <TrendingUp className="h-6 w-6 text-orange-600" />,
-      color: 'bg-orange-100'
+      color: 'bg-orange-100',
+      onClick: () => navigate('/funnel')
     },
     {
       title: 'CPA Atual',
       value: `R$ ${kpis.cpaAtual}`,
-      change: -2.1,
+      change: -2.1, // Valor fixo por enquanto
       icon: <DollarSign className="h-6 w-6 text-red-600" />,
-      color: 'bg-red-100'
+      color: 'bg-red-100',
+      onClick: () => navigate('/marketing')
     },
     {
       title: 'Taxa Rematrícula',
       value: `${kpis.taxaRematricula}%`,
-      change: 2.1,
+      change: 2.1, // Valor fixo por enquanto
       icon: <RefreshCw className="h-6 w-6 text-teal-600" />,
-      color: 'bg-teal-100'
+      color: 'bg-teal-100',
+      onClick: () => navigate('/reenrollments')
     }
   ]
 
@@ -172,24 +300,35 @@ export default function Dashboard() {
           </div>
           <div className="space-y-4">
             {[
-              { etapa: 'Leads Cadastrados', valor: kpis.totalLeads, percentual: 100, cor: 'bg-blue-500' },
-              { etapa: 'Contatos Realizados', valor: Math.floor(kpis.totalLeads * 0.7), percentual: 70, cor: 'bg-green-500' },
-              { etapa: 'Visitas Agendadas', valor: Math.floor(kpis.totalLeads * 0.4), percentual: 40, cor: 'bg-yellow-500' },
-              { etapa: 'Matrículas Efetivadas', valor: kpis.matriculasMes, percentual: kpis.taxaConversao, cor: 'bg-purple-500' }
-            ].map((item, index) => (
-              <div key={index} className="relative">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700">{item.etapa}</span>
-                  <span className="text-sm text-gray-600">{item.valor}</span>
+              { etapa: 'Leads Cadastrados', valor: funnelData.leads, percentual: 100, cor: 'bg-blue-500', icon: Users },
+              { etapa: 'Contatos Realizados', valor: funnelData.contatos, percentual: funnelData.leads > 0 ? (funnelData.contatos / funnelData.leads) * 100 : 0, cor: 'bg-green-500', icon: Users },
+              { etapa: 'Visitas Agendadas', valor: funnelData.agendamentos, percentual: funnelData.leads > 0 ? (funnelData.agendamentos / funnelData.leads) * 100 : 0, cor: 'bg-yellow-500', icon: Calendar },
+              { etapa: 'Visitas Realizadas', valor: funnelData.visitas, percentual: funnelData.leads > 0 ? (funnelData.visitas / funnelData.leads) * 100 : 0, cor: 'bg-orange-500', icon: Eye },
+              { etapa: 'Propostas Enviadas', valor: funnelData.propostas, percentual: funnelData.leads > 0 ? (funnelData.propostas / funnelData.leads) * 100 : 0, cor: 'bg-indigo-500', icon: Target },
+              { etapa: 'Matrículas Efetivadas', valor: funnelData.matriculas, percentual: funnelData.leads > 0 ? (funnelData.matriculas / funnelData.leads) * 100 : 0, cor: 'bg-purple-500', icon: GraduationCap }
+            ].map((item, index) => {
+              const Icon = item.icon
+              return (
+                <div key={index} className="relative">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center">
+                      <Icon className="h-4 w-4 text-gray-500 mr-2" />
+                      <span className="text-sm font-medium text-gray-700">{item.etapa}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-gray-600">{item.valor}</span>
+                      <span className="text-xs text-gray-500">({item.percentual.toFixed(1)}%)</span>
+                    </div>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div 
+                      className={`h-3 rounded-full ${item.cor} transition-all duration-500`}
+                      style={{ width: `${Math.max(item.percentual, 2)}%` }}
+                    ></div>
+                  </div>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div 
-                    className={`h-3 rounded-full ${item.cor} transition-all duration-500`}
-                    style={{ width: `${item.percentual}%` }}
-                  ></div>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
 
@@ -197,34 +336,65 @@ export default function Dashboard() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Ações Rápidas</h3>
           <div className="space-y-3">
-            <button className="w-full flex items-center justify-between p-3 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all duration-200 group hover:shadow-sm">
+            <button 
+              onClick={() => handleQuickAction('new-lead')}
+              className="w-full flex items-center justify-between p-3 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all duration-200 group hover:shadow-sm"
+            >
               <span className="text-sm font-medium text-blue-700">Novo Lead</span>
               <div className="flex items-center space-x-2">
                 <Users className="h-4 w-4 text-blue-600" />
                 <Plus className="h-3 w-3 text-blue-500 group-hover:scale-110 transition-transform" />
               </div>
             </button>
-            <button className="w-full flex items-center justify-between p-3 bg-green-50 hover:bg-green-100 rounded-xl transition-all duration-200 group hover:shadow-sm">
+            <button 
+              onClick={() => handleQuickAction('schedule-visit')}
+              className="w-full flex items-center justify-between p-3 bg-green-50 hover:bg-green-100 rounded-xl transition-all duration-200 group hover:shadow-sm"
+            >
               <span className="text-sm font-medium text-green-700">Agendar Visita</span>
               <div className="flex items-center space-x-2">
                 <Calendar className="h-4 w-4 text-green-600" />
                 <Plus className="h-3 w-3 text-green-500 group-hover:scale-110 transition-transform" />
               </div>
             </button>
-            <button className="w-full flex items-center justify-between p-3 bg-purple-50 hover:bg-purple-100 rounded-xl transition-all duration-200 group hover:shadow-sm">
+            <button 
+              onClick={() => handleQuickAction('new-enrollment')}
+              className="w-full flex items-center justify-between p-3 bg-purple-50 hover:bg-purple-100 rounded-xl transition-all duration-200 group hover:shadow-sm"
+            >
               <span className="text-sm font-medium text-purple-700">Nova Matrícula</span>
               <div className="flex items-center space-x-2">
                 <GraduationCap className="h-4 w-4 text-purple-600" />
                 <Plus className="h-3 w-3 text-purple-500 group-hover:scale-110 transition-transform" />
               </div>
             </button>
-            <button className="w-full flex items-center justify-between p-3 bg-orange-50 hover:bg-orange-100 rounded-xl transition-all duration-200 group hover:shadow-sm">
+            <button 
+              onClick={() => handleQuickAction('view-reports')}
+              className="w-full flex items-center justify-between p-3 bg-orange-50 hover:bg-orange-100 rounded-xl transition-all duration-200 group hover:shadow-sm"
+            >
               <span className="text-sm font-medium text-orange-700">Ver Relatórios</span>
               <div className="flex items-center space-x-2">
                 <BarChart3 className="h-4 w-4 text-orange-600" />
                 <ArrowUpRight className="h-3 w-3 text-orange-500 group-hover:scale-110 transition-transform" />
               </div>
             </button>
+          </div>
+
+          {/* Resumo Rápido */}
+          <div className="mt-6 pt-4 border-t border-gray-200">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">Resumo Rápido</h4>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Leads Novos (mês)</span>
+                <span className="font-medium text-gray-900">{kpis.leadsNovos}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Visitas (semana)</span>
+                <span className="font-medium text-gray-900">{kpis.visitasSemana}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Conversão</span>
+                <span className="font-medium text-green-600">{kpis.taxaConversao}%</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
