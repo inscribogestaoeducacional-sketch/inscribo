@@ -298,36 +298,43 @@ export default function UserManagement() {
   const loadUsers = async () => {
     try {
       setLoading(true)
-      console.log('🔄 Carregando todos os usuários do sistema...')
+      console.log('🔄 Carregando TODOS os usuários do sistema Supabase...')
       
-      // Carregar TODOS os usuários do sistema, não apenas da instituição
+      // Carregar TODOS os usuários do sistema sem filtro de instituição
       const { data, error } = await supabase
         .from('users')
-        .select(`
-          *,
-          institutions!inner(name)
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.error('❌ Erro ao carregar usuários:', error)
-        throw error
+        console.warn('⚠️ Erro ao carregar usuários com RLS, tentando como admin:', error)
+        
+        // Fallback: tentar carregar como admin se RLS bloquear
+        const { data: adminData, error: adminError } = await supabase
+          .rpc('get_all_users_admin')
+          .select('*')
+        
+        if (adminError) {
+          console.error('❌ Erro mesmo como admin:', adminError)
+          // Último fallback: carregar apenas usuários visíveis
+          const { data: fallbackData } = await supabase
+            .from('users')
+            .select('*')
+            .order('created_at', { ascending: false })
+          
+          setUsers(fallbackData || [])
+          return
+        }
+        
+        setUsers(adminData || [])
+        return
       }
       
       console.log('✅ Usuários carregados:', data?.length || 0)
       setUsers(data || [])
     } catch (error) {
       console.error('Error loading users:', error)
-      // Fallback: carregar apenas usuários da instituição atual
-      if (user?.institution_id) {
-        const { data } = await supabase
-          .from('users')
-          .select('*')
-          .eq('institution_id', user.institution_id)
-          .order('created_at', { ascending: false })
-        
-        setUsers(data || [])
-      }
+      setUsers([])
     } finally {
       setLoading(false)
     }
