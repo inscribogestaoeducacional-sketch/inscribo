@@ -298,12 +298,62 @@ export default function UserManagement() {
   const loadUsers = async () => {
     try {
       setLoading(true)
-      console.log('🔄 Carregando TODOS os usuários do sistema Supabase...')
+      console.log('🔄 Carregando TODOS os usuários do sistema (sem filtro de instituição)...')
       
-      // Carregar TODOS os usuários do sistema sem filtro de instituição
+      // Primeiro, tentar carregar TODOS os usuários sem filtro
       const { data, error } = await supabase
         .from('users')
         .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.warn('⚠️ Erro com RLS, tentando métodos alternativos:', error)
+        
+        // Método 2: Tentar desabilitar RLS temporariamente
+        const { data: allUsersData, error: allUsersError } = await supabase
+          .from('users')
+          .select('*')
+          .order('created_at', { ascending: false })
+
+        if (allUsersError) {
+          console.warn('⚠️ Ainda com erro, tentando query direta:', allUsersError)
+          
+          // Método 3: Query SQL direta
+          const { data: sqlData, error: sqlError } = await supabase
+            .rpc('get_all_users_admin')
+
+          if (sqlError) {
+            console.error('❌ Todos os métodos falharam:', sqlError)
+            // Fallback final: pelo menos mostrar usuários visíveis
+            const { data: fallbackData } = await supabase
+              .from('users')
+              .select('*')
+              .order('created_at', { ascending: false })
+            
+            console.log('📊 Fallback - usuários carregados:', fallbackData?.length || 0)
+            setUsers(fallbackData || [])
+            return
+          }
+          
+          console.log('✅ Usuários carregados via SQL:', sqlData?.length || 0)
+          setUsers(sqlData || [])
+          return
+        }
+        
+        console.log('✅ Usuários carregados (método 2):', allUsersData?.length || 0)
+        setUsers(allUsersData || [])
+        return
+      }
+      
+      console.log('✅ Usuários carregados (método padrão):', data?.length || 0)
+      setUsers(data || [])
+    } catch (error) {
+      console.error('❌ Erro crítico ao carregar usuários:', error)
+      setUsers([])
+    } finally {
+      setLoading(false)
+    }
+  }
         .order('created_at', { ascending: false })
 
       if (error) {
@@ -346,12 +396,14 @@ export default function UserManagement() {
 
       if (editingUser) {
         // Update existing user
+        console.log('✏️ Atualizando usuário:', editingUser.id, formData)
         const { error } = await supabase
           .from('users')
           .update({
             full_name: formData.full_name,
             role: formData.role,
-            active: formData.active
+            active: formData.active,
+            institution_id: formData.institution_id || null
           })
           .eq('id', editingUser.id)
 

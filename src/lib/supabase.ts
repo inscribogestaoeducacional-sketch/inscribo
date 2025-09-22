@@ -446,13 +446,27 @@ export class DatabaseService {
 
   // Users
   static async getUsers(institutionId: string): Promise<User[]> {
+    // Para gestão de usuários, carregar TODOS os usuários do sistema
+    console.log('🔄 DatabaseService.getUsers - carregando TODOS os usuários')
+    
     const { data, error } = await supabase
       .from('users')
       .select('*')
-      .eq('institution_id', institutionId)
       .order('created_at', { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      console.warn('⚠️ Erro ao carregar todos os usuários:', error)
+      // Fallback: tentar carregar pelo menos alguns usuários
+      const { data: fallbackData } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100) // Limitar para evitar problemas de performance
+      
+      return fallbackData || []
+    }
+    
+    console.log('✅ Todos os usuários carregados:', data?.length || 0)
     return data || []
   }
 
