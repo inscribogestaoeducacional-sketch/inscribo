@@ -46,8 +46,7 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
     role: 'user' as 'admin' | 'manager' | 'user',
     password: '',
     confirmPassword: '',
-    active: true,
-    institution_id: ''
+    active: true
   })
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -61,8 +60,7 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
         role: editingUser.role,
         password: '',
         confirmPassword: '',
-        active: editingUser.active,
-        institution_id: editingUser.institution_id || ''
+        active: editingUser.active
       })
     } else {
       setFormData({
@@ -71,8 +69,7 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
         role: 'user',
         password: '',
         confirmPassword: '',
-        active: true,
-        institution_id: ''
+        active: true
       })
     }
   }, [editingUser, isOpen])
@@ -122,9 +119,8 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Nome Completo *
+                E-mail *
               </label>
-              <input
                 type="text"
                 required
                 value={formData.full_name}
@@ -778,14 +774,40 @@ export default function UserManagement() {
           </table>
 
           {filteredUsers.length === 0 && (
-            <div className="text-center py-12">
-              <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum usuário encontrado</h3>
-              <p className="text-gray-500">
-                {searchTerm || filterRole || filterStatus 
-                  ? 'Tente ajustar os filtros de busca'
-                  : 'Comece criando o primeiro usuário do sistema'
-                }
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                <input
+                  type="email"
+                  required
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  disabled={!!editingUser}
+                  className={`pl-10 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
+                    editingUser ? 'bg-gray-100 cursor-not-allowed' : ''
+                  }`}
+                  placeholder="usuario@email.com"
+                />
+              </div>
+              {editingUser && (
+                <p className="text-xs text-gray-500 mt-1">
+                  O email não pode ser alterado
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Instituição
+              </label>
+              <input
+                type="text"
+                value={formData.institution_id}
+                onChange={(e) => setFormData({ ...formData, institution_id: e.target.value })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                placeholder="ID da instituição (deixe vazio para usuário global)"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Deixe vazio para criar um usuário global (sem instituição específica)
               </p>
             </div>
           )}
