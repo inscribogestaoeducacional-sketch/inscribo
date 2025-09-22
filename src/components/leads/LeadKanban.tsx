@@ -520,22 +520,7 @@ export default function LeadKanban() {
     })
   }
 
-  const handleViewHistory = async (lead: Lead) => {
-    try {
-      setLoadingHistory(true)
-      console.log('📜 Carregando histórico do lead:', lead.id)
-      
-      const history = await DatabaseService.getActivityLogs(user!.institution_id, lead.id)
-      setLeadHistory(history)
-      
-      console.log('✅ Histórico carregado:', history.length, 'registros')
-    } catch (error) {
-      console.error('❌ Erro ao carregar histórico:', error)
-      setLeadHistory([])
-    } finally {
-      setLoadingHistory(false)
-    }
-    
+  const handleViewHistory = (lead: Lead) => {
     setSelectedLead(lead)
     setShowHistory(true)
   }
@@ -859,7 +844,10 @@ export default function LeadKanban() {
                 Histórico - {selectedLead.student_name}
               </h2>
               <button 
-                onClick={() => setShowHistory(false)} 
+                onClick={() => {
+                  setShowHistory(false)
+                  setLeadHistory([])
+                }} 
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <X className="h-6 w-6" />
@@ -879,11 +867,23 @@ export default function LeadKanban() {
                 </div>
                 <div>
                   <span className="font-medium text-gray-700">Telefone:</span>
-                  <p className="text-gray-900">{selectedLead.phone}</p>
+                  <p className="text-gray-900">{selectedLead.phone || 'Não informado'}</p>
                 </div>
                 <div>
                   <span className="font-medium text-gray-700">Origem:</span>
                   <p className="text-gray-900">{selectedLead.source}</p>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-700">Status Atual:</span>
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    statusConfig[selectedLead.status]?.bgColor
+                  } ${statusConfig[selectedLead.status]?.textColor}`}>
+                    {statusConfig[selectedLead.status]?.label}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-700">Criado em:</span>
+                  <p className="text-gray-900">{new Date(selectedLead.created_at).toLocaleString('pt-BR')}</p>
                 </div>
               </div>
             </div>
@@ -891,30 +891,77 @@ export default function LeadKanban() {
             {/* Timeline */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Timeline de Ações</h3>
-              {getLeadHistory(selectedLead).map((item, index) => (
-                <div key={item.id} className="flex items-start space-x-4">
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                      <Clock className="w-4 h-4 text-blue-600" />
+              
+              {loadingHistory ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <span className="ml-3 text-gray-600">Carregando histórico...</span>
+                </div>
+              ) : leadHistory.length > 0 ? (
+                leadHistory.map((item, index) => (
+                  <div key={item.id} className="flex items-start space-x-4 p-4 bg-gray-50 rounded-lg">
+                    <div className="flex-shrink-0">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                        item.action.includes('criado') ? 'bg-green-100' :
+                        item.action.includes('Status') ? 'bg-blue-100' :
+                        item.action.includes('atualizado') ? 'bg-yellow-100' :
+                        item.action.includes('excluído') ? 'bg-red-100' :
+                        'bg-gray-100'
+                      }`}>
+                        {item.action.includes('criado') ? <Plus className="w-5 h-5 text-green-600" /> :
+                         item.action.includes('Status') ? <TrendingUp className="w-5 h-5 text-blue-600" /> :
+                         item.action.includes('atualizado') ? <Edit className="w-5 h-5 text-yellow-600" /> :
+                         item.action.includes('excluído') ? <Trash2 className="w-5 h-5 text-red-600" /> :
+                         <Clock className="w-5 h-5 text-gray-600" />}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-gray-900">{item.action}</p>
-                      <p className="text-xs text-gray-500">
-                        {new Date(item.date).toLocaleString('pt-BR')}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-semibold text-gray-900">{item.action}</p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(item.created_at).toLocaleString('pt-BR')}
+                        </p>
+                      </div>
+                      
+                      {/* Detalhes específicos por tipo de ação */}
+                      {item.details && (
+                        <div className="text-sm text-gray-600 mb-2">
+                          {item.action.includes('Status') && item.details.from && item.details.to && (
+                            <p>Status alterado de <strong>{item.details.from}</strong> para <strong>{item.details.to}</strong></p>
+                          )}
+                          {item.action.includes('criado') && (
+                            <p>Lead criado para <strong>{item.details.student_name}</strong> via <strong>{item.details.source}</strong></p>
+                          )}
+                          {item.action.includes('atualizado') && (
+                            <p>Informações do lead foram atualizadas</p>
+                          )}
+                          {item.action.includes('excluído') && (
+                            <p>Lead <strong>{item.details.student_name}</strong> foi excluído permanentemente</p>
+                          )}
+                        </div>
+                      )}
+                      
+                      <p className="text-xs text-gray-500 flex items-center">
+                        <User className="w-3 h-3 mr-1" />
+                        por {item.user_name || 'Usuário desconhecido'}
                       </p>
                     </div>
-                    <p className="text-sm text-gray-600">{item.details}</p>
-                    <p className="text-xs text-gray-500 mt-1">por {item.user}</p>
                   </div>
+                ))
+              ) : (
+                <div className="text-center py-8">
+                  <Clock className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500">Nenhum histórico encontrado para este lead</p>
                 </div>
-              ))}
+              )}
             </div>
 
             <div className="flex justify-end pt-6 border-t border-gray-200 mt-6">
               <button
-                onClick={() => setShowHistory(false)}
+                onClick={() => {
+                  setShowHistory(false)
+                  setLeadHistory([])
+                }}
                 className="px-6 py-3 bg-gray-600 text-white rounded-xl hover:bg-gray-700 transition-all font-medium"
               >
                 Fechar
