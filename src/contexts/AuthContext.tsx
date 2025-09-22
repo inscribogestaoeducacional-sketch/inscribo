@@ -34,13 +34,15 @@ export function useAuth() {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null)
   const [session, setSession] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
     let mounted = true
 
     const initializeAuth = async () => {
       try {
+        setLoading(true)
         console.log('🔄 Initializing auth...')
         
         // Get current session
@@ -52,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setSession(null)
             setUser(null)
             setLoading(false)
+            setInitialized(true)
           }
           return
         }
@@ -70,6 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (mounted) {
             setUser(null)
             setLoading(false)
+            setInitialized(true)
           }
         }
       } catch (error) {
@@ -78,6 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setSession(null)
           setUser(null)
           setLoading(false)
+          setInitialized(true)
         }
       }
     }
@@ -100,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('🚫 Auth change - no session, clearing user')
         setUser(null)
         setLoading(false)
+        setInitialized(true)
       }
     })
 
@@ -173,6 +179,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       console.log('🏁 Setting loading to false')
       setLoading(false)
+      setInitialized(true)
     }
   }
 
@@ -193,6 +200,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(null)
       setUser(null)
       setLoading(false)
+      setInitialized(true)
     }
   }
 
@@ -212,6 +220,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('✅ Sign in successful')
     } catch (error) {
       setLoading(false)
+      setInitialized(true)
       throw error
     }
   }
@@ -231,6 +240,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('❌ Error signing out:', error)
     } finally {
       setLoading(false)
+      setInitialized(true)
     }
   }
 
@@ -257,8 +267,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       setLoading(false)
+      setInitialized(true)
       throw error
     }
+  }
+
+  // Don't render anything until auth is initialized
+  if (!initialized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+          <p className="text-gray-600 text-sm">Inicializando...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
