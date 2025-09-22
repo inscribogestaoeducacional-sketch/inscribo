@@ -38,6 +38,7 @@ export interface Lead {
   updated_at: string
   address?: string
   budget_range?: string
+  cpf?: string
 }
 
 export interface Visit {
