@@ -667,6 +667,16 @@ export default function LeadKanban() {
                         >
                           <Edit className="w-4 h-4" />
                         </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDelete(lead.id)
+                          }}
+                          className="text-gray-400 hover:text-red-600 p-1"
+                          title="Excluir lead"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
 
