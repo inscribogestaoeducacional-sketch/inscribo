@@ -113,7 +113,7 @@ export default function Dashboard() {
           console.log('📈 Carregando leads...')
           leads = await DatabaseService.getLeads(user.institution_id)
         } catch (error) {
-          console.warn('⚠️ Erro ao carregar leads:', error)
+          console.error('⚠️ Erro ao carregar leads:', error)
           leads = []
         }
         

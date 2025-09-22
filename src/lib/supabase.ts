@@ -163,18 +163,25 @@ export class DatabaseService {
   // Leads
   static async getLeads(institutionId: string): Promise<Lead[]> {
     console.log('Loading leads for institution:', institutionId)
-    const { data, error } = await supabase
-      .from('leads')
-      .select('*')
-      .eq('institution_id', institutionId)
-      .order('created_at', { ascending: false })
+    
+    try {
+      const { data, error } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('institution_id', institutionId)
+        .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('Error loading leads:', error)
-      throw error
+      if (error) {
+        console.error('Error loading leads:', error)
+        throw error
+      }
+      console.log('Leads loaded successfully:', data?.length || 0, 'leads')
+      return data || []
+    } catch (error) {
+      console.error('Network error loading leads:', error)
+      // Return empty array instead of throwing to prevent app crash
+      return []
     }
-    console.log('Leads loaded successfully:', data?.length || 0, 'leads')
-    return data || []
   }
 
   static async createLead(lead: Partial<Lead>): Promise<Lead> {
