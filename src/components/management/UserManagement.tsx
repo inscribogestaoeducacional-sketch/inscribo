@@ -119,8 +119,9 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                E-mail *
+                Nome Completo *
               </label>
+              <input
                 type="text"
                 required
                 value={formData.full_name}
@@ -353,41 +354,6 @@ export default function UserManagement() {
       setLoading(false)
     }
   }
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        console.warn('⚠️ Erro ao carregar usuários com RLS, tentando como admin:', error)
-        
-        // Fallback: tentar carregar como admin se RLS bloquear
-        const { data: adminData, error: adminError } = await supabase
-          .rpc('get_all_users_admin')
-          .select('*')
-        
-        if (adminError) {
-          console.error('❌ Erro mesmo como admin:', adminError)
-          // Último fallback: carregar apenas usuários visíveis
-          const { data: fallbackData } = await supabase
-            .from('users')
-            .select('*')
-            .order('created_at', { ascending: false })
-          
-          setUsers(fallbackData || [])
-          return
-        }
-        
-        setUsers(adminData || [])
-        return
-      }
-      
-      console.log('✅ Usuários carregados:', data?.length || 0)
-      setUsers(data || [])
-    } catch (error) {
-      console.error('Error loading users:', error)
-      setUsers([])
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleSave = async (formData: any) => {
     try {
@@ -493,19 +459,54 @@ export default function UserManagement() {
   }
 
   const handleDelete = async (userId: string) => {
-    if (!confirm('Tem certeza que deseja desativar este usuário?')) return
+    const user = users.find(u => u.id === userId)
+    if (!user) return
+
+    const confirmMessage = `⚠️ ATENÇÃO: Você está prestes a EXCLUIR PERMANENTEMENTE o usuário "${user.full_name}".\n\n` +
+      `Esta ação irá:\n` +
+      `• Remover o usuário do Supabase Auth\n` +
+      `• Excluir todos os dados do usuário\n` +
+      `• Esta ação é IRREVERSÍVEL\n\n` +
+      `Digite "EXCLUIR" para confirmar:`
+    
+    const confirmation = prompt(confirmMessage)
+    if (confirmation !== 'EXCLUIR') {
+      alert('Exclusão cancelada.')
+      return
+    }
 
     try {
+      console.log('🗑️ Excluindo usuário permanentemente:', userId)
+      
+      // 1. Excluir do Supabase Auth (se possível)
+      try {
+        const { error: authError } = await supabase.auth.admin.deleteUser(userId)
+        if (authError) {
+          console.warn('⚠️ Erro ao excluir do Auth (pode não ter permissão):', authError)
+        } else {
+          console.log('✅ Usuário removido do Supabase Auth')
+        }
+      } catch (authError) {
+        console.warn('⚠️ Não foi possível excluir do Auth:', authError)
+      }
+      
+      // 2. Excluir da tabela users
       const { error } = await supabase
         .from('users')
-        .update({ active: false })
+        .delete()
         .eq('id', userId)
 
-      if (error) throw error
+      if (error) {
+        console.error('❌ Erro ao excluir da tabela users:', error)
+        throw error
+      }
+      
+      console.log('✅ Usuário excluído permanentemente')
       await loadUsers()
+      alert('Usuário excluído permanentemente do sistema.')
     } catch (error) {
-      console.error('Error deactivating user:', error)
-      alert('Erro ao desativar usuário')
+      console.error('❌ Erro ao excluir usuário:', error)
+      alert('Erro ao excluir usuário: ' + (error as Error).message)
     }
   }
 
@@ -774,40 +775,14 @@ export default function UserManagement() {
           </table>
 
           {filteredUsers.length === 0 && (
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-                <input
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  disabled={!!editingUser}
-                  className={`pl-10 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
-                    editingUser ? 'bg-gray-100 cursor-not-allowed' : ''
-                  }`}
-                  placeholder="usuario@email.com"
-                />
-              </div>
-              {editingUser && (
-                <p className="text-xs text-gray-500 mt-1">
-                  O email não pode ser alterado
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Instituição
-              </label>
-              <input
-                type="text"
-                value={formData.institution_id}
-                onChange={(e) => setFormData({ ...formData, institution_id: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                placeholder="ID da instituição (deixe vazio para usuário global)"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Deixe vazio para criar um usuário global (sem instituição específica)
+            <div className="text-center py-12">
+              <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum usuário encontrado</h3>
+              <p className="text-gray-500">
+                {searchTerm || filterRole || filterStatus 
+                  ? 'Tente ajustar os filtros de busca'
+                  : 'Comece criando o primeiro usuário do sistema'
+                }
               </p>
             </div>
           )}

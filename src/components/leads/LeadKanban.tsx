@@ -419,9 +419,42 @@ export default function LeadKanban() {
       if (editingLead) {
         console.log('✏️ Atualizando lead existente:', editingLead.id)
         await DatabaseService.updateLead(editingLead.id, leadData)
+        
+        // Registrar atividade de edição
+        await DatabaseService.logActivity({
+          user_id: user!.id,
+          action: 'Lead atualizado',
+          entity_type: 'lead',
+          entity_id: editingLead.id,
+          details: {
+            changes: data,
+            previous: {
+              student_name: editingLead.student_name,
+              responsible_name: editingLead.responsible_name,
+              status: editingLead.status,
+              source: editingLead.source
+            }
+          },
+          institution_id: user!.institution_id
+        })
       } else {
         console.log('➕ Criando novo lead')
-        await DatabaseService.createLead(leadData)
+        const newLead = await DatabaseService.createLead(leadData)
+        
+        // Registrar atividade de criação
+        await DatabaseService.logActivity({
+          user_id: user!.id,
+          action: 'Lead criado',
+          entity_type: 'lead',
+          entity_id: newLead.id,
+          details: {
+            student_name: newLead.student_name,
+            responsible_name: newLead.responsible_name,
+            source: newLead.source,
+            grade_interest: newLead.grade_interest
+          },
+          institution_id: user!.institution_id
+        })
       }
 
       console.log('✅ Lead salvo com sucesso!')
@@ -487,7 +520,22 @@ export default function LeadKanban() {
     })
   }
 
-  const handleViewHistory = (lead: Lead) => {
+  const handleViewHistory = async (lead: Lead) => {
+    try {
+      setLoadingHistory(true)
+      console.log('📜 Carregando histórico do lead:', lead.id)
+      
+      const history = await DatabaseService.getActivityLogs(user!.institution_id, lead.id)
+      setLeadHistory(history)
+      
+      console.log('✅ Histórico carregado:', history.length, 'registros')
+    } catch (error) {
+      console.error('❌ Erro ao carregar histórico:', error)
+      setLeadHistory([])
+    } finally {
+      setLoadingHistory(false)
+    }
+    
     setSelectedLead(lead)
     setShowHistory(true)
   }

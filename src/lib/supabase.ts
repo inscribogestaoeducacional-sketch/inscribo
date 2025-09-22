@@ -150,6 +150,7 @@ export interface User {
 export interface ActivityLog {
   id: string
   user_id: string
+  user_name?: string
   action: string
   entity_type: string
   entity_id?: string
@@ -472,27 +473,50 @@ export class DatabaseService {
 
   // Activity Logs
   static async logActivity(activity: Partial<ActivityLog>): Promise<void> {
+    console.log('📝 Registrando atividade:', activity)
+    
     const { error } = await supabase
       .from('activity_logs')
       .insert(activity)
 
-    if (error) throw error
+    if (error) {
+      console.error('❌ Erro ao registrar atividade:', error)
+      throw error
+    }
+    
+    console.log('✅ Atividade registrada com sucesso')
   }
 
   static async getActivityLogs(institutionId: string, entityId?: string): Promise<ActivityLog[]> {
     let query = supabase
       .from('activity_logs')
-      .select('*')
+      .select(`
+        *,
+        users!activity_logs_user_id_fkey(full_name)
+      `)
       .eq('institution_id', institutionId)
 
     if (entityId) {
       query = query.eq('entity_id', entityId)
     }
 
-    const { data, error } = await query.order('created_at', { ascending: false })
+    const { data, error } = await query
+      .order('created_at', { ascending: false })
+      .limit(50)
 
-    if (error) throw error
-    return data || []
+    if (error) {
+      console.error('❌ Erro ao carregar logs:', error)
+      return []
+    }
+    
+    // Mapear dados do usuário
+    const mappedData = (data || []).map(log => ({
+      ...log,
+      user_name: log.users?.full_name || 'Usuário desconhecido'
+    }))
+    
+    console.log('✅ Logs carregados:', mappedData.length)
+    return mappedData
   }
 
   // Dashboard KPIs
