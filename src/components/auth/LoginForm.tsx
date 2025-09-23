@@ -24,7 +24,10 @@ export default function LoginForm() {
       if (isLogin) {
         console.log('Attempting login for:', email)
         await signIn(email, password)
-        // signIn já faz o redirecionamento
+        // Aguardar um pouco para o contexto atualizar
+        setTimeout(() => {
+          window.location.href = '/dashboard'
+        }, 100)
       } else {
         console.log('Attempting signup for:', email)
         await signUp(email, password, fullName, role)

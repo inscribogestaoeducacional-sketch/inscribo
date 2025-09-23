@@ -532,8 +532,6 @@ export default function LeadKanban() {
        // Buscar lead atual para registrar mudança
        const currentLead = leads.find(l => l.id === leadId)
        const previousStatus = currentLead?.status
-          console.error('❌ Erro ao registrar atividade:', logError)
-        }
        
       await DatabaseService.updateLead(leadId, { status: newStatus })
        

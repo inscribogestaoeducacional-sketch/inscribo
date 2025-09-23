@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 
 export default function TopBar() {
-  const { user, signOut } = useAuth()
+  const { user, signOut, session } = useAuth()
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
 
@@ -26,6 +26,10 @@ export default function TopBar() {
     }
   }
 
+  // Debug info para verificar sessão
+  useEffect(() => {
+    console.log('🔍 TopBar - User:', user?.full_name, 'Session:', !!session)
+  }, [user, session])
   return (
     <header className="bg-white shadow-sm border-b border-gray-200">
       <div className="flex items-center justify-between px-4 py-3">
@@ -40,8 +44,13 @@ export default function TopBar() {
         {/* Logo/Title */}
         <div className="flex items-center">
           <h1 className="text-xl font-semibold text-gray-900">
-            Sistema de Gestão
+            Inscribo - Sistema de Gestão
           </h1>
+          {session && (
+            <span className="ml-3 px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full">
+              Conectado
+            </span>
+          )}
         </div>
 
         {/* Right side - Notifications and User Menu */}

@@ -87,6 +87,7 @@ export default function Dashboard() {
     matriculas: 0
   })
   const [loading, setLoading] = useState(true)
+  const [dataLoaded, setDataLoaded] = useState(false)
   const [previousMonthKpis, setPreviousMonthKpis] = useState({
     totalLeads: 0,
     visitasHoje: 0,
@@ -95,12 +96,18 @@ export default function Dashboard() {
   })
 
   useEffect(() => {
-    if (user?.institution_id) {
+    if (user?.institution_id && !dataLoaded) {
       loadDashboardData()
     }
-  }, [user])
+  }, [user, dataLoaded])
 
   const loadDashboardData = async () => {
+    if (!user?.institution_id) {
+      console.warn('⚠️ Usuário sem institution_id')
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
       console.log('📊 Carregando dados do dashboard...')
@@ -108,40 +115,36 @@ export default function Dashboard() {
       // Carregar dados em paralelo
       let leads = [], visits = [], enrollments = [], campaigns = []
       
-      if (user?.institution_id) {
-        try {
-          console.log('📈 Carregando leads...')
-          leads = await DatabaseService.getLeads(user.institution_id)
-        } catch (error) {
-          console.error('⚠️ Erro ao carregar leads:', error)
-          leads = []
-        }
-        
-        try {
-          console.log('📅 Carregando visitas...')
-          visits = await DatabaseService.getVisits(user.institution_id)
-        } catch (error) {
-          console.warn('⚠️ Erro ao carregar visitas:', error)
-          visits = []
-        }
-        
-        try {
-          console.log('🎓 Carregando matrículas...')
-          enrollments = await DatabaseService.getEnrollments(user.institution_id)
-        } catch (error) {
-          console.warn('⚠️ Erro ao carregar matrículas:', error)
-          enrollments = []
-        }
-        
-        try {
-          console.log('📢 Carregando campanhas...')
-          campaigns = await DatabaseService.getMarketingCampaigns(user.institution_id)
-        } catch (error) {
-          console.warn('⚠️ Erro ao carregar campanhas:', error)
-          campaigns = []
-        }
-      } else {
-        console.warn('⚠️ Usuário sem institution_id, usando dados vazios')
+      try {
+        console.log('📈 Carregando leads...')
+        leads = await DatabaseService.getLeads(user.institution_id)
+      } catch (error) {
+        console.error('⚠️ Erro ao carregar leads:', error)
+        leads = []
+      }
+      
+      try {
+        console.log('📅 Carregando visitas...')
+        visits = await DatabaseService.getVisits(user.institution_id)
+      } catch (error) {
+        console.warn('⚠️ Erro ao carregar visitas:', error)
+        visits = []
+      }
+      
+      try {
+        console.log('🎓 Carregando matrículas...')
+        enrollments = await DatabaseService.getEnrollments(user.institution_id)
+      } catch (error) {
+        console.warn('⚠️ Erro ao carregar matrículas:', error)
+        enrollments = []
+      }
+      
+      try {
+        console.log('📢 Carregando campanhas...')
+        campaigns = await DatabaseService.getMarketingCampaigns(user.institution_id)
+      } catch (error) {
+        console.warn('⚠️ Erro ao carregar campanhas:', error)
+        campaigns = []
       }
 
       // Datas para cálculos
@@ -211,6 +214,7 @@ export default function Dashboard() {
         matriculas: matriculasCount
       })
 
+      setDataLoaded(true)
       console.log('✅ Dashboard carregado com sucesso!')
     } catch (error) {
       console.error('❌ Erro ao carregar dashboard:', error)

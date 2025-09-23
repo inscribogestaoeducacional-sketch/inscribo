@@ -34,12 +34,32 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode,
 }
 
 function AppContent() {
-  const { user } = useAuth()
+  const { user, initializing } = useAuth()
 
-  if (!user) {
+  // Mostrar tela de login apenas se não estiver inicializando e não houver usuário
+  if (!initializing && !user) {
     return <LoginForm />
   }
 
+  // Mostrar loading se ainda estiver inicializando
+  if (initializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+        <div className="text-center">
+          <div className="w-16 h-16 mb-6 mx-auto">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600"></div>
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Carregando Inscribo</h2>
+          <p className="text-gray-600">Verificando sua sessão...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Se não há usuário após inicialização, mostrar login
+  if (!user) {
+    return <LoginForm />
+  }
   return (
     <div className="min-h-screen bg-gray-50">
       <Sidebar />
