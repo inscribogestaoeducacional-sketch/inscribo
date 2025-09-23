@@ -35,14 +35,19 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode,
 
 function AppContent() {
   const { user, initializing } = useAuth()
+  const [appReady, setAppReady] = useState(false)
 
-  // Mostrar tela de login apenas se não estiver inicializando e não houver usuário
-  if (!initializing && !user) {
-    return <LoginForm />
-  }
+  useEffect(() => {
+    // Aguardar um pouco para garantir que a inicialização termine
+    const timer = setTimeout(() => {
+      setAppReady(true)
+    }, 1000)
 
-  // Mostrar loading se ainda estiver inicializando
-  if (initializing) {
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Mostrar loading enquanto inicializa ou não está pronto
+  if (initializing || !appReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
         <div className="text-center">
@@ -50,22 +55,39 @@ function AppContent() {
             <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600"></div>
           </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Carregando Inscribo</h2>
-          <p className="text-gray-600">Verificando sua sessão...</p>
+          <p className="text-gray-600 mb-4">Verificando sua sessão...</p>
+          
+          <div className="space-y-2 text-sm text-gray-500">
+            <div className="flex items-center justify-center space-x-2">
+              <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
+              <span>Verificando autenticação</span>
+            </div>
+            <div className="flex items-center justify-center space-x-2">
+              <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse delay-100"></div>
+              <span>Carregando perfil</span>
+            </div>
+            <div className="flex items-center justify-center space-x-2">
+              <div className="w-2 h-2 bg-purple-600 rounded-full animate-pulse delay-200"></div>
+              <span>Preparando dashboard</span>
+            </div>
+          </div>
         </div>
       </div>
     )
   }
 
-  // Se não há usuário após inicialização, mostrar login
+  // Mostrar tela de login se não houver usuário
   if (!user) {
     return <LoginForm />
   }
+
+  // Renderizar aplicação principal
   return (
     <div className="min-h-screen bg-gray-50">
       <Sidebar />
       <div className="ml-64">
         <TopBar />
-        <main className="p-6">
+        <main>
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/dashboard" element={<Dashboard />} />

@@ -26,10 +26,6 @@ export default function TopBar() {
     }
   }
 
-  // Debug info para verificar sessão
-  useEffect(() => {
-    console.log('🔍 TopBar - User:', user?.full_name, 'Session:', !!session)
-  }, [user, session])
   return (
     <header className="bg-white shadow-sm border-b border-gray-200">
       <div className="flex items-center justify-between px-4 py-3">

@@ -68,6 +68,7 @@ function KPICard({ title, value, change, icon, color, onClick }: KPICardProps) {
 export default function Dashboard() {
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
+  const [error, setError] = useState('')
   const [kpis, setKpis] = useState({
     totalLeads: 0,
     visitasHoje: 0,
@@ -87,7 +88,6 @@ export default function Dashboard() {
     matriculas: 0
   })
   const [loading, setLoading] = useState(true)
-  const [dataLoaded, setDataLoaded] = useState(false)
   const [previousMonthKpis, setPreviousMonthKpis] = useState({
     totalLeads: 0,
     visitasHoje: 0,
@@ -96,10 +96,10 @@ export default function Dashboard() {
   })
 
   useEffect(() => {
-    if (user?.institution_id && !dataLoaded) {
+    if (user?.institution_id) {
       loadDashboardData()
     }
-  }, [user, dataLoaded])
+  }, [user])
 
   const loadDashboardData = async () => {
     if (!user?.institution_id) {
@@ -110,6 +110,7 @@ export default function Dashboard() {
 
     try {
       setLoading(true)
+      setError('')
       console.log('📊 Carregando dados do dashboard...')
       
       // Carregar dados em paralelo
@@ -118,6 +119,7 @@ export default function Dashboard() {
       try {
         console.log('📈 Carregando leads...')
         leads = await DatabaseService.getLeads(user.institution_id)
+        console.log('✅ Leads carregados:', leads.length)
       } catch (error) {
         console.error('⚠️ Erro ao carregar leads:', error)
         leads = []
@@ -126,6 +128,7 @@ export default function Dashboard() {
       try {
         console.log('📅 Carregando visitas...')
         visits = await DatabaseService.getVisits(user.institution_id)
+        console.log('✅ Visitas carregadas:', visits.length)
       } catch (error) {
         console.warn('⚠️ Erro ao carregar visitas:', error)
         visits = []
@@ -134,6 +137,7 @@ export default function Dashboard() {
       try {
         console.log('🎓 Carregando matrículas...')
         enrollments = await DatabaseService.getEnrollments(user.institution_id)
+        console.log('✅ Matrículas carregadas:', enrollments.length)
       } catch (error) {
         console.warn('⚠️ Erro ao carregar matrículas:', error)
         enrollments = []
@@ -142,6 +146,7 @@ export default function Dashboard() {
       try {
         console.log('📢 Carregando campanhas...')
         campaigns = await DatabaseService.getMarketingCampaigns(user.institution_id)
+        console.log('✅ Campanhas carregadas:', campaigns.length)
       } catch (error) {
         console.warn('⚠️ Erro ao carregar campanhas:', error)
         campaigns = []
@@ -214,11 +219,11 @@ export default function Dashboard() {
         matriculas: matriculasCount
       })
 
-      setDataLoaded(true)
       console.log('✅ Dashboard carregado com sucesso!')
+      console.log('📊 KPIs:', { totalLeads, leadsNovos, matriculasMes, taxaConversao })
     } catch (error) {
       console.error('❌ Erro ao carregar dashboard:', error)
-      // Não quebra a aplicação, apenas usa dados vazios
+      setError('Erro ao carregar dados do dashboard: ' + (error as Error).message)
     } finally {
       setLoading(false)
     }
@@ -254,21 +259,60 @@ export default function Dashboard() {
     }
   }
 
+  // Debug info
+  console.log('🔍 Dashboard render - User:', user?.full_name, 'Loading:', loading, 'Error:', error)
+
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="p-8 bg-gradient-to-br from-blue-50 via-white to-indigo-50 min-h-screen">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-64 mb-6"></div>
+          <div className="h-12 bg-gray-200 rounded-xl w-80 mb-8"></div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             {[1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} className="h-32 bg-gray-200 rounded-xl"></div>
+              <div key={i} className="h-40 bg-gray-200 rounded-2xl"></div>
             ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 h-96 bg-gray-200 rounded-2xl"></div>
+            <div className="h-96 bg-gray-200 rounded-2xl"></div>
           </div>
         </div>
       </div>
     )
   }
 
+  if (error) {
+    return (
+      <div className="p-8 bg-gradient-to-br from-red-50 via-white to-red-50 min-h-screen">
+        <div className="max-w-2xl mx-auto text-center">
+          <div className="bg-white rounded-2xl p-8 shadow-lg border border-red-200">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <X className="w-8 h-8 text-red-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Erro no Dashboard</h2>
+            <p className="text-gray-600 mb-6">{error}</p>
+            <div className="space-x-4">
+              <button
+                onClick={() => {
+                  setError('')
+                  loadDashboardData()
+                }}
+                className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-all"
+              >
+                Tentar Novamente
+              </button>
+              <button
+                onClick={handleForceLogin}
+                className="bg-red-600 text-white px-6 py-3 rounded-xl hover:bg-red-700 transition-all"
+              >
+                Fazer Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
   const kpiCards = [
     {
       title: 'Total de Leads',
@@ -321,41 +365,56 @@ export default function Dashboard() {
   ]
 
   return (
-    <div className="p-6">
+    <div className="p-8 bg-gradient-to-br from-blue-50 via-white to-indigo-50 min-h-screen">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-600">Visão geral do sistema Inscribo</p>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Dashboard</h1>
+            <p className="text-gray-600 text-lg">Visão geral do sistema Inscribo</p>
+            {user && (
+              <p className="text-sm text-gray-500 mt-1">
+                Bem-vindo, <strong>{user.full_name}</strong> • {user.role === 'admin' ? 'Administrador' : user.role === 'manager' ? 'Gestor' : 'Consultor'}
+              </p>
+            )}
           </div>
-          <button
-            onClick={handleForceLogin}
-            className="flex items-center px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg border border-red-200 hover:border-red-300 transition-colors"
-            title="Forçar novo login (limpa sessão e cookies)"
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            Forçar Login
-          </button>
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={() => loadDashboardData()}
+              className="flex items-center px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-xl border border-blue-200 hover:border-blue-300 transition-colors"
+              title="Atualizar dados do dashboard"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Atualizar
+            </button>
+            <button
+              onClick={handleForceLogin}
+              className="flex items-center px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-xl border border-red-200 hover:border-red-300 transition-colors"
+              title="Forçar novo login (limpa sessão e cookies)"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </button>
+          </div>
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-10">
         {kpiCards.map((kpi, index) => (
           <KPICard key={index} {...kpi} />
         ))}
       </div>
 
       {/* Charts and Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Funil de Conversão */}
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="lg:col-span-2 bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Funil de Conversão</h3>
+            <h3 className="text-2xl font-bold text-gray-900">Funil de Conversão</h3>
             <BarChart3 className="h-5 w-5 text-gray-500" />
           </div>
-          <div className="space-y-4">
+          <div className="space-y-6">
             {[
               { etapa: 'Leads Cadastrados', valor: funnelData.leads, percentual: 100, cor: 'bg-blue-500', icon: Users },
               { etapa: 'Contatos Realizados', valor: funnelData.contatos, percentual: funnelData.leads > 0 ? (funnelData.contatos / funnelData.leads) * 100 : 0, cor: 'bg-green-500', icon: Users },
@@ -377,9 +436,9 @@ export default function Dashboard() {
                       <span className="text-xs text-gray-500">({item.percentual.toFixed(1)}%)</span>
                     </div>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div className="w-full bg-gray-200 rounded-full h-4">
                     <div 
-                      className={`h-3 rounded-full ${item.cor} transition-all duration-500`}
+                      className={`h-4 rounded-full ${item.cor} transition-all duration-500 shadow-sm`}
                       style={{ width: `${Math.max(item.percentual, 2)}%` }}
                     ></div>
                   </div>
@@ -390,14 +449,14 @@ export default function Dashboard() {
         </div>
 
         {/* Ações Rápidas */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Ações Rápidas</h3>
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
+          <h3 className="text-2xl font-bold text-gray-900 mb-6">Ações Rápidas</h3>
           <div className="space-y-3">
             <button 
               onClick={() => handleQuickAction('new-lead')}
-              className="w-full flex items-center justify-between p-3 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all duration-200 group hover:shadow-sm"
+              className="w-full flex items-center justify-between p-4 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all duration-200 group hover:shadow-md"
             >
-              <span className="text-sm font-medium text-blue-700">Novo Lead</span>
+              <span className="text-sm font-semibold text-blue-700">Novo Lead</span>
               <div className="flex items-center space-x-2">
                 <Users className="h-4 w-4 text-blue-600" />
                 <Plus className="h-3 w-3 text-blue-500 group-hover:scale-110 transition-transform" />
@@ -405,9 +464,9 @@ export default function Dashboard() {
             </button>
             <button 
               onClick={() => handleQuickAction('schedule-visit')}
-              className="w-full flex items-center justify-between p-3 bg-green-50 hover:bg-green-100 rounded-xl transition-all duration-200 group hover:shadow-sm"
+              className="w-full flex items-center justify-between p-4 bg-green-50 hover:bg-green-100 rounded-xl transition-all duration-200 group hover:shadow-md"
             >
-              <span className="text-sm font-medium text-green-700">Agendar Visita</span>
+              <span className="text-sm font-semibold text-green-700">Agendar Visita</span>
               <div className="flex items-center space-x-2">
                 <Calendar className="h-4 w-4 text-green-600" />
                 <Plus className="h-3 w-3 text-green-500 group-hover:scale-110 transition-transform" />
@@ -415,9 +474,9 @@ export default function Dashboard() {
             </button>
             <button 
               onClick={() => handleQuickAction('new-enrollment')}
-              className="w-full flex items-center justify-between p-3 bg-purple-50 hover:bg-purple-100 rounded-xl transition-all duration-200 group hover:shadow-sm"
+              className="w-full flex items-center justify-between p-4 bg-purple-50 hover:bg-purple-100 rounded-xl transition-all duration-200 group hover:shadow-md"
             >
-              <span className="text-sm font-medium text-purple-700">Nova Matrícula</span>
+              <span className="text-sm font-semibold text-purple-700">Nova Matrícula</span>
               <div className="flex items-center space-x-2">
                 <GraduationCap className="h-4 w-4 text-purple-600" />
                 <Plus className="h-3 w-3 text-purple-500 group-hover:scale-110 transition-transform" />
@@ -425,9 +484,9 @@ export default function Dashboard() {
             </button>
             <button 
               onClick={() => handleQuickAction('view-reports')}
-              className="w-full flex items-center justify-between p-3 bg-orange-50 hover:bg-orange-100 rounded-xl transition-all duration-200 group hover:shadow-sm"
+              className="w-full flex items-center justify-between p-4 bg-orange-50 hover:bg-orange-100 rounded-xl transition-all duration-200 group hover:shadow-md"
             >
-              <span className="text-sm font-medium text-orange-700">Ver Relatórios</span>
+              <span className="text-sm font-semibold text-orange-700">Ver Relatórios</span>
               <div className="flex items-center space-x-2">
                 <BarChart3 className="h-4 w-4 text-orange-600" />
                 <ArrowUpRight className="h-3 w-3 text-orange-500 group-hover:scale-110 transition-transform" />
@@ -436,20 +495,20 @@ export default function Dashboard() {
           </div>
 
           {/* Resumo Rápido */}
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <h4 className="text-sm font-semibold text-gray-900 mb-3">Resumo Rápido</h4>
+          <div className="mt-8 pt-6 border-t border-gray-200">
+            <h4 className="text-lg font-bold text-gray-900 mb-4">Resumo Rápido</h4>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Leads Novos (mês)</span>
-                <span className="font-medium text-gray-900">{kpis.leadsNovos}</span>
+                <span className="font-bold text-blue-600">{kpis.leadsNovos}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Visitas (semana)</span>
-                <span className="font-medium text-gray-900">{kpis.visitasSemana}</span>
+                <span className="font-bold text-green-600">{kpis.visitasSemana}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Conversão</span>
-                <span className="font-medium text-green-600">{kpis.taxaConversao}%</span>
+                <span className="font-bold text-purple-600">{kpis.taxaConversao}%</span>
               </div>
             </div>
           </div>
