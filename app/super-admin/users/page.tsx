@@ -1,60 +1,45 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Plus, Users, Shield, UserCheck, Search, Edit, Trash2, Building } from 'lucide-react'
+import { DatabaseService, User } from '../../../src/lib/supabase'
 
-interface SuperUser {
-  id: string
-  full_name: string
-  email: string
-  role: 'admin' | 'manager' | 'user'
+interface SuperUser extends User {
   institution_name: string
-  institution_id: string
-  active: boolean
   last_login: string
-  created_at: string
 }
 
 export default function SuperAdminUsersPage() {
-  const [users, setUsers] = useState<SuperUser[]>([
-    {
-      id: '1',
-      full_name: 'Maria Silva',
-      email: 'maria@saojose.edu.br',
-      role: 'admin',
-      institution_name: 'Colégio São José',
-      institution_id: 'inst_001',
-      active: true,
-      last_login: '2024-01-20T10:30:00Z',
-      created_at: '2024-01-15T09:00:00Z'
-    },
-    {
-      id: '2',
-      full_name: 'João Santos',
-      email: 'joao@instituto.edu.br',
-      role: 'manager',
-      institution_name: 'Instituto Educacional',
-      institution_id: 'inst_002',
-      active: true,
-      last_login: '2024-01-19T14:15:00Z',
-      created_at: '2024-02-03T11:30:00Z'
-    },
-    {
-      id: '3',
-      full_name: 'Ana Costa',
-      email: 'ana@criativa.edu.br',
-      role: 'user',
-      institution_name: 'Escola Criativa',
-      institution_id: 'inst_003',
-      active: false,
-      last_login: '2024-01-10T16:45:00Z',
-      created_at: '2024-03-10T08:20:00Z'
-    }
-  ])
+  const [users, setUsers] = useState<SuperUser[]>([])
+  const [loading, setLoading] = useState(true)
 
   const [searchTerm, setSearchTerm] = useState('')
   const [filterRole, setFilterRole] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+
+  useEffect(() => {
+    loadUsers()
+  }, [])
+
+  const loadUsers = async () => {
+    try {
+      setLoading(true)
+      const data = await DatabaseService.getAllUsersForSuperAdmin()
+      
+      // Transform data to include last_login (mock for now)
+      const usersWithStats: SuperUser[] = data.map(user => ({
+        ...user,
+        institution_name: user.institution_name || 'Sem instituição',
+        last_login: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString()
+      }))
+      
+      setUsers(usersWithStats)
+    } catch (error) {
+      console.error('Error loading users:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const getRoleIcon = (role: string) => {
     switch (role) {
@@ -88,6 +73,21 @@ export default function SuperAdminUsersPage() {
   const totalUsers = users.length
   const activeUsers = users.filter(u => u.active).length
   const adminUsers = users.filter(u => u.role === 'admin').length
+
+  if (loading) {
+    return (
+      <div className="space-y-8">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-64 mb-6"></div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="h-32 bg-gray-200 rounded-2xl"></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">

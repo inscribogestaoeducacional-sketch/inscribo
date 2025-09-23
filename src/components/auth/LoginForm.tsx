@@ -18,16 +18,24 @@ export default function LoginForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setLoading(true)
     setSuccess('')
 
     try {
       if (isLogin) {
         console.log('Attempting login for:', email)
         await signIn(email, password)
-        // Aguardar um pouco para o contexto atualizar
-        setTimeout(() => {
+        
+        // Check if user is super admin
+        const isSuperAdmin = await DatabaseService.isSuperAdmin(email)
+        
+        if (isSuperAdmin) {
+          console.log('🛡️ Super Admin login detected')
+          window.location.href = '/super-admin'
+        } else {
+          console.log('👤 Regular user login')
           window.location.href = '/dashboard'
-        }, 100)
+        }
       } else {
         console.log('Attempting signup for:', email)
         await signUp(email, password, fullName, role)
@@ -56,6 +64,8 @@ export default function LoginForm() {
       }
       
       setError(errorMessage)
+    } finally {
+      setLoading(false)
     }
   }
 

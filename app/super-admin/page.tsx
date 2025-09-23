@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { useEffect, useState } from 'react'
 import { 
   Building, 
   Users, 
@@ -13,6 +14,7 @@ import {
   BarChart3,
   Target
 } from 'lucide-react'
+import { DatabaseService, SaasMetrics } from '../../../src/lib/supabase'
 
 interface KPICardProps {
   title: string
@@ -56,39 +58,69 @@ function KPICard({ title, value, change, icon, color }: KPICardProps) {
 }
 
 export default function SuperAdminDashboard() {
+  const [metrics, setMetrics] = useState<SaasMetrics[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadMetrics()
+  }, [])
+
+  const loadMetrics = async () => {
+    try {
+      setLoading(true)
+      const data = await DatabaseService.getSaasMetrics()
+      setMetrics(data)
+      
+      // Update current metrics
+      await DatabaseService.updateSaasMetrics()
+    } catch (error) {
+      console.error('Error loading metrics:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const currentMetrics = metrics[0]
+  const previousMetrics = metrics[1]
+
+  const calculateChange = (current: number, previous: number) => {
+    if (!previous) return 0
+    return ((current - previous) / previous) * 100
+  }
+
   const kpiCards = [
     {
       title: 'Instituições Ativas',
-      value: 47,
-      change: 12.5,
+      value: currentMetrics?.active_institutions || 0,
+      change: calculateChange(currentMetrics?.active_institutions || 0, previousMetrics?.active_institutions || 0),
       icon: <Building className="h-6 w-6 text-blue-600" />,
       color: 'bg-blue-100'
     },
     {
       title: 'Usuários Totais',
-      value: 342,
-      change: 8.3,
+      value: currentMetrics?.total_users || 0,
+      change: calculateChange(currentMetrics?.total_users || 0, previousMetrics?.total_users || 0),
       icon: <Users className="h-6 w-6 text-green-600" />,
       color: 'bg-green-100'
     },
     {
       title: 'Leads Processados',
-      value: '12.4K',
-      change: 15.7,
+      value: currentMetrics?.total_leads ? `${(currentMetrics.total_leads / 1000).toFixed(1)}K` : '0',
+      change: calculateChange(currentMetrics?.total_leads || 0, previousMetrics?.total_leads || 0),
       icon: <Target className="h-6 w-6 text-purple-600" />,
       color: 'bg-purple-100'
     },
     {
       title: 'Matrículas do Mês',
-      value: '2.1K',
-      change: 22.1,
+      value: currentMetrics?.total_enrollments ? `${(currentMetrics.total_enrollments / 1000).toFixed(1)}K` : '0',
+      change: calculateChange(currentMetrics?.total_enrollments || 0, previousMetrics?.total_enrollments || 0),
       icon: <GraduationCap className="h-6 w-6 text-orange-600" />,
       color: 'bg-orange-100'
     },
     {
       title: 'Receita Recorrente',
-      value: 'R$ 45.7K',
-      change: 18.9,
+      value: currentMetrics?.mrr ? `R$ ${(currentMetrics.mrr / 1000).toFixed(1)}K` : 'R$ 0',
+      change: calculateChange(currentMetrics?.mrr || 0, previousMetrics?.mrr || 0),
       icon: <DollarSign className="h-6 w-6 text-emerald-600" />,
       color: 'bg-emerald-100'
     },
@@ -100,6 +132,21 @@ export default function SuperAdminDashboard() {
       color: 'bg-red-100'
     }
   ]
+
+  if (loading) {
+    return (
+      <div className="space-y-8">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-64 mb-6"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <div key={i} className="h-32 bg-gray-200 rounded-2xl"></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">
@@ -126,24 +173,24 @@ export default function SuperAdminDashboard() {
           </div>
           <div className="h-64 flex items-end justify-between space-x-2">
             {[
-              { month: 'Jan', count: 12 },
-              { month: 'Fev', count: 19 },
-              { month: 'Mar', count: 25 },
-              { month: 'Abr', count: 32 },
-              { month: 'Mai', count: 38 },
-              { month: 'Jun', count: 47 }
-            ].map((item, index) => (
+              ...metrics.slice(-6).reverse().map(metric => ({
+                month: new Date(metric.metric_date).toLocaleDateString('pt-BR', { month: 'short' }),
+                count: metric.active_institutions
+              }))
+            ].map((item, index) => {
+              const maxCount = Math.max(...metrics.slice(-6).map(m => m.active_institutions))
+              return (
               <div key={index} className="flex-1 flex flex-col items-center">
                 <div 
                   className="w-full bg-gradient-to-t from-blue-500 to-blue-400 rounded-t-lg transition-all duration-500 hover:from-blue-600 hover:to-blue-500"
-                  style={{ height: `${(item.count / 47) * 200}px` }}
+                  style={{ height: `${maxCount > 0 ? (item.count / maxCount) * 200 : 0}px` }}
                 ></div>
                 <div className="mt-2 text-xs text-gray-600 text-center">
                   <div className="font-semibold">{item.count}</div>
                   <div>{item.month}</div>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         </div>
 
@@ -155,24 +202,24 @@ export default function SuperAdminDashboard() {
           </div>
           <div className="h-64 flex items-end justify-between space-x-2">
             {[
-              { month: 'Jan', revenue: 28500 },
-              { month: 'Fev', revenue: 32100 },
-              { month: 'Mar', revenue: 35800 },
-              { month: 'Abr', revenue: 39200 },
-              { month: 'Mai', revenue: 42600 },
-              { month: 'Jun', revenue: 45700 }
-            ].map((item, index) => (
+              ...metrics.slice(-6).reverse().map(metric => ({
+                month: new Date(metric.metric_date).toLocaleDateString('pt-BR', { month: 'short' }),
+                revenue: metric.mrr
+              }))
+            ].map((item, index) => {
+              const maxRevenue = Math.max(...metrics.slice(-6).map(m => m.mrr))
+              return (
               <div key={index} className="flex-1 flex flex-col items-center">
                 <div 
                   className="w-full bg-gradient-to-t from-green-500 to-green-400 rounded-t-lg transition-all duration-500 hover:from-green-600 hover:to-green-500"
-                  style={{ height: `${(item.revenue / 45700) * 200}px` }}
+                  style={{ height: `${maxRevenue > 0 ? (item.revenue / maxRevenue) * 200 : 0}px` }}
                 ></div>
                 <div className="mt-2 text-xs text-gray-600 text-center">
                   <div className="font-semibold">R$ {(item.revenue / 1000).toFixed(0)}K</div>
                   <div>{item.month}</div>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         </div>
       </div>

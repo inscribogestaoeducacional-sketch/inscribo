@@ -1,56 +1,51 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Plus, Building, Users, Calendar, Edit, Trash2, Eye, Search, Filter } from 'lucide-react'
+import { DatabaseService, Institution } from '../../../src/lib/supabase'
 
-interface Institution {
-  id: string
-  name: string
+interface InstitutionWithStats extends Institution {
   plan: 'starter' | 'professional' | 'enterprise'
   users: number
   leads: number
   status: 'active' | 'trial' | 'suspended'
-  created_at: string
   mrr: number
 }
 
 export default function InstitutionsPage() {
-  const [institutions, setInstitutions] = useState<Institution[]>([
-    {
-      id: '1',
-      name: 'Colégio São José',
-      plan: 'professional',
-      users: 8,
-      leads: 247,
-      status: 'active',
-      created_at: '2024-01-15',
-      mrr: 97
-    },
-    {
-      id: '2',
-      name: 'Instituto Educacional',
-      plan: 'enterprise',
-      users: 15,
-      leads: 456,
-      status: 'active',
-      created_at: '2024-02-03',
-      mrr: 297
-    },
-    {
-      id: '3',
-      name: 'Escola Criativa',
-      plan: 'starter',
-      users: 3,
-      leads: 89,
-      status: 'trial',
-      created_at: '2024-03-10',
-      mrr: 0
-    }
-  ])
+  const [institutions, setInstitutions] = useState<InstitutionWithStats[]>([])
+  const [loading, setLoading] = useState(true)
 
   const [searchTerm, setSearchTerm] = useState('')
   const [filterPlan, setFilterPlan] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+
+  useEffect(() => {
+    loadInstitutions()
+  }, [])
+
+  const loadInstitutions = async () => {
+    try {
+      setLoading(true)
+      const data = await DatabaseService.getAllInstitutions()
+      
+      // Transform data to include stats (mock data for now)
+      const institutionsWithStats: InstitutionWithStats[] = data.map((inst, index) => ({
+        ...inst,
+        plan: index % 3 === 0 ? 'enterprise' : index % 2 === 0 ? 'professional' : 'starter',
+        users: Math.floor(Math.random() * 20) + 3,
+        leads: Math.floor(Math.random() * 500) + 50,
+        status: Math.random() > 0.8 ? 'trial' : 'active',
+        mrr: index % 3 === 0 ? 297 : index % 2 === 0 ? 97 : 0
+      }))
+      
+      setInstitutions(institutionsWithStats)
+    } catch (error) {
+      console.error('Error loading institutions:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const getPlanBadge = (plan: string) => {
     switch (plan) {
@@ -90,6 +85,21 @@ export default function InstitutionsPage() {
   const totalMRR = institutions.reduce((sum, inst) => sum + inst.mrr, 0)
   const activeInstitutions = institutions.filter(i => i.status === 'active').length
   const trialInstitutions = institutions.filter(i => i.status === 'trial').length
+
+  if (loading) {
+    return (
+      <div className="space-y-8">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-64 mb-6"></div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="h-32 bg-gray-200 rounded-2xl"></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">
