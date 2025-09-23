@@ -395,6 +395,33 @@ export default function LeadKanban() {
       setError('')
       console.log('🔄 Carregando dados dos leads...')
       
+      const [leadsData, usersData] = await Promise.all([
+        DatabaseService.getLeads(user!.institution_id),
+        DatabaseService.getUsers(user!.institution_id)
+      ])
+      
+      setLeads(leadsData)
+      setUsers(usersData)
+      console.log('✅ Dados carregados:', leadsData.length, 'leads,', usersData.length, 'usuários')
+    } catch (error) {
+      console.error('❌ Erro ao carregar dados:', error)
+      setError('Erro ao carregar dados: ' + (error as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSave = async (data: Partial<Lead>) => {
+    try {
+      console.log('💾 Salvando lead:', data)
+      
+      const leadData = {
+        ...data,
+        institution_id: user!.institution_id
+      }
+
+      if (editingLead) {
+        console.log('✏️ Atualizando lead existente:', editingLead.id)
         
         await DatabaseService.updateLead(editingLead.id, leadData)
         // Registrar atividade de edição com mudanças específicas
@@ -410,28 +437,6 @@ export default function LeadKanban() {
             previousData[key] = oldValue
           }
         })
-        
-        // Só registra se houve mudanças
-        if (Object.keys(changes).length > 0) {
-          try {
-            await DatabaseService.logActivity({
-              user_id: user!.id,
-              action: 'Lead editado',
-              entity_type: 'lead',
-              entity_id: editingLead.id,
-              details: {
-                changes: changes,
-                previous: previousData,
-                student_name: data.student_name || editingLead.student_name,
-                responsible_name: data.responsible_name || editingLead.responsible_name
-              },
-              institution_id: user!.institution_id
-            })
-            console.log('✅ Atividade de edição registrada')
-          } catch (logError) {
-            console.error('❌ Erro ao registrar atividade:', logError)
-          }
-        }
         
         // Só registra se houve mudanças
         if (Object.keys(changes).length > 0) {
@@ -482,14 +487,6 @@ export default function LeadKanban() {
         } catch (logError) {
           console.error('❌ Erro ao registrar atividade:', logError)
         }
-              notes: newLead.notes || ''
-            },
-            institution_id: user!.institution_id
-          })
-          console.log('✅ Atividade de criação registrada')
-        } catch (logError) {
-          console.error('❌ Erro ao registrar atividade:', logError)
-        }
       }
 
       console.log('✅ Lead salvo com sucesso!')
@@ -529,8 +526,9 @@ export default function LeadKanban() {
     try {
       console.log('🔄 Alterando status do lead:', leadId, 'para:', newStatus)
        
-          console.error('❌ Erro ao registrar atividade:', logError)
-        }
+      // Buscar dados atuais do lead antes da mudança
+      const currentLead = leads.find(l => l.id === leadId)
+      const previousStatus = currentLead?.status
        
       await DatabaseService.updateLead(leadId, { status: newStatus })
        
