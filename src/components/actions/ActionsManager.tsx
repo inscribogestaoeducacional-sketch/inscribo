@@ -525,11 +525,10 @@ export default function LeadKanban() {
   const handleStatusChange = async (leadId: string, newStatus: Lead['status']) => {
     try {
       console.log('🔄 Alterando status do lead:', leadId, 'para:', newStatus)
-       
-      // Buscar dados atuais do lead antes da mudança
+      
       const currentLead = leads.find(l => l.id === leadId)
       const previousStatus = currentLead?.status
-       
+      
       await DatabaseService.updateLead(leadId, { status: newStatus })
        
        // Registrar mudança de status
