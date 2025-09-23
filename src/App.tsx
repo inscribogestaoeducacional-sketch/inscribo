@@ -73,9 +73,7 @@ function AppContent() {
 
   // Redirecionar super admin para painel específico
   if (user.is_super_admin && !window.location.pathname.startsWith('/super-admin')) {
-    // Redirecionar super admin para seu painel
-    window.location.href = '/super-admin'
-    return null
+    return <Navigate to="/super-admin" replace />
   }
 
   // Renderizar aplicação principal

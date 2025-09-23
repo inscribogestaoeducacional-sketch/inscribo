@@ -584,6 +584,7 @@ export class DatabaseService {
   // Super Admin Methods
   static async isSuperAdmin(email: string): Promise<boolean> {
     try {
+      console.log('🔍 Verificando se é super admin:', email)
       const { data, error } = await supabase
         .from('super_admins')
         .select('id')
@@ -591,8 +592,11 @@ export class DatabaseService {
         .eq('active', true)
         .single()
 
-      return !error && !!data
+      const isSuperAdmin = !error && !!data
+      console.log('🛡️ Resultado super admin:', isSuperAdmin)
+      return isSuperAdmin
     } catch {
+      console.log('❌ Erro ao verificar super admin')
       return false
     }
   }

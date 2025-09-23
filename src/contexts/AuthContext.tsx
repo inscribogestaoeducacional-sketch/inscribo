@@ -214,7 +214,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userEmail = authUser.user?.email
       
       if (userEmail) {
+        console.log('📧 Email do usuário:', userEmail)
         const isSuperAdmin = await DatabaseService.isSuperAdmin(userEmail)
+        console.log('🔍 É super admin?', isSuperAdmin)
         
         if (isSuperAdmin) {
           console.log('🛡️ Super Admin detectado:', userEmail)
@@ -225,6 +227,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .single()
 
           if (superAdminData) {
+            console.log('✅ Dados do super admin carregados:', superAdminData)
             setUser({
               id: superAdminData.id,
               full_name: superAdminData.full_name,

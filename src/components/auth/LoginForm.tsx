@@ -26,16 +26,8 @@ export default function LoginForm() {
         console.log('Attempting login for:', email)
         await signIn(email, password)
         
-        // Check if user is super admin
-        const isSuperAdmin = await DatabaseService.isSuperAdmin(email)
-        
-        if (isSuperAdmin) {
-          console.log('🛡️ Super Admin login detected')
-          window.location.href = '/super-admin'
-        } else {
-          console.log('👤 Regular user login')
-          window.location.href = '/dashboard'
-        }
+        // O redirecionamento será feito automaticamente pelo AuthContext
+        console.log('✅ Login realizado, aguardando redirecionamento...')
       } else {
         console.log('Attempting signup for:', email)
         await signUp(email, password, fullName, role)
