@@ -320,6 +320,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true)
       console.log('🔐 Iniciando login:', email)
       
+      // Verificar se é super admin ANTES do login
+      const isSuperAdmin = email === 'admin@inscribo.com'
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
@@ -337,7 +340,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Salvar sessão no localStorage imediatamente
         localStorage.setItem('inscribo-auth-token', JSON.stringify(data.session))
         
-        if (data.user) {
+        if (isSuperAdmin) {
+          // Para super admin, criar perfil especial
+          const superAdminUser = {
+            id: data.user!.id,
+            full_name: 'Super Admin',
+            email: email,
+            role: 'admin' as const,
+            institution_id: 'super-admin',
+            active: true,
+            is_super_admin: true,
+            institution_name: 'Inscribo - Super Admin'
+          }
+          setUser(superAdminUser)
+          localStorage.setItem('inscribo-user', JSON.stringify(superAdminUser))
+        } else if (data.user) {
           await loadUserProfile(data.user.id)
         }
       }
