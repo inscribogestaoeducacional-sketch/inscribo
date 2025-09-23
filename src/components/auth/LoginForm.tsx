@@ -262,6 +262,15 @@ export default function LoginForm() {
             © 2024 Inscribo. Sistema de Gestão Educacional.
           </p>
         </div>
+
+        {/* Demo Credentials */}
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <h4 className="font-semibold text-blue-900 mb-2">Credenciais de Demonstração:</h4>
+          <div className="text-sm text-blue-800 space-y-1">
+            <p><strong>Super Admin:</strong> admin@inscribo.com / admin123</p>
+            <p><strong>Instituição:</strong> escola@exemplo.com / escola123</p>
+          </div>
+        </div>
       </div>
     </div>
   )

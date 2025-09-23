@@ -72,9 +72,7 @@ function AppContent() {
   }
 
   // Redirecionar super admin para painel específico
-  if (user.is_super_admin && window.location.pathname.startsWith('/super-admin')) {
-    // Super admin já está no painel correto
-  } else if (user.is_super_admin) {
+  if (user.is_super_admin && !window.location.pathname.startsWith('/super-admin')) {
     // Redirecionar super admin para seu painel
     window.location.href = '/super-admin'
     return null
