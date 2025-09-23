@@ -100,7 +100,7 @@ const Sidebar = () => {
         
         {/* Role Indicator */}
         <div className="mt-8 px-6">
-          <div className={`${roleInfo.bg} rounded-lg p-3 border`}>
+          <div className={`${roleInfo.bg} rounded-lg p-4 border`}>
             <div className="text-xs font-medium text-gray-600 mb-1">Seu Perfil:</div>
             <div className={`text-sm font-semibold ${roleInfo.color}`}>
               {roleInfo.label}
@@ -110,6 +110,14 @@ const Sidebar = () => {
               {user?.role === 'manager' && 'Gestão e relatórios'}
               {user?.role === 'user' && 'Leads, visitas e matrículas'}
             </div>
+            {user?.institution_id && (
+              <div className="mt-2 pt-2 border-t border-gray-200">
+                <div className="text-xs text-gray-600">Instituição:</div>
+                <div className="text-xs font-mono bg-gray-100 px-2 py-1 rounded mt-1">
+                  {user.institution_id.slice(-8)}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </nav>
@@ -126,10 +134,17 @@ const Sidebar = () => {
             </div>
             <div className="ml-3">
               <p className="text-sm font-medium text-gray-700">{user.full_name}</p>
-              <p className="text-xs text-gray-500 capitalize">
-                {user.role === 'admin' ? 'Administrador' : 
-                 user.role === 'manager' ? 'Gestor' : 'Consultor'}
-              </p>
+              <div className="flex items-center space-x-2">
+                <p className="text-xs text-gray-500 capitalize">
+                  {user.role === 'admin' ? 'Administrador' : 
+                   user.role === 'manager' ? 'Gestor' : 'Consultor'}
+                </p>
+                {user.institution_id && (
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                    ID: {user.institution_id.slice(-6)}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
