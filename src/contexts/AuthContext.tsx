@@ -43,11 +43,92 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initializeAuth()
   }, [])
 
+  // Listener para mudanças de visibilidade da página
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && session) {
+        console.log('👁️ Página ficou visível, verificando sessão...')
+        // Verificar se a sessão ainda é válida quando a página fica visível
+        refreshSession()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [session])
+
+  // Listener para mudanças de foco da janela
+  useEffect(() => {
+    const handleFocus = () => {
+      if (session) {
+        console.log('🎯 Janela ganhou foco, verificando sessão...')
+        refreshSession()
+      }
+    }
+
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [session])
+
+  // Listener para storage changes (sincronização entre abas)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'inscribo-auth-token') {
+        console.log('🔄 Mudança detectada no storage, sincronizando...')
+        if (e.newValue) {
+          // Nova sessão detectada em outra aba
+          const sessionData = JSON.parse(e.newValue)
+          setSession(sessionData)
+          if (sessionData.user) {
+            loadUserProfile(sessionData.user.id)
+          }
+        } else {
+          // Sessão removida em outra aba
+          clearAuthState()
+        }
+      }
+    }
+
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
+  }, [])
+
   const initializeAuth = async () => {
     try {
       console.log('🔍 Verificando sessão existente...')
       
-      // 1. Verificar sessão atual no Supabase
+      // 1. Tentar recuperar sessão do localStorage primeiro
+      const cachedSession = localStorage.getItem('inscribo-auth-token')
+      const cachedUser = localStorage.getItem('inscribo-user')
+      
+      if (cachedSession && cachedUser) {
+        try {
+          const sessionData = JSON.parse(cachedSession)
+          const userData = JSON.parse(cachedUser)
+          
+          // Verificar se a sessão não expirou
+          const expiresAt = sessionData.expires_at * 1000
+          const now = Date.now()
+          
+          if (expiresAt > now) {
+            console.log('✅ Sessão válida encontrada no cache')
+            setSession(sessionData)
+            setUser(userData)
+            setInitializing(false)
+            return
+          } else {
+            console.log('⏰ Sessão em cache expirada, removendo...')
+            localStorage.removeItem('inscribo-auth-token')
+            localStorage.removeItem('inscribo-user')
+          }
+        } catch (parseError) {
+          console.error('❌ Erro ao parsear cache:', parseError)
+          localStorage.removeItem('inscribo-auth-token')
+          localStorage.removeItem('inscribo-user')
+        }
+      }
+      
+      // 2. Verificar sessão atual no Supabase
       const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession()
       
       if (sessionError) {
@@ -57,15 +138,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (currentSession?.user) {
-        console.log('✅ Sessão encontrada:', currentSession.user.email)
+        console.log('✅ Sessão ativa encontrada no Supabase:', currentSession.user.email)
         setSession(currentSession)
+        
+        // Salvar no localStorage
+        localStorage.setItem('inscribo-auth-token', JSON.stringify(currentSession))
+        
         await loadUserProfile(currentSession.user.id)
       } else {
         console.log('ℹ️ Nenhuma sessão ativa encontrada')
         clearAuthState()
       }
 
-      // 2. Configurar listener para mudanças de auth
+      // 3. Configurar listener para mudanças de auth
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
         console.log('🔄 Auth state change:', event, newSession?.user?.email)
         
@@ -73,8 +158,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           case 'SIGNED_IN':
             console.log('✅ Usuário logado')
             setSession(newSession)
-            if (newSession?.user) {
-              await loadUserProfile(newSession.user.id)
+            if (newSession) {
+              localStorage.setItem('inscribo-auth-token', JSON.stringify(newSession))
+              if (newSession.user) {
+                await loadUserProfile(newSession.user.id)
+              }
             }
             break
             
@@ -86,6 +174,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           case 'TOKEN_REFRESHED':
             console.log('🔄 Token renovado')
             setSession(newSession)
+            if (newSession) {
+              localStorage.setItem('inscribo-auth-token', JSON.stringify(newSession))
+            }
             break
             
           case 'USER_UPDATED':
@@ -140,13 +231,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(userData)
         
         // Salvar dados do usuário no localStorage para recuperação rápida
-        localStorage.setItem('inscribo_user', JSON.stringify(userData))
+        localStorage.setItem('inscribo-user', JSON.stringify(userData))
       }
     } catch (error) {
       console.error('❌ Erro ao carregar perfil:', error)
       
       // Em caso de erro de rede, tentar recuperar do localStorage
-      const cachedUser = localStorage.getItem('inscribo_user')
+      const cachedUser = localStorage.getItem('inscribo-user')
       if (cachedUser) {
         try {
           const parsedUser = JSON.parse(cachedUser)
@@ -155,7 +246,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return
         } catch (parseError) {
           console.error('❌ Erro ao parsear cache:', parseError)
-          localStorage.removeItem('inscribo_user')
+          localStorage.removeItem('inscribo-user')
         }
       }
       
@@ -167,8 +258,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('🧹 Limpando estado de autenticação')
     setUser(null)
     setSession(null)
-    localStorage.removeItem('inscribo_user')
-    localStorage.removeItem('inscribo_session')
+    localStorage.removeItem('inscribo-user')
+    localStorage.removeItem('inscribo-auth-token')
+    localStorage.removeItem('inscribo-session')
   }
 
   const signIn = async (email: string, password: string) => {
@@ -190,8 +282,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('✅ Login bem-sucedido')
         setSession(data.session)
         
-        // Salvar sessão no localStorage
-        localStorage.setItem('inscribo_session', JSON.stringify(data.session))
+        // Salvar sessão no localStorage imediatamente
+        localStorage.setItem('inscribo-auth-token', JSON.stringify(data.session))
         
         if (data.user) {
           await loadUserProfile(data.user.id)
@@ -267,6 +359,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (error) {
         console.error('❌ Erro ao renovar sessão:', error)
+        
+        // Tentar recuperar do localStorage se falhar
+        const cachedSession = localStorage.getItem('inscribo-auth-token')
+        const cachedUser = localStorage.getItem('inscribo-user')
+        
+        if (cachedSession && cachedUser) {
+          try {
+            const sessionData = JSON.parse(cachedSession)
+            const userData = JSON.parse(cachedUser)
+            
+            // Verificar se ainda não expirou
+            const expiresAt = sessionData.expires_at * 1000
+            if (expiresAt > Date.now()) {
+              console.log('🔄 Usando sessão em cache')
+              setSession(sessionData)
+              setUser(userData)
+              return
+            }
+          } catch (parseError) {
+            console.error('❌ Erro ao parsear cache:', parseError)
+          }
+        }
+        
         clearAuthState()
         return
       }
@@ -274,7 +389,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (refreshedSession) {
         console.log('✅ Sessão renovada')
         setSession(refreshedSession)
-        localStorage.setItem('inscribo_session', JSON.stringify(refreshedSession))
+        localStorage.setItem('inscribo-auth-token', JSON.stringify(refreshedSession))
         
         if (refreshedSession.user) {
           await loadUserProfile(refreshedSession.user.id)
@@ -282,17 +397,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error('❌ Erro ao renovar sessão:', error)
+      
+      // Fallback para dados em cache
+      const cachedUser = localStorage.getItem('inscribo-user')
+      if (cachedUser) {
+        try {
+          const userData = JSON.parse(cachedUser)
+          console.log('🔄 Mantendo usuário em cache durante erro de rede')
+          setUser(userData)
+          return
+        } catch (parseError) {
+          console.error('❌ Erro ao parsear cache de usuário:', parseError)
+        }
+      }
+      
       clearAuthState()
     }
   }
 
-  // Auto-refresh da sessão a cada 50 minutos (tokens expiram em 1 hora)
+  // Auto-refresh da sessão a cada 45 minutos (tokens expiram em 1 hora)
   useEffect(() => {
     if (session) {
       const refreshInterval = setInterval(() => {
         console.log('⏰ Auto-refresh da sessão')
         refreshSession()
-      }, 50 * 60 * 1000) // 50 minutos
+      }, 45 * 60 * 1000) // 45 minutos
 
       return () => clearInterval(refreshInterval)
     }
@@ -305,8 +434,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (expiresAt) {
         const timeUntilExpiry = (expiresAt * 1000) - Date.now()
         
-        // Se expira em menos de 5 minutos, renovar
-        if (timeUntilExpiry < 5 * 60 * 1000) {
+        // Se expira em menos de 10 minutos, renovar
+        if (timeUntilExpiry < 10 * 60 * 1000) {
           console.log('⚠️ Sessão próxima do vencimento, renovando...')
           refreshSession()
         }
@@ -314,7 +443,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [session])
 
-  // Tela de carregamento inicial
+  // Heartbeat para manter sessão ativa
+  useEffect(() => {
+    if (session && user) {
+      const heartbeat = setInterval(() => {
+        // Fazer uma pequena query para manter a conexão ativa
+        supabase.from('users').select('id').eq('id', user.id).limit(1)
+          .then(() => console.log('💓 Heartbeat - sessão ativa'))
+          .catch(error => console.warn('⚠️ Heartbeat falhou:', error))
+      }, 5 * 60 * 1000) // A cada 5 minutos
+
+      return () => clearInterval(heartbeat)
+    }
+  }, [session, user])
+
+  // Tela de carregamento inicial mais rápida
   if (initializing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
@@ -322,7 +465,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           <div className="w-16 h-16 mb-6 mx-auto">
             <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600"></div>
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Carregando Inscribo</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Inscribo</h2>
           <p className="text-gray-600 mb-6">Verificando sua sessão...</p>
           
           <div className="space-y-2 text-sm text-gray-500">
@@ -336,7 +479,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex items-center justify-center space-x-2">
               <div className="w-2 h-2 bg-purple-600 rounded-full animate-pulse delay-200"></div>
-              <span>Preparando dashboard</span>
+              <span>Preparando sistema</span>
             </div>
           </div>
           

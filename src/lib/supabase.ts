@@ -10,27 +10,32 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
-    storageKey: 'inscribo-auth',
+    storageKey: 'inscribo-auth-token',
     storage: {
       getItem: (key: string) => {
         if (typeof window !== 'undefined') {
-          return localStorage.getItem(key)
+          const item = localStorage.getItem(key)
+          console.log('📦 Storage getItem:', key, item ? 'found' : 'not found')
+          return item
         }
         return null
       },
       setItem: (key: string, value: string) => {
         if (typeof window !== 'undefined') {
+          console.log('💾 Storage setItem:', key)
           localStorage.setItem(key, value)
         }
       },
       removeItem: (key: string) => {
         if (typeof window !== 'undefined') {
+          console.log('🗑️ Storage removeItem:', key)
           localStorage.removeItem(key)
         }
       }
     },
     autoRefreshToken: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    flowType: 'pkce'
   }
 })
 

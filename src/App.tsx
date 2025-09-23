@@ -35,26 +35,16 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode,
 
 function AppContent() {
   const { user, initializing } = useAuth()
-  const [appReady, setAppReady] = useState(false)
 
-  useEffect(() => {
-    // Aguardar um pouco para garantir que a inicialização termine
-    const timer = setTimeout(() => {
-      setAppReady(true)
-    }, 1000)
-
-    return () => clearTimeout(timer)
-  }, [])
-
-  // Mostrar loading enquanto inicializa ou não está pronto
-  if (initializing || !appReady) {
+  // Mostrar loading apenas enquanto inicializa
+  if (initializing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
         <div className="text-center">
           <div className="w-16 h-16 mb-6 mx-auto">
             <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600"></div>
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Carregando Inscribo</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Inscribo</h2>
           <p className="text-gray-600 mb-4">Verificando sua sessão...</p>
           
           <div className="space-y-2 text-sm text-gray-500">
@@ -68,7 +58,7 @@ function AppContent() {
             </div>
             <div className="flex items-center justify-center space-x-2">
               <div className="w-2 h-2 bg-purple-600 rounded-full animate-pulse delay-200"></div>
-              <span>Preparando dashboard</span>
+              <span>Preparando sistema</span>
             </div>
           </div>
         </div>
