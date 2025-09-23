@@ -9,6 +9,8 @@ interface AppUser {
   role: 'admin' | 'manager' | 'user'
   institution_id: string
   active: boolean
+  institution_name?: string
+  is_super_admin?: boolean
 }
 
 interface AuthContextType {
@@ -207,9 +209,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('👤 Carregando perfil do usuário:', userId)
       
+      // First check if user is super admin
+      const { data: authUser } = await supabase.auth.getUser()
+      const userEmail = authUser.user?.email
+      
+      if (userEmail) {
+        const isSuperAdmin = await DatabaseService.isSuperAdmin(userEmail)
+        
+        if (isSuperAdmin) {
+          console.log('🛡️ Super Admin detectado:', userEmail)
+          const { data: superAdminData } = await supabase
+            .from('super_admins')
+            .select('*')
+            .eq('email', userEmail)
+            .single()
+
+          if (superAdminData) {
+            setUser({
+              id: superAdminData.id,
+              full_name: superAdminData.full_name,
+              email: superAdminData.email,
+              role: 'admin',
+              institution_id: 'super-admin',
+              active: superAdminData.active,
+              is_super_admin: true,
+              institution_name: 'Inscribo - Super Admin'
+            })
+            localStorage.setItem('inscribo-user', JSON.stringify({
+              id: superAdminData.id,
+              full_name: superAdminData.full_name,
+              email: superAdminData.email,
+              role: 'admin',
+              institution_id: 'super-admin',
+              active: superAdminData.active,
+              is_super_admin: true,
+              institution_name: 'Inscribo - Super Admin'
+            }))
+            return
+          }
+        }
+      }
+      
+      // Regular user lookup
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('*')
+        .select(`
+          *,
+          institutions(name)
+        `)
         .eq('id', userId)
         .single()
 
@@ -228,10 +275,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (userData) {
         console.log('✅ Perfil carregado:', userData.full_name)
-        setUser(userData)
+        const userWithInstitution = {
+          ...userData,
+          institution_name: (userData as any).institutions?.name,
+          is_super_admin: false
+        }
+        setUser(userWithInstitution)
         
         // Salvar dados do usuário no localStorage para recuperação rápida
-        localStorage.setItem('inscribo-user', JSON.stringify(userData))
+        localStorage.setItem('inscribo-user', JSON.stringify(userWithInstitution))
       }
     } catch (error) {
       console.error('❌ Erro ao carregar perfil:', error)

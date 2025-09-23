@@ -167,6 +167,27 @@ export interface Institution {
   updated_at: string
 }
 
+export interface SuperAdmin {
+  id: string
+  email: string
+  full_name: string
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface SaasMetrics {
+  id: string
+  metric_date: string
+  total_institutions: number
+  active_institutions: number
+  total_users: number
+  total_leads: number
+  total_enrollments: number
+  mrr: number
+  created_at: string
+}
+
 // Database Service
 export class DatabaseService {
   // Leads
@@ -558,5 +579,103 @@ export class DatabaseService {
       .eq('id', id)
 
     if (error) throw error
+  }
+
+  // Super Admin Methods
+  static async isSuperAdmin(email: string): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from('super_admins')
+        .select('id')
+        .eq('email', email)
+        .eq('active', true)
+        .single()
+
+      return !error && !!data
+    } catch {
+      return false
+    }
+  }
+
+  static async getAllInstitutions(): Promise<Institution[]> {
+    const { data, error } = await supabase
+      .from('institutions')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data || []
+  }
+
+  static async getAllUsersForSuperAdmin(): Promise<(User & { institution_name?: string })[]> {
+    const { data, error } = await supabase
+      .from('users')
+      .select(`
+        *,
+        institutions(name)
+      `)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return (data || []).map(user => ({
+      ...user,
+      institution_name: (user as any).institutions?.name
+    }))
+  }
+
+  static async getSaasMetrics(): Promise<SaasMetrics[]> {
+    const { data, error } = await supabase
+      .from('saas_metrics')
+      .select('*')
+      .order('metric_date', { ascending: false })
+      .limit(12)
+
+    if (error) throw error
+    return data || []
+  }
+
+  static async updateSaasMetrics(): Promise<void> {
+    try {
+      // Get current counts
+      const [institutions, users, leads, enrollments] = await Promise.all([
+        supabase.from('institutions').select('id, created_at'),
+        supabase.from('users').select('id'),
+        supabase.from('leads').select('id'),
+        supabase.from('enrollments').select('id, enrollment_value')
+      ])
+
+      const totalInstitutions = institutions.data?.length || 0
+      const activeInstitutions = institutions.data?.filter(i => {
+        const createdAt = new Date(i.created_at)
+        const thirtyDaysAgo = new Date()
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+        return createdAt > thirtyDaysAgo
+      }).length || 0
+
+      const totalUsers = users.data?.length || 0
+      const totalLeads = leads.data?.length || 0
+      const totalEnrollments = enrollments.data?.length || 0
+      
+      // Calculate MRR (simplified - would be more complex in production)
+      const mrr = totalInstitutions * 97 // Assuming average of R$ 97/month
+
+      // Insert or update today's metrics
+      const { error } = await supabase
+        .from('saas_metrics')
+        .upsert({
+          metric_date: new Date().toISOString().split('T')[0],
+          total_institutions: totalInstitutions,
+          active_institutions: activeInstitutions,
+          total_users: totalUsers,
+          total_leads: totalLeads,
+          total_enrollments: totalEnrollments,
+          mrr: mrr
+        }, {
+          onConflict: 'metric_date'
+        })
+      if (error) throw error
+    } catch (error) {
+      console.error('Error updating SaaS metrics:', error)
+    }
   }
 }
