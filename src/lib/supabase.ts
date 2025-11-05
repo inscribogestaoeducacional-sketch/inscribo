@@ -190,7 +190,17 @@ export interface SaasMetrics {
 
 // Database Service
 export class DatabaseService {
-// ============================================
+
+  export const DatabaseService = {
+  // ... seus métodos existentes ...
+  
+  getLeads: async (institution_id: string) => { ... },
+  updateLead: async (id: string, data: Partial<Lead>) => { ... },
+  
+  // NOVOS MÉTODOS (cole aqui)
+  logActivity: async (data: { ... }) => { ... },
+  getActivityLogs: async (institution_id: string, entity_id?: string) => { ... }
+}// ============================================
 // MÉTODOS PARA ADICIONAR AO SEU DatabaseService
 // Arquivo: src/lib/supabase.ts (ou onde está seu DatabaseService)
 // ============================================
