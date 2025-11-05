@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Filter, User, Phone, Mail, Calendar, Edit, Trash2, X, Search, Clock, MapPin, DollarSign, Tag, Users, TrendingUp, Eye, MessageSquare, Send, CheckCircle } from 'lucide-react'
+import { Plus, Filter, User, Phone, Mail, Calendar, Edit, Trash2, X, Search, Clock, MapPin, DollarSign, Tag, Users, TrendingUp, Eye, MessageSquare, Send, CheckCircle, Save } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, Lead, User as AppUser } from '../../lib/supabase'
 
@@ -386,6 +386,8 @@ export default function LeadKanban() {
   const [leadHistory, setLeadHistory] = useState<any[]>([])
   const [newAction, setNewAction] = useState('')
   const [savingAction, setSavingAction] = useState(false)
+  const [editingAction, setEditingAction] = useState<string | null>(null)
+  const [editingActionText, setEditingActionText] = useState('')
 
   useEffect(() => {
     if (user?.institution_id) {
@@ -608,6 +610,8 @@ export default function LeadKanban() {
     setSelectedLead(lead)
     setShowHistory(true)
     setNewAction('')
+    setEditingAction(null)
+    setEditingActionText('')
     loadLeadHistory(lead.id)
   }
 
@@ -659,6 +663,58 @@ export default function LeadKanban() {
       setError('Erro ao adicionar ação ao histórico')
     } finally {
       setSavingAction(false)
+    }
+  }
+
+  const handleEditAction = (actionId: string, currentDescription: string) => {
+    setEditingAction(actionId)
+    setEditingActionText(currentDescription)
+  }
+
+  const handleSaveEditAction = async (actionId: string) => {
+    if (!editingActionText.trim()) return
+
+    try {
+      console.log('💾 Atualizando ação...')
+      
+      // Atualizar a ação no banco de dados
+      await DatabaseService.updateActivityLog(actionId, {
+        details: {
+          ...leadHistory.find(h => h.id === actionId)?.details,
+          description: editingActionText.trim()
+        }
+      })
+      
+      console.log('✅ Ação atualizada com sucesso!')
+      
+      // Recarregar o histórico
+      await loadLeadHistory(selectedLead!.id)
+      
+      // Limpar estado de edição
+      setEditingAction(null)
+      setEditingActionText('')
+    } catch (error) {
+      console.error('❌ Erro ao atualizar ação:', error)
+      setError('Erro ao atualizar ação')
+    }
+  }
+
+  const handleDeleteAction = async (actionId: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta ação?\n\nEsta ação não pode ser desfeita.')) return
+
+    try {
+      console.log('🗑️ Excluindo ação...')
+      
+      // Excluir a ação do banco de dados
+      await DatabaseService.deleteActivityLog(actionId)
+      
+      console.log('✅ Ação excluída com sucesso!')
+      
+      // Recarregar o histórico
+      await loadLeadHistory(selectedLead!.id)
+    } catch (error) {
+      console.error('❌ Erro ao excluir ação:', error)
+      setError('Erro ao excluir ação')
     }
   }
 
@@ -837,176 +893,182 @@ export default function LeadKanban() {
         </div>
       )}
 
-      {/* Kanban Board */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-6">
-        {Object.entries(statusConfig).map(([status, config]) => {
-          const statusLeads = getLeadsByStatus(status as Lead['status'])
-          
-          return (
-            <div key={status} className={`${config.bgColor} rounded-2xl p-6 min-h-96 ${config.borderColor} border-2 transition-all hover:shadow-lg`}>
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center">
-                  <div className={`w-4 h-4 rounded-full ${config.color} mr-3 shadow-md`}></div>
-                  <h3 className={`font-bold text-base ${config.textColor}`}>{config.label}</h3>
+      {/* Kanban Board - COM SCROLL HORIZONTAL PARA CARDS MAIORES */}
+      <div className="overflow-x-auto pb-4">
+        <div className="flex gap-6 min-w-max">
+          {Object.entries(statusConfig).map(([status, config]) => {
+            const statusLeads = getLeadsByStatus(status as Lead['status'])
+            
+            return (
+              <div key={status} className={`${config.bgColor} rounded-2xl p-6 w-96 min-h-[600px] ${config.borderColor} border-2 transition-all hover:shadow-lg flex-shrink-0`}>
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center">
+                    <div className={`w-4 h-4 rounded-full ${config.color} mr-3 shadow-md`}></div>
+                    <h3 className={`font-bold text-lg ${config.textColor}`}>{config.label}</h3>
+                  </div>
+                  <span className={`${config.color} text-white text-sm px-4 py-1.5 rounded-full font-bold shadow-md`}>
+                    {statusLeads.length}
+                  </span>
                 </div>
-                <span className={`${config.color} text-white text-sm px-3 py-1 rounded-full font-bold shadow-md`}>
-                  {statusLeads.length}
-                </span>
+
+                <div className="space-y-5">
+                  {statusLeads.map((lead) => (
+                    <div
+                      key={lead.id}
+                      className="bg-white p-6 rounded-xl shadow-md border-2 border-gray-100 hover:shadow-xl hover:border-gray-200 transition-all cursor-pointer group transform hover:-translate-y-1"
+                    >
+                      {/* Header do Card */}
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex-1">
+                          <h4 className="font-bold text-gray-900 text-lg mb-2 group-hover:text-blue-600 transition-colors">
+                            {lead.student_name}
+                          </h4>
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold ${
+                              lead.source === 'Facebook' ? 'bg-blue-100 text-blue-700' :
+                              lead.source === 'Instagram' ? 'bg-pink-100 text-pink-700' :
+                              lead.source === 'Google' ? 'bg-green-100 text-green-700' :
+                              lead.source === 'WhatsApp' ? 'bg-emerald-100 text-emerald-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              <Tag className="w-3.5 h-3.5 mr-1" />
+                              {lead.source}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-all ml-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleViewHistory(lead)
+                            }}
+                            className="text-gray-400 hover:text-green-600 p-2 hover:bg-green-50 rounded-lg transition-all"
+                            title="Ver histórico"
+                          >
+                            <Clock className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEdit(lead)
+                            }}
+                            className="text-gray-400 hover:text-blue-600 p-2 hover:bg-blue-50 rounded-lg transition-all"
+                            title="Editar lead"
+                          >
+                            <Edit className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDelete(lead.id)
+                            }}
+                            className="text-gray-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition-all"
+                            title="Excluir lead"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Informações principais */}
+                      <div className="space-y-3 mb-5">
+                        <div className="flex items-center text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
+                          <User className="w-5 h-5 mr-3 text-gray-500 flex-shrink-0" />
+                          <div className="flex-1">
+                            <span className="font-medium text-xs text-gray-500 block mb-0.5">Série:</span>
+                            <span className="font-bold text-gray-900">{lead.grade_interest}</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
+                          <Users className="w-5 h-5 mr-3 text-gray-500 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium text-xs text-gray-500 block mb-0.5">Responsável:</span>
+                            <span className="font-bold text-gray-900 truncate block">{lead.responsible_name}</span>
+                          </div>
+                        </div>
+                        
+                        {lead.phone && (
+                          <div className="flex items-center text-sm text-gray-700 bg-blue-50 p-3 rounded-lg">
+                            <Phone className="w-5 h-5 mr-3 text-blue-600 flex-shrink-0" />
+                            <span className="font-bold text-blue-900">{lead.phone}</span>
+                          </div>
+                        )}
+                        
+                        {lead.email && (
+                          <div className="flex items-center text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
+                            <Mail className="w-5 h-5 mr-3 text-gray-500 flex-shrink-0" />
+                            <span className="text-xs truncate">{lead.email}</span>
+                          </div>
+                        )}
+                        
+                        {lead.address && (
+                          <div className="flex items-start text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
+                            <MapPin className="w-5 h-5 mr-3 text-gray-500 flex-shrink-0 mt-0.5" />
+                            <span className="text-xs line-clamp-2">{lead.address}</span>
+                          </div>
+                        )}
+                        
+                        {lead.budget_range && (
+                          <div className="flex items-center text-sm text-gray-700 bg-green-50 p-3 rounded-lg">
+                            <DollarSign className="w-5 h-5 mr-3 text-green-600 flex-shrink-0" />
+                            <span className="font-bold text-green-900 text-xs">{lead.budget_range}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Notas */}
+                      {lead.notes && (
+                        <div className="mb-5 p-4 bg-amber-50 border-2 border-amber-200 rounded-lg">
+                          <p className="text-xs text-gray-700 flex items-start">
+                            <MessageSquare className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0 text-amber-600" />
+                            <span className="line-clamp-3 font-medium leading-relaxed">{lead.notes}</span>
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Footer do Card */}
+                      <div className="pt-4 border-t-2 border-gray-100 space-y-3">
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center text-gray-500 bg-gray-50 px-3 py-2 rounded-lg">
+                            <Calendar className="w-4 h-4 mr-2" />
+                            <span className="font-medium">{formatDate(lead.created_at)}</span>
+                          </div>
+                        </div>
+                        
+                        <select
+                          value={lead.status}
+                          onChange={(e) => {
+                            e.stopPropagation()
+                            handleStatusChange(lead.id, e.target.value as Lead['status'])
+                          }}
+                          className="w-full text-sm font-bold border-2 border-gray-200 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white hover:bg-gray-50 transition-all cursor-pointer"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {Object.entries(statusConfig).map(([value, config]) => (
+                            <option key={value} value={value}>
+                              {config.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+
+                  {statusLeads.length === 0 && (
+                    <div className="text-center py-16">
+                      <div className={`w-20 h-20 ${config.color} rounded-full flex items-center justify-center mx-auto mb-4 opacity-20`}>
+                        <Users className="w-10 h-10 text-white" />
+                      </div>
+                      <p className="text-base font-bold text-gray-500">Nenhum lead</p>
+                      <p className="text-sm text-gray-400 mt-1">nesta etapa</p>
+                    </div>
+                  )}
+                </div>
               </div>
-
-              <div className="space-y-4">
-                {statusLeads.map((lead) => (
-                  <div
-                    key={lead.id}
-                    className="bg-white p-5 rounded-xl shadow-md border-2 border-gray-100 hover:shadow-xl hover:border-gray-200 transition-all cursor-pointer group transform hover:-translate-y-1"
-                  >
-                    {/* Header do Card */}
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex-1">
-                        <h4 className="font-bold text-gray-900 text-base mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">
-                          {lead.student_name}
-                        </h4>
-                        <div className="flex items-center gap-2">
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold ${
-                            lead.source === 'Facebook' ? 'bg-blue-100 text-blue-700' :
-                            lead.source === 'Instagram' ? 'bg-pink-100 text-pink-700' :
-                            lead.source === 'Google' ? 'bg-green-100 text-green-700' :
-                            lead.source === 'WhatsApp' ? 'bg-emerald-100 text-emerald-700' :
-                            'bg-gray-100 text-gray-700'
-                          }`}>
-                            <Tag className="w-3 h-3 mr-1" />
-                            {lead.source}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all ml-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleViewHistory(lead)
-                          }}
-                          className="text-gray-400 hover:text-green-600 p-2 hover:bg-green-50 rounded-lg transition-all"
-                          title="Ver histórico"
-                        >
-                          <Clock className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleEdit(lead)
-                          }}
-                          className="text-gray-400 hover:text-blue-600 p-2 hover:bg-blue-50 rounded-lg transition-all"
-                          title="Editar lead"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDelete(lead.id)
-                          }}
-                          className="text-gray-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition-all"
-                          title="Excluir lead"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Informações principais */}
-                    <div className="space-y-2.5 mb-4">
-                      <div className="flex items-center text-sm text-gray-700 bg-gray-50 p-2 rounded-lg">
-                        <User className="w-4 h-4 mr-2 text-gray-500 flex-shrink-0" />
-                        <span className="font-medium text-xs text-gray-500 mr-2">Série:</span>
-                        <span className="font-semibold">{lead.grade_interest}</span>
-                      </div>
-                      
-                      <div className="flex items-center text-sm text-gray-700 bg-gray-50 p-2 rounded-lg">
-                        <Users className="w-4 h-4 mr-2 text-gray-500 flex-shrink-0" />
-                        <span className="font-medium text-xs text-gray-500 mr-2">Resp.:</span>
-                        <span className="font-semibold truncate">{lead.responsible_name}</span>
-                      </div>
-                      
-                      {lead.phone && (
-                        <div className="flex items-center text-sm text-gray-700 bg-blue-50 p-2 rounded-lg">
-                          <Phone className="w-4 h-4 mr-2 text-blue-600 flex-shrink-0" />
-                          <span className="font-medium">{lead.phone}</span>
-                        </div>
-                      )}
-                      
-                      {lead.email && (
-                        <div className="flex items-center text-sm text-gray-700 bg-gray-50 p-2 rounded-lg">
-                          <Mail className="w-4 h-4 mr-2 text-gray-500 flex-shrink-0" />
-                          <span className="truncate text-xs">{lead.email}</span>
-                        </div>
-                      )}
-                      
-                      {lead.address && (
-                        <div className="flex items-start text-sm text-gray-700 bg-gray-50 p-2 rounded-lg">
-                          <MapPin className="w-4 h-4 mr-2 text-gray-500 flex-shrink-0 mt-0.5" />
-                          <span className="text-xs line-clamp-2">{lead.address}</span>
-                        </div>
-                      )}
-                      
-                      {lead.budget_range && (
-                        <div className="flex items-center text-sm text-gray-700 bg-green-50 p-2 rounded-lg">
-                          <DollarSign className="w-4 h-4 mr-2 text-green-600 flex-shrink-0" />
-                          <span className="font-medium text-xs">{lead.budget_range}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Notas */}
-                    {lead.notes && (
-                      <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                        <p className="text-xs text-gray-700 flex items-start">
-                          <MessageSquare className="w-3.5 h-3.5 mr-1.5 mt-0.5 flex-shrink-0 text-amber-600" />
-                          <span className="line-clamp-3 font-medium">{lead.notes}</span>
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Footer do Card */}
-                    <div className="pt-4 border-t-2 border-gray-100 space-y-3">
-                      <div className="flex items-center justify-between text-xs">
-                        <div className="flex items-center text-gray-500 bg-gray-50 px-2 py-1 rounded-lg">
-                          <Calendar className="w-3.5 h-3.5 mr-1.5" />
-                          <span className="font-medium">{formatDate(lead.created_at)}</span>
-                        </div>
-                      </div>
-                      
-                      <select
-                        value={lead.status}
-                        onChange={(e) => {
-                          e.stopPropagation()
-                          handleStatusChange(lead.id, e.target.value as Lead['status'])
-                        }}
-                        className="w-full text-sm font-medium border-2 border-gray-200 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white hover:bg-gray-50 transition-all cursor-pointer"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {Object.entries(statusConfig).map(([value, config]) => (
-                          <option key={value} value={value}>
-                            {config.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                ))}
-
-                {statusLeads.length === 0 && (
-                  <div className="text-center py-12">
-                    <div className={`w-16 h-16 ${config.color} rounded-full flex items-center justify-center mx-auto mb-4 opacity-20`}>
-                      <Users className="w-8 h-8 text-white" />
-                    </div>
-                    <p className="text-sm font-medium text-gray-500">Nenhum lead</p>
-                    <p className="text-xs text-gray-400 mt-1">nesta etapa</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
 
       {/* Modal */}
@@ -1020,7 +1082,7 @@ export default function LeadKanban() {
         editingLead={editingLead}
       />
 
-      {/* History Modal - NOVO COM SISTEMA DE ADICIONAR AÇÕES */}
+      {/* History Modal - COM EDITAR/EXCLUIR AÇÕES */}
       {showHistory && selectedLead && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-8 w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -1035,6 +1097,8 @@ export default function LeadKanban() {
                   setLeadHistory([])
                   setSelectedLead(null)
                   setNewAction('')
+                  setEditingAction(null)
+                  setEditingActionText('')
                 }} 
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
@@ -1076,7 +1140,7 @@ export default function LeadKanban() {
               </div>
             </div>
 
-            {/* NOVA SEÇÃO: Adicionar Ação */}
+            {/* SEÇÃO: Adicionar Ação */}
             <div className="mb-6 p-5 bg-blue-50 border-2 border-blue-200 rounded-xl">
               <h3 className="text-md font-bold text-gray-900 mb-3 flex items-center">
                 <MessageSquare className="h-5 w-5 mr-2 text-blue-600" />
@@ -1133,104 +1197,155 @@ export default function LeadKanban() {
                 </div>
               ) : leadHistory.length > 0 ? (
                 <div className="space-y-3">
-                  {leadHistory.map((item, index) => (
-                    <div key={item.id} className="relative">
-                      {/* Linha conectora */}
-                      {index < leadHistory.length - 1 && (
-                        <div className="absolute left-5 top-12 w-0.5 h-full bg-gray-200"></div>
-                      )}
-                      
-                      <div className="flex items-start space-x-4 p-5 bg-gradient-to-r from-gray-50 to-white rounded-xl border-2 border-gray-100 hover:border-blue-200 hover:shadow-md transition-all">
-                        <div className="flex-shrink-0 relative z-10">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-md ${
-                            item.action.includes('criado') || item.action.includes('Lead criado') ? 'bg-green-500' :
-                            item.action.includes('Status') || item.action.includes('status') || item.action.includes('alterado') ? 'bg-blue-500' :
-                            item.action.includes('atualizado') || item.action.includes('Lead atualizado') || item.action.includes('editado') ? 'bg-yellow-500' :
-                            item.action.includes('excluído') || item.action.includes('Lead excluído') ? 'bg-red-500' :
-                            item.action.includes('manual') || item.action.includes('Ação manual') ? 'bg-purple-500' :
-                            'bg-gray-500'
-                          }`}>
-                            {item.action.includes('criado') || item.action.includes('Lead criado') ? <Plus className="w-5 h-5 text-white" /> :
-                             item.action.includes('Status') || item.action.includes('status') || item.action.includes('alterado') ? <TrendingUp className="w-5 h-5 text-white" /> :
-                             item.action.includes('atualizado') || item.action.includes('Lead atualizado') || item.action.includes('editado') ? <Edit className="w-5 h-5 text-white" /> :
-                             item.action.includes('excluído') || item.action.includes('Lead excluído') ? <Trash2 className="w-5 h-5 text-white" /> :
-                             item.action.includes('manual') || item.action.includes('Ação manual') ? <MessageSquare className="w-5 h-5 text-white" /> :
-                             <Clock className="w-5 h-5 text-white" />}
-                          </div>
-                        </div>
+                  {leadHistory.map((item, index) => {
+                    const isManualAction = item.action.includes('manual') || item.action.includes('Ação manual')
+                    const isEditing = editingAction === item.id
+                    
+                    return (
+                      <div key={item.id} className="relative">
+                        {/* Linha conectora */}
+                        {index < leadHistory.length - 1 && (
+                          <div className="absolute left-5 top-12 w-0.5 h-full bg-gray-200"></div>
+                        )}
                         
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-sm font-bold text-gray-900">{item.action}</p>
-                            <p className="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-1 rounded-lg">
-                              {formatDateTime(item.created_at)}
+                        <div className="flex items-start space-x-4 p-5 bg-gradient-to-r from-gray-50 to-white rounded-xl border-2 border-gray-100 hover:border-blue-200 hover:shadow-md transition-all">
+                          <div className="flex-shrink-0 relative z-10">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-md ${
+                              item.action.includes('criado') || item.action.includes('Lead criado') ? 'bg-green-500' :
+                              item.action.includes('Status') || item.action.includes('status') || item.action.includes('alterado') ? 'bg-blue-500' :
+                              item.action.includes('atualizado') || item.action.includes('Lead atualizado') || item.action.includes('editado') ? 'bg-yellow-500' :
+                              item.action.includes('excluído') || item.action.includes('Lead excluído') ? 'bg-red-500' :
+                              isManualAction ? 'bg-purple-500' :
+                              'bg-gray-500'
+                            }`}>
+                              {item.action.includes('criado') || item.action.includes('Lead criado') ? <Plus className="w-5 h-5 text-white" /> :
+                               item.action.includes('Status') || item.action.includes('status') || item.action.includes('alterado') ? <TrendingUp className="w-5 h-5 text-white" /> :
+                               item.action.includes('atualizado') || item.action.includes('Lead atualizado') || item.action.includes('editado') ? <Edit className="w-5 h-5 text-white" /> :
+                               item.action.includes('excluído') || item.action.includes('Lead excluído') ? <Trash2 className="w-5 h-5 text-white" /> :
+                               isManualAction ? <MessageSquare className="w-5 h-5 text-white" /> :
+                               <Clock className="w-5 h-5 text-white" />}
+                            </div>
+                          </div>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-sm font-bold text-gray-900">{item.action}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-1 rounded-lg">
+                                  {formatDateTime(item.created_at)}
+                                </p>
+                                {/* Botões de editar/excluir APENAS para ações manuais */}
+                                {isManualAction && !isEditing && (
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={() => handleEditAction(item.id, item.details?.description || '')}
+                                      className="text-gray-400 hover:text-blue-600 p-1 hover:bg-blue-50 rounded transition-all"
+                                      title="Editar ação"
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteAction(item.id)}
+                                      className="text-gray-400 hover:text-red-600 p-1 hover:bg-red-50 rounded transition-all"
+                                      title="Excluir ação"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {/* Detalhes da ação */}
+                            {item.details && (
+                              <div className="text-sm text-gray-700 mb-3 bg-white p-3 rounded-lg border border-gray-200">
+                                {/* Ação manual - MODO EDIÇÃO */}
+                                {isManualAction && isEditing ? (
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      value={editingActionText}
+                                      onChange={(e) => setEditingActionText(e.target.value)}
+                                      className="flex-1 px-3 py-2 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                      autoFocus
+                                    />
+                                    <button
+                                      onClick={() => handleSaveEditAction(item.id)}
+                                      className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all"
+                                      title="Salvar"
+                                    >
+                                      <Save className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setEditingAction(null)
+                                        setEditingActionText('')
+                                      }}
+                                      className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all"
+                                      title="Cancelar"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                ) : isManualAction && item.details.description ? (
+                                  <div className="flex items-start">
+                                    <MessageSquare className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0 mt-0.5" />
+                                    <p className="font-medium text-gray-800">{item.details.description}</p>
+                                  </div>
+                                ) : null}
+                                
+                                {/* Outras ações (status, criado, etc) */}
+                                {(item.action.includes('Status') || item.action.includes('status') || item.action.includes('alterado')) && (
+                                  <p className="flex items-center">
+                                    <TrendingUp className="w-4 h-4 mr-2 text-blue-600" />
+                                    Status: <span className="font-bold mx-1">{statusConfig[item.details.previous_status as keyof typeof statusConfig]?.label || item.details.previous_status}</span> 
+                                    → <span className="font-bold mx-1">{statusConfig[item.details.new_status as keyof typeof statusConfig]?.label || item.details.new_status}</span>
+                                  </p>
+                                )}
+                                
+                                {(item.action.includes('criado') || item.action.includes('Lead criado')) && (
+                                  <div className="space-y-1">
+                                    <p className="font-bold">Lead criado: {item.details.student_name || 'N/A'}</p>
+                                    <p className="text-xs">Responsável: <span className="font-semibold">{item.details.responsible_name || 'N/A'}</span></p>
+                                    <p className="text-xs">Origem: <span className="font-semibold">{item.details.source || 'N/A'}</span> | Série: <span className="font-semibold">{item.details.grade_interest || 'N/A'}</span></p>
+                                  </div>
+                                )}
+                                
+                                {(item.action.includes('atualizado') || item.action.includes('Lead atualizado') || item.action.includes('editado')) && (
+                                  <div>
+                                    <p className="font-semibold mb-2">Informações atualizadas:</p>
+                                    {item.details.changes && Object.keys(item.details.changes).length > 0 && (
+                                      <ul className="text-xs space-y-1 ml-4">
+                                        {Object.entries(item.details.changes).map(([key, value]) => (
+                                          <li key={key} className="flex items-center">
+                                            <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                                            <strong>{key === 'student_name' ? 'Nome do Aluno' : 
+                                                     key === 'responsible_name' ? 'Responsável' :
+                                                     key === 'phone' ? 'Telefone' :
+                                                     key === 'email' ? 'Email' :
+                                                     key === 'grade_interest' ? 'Série' :
+                                                     key === 'source' ? 'Origem' :
+                                                     key === 'address' ? 'Endereço' :
+                                                     key === 'budget_range' ? 'Orçamento' : key}:</strong> 
+                                            <span className="ml-1">{value as string}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            
+                            <p className="text-xs text-gray-600 flex items-center font-medium">
+                              <User className="w-3 h-3 mr-1" />
+                              por {item.user_name || user?.full_name || 'Usuário desconhecido'}
                             </p>
                           </div>
-                          
-                          {/* Detalhes específicos por tipo de ação */}
-                          {item.details && (
-                            <div className="text-sm text-gray-700 mb-3 bg-white p-3 rounded-lg border border-gray-200">
-                              {/* Ação manual adicionada */}
-                              {(item.action.includes('manual') || item.action.includes('Ação manual')) && item.details.description && (
-                                <div className="flex items-start">
-                                  <MessageSquare className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0 mt-0.5" />
-                                  <p className="font-medium text-gray-800">{item.details.description}</p>
-                                </div>
-                              )}
-                              
-                              {/* Status alterado */}
-                              {(item.action.includes('Status') || item.action.includes('status') || item.action.includes('alterado')) && (
-                                <p className="flex items-center">
-                                  <TrendingUp className="w-4 h-4 mr-2 text-blue-600" />
-                                  Status: <span className="font-bold mx-1">{statusConfig[item.details.previous_status as keyof typeof statusConfig]?.label || item.details.previous_status}</span> 
-                                  → <span className="font-bold mx-1">{statusConfig[item.details.new_status as keyof typeof statusConfig]?.label || item.details.new_status}</span>
-                                </p>
-                              )}
-                              
-                              {/* Lead criado */}
-                              {(item.action.includes('criado') || item.action.includes('Lead criado')) && (
-                                <div className="space-y-1">
-                                  <p className="font-bold">Lead criado: {item.details.student_name || 'N/A'}</p>
-                                  <p className="text-xs">Responsável: <span className="font-semibold">{item.details.responsible_name || 'N/A'}</span></p>
-                                  <p className="text-xs">Origem: <span className="font-semibold">{item.details.source || 'N/A'}</span> | Série: <span className="font-semibold">{item.details.grade_interest || 'N/A'}</span></p>
-                                </div>
-                              )}
-                              
-                              {/* Lead atualizado */}
-                              {(item.action.includes('atualizado') || item.action.includes('Lead atualizado') || item.action.includes('editado')) && (
-                                <div>
-                                  <p className="font-semibold mb-2">Informações atualizadas:</p>
-                                  {item.details.changes && Object.keys(item.details.changes).length > 0 && (
-                                    <ul className="text-xs space-y-1 ml-4">
-                                      {Object.entries(item.details.changes).map(([key, value]) => (
-                                        <li key={key} className="flex items-center">
-                                          <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-                                          <strong>{key === 'student_name' ? 'Nome do Aluno' : 
-                                                   key === 'responsible_name' ? 'Responsável' :
-                                                   key === 'phone' ? 'Telefone' :
-                                                   key === 'email' ? 'Email' :
-                                                   key === 'grade_interest' ? 'Série' :
-                                                   key === 'source' ? 'Origem' :
-                                                   key === 'address' ? 'Endereço' :
-                                                   key === 'budget_range' ? 'Orçamento' : key}:</strong> 
-                                          <span className="ml-1">{value as string}</span>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          
-                          <p className="text-xs text-gray-600 flex items-center font-medium">
-                            <User className="w-3 h-3 mr-1" />
-                            por {item.user_name || user?.full_name || 'Usuário desconhecido'}
-                          </p>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-12">
@@ -1254,6 +1369,8 @@ export default function LeadKanban() {
                   setSelectedLead(null)
                   setLeadHistory([])
                   setNewAction('')
+                  setEditingAction(null)
+                  setEditingActionText('')
                 }}
                 className="px-8 py-3 bg-gray-600 text-white rounded-xl hover:bg-gray-700 transition-all font-semibold shadow-lg hover:shadow-xl"
               >
