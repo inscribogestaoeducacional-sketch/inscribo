@@ -15,29 +15,45 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       getItem: (key: string) => {
         if (typeof window !== 'undefined') {
           const item = localStorage.getItem(key)
-          console.log('📦 Storage getItem:', key, item ? 'found' : 'not found')
+          // Removido log excessivo
           return item
         }
         return null
       },
       setItem: (key: string, value: string) => {
         if (typeof window !== 'undefined') {
-          console.log('💾 Storage setItem:', key)
           localStorage.setItem(key, value)
         }
       },
       removeItem: (key: string) => {
         if (typeof window !== 'undefined') {
-          console.log('🗑️ Storage removeItem:', key)
           localStorage.removeItem(key)
         }
       }
     },
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    detectSessionInUrl: false, // ← MUDADO PARA FALSE (evita reload)
     flowType: 'pkce'
   }
 })
+
+// PREVENIR RELOAD AO TROCAR DE ABA
+if (typeof window !== 'undefined') {
+  // Remover qualquer listener de visibilidade que cause reload
+  const originalAddEventListener = window.addEventListener
+  window.addEventListener = function(type, listener, options) {
+    // Não permitir listeners que possam causar reload ao mudar de aba
+    if (type === 'visibilitychange' || type === 'focus' || type === 'blur') {
+      // Verificar se o listener não está tentando recarregar a página
+      const listenerStr = listener.toString()
+      if (listenerStr.includes('reload') || listenerStr.includes('location.reload')) {
+        console.warn('⚠️ Bloqueado event listener que causaria reload:', type)
+        return
+      }
+    }
+    return originalAddEventListener.call(this, type, listener, options)
+  }
+}
 
 // Types
 export interface Lead {
@@ -532,8 +548,6 @@ export class DatabaseService {
     institution_id: string
   }): Promise<void> {
     try {
-      console.log('📝 Registrando atividade:', activity)
-      
       const { error } = await supabase
         .from('activity_logs')
         .insert({
@@ -549,8 +563,6 @@ export class DatabaseService {
         console.error('❌ Erro ao registrar atividade:', error)
         throw error
       }
-
-      console.log('✅ Atividade registrada com sucesso')
     } catch (error) {
       console.error('❌ Falha ao registrar atividade:', error)
       // Não quebra o fluxo principal se falhar o log
@@ -621,7 +633,6 @@ export class DatabaseService {
   // Super Admin Methods
   static async isSuperAdmin(email: string): Promise<boolean> {
     try {
-      console.log('🔍 Verificando se é super admin:', email)
       const { data, error } = await supabase
         .from('super_admins')
         .select('id')
@@ -630,10 +641,8 @@ export class DatabaseService {
         .single()
 
       const isSuperAdmin = !error && !!data
-      console.log('🛡️ Resultado super admin:', isSuperAdmin)
       return isSuperAdmin
     } catch {
-      console.log('❌ Erro ao verificar super admin')
       return false
     }
   }
