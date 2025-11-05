@@ -190,232 +190,6 @@ export interface SaasMetrics {
 
 // Database Service
 export class DatabaseService {
-
-  export const DatabaseService = {
-  // ... seus métodos existentes ...
-  
-  getLeads: async (institution_id: string) => { ... },
-  updateLead: async (id: string, data: Partial<Lead>) => { ... },
-  
-  // NOVOS MÉTODOS (cole aqui)
-  logActivity: async (data: { ... }) => { ... },
-  getActivityLogs: async (institution_id: string, entity_id?: string) => { ... }
-}// ============================================
-// MÉTODOS PARA ADICIONAR AO SEU DatabaseService
-// Arquivo: src/lib/supabase.ts (ou onde está seu DatabaseService)
-// ============================================
-
-// Cole estes métodos dentro da sua classe/objeto DatabaseService
-
-/**
- * Registra uma ação no histórico de atividades
- * Usado para rastrear todas as ações realizadas em leads
- */
-async logActivity(data: {
-  user_id: string
-  action: string
-  entity_type: string
-  entity_id: string
-  details: any
-  institution_id: string
-}) {
-  try {
-    const { data: activity, error } = await supabase
-      .from('activity_logs')
-      .insert([{
-        user_id: data.user_id,
-        action: data.action,
-        entity_type: data.entity_type,
-        entity_id: data.entity_id,
-        details: data.details,
-        institution_id: data.institution_id,
-        created_at: new Date().toISOString()
-      }])
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Erro ao registrar atividade:', error)
-      throw error
-    }
-    
-    return activity
-  } catch (error) {
-    console.error('Erro ao salvar log de atividade:', error)
-    throw error
-  }
-}
-
-/**
- * Busca o histórico de atividades
- * @param institution_id - ID da instituição
- * @param entity_id - (Opcional) ID da entidade específica (ex: lead_id)
- * @returns Array de atividades com nome do usuário
- */
-async getActivityLogs(institution_id: string, entity_id?: string) {
-  try {
-    let query = supabase
-      .from('activity_logs')
-      .select(`
-        *,
-        users!activity_logs_user_id_fkey (
-          full_name,
-          email
-        )
-      `)
-      .eq('institution_id', institution_id)
-      .order('created_at', { ascending: false })
-
-    // Se entity_id for fornecido, filtra por ele
-    if (entity_id) {
-      query = query.eq('entity_id', entity_id)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-      console.error('Erro ao buscar histórico:', error)
-      throw error
-    }
-    
-    // Adicionar user_name ao objeto para facilitar exibição
-    return data.map(log => ({
-      ...log,
-      user_name: log.users?.full_name || 'Usuário desconhecido'
-    }))
-  } catch (error) {
-    console.error('Erro ao carregar logs de atividade:', error)
-    return []
-  }
-}
-
-// ============================================
-// EXEMPLO DE USO
-// ============================================
-
-// 1. Registrar uma nova ação
-/*
-await DatabaseService.logActivity({
-  user_id: currentUser.id,
-  action: 'Lead criado',
-  entity_type: 'lead',
-  entity_id: newLead.id,
-  details: {
-    student_name: newLead.student_name,
-    responsible_name: newLead.responsible_name,
-    source: newLead.source
-  },
-  institution_id: currentUser.institution_id
-})
-*/
-
-// 2. Buscar histórico de um lead específico
-/*
-const history = await DatabaseService.getActivityLogs(
-  institution_id,
-  lead_id  // ID do lead específico
-)
-*/
-
-// 3. Buscar todo o histórico da instituição
-/*
-const allHistory = await DatabaseService.getActivityLogs(
-  institution_id
-  // Sem passar entity_id
-)
-*/
-
-// ============================================
-// TIPOS DE AÇÕES REGISTRADAS AUTOMATICAMENTE
-// ============================================
-
-/*
-- "Lead criado" - Quando um novo lead é adicionado
-- "Lead editado" - Quando informações são atualizadas
-- "Status alterado" - Quando o status muda no kanban
-- "Ação manual adicionada" - Quando usuário adiciona ação manualmente
-- "Lead excluído" - Quando um lead é removido (se implementado)
-
-Todos com:
-- Data e hora exata
-- Usuário que realizou
-- Detalhes específicos da ação
-*/
-
-// ============================================
-// ESTRUTURA DO OBJETO 'details'
-// ============================================
-
-/*
-Para "Lead criado":
-{
-  student_name: string,
-  responsible_name: string,
-  source: string,
-  grade_interest: string,
-  phone: string,
-  email: string,
-  address: string,
-  budget_range: string,
-  notes: string
-}
-
-Para "Status alterado":
-{
-  previous_status: string,
-  new_status: string,
-  student_name: string,
-  responsible_name: string
-}
-
-Para "Lead editado":
-{
-  changes: { [campo]: novo_valor },
-  previous: { [campo]: valor_anterior },
-  student_name: string,
-  responsible_name: string
-}
-
-Para "Ação manual adicionada":
-{
-  description: string,
-  student_name: string,
-  responsible_name: string
-}
-*/
-
-// ============================================
-// DICAS DE IMPLEMENTAÇÃO
-// ============================================
-
-/*
-1. SEMPRE envolver em try/catch para não quebrar o fluxo principal
-2. Registrar o log DEPOIS da ação principal ser bem-sucedida
-3. Incluir informações relevantes em 'details' para contexto
-4. Usar ações consistentes (mesmos nomes) para facilitar filtros
-5. Considerar adicionar índices no banco se o histórico crescer muito
-*/
-
-// ============================================
-// VERIFICAÇÃO DE INSTALAÇÃO
-// ============================================
-
-/*
-Para verificar se está funcionando:
-
-1. Execute uma ação no sistema (ex: criar um lead)
-2. Verifique no console se há erros
-3. Vá no Supabase > Table Editor > activity_logs
-4. Deve haver um novo registro com:
-   - user_id preenchido
-   - action descrita
-   - details com JSON
-   - created_at com timestamp
-*/
-
-// ============================================
-// FIM DOS MÉTODOS
-// ============================================
   // Leads
   static async getLeads(institutionId: string): Promise<Lead[]> {
     const { data, error } = await supabase
@@ -489,7 +263,6 @@ Para verificar se está funcionando:
     if (error) throw error
   }
 
- 
   // Enrollments
   static async getEnrollments(institutionId: string): Promise<Enrollment[]> {
     const { data, error } = await supabase
@@ -781,6 +554,43 @@ Para verificar se está funcionando:
     } catch (error) {
       console.error('❌ Falha ao registrar atividade:', error)
       // Não quebra o fluxo principal se falhar o log
+    }
+  }
+
+  // NOVOS MÉTODOS para editar e excluir ações
+  static async updateActivityLog(activityId: string, data: { details: any }): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('activity_logs')
+        .update({
+          details: data.details
+        })
+        .eq('id', activityId)
+
+      if (error) {
+        console.error('Erro ao atualizar atividade:', error)
+        throw error
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar log de atividade:', error)
+      throw error
+    }
+  }
+
+  static async deleteActivityLog(activityId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('activity_logs')
+        .delete()
+        .eq('id', activityId)
+
+      if (error) {
+        console.error('Erro ao excluir atividade:', error)
+        throw error
+      }
+    } catch (error) {
+      console.error('Erro ao excluir log de atividade:', error)
+      throw error
     }
   }
 
