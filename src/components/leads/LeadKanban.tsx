@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Filter, User, Phone, Mail, Calendar, Edit, Trash2, X, Search, Clock, MapPin, DollarSign, Tag, Users, TrendingUp, Eye, MessageSquare } from 'lucide-react'
+import { Plus, Filter, User, Phone, Mail, Calendar, Edit, Trash2, X, Search, Clock, MapPin, DollarSign, Tag, Users, TrendingUp, Eye, MessageSquare, Send, CheckCircle } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, Lead, User as AppUser } from '../../lib/supabase'
 
@@ -378,10 +378,14 @@ export default function LeadKanban() {
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [filterSource, setFilterSource] = useState('')
+  const [filterStartDate, setFilterStartDate] = useState('')
+  const [filterEndDate, setFilterEndDate] = useState('')
   const [showHistory, setShowHistory] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [leadHistory, setLeadHistory] = useState<any[]>([])
+  const [newAction, setNewAction] = useState('')
+  const [savingAction, setSavingAction] = useState(false)
 
   useEffect(() => {
     if (user?.institution_id) {
@@ -525,6 +529,7 @@ export default function LeadKanban() {
       setError('Erro ao excluir lead: ' + (error as Error).message)
     }
   }
+
   const handleStatusChange = async (leadId: string, newStatus: Lead['status']) => {
     try {
       console.log('🔄 Alterando status do lead:', leadId, 'para:', newStatus)
@@ -579,13 +584,30 @@ export default function LeadKanban() {
         lead.responsible_name.toLowerCase().includes(searchTerm.toLowerCase())
       const matchesSource = filterSource === '' || lead.source === filterSource
       
-      return matchesStatus && matchesSearch && matchesSource
+      // Filtro por data de inscrição
+      let matchesDate = true
+      if (filterStartDate || filterEndDate) {
+        const leadDate = new Date(lead.created_at).setHours(0, 0, 0, 0)
+        
+        if (filterStartDate) {
+          const startDate = new Date(filterStartDate).setHours(0, 0, 0, 0)
+          matchesDate = matchesDate && leadDate >= startDate
+        }
+        
+        if (filterEndDate) {
+          const endDate = new Date(filterEndDate).setHours(23, 59, 59, 999)
+          matchesDate = matchesDate && leadDate <= endDate
+        }
+      }
+      
+      return matchesStatus && matchesSearch && matchesSource && matchesDate
     })
   }
 
   const handleViewHistory = (lead: Lead) => {
     setSelectedLead(lead)
     setShowHistory(true)
+    setNewAction('')
     loadLeadHistory(lead.id)
   }
 
@@ -604,25 +626,42 @@ export default function LeadKanban() {
     }
   }
 
-  const getLeadHistory = (lead: Lead) => {
-    // Mock history data - em produção viria do banco
-    return [
-      {
-        id: '1',
-        action: 'Lead criado',
-        user: 'Victor Almeida',
-        date: lead.created_at,
-        details: `Lead ${lead.student_name} foi criado via ${lead.source}`
-      },
-      {
-        id: '2',
-        action: 'Status alterado',
-        user: 'Victor Almeida',
-        date: lead.updated_at,
-        details: `Status alterado para ${statusConfig[lead.status]?.label}`
-      }
-    ]
+  const handleAddAction = async () => {
+    if (!newAction.trim() || !selectedLead) return
+
+    try {
+      setSavingAction(true)
+      console.log('💾 Salvando nova ação no histórico...')
+      
+      // Salvar a ação no banco de dados
+      await DatabaseService.logActivity({
+        user_id: user!.id,
+        action: 'Ação manual adicionada',
+        entity_type: 'lead',
+        entity_id: selectedLead.id,
+        details: {
+          description: newAction.trim(),
+          student_name: selectedLead.student_name,
+          responsible_name: selectedLead.responsible_name
+        },
+        institution_id: user!.institution_id
+      })
+      
+      console.log('✅ Ação salva com sucesso!')
+      
+      // Recarregar o histórico
+      await loadLeadHistory(selectedLead.id)
+      
+      // Limpar o campo
+      setNewAction('')
+    } catch (error) {
+      console.error('❌ Erro ao salvar ação:', error)
+      setError('Erro ao adicionar ação ao histórico')
+    } finally {
+      setSavingAction(false)
+    }
   }
+
   const getUserName = (userId: string) => {
     const user = users.find(u => u.id === userId)
     return user ? user.full_name : 'Não atribuído'
@@ -630,6 +669,10 @@ export default function LeadKanban() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR')
+  }
+
+  const formatDateTime = (dateString: string) => {
+    return new Date(dateString).toLocaleString('pt-BR')
   }
 
   const getLeadStats = () => {
@@ -640,6 +683,13 @@ export default function LeadKanban() {
     const conversionRate = total > 0 ? (converted / total) * 100 : 0
     
     return { total, newThisMonth, converted, conversionRate }
+  }
+
+  const clearFilters = () => {
+    setSearchTerm('')
+    setFilterSource('')
+    setFilterStartDate('')
+    setFilterEndDate('')
   }
 
   const stats = getLeadStats()
@@ -703,7 +753,7 @@ export default function LeadKanban() {
                 <p className="text-sm font-medium text-gray-600">Convertidos</p>
                 <p className="text-3xl font-bold text-purple-600">{stats.converted}</p>
               </div>
-              <Eye className="h-8 w-8 text-purple-600" />
+              <CheckCircle className="h-8 w-8 text-purple-600" />
             </div>
           </div>
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
@@ -718,27 +768,65 @@ export default function LeadKanban() {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-8">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-            <input
-              type="text"
-              placeholder="Buscar por nome do aluno ou responsável..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-3 w-full border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-            />
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+              <Filter className="h-5 w-5 mr-2" />
+              Filtros
+            </h3>
+            {(searchTerm || filterSource || filterStartDate || filterEndDate) && (
+              <button
+                onClick={clearFilters}
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
+                Limpar Filtros
+              </button>
+            )}
           </div>
-          <select
-            value={filterSource}
-            onChange={(e) => setFilterSource(e.target.value)}
-            className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-          >
-            <option value="">Todas as origens</option>
-            {sourceOptions.map(source => (
-              <option key={source} value={source}>{source}</option>
-            ))}
-          </select>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+              <input
+                type="text"
+                placeholder="Buscar por nome..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-3 w-full border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              />
+            </div>
+            
+            <select
+              value={filterSource}
+              onChange={(e) => setFilterSource(e.target.value)}
+              className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+            >
+              <option value="">Todas as origens</option>
+              {sourceOptions.map(source => (
+                <option key={source} value={source}>{source}</option>
+              ))}
+            </select>
+            
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Data Início</label>
+              <input
+                type="date"
+                value={filterStartDate}
+                onChange={(e) => setFilterStartDate(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Data Fim</label>
+              <input
+                type="date"
+                value={filterEndDate}
+                onChange={(e) => setFilterEndDate(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -755,13 +843,13 @@ export default function LeadKanban() {
           const statusLeads = getLeadsByStatus(status as Lead['status'])
           
           return (
-            <div key={status} className={`${config.bgColor} rounded-2xl p-6 min-h-96 ${config.borderColor} border-2`}>
+            <div key={status} className={`${config.bgColor} rounded-2xl p-6 min-h-96 ${config.borderColor} border-2 transition-all hover:shadow-lg`}>
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center">
-                  <div className={`w-4 h-4 rounded-full ${config.color} mr-3`}></div>
-                  <h3 className={`font-bold ${config.textColor}`}>{config.label}</h3>
+                  <div className={`w-4 h-4 rounded-full ${config.color} mr-3 shadow-md`}></div>
+                  <h3 className={`font-bold text-base ${config.textColor}`}>{config.label}</h3>
                 </div>
-                <span className={`${config.color} text-white text-sm px-3 py-1 rounded-full font-medium`}>
+                <span className={`${config.color} text-white text-sm px-3 py-1 rounded-full font-bold shadow-md`}>
                   {statusLeads.length}
                 </span>
               </div>
@@ -770,19 +858,34 @@ export default function LeadKanban() {
                 {statusLeads.map((lead) => (
                   <div
                     key={lead.id}
-                    className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer group"
+                    className="bg-white p-5 rounded-xl shadow-md border-2 border-gray-100 hover:shadow-xl hover:border-gray-200 transition-all cursor-pointer group transform hover:-translate-y-1"
                   >
-                    <div className="flex justify-between items-start mb-3">
-                      <h4 className="font-semibold text-gray-900 text-sm group-hover:text-blue-600 transition-colors">
-                        {lead.student_name}
-                      </h4>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    {/* Header do Card */}
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex-1">
+                        <h4 className="font-bold text-gray-900 text-base mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">
+                          {lead.student_name}
+                        </h4>
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                            lead.source === 'Facebook' ? 'bg-blue-100 text-blue-700' :
+                            lead.source === 'Instagram' ? 'bg-pink-100 text-pink-700' :
+                            lead.source === 'Google' ? 'bg-green-100 text-green-700' :
+                            lead.source === 'WhatsApp' ? 'bg-emerald-100 text-emerald-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            <Tag className="w-3 h-3 mr-1" />
+                            {lead.source}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all ml-2">
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
                             handleViewHistory(lead)
                           }}
-                          className="text-gray-400 hover:text-green-600 p-1"
+                          className="text-gray-400 hover:text-green-600 p-2 hover:bg-green-50 rounded-lg transition-all"
                           title="Ver histórico"
                         >
                           <Clock className="w-4 h-4" />
@@ -792,7 +895,7 @@ export default function LeadKanban() {
                             e.stopPropagation()
                             handleEdit(lead)
                           }}
-                          className="text-gray-400 hover:text-blue-600 p-1"
+                          className="text-gray-400 hover:text-blue-600 p-2 hover:bg-blue-50 rounded-lg transition-all"
                           title="Editar lead"
                         >
                           <Edit className="w-4 h-4" />
@@ -802,7 +905,7 @@ export default function LeadKanban() {
                             e.stopPropagation()
                             handleDelete(lead.id)
                           }}
-                          className="text-gray-400 hover:text-red-600 p-1"
+                          className="text-gray-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition-all"
                           title="Excluir lead"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -810,73 +913,75 @@ export default function LeadKanban() {
                       </div>
                     </div>
 
-                    <div className="space-y-2 mb-4">
-                      <p className="text-xs text-gray-600 flex items-center">
-                        <User className="w-3 h-3 mr-1" />
-                        {lead.grade_interest}
-                      </p>
-                      <p className="text-xs text-gray-600 flex items-center">
-                        <User className="w-3 h-3 mr-1" />
-                        {lead.responsible_name}
-                      </p>
-                      {lead.phone && (
-                        <p className="text-xs text-gray-600 flex items-center">
-                          <Phone className="w-3 h-3 mr-1" />
-                          {lead.phone}
-                        </p>
-                      )}
-                      {lead.email && (
-                        <p className="text-xs text-gray-600 flex items-center">
-                          <Mail className="w-3 h-3 mr-1" />
-                          <span className="truncate">{lead.email}</span>
-                        </p>
-                      )}
-                      {lead.address && (
-                        <p className="text-xs text-gray-600 flex items-center">
-                          <MapPin className="w-3 h-3 mr-1" />
-                          <span className="truncate">{lead.address}</span>
-                        </p>
-                      )}
-                      {lead.budget_range && (
-                        <p className="text-xs text-gray-600 flex items-center">
-                          <DollarSign className="w-3 h-3 mr-1" />
-                          {lead.budget_range}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center text-gray-500">
-                        <Calendar className="w-3 h-3 mr-1" />
-                        {formatDate(lead.created_at)}
+                    {/* Informações principais */}
+                    <div className="space-y-2.5 mb-4">
+                      <div className="flex items-center text-sm text-gray-700 bg-gray-50 p-2 rounded-lg">
+                        <User className="w-4 h-4 mr-2 text-gray-500 flex-shrink-0" />
+                        <span className="font-medium text-xs text-gray-500 mr-2">Série:</span>
+                        <span className="font-semibold">{lead.grade_interest}</span>
                       </div>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        lead.source === 'Facebook' ? 'bg-blue-100 text-blue-700' :
-                        lead.source === 'Instagram' ? 'bg-pink-100 text-pink-700' :
-                        lead.source === 'Google' ? 'bg-green-100 text-green-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                        {lead.source}
-                      </span>
+                      
+                      <div className="flex items-center text-sm text-gray-700 bg-gray-50 p-2 rounded-lg">
+                        <Users className="w-4 h-4 mr-2 text-gray-500 flex-shrink-0" />
+                        <span className="font-medium text-xs text-gray-500 mr-2">Resp.:</span>
+                        <span className="font-semibold truncate">{lead.responsible_name}</span>
+                      </div>
+                      
+                      {lead.phone && (
+                        <div className="flex items-center text-sm text-gray-700 bg-blue-50 p-2 rounded-lg">
+                          <Phone className="w-4 h-4 mr-2 text-blue-600 flex-shrink-0" />
+                          <span className="font-medium">{lead.phone}</span>
+                        </div>
+                      )}
+                      
+                      {lead.email && (
+                        <div className="flex items-center text-sm text-gray-700 bg-gray-50 p-2 rounded-lg">
+                          <Mail className="w-4 h-4 mr-2 text-gray-500 flex-shrink-0" />
+                          <span className="truncate text-xs">{lead.email}</span>
+                        </div>
+                      )}
+                      
+                      {lead.address && (
+                        <div className="flex items-start text-sm text-gray-700 bg-gray-50 p-2 rounded-lg">
+                          <MapPin className="w-4 h-4 mr-2 text-gray-500 flex-shrink-0 mt-0.5" />
+                          <span className="text-xs line-clamp-2">{lead.address}</span>
+                        </div>
+                      )}
+                      
+                      {lead.budget_range && (
+                        <div className="flex items-center text-sm text-gray-700 bg-green-50 p-2 rounded-lg">
+                          <DollarSign className="w-4 h-4 mr-2 text-green-600 flex-shrink-0" />
+                          <span className="font-medium text-xs">{lead.budget_range}</span>
+                        </div>
+                      )}
                     </div>
 
+                    {/* Notas */}
                     {lead.notes && (
-                      <div className="mt-3 pt-3 border-t border-gray-100">
-                        <p className="text-xs text-gray-600 flex items-start">
-                          <MessageSquare className="w-3 h-3 mr-1 mt-0.5 flex-shrink-0" />
-                          <span className="line-clamp-2">{lead.notes}</span>
+                      <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-xs text-gray-700 flex items-start">
+                          <MessageSquare className="w-3.5 h-3.5 mr-1.5 mt-0.5 flex-shrink-0 text-amber-600" />
+                          <span className="line-clamp-3 font-medium">{lead.notes}</span>
                         </p>
                       </div>
                     )}
 
-                    <div className="mt-4 pt-3 border-t border-gray-100">
+                    {/* Footer do Card */}
+                    <div className="pt-4 border-t-2 border-gray-100 space-y-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center text-gray-500 bg-gray-50 px-2 py-1 rounded-lg">
+                          <Calendar className="w-3.5 h-3.5 mr-1.5" />
+                          <span className="font-medium">{formatDate(lead.created_at)}</span>
+                        </div>
+                      </div>
+                      
                       <select
                         value={lead.status}
                         onChange={(e) => {
                           e.stopPropagation()
                           handleStatusChange(lead.id, e.target.value as Lead['status'])
                         }}
-                        className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full text-sm font-medium border-2 border-gray-200 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white hover:bg-gray-50 transition-all cursor-pointer"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {Object.entries(statusConfig).map(([value, config]) => (
@@ -890,11 +995,12 @@ export default function LeadKanban() {
                 ))}
 
                 {statusLeads.length === 0 && (
-                  <div className="text-center py-8">
-                    <div className={`w-12 h-12 ${config.color} rounded-full flex items-center justify-center mx-auto mb-3 opacity-20`}>
-                      <Users className="w-6 h-6 text-white" />
+                  <div className="text-center py-12">
+                    <div className={`w-16 h-16 ${config.color} rounded-full flex items-center justify-center mx-auto mb-4 opacity-20`}>
+                      <Users className="w-8 h-8 text-white" />
                     </div>
-                    <p className="text-sm text-gray-500">Nenhum lead nesta etapa</p>
+                    <p className="text-sm font-medium text-gray-500">Nenhum lead</p>
+                    <p className="text-xs text-gray-400 mt-1">nesta etapa</p>
                   </div>
                 )}
               </div>
@@ -914,18 +1020,21 @@ export default function LeadKanban() {
         editingLead={editingLead}
       />
 
-      {/* History Modal */}
+      {/* History Modal - NOVO COM SISTEMA DE ADICIONAR AÇÕES */}
       {showHistory && selectedLead && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-8 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+          <div className="bg-white rounded-2xl p-8 w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">
+              <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                <Clock className="h-6 w-6 mr-2 text-blue-600" />
                 Histórico - {selectedLead.student_name}
               </h2>
               <button 
                 onClick={() => {
                   setShowHistory(false)
                   setLeadHistory([])
+                  setSelectedLead(null)
+                  setNewAction('')
                 }} 
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
@@ -934,133 +1043,203 @@ export default function LeadKanban() {
             </div>
 
             {/* Lead Info */}
-            <div className="bg-gray-50 rounded-xl p-4 mb-6">
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-5 mb-6 border border-blue-200">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="font-medium text-gray-700">Responsável:</span>
+                  <span className="font-semibold text-gray-700 block mb-1">Responsável:</span>
                   <p className="text-gray-900">{selectedLead.responsible_name}</p>
                 </div>
                 <div>
-                  <span className="font-medium text-gray-700">Série:</span>
+                  <span className="font-semibold text-gray-700 block mb-1">Série:</span>
                   <p className="text-gray-900">{selectedLead.grade_interest}</p>
                 </div>
                 <div>
-                  <span className="font-medium text-gray-700">Telefone:</span>
+                  <span className="font-semibold text-gray-700 block mb-1">Telefone:</span>
                   <p className="text-gray-900">{selectedLead.phone || 'Não informado'}</p>
                 </div>
                 <div>
-                  <span className="font-medium text-gray-700">Origem:</span>
+                  <span className="font-semibold text-gray-700 block mb-1">Origem:</span>
                   <p className="text-gray-900">{selectedLead.source}</p>
                 </div>
                 <div>
-                  <span className="font-medium text-gray-700">Status Atual:</span>
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                  <span className="font-semibold text-gray-700 block mb-1">Status Atual:</span>
+                  <span className={`inline-flex px-3 py-1 text-xs font-bold rounded-full ${
                     statusConfig[selectedLead.status]?.bgColor
                   } ${statusConfig[selectedLead.status]?.textColor}`}>
                     {statusConfig[selectedLead.status]?.label}
                   </span>
                 </div>
                 <div>
-                  <span className="font-medium text-gray-700">Criado em:</span>
+                  <span className="font-semibold text-gray-700 block mb-1">Criado em:</span>
                   <p className="text-gray-900">{new Date(selectedLead.created_at).toLocaleString('pt-BR')}</p>
                 </div>
               </div>
             </div>
 
-            {/* Timeline */}
+            {/* NOVA SEÇÃO: Adicionar Ação */}
+            <div className="mb-6 p-5 bg-blue-50 border-2 border-blue-200 rounded-xl">
+              <h3 className="text-md font-bold text-gray-900 mb-3 flex items-center">
+                <MessageSquare className="h-5 w-5 mr-2 text-blue-600" />
+                Adicionar Nova Ação
+              </h3>
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={newAction}
+                  onChange={(e) => setNewAction(e.target.value)}
+                  placeholder="Descreva a ação realizada (ex: Ligação feita, E-mail enviado, Reunião agendada...)"
+                  className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !savingAction) {
+                      handleAddAction()
+                    }
+                  }}
+                />
+                <button
+                  onClick={handleAddAction}
+                  disabled={!newAction.trim() || savingAction}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center"
+                >
+                  {savingAction ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-5 h-5 mr-2" />
+                      Adicionar
+                    </>
+                  )}
+                </button>
+              </div>
+              <p className="text-xs text-gray-600 mt-2 flex items-center">
+                <Clock className="w-3 h-3 mr-1" />
+                Data e hora serão registradas automaticamente
+              </p>
+            </div>
+
+            {/* Timeline de Ações */}
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Timeline de Ações</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                <TrendingUp className="h-5 w-5 mr-2 text-purple-600" />
+                Timeline de Ações
+              </h3>
               
               {loadingHistory ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                  <span className="ml-3 text-gray-600">Carregando histórico...</span>
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                  <span className="ml-3 text-gray-600 font-medium">Carregando histórico...</span>
                 </div>
               ) : leadHistory.length > 0 ? (
-                leadHistory.map((item) => (
-                  <div key={item.id} className="flex items-start space-x-4 p-4 bg-gray-50 rounded-lg">
-                    <div className="flex-shrink-0">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                        item.action.includes('criado') || item.action.includes('Lead criado') ? 'bg-green-100' :
-                        item.action.includes('Status') || item.action.includes('status') || item.action.includes('alterado') ? 'bg-blue-100' :
-                        item.action.includes('atualizado') || item.action.includes('Lead atualizado') ? 'bg-yellow-100' :
-                        item.action.includes('excluído') || item.action.includes('Lead excluído') ? 'bg-red-100' :
-                        'bg-gray-100'
-                      }`}>
-                        {item.action.includes('criado') || item.action.includes('Lead criado') ? <Plus className="w-5 h-5 text-green-600" /> :
-                         item.action.includes('Status') || item.action.includes('status') || item.action.includes('alterado') ? <TrendingUp className="w-5 h-5 text-blue-600" /> :
-                         item.action.includes('atualizado') || item.action.includes('Lead atualizado') ? <Edit className="w-5 h-5 text-yellow-600" /> :
-                         item.action.includes('excluído') || item.action.includes('Lead excluído') ? <Trash2 className="w-5 h-5 text-red-600" /> :
-                         <Clock className="w-5 h-5 text-gray-600" />}
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-sm font-semibold text-gray-900">{item.action}</p>
-                        <p className="text-xs text-gray-500">
-                          {new Date(item.created_at).toLocaleString('pt-BR')}
-                        </p>
-                      </div>
+                <div className="space-y-3">
+                  {leadHistory.map((item, index) => (
+                    <div key={item.id} className="relative">
+                      {/* Linha conectora */}
+                      {index < leadHistory.length - 1 && (
+                        <div className="absolute left-5 top-12 w-0.5 h-full bg-gray-200"></div>
+                      )}
                       
-                      {/* Detalhes específicos por tipo de ação */}
-                      {item.details && (
-                        <div className="text-sm text-gray-600 mb-2">
-                          {(item.action.includes('Status') || item.action.includes('status') || item.action.includes('alterado')) && (
-                            <p>
-                              Status alterado de <strong>{statusConfig[item.details.previous_status as keyof typeof statusConfig]?.label || item.details.previous_status}</strong> 
-                              {' '}para <strong>{statusConfig[item.details.new_status as keyof typeof statusConfig]?.label || item.details.new_status}</strong>
+                      <div className="flex items-start space-x-4 p-5 bg-gradient-to-r from-gray-50 to-white rounded-xl border-2 border-gray-100 hover:border-blue-200 hover:shadow-md transition-all">
+                        <div className="flex-shrink-0 relative z-10">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-md ${
+                            item.action.includes('criado') || item.action.includes('Lead criado') ? 'bg-green-500' :
+                            item.action.includes('Status') || item.action.includes('status') || item.action.includes('alterado') ? 'bg-blue-500' :
+                            item.action.includes('atualizado') || item.action.includes('Lead atualizado') || item.action.includes('editado') ? 'bg-yellow-500' :
+                            item.action.includes('excluído') || item.action.includes('Lead excluído') ? 'bg-red-500' :
+                            item.action.includes('manual') || item.action.includes('Ação manual') ? 'bg-purple-500' :
+                            'bg-gray-500'
+                          }`}>
+                            {item.action.includes('criado') || item.action.includes('Lead criado') ? <Plus className="w-5 h-5 text-white" /> :
+                             item.action.includes('Status') || item.action.includes('status') || item.action.includes('alterado') ? <TrendingUp className="w-5 h-5 text-white" /> :
+                             item.action.includes('atualizado') || item.action.includes('Lead atualizado') || item.action.includes('editado') ? <Edit className="w-5 h-5 text-white" /> :
+                             item.action.includes('excluído') || item.action.includes('Lead excluído') ? <Trash2 className="w-5 h-5 text-white" /> :
+                             item.action.includes('manual') || item.action.includes('Ação manual') ? <MessageSquare className="w-5 h-5 text-white" /> :
+                             <Clock className="w-5 h-5 text-white" />}
+                          </div>
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-sm font-bold text-gray-900">{item.action}</p>
+                            <p className="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-1 rounded-lg">
+                              {formatDateTime(item.created_at)}
                             </p>
-                          )}
-                          {(item.action.includes('criado') || item.action.includes('Lead criado')) && (
-                            <div>
-                              <p>Lead criado para <strong>{item.details.student_name || 'N/A'}</strong></p>
-                              <p className="text-xs">Responsável: <strong>{item.details.responsible_name || 'N/A'}</strong></p>
-                              <p className="text-xs">Origem: <strong>{item.details.source || 'N/A'}</strong> | Série: <strong>{item.details.grade_interest || 'N/A'}</strong></p>
-                            </div>
-                          )}
-                          {(item.action.includes('atualizado') || item.action.includes('Lead atualizado')) && (
-                            <div>
-                              <p>Informações atualizadas:</p>
-                              {item.details.changes && Object.keys(item.details.changes).length > 0 && (
-                                <ul className="text-xs mt-1 space-y-1">
-                                  {Object.entries(item.details.changes).map(([key, value]) => (
-                                    <li key={key}>
-                                      <strong>{key === 'student_name' ? 'Nome do Aluno' : 
-                                               key === 'responsible_name' ? 'Responsável' :
-                                               key === 'phone' ? 'Telefone' :
-                                               key === 'email' ? 'Email' :
-                                               key === 'grade_interest' ? 'Série' :
-                                               key === 'source' ? 'Origem' : key}:</strong> {value as string}
-                                    </li>
-                                  ))}
-                                </ul>
+                          </div>
+                          
+                          {/* Detalhes específicos por tipo de ação */}
+                          {item.details && (
+                            <div className="text-sm text-gray-700 mb-3 bg-white p-3 rounded-lg border border-gray-200">
+                              {/* Ação manual adicionada */}
+                              {(item.action.includes('manual') || item.action.includes('Ação manual')) && item.details.description && (
+                                <div className="flex items-start">
+                                  <MessageSquare className="w-4 h-4 mr-2 text-purple-600 flex-shrink-0 mt-0.5" />
+                                  <p className="font-medium text-gray-800">{item.details.description}</p>
+                                </div>
+                              )}
+                              
+                              {/* Status alterado */}
+                              {(item.action.includes('Status') || item.action.includes('status') || item.action.includes('alterado')) && (
+                                <p className="flex items-center">
+                                  <TrendingUp className="w-4 h-4 mr-2 text-blue-600" />
+                                  Status: <span className="font-bold mx-1">{statusConfig[item.details.previous_status as keyof typeof statusConfig]?.label || item.details.previous_status}</span> 
+                                  → <span className="font-bold mx-1">{statusConfig[item.details.new_status as keyof typeof statusConfig]?.label || item.details.new_status}</span>
+                                </p>
+                              )}
+                              
+                              {/* Lead criado */}
+                              {(item.action.includes('criado') || item.action.includes('Lead criado')) && (
+                                <div className="space-y-1">
+                                  <p className="font-bold">Lead criado: {item.details.student_name || 'N/A'}</p>
+                                  <p className="text-xs">Responsável: <span className="font-semibold">{item.details.responsible_name || 'N/A'}</span></p>
+                                  <p className="text-xs">Origem: <span className="font-semibold">{item.details.source || 'N/A'}</span> | Série: <span className="font-semibold">{item.details.grade_interest || 'N/A'}</span></p>
+                                </div>
+                              )}
+                              
+                              {/* Lead atualizado */}
+                              {(item.action.includes('atualizado') || item.action.includes('Lead atualizado') || item.action.includes('editado')) && (
+                                <div>
+                                  <p className="font-semibold mb-2">Informações atualizadas:</p>
+                                  {item.details.changes && Object.keys(item.details.changes).length > 0 && (
+                                    <ul className="text-xs space-y-1 ml-4">
+                                      {Object.entries(item.details.changes).map(([key, value]) => (
+                                        <li key={key} className="flex items-center">
+                                          <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                                          <strong>{key === 'student_name' ? 'Nome do Aluno' : 
+                                                   key === 'responsible_name' ? 'Responsável' :
+                                                   key === 'phone' ? 'Telefone' :
+                                                   key === 'email' ? 'Email' :
+                                                   key === 'grade_interest' ? 'Série' :
+                                                   key === 'source' ? 'Origem' :
+                                                   key === 'address' ? 'Endereço' :
+                                                   key === 'budget_range' ? 'Orçamento' : key}:</strong> 
+                                          <span className="ml-1">{value as string}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
                               )}
                             </div>
                           )}
-                          {(item.action.includes('excluído') || item.action.includes('Lead excluído')) && (
-                            <div>
-                              <p>Lead <strong>{item.details.student_name || 'N/A'}</strong> foi excluído permanentemente</p>
-                              <p className="text-xs">Responsável: <strong>{item.details.responsible_name || 'N/A'}</strong></p>
-                              <p className="text-xs">Status: <strong>{statusConfig[item.details.status as keyof typeof statusConfig]?.label || item.details.status}</strong></p>
-                            </div>
-                          )}
+                          
+                          <p className="text-xs text-gray-600 flex items-center font-medium">
+                            <User className="w-3 h-3 mr-1" />
+                            por {item.user_name || user?.full_name || 'Usuário desconhecido'}
+                          </p>
                         </div>
-                      )}
-                      
-                      <p className="text-xs text-gray-500 flex items-center">
-                        <User className="w-3 h-3 mr-1" />
-                        por {item.user_name || 'Usuário desconhecido'}
-                      </p>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               ) : (
-                <div className="text-center py-8">
-                  <Clock className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500 mb-2">Nenhum histórico encontrado para este lead</p>
+                <div className="text-center py-12">
+                  <Clock className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500 font-medium mb-2">Nenhum histórico encontrado</p>
+                  <p className="text-sm text-gray-400 mb-4">Adicione a primeira ação usando o campo acima</p>
                   <button
                     onClick={() => loadLeadHistory(selectedLead!.id)}
-                    className="text-blue-600 hover:text-blue-700 text-sm"
+                    className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                   >
                     Tentar carregar novamente
                   </button>
@@ -1068,14 +1247,15 @@ export default function LeadKanban() {
               )}
             </div>
 
-            <div className="flex justify-end pt-6 border-t border-gray-200 mt-6">
+            <div className="flex justify-end pt-6 border-t-2 border-gray-200 mt-6">
               <button
                 onClick={() => {
                   setShowHistory(false)
                   setSelectedLead(null)
                   setLeadHistory([])
+                  setNewAction('')
                 }}
-                className="px-6 py-3 bg-gray-600 text-white rounded-xl hover:bg-gray-700 transition-all font-medium"
+                className="px-8 py-3 bg-gray-600 text-white rounded-xl hover:bg-gray-700 transition-all font-semibold shadow-lg hover:shadow-xl"
               >
                 Fechar
               </button>
