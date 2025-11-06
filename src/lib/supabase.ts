@@ -15,7 +15,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       getItem: (key: string) => {
         if (typeof window !== 'undefined') {
           const item = localStorage.getItem(key)
-          // Removido log excessivo
           return item
         }
         return null
@@ -32,27 +31,56 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       }
     },
     autoRefreshToken: true,
-    detectSessionInUrl: false, // ← MUDADO PARA FALSE (evita reload)
+    detectSessionInUrl: false,
     flowType: 'pkce'
   }
 })
 
-// PREVENIR RELOAD AO TROCAR DE ABA
+// ========================================
+// PREVINE RELOAD AO TROCAR DE ABA
+// ========================================
 if (typeof window !== 'undefined') {
-  // Remover qualquer listener de visibilidade que cause reload
-  const originalAddEventListener = window.addEventListener
-  window.addEventListener = function(type, listener, options) {
-    // Não permitir listeners que possam causar reload ao mudar de aba
-    if (type === 'visibilitychange' || type === 'focus' || type === 'blur') {
-      // Verificar se o listener não está tentando recarregar a página
-      const listenerStr = listener.toString()
-      if (listenerStr.includes('reload') || listenerStr.includes('location.reload')) {
-        console.warn('⚠️ Bloqueado event listener que causaria reload:', type)
-        return
-      }
+  let isTabVisible = true
+  let sessionCheckInProgress = false
+  
+  // Monitora quando a aba fica visível/invisível
+  document.addEventListener('visibilitychange', () => {
+    const wasHidden = !isTabVisible
+    isTabVisible = document.visibilityState === 'visible'
+    
+    if (isTabVisible && wasHidden && !sessionCheckInProgress) {
+      // Aba voltou a ficar visível - verifica sessão silenciosamente
+      sessionCheckInProgress = true
+      
+      supabase.auth.getSession()
+        .then(({ data }) => {
+          if (data.session) {
+            console.log('✅ Sessão ativa - mantendo estado')
+          } else {
+            console.log('⚠️ Sem sessão - redirecionando para login')
+            window.location.href = '/login'
+          }
+        })
+        .catch((error) => {
+          console.error('Erro ao verificar sessão:', error)
+        })
+        .finally(() => {
+          sessionCheckInProgress = false
+        })
     }
-    return originalAddEventListener.call(this, type, listener, options)
-  }
+  })
+  
+  // Listener otimizado do Supabase Auth
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'TOKEN_REFRESHED') {
+      console.log('🔄 Token atualizado silenciosamente')
+    } else if (event === 'SIGNED_OUT') {
+      console.log('🚪 Usuário deslogado')
+      window.location.href = '/login'
+    } else if (event === 'SIGNED_IN') {
+      console.log('✅ Usuário logado')
+    }
+  })
 }
 
 // Types
