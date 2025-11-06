@@ -18,34 +18,6 @@ import UserProfile from './components/management/UserProfile'
 import Sidebar from './components/layout/Sidebar'
 import TopBar from './components/layout/TopBar'
 
-// ========================================
-// ANTI-RELOAD - Previne reload ao trocar de aba
-// ========================================
-if (typeof window !== 'undefined') {
-  let preventReload = false
-  
-  window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      preventReload = true
-      console.log('[ANTI-RELOAD] Aba visível - bloqueando reload por 2s')
-      
-      setTimeout(() => {
-        preventReload = false
-      }, 2000)
-    }
-  })
-  
-  const originalReload = window.location.reload.bind(window.location)
-  window.location.reload = function() {
-    if (preventReload) {
-      console.log('[ANTI-RELOAD] Reload bloqueado!')
-      return
-    }
-    originalReload()
-  } as any
-}
-// ========================================
-
 // Route protection component
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: string[] }) {
   const { user } = useAuth()
