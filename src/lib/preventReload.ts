@@ -11,14 +11,14 @@ let isInitialLoad = true
 export function setupReloadPrevention() {
   if (typeof window === 'undefined') return
 
-  console.log('🛡️ Sistema de prevenção de reload ativado')
+  console.log('[RELOAD PREVENTION] Sistema ativado')
 
   // PREVENIR RELOAD POR VISIBILIDADE
   const handleVisibilityChange = () => {
     const currentState = document.visibilityState
     
     if (currentState === 'visible' && lastVisibilityState === 'hidden') {
-      console.log('👁️ Aba visível - MANTENDO estado (sem reload)')
+      console.log('[RELOAD PREVENTION] Aba visível - mantendo estado')
       
       if (Date.now() - pageLoadTime > 5000) {
         window.onbeforeunload = null
@@ -40,11 +40,11 @@ export function setupReloadPrevention() {
 
   // PREVENIR RELOAD POR FOCO
   const handleFocus = () => {
-    console.log('🔍 Foco na janela - mantendo estado')
+    console.log('[RELOAD PREVENTION] Foco na janela - mantendo estado')
   }
 
   const handleBlur = () => {
-    console.log('😴 Foco perdido - estado preservado')
+    console.log('[RELOAD PREVENTION] Foco perdido - estado preservado')
   }
 
   window.addEventListener('focus', handleFocus, { passive: true })
@@ -55,12 +55,12 @@ export function setupReloadPrevention() {
   const originalReplaceState = history.replaceState
 
   history.pushState = function(...args) {
-    console.log('📍 Navegação - sem reload')
+    console.log('[RELOAD PREVENTION] Navegação sem reload')
     return originalPushState.apply(history, args)
   }
 
   history.replaceState = function(...args) {
-    console.log('🔄 Estado substituído - sem reload')
+    console.log('[RELOAD PREVENTION] Estado substituído sem reload')
     return originalReplaceState.apply(history, args)
   }
 
@@ -68,28 +68,28 @@ export function setupReloadPrevention() {
   const originalReload = window.location.reload.bind(window.location)
   
   window.location.reload = function() {
-    console.warn('⚠️ Tentativa de reload BLOQUEADA!')
+    console.warn('[RELOAD PREVENTION] Tentativa de reload bloqueada!')
     console.trace('Stack trace da tentativa de reload:')
     
     const userInitiated = performance.now() - pageLoadTime > 1000
     
     if (userInitiated) {
-      console.log('✅ Reload permitido (iniciado pelo usuário)')
+      console.log('[RELOAD PREVENTION] Reload permitido (usuário)')
       originalReload()
     } else {
-      console.log('❌ Reload bloqueado (não iniciado pelo usuário)')
+      console.log('[RELOAD PREVENTION] Reload bloqueado (automático)')
     }
   } as any
 
   // MARCAR CARGA INICIAL COMPLETA
   setTimeout(() => {
     isInitialLoad = false
-    console.log('✅ Carga inicial completa - proteção ativa')
+    console.log('[RELOAD PREVENTION] Carga inicial completa - proteção ativa')
   }, 3000)
 
   // PREVENIR RELOADS POR ERRO
   window.addEventListener('error', (e) => {
-    console.warn('⚠️ Erro capturado - NÃO recarregando:', e.message)
+    console.warn('[RELOAD PREVENTION] Erro capturado - não recarregando:', e.message)
     e.stopPropagation()
   }, true)
 
@@ -126,21 +126,7 @@ export function setupSessionPersistence() {
   if (lastActive) {
     const timeSinceLastActive = Date.now() - parseInt(lastActive)
     if (timeSinceLastActive < 5000) {
-      console.log('⚠️ Reload detectado recentemente - pode ter sido não intencional')
+      console.log('[RELOAD PREVENTION] Reload recente detectado')
     }
   }
 }
-```
-
-### **3. Salve (Ctrl+S)**
-
-### **4. A página deve voltar automaticamente!**
-
----
-
-## ✅ **VERIFICAR:**
-
-Após salvar, você deve ver no console:
-```
-🛡️ Sistema de prevenção de reload ativado
-✅ Carga inicial completa - proteção ativa
