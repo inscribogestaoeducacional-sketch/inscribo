@@ -1,6 +1,12 @@
-import React, { useState, useEffect } from 'react'
+// ========================================
+// APP.TSX PROFISSIONAL
+// Arquivo: src/App.tsx
+// ========================================
+
+import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { usePreventTabReload } from './hooks/useTabVisibility'
 import LoginForm from './components/auth/LoginForm'
 import InitialSetup from './components/auth/InitialSetup'
 import Dashboard from './components/dashboard/Dashboard'
@@ -18,8 +24,16 @@ import UserProfile from './components/management/UserProfile'
 import Sidebar from './components/layout/Sidebar'
 import TopBar from './components/layout/TopBar'
 
-// Route protection component
-function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: string[] }) {
+// ========================================
+// COMPONENTE DE PROTEÇÃO DE ROTAS
+// ========================================
+function ProtectedRoute({ 
+  children, 
+  allowedRoles 
+}: { 
+  children: React.ReactNode
+  allowedRoles: string[] 
+}) {
   const { user } = useAuth()
   
   if (!user) {
@@ -33,10 +47,16 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode,
   return <>{children}</>
 }
 
+// ========================================
+// CONTEÚDO PRINCIPAL DA APLICAÇÃO
+// ========================================
 function AppContent() {
   const { user, initializing } = useAuth()
+  
+  // Hook profissional para prevenir reload ao trocar de aba
+  usePreventTabReload()
 
-  // Mostrar loading apenas enquanto inicializa
+  // Loading state durante inicialização
   if (initializing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
@@ -66,17 +86,17 @@ function AppContent() {
     )
   }
 
-  // Mostrar tela de login se não houver usuário
+  // Login screen se não houver usuário
   if (!user) {
     return <LoginForm />
   }
 
-  // Redirecionar super admin para painel específico
+  // Redirecionar super admin se necessário
   if (user.is_super_admin && !window.location.pathname.startsWith('/super-admin')) {
     return <Navigate to="/super-admin" replace />
   }
 
-  // Renderizar aplicação principal
+  // Aplicação principal
   return (
     <div className="min-h-screen bg-gray-50">
       <Sidebar />
@@ -135,6 +155,9 @@ function AppContent() {
   )
 }
 
+// ========================================
+// COMPONENTE RAIZ
+// ========================================
 function App() {
   return (
     <Router>
