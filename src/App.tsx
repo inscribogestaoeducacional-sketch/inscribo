@@ -1,5 +1,5 @@
 // ========================================
-// APP.TSX PROFISSIONAL
+// APP.TSX FINAL - SOLUÇÃO COMPLETA
 // Arquivo: src/App.tsx
 // ========================================
 
@@ -25,7 +25,7 @@ import Sidebar from './components/layout/Sidebar'
 import TopBar from './components/layout/TopBar'
 
 // ========================================
-// COMPONENTE DE PROTEÇÃO DE ROTAS
+// PROTEÇÃO DE ROTAS
 // ========================================
 function ProtectedRoute({ 
   children, 
@@ -34,7 +34,12 @@ function ProtectedRoute({
   children: React.ReactNode
   allowedRoles: string[] 
 }) {
-  const { user } = useAuth()
+  const { user, initializing } = useAuth()
+  
+  // Aguardar inicialização
+  if (initializing) {
+    return null
+  }
   
   if (!user) {
     return <Navigate to="/login" replace />
@@ -48,15 +53,15 @@ function ProtectedRoute({
 }
 
 // ========================================
-// CONTEÚDO PRINCIPAL DA APLICAÇÃO
+// CONTEÚDO PRINCIPAL
 // ========================================
 function AppContent() {
   const { user, initializing } = useAuth()
   
-  // Hook profissional para prevenir reload ao trocar de aba
+  // Hook anti-reload
   usePreventTabReload()
 
-  // Loading state durante inicialização
+  // Loading durante inicialização
   if (initializing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
@@ -86,12 +91,12 @@ function AppContent() {
     )
   }
 
-  // Login screen se não houver usuário
+  // Tela de login
   if (!user) {
     return <LoginForm />
   }
 
-  // Redirecionar super admin se necessário
+  // Super admin redirect
   if (user.is_super_admin && !window.location.pathname.startsWith('/super-admin')) {
     return <Navigate to="/super-admin" replace />
   }
@@ -104,7 +109,7 @@ function AppContent() {
         <TopBar />
         <main>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/leads" element={<LeadKanban />} />
             <Route path="/visits" element={<VisitCalendar />} />
