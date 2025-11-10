@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { createContext, useContext, useEffect, useState } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase, User as AppUser } from '../lib/supabase'
 
 interface AuthContextType {
@@ -10,46 +10,45 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
-
 const USER_KEY = 'inscribo_user'
+const SESSION_KEY = 'inscribo_session_active'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(() => {
     try {
       const stored = localStorage.getItem(USER_KEY)
-      if (stored) {
-        console.log('[AUTH] ✅ Usuário restaurado do cache')
+      const hasSession = localStorage.getItem(SESSION_KEY)
+      
+      if (stored && hasSession) {
+        console.log('[AUTH] ✅ Restaurado do cache')
         return JSON.parse(stored)
       }
     } catch (e) {
-      console.error('[AUTH] ❌ Erro ao restaurar cache:', e)
+      console.error('[AUTH] Erro ao restaurar:', e)
     }
     return null
   })
   
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!user)
   const navigate = useNavigate()
-  const isCheckingSession = useRef(false)
-  const isMounted = useRef(true)
+  const location = useLocation()
 
-  const saveUser = useCallback((userData: AppUser | null) => {
+  const saveUser = (userData: AppUser | null) => {
     try {
       if (userData) {
         localStorage.setItem(USER_KEY, JSON.stringify(userData))
-        console.log('[AUTH] 💾 Cache salvo')
+        localStorage.setItem(SESSION_KEY, 'true')
       } else {
         localStorage.removeItem(USER_KEY)
-        console.log('[AUTH] 🗑️ Cache limpo')
+        localStorage.removeItem(SESSION_KEY)
       }
     } catch (e) {
-      console.error('[AUTH] ❌ Erro ao salvar:', e)
+      console.error('[AUTH] Erro ao salvar:', e)
     }
-  }, [])
+  }
 
-  const loadUser = useCallback(async (email: string): Promise<AppUser | null> => {
+  const loadUser = async (email: string): Promise<AppUser | null> => {
     try {
-      console.log('[AUTH] 📊 Carregando usuário:', email)
-      
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -57,64 +56,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('active', true)
         .single()
 
-      if (error) {
-        console.error('[AUTH] ❌ Erro ao carregar:', error.message)
+      if (error || !data) {
+        console.error('[AUTH] Erro ao carregar:', error?.message)
         return null
       }
 
-      if (data) {
-        console.log('[AUTH] ✅ Usuário carregado:', data.full_name)
-        return data
-      }
-
-      return null
+      return data
     } catch (e) {
-      console.error('[AUTH] ❌ Exception:', e)
+      console.error('[AUTH] Exception:', e)
       return null
     }
-  }, [])
+  }
 
   // Verifica sessão no mount
   useEffect(() => {
-    if (!isMounted.current) return
-    
+    let mounted = true
+
     const checkSession = async () => {
-      if (isCheckingSession.current) {
-        console.log('[AUTH] ⏭️ Verificação já em andamento')
-        return
-      }
-
-      isCheckingSession.current = true
-      console.log('[AUTH] 🔍 Verificando sessão...')
-
       try {
         const { data: { session }, error } = await supabase.auth.getSession()
 
-        if (!isMounted.current) return
+        if (!mounted) return
 
-        if (error) {
-          console.error('[AUTH] ❌ Erro de sessão:', error.message)
-          setUser(null)
-          saveUser(null)
-          setLoading(false)
-          return
-        }
-
-        if (!session?.user) {
-          console.log('[AUTH] ℹ️ Sem sessão ativa')
+        if (error || !session?.user) {
+          console.log('[AUTH] Sem sessão válida')
+          
+          // Se tinha usuário em cache mas sessão expirou
           if (user) {
             setUser(null)
             saveUser(null)
           }
+          
           setLoading(false)
           return
         }
 
-        console.log('[AUTH] ✅ Sessão válida:', session.user.email)
+        console.log('[AUTH] Sessão válida:', session.user.email)
 
-        // Se já tem usuário em cache e é o mesmo
+        // Se já tem usuário em cache do mesmo email
         if (user && user.email === session.user.email) {
-          console.log('[AUTH] ✅ Usando cache')
+          console.log('[AUTH] Usando cache')
           setLoading(false)
           return
         }
@@ -122,84 +103,74 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Carrega usuário do banco
         const userData = await loadUser(session.user.email)
         
-        if (userData && isMounted.current) {
+        if (userData && mounted) {
           setUser(userData)
           saveUser(userData)
-        } else if (isMounted.current) {
-          setUser(null)
-          saveUser(null)
         }
 
-        if (isMounted.current) {
-          setLoading(false)
-        }
+        if (mounted) setLoading(false)
       } catch (e) {
-        console.error('[AUTH] ❌ Erro na verificação:', e)
-        if (isMounted.current) {
-          setLoading(false)
-        }
-      } finally {
-        isCheckingSession.current = false
+        console.error('[AUTH] Erro na verificação:', e)
+        if (mounted) setLoading(false)
       }
     }
 
     checkSession()
 
     return () => {
-      isMounted.current = false
+      mounted = false
     }
-  }, []) // Executa UMA VEZ
+  }, [])
 
-  // Listener de mudanças de autenticação
+  // Listener de auth changes
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('[AUTH] 🔔 Evento:', event)
+        console.log('[AUTH] Evento:', event)
 
-        // Ignora eventos que não precisam de ação
+        // Ignora eventos desnecessários
         if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
-          console.log('[AUTH] ⏭️ Ignorando:', event)
           return
         }
 
-        // Login bem-sucedido
+        // Login
         if (event === 'SIGNED_IN' && session?.user) {
-          console.log('[AUTH] ✅ Login detectado')
-          setLoading(true)
+          console.log('[AUTH] Login detectado')
           
           const userData = await loadUser(session.user.email)
           
-          if (userData && isMounted.current) {
+          if (userData) {
             setUser(userData)
             saveUser(userData)
-            setLoading(false)
             
-            // Pequeno delay para garantir que o estado atualizou
+            // Aguarda um pouco antes de navegar
             setTimeout(() => {
-              console.log('[AUTH] 🚀 Navegando para dashboard')
               navigate('/dashboard', { replace: true })
-            }, 200)
-          } else if (isMounted.current) {
-            setLoading(false)
+            }, 100)
           }
         }
 
         // Logout
         if (event === 'SIGNED_OUT') {
-          console.log('[AUTH] 🚪 Logout detectado')
+          console.log('[AUTH] Logout detectado')
           setUser(null)
           saveUser(null)
-          setLoading(false)
           navigate('/login', { replace: true })
         }
       }
     )
 
     return () => subscription.unsubscribe()
-  }, [navigate, loadUser, saveUser])
+  }, [navigate])
+
+  // Previne navegação se não estiver autenticado
+  useEffect(() => {
+    if (!loading && !user && location.pathname !== '/login') {
+      navigate('/login', { replace: true })
+    }
+  }, [loading, user, location.pathname, navigate])
 
   const signIn = async (email: string, password: string) => {
-    console.log('[AUTH] 🔑 Tentando login...')
     setLoading(true)
     
     try {
@@ -210,21 +181,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error
       
-      console.log('[AUTH] ✅ Autenticação OK')
-      
     } catch (error: any) {
-      console.error('[AUTH] ❌ Erro de login:', error.message)
+      console.error('[AUTH] Erro de login:', error.message)
       setLoading(false)
       throw error
     }
   }
 
   const signOut = async () => {
-    console.log('[AUTH] 🚪 Fazendo logout...')
+    console.log('[AUTH] Fazendo logout...')
     await supabase.auth.signOut()
     setUser(null)
     saveUser(null)
-    setLoading(false)
     navigate('/login', { replace: true })
   }
 
