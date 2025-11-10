@@ -1,84 +1,181 @@
-import React, { createContext, useState, useEffect, useContext } from 'react'
-import axios from 'axios'
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { User } from '@supabase/supabase-js';
+import { supabase, hasSupabaseConfig } from '../lib/supabase';
 
-// Tipagem do usuário (com 'role' para controle de acesso)
-interface User {
-  id: string
-  name: string
-  email: string
-  role: string // admin, manager, user etc.
+interface Profile {
+  id: string;
+  email: string;
+  full_name: string;
+  role: 'admin' | 'user';
+  institution_id: string | null;
+  avatar_url: string | null;
 }
 
-interface AuthContextData {
-  user: User | null
-  loading: boolean
-  signIn: (email: string, password: string) => Promise<void>
-  signOut: () => void
+interface AuthContextType {
+  user: User | null;
+  profile: Profile | null;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, fullName: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  loading: boolean;
 }
 
-const AuthContext = createContext<AuthContextData>({} as AuthContextData)
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Verifica se há sessão salva no localStorage
   useEffect(() => {
-    const storedUser = localStorage.getItem('@Esquimbro:user')
-    const storedToken = localStorage.getItem('@Esquimbro:token')
-
-    if (storedUser && storedToken) {
-      setUser(JSON.parse(storedUser))
-      axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`
+    // If no Supabase config, set demo mode
+    if (!hasSupabaseConfig || !supabase) {
+      setLoading(false);
+      return;
     }
 
-    setLoading(false)
-  }, [])
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+      } else {
+        setLoading(false);
+      }
+    });
 
-  // Função de login
-  const signIn = async (email: string, password: string) => {
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        await fetchProfile(session.user.id);
+      } else {
+        setProfile(null);
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchProfile = async (userId: string) => {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+    
     try {
-      const response = await axios.post('https://seu-backend.com/api/login', {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) throw error;
+      setProfile(data);
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signIn = async (email: string, password: string) => {
+    if (!supabase) {
+      throw new Error('Configuração do Supabase não encontrada.');
+    }
+    
+    try {
+      console.log('Tentando fazer login com:', email);
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
-      })
-
-      // A API deve retornar um objeto com { user, token }
-      const { user, token } = response.data
-
-      // Salva no localStorage
-      localStorage.setItem('@Esquimbro:user', JSON.stringify(user))
-      localStorage.setItem('@Esquimbro:token', token)
-
-      // Define o token padrão para futuras requisições
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
-
-      // Atualiza estado
-      setUser(user)
+      });
+      console.log('Resultado do login:', { data, error });
+      if (error) {
+        console.error('Erro específico:', error.message, error.status);
+        throw error;
+      }
     } catch (error) {
-      console.error('Erro ao fazer login:', error)
-      throw new Error('Falha no login. Verifique suas credenciais.')
+      console.error('Supabase auth error:', error);
+      throw new Error(`Erro ao fazer login: ${error.message}`);
     }
-  }
+  };
 
-  // Função de logout
-  const signOut = () => {
-    localStorage.removeItem('@Esquimbro:user')
-    localStorage.removeItem('@Esquimbro:token')
-    setUser(null)
-  }
+  const signUp = async (email: string, password: string, fullName: string) => {
+    if (!supabase) {
+      throw new Error('Configuração do Supabase não encontrada.');
+    }
+    
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+        },
+      });
+      if (error) throw error;
+    } catch (error) {
+      console.error('Supabase signup error:', error);
+      throw new Error('Erro ao criar conta. Tente novamente.');
+    }
+  };
 
-  return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
-      {children}
-    </AuthContext.Provider>
-  )
+  const signOut = async () => {
+    if (!supabase) {
+      setUser(null);
+      setProfile(null);
+      return;
+    }
+    
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+    } catch (error) {
+      console.error('Supabase signout error:', error);
+      // Still clear local state even if signout fails
+      setUser(null);
+      setProfile(null);
+    }
+  };
+
+  const resetPassword = async (email: string) => {
+    if (!supabase) {
+      throw new Error('Configuração do Supabase não encontrada.');
+    }
+    
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+    } catch (error) {
+      console.error('Supabase reset password error:', error);
+      throw new Error('Erro ao enviar e-mail de recuperação. Tente novamente.');
+    }
+  };
+
+  const value = {
+    user,
+    profile,
+    signIn,
+    signUp,
+    signOut,
+    resetPassword,
+    loading,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export const useAuth = () => {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth deve ser usado dentro de um AuthProvider')
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
   }
-  return context
+  return context;
 }
