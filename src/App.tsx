@@ -1,8 +1,3 @@
-// ========================================
-// APP.TSX SIMPLES E LIMPO
-// Arquivo: src/App.tsx
-// ========================================
-
 import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
@@ -22,9 +17,6 @@ import UserProfile from './components/management/UserProfile'
 import Sidebar from './components/layout/Sidebar'
 import TopBar from './components/layout/TopBar'
 
-// ========================================
-// ROTA PROTEGIDA
-// ========================================
 function ProtectedRoute({ 
   children, 
   allowedRoles = [] 
@@ -34,21 +26,21 @@ function ProtectedRoute({
 }) {
   const { user, loading } = useAuth()
 
-  // Aguarda carregar
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Carregando...</p>
+        </div>
       </div>
     )
   }
 
-  // Sem usuário → Login
   if (!user) {
     return <Navigate to="/login" replace />
   }
 
-  // Verifica role se necessário
   if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
     return <Navigate to="/dashboard" replace />
   }
@@ -56,9 +48,6 @@ function ProtectedRoute({
   return <>{children}</>
 }
 
-// ========================================
-// LAYOUT COM SIDEBAR
-// ========================================
 function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50">
@@ -71,13 +60,9 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
   )
 }
 
-// ========================================
-// CONTEÚDO PRINCIPAL
-// ========================================
 function AppContent() {
   const { user, loading } = useAuth()
 
-  // Loading inicial
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
@@ -86,18 +71,21 @@ function AppContent() {
             <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600"></div>
           </div>
           <h2 className="text-xl font-semibold text-gray-900">Inscribo</h2>
-          <p className="text-gray-600 mt-2">Carregando...</p>
+          <p className="text-gray-600 mt-2">Verificando sessão...</p>
         </div>
       </div>
     )
   }
 
-  // Sem usuário → Login
   if (!user) {
-    return <LoginForm />
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginForm />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    )
   }
 
-  // Com usuário → Dashboard
   return (
     <DashboardLayout>
       <Routes>
@@ -157,9 +145,6 @@ function AppContent() {
   )
 }
 
-// ========================================
-// APP RAIZ
-// ========================================
 function App() {
   return (
     <Router>
