@@ -1,10 +1,4 @@
-// ========================================
-// AUTHCONTEXT PROFISSIONAL
-// Com localStorage e token persistente
-// Arquivo: src/contexts/AuthContext.tsx
-// ========================================
-
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase, User as AppUser } from '../lib/supabase'
 
@@ -17,13 +11,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// Keys do localStorage
 const USER_KEY = 'inscribo_user'
 const SESSION_KEY = 'inscribo_session'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(() => {
-    // Restaura usuário do localStorage
     try {
       const stored = localStorage.getItem(USER_KEY)
       return stored ? JSON.parse(stored) : null
@@ -35,10 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
-  // ========================================
-  // SALVAR NO LOCALSTORAGE
-  // ========================================
-  const saveUser = (userData: AppUser | null) => {
+  const saveUser = useCallback((userData: AppUser | null) => {
     try {
       if (userData) {
         localStorage.setItem(USER_KEY, JSON.stringify(userData))
@@ -50,12 +39,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       console.error('[AUTH] Storage error:', e)
     }
-  }
+  }, [])
 
-  // ========================================
-  // CARREGAR USUÁRIO DO BANCO
-  // ========================================
-  const loadUser = async (email: string): Promise<AppUser | null> => {
+  const loadUser = useCallback(async (email: string): Promise<AppUser | null> => {
     try {
       const { data, error } = await supabase
         .from('users')
@@ -74,25 +60,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('[AUTH] Exception:', e)
       return null
     }
-  }
+  }, [])
 
-  // ========================================
-  // VERIFICAR SESSÃO NO MOUNT
-  // ========================================
   useEffect(() => {
     let mounted = true
 
     const checkSession = async () => {
       try {
-        // Verifica sessão do Supabase
         const { data: { session }, error } = await supabase.auth.getSession()
 
         if (!mounted) return
 
         if (error || !session?.user) {
-          // Sem sessão válida - limpa tudo
           if (user) {
-            console.log('[AUTH] Session expired - clearing')
+            console.log('[AUTH] Session expired')
             setUser(null)
             saveUser(null)
           }
@@ -100,9 +81,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return
         }
 
-        // Tem sessão - verifica se precisa atualizar user
         if (!user || user.email !== session.user.email) {
-          console.log('[AUTH] Loading user data')
+          console.log('[AUTH] Loading user:', session.user.email)
           const userData = await loadUser(session.user.email)
           
           if (userData && mounted) {
@@ -111,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
         
-        setLoading(false)
+        if (mounted) setLoading(false)
       } catch (e) {
         console.error('[AUTH] Check error:', e)
         if (mounted) setLoading(false)
@@ -123,32 +103,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       mounted = false
     }
-  }, []) // Executa UMA VEZ
+  }, [user, loadUser, saveUser])
 
-  // ========================================
-  // LISTENER DE AUTH STATE
-  // ========================================
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('[AUTH] Event:', event)
 
-        // Ignora token refresh
-        if (event === 'TOKEN_REFRESHED') {
+        if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
           return
         }
 
-        // Login
         if (event === 'SIGNED_IN' && session?.user) {
           const userData = await loadUser(session.user.email)
           if (userData) {
             setUser(userData)
             saveUser(userData)
-            navigate('/dashboard', { replace: true })
+            setTimeout(() => {
+              navigate('/dashboard', { replace: true })
+            }, 100)
           }
         }
 
-        // Logout
         if (event === 'SIGNED_OUT') {
           setUser(null)
           saveUser(null)
@@ -158,11 +134,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     )
 
     return () => subscription.unsubscribe()
-  }, [navigate])
+  }, [navigate, loadUser, saveUser])
 
-  // ========================================
-  // MÉTODOS PÚBLICOS
-  // ========================================
   const signIn = async (email: string, password: string) => {
     setLoading(true)
     
@@ -174,13 +147,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error
       
-      // O listener vai cuidar do resto
-      
     } catch (error: any) {
       console.error('[AUTH] Login error:', error.message)
-      throw error
-    } finally {
       setLoading(false)
+      throw error
     }
   }
 
