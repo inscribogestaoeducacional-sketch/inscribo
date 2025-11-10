@@ -1,7 +1,3 @@
-// ========================================
-// AUTHCONTEXT PROFISSIONAL - SEM RELOADS
-// Arquivo: src/contexts/AuthContext.tsx
-// ========================================
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { User as SupabaseUser } from '@supabase/supabase-js'
@@ -29,8 +25,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Refs para evitar múltiplas chamadas
   const isLoadingUser = useRef(false)
   const isMounted = useRef(true)
+  const initializationTimeout = useRef<NodeJS.Timeout>()
   
   const navigate = useNavigate()
+
+  // ========================================
+  // TIMEOUT DE SEGURANÇA
+  // ========================================
+  useEffect(() => {
+    // Timeout de 10 segundos para garantir que não fica travado
+    initializationTimeout.current = setTimeout(() => {
+      if (initializing) {
+        console.warn('[AUTH] Timeout de inicialização - forçando conclusão')
+        setInitializing(false)
+      }
+    }, 10000)
+
+    return () => {
+      if (initializationTimeout.current) {
+        clearTimeout(initializationTimeout.current)
+      }
+    }
+  }, [initializing])
 
   // ========================================
   // CARREGAR DADOS DO USUÁRIO
@@ -65,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('[AUTH] Erro ao carregar usuário:', error)
       if (isMounted.current) {
         await supabase.auth.signOut()
+        setUser(null)
       }
     } finally {
       isLoadingUser.current = false
@@ -117,7 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false
       isMounted.current = false
     }
-  }, [loadUserData]) // Dependência estável
+  }, [loadUserData])
 
   // ========================================
   // LISTENER DE AUTH - OTIMIZADO
