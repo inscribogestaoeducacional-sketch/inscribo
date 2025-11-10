@@ -4,43 +4,35 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: '/',
+  build: {
+    // Build otimizado para Vercel
+    target: 'esnext',
+    minify: 'esbuild',
+    sourcemap: false,
+    
+    rollupOptions: {
+      output: {
+        // CRÍTICO: Sem chunks dinâmicos
+        manualChunks: undefined,
+        
+        // Nomes estáveis (sem hash aleatório)
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name].[ext]'
+      }
+    },
+    
+    // Evita problemas com chunks grandes
+    chunkSizeWarningLimit: 10000,
+  },
+  
   server: {
     port: 3000,
     host: true,
-    cors: true,
-    strictPort: false,
-    hmr: {
-      overlay: false,
-      protocol: 'ws',
-      host: 'localhost'
-    }
+    cors: true
   },
-  build: {
-    target: 'esnext',
-    minify: 'esbuild',
-    cssCodeSplit: false,
-    sourcemap: false,
-    rollupOptions: {
-      output: {
-        // CRÍTICO: Sem code splitting
-        manualChunks: undefined,
-        inlineDynamicImports: true,
-      },
-    },
-    chunkSizeWarningLimit: 5000,
-    commonjsOptions: {
-      include: [/node_modules/],
-      transformMixedEsModules: true
-    }
-  },
+  
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom'],
-    exclude: [],
-    esbuildOptions: {
-      target: 'esnext'
-    }
-  },
-  resolve: {
-    dedupe: ['react', 'react-dom']
+    include: ['react', 'react-dom', 'react-router-dom']
   }
 })
