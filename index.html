@@ -1,14 +1,29 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co wss://*.supabase.in; font-src 'self' data:;">
-    
-    <!-- Favicon (ícone da aba do site) -->
-    <link rel="icon" type="image/jpeg" href="./logo.jpeg" />
-    
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Inscribo</title>
+    <title>Inscribo - Sistema de Gestão</title>
+    <script>
+      // Trata ChunkLoadError globalmente
+      window.addEventListener('unhandledrejection', function(event) {
+        if (event.reason && event.reason.message && event.reason.message.includes('Loading chunk')) {
+          console.warn('ChunkLoadError detectado - recarregando...');
+          event.preventDefault();
+          // Recarrega a página uma única vez
+          if (!sessionStorage.getItem('chunk_reload_attempted')) {
+            sessionStorage.setItem('chunk_reload_attempted', 'true');
+            window.location.reload();
+          }
+        }
+      });
+      
+      // Limpa flag após 5 segundos
+      setTimeout(() => {
+        sessionStorage.removeItem('chunk_reload_attempted');
+      }, 5000);
+    </script>
   </head>
   <body>
     <div id="root"></div>
