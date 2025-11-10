@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react'
+import React, { createContext, useContext, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase, User as AppUser } from '../lib/supabase'
 
@@ -10,182 +10,105 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
-const USER_KEY = 'inscribo_user'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AppUser | null>(() => {
-    try {
-      const stored = localStorage.getItem(USER_KEY)
-      if (stored) {
-        console.log('[AUTH] ✅ Cache restaurado')
-        return JSON.parse(stored)
-      }
-    } catch {}
-    return null
-  })
-  
-  const [loading, setLoading] = useState(!user)
+  const [user, setUser] = useState<AppUser | null>(null)
+  const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
-  const hasNavigated = useRef(false)
 
-  const saveUser = (userData: AppUser | null) => {
-    try {
-      if (userData) {
-        localStorage.setItem(USER_KEY, JSON.stringify(userData))
-      } else {
-        localStorage.removeItem(USER_KEY)
-      }
-    } catch {}
-  }
-
-  const loadUser = async (email: string): Promise<AppUser | null> => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', email)
-        .eq('active', true)
-        .single()
-
-      return error ? null : data
-    } catch {
-      return null
-    }
-  }
-
-  // Verifica sessão no mount
+  // 🔁 Carrega sessão e usuário ao montar
   useEffect(() => {
-    let mounted = true
-
-    const check = async () => {
+    const initAuth = async () => {
+      setLoading(true)
       try {
         const { data: { session } } = await supabase.auth.getSession()
 
-        if (!mounted) return
+        if (session?.user) {
+          console.log('[AUTH] Sessão ativa detectada')
+          const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', session.user.email)
+            .eq('active', true)
+            .single()
 
-        if (!session?.user) {
-          if (user) {
+          if (!error && data) {
+            setUser(data)
+          } else {
+            console.warn('[AUTH] Usuário não encontrado no banco')
+            await supabase.auth.signOut()
             setUser(null)
-            saveUser(null)
           }
-          setLoading(false)
-          return
+        } else {
+          setUser(null)
         }
-
-        if (user && user.email === session.user.email) {
-          setLoading(false)
-          return
-        }
-
-        const userData = await loadUser(session.user.email)
-        
-        if (userData && mounted) {
-          setUser(userData)
-          saveUser(userData)
-        }
-
-        if (mounted) setLoading(false)
-      } catch {
-        if (mounted) setLoading(false)
+      } catch (err) {
+        console.error('[AUTH] Erro ao inicializar sessão:', err)
+        setUser(null)
+      } finally {
+        setLoading(false)
       }
     }
 
-    check()
-    return () => { mounted = false }
-  }, [])
+    initAuth()
 
-  // Listener
-  useEffect(() => {
+    // 🔂 Listener de mudanças de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('[AUTH] Evento:', event)
+        console.log('[AUTH] Evento detectado:', event)
 
-        // Ignora TOKEN_REFRESHED
-        if (event === 'TOKEN_REFRESHED') {
-          return
-        }
-
-        // INICIAL_SESSION - se acabou de fazer login, navega
-        if (event === 'INITIAL_SESSION' && session?.user) {
-          // Se já tem usuário E ainda não navegou, navega!
-          if (user && !hasNavigated.current) {
-            console.log('[AUTH] 🚀 Navegando após INITIAL_SESSION')
-            hasNavigated.current = true
-            setTimeout(() => {
-              navigate('/dashboard', { replace: true })
-            }, 100)
-          }
-          return
-        }
-
-        // SIGNED_IN
         if (event === 'SIGNED_IN' && session?.user) {
-          console.log('[AUTH] ✅ Login detectado')
-          
-          const userData = await loadUser(session.user.email)
-          
-          if (userData) {
-            setUser(userData)
-            saveUser(userData)
-            
-            // Navega IMEDIATAMENTE
-            if (!hasNavigated.current) {
-              console.log('[AUTH] 🚀 Navegando para dashboard')
-              hasNavigated.current = true
-              setTimeout(() => {
-                navigate('/dashboard', { replace: true })
-              }, 100)
-            }
+          const { data } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', session.user.email)
+            .eq('active', true)
+            .single()
+
+          if (data) {
+            setUser(data)
+            navigate('/dashboard', { replace: true })
           }
         }
 
-        // SIGNED_OUT
         if (event === 'SIGNED_OUT') {
-          console.log('[AUTH] 🚪 Logout')
           setUser(null)
-          saveUser(null)
-          hasNavigated.current = false
           navigate('/login', { replace: true })
         }
       }
     )
 
     return () => subscription.unsubscribe()
-  }, [navigate, user])
+  }, [navigate])
 
   const signIn = async (email: string, password: string) => {
-    console.log('[AUTH] 🔑 Login...')
-    setLoading(true)
-    hasNavigated.current = false // Reset flag
-    
     try {
+      setLoading(true)
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
     } catch (error: any) {
-      console.error('[AUTH] ❌ Erro:', error.message)
-      setLoading(false)
+      console.error('[AUTH] Erro no login:', error.message)
       throw error
+    } finally {
+      setLoading(false)
     }
   }
 
   const signOut = async () => {
-    console.log('[AUTH] 🚪 Logout...')
     await supabase.auth.signOut()
     setUser(null)
-    saveUser(null)
-    hasNavigated.current = false
     navigate('/login', { replace: true })
   }
 
   return (
     <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
-      {children}
+      {!loading ? children : <div className="loading-screen">Carregando...</div>}
     </AuthContext.Provider>
   )
 }
 
 export function useAuth() {
   const context = useContext(AuthContext)
-  if (!context) throw new Error('useAuth must be used within AuthProvider')
+  if (!context) throw new Error('useAuth deve ser usado dentro de AuthProvider')
   return context
 }
