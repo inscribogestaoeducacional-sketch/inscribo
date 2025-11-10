@@ -1,95 +1,62 @@
 // ========================================
-// AUTHCONTEXT ULTIMATE - COM SESSIONSTORAGE
-// Nunca perde sessão ao recarregar
+// AUTHCONTEXT PROFISSIONAL
+// Com localStorage e token persistente
 // Arquivo: src/contexts/AuthContext.tsx
 // ========================================
 
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
-import { User as SupabaseUser } from '@supabase/supabase-js'
-import { supabase, User as AppUser } from '../lib/supabase'
+import React, { createContext, useContext, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { supabase, User as AppUser } from '../lib/supabase'
 
 interface AuthContextType {
   user: AppUser | null
-  supabaseUser: SupabaseUser | null
   loading: boolean
-  initializing: boolean
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
-  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// Cache de usuário no SessionStorage
-const USER_STORAGE_KEY = 'inscribo_user_cache'
-const SESSION_STORAGE_KEY = 'inscribo_has_session'
+// Keys do localStorage
+const USER_KEY = 'inscribo_user'
+const SESSION_KEY = 'inscribo_session'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(() => {
-    // Tenta restaurar do SessionStorage
+    // Restaura usuário do localStorage
     try {
-      const cached = sessionStorage.getItem(USER_STORAGE_KEY)
-      if (cached) {
-        console.log('[AUTH] 💾 Usuário em cache')
-        return JSON.parse(cached)
-      }
-    } catch (e) {
-      console.error('[AUTH] ❌ Cache error:', e)
+      const stored = localStorage.getItem(USER_KEY)
+      return stored ? JSON.parse(stored) : null
+    } catch {
+      return null
     }
-    return null
   })
   
-  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [initializing, setInitializing] = useState(true)
-  
-  const isLoadingUser = useRef(false)
-  const isMounted = useRef(true)
-  const hasInitialized = useRef(false)
-  const initTimeoutRef = useRef<NodeJS.Timeout>()
-  
+  const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
   // ========================================
-  // SALVAR USUÁRIO NO CACHE
+  // SALVAR NO LOCALSTORAGE
   // ========================================
-  const cacheUser = useCallback((userData: AppUser | null) => {
+  const saveUser = (userData: AppUser | null) => {
     try {
       if (userData) {
-        sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData))
-        sessionStorage.setItem(SESSION_STORAGE_KEY, 'true')
-        console.log('[AUTH] 💾 Cache salvo')
+        localStorage.setItem(USER_KEY, JSON.stringify(userData))
+        localStorage.setItem(SESSION_KEY, 'active')
       } else {
-        sessionStorage.removeItem(USER_STORAGE_KEY)
-        sessionStorage.removeItem(SESSION_STORAGE_KEY)
-        console.log('[AUTH] 🗑️ Cache limpo')
+        localStorage.removeItem(USER_KEY)
+        localStorage.removeItem(SESSION_KEY)
       }
     } catch (e) {
-      console.error('[AUTH] ❌ Cache save error:', e)
+      console.error('[AUTH] Storage error:', e)
     }
-  }, [])
+  }
 
   // ========================================
-  // VERIFICAR SE TEM SESSÃO ATIVA
+  // CARREGAR USUÁRIO DO BANCO
   // ========================================
-  const hasActiveSession = useCallback(() => {
-    return sessionStorage.getItem(SESSION_STORAGE_KEY) === 'true'
-  }, [])
-
-  // ========================================
-  // CARREGAR USUÁRIO
-  // ========================================
-  const loadUserData = useCallback(async (email: string): Promise<boolean> => {
-    if (isLoadingUser.current) {
-      console.log('[AUTH] 🔒 Bloqueado')
-      return false
-    }
-
+  const loadUser = async (email: string): Promise<AppUser | null> => {
     try {
-      isLoadingUser.current = true
-      console.log('[AUTH] 📊 Loading:', email)
-
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -97,219 +64,107 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('active', true)
         .single()
 
-      if (!isMounted.current) return false
-
-      if (error) {
-        console.error('[AUTH] ❌ Error:', error.message)
-        setInitializing(false)
-        return false
+      if (error || !data) {
+        console.error('[AUTH] Load error:', error?.message)
+        return null
       }
 
-      if (data) {
-        console.log('[AUTH] ✅ Loaded:', data.full_name)
-        setUser(data)
-        cacheUser(data) // Salva no cache
-        setInitializing(false)
-        return true
-      }
-
-      setInitializing(false)
-      return false
-      
-    } catch (error: any) {
-      console.error('[AUTH] ❌ Exception:', error.message)
-      setInitializing(false)
-      return false
-    } finally {
-      isLoadingUser.current = false
-      setLoading(false)
+      return data
+    } catch (e) {
+      console.error('[AUTH] Exception:', e)
+      return null
     }
-  }, [cacheUser])
+  }
 
   // ========================================
-  // INICIALIZAÇÃO COM TIMEOUT DE SEGURANÇA
+  // VERIFICAR SESSÃO NO MOUNT
   // ========================================
   useEffect(() => {
-    if (hasInitialized.current) {
-      console.log('[AUTH] ✋ Skip')
-      return
-    }
-
     let mounted = true
 
-    // Timeout de segurança - 15 segundos
-    // Só ativa se realmente travar
-    initTimeoutRef.current = setTimeout(() => {
-      if (initializing && mounted) {
-        console.warn('[AUTH] ⏱️ Init timeout')
-        
-        // Se tem usuário em cache, mantém
-        if (user) {
-          console.log('[AUTH] ✅ Mantendo cache')
-          setInitializing(false)
-        } 
-        // Se tinha sessão mas perdeu, tenta uma última vez
-        else if (hasActiveSession()) {
-          console.log('[AUTH] 🔄 Tentativa final')
-          supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session?.user && mounted) {
-              loadUserData(session.user.email).then(() => {
-                if (mounted) setInitializing(false)
-              })
-            } else {
-              if (mounted) setInitializing(false)
-            }
-          })
-        }
-        // Sem nada, libera
-        else {
-          console.log('[AUTH] ℹ️ Sem sessão')
-          setInitializing(false)
-        }
-        
-        hasInitialized.current = true
-      }
-    }, 15000)
-
-    const initialize = async () => {
+    const checkSession = async () => {
       try {
-        console.log('[AUTH] 🚀 Init')
-        
-        // Se já tem usuário em cache, usa temporariamente
-        if (user) {
-          console.log('[AUTH] ⚡ Usando cache')
-        }
-        
+        // Verifica sessão do Supabase
         const { data: { session }, error } = await supabase.auth.getSession()
 
         if (!mounted) return
 
-        if (error) {
-          console.error('[AUTH] ❌ Session error:', error.message)
-          
-          // Se tem cache, mantém
+        if (error || !session?.user) {
+          // Sem sessão válida - limpa tudo
           if (user) {
-            console.log('[AUTH] ✅ Mantendo cache')
-            setInitializing(false)
-          } else {
-            setInitializing(false)
+            console.log('[AUTH] Session expired - clearing')
+            setUser(null)
+            saveUser(null)
           }
-          
-          hasInitialized.current = true
+          setLoading(false)
           return
         }
 
-        if (session?.user) {
-          console.log('[AUTH] ✅ Session:', session.user.email)
-          setSupabaseUser(session.user)
+        // Tem sessão - verifica se precisa atualizar user
+        if (!user || user.email !== session.user.email) {
+          console.log('[AUTH] Loading user data')
+          const userData = await loadUser(session.user.email)
           
-          // Só carrega se não tem cache OU cache desatualizado
-          if (!user || user.email !== session.user.email) {
-            await loadUserData(session.user.email)
-          } else {
-            console.log('[AUTH] ✅ Cache válido')
-            setInitializing(false)
+          if (userData && mounted) {
+            setUser(userData)
+            saveUser(userData)
           }
-        } else {
-          console.log('[AUTH] ℹ️ No session')
-          
-          // Limpa cache se não tem sessão
-          if (user) {
-            console.log('[AUTH] 🗑️ Limpando cache desatualizado')
-            setUser(null)
-            cacheUser(null)
-          }
-          
-          setInitializing(false)
         }
         
-        hasInitialized.current = true
-        
-      } catch (error: any) {
-        console.error('[AUTH] ❌ Init error:', error.message)
-        
-        // Em caso de erro, mantém cache se existir
-        if (mounted) {
-          if (user) {
-            console.log('[AUTH] ✅ Mantendo cache em erro')
-          }
-          setInitializing(false)
-          hasInitialized.current = true
-        }
+        setLoading(false)
+      } catch (e) {
+        console.error('[AUTH] Check error:', e)
+        if (mounted) setLoading(false)
       }
     }
 
-    initialize()
+    checkSession()
 
     return () => {
       mounted = false
-      isMounted.current = false
-      if (initTimeoutRef.current) {
-        clearTimeout(initTimeoutRef.current)
-      }
     }
-  }, [loadUserData, user, cacheUser, hasActiveSession])
+  }, []) // Executa UMA VEZ
 
   // ========================================
-  // LISTENER
+  // LISTENER DE AUTH STATE
   // ========================================
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('[AUTH] 🔔', event)
+        console.log('[AUTH] Event:', event)
 
-        // Ignorar eventos
-        const ignoredEvents = ['TOKEN_REFRESHED', 'INITIAL_SESSION']
-        if (ignoredEvents.includes(event)) {
-          console.log('[AUTH] ⏭️ Skip:', event)
+        // Ignora token refresh
+        if (event === 'TOKEN_REFRESHED') {
           return
         }
 
         // Login
         if (event === 'SIGNED_IN' && session?.user) {
-          if (isLoadingUser.current) {
-            console.log('[AUTH] ⏭️ Skip - já carregando')
-            return
-          }
-
-          console.log('[AUTH] ✅ Signed in')
-          setSupabaseUser(session.user)
-          
-          const success = await loadUserData(session.user.email)
-          
-          if (success) {
-            console.log('[AUTH] ➡️ Navigate')
-            setTimeout(() => {
-              navigate('/dashboard', { replace: true })
-            }, 300)
+          const userData = await loadUser(session.user.email)
+          if (userData) {
+            setUser(userData)
+            saveUser(userData)
+            navigate('/dashboard', { replace: true })
           }
         }
-        
+
         // Logout
-        else if (event === 'SIGNED_OUT') {
-          console.log('[AUTH] 🚪 Signed out')
+        if (event === 'SIGNED_OUT') {
           setUser(null)
-          setSupabaseUser(null)
-          cacheUser(null)
-          setInitializing(false)
-          hasInitialized.current = false
+          saveUser(null)
           navigate('/login', { replace: true })
         }
       }
     )
 
-    return () => {
-      subscription.unsubscribe()
-    }
-  }, [navigate, loadUserData, cacheUser])
+    return () => subscription.unsubscribe()
+  }, [navigate])
 
   // ========================================
   // MÉTODOS PÚBLICOS
   // ========================================
-  const signIn = useCallback(async (email: string, password: string) => {
-    console.log('[AUTH] 🔑 Sign in')
+  const signIn = async (email: string, password: string) => {
     setLoading(true)
-    setInitializing(true)
     
     try {
       const { error } = await supabase.auth.signInWithPassword({
@@ -319,49 +174,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error
       
-      console.log('[AUTH] ✅ Auth OK')
+      // O listener vai cuidar do resto
       
     } catch (error: any) {
-      console.error('[AUTH] ❌ Error:', error.message)
-      setInitializing(false)
-      setLoading(false)
+      console.error('[AUTH] Login error:', error.message)
       throw error
+    } finally {
+      setLoading(false)
     }
-  }, [])
+  }
 
-  const signOut = useCallback(async () => {
-    console.log('[AUTH] 🚪 Logout')
+  const signOut = async () => {
     await supabase.auth.signOut()
     setUser(null)
-    setSupabaseUser(null)
-    cacheUser(null)
-    setInitializing(false)
-    hasInitialized.current = false
+    saveUser(null)
     navigate('/login', { replace: true })
-  }, [navigate, cacheUser])
-
-  const refreshUser = useCallback(async () => {
-    if (isLoadingUser.current) return
-    
-    console.log('[AUTH] 🔄 Refresh')
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session?.user && isMounted.current) {
-      await loadUserData(session.user.email)
-    }
-  }, [loadUserData])
-
-  const value = {
-    user,
-    supabaseUser,
-    loading,
-    initializing,
-    signIn,
-    signOut,
-    refreshUser
   }
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   )
@@ -369,8 +200,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider')
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider')
   }
   return context
 }
