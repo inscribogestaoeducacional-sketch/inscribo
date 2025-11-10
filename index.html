@@ -1,50 +1,14 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Inscribo - Sistema de Gestão</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co wss://*.supabase.in; font-src 'self' data:;">
     
-    <script>
-      // Limpa service workers antigos
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(registrations => {
-          registrations.forEach(registration => registration.unregister())
-        })
-      }
-      
-      // Trata ChunkLoadError
-      window.addEventListener('unhandledrejection', event => {
-        const error = event.reason
-        
-        if (error?.message?.includes('Loading chunk') || 
-            error?.message?.includes('Failed to fetch dynamically imported module')) {
-          
-          console.warn('[CHUNK ERROR] Detectado, limpando cache...')
-          event.preventDefault()
-          
-          // Limpa caches
-          if ('caches' in window) {
-            caches.keys().then(names => {
-              names.forEach(name => caches.delete(name))
-            })
-          }
-          
-          // Recarrega UMA VEZ
-          if (!sessionStorage.getItem('chunk_reload')) {
-            sessionStorage.setItem('chunk_reload', '1')
-            window.location.reload()
-          } else {
-            sessionStorage.removeItem('chunk_reload')
-            alert('Erro ao carregar. Por favor, limpe o cache do navegador (Ctrl+Shift+Delete)')
-          }
-        }
-      })
-      
-      // Limpa flag após 5s
-      setTimeout(() => sessionStorage.removeItem('chunk_reload'), 5000)
-    </script>
+    <!-- Favicon (ícone da aba do site) -->
+    <link rel="icon" type="image/jpeg" href="./logo.jpeg" />
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inscribo</title>
   </head>
   <body>
     <div id="root"></div>
