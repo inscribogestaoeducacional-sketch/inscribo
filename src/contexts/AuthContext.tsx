@@ -1,3 +1,5 @@
+// src/contexts/AuthContext.tsx
+
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase, User as AppUser } from '../lib/supabase'
@@ -16,15 +18,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
-  // 🔁 Carrega sessão e usuário ao montar
+  // 🔁 Carrega sessão atual e usuário associado
   useEffect(() => {
     const initAuth = async () => {
-      setLoading(true)
       try {
         const { data: { session } } = await supabase.auth.getSession()
 
         if (session?.user) {
-          console.log('[AUTH] Sessão ativa detectada')
+          console.log('[AUTH] Sessão ativa encontrada')
+
           const { data, error } = await supabase
             .from('users')
             .select('*')
@@ -32,10 +34,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .eq('active', true)
             .single()
 
-          if (!error && data) {
+          if (data && !error) {
             setUser(data)
           } else {
-            console.warn('[AUTH] Usuário não encontrado no banco')
+            console.warn('[AUTH] Usuário não encontrado, desconectando...')
             await supabase.auth.signOut()
             setUser(null)
           }
@@ -43,7 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(null)
         }
       } catch (err) {
-        console.error('[AUTH] Erro ao inicializar sessão:', err)
+        console.error('[AUTH] Erro ao inicializar:', err)
         setUser(null)
       } finally {
         setLoading(false)
@@ -52,10 +54,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initAuth()
 
-    // 🔂 Listener de mudanças de autenticação
+    // 🔂 Escuta mudanças de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('[AUTH] Evento detectado:', event)
+        console.log('[AUTH] Evento:', event)
 
         if (event === 'SIGNED_IN' && session?.user) {
           const { data } = await supabase
@@ -82,8 +84,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [navigate])
 
   const signIn = async (email: string, password: string) => {
+    setLoading(true)
     try {
-      setLoading(true)
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
     } catch (error: any) {
@@ -102,7 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
-      {!loading ? children : <div className="loading-screen">Carregando...</div>}
+      {children}
     </AuthContext.Provider>
   )
 }
