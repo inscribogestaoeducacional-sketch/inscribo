@@ -1,6 +1,6 @@
 // ========================================
-// HOOK ENTERPRISE: useTabVisibility
-// ZERO reloads, ZERO side effects
+// useTabVisibility - ZERO SIDE EFFECTS
+// Apenas monitora, não causa reloads
 // Arquivo: src/hooks/useTabVisibility.ts
 // ========================================
 
@@ -12,10 +12,6 @@ interface UseTabVisibilityOptions {
   preventReload?: boolean
 }
 
-/**
- * Hook enterprise para gerenciar visibilidade sem causar reloads
- * Usa refs para evitar re-renders
- */
 export function useTabVisibility(options: UseTabVisibilityOptions = {}) {
   const {
     onVisible,
@@ -27,7 +23,6 @@ export function useTabVisibility(options: UseTabVisibilityOptions = {}) {
   const lastState = useRef<DocumentVisibilityState>('visible')
 
   useEffect(() => {
-    // Skip primeiro mount
     if (isFirstMount.current) {
       isFirstMount.current = false
       return
@@ -37,30 +32,35 @@ export function useTabVisibility(options: UseTabVisibilityOptions = {}) {
       const current = document.visibilityState
       const previous = lastState.current
 
-      // Aba voltou visível
+      // Aba visível
       if (current === 'visible' && previous === 'hidden') {
         console.log('[TAB] 👁️ Visible')
         
-        // Callback customizado
-        onVisible?.()
+        // Callback SE fornecido
+        if (onVisible) {
+          onVisible()
+        }
         
-        // Previne reload se necessário
+        // Previne reload SE necessário
         if (preventReload) {
-          // Remove beforeunload
           window.onbeforeunload = null
         }
       }
 
-      // Aba ficou oculta
+      // Aba oculta
       if (current === 'hidden' && previous === 'visible') {
         console.log('[TAB] 😴 Hidden')
-        onHidden?.()
+        
+        // Callback SE fornecido
+        if (onHidden) {
+          onHidden()
+        }
       }
 
       lastState.current = current
     }
 
-    // Listener passivo (não bloqueia)
+    // Listener PASSIVO (não bloqueia)
     document.addEventListener('visibilitychange', handleVisibility, { passive: true })
 
     return () => {
@@ -70,8 +70,12 @@ export function useTabVisibility(options: UseTabVisibilityOptions = {}) {
 }
 
 /**
- * Versão simplificada - apenas previne reloads
+ * Versão simplificada - APENAS previne reloads
+ * NÃO executa callbacks, NÃO causa side effects
  */
 export function usePreventTabReload() {
-  useTabVisibility({ preventReload: true })
+  useTabVisibility({ 
+    preventReload: true
+    // SEM callbacks!
+  })
 }
