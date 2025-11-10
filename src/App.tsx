@@ -1,158 +1,108 @@
-import React from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider, useAuth } from './contexts/AuthContext'
-import LoginForm from './components/auth/LoginForm'
-import Dashboard from './components/dashboard/Dashboard'
-import LeadKanban from './components/leads/LeadKanban'
-import VisitCalendar from './components/calendar/VisitCalendar'
-import EnrollmentManager from './components/enrollments/EnrollmentManager'
-import MarketingCPA from './components/marketing/MarketingCPA'
-import ReEnrollments from './components/reenrollments/ReEnrollments'
-import FunnelAnalysis from './components/funnel/FunnelAnalysis'
-import ActionsManager from './components/actions/ActionsManager'
-import Reports from './components/reports/Reports'
-import UserManagement from './components/management/UserManagement'
-import SystemSettings from './components/management/SystemSettings'
-import UserProfile from './components/management/UserProfile'
-import Sidebar from './components/layout/Sidebar'
-import TopBar from './components/layout/TopBar'
-
-function ProtectedRoute({ 
-  children, 
-  allowedRoles = [] 
-}: { 
-  children: React.ReactNode
-  allowedRoles?: string[]
-}) {
-  const { user, loading } = useAuth()
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Carregando...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!user) {
-    return <Navigate to="/login" replace />
-  }
-
-  if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard" replace />
-  }
-
-  return <>{children}</>
-}
-
-function DashboardLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <Sidebar />
-      <div className="ml-64">
-        <TopBar />
-        <main>{children}</main>
-      </div>
-    </div>
-  )
-}
-
-function AppContent() {
-  const { user, loading } = useAuth()
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-        <div className="text-center">
-          <div className="w-16 h-16 mb-6 mx-auto">
-            <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600"></div>
-          </div>
-          <h2 className="text-xl font-semibold text-gray-900">Inscribo</h2>
-          <p className="text-gray-600 mt-2">Verificando sessão...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!user) {
-    return (
-      <Routes>
-        <Route path="/login" element={<LoginForm />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    )
-  }
-
-  return (
-    <DashboardLayout>
-      <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/leads" element={<LeadKanban />} />
-        <Route path="/visits" element={<VisitCalendar />} />
-        <Route path="/enrollments" element={<EnrollmentManager />} />
-        
-        <Route path="/marketing" element={
-          <ProtectedRoute allowedRoles={['manager', 'admin']}>
-            <MarketingCPA />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/reenrollments" element={
-          <ProtectedRoute allowedRoles={['manager', 'admin']}>
-            <ReEnrollments />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/funnel" element={
-          <ProtectedRoute allowedRoles={['manager', 'admin']}>
-            <FunnelAnalysis />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/actions" element={
-          <ProtectedRoute allowedRoles={['manager', 'admin']}>
-            <ActionsManager />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/reports" element={
-          <ProtectedRoute allowedRoles={['manager', 'admin']}>
-            <Reports />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/users" element={
-          <ProtectedRoute allowedRoles={['admin']}>
-            <UserManagement />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/settings" element={
-          <ProtectedRoute allowedRoles={['admin']}>
-            <SystemSettings />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/profile" element={<UserProfile />} />
-        <Route path="/login" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </DashboardLayout>
-  )
-}
+import React, { useState } from 'react';
+import { useAuth } from './contexts/AuthContext';
+import { hasSupabaseConfig } from './lib/supabase';
+import { LoginForm } from './components/auth/LoginForm';
+import { Sidebar } from './components/layout/Sidebar';
+import { Header } from './components/layout/Header';
+import { Dashboard } from './components/dashboard/Dashboard';
+import { LeadsKanban } from './components/leads/LeadsKanban';
+import { CalendarView } from './components/calendar/CalendarView';
+import { Reports } from './components/reports/Reports';
+import { UserManagement } from './components/users/UserManagement';
+import { Settings } from './components/settings/Settings';
 
 function App() {
+  const { user, profile, loading } = useAuth();
+  const [currentPage, setCurrentPage] = useState('dashboard');
+
+  // Show loading while checking auth
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login if not authenticated
+  if (!user) {
+    return <LoginForm />;
+  }
+
+  // Authenticated user
+  const currentProfile = profile || {
+    id: user?.id || 'user',
+    full_name: user?.user_metadata?.full_name || 'Usuário',
+    email: user?.email || 'user@email.com',
+    role: 'user' as const,
+    institution_id: null,
+    avatar_url: null,
+  };
+
   return (
-    <Router>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </Router>
-  )
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+      <Sidebar 
+        currentPage={currentPage} 
+        onPageChange={setCurrentPage}
+        profile={currentProfile}
+        onSignOut={signOut}
+      />
+      
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Header title={getPageTitle(currentPage)} subtitle={getPageSubtitle(currentPage)} />
+        
+        <main className="flex-1 overflow-y-auto">
+          {renderCurrentPage(currentPage, setCurrentPage, currentProfile)}
+        </main>
+      </div>
+    </div>
+  );
 }
 
-export default App
+function getPageTitle(currentPage: string) {
+  const titles: Record<string, string> = {
+    dashboard: 'Dashboard',
+    leads: 'Gestão de Leads',
+    calendar: 'Calendário de Visitas',
+    reports: 'Relatórios',
+    users: 'Gestão de Usuários',
+    settings: 'Configurações',
+  };
+  return titles[currentPage] || 'Dashboard';
+}
+
+function getPageSubtitle(currentPage: string) {
+  const subtitles: Record<string, string> = {
+    dashboard: 'Visão geral das suas atividades',
+    leads: 'Gerencie seus leads através do funil de vendas',
+    calendar: 'Agende e gerencie visitas',
+    reports: 'Análise de performance e conversões',
+    users: 'Gerenciar usuários do sistema',
+    settings: 'Configurações gerais do sistema',
+  };
+  return subtitles[currentPage];
+}
+
+function renderCurrentPage(currentPage: string, setCurrentPage: (page: string) => void, profile: any) {
+  switch (currentPage) {
+    case 'dashboard':
+      return <Dashboard onNavigate={setCurrentPage} profile={profile} />;
+    case 'leads':
+      return <LeadsKanban />;
+    case 'calendar':
+      return <CalendarView />;
+    case 'reports':
+      return <Reports />;
+    case 'users':
+      return <UserManagement />;
+    case 'settings':
+      return <Settings />;
+    default:
+      return <Dashboard onNavigate={setCurrentPage} profile={profile} />;
+  }
+}
+
+export default App;
