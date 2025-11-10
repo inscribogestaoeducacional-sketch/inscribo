@@ -1,5 +1,5 @@
 // ========================================
-// AUTHCONTEXT DEFINITIVO - SEM TIMEOUT
+// AUTHCONTEXT FINAL - COM TIMEOUT INTELIGENTE
 // Arquivo: src/contexts/AuthContext.tsx
 // ========================================
 
@@ -28,15 +28,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   
   const isLoadingUser = useRef(false)
   const isMounted = useRef(true)
+  const safetyTimeoutRef = useRef<NodeJS.Timeout>()
   
   const navigate = useNavigate()
+
+  // ========================================
+  // TIMEOUT DE SEGURANÇA (10s)
+  // Só ativa se realmente travar
+  // ========================================
+  useEffect(() => {
+    // Timeout de SEGURANÇA de 10 segundos
+    // Só serve para caso algo dê muito errado
+    safetyTimeoutRef.current = setTimeout(() => {
+      if (initializing && isMounted.current) {
+        console.warn('[AUTH] ⚠️ TIMEOUT DE SEGURANÇA - Forçando conclusão')
+        setInitializing(false)
+        
+        // Se não tem usuário, vai para login
+        if (!user) {
+          console.log('[AUTH] ➡️ Sem usuário - redirecionando para login')
+          navigate('/login', { replace: true })
+        }
+      }
+    }, 10000)
+
+    return () => {
+      if (safetyTimeoutRef.current) {
+        clearTimeout(safetyTimeoutRef.current)
+      }
+    }
+  }, [initializing, user, navigate])
 
   // ========================================
   // CARREGAR DADOS DO USUÁRIO
   // ========================================
   const loadUserData = useCallback(async (email: string): Promise<boolean> => {
     if (isLoadingUser.current) {
-      console.log('[AUTH] Já carregando - aguardando...')
+      console.log('[AUTH] ⏳ Já carregando - aguardando...')
       return false
     }
 
@@ -54,27 +82,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!isMounted.current) return false
 
       if (error) {
-        console.error('[AUTH] ❌ Erro:', error)
+        console.error('[AUTH] ❌ Erro na query:', error.message)
         throw error
       }
 
       if (data) {
-        console.log('[AUTH] ✅ Carregado:', data.full_name)
+        console.log('[AUTH] ✅ Usuário carregado:', data.full_name)
         setUser(data)
-        setInitializing(false) // ← AQUI que seta false, não no timeout!
+        setInitializing(false)
+        
+        // Limpa timeout de segurança
+        if (safetyTimeoutRef.current) {
+          clearTimeout(safetyTimeoutRef.current)
+        }
+        
         return true
       }
 
+      console.warn('[AUTH] ⚠️ Usuário não encontrado')
       setInitializing(false)
       return false
-    } catch (error) {
-      console.error('[AUTH] ❌ Erro crítico:', error)
+      
+    } catch (error: any) {
+      console.error('[AUTH] ❌ Erro crítico:', error.message)
+      
       if (isMounted.current) {
+        // Em caso de erro, desloga
         await supabase.auth.signOut()
         setUser(null)
         setSupabaseUser(null)
         setInitializing(false)
       }
+      
       return false
     } finally {
       isLoadingUser.current = false
@@ -97,21 +136,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!mounted) return
 
         if (error) {
-          console.error('[AUTH] ❌ Erro sessão:', error)
+          console.error('[AUTH] ❌ Erro ao obter sessão:', error.message)
           setInitializing(false)
           return
         }
 
         if (session?.user) {
-          console.log('[AUTH] ✅ Sessão encontrada:', session.user.email)
+          console.log('[AUTH] ✅ Sessão ativa:', session.user.email)
           setSupabaseUser(session.user)
-          await loadUserData(session.user.email)
+          
+          const success = await loadUserData(session.user.email)
+          
+          if (success) {
+            console.log('[AUTH] 🎉 Inicialização completa!')
+          }
         } else {
-          console.log('[AUTH] ℹ️ Sem sessão')
+          console.log('[AUTH] ℹ️ Sem sessão ativa')
           setInitializing(false)
         }
-      } catch (error) {
-        console.error('[AUTH] ❌ Erro init:', error)
+      } catch (error: any) {
+        console.error('[AUTH] ❌ Erro na inicialização:', error.message)
         if (mounted) {
           setInitializing(false)
         }
@@ -136,20 +180,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Ignorar refresh (CRÍTICO)
         if (event === 'TOKEN_REFRESHED') {
-          console.log('[AUTH] 🔄 Token OK - mantendo')
+          console.log('[AUTH] 🔄 Token atualizado - mantendo estado')
           return
         }
 
         // Login
         if (event === 'SIGNED_IN' && session?.user) {
-          console.log('[AUTH] ✅ Login OK')
+          console.log('[AUTH] ✅ Login detectado')
           setSupabaseUser(session.user)
           
           const success = await loadUserData(session.user.email)
           
           if (success) {
-            console.log('[AUTH] ➡️ Redirecionando...')
-            // Aguarda render cycle completar
+            console.log('[AUTH] ➡️ Redirecionando para dashboard...')
             setTimeout(() => {
               navigate('/dashboard', { replace: true })
             }, 200)
@@ -158,7 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Logout
         else if (event === 'SIGNED_OUT') {
-          console.log('[AUTH] 🚪 Logout')
+          console.log('[AUTH] 🚪 Logout detectado')
           setUser(null)
           setSupabaseUser(null)
           setInitializing(false)
@@ -176,9 +219,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // MÉTODOS PÚBLICOS
   // ========================================
   const signIn = useCallback(async (email: string, password: string) => {
-    console.log('[AUTH] 🔑 Login...')
+    console.log('[AUTH] 🔑 Tentando login...')
     setLoading(true)
-    setInitializing(true) // ← Seta true para mostrar loading
+    setInitializing(true)
     
     try {
       const { error } = await supabase.auth.signInWithPassword({
@@ -188,10 +231,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error
       
-      console.log('[AUTH] ✅ Autenticado')
+      console.log('[AUTH] ✅ Login bem-sucedido')
       
     } catch (error: any) {
-      console.error('[AUTH] ❌ Erro login:', error.message)
+      console.error('[AUTH] ❌ Erro no login:', error.message)
       setInitializing(false)
       setLoading(false)
       throw error
@@ -199,7 +242,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
-    console.log('[AUTH] 🚪 Saindo...')
+    console.log('[AUTH] 🚪 Fazendo logout...')
     await supabase.auth.signOut()
     setUser(null)
     setSupabaseUser(null)
@@ -207,7 +250,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [navigate])
 
   const refreshUser = useCallback(async () => {
-    console.log('[AUTH] 🔄 Refresh')
+    console.log('[AUTH] 🔄 Refresh manual solicitado')
     const { data: { session } } = await supabase.auth.getSession()
     if (session?.user && isMounted.current) {
       await loadUserData(session.user.email)
