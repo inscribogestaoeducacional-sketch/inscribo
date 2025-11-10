@@ -5,24 +5,45 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Inscribo - Sistema de Gestão</title>
+    
     <script>
-      // Trata ChunkLoadError globalmente
-      window.addEventListener('unhandledrejection', function(event) {
-        if (event.reason && event.reason.message && event.reason.message.includes('Loading chunk')) {
-          console.warn('ChunkLoadError detectado - recarregando...');
-          event.preventDefault();
-          // Recarrega a página uma única vez
-          if (!sessionStorage.getItem('chunk_reload_attempted')) {
-            sessionStorage.setItem('chunk_reload_attempted', 'true');
-            window.location.reload();
+      // Limpa service workers antigos
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+          registrations.forEach(registration => registration.unregister())
+        })
+      }
+      
+      // Trata ChunkLoadError
+      window.addEventListener('unhandledrejection', event => {
+        const error = event.reason
+        
+        if (error?.message?.includes('Loading chunk') || 
+            error?.message?.includes('Failed to fetch dynamically imported module')) {
+          
+          console.warn('[CHUNK ERROR] Detectado, limpando cache...')
+          event.preventDefault()
+          
+          // Limpa caches
+          if ('caches' in window) {
+            caches.keys().then(names => {
+              names.forEach(name => caches.delete(name))
+            })
+          }
+          
+          // Recarrega UMA VEZ
+          if (!sessionStorage.getItem('chunk_reload')) {
+            sessionStorage.setItem('chunk_reload', '1')
+            window.location.reload()
+          } else {
+            sessionStorage.removeItem('chunk_reload')
+            alert('Erro ao carregar. Por favor, limpe o cache do navegador (Ctrl+Shift+Delete)')
           }
         }
-      });
+      })
       
-      // Limpa flag após 5 segundos
-      setTimeout(() => {
-        sessionStorage.removeItem('chunk_reload_attempted');
-      }, 5000);
+      // Limpa flag após 5s
+      setTimeout(() => sessionStorage.removeItem('chunk_reload'), 5000)
     </script>
   </head>
   <body>
