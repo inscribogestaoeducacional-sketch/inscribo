@@ -1,11 +1,12 @@
 import React, { createContext, useState, useEffect, useContext } from 'react'
 import axios from 'axios'
 
-// Tipagem dos dados do usuário (ajuste conforme sua API)
+// Tipagem do usuário (com 'role' para controle de acesso)
 interface User {
   id: string
   name: string
   email: string
+  role: string // admin, manager, user etc.
 }
 
 interface AuthContextData {
@@ -15,15 +16,13 @@ interface AuthContextData {
   signOut: () => void
 }
 
-// Criação do contexto
 const AuthContext = createContext<AuthContextData>({} as AuthContextData)
 
-// Provider
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Verifica se o usuário já está logado ao iniciar
+  // Verifica se há sessão salva no localStorage
   useEffect(() => {
     const storedUser = localStorage.getItem('@Esquimbro:user')
     const storedToken = localStorage.getItem('@Esquimbro:token')
@@ -44,15 +43,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         password,
       })
 
+      // A API deve retornar um objeto com { user, token }
       const { user, token } = response.data
 
+      // Salva no localStorage
       localStorage.setItem('@Esquimbro:user', JSON.stringify(user))
       localStorage.setItem('@Esquimbro:token', token)
+
+      // Define o token padrão para futuras requisições
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+
+      // Atualiza estado
       setUser(user)
     } catch (error) {
       console.error('Erro ao fazer login:', error)
-      throw new Error('Credenciais inválidas')
+      throw new Error('Falha no login. Verifique suas credenciais.')
     }
   }
 
@@ -70,7 +75,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   )
 }
 
-// Hook personalizado para acessar o contexto
 export const useAuth = () => {
   const context = useContext(AuthContext)
   if (!context) {
