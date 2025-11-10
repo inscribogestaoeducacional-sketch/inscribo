@@ -1,7 +1,3 @@
-// ========================================
-// HOOK PROFISSIONAL: useTabVisibility
-// Arquivo: src/hooks/useTabVisibility.ts
-// ========================================
 
 import { useEffect, useRef } from 'react'
 
