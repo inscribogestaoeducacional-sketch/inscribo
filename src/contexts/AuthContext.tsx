@@ -1,7 +1,11 @@
+// ========================================
+// AUTHCONTEXT FINAL - SOLUÇÃO COMPLETA
+// Arquivo: src/contexts/AuthContext.tsx
+// ========================================
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { User as SupabaseUser } from '@supabase/supabase-js'
-import { supabase, DatabaseService, User as AppUser } from '../lib/supabase'
+import { supabase, User as AppUser } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 
 interface AuthContextType {
@@ -22,45 +26,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(false)
   const [initializing, setInitializing] = useState(true)
   
-  // Refs para evitar múltiplas chamadas
   const isLoadingUser = useRef(false)
   const isMounted = useRef(true)
-  const initializationTimeout = useRef<NodeJS.Timeout>()
+  const hasCompletedInit = useRef(false)
   
   const navigate = useNavigate()
 
   // ========================================
-  // TIMEOUT DE SEGURANÇA
-  // ========================================
-  useEffect(() => {
-    // Timeout de 10 segundos para garantir que não fica travado
-    initializationTimeout.current = setTimeout(() => {
-      if (initializing) {
-        console.warn('[AUTH] Timeout de inicialização - forçando conclusão')
-        setInitializing(false)
-      }
-    }, 10000)
-
-    return () => {
-      if (initializationTimeout.current) {
-        clearTimeout(initializationTimeout.current)
-      }
-    }
-  }, [initializing])
-
-  // ========================================
   // CARREGAR DADOS DO USUÁRIO
   // ========================================
-  const loadUserData = useCallback(async (email: string) => {
-    // Previne chamadas duplicadas
+  const loadUserData = useCallback(async (email: string): Promise<boolean> => {
     if (isLoadingUser.current) {
-      console.log('[AUTH] Já está carregando usuário - ignorando')
-      return
+      console.log('[AUTH] Já está carregando - ignorando')
+      return false
     }
 
     try {
       isLoadingUser.current = true
-      console.log('[AUTH] Carregando dados do usuário:', email)
+      console.log('[AUTH] Carregando dados:', email)
 
       const { data, error } = await supabase
         .from('users')
@@ -69,62 +52,90 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('active', true)
         .single()
 
-      if (!isMounted.current) return
+      if (!isMounted.current) return false
 
-      if (error) throw error
+      if (error) {
+        console.error('[AUTH] Erro ao carregar:', error)
+        throw error
+      }
 
       if (data) {
-        console.log('[AUTH] Usuário carregado:', data.full_name)
+        console.log('[AUTH] ✅ Usuário carregado:', data.full_name)
         setUser(data)
+        return true
       }
+
+      return false
     } catch (error) {
-      console.error('[AUTH] Erro ao carregar usuário:', error)
+      console.error('[AUTH] ❌ Erro crítico:', error)
       if (isMounted.current) {
         await supabase.auth.signOut()
         setUser(null)
+        setSupabaseUser(null)
       }
+      return false
     } finally {
       isLoadingUser.current = false
       if (isMounted.current) {
         setLoading(false)
         setInitializing(false)
+        hasCompletedInit.current = true
       }
     }
   }, [])
 
   // ========================================
-  // INICIALIZAÇÃO - EXECUTAR APENAS UMA VEZ
+  // INICIALIZAÇÃO - UMA VEZ APENAS
   // ========================================
   useEffect(() => {
     let mounted = true
+    let timeoutId: NodeJS.Timeout
 
     async function initializeAuth() {
+      // Timeout de segurança de 8 segundos
+      timeoutId = setTimeout(() => {
+        if (mounted && !hasCompletedInit.current) {
+          console.warn('[AUTH] ⏱️ Timeout - forçando conclusão')
+          setInitializing(false)
+          hasCompletedInit.current = true
+        }
+      }, 8000)
+
       try {
-        console.log('[AUTH] Inicializando autenticação...')
+        console.log('[AUTH] 🔐 Inicializando...')
         
         const { data: { session }, error } = await supabase.auth.getSession()
 
         if (!mounted) return
 
         if (error) {
-          console.error('[AUTH] Erro ao obter sessão:', error)
+          console.error('[AUTH] ❌ Erro ao obter sessão:', error)
           setInitializing(false)
+          hasCompletedInit.current = true
           return
         }
 
         if (session?.user) {
-          console.log('[AUTH] Sessão encontrada:', session.user.email)
+          console.log('[AUTH] ✅ Sessão ativa:', session.user.email)
           setSupabaseUser(session.user)
-          await loadUserData(session.user.email)
+          const success = await loadUserData(session.user.email)
+          
+          if (success && mounted) {
+            console.log('[AUTH] ✅ Inicialização completa')
+          }
         } else {
-          console.log('[AUTH] Nenhuma sessão ativa')
+          console.log('[AUTH] ℹ️ Sem sessão ativa')
           setInitializing(false)
+          hasCompletedInit.current = true
         }
       } catch (error) {
-        console.error('[AUTH] Erro na inicialização:', error)
+        console.error('[AUTH] ❌ Erro na inicialização:', error)
         if (mounted) {
           setInitializing(false)
+          hasCompletedInit.current = true
         }
+      } finally {
+        clearTimeout(timeoutId)
       }
     }
 
@@ -133,33 +144,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       mounted = false
       isMounted.current = false
+      clearTimeout(timeoutId)
     }
   }, [loadUserData])
 
   // ========================================
-  // LISTENER DE AUTH - OTIMIZADO
+  // LISTENER DE AUTH
   // ========================================
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('[AUTH] Evento:', event)
+        console.log('[AUTH] 🔔 Evento:', event)
 
-        // CRÍTICO: Ignorar TOKEN_REFRESHED para evitar reloads
+        // Ignorar refresh de token (CRÍTICO!)
         if (event === 'TOKEN_REFRESHED') {
-          console.log('[AUTH] Token atualizado silenciosamente - mantendo usuário')
+          console.log('[AUTH] 🔄 Token atualizado - mantendo estado')
           return
         }
 
-        // Apenas processar eventos importantes
+        // Login
         if (event === 'SIGNED_IN' && session?.user) {
-          console.log('[AUTH] Usuário logou')
+          console.log('[AUTH] ✅ Login detectado')
           setSupabaseUser(session.user)
-          await loadUserData(session.user.email)
-        } else if (event === 'SIGNED_OUT') {
-          console.log('[AUTH] Usuário deslogou')
+          
+          const success = await loadUserData(session.user.email)
+          
+          if (success) {
+            console.log('[AUTH] ➡️ Redirecionando para dashboard...')
+            // Pequeno delay para garantir que o estado atualizou
+            setTimeout(() => {
+              navigate('/dashboard', { replace: true })
+            }, 100)
+          }
+        }
+        
+        // Logout
+        else if (event === 'SIGNED_OUT') {
+          console.log('[AUTH] 🚪 Logout detectado')
           setUser(null)
           setSupabaseUser(null)
-          navigate('/login')
+          navigate('/login', { replace: true })
         }
       }
     )
@@ -172,38 +196,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ========================================
   // MÉTODOS PÚBLICOS
   // ========================================
-  const refreshUser = useCallback(async () => {
-    console.log('[AUTH] Refresh manual solicitado')
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session?.user && isMounted.current) {
-      await loadUserData(session.user.email)
-    }
-  }, [loadUserData])
-
   const signIn = useCallback(async (email: string, password: string) => {
-    console.log('[AUTH] Tentando login...')
+    console.log('[AUTH] 🔑 Tentando login...')
     setLoading(true)
     
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       })
 
       if (error) throw error
-      console.log('[AUTH] Login bem-sucedido')
+      
+      console.log('[AUTH] ✅ Login bem-sucedido')
+      
+      // O listener onAuthStateChange vai cuidar do resto
+      
+    } catch (error: any) {
+      console.error('[AUTH] ❌ Erro no login:', error.message)
+      throw error
     } finally {
       setLoading(false)
     }
   }, [])
 
   const signOut = useCallback(async () => {
-    console.log('[AUTH] Fazendo logout...')
+    console.log('[AUTH] 🚪 Fazendo logout...')
     await supabase.auth.signOut()
     setUser(null)
     setSupabaseUser(null)
-    navigate('/login')
+    navigate('/login', { replace: true })
   }, [navigate])
+
+  const refreshUser = useCallback(async () => {
+    console.log('[AUTH] 🔄 Refresh manual')
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.user && isMounted.current) {
+      await loadUserData(session.user.email)
+    }
+  }, [loadUserData])
 
   const value = {
     user,
