@@ -1,6 +1,6 @@
 // ========================================
-// AUTHCONTEXT ABSOLUTO - ZERO FALHAS
-// Versão testada e aprovada
+// AUTHCONTEXT ULTIMATE - COM SESSIONSTORAGE
+// Nunca perde sessão ao recarregar
 // Arquivo: src/contexts/AuthContext.tsx
 // ========================================
 
@@ -21,8 +21,25 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+// Cache de usuário no SessionStorage
+const USER_STORAGE_KEY = 'inscribo_user_cache'
+const SESSION_STORAGE_KEY = 'inscribo_has_session'
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AppUser | null>(null)
+  const [user, setUser] = useState<AppUser | null>(() => {
+    // Tenta restaurar do SessionStorage
+    try {
+      const cached = sessionStorage.getItem(USER_STORAGE_KEY)
+      if (cached) {
+        console.log('[AUTH] 💾 Usuário em cache')
+        return JSON.parse(cached)
+      }
+    } catch (e) {
+      console.error('[AUTH] ❌ Cache error:', e)
+    }
+    return null
+  })
+  
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null)
   const [loading, setLoading] = useState(false)
   const [initializing, setInitializing] = useState(true)
@@ -30,26 +47,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isLoadingUser = useRef(false)
   const isMounted = useRef(true)
   const hasInitialized = useRef(false)
+  const initTimeoutRef = useRef<NodeJS.Timeout>()
   
   const navigate = useNavigate()
 
   // ========================================
-  // CARREGAR USUÁRIO - COM TIMEOUT INTERNO
+  // SALVAR USUÁRIO NO CACHE
+  // ========================================
+  const cacheUser = useCallback((userData: AppUser | null) => {
+    try {
+      if (userData) {
+        sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData))
+        sessionStorage.setItem(SESSION_STORAGE_KEY, 'true')
+        console.log('[AUTH] 💾 Cache salvo')
+      } else {
+        sessionStorage.removeItem(USER_STORAGE_KEY)
+        sessionStorage.removeItem(SESSION_STORAGE_KEY)
+        console.log('[AUTH] 🗑️ Cache limpo')
+      }
+    } catch (e) {
+      console.error('[AUTH] ❌ Cache save error:', e)
+    }
+  }, [])
+
+  // ========================================
+  // VERIFICAR SE TEM SESSÃO ATIVA
+  // ========================================
+  const hasActiveSession = useCallback(() => {
+    return sessionStorage.getItem(SESSION_STORAGE_KEY) === 'true'
+  }, [])
+
+  // ========================================
+  // CARREGAR USUÁRIO
   // ========================================
   const loadUserData = useCallback(async (email: string): Promise<boolean> => {
     if (isLoadingUser.current) {
       console.log('[AUTH] 🔒 Bloqueado')
       return false
     }
-
-    const timeoutId = setTimeout(() => {
-      if (isLoadingUser.current) {
-        console.warn('[AUTH] ⏱️ Load timeout - forçando conclusão')
-        isLoadingUser.current = false
-        setInitializing(false)
-        setLoading(false)
-      }
-    }, 5000) // 5 segundos timeout APENAS para loadUserData
 
     try {
       isLoadingUser.current = true
@@ -62,8 +97,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('active', true)
         .single()
 
-      clearTimeout(timeoutId)
-
       if (!isMounted.current) return false
 
       if (error) {
@@ -75,6 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data) {
         console.log('[AUTH] ✅ Loaded:', data.full_name)
         setUser(data)
+        cacheUser(data) // Salva no cache
         setInitializing(false)
         return true
       }
@@ -83,7 +117,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return false
       
     } catch (error: any) {
-      clearTimeout(timeoutId)
       console.error('[AUTH] ❌ Exception:', error.message)
       setInitializing(false)
       return false
@@ -91,22 +124,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isLoadingUser.current = false
       setLoading(false)
     }
-  }, [])
+  }, [cacheUser])
 
   // ========================================
-  // INICIALIZAÇÃO - UMA VEZ APENAS
+  // INICIALIZAÇÃO COM TIMEOUT DE SEGURANÇA
   // ========================================
   useEffect(() => {
     if (hasInitialized.current) {
-      console.log('[AUTH] ✋ Skip - already initialized')
+      console.log('[AUTH] ✋ Skip')
       return
     }
 
     let mounted = true
 
+    // Timeout de segurança - 15 segundos
+    // Só ativa se realmente travar
+    initTimeoutRef.current = setTimeout(() => {
+      if (initializing && mounted) {
+        console.warn('[AUTH] ⏱️ Init timeout')
+        
+        // Se tem usuário em cache, mantém
+        if (user) {
+          console.log('[AUTH] ✅ Mantendo cache')
+          setInitializing(false)
+        } 
+        // Se tinha sessão mas perdeu, tenta uma última vez
+        else if (hasActiveSession()) {
+          console.log('[AUTH] 🔄 Tentativa final')
+          supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session?.user && mounted) {
+              loadUserData(session.user.email).then(() => {
+                if (mounted) setInitializing(false)
+              })
+            } else {
+              if (mounted) setInitializing(false)
+            }
+          })
+        }
+        // Sem nada, libera
+        else {
+          console.log('[AUTH] ℹ️ Sem sessão')
+          setInitializing(false)
+        }
+        
+        hasInitialized.current = true
+      }
+    }, 15000)
+
     const initialize = async () => {
       try {
         console.log('[AUTH] 🚀 Init')
+        
+        // Se já tem usuário em cache, usa temporariamente
+        if (user) {
+          console.log('[AUTH] ⚡ Usando cache')
+        }
         
         const { data: { session }, error } = await supabase.auth.getSession()
 
@@ -114,7 +186,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (error) {
           console.error('[AUTH] ❌ Session error:', error.message)
-          setInitializing(false)
+          
+          // Se tem cache, mantém
+          if (user) {
+            console.log('[AUTH] ✅ Mantendo cache')
+            setInitializing(false)
+          } else {
+            setInitializing(false)
+          }
+          
           hasInitialized.current = true
           return
         }
@@ -122,9 +202,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session?.user) {
           console.log('[AUTH] ✅ Session:', session.user.email)
           setSupabaseUser(session.user)
-          await loadUserData(session.user.email)
+          
+          // Só carrega se não tem cache OU cache desatualizado
+          if (!user || user.email !== session.user.email) {
+            await loadUserData(session.user.email)
+          } else {
+            console.log('[AUTH] ✅ Cache válido')
+            setInitializing(false)
+          }
         } else {
           console.log('[AUTH] ℹ️ No session')
+          
+          // Limpa cache se não tem sessão
+          if (user) {
+            console.log('[AUTH] 🗑️ Limpando cache desatualizado')
+            setUser(null)
+            cacheUser(null)
+          }
+          
           setInitializing(false)
         }
         
@@ -132,7 +227,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
       } catch (error: any) {
         console.error('[AUTH] ❌ Init error:', error.message)
+        
+        // Em caso de erro, mantém cache se existir
         if (mounted) {
+          if (user) {
+            console.log('[AUTH] ✅ Mantendo cache em erro')
+          }
           setInitializing(false)
           hasInitialized.current = true
         }
@@ -144,18 +244,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       mounted = false
       isMounted.current = false
+      if (initTimeoutRef.current) {
+        clearTimeout(initTimeoutRef.current)
+      }
     }
-  }, []) // Array vazio - UMA VEZ
+  }, [loadUserData, user, cacheUser, hasActiveSession])
 
   // ========================================
-  // LISTENER - IGNORA EVENTOS PROBLEMÁTICOS
+  // LISTENER
   // ========================================
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('[AUTH] 🔔', event)
 
-        // IGNORAR estes eventos
+        // Ignorar eventos
         const ignoredEvents = ['TOKEN_REFRESHED', 'INITIAL_SESSION']
         if (ignoredEvents.includes(event)) {
           console.log('[AUTH] ⏭️ Skip:', event)
@@ -164,9 +267,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Login
         if (event === 'SIGNED_IN' && session?.user) {
-          // Só processa se NÃO estiver carregando
           if (isLoadingUser.current) {
-            console.log('[AUTH] ⏭️ Skip SIGNED_IN - já carregando')
+            console.log('[AUTH] ⏭️ Skip - já carregando')
             return
           }
 
@@ -188,6 +290,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log('[AUTH] 🚪 Signed out')
           setUser(null)
           setSupabaseUser(null)
+          cacheUser(null)
           setInitializing(false)
           hasInitialized.current = false
           navigate('/login', { replace: true })
@@ -198,7 +301,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       subscription.unsubscribe()
     }
-  }, [navigate, loadUserData])
+  }, [navigate, loadUserData, cacheUser])
 
   // ========================================
   // MÉTODOS PÚBLICOS
@@ -231,10 +334,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut()
     setUser(null)
     setSupabaseUser(null)
+    cacheUser(null)
     setInitializing(false)
     hasInitialized.current = false
     navigate('/login', { replace: true })
-  }, [navigate])
+  }, [navigate, cacheUser])
 
   const refreshUser = useCallback(async () => {
     if (isLoadingUser.current) return
