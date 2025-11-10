@@ -1,3 +1,8 @@
+// ========================================
+// HOOK ENTERPRISE: useTabVisibility
+// ZERO reloads, ZERO side effects
+// Arquivo: src/hooks/useTabVisibility.ts
+// ========================================
 
 import { useEffect, useRef } from 'react'
 
@@ -8,11 +13,8 @@ interface UseTabVisibilityOptions {
 }
 
 /**
- * Hook profissional para gerenciar visibilidade de aba
- * Previne reloads não intencionais ao trocar de aba
- * 
- * @param options - Configurações do hook
- * @returns void
+ * Hook enterprise para gerenciar visibilidade sem causar reloads
+ * Usa refs para evitar re-renders
  */
 export function useTabVisibility(options: UseTabVisibilityOptions = {}) {
   const {
@@ -22,52 +24,53 @@ export function useTabVisibility(options: UseTabVisibilityOptions = {}) {
   } = options
 
   const isFirstMount = useRef(true)
-  const lastVisibilityState = useRef<DocumentVisibilityState>('visible')
+  const lastState = useRef<DocumentVisibilityState>('visible')
 
   useEffect(() => {
-    // Pula o primeiro mount
+    // Skip primeiro mount
     if (isFirstMount.current) {
       isFirstMount.current = false
       return
     }
 
-    const handleVisibilityChange = () => {
-      const currentState = document.visibilityState
-      const previousState = lastVisibilityState.current
+    const handleVisibility = () => {
+      const current = document.visibilityState
+      const previous = lastState.current
 
-      // Aba voltou a ficar visível
-      if (currentState === 'visible' && previousState === 'hidden') {
-        console.log('[TAB VISIBILITY] Aba visível novamente')
+      // Aba voltou visível
+      if (current === 'visible' && previous === 'hidden') {
+        console.log('[TAB] 👁️ Visible')
         
-        // Executa callback customizado
+        // Callback customizado
         onVisible?.()
         
-        // Previne reload se configurado
+        // Previne reload se necessário
         if (preventReload) {
-          // Cancela qualquer beforeunload pendente
+          // Remove beforeunload
           window.onbeforeunload = null
         }
       }
 
       // Aba ficou oculta
-      if (currentState === 'hidden' && previousState === 'visible') {
-        console.log('[TAB VISIBILITY] Aba oculta')
+      if (current === 'hidden' && previous === 'visible') {
+        console.log('[TAB] 😴 Hidden')
         onHidden?.()
       }
 
-      lastVisibilityState.current = currentState
+      lastState.current = current
     }
 
-    document.addEventListener('visibilitychange', handleVisibilityChange)
+    // Listener passivo (não bloqueia)
+    document.addEventListener('visibilitychange', handleVisibility, { passive: true })
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [onVisible, onHidden, preventReload])
 }
 
 /**
- * Hook simplificado que apenas previne reloads
+ * Versão simplificada - apenas previne reloads
  */
 export function usePreventTabReload() {
   useTabVisibility({ preventReload: true })
