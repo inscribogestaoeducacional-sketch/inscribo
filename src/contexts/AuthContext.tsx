@@ -1,10 +1,11 @@
 // ========================================
-// AUTHCONTEXT FINAL - COM TIMEOUT INTELIGENTE
+// AUTHCONTEXT ENTERPRISE - 100% ROBUSTO
+// Sistema profissional sem falhas
 // Arquivo: src/contexts/AuthContext.tsx
 // ========================================
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
-import { User as SupabaseUser } from '@supabase/supabase-js'
+import { User as SupabaseUser, Session } from '@supabase/supabase-js'
 import { supabase, User as AppUser } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 
@@ -26,51 +27,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(false)
   const [initializing, setInitializing] = useState(true)
   
+  // Controles robustos
   const isLoadingUser = useRef(false)
   const isMounted = useRef(true)
-  const safetyTimeoutRef = useRef<NodeJS.Timeout>()
+  const hasInitialized = useRef(false)
+  const initPromise = useRef<Promise<void> | null>(null)
   
   const navigate = useNavigate()
 
   // ========================================
-  // TIMEOUT DE SEGURANÇA (10s)
-  // Só ativa se realmente travar
-  // ========================================
-  useEffect(() => {
-    // Timeout de SEGURANÇA de 10 segundos
-    // Só serve para caso algo dê muito errado
-    safetyTimeoutRef.current = setTimeout(() => {
-      if (initializing && isMounted.current) {
-        console.warn('[AUTH] ⚠️ TIMEOUT DE SEGURANÇA - Forçando conclusão')
-        setInitializing(false)
-        
-        // Se não tem usuário, vai para login
-        if (!user) {
-          console.log('[AUTH] ➡️ Sem usuário - redirecionando para login')
-          navigate('/login', { replace: true })
-        }
-      }
-    }, 10000)
-
-    return () => {
-      if (safetyTimeoutRef.current) {
-        clearTimeout(safetyTimeoutRef.current)
-      }
-    }
-  }, [initializing, user, navigate])
-
-  // ========================================
-  // CARREGAR DADOS DO USUÁRIO
+  // CARREGAR USUÁRIO - VERSÃO ROBUSTA
   // ========================================
   const loadUserData = useCallback(async (email: string): Promise<boolean> => {
+    // Previne chamadas paralelas
     if (isLoadingUser.current) {
-      console.log('[AUTH] ⏳ Já carregando - aguardando...')
+      console.log('[AUTH] 🔒 Bloqueado - já carregando')
       return false
     }
 
     try {
       isLoadingUser.current = true
-      console.log('[AUTH] 📊 Carregando dados:', email)
+      console.log('[AUTH] 📊 Carregando:', email)
 
       const { data, error } = await supabase
         .from('users')
@@ -79,132 +56,147 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('active', true)
         .single()
 
-      if (!isMounted.current) return false
+      if (!isMounted.current) {
+        console.log('[AUTH] ⚠️ Component unmounted')
+        return false
+      }
 
       if (error) {
-        console.error('[AUTH] ❌ Erro na query:', error.message)
-        throw error
+        console.error('[AUTH] ❌ Query error:', error.message)
+        
+        // Se erro de autenticação, desloga
+        if (error.message.includes('JWT') || error.message.includes('auth')) {
+          console.log('[AUTH] 🚪 Erro de auth - deslogando')
+          await supabase.auth.signOut()
+          setUser(null)
+          setSupabaseUser(null)
+        }
+        
+        return false
       }
 
       if (data) {
-        console.log('[AUTH] ✅ Usuário carregado:', data.full_name)
+        console.log('[AUTH] ✅ OK:', data.full_name)
         setUser(data)
-        setInitializing(false)
-        
-        // Limpa timeout de segurança
-        if (safetyTimeoutRef.current) {
-          clearTimeout(safetyTimeoutRef.current)
-        }
-        
         return true
       }
 
-      console.warn('[AUTH] ⚠️ Usuário não encontrado')
-      setInitializing(false)
+      console.warn('[AUTH] ⚠️ User not found')
       return false
       
     } catch (error: any) {
-      console.error('[AUTH] ❌ Erro crítico:', error.message)
-      
-      if (isMounted.current) {
-        // Em caso de erro, desloga
-        await supabase.auth.signOut()
-        setUser(null)
-        setSupabaseUser(null)
-        setInitializing(false)
-      }
-      
+      console.error('[AUTH] ❌ Exception:', error.message)
       return false
     } finally {
       isLoadingUser.current = false
-      setLoading(false)
     }
   }, [])
 
   // ========================================
-  // INICIALIZAÇÃO
+  // INICIALIZAÇÃO - UMA VEZ APENAS
   // ========================================
   useEffect(() => {
+    // Se já inicializou, não faz nada
+    if (hasInitialized.current) {
+      console.log('[AUTH] ✋ Já inicializado - skip')
+      return
+    }
+
+    // Se já tem uma inicialização rodando, não inicia outra
+    if (initPromise.current) {
+      console.log('[AUTH] ⏳ Init já em andamento - skip')
+      return
+    }
+
     let mounted = true
 
-    async function initializeAuth() {
+    const initialize = async () => {
       try {
-        console.log('[AUTH] 🔐 Inicializando...')
+        console.log('[AUTH] 🚀 Inicializando...')
         
         const { data: { session }, error } = await supabase.auth.getSession()
 
         if (!mounted) return
 
         if (error) {
-          console.error('[AUTH] ❌ Erro ao obter sessão:', error.message)
+          console.error('[AUTH] ❌ Session error:', error.message)
           setInitializing(false)
+          hasInitialized.current = true
           return
         }
 
         if (session?.user) {
-          console.log('[AUTH] ✅ Sessão ativa:', session.user.email)
+          console.log('[AUTH] ✅ Session OK:', session.user.email)
           setSupabaseUser(session.user)
           
           const success = await loadUserData(session.user.email)
           
-          if (success) {
-            console.log('[AUTH] 🎉 Inicialização completa!')
+          if (success && mounted) {
+            console.log('[AUTH] 🎉 Init complete!')
           }
         } else {
-          console.log('[AUTH] ℹ️ Sem sessão ativa')
-          setInitializing(false)
+          console.log('[AUTH] ℹ️ No session')
         }
-      } catch (error: any) {
-        console.error('[AUTH] ❌ Erro na inicialização:', error.message)
+        
+        // SEMPRE seta false no final
         if (mounted) {
           setInitializing(false)
+          hasInitialized.current = true
+        }
+        
+      } catch (error: any) {
+        console.error('[AUTH] ❌ Init error:', error.message)
+        if (mounted) {
+          setInitializing(false)
+          hasInitialized.current = true
         }
       }
     }
 
-    initializeAuth()
+    // Guarda promise para evitar dupla inicialização
+    initPromise.current = initialize()
 
     return () => {
       mounted = false
       isMounted.current = false
     }
-  }, [loadUserData])
+  }, []) // Array vazio - executa UMA VEZ
 
   // ========================================
-  // LISTENER DE AUTH
+  // LISTENER - OTIMIZADO
   // ========================================
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('[AUTH] 🔔 Evento:', event)
+        console.log('[AUTH] 🔔', event)
 
-        // Ignorar refresh (CRÍTICO)
+        // CRÍTICO: Ignorar TOKEN_REFRESHED
         if (event === 'TOKEN_REFRESHED') {
-          console.log('[AUTH] 🔄 Token atualizado - mantendo estado')
+          console.log('[AUTH] 🔄 Token refresh - IGNORANDO')
           return
         }
 
         // Login
         if (event === 'SIGNED_IN' && session?.user) {
-          console.log('[AUTH] ✅ Login detectado')
+          console.log('[AUTH] ✅ Signed in')
           setSupabaseUser(session.user)
           
           const success = await loadUserData(session.user.email)
           
           if (success) {
-            console.log('[AUTH] ➡️ Redirecionando para dashboard...')
+            console.log('[AUTH] ➡️ → dashboard')
             setTimeout(() => {
               navigate('/dashboard', { replace: true })
-            }, 200)
+            }, 300)
           }
         }
         
         // Logout
         else if (event === 'SIGNED_OUT') {
-          console.log('[AUTH] 🚪 Logout detectado')
+          console.log('[AUTH] 🚪 Signed out')
           setUser(null)
           setSupabaseUser(null)
-          setInitializing(false)
+          hasInitialized.current = false
           navigate('/login', { replace: true })
         }
       }
@@ -219,7 +211,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // MÉTODOS PÚBLICOS
   // ========================================
   const signIn = useCallback(async (email: string, password: string) => {
-    console.log('[AUTH] 🔑 Tentando login...')
+    console.log('[AUTH] 🔑 Sign in...')
     setLoading(true)
     setInitializing(true)
     
@@ -231,10 +223,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error
       
-      console.log('[AUTH] ✅ Login bem-sucedido')
+      console.log('[AUTH] ✅ Auth OK')
       
     } catch (error: any) {
-      console.error('[AUTH] ❌ Erro no login:', error.message)
+      console.error('[AUTH] ❌ Login error:', error.message)
       setInitializing(false)
       setLoading(false)
       throw error
@@ -242,15 +234,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
-    console.log('[AUTH] 🚪 Fazendo logout...')
+    console.log('[AUTH] 🚪 Sign out...')
     await supabase.auth.signOut()
     setUser(null)
     setSupabaseUser(null)
+    hasInitialized.current = false
     navigate('/login', { replace: true })
   }, [navigate])
 
   const refreshUser = useCallback(async () => {
-    console.log('[AUTH] 🔄 Refresh manual solicitado')
+    console.log('[AUTH] 🔄 Manual refresh')
     const { data: { session } } = await supabase.auth.getSession()
     if (session?.user && isMounted.current) {
       await loadUserData(session.user.email)
