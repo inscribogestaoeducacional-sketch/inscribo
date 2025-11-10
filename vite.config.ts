@@ -8,18 +8,26 @@ export default defineConfig({
     port: 3000,
     host: true,
     cors: true,
+    strictPort: false,
     hmr: {
-      overlay: false
+      overlay: false,
+      protocol: 'ws',
+      host: 'localhost'
     }
   },
   build: {
+    target: 'esnext',
+    minify: 'esbuild',
+    cssCodeSplit: false,
+    sourcemap: false,
     rollupOptions: {
       output: {
+        // CRÍTICO: Sem code splitting
         manualChunks: undefined,
+        inlineDynamicImports: true,
       },
     },
-    chunkSizeWarningLimit: 2000,
-    sourcemap: false,
+    chunkSizeWarningLimit: 5000,
     commonjsOptions: {
       include: [/node_modules/],
       transformMixedEsModules: true
@@ -27,6 +35,12 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom'],
-    force: true
+    exclude: [],
+    esbuildOptions: {
+      target: 'esnext'
+    }
+  },
+  resolve: {
+    dedupe: ['react', 'react-dom']
   }
 })
