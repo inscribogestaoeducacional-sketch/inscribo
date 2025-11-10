@@ -1,116 +1,177 @@
-// src/contexts/AuthContext.tsx
+import React from 'react'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 
-import React, { createContext, useContext, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { supabase, User as AppUser } from '../lib/supabase'
+import LoginForm from './components/auth/LoginForm'
+import Dashboard from './components/dashboard/Dashboard'
+import LeadKanban from './components/leads/LeadKanban'
+import VisitCalendar from './components/calendar/VisitCalendar'
+import EnrollmentManager from './components/enrollments/EnrollmentManager'
+import MarketingCPA from './components/marketing/MarketingCPA'
+import ReEnrollments from './components/reenrollments/ReEnrollments'
+import FunnelAnalysis from './components/funnel/FunnelAnalysis'
+import ActionsManager from './components/actions/ActionsManager'
+import Reports from './components/reports/Reports'
+import UserManagement from './components/management/UserManagement'
+import SystemSettings from './components/management/SystemSettings'
+import UserProfile from './components/management/UserProfile'
+import Sidebar from './components/layout/Sidebar'
+import TopBar from './components/layout/TopBar'
 
-interface AuthContextType {
-  user: AppUser | null
-  loading: boolean
-  signIn: (email: string, password: string) => Promise<void>
-  signOut: () => Promise<void>
+// Protege rotas de acordo com o papel do usuário
+function ProtectedRoute({ children, allowedRoles = [] }: { children: React.ReactNode; allowedRoles?: string[] }) {
+  const { user, loading } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Carregando sessão...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />
+  }
+
+  if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  return <>{children}</>
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
-
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AppUser | null>(null)
-  const [loading, setLoading] = useState(true)
-  const navigate = useNavigate()
-
-  // 🔁 Carrega sessão atual e usuário associado
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-
-        if (session?.user) {
-          console.log('[AUTH] Sessão ativa encontrada')
-
-          const { data, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('email', session.user.email)
-            .eq('active', true)
-            .single()
-
-          if (data && !error) {
-            setUser(data)
-          } else {
-            console.warn('[AUTH] Usuário não encontrado, desconectando...')
-            await supabase.auth.signOut()
-            setUser(null)
-          }
-        } else {
-          setUser(null)
-        }
-      } catch (err) {
-        console.error('[AUTH] Erro ao inicializar:', err)
-        setUser(null)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    initAuth()
-
-    // 🔂 Escuta mudanças de autenticação
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('[AUTH] Evento:', event)
-
-        if (event === 'SIGNED_IN' && session?.user) {
-          const { data } = await supabase
-            .from('users')
-            .select('*')
-            .eq('email', session.user.email)
-            .eq('active', true)
-            .single()
-
-          if (data) {
-            setUser(data)
-            navigate('/dashboard', { replace: true })
-          }
-        }
-
-        if (event === 'SIGNED_OUT') {
-          setUser(null)
-          navigate('/login', { replace: true })
-        }
-      }
-    )
-
-    return () => subscription.unsubscribe()
-  }, [navigate])
-
-  const signIn = async (email: string, password: string) => {
-    setLoading(true)
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) throw error
-    } catch (error: any) {
-      console.error('[AUTH] Erro no login:', error.message)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const signOut = async () => {
-    await supabase.auth.signOut()
-    setUser(null)
-    navigate('/login', { replace: true })
-  }
-
+// Layout do painel principal
+function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
-      {children}
-    </AuthContext.Provider>
+    <div className="min-h-screen bg-gray-50 flex">
+      <Sidebar />
+      <div className="flex-1">
+        <TopBar />
+        <main className="p-6">{children}</main>
+      </div>
+    </div>
   )
 }
 
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (!context) throw new Error('useAuth deve ser usado dentro de AuthProvider')
-  return context
+// Conteúdo principal da aplicação
+function AppContent() {
+  const { user, loading } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+        <div className="text-center">
+          <div className="w-16 h-16 mb-6 mx-auto">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600"></div>
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900">Inscribo</h2>
+          <p className="text-gray-600 mt-2">Verificando sessão...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginForm />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    )
+  }
+
+  return (
+    <DashboardLayout>
+      <Routes>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/leads" element={<LeadKanban />} />
+        <Route path="/visits" element={<VisitCalendar />} />
+        <Route path="/enrollments" element={<EnrollmentManager />} />
+
+        <Route
+          path="/marketing"
+          element={
+            <ProtectedRoute allowedRoles={['manager', 'admin']}>
+              <MarketingCPA />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/reenrollments"
+          element={
+            <ProtectedRoute allowedRoles={['manager', 'admin']}>
+              <ReEnrollments />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/funnel"
+          element={
+            <ProtectedRoute allowedRoles={['manager', 'admin']}>
+              <FunnelAnalysis />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/actions"
+          element={
+            <ProtectedRoute allowedRoles={['manager', 'admin']}>
+              <ActionsManager />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/reports"
+          element={
+            <ProtectedRoute allowedRoles={['manager', 'admin']}>
+              <Reports />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/users"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <UserManagement />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <SystemSettings />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route path="/profile" element={<UserProfile />} />
+        <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </DashboardLayout>
+  )
 }
+
+function App() {
+  return (
+    <Router>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </Router>
+  )
+}
+
+export default App
