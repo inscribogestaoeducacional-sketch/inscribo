@@ -541,7 +541,7 @@ export default function LeadKanban() {
           </p>
         </div>
         
-        <div className="overflow-x-auto overflow-y-auto" style={{ height: 'calc(100vh - 380px)', minHeight: '600px', maxHeight: '800px' }}>
+        <div className="overflow-x-auto overflow-y-hidden" style={{ height: 'auto', minHeight: '600px', maxHeight: '800px', paddingBottom: '1rem' }}>
           <div className="flex gap-3 sm:gap-4 p-3 sm:p-4 pb-6">
             {Object.entries(statusConfig).map(([status, config]) => {
               const statusLeads = getLeadsByStatus(status as Lead['status'])
@@ -561,7 +561,8 @@ export default function LeadKanban() {
                     </span>
                   </div>
 
-                  <div className="space-y-3 flex-1 overflow-y-auto pr-2" style={{ minHeight: '400px' }}>
+                  <div className="space-y-3 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-500" 
+                    style={{ height: '550px', maxHeight: '70vh' }}>
                     {statusLeads.map((lead) => (
                       <div key={lead.id}
                         className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all cursor-pointer group min-h-[200px]">
