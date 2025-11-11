@@ -541,15 +541,14 @@ export default function LeadKanban() {
           </p>
         </div>
         
-        <div className="overflow-x-auto overflow-y-auto" style={{ height: 'calc(100vh - 450px)', minHeight: '500px' }}>
+        <div className="overflow-x-auto overflow-y-auto" style={{ height: 'calc(100vh - 380px)', minHeight: '600px', maxHeight: '800px' }}>
           <div className="flex gap-3 sm:gap-4 p-3 sm:p-4 pb-6">
             {Object.entries(statusConfig).map(([status, config]) => {
               const statusLeads = getLeadsByStatus(status as Lead['status'])
               
               return (
                 <div key={status} className={`${config.bgColor} rounded-xl p-3 sm:p-4 flex-shrink-0 
-                  w-full sm:w-80 md:w-[320px] lg:w-[340px] xl:w-[360px] 2xl:w-[380px]
-                  min-w-[280px] max-w-[420px]
+                  w-[300px]
                   ${config.borderColor} border-2 transition-all hover:shadow-md flex flex-col`}>
                   
                   <div className="flex items-center justify-between mb-4">
@@ -562,10 +561,10 @@ export default function LeadKanban() {
                     </span>
                   </div>
 
-                  <div className="space-y-3 flex-1 overflow-y-auto pr-2" style={{ maxHeight: 'calc(100vh - 520px)' }}>
+                  <div className="space-y-3 flex-1 overflow-y-auto pr-2" style={{ minHeight: '400px' }}>
                     {statusLeads.map((lead) => (
                       <div key={lead.id}
-                        className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all cursor-pointer group min-h-[180px]">
+                        className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all cursor-pointer group min-h-[200px]">
                         
                         <div className="flex justify-between items-start mb-3">
                           <div className="flex-1 min-w-0 pr-2">
