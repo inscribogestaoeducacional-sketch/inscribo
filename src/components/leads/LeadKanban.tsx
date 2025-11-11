@@ -342,7 +342,17 @@ export default function LeadKanban() {
     try {
       setLoadingHistory(true)
       const history = await DatabaseService.getActivityLogs(user!.institution_id, leadId)
-      setLeadHistory(history)
+      
+      // Adicionar nomes dos usuários ao histórico
+      const historyWithUsers = history.map(item => {
+        const userName = users.find(u => u.id === item.user_id)?.full_name || user?.full_name || 'Sistema'
+        return {
+          ...item,
+          user_name: userName
+        }
+      })
+      
+      setLeadHistory(historyWithUsers)
     } catch (error) {
       console.error('Erro ao carregar histórico:', error)
       setLeadHistory([])
