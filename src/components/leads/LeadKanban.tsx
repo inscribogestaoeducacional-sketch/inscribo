@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Plus, Filter, User, Phone, Mail, Calendar, Edit, Trash2, X, Search, Clock, MapPin, DollarSign, Tag, Users, TrendingUp, Eye, MessageSquare, Send, CheckCircle, Save } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, Lead, User as AppUser } from '../../lib/supabase'
+import ScheduleVisitModal from './ScheduleVisitModal'
 
 const statusConfig = {
   new: { label: 'Novo', color: 'bg-blue-500', bgColor: 'bg-blue-50', textColor: 'text-blue-700', borderColor: 'border-blue-200' },
@@ -247,6 +248,10 @@ export default function LeadKanban() {
   const [savingAction, setSavingAction] = useState(false)
   const [editingAction, setEditingAction] = useState<string | null>(null)
   const [editingActionText, setEditingActionText] = useState('')
+  
+  // 🔥 NOVOS STATES PARA AGENDAMENTO DE VISITA
+  const [showScheduleModal, setShowScheduleModal] = useState(false)
+  const [leadToSchedule, setLeadToSchedule] = useState<Lead | null>(null)
 
   useEffect(() => {
     if (user?.institution_id) loadData()
@@ -308,10 +313,22 @@ export default function LeadKanban() {
     }
   }
 
+  // 🔥 FUNÇÃO MODIFICADA - Detecta quando muda para "scheduled" e abre modal
   const handleStatusChange = async (leadId: string, newStatus: Lead['status']) => {
     try {
-      const currentLead = leads.find(l => l.id === leadId), previousStatus = currentLead?.status
+      const currentLead = leads.find(l => l.id === leadId)
+      const previousStatus = currentLead?.status
+      
+      // 🔥 SE MUDOU PARA "SCHEDULED", ABRE MODAL DE AGENDAMENTO
+      if (newStatus === 'scheduled' && currentLead) {
+        setLeadToSchedule(currentLead)
+        setShowScheduleModal(true)
+        return // Não atualiza o status ainda - vai atualizar depois de agendar
+      }
+      
+      // Resto do código continua normal para outros status
       await DatabaseService.updateLead(leadId, { status: newStatus })
+      
       if (currentLead && previousStatus !== newStatus) {
         await DatabaseService.logActivity({
           user_id: user!.id, action: 'Status alterado', entity_type: 'lead', entity_id: leadId,
@@ -319,10 +336,78 @@ export default function LeadKanban() {
           institution_id: user!.institution_id
         })
       }
+      
       await loadData()
     } catch (error) {
       console.error('Erro ao atualizar status:', error)
       setError('Erro ao atualizar status do lead')
+    }
+  }
+
+  // 🔥 NOVA FUNÇÃO - Agenda a visita quando confirmar no modal
+  const handleScheduleVisit = async (data: {
+    scheduled_date: string
+    scheduled_time: string
+    notes: string
+  }) => {
+    if (!leadToSchedule) return
+    
+    try {
+      console.log('📅 Agendando visita para lead:', leadToSchedule.student_name)
+      console.log('📅 Data/Hora:', data)
+      
+      // Cria data/hora em formato ISO (UTC)
+      const scheduledDateTime = `${data.scheduled_date}T${data.scheduled_time}:00.000Z`
+      
+      // 1. Cria a visita no banco
+      const newVisit = await DatabaseService.createVisit({
+        lead_id: leadToSchedule.id,
+        student_name: leadToSchedule.student_name,
+        scheduled_date: scheduledDateTime,
+        notes: data.notes,
+        status: 'scheduled',
+        institution_id: user!.institution_id
+      })
+      
+      console.log('✅ Visita criada com ID:', newVisit.id)
+      
+      // 2. Atualiza status do lead para "scheduled"
+      await DatabaseService.updateLead(leadToSchedule.id, {
+        status: 'scheduled'
+      })
+      
+      console.log('✅ Status do lead atualizado para "scheduled"')
+      
+      // 3. Registra no histórico do lead
+      await DatabaseService.logActivity({
+        user_id: user!.id,
+        action: 'Visita agendada',
+        entity_type: 'lead',
+        entity_id: leadToSchedule.id,
+        details: {
+          visit_id: newVisit.id,
+          scheduled_date: scheduledDateTime,
+          scheduled_time: data.scheduled_time,
+          student_name: leadToSchedule.student_name,
+          responsible_name: leadToSchedule.responsible_name,
+          phone: leadToSchedule.phone,
+          grade_interest: leadToSchedule.grade_interest,
+          notes: data.notes
+        },
+        institution_id: user!.institution_id
+      })
+      
+      console.log('✅ Atividade registrada no histórico')
+      
+      // 4. Fecha modal e recarrega dados
+      setShowScheduleModal(false)
+      setLeadToSchedule(null)
+      await loadData()
+      
+      alert('✅ Visita agendada com sucesso!\n\nO lead foi movido para "Agendado" e a visita aparecerá no calendário.')
+    } catch (error) {
+      console.error('❌ Erro ao agendar visita:', error)
+      alert('❌ Erro ao agendar visita: ' + (error as Error).message)
     }
   }
 
@@ -343,13 +428,9 @@ export default function LeadKanban() {
       setLoadingHistory(true)
       const history = await DatabaseService.getActivityLogs(user!.institution_id, leadId)
       
-      // Adicionar nomes dos usuários ao histórico
       const historyWithUsers = history.map(item => {
         const userName = users.find(u => u.id === item.user_id)?.full_name || user?.full_name || 'Sistema'
-        return {
-          ...item,
-          user_name: userName
-        }
+        return { ...item, user_name: userName }
       })
       
       setLeadHistory(historyWithUsers)
@@ -542,7 +623,7 @@ export default function LeadKanban() {
         </div>
       )}
 
-      {/* KANBAN BOARD - RESPONSIVO */}
+      {/* KANBAN BOARD */}
       <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
         <div className="p-3 border-b border-gray-200 bg-gray-50 rounded-t-xl">
           <p className="text-sm font-semibold text-gray-700 flex items-center">
@@ -557,9 +638,7 @@ export default function LeadKanban() {
               const statusLeads = getLeadsByStatus(status as Lead['status'])
               
               return (
-                <div key={status} className={`${config.bgColor} rounded-xl p-3 sm:p-4 flex-shrink-0 
-                  w-[300px]
-                  ${config.borderColor} border-2 transition-all hover:shadow-md flex flex-col`}>
+                <div key={status} className={`${config.bgColor} rounded-xl p-3 sm:p-4 flex-shrink-0 w-[300px] ${config.borderColor} border-2 transition-all hover:shadow-md flex flex-col`}>
                   
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center">
@@ -571,11 +650,9 @@ export default function LeadKanban() {
                     </span>
                   </div>
 
-                  <div className="space-y-3 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-500" 
-                    style={{ height: '550px', maxHeight: '70vh' }}>
+                  <div className="space-y-3 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-500" style={{ height: '550px', maxHeight: '70vh' }}>
                     {statusLeads.map((lead) => (
-                      <div key={lead.id}
-                        className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all cursor-pointer group min-h-[200px]">
+                      <div key={lead.id} className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all cursor-pointer group min-h-[200px]">
                         
                         <div className="flex justify-between items-start mb-3">
                           <div className="flex-1 min-w-0 pr-2">
@@ -673,11 +750,28 @@ export default function LeadKanban() {
         </div>
       </div>
 
-      <NewLeadModal isOpen={showNewLeadModal}
+      {/* MODAL DE NOVO LEAD */}
+      <NewLeadModal 
+        isOpen={showNewLeadModal}
         onClose={() => { setShowNewLeadModal(false); setEditingLead(null) }}
-        onSave={handleSave} editingLead={editingLead} />
+        onSave={handleSave} 
+        editingLead={editingLead} 
+      />
 
-      {/* MODAL DE HISTÓRICO - COMPLETO */}
+      {/* 🔥 MODAL DE AGENDAMENTO DE VISITA - NOVO! */}
+      {showScheduleModal && leadToSchedule && (
+        <ScheduleVisitModal
+          isOpen={showScheduleModal}
+          onClose={() => {
+            setShowScheduleModal(false)
+            setLeadToSchedule(null)
+          }}
+          lead={leadToSchedule}
+          onSchedule={handleScheduleVisit}
+        />
+      )}
+
+      {/* MODAL DE HISTÓRICO */}
       {showHistory && selectedLead && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 sm:p-8 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -880,7 +974,7 @@ export default function LeadKanban() {
                 </div>
               ) : (
                 <div className="text-center py-12">
-                  <Clock className="w-12 h-12 sm:w-16 sm:h-16 text-gray-300 mx-auto mb-4" />
+                  <Clock className="w-12 h-12 sm:w-16 sm:w-16 text-gray-300 mx-auto mb-4" />
                   <p className="text-gray-500 font-medium mb-2">Nenhum histórico encontrado</p>
                   <p className="text-sm text-gray-400 mb-4">Adicione a primeira ação usando o campo acima</p>
                 </div>
