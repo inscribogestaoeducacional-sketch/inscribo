@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Filter, User, Phone, Mail, Calendar, Edit, Trash2, X, Search, Clock, MapPin, DollarSign, Tag, Users, TrendingUp, Eye, MessageSquare, Send, CheckCircle, Save } from 'lucide-react'
+import { Plus, Filter, User, Phone, Mail, Calendar, Edit, Trash2, X, Search, Clock, MapPin, DollarSign, Tag, Users, TrendingUp, Eye, MessageSquare, Send, CheckCircle, Save, MoreVertical } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, Lead, User as AppUser } from '../../lib/supabase'
 
@@ -232,7 +232,7 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
   )
 }
 
-// 🆕 NOVO COMPONENTE - Modal de Agendar Visita
+// Modal de Agendar Visita
 interface ScheduleVisitModalProps {
   isOpen: boolean
   onClose: () => void
@@ -259,7 +259,6 @@ function ScheduleVisitModal({ isOpen, onClose, lead, onSchedule }: ScheduleVisit
       notes: notes
     })
 
-    // Reset form
     setScheduledDate('')
     setScheduledTime('')
     setNotes('')
@@ -280,7 +279,6 @@ function ScheduleVisitModal({ isOpen, onClose, lead, onSchedule }: ScheduleVisit
           </button>
         </div>
 
-        {/* Informações do Lead */}
         <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 mb-6 border border-blue-200">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             <div>
@@ -338,7 +336,6 @@ function ScheduleVisitModal({ isOpen, onClose, lead, onSchedule }: ScheduleVisit
             </div>
           </div>
 
-          {/* Preview da data/hora */}
           {scheduledDate && scheduledTime && (
             <div className="bg-green-50 border border-green-200 rounded-xl p-4">
               <div className="flex items-center">
@@ -414,9 +411,9 @@ export default function LeadKanban() {
   const [editingAction, setEditingAction] = useState<string | null>(null)
   const [editingActionText, setEditingActionText] = useState('')
   
-  // 🆕 NOVO STATE - Modal de agendamento de visita
   const [showScheduleVisitModal, setShowScheduleVisitModal] = useState(false)
   const [leadToSchedule, setLeadToSchedule] = useState<Lead | null>(null)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
 
   useEffect(() => {
     if (user?.institution_id) loadData()
@@ -512,14 +509,18 @@ export default function LeadKanban() {
     }
   }
 
-  // 🆕 NOVA FUNÇÃO - Agendar visita para o lead
+  // 🔥 CORRIGIDO: Salvar horário sem conversão de timezone
   const handleScheduleVisit = async (data: { scheduled_date: string; scheduled_time: string; notes: string }) => {
     if (!leadToSchedule) return
     
     try {
-      const scheduledDateTime = `${data.scheduled_date}T${data.scheduled_time}:00.000Z`
+      // 🔥 FIX: Criar datetime sem conversão de timezone
+      const [hours, minutes] = data.scheduled_time.split(':')
+      const visitDate = new Date(data.scheduled_date)
+      visitDate.setHours(parseInt(hours), parseInt(minutes), 0, 0)
       
-      // Criar a visita
+      const scheduledDateTime = visitDate.toISOString()
+      
       await DatabaseService.createVisit({
         institution_id: user!.institution_id,
         lead_id: leadToSchedule.id,
@@ -529,10 +530,8 @@ export default function LeadKanban() {
         status: 'scheduled'
       })
       
-      // Atualizar status do lead para "scheduled" ou "visit"
       await DatabaseService.updateLead(leadToSchedule.id, { status: 'scheduled' })
       
-      // Registrar no histórico
       await DatabaseService.logActivity({
         user_id: user!.id,
         action: 'Visita agendada',
@@ -773,7 +772,7 @@ export default function LeadKanban() {
               const statusLeads = getLeadsByStatus(status as Lead['status'])
               
               return (
-                <div key={status} className={`${config.bgColor} rounded-xl p-3 sm:p-4 flex-shrink-0 w-[300px] ${config.borderColor} border-2 transition-all hover:shadow-md flex flex-col`}>
+                <div key={status} className={`${config.bgColor} rounded-xl p-3 sm:p-4 flex-shrink-0 w-[320px] ${config.borderColor} border-2 transition-all hover:shadow-md flex flex-col`}>
                   
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center">
@@ -787,13 +786,28 @@ export default function LeadKanban() {
 
                   <div className="space-y-3 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-500" style={{ height: '550px', maxHeight: '70vh' }}>
                     {statusLeads.map((lead) => (
-                      <div key={lead.id} className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all cursor-pointer group min-h-[200px]">
+                      <div key={lead.id} className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all group">
                         
+                        {/* 🔥 HEADER COM MENU DROPDOWN */}
                         <div className="flex justify-between items-start mb-3">
-                          <div className="flex-1 min-w-0 pr-2">
-                            <h4 className="font-bold text-gray-900 text-sm mb-1.5 group-hover:text-blue-600 transition-colors truncate">
-                              {lead.student_name}
-                            </h4>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h4 className="font-bold text-gray-900 text-sm group-hover:text-blue-600 transition-colors truncate">
+                                {lead.student_name}
+                              </h4>
+                              {/* 🌡️ INDICADOR DE TEMPERATURA */}
+                              {(lead as any).temperature && (
+                                <span className="flex-shrink-0" title={
+                                  (lead as any).temperature === 'hot' ? 'Lead Quente - Muito Interessado' :
+                                  (lead as any).temperature === 'warm' ? 'Lead Morno - Interesse Moderado' : 
+                                  'Lead Frio - Pouco Interessado'
+                                }>
+                                  {(lead as any).temperature === 'hot' && <span className="text-lg">🔥</span>}
+                                  {(lead as any).temperature === 'warm' && <span className="text-lg">☀️</span>}
+                                  {(lead as any).temperature === 'cold' && <span className="text-lg">❄️</span>}
+                                </span>
+                              )}
+                            </div>
                             <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-bold ${
                               lead.source === 'Facebook' ? 'bg-blue-100 text-blue-700' :
                               lead.source === 'Instagram' ? 'bg-pink-100 text-pink-700' :
@@ -805,51 +819,95 @@ export default function LeadKanban() {
                               {lead.source}
                             </span>
                           </div>
-                          <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                            {/* 🆕 BOTÃO DE AGENDAR VISITA */}
+                          
+                          {/* 🆕 MENU DROPDOWN ÚNICO */}
+                          <div className="relative opacity-0 group-hover:opacity-100 transition-all">
                             <button 
                               onClick={(e) => { 
-                                e.stopPropagation(); 
-                                setLeadToSchedule(lead); 
-                                setShowScheduleVisitModal(true) 
+                                e.stopPropagation()
+                                setOpenMenuId(openMenuId === lead.id ? null : lead.id)
                               }}
-                              className="text-gray-400 hover:text-purple-600 p-1.5 hover:bg-purple-50 rounded-md transition-all" 
-                              title="Agendar visita">
-                              <Calendar className="w-4 h-4" />
+                              className="text-gray-400 hover:text-blue-600 p-2 hover:bg-blue-50 rounded-md transition-all" 
+                              title="Menu de ações">
+                              <MoreVertical className="w-4 h-4" />
                             </button>
-                            <button onClick={(e) => { e.stopPropagation(); setSelectedLead(lead); setShowHistory(true); setNewAction(''); setEditingAction(null); setEditingActionText(''); loadLeadHistory(lead.id) }}
-                              className="text-gray-400 hover:text-green-600 p-1.5 hover:bg-green-50 rounded-md transition-all" title="Ver histórico">
-                              <Clock className="w-4 h-4" />
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); setEditingLead(lead); setShowNewLeadModal(true) }}
-                              className="text-gray-400 hover:text-blue-600 p-1.5 hover:bg-blue-50 rounded-md transition-all" title="Editar lead">
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); handleDelete(lead.id) }}
-                              className="text-gray-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-md transition-all" title="Excluir lead">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {openMenuId === lead.id && (
+                              <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+                                <button
+                                  onClick={(e) => { 
+                                    e.stopPropagation()
+                                    setLeadToSchedule(lead)
+                                    setShowScheduleVisitModal(true)
+                                    setOpenMenuId(null)
+                                  }}
+                                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-purple-50 flex items-center gap-2 rounded-t-lg"
+                                >
+                                  <Calendar className="w-4 h-4 text-purple-600" />
+                                  Agendar Visita
+                                </button>
+                                <button
+                                  onClick={(e) => { 
+                                    e.stopPropagation()
+                                    setSelectedLead(lead)
+                                    setShowHistory(true)
+                                    setNewAction('')
+                                    setEditingAction(null)
+                                    setEditingActionText('')
+                                    loadLeadHistory(lead.id)
+                                    setOpenMenuId(null)
+                                  }}
+                                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 flex items-center gap-2"
+                                >
+                                  <Clock className="w-4 h-4 text-green-600" />
+                                  Ver Histórico
+                                </button>
+                                <button
+                                  onClick={(e) => { 
+                                    e.stopPropagation()
+                                    setEditingLead(lead)
+                                    setShowNewLeadModal(true)
+                                    setOpenMenuId(null)
+                                  }}
+                                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 flex items-center gap-2"
+                                >
+                                  <Edit className="w-4 h-4 text-blue-600" />
+                                  Editar Lead
+                                </button>
+                                <button
+                                  onClick={(e) => { 
+                                    e.stopPropagation()
+                                    handleDelete(lead.id)
+                                    setOpenMenuId(null)
+                                  }}
+                                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 flex items-center gap-2 rounded-b-lg border-t border-gray-100"
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-600" />
+                                  Excluir Lead
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
 
-                        <div className="space-y-2 mb-3">
+                        {/* 🔥 LAYOUT HORIZONTAL MELHORADO */}
+                        <div className="grid grid-cols-2 gap-2 mb-3">
                           <div className="flex items-center text-xs text-gray-700 bg-gray-50 p-2 rounded-md">
-                            <User className="w-3.5 h-3.5 mr-2 text-gray-500 flex-shrink-0" />
-                            <span className="font-semibold truncate">{lead.grade_interest}</span>
+                            <User className="w-3.5 h-3.5 mr-1.5 text-gray-500 flex-shrink-0" />
+                            <span className="font-semibold truncate" title={lead.grade_interest}>{lead.grade_interest}</span>
                           </div>
                           <div className="flex items-center text-xs text-gray-700 bg-gray-50 p-2 rounded-md">
-                            <Users className="w-3.5 h-3.5 mr-2 text-gray-500 flex-shrink-0" />
-                            <span className="truncate">{lead.responsible_name}</span>
+                            <Users className="w-3.5 h-3.5 mr-1.5 text-gray-500 flex-shrink-0" />
+                            <span className="truncate" title={lead.responsible_name}>{lead.responsible_name}</span>
                           </div>
                           {lead.phone && (
-                            <div className="flex items-center text-xs text-blue-700 bg-blue-50 p-2 rounded-md">
-                              <Phone className="w-3.5 h-3.5 mr-2 text-blue-600 flex-shrink-0" />
+                            <div className="flex items-center text-xs text-blue-700 bg-blue-50 p-2 rounded-md col-span-2">
+                              <Phone className="w-3.5 h-3.5 mr-1.5 text-blue-600 flex-shrink-0" />
                               <span className="font-medium truncate">{lead.phone}</span>
                             </div>
                           )}
                           {lead.budget_range && (
-                            <div className="flex items-center text-xs text-green-700 bg-green-50 p-2 rounded-md">
-                              <DollarSign className="w-3.5 h-3.5 mr-2 text-green-600 flex-shrink-0" />
+                            <div className="flex items-center text-xs text-green-700 bg-green-50 p-2 rounded-md col-span-2">
+                              <DollarSign className="w-3.5 h-3.5 mr-1.5 text-green-600 flex-shrink-0" />
                               <span className="font-medium truncate">{lead.budget_range}</span>
                             </div>
                           )}
@@ -903,7 +961,6 @@ export default function LeadKanban() {
         editingLead={editingLead} 
       />
 
-      {/* 🆕 MODAL DE AGENDAR VISITA */}
       {showScheduleVisitModal && leadToSchedule && (
         <ScheduleVisitModal
           isOpen={showScheduleVisitModal}
@@ -915,8 +972,6 @@ export default function LeadKanban() {
           onSchedule={handleScheduleVisit}
         />
       )}
-
-      {/* Modal de histórico omitido por brevidade - você já tem no arquivo original */}
     </div>
   )
 }
