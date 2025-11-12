@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Plus, Filter, User, Phone, Mail, Calendar, Edit, Trash2, X, Search, Clock, MapPin, DollarSign, Tag, Users, TrendingUp, Eye, MessageSquare, Send, CheckCircle, Save } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, Lead, User as AppUser } from '../../lib/supabase'
-import ScheduleVisitModal from './ScheduleVisitModal'
+import ScheduleVisitModal from '@/components/leads/ScheduleVisitModal'
 
 const statusConfig = {
   new: { label: 'Novo', color: 'bg-blue-500', bgColor: 'bg-blue-50', textColor: 'text-blue-700', borderColor: 'border-blue-200' },
