@@ -467,27 +467,35 @@ export default function VisitCalendar() {
     }
   }
 
+  // 🔥 FUNÇÃO CORRIGIDA - Visita realizada → Lead vai para "Visita"
   const handleStatusChange = async (visitId: string, newStatus: Visit['status'], temperature?: 'hot' | 'warm' | 'cold') => {
     try {
       await DatabaseService.updateVisit(visitId, { status: newStatus })
       
-      if (newStatus === 'completed' && temperature) {
-        const visit = visits.find(v => v.id === visitId)
-        if (visit && visit.lead_id) {
-          await DatabaseService.logActivity({
-            user_id: user!.id,
-            action: 'Visita realizada',
-            entity_type: 'lead',
-            entity_id: visit.lead_id,
-            details: {
-              visit_id: visitId,
-              temperature: temperature,
-              temperature_label: temperature === 'hot' ? 'Quente 🔥' : temperature === 'warm' ? 'Morno ☀️' : 'Frio ❄️',
-              notes: `Lead ficou ${temperature === 'hot' ? 'muito interessado' : temperature === 'warm' ? 'moderadamente interessado' : 'pouco interessado'} após a visita`
-            },
-            institution_id: user!.institution_id
-          })
-        }
+      const visit = visits.find(v => v.id === visitId)
+      
+      // 🔥 QUANDO MARCAR COMO "REALIZADA", ATUALIZAR LEAD PARA "VISITA"
+      if (newStatus === 'completed' && visit && visit.lead_id) {
+        // Atualizar status do lead para "visit"
+        await DatabaseService.updateLead(visit.lead_id, { 
+          status: 'visit',
+          temperature: temperature || null  // Salvar temperatura no lead
+        })
+        
+        // Registrar no histórico
+        await DatabaseService.logActivity({
+          user_id: user!.id,
+          action: 'Visita realizada',
+          entity_type: 'lead',
+          entity_id: visit.lead_id,
+          details: {
+            visit_id: visitId,
+            temperature: temperature,
+            temperature_label: temperature === 'hot' ? 'Quente 🔥' : temperature === 'warm' ? 'Morno ☀️' : 'Frio ❄️',
+            notes: `Lead ficou ${temperature === 'hot' ? 'muito interessado' : temperature === 'warm' ? 'moderadamente interessado' : 'pouco interessado'} após a visita. Status atualizado para "Visita".`
+          },
+          institution_id: user!.institution_id
+        })
       }
       
       await loadData()
@@ -498,9 +506,18 @@ export default function VisitCalendar() {
     }
   }
 
+  // 🔥 FUNÇÃO CORRIGIDA - Corrigir bug de horário
   const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string; notes: string }) => {
     try {
-      await DatabaseService.updateVisit(visitId, data)
+      // 🔥 FIX: Corrigir timezone
+      const [hours, minutes] = data.scheduled_date.split('T')[1].split(':')
+      const visitDate = new Date(data.scheduled_date.split('T')[0])
+      visitDate.setHours(parseInt(hours), parseInt(minutes), 0, 0)
+      
+      await DatabaseService.updateVisit(visitId, {
+        scheduled_date: visitDate.toISOString(),
+        notes: data.notes
+      })
       await loadData()
       alert('Visita atualizada com sucesso!')
     } catch (error) {
