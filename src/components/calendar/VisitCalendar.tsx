@@ -1,922 +1,873 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Filter, User, Phone, Mail, Calendar, Edit, Trash2, X, Search, Clock, MapPin, DollarSign, Tag, Users, TrendingUp, Eye, MessageSquare, Send, CheckCircle, Save } from 'lucide-react'
+import { Calendar, Clock, User, Plus, Edit, Eye, MapPin, Phone, Mail, ChevronLeft, ChevronRight, Filter, Search, X, Flame, Snowflake, Sun, MessageSquare, Check, AlertCircle, Save, Trash2, DollarSign, Tag, Users as UsersIcon } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { DatabaseService, Lead, User as AppUser } from '../../lib/supabase'
+import { DatabaseService, Visit, Lead, User as AppUser } from '../../lib/supabase'
 
 const statusConfig = {
-  new: { label: 'Novo', color: 'bg-blue-500', bgColor: 'bg-blue-50', textColor: 'text-blue-700', borderColor: 'border-blue-200' },
-  contact: { label: 'Contato', color: 'bg-yellow-500', bgColor: 'bg-yellow-50', textColor: 'text-yellow-700', borderColor: 'border-yellow-200' },
-  scheduled: { label: 'Agendado', color: 'bg-purple-500', bgColor: 'bg-purple-50', textColor: 'text-purple-700', borderColor: 'border-purple-200' },
-  visit: { label: 'Visita', color: 'bg-orange-500', bgColor: 'bg-orange-50', textColor: 'text-orange-700', borderColor: 'border-orange-200' },
-  proposal: { label: 'Proposta', color: 'bg-indigo-500', bgColor: 'bg-indigo-50', textColor: 'text-indigo-700', borderColor: 'border-indigo-200' },
-  enrolled: { label: 'Matriculado', color: 'bg-green-500', bgColor: 'bg-green-50', textColor: 'text-green-700', borderColor: 'border-green-200' },
-  lost: { label: 'Perdido', color: 'bg-red-500', bgColor: 'bg-red-50', textColor: 'text-red-700', borderColor: 'border-red-200' }
+  scheduled: { label: 'Agendada', color: 'bg-blue-500', bgColor: 'bg-blue-50', textColor: 'text-blue-700', borderColor: 'border-blue-200' },
+  completed: { label: 'Realizada', color: 'bg-green-500', bgColor: 'bg-green-50', textColor: 'text-green-700', borderColor: 'border-green-200' },
+  cancelled: { label: 'Cancelada', color: 'bg-red-500', bgColor: 'bg-red-50', textColor: 'text-red-700', borderColor: 'border-red-200' },
+  no_show: { label: 'Não Compareceu', color: 'bg-gray-500', bgColor: 'bg-gray-50', textColor: 'text-gray-700', borderColor: 'border-gray-200' }
 }
-
-const sourceOptions = ['Facebook', 'Instagram', 'Google', 'Site', 'Indicação', 'WhatsApp', 'Outros']
-
-const gradeOptions = [
-  'Infantil I', 'Infantil II', 'Infantil III', 'Infantil IV', 'Infantil V',
-  '1º Ano EF', '2º Ano EF', '3º Ano EF', '4º Ano EF', '5º Ano EF',
-  '6º Ano EF', '7º Ano EF', '8º Ano EF', '9º Ano EF',
-  '1ª Série EM', '2ª Série EM', '3ª Série EM'
-]
 
 const timeSlots = [
   '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-  '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
+  '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00'
 ]
 
-interface NewLeadModalProps {
+// 🔥 MODAL MODIFICADO - Mostra informações completas do LEAD ao clicar na visita
+interface VisitDetailsModalProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (data: Partial<Lead>) => void
-  editingLead?: Lead | null
+  visit: Visit
+  lead: Lead | null
+  onStatusChange: (visitId: string, status: Visit['status'], temperature?: 'hot' | 'warm' | 'cold') => void
+  onUpdateVisit: (visitId: string, data: { scheduled_date: string; notes: string }) => void
+  onDeleteVisit: (visitId: string) => void
 }
 
-function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProps) {
-  const [currentStep, setCurrentStep] = useState(1)
-  const [formData, setFormData] = useState({
-    student_name: '', grade_interest: '', cpf: '', responsible_name: '',
-    phone: '', email: '', address: '', budget_range: '', source: '', notes: ''
-  })
+function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpdateVisit, onDeleteVisit }: VisitDetailsModalProps) {
+  const [selectedStatus, setSelectedStatus] = useState<Visit['status']>(visit.status)
+  const [selectedTemperature, setSelectedTemperature] = useState<'hot' | 'warm' | 'cold' | null>(null)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editDate, setEditDate] = useState('')
+  const [editTime, setEditTime] = useState('')
+  const [editNotes, setEditNotes] = useState('')
 
   useEffect(() => {
-    if (editingLead) {
-      setFormData({
-        student_name: editingLead.student_name, grade_interest: editingLead.grade_interest,
-        cpf: editingLead.cpf || '', responsible_name: editingLead.responsible_name,
-        phone: editingLead.phone || '', email: editingLead.email || '',
-        address: editingLead.address || '', budget_range: editingLead.budget_range || '',
-        source: editingLead.source, notes: editingLead.notes || ''
-      })
-    } else {
-      setFormData({
-        student_name: '', grade_interest: '', cpf: '', responsible_name: '',
-        phone: '', email: '', address: '', budget_range: '', source: '', notes: ''
-      })
+    if (visit) {
+      const dateTime = new Date(visit.scheduled_date)
+      setEditDate(dateTime.toISOString().split('T')[0])
+      setEditTime(dateTime.toTimeString().slice(0, 5))
+      setEditNotes(visit.notes || '')
+      setSelectedStatus(visit.status)
     }
-    setCurrentStep(1)
-  }, [editingLead, isOpen])
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSave(formData)
-    onClose()
-  }
+  }, [visit])
 
   if (!isOpen) return null
 
+  const handleComplete = () => {
+    if (selectedStatus === 'completed' && !selectedTemperature) {
+      alert('Por favor, selecione a temperatura do lead!')
+      return
+    }
+    onStatusChange(visit.id, selectedStatus, selectedTemperature || undefined)
+    onClose()
+  }
+
+  const handleSaveEdit = () => {
+    if (!editDate || !editTime) {
+      alert('Data e horário são obrigatórios!')
+      return
+    }
+    
+    const scheduledDateTime = `${editDate}T${editTime}:00.000Z`
+    onUpdateVisit(visit.id, {
+      scheduled_date: scheduledDateTime,
+      notes: editNotes
+    })
+    setIsEditing(false)
+  }
+
+  const handleDelete = () => {
+    if (confirm('Tem certeza que deseja excluir esta visita?\n\nEsta ação não pode ser desfeita.')) {
+      onDeleteVisit(visit.id)
+      onClose()
+    }
+  }
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-6 sm:p-8 w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div className="bg-white rounded-3xl p-8 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">{editingLead ? 'Editar Lead' : 'Novo Lead'}</h2>
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-1">📋 Detalhes da Visita</h2>
+            {lead && (
+              <p className="text-gray-600">Lead: <span className="font-semibold">{lead.student_name}</span></p>
+            )}
+          </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X className="h-6 w-6" />
           </button>
         </div>
 
-        <div className="flex items-center justify-center mb-8">
-          {[1, 2, 3].map((step) => (
-            <div key={step} className="flex items-center">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                step === currentStep ? 'bg-blue-600 text-white shadow-lg' : 
-                step < currentStep ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'
-              }`}>{step}</div>
-              {step < 3 && <div className={`w-16 h-1 mx-3 rounded-full transition-all ${step < currentStep ? 'bg-green-500' : 'bg-gray-200'}`}></div>}
-            </div>
-          ))}
-        </div>
+        {/* 🔥 SEÇÃO DE EDIÇÃO DA VISITA */}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 mb-6 border border-blue-200">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-900 flex items-center">
+              <Calendar className="w-5 h-5 mr-2 text-blue-600" />
+              Informações da Visita
+            </h3>
+            {!isEditing && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="text-blue-600 hover:text-blue-700 p-2 hover:bg-blue-100 rounded-lg transition-all"
+                  title="Editar visita"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="text-red-600 hover:text-red-700 p-2 hover:bg-red-100 rounded-lg transition-all"
+                  title="Excluir visita"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
 
-        <div className="text-center mb-8">
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">
-            {currentStep === 1 && 'Dados do Aluno'}
-            {currentStep === 2 && 'Dados do Responsável'}
-            {currentStep === 3 && 'Informações Adicionais'}
-          </h3>
-        </div>
-        
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {currentStep === 1 && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {isEditing ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Nome do Aluno *</label>
-                  <input type="text" required value={formData.student_name}
-                    onChange={(e) => setFormData({ ...formData, student_name: e.target.value })}
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Data da Visita *</label>
+                  <input
+                    type="date"
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                    placeholder="Nome completo do aluno" />
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Série/Ano de Interesse *</label>
-                  <select required value={formData.grade_interest}
-                    onChange={(e) => setFormData({ ...formData, grade_interest: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
-                    <option value="">Selecione a série</option>
-                    {gradeOptions.map(grade => <option key={grade} value={grade}>{grade}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">CPF do Aluno</label>
-                <input type="text" value={formData.cpf}
-                  onChange={(e) => setFormData({ ...formData, cpf: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                  placeholder="000.000.000-00" />
-              </div>
-            </div>
-          )}
-
-          {currentStep === 2 && (
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Nome do Responsável *</label>
-                <input type="text" required value={formData.responsible_name}
-                  onChange={(e) => setFormData({ ...formData, responsible_name: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                  placeholder="Nome completo do responsável" />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Telefone *</label>
-                  <input type="tel" required value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Horário *</label>
+                  <select
+                    value={editTime}
+                    onChange={(e) => setEditTime(e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                    placeholder="(11) 99999-9999" />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">E-mail</label>
-                  <input type="email" value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                    placeholder="email@exemplo.com" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Endereço</label>
-                <input type="text" value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                  placeholder="Endereço completo" />
-              </div>
-            </div>
-          )}
-
-          {currentStep === 3 && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Faixa de Orçamento</label>
-                  <select value={formData.budget_range}
-                    onChange={(e) => setFormData({ ...formData, budget_range: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
-                    <option value="">Selecione a faixa</option>
-                    <option value="Até R$ 500">Até R$ 500</option>
-                    <option value="R$ 500 - R$ 1.000">R$ 500 - R$ 1.000</option>
-                    <option value="R$ 1.000 - R$ 1.500">R$ 1.000 - R$ 1.500</option>
-                    <option value="R$ 1.500 - R$ 2.000">R$ 1.500 - R$ 2.000</option>
-                    <option value="Acima de R$ 2.000">Acima de R$ 2.000</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Origem do Lead *</label>
-                  <select required value={formData.source}
-                    onChange={(e) => setFormData({ ...formData, source: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
-                    <option value="">Selecione a origem</option>
-                    {sourceOptions.map(source => <option key={source} value={source}>{source}</option>)}
+                  >
+                    {timeSlots.map(time => (
+                      <option key={time} value={time}>{time}</option>
+                    ))}
                   </select>
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Observações</label>
-                <textarea value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                <textarea
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                  rows={4} placeholder="Informações adicionais sobre o lead" />
+                  rows={3}
+                />
+              </div>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setIsEditing(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all flex items-center"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  Salvar Alterações
+                </button>
               </div>
             </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="font-semibold text-gray-700 flex items-center">
+                  <User className="w-4 h-4 mr-1" />
+                  Visitante:
+                </span>
+                <p className="text-gray-900 mt-1">{visit.student_name || 'Não informado'}</p>
+              </div>
+              <div>
+                <span className="font-semibold text-gray-700 flex items-center">
+                  <Calendar className="w-4 h-4 mr-1" />
+                  Data/Hora:
+                </span>
+                <p className="text-gray-900 mt-1">
+                  {new Date(visit.scheduled_date).toLocaleString('pt-BR', {
+                    weekday: 'long',
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </p>
+              </div>
+              {visit.notes && (
+                <div className="md:col-span-2 p-3 bg-white rounded-lg border border-gray-200">
+                  <span className="font-semibold text-gray-700 flex items-center text-sm mb-2">
+                    <MessageSquare className="w-4 h-4 mr-1" />
+                    Observações:
+                  </span>
+                  <p className="text-gray-700 text-sm">{visit.notes}</p>
+                </div>
+              )}
+            </div>
           )}
-
-          <div className="flex justify-between pt-6 border-t border-gray-200">
-            <div>
-              {currentStep > 1 && (
-                <button type="button" onClick={() => setCurrentStep(currentStep - 1)}
-                  className="px-6 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all font-medium">
-                  Anterior
-                </button>
-              )}
-            </div>
-            <div className="space-x-3">
-              <button type="button" onClick={onClose}
-                className="px-6 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all font-medium">
-                Cancelar
-              </button>
-              {currentStep < 3 ? (
-                <button type="button" onClick={() => setCurrentStep(currentStep + 1)}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all font-medium shadow-lg">
-                  Próximo
-                </button>
-              ) : (
-                <button type="submit"
-                  className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all font-medium shadow-lg">
-                  {editingLead ? 'Atualizar' : 'Salvar'} Lead
-                </button>
-              )}
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-// 🆕 NOVO COMPONENTE - Modal de Agendar Visita
-interface ScheduleVisitModalProps {
-  isOpen: boolean
-  onClose: () => void
-  lead: Lead
-  onSchedule: (data: { scheduled_date: string; scheduled_time: string; notes: string }) => void
-}
-
-function ScheduleVisitModal({ isOpen, onClose, lead, onSchedule }: ScheduleVisitModalProps) {
-  const [scheduledDate, setScheduledDate] = useState('')
-  const [scheduledTime, setScheduledTime] = useState('')
-  const [notes, setNotes] = useState('')
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!scheduledDate || !scheduledTime) {
-      alert('Por favor, selecione data e horário!')
-      return
-    }
-
-    onSchedule({
-      scheduled_date: scheduledDate,
-      scheduled_time: scheduledTime,
-      notes: notes
-    })
-
-    // Reset form
-    setScheduledDate('')
-    setScheduledTime('')
-    setNotes('')
-  }
-
-  if (!isOpen) return null
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-6 sm:p-8 w-full max-w-2xl mx-4 shadow-2xl">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-1">📅 Agendar Visita</h2>
-            <p className="text-gray-600">Lead: <span className="font-semibold">{lead.student_name}</span></p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-            <X className="h-6 w-6" />
-          </button>
         </div>
 
-        {/* Informações do Lead */}
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 mb-6 border border-blue-200">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-            <div>
-              <span className="font-semibold text-gray-700">Responsável:</span>
-              <p className="text-gray-900">{lead.responsible_name}</p>
-            </div>
-            <div>
-              <span className="font-semibold text-gray-700">Série Interesse:</span>
-              <p className="text-gray-900">{lead.grade_interest}</p>
-            </div>
-            <div>
-              <span className="font-semibold text-gray-700">Telefone:</span>
-              <p className="text-gray-900">{lead.phone || 'Não informado'}</p>
-            </div>
-            <div>
-              <span className="font-semibold text-gray-700">Origem:</span>
-              <p className="text-gray-900">{lead.source}</p>
-            </div>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
-                <Calendar className="h-4 w-4 mr-2 text-blue-600" />
-                Data da Visita *
-              </label>
-              <input
-                type="date"
-                required
-                value={scheduledDate}
-                onChange={(e) => setScheduledDate(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-              />
+        {/* 🔥 INFORMAÇÕES COMPLETAS DO LEAD */}
+        {lead && (
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-6 mb-6 border border-green-200">
+            <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+              <User className="w-6 h-6 mr-2 text-green-600" />
+              Informações Completas do Lead
+            </h3>
+            
+            {/* Dados do Aluno */}
+            <div className="mb-6">
+              <h4 className="font-bold text-gray-900 mb-3 text-lg border-b border-green-200 pb-2">
+                👨‍🎓 Dados do Aluno
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div className="bg-white p-3 rounded-lg border border-green-100">
+                  <span className="font-semibold text-gray-700">Nome do Aluno:</span>
+                  <p className="text-gray-900 text-base mt-1">{lead.student_name}</p>
+                </div>
+                <div className="bg-white p-3 rounded-lg border border-green-100">
+                  <span className="font-semibold text-gray-700">Série/Ano de Interesse:</span>
+                  <p className="text-gray-900 text-base mt-1">{lead.grade_interest}</p>
+                </div>
+                {lead.cpf && (
+                  <div className="bg-white p-3 rounded-lg border border-green-100">
+                    <span className="font-semibold text-gray-700">CPF:</span>
+                    <p className="text-gray-900 text-base mt-1">{lead.cpf}</p>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
-                <Clock className="h-4 w-4 mr-2 text-blue-600" />
-                Horário *
-              </label>
-              <select
-                required
-                value={scheduledTime}
-                onChange={(e) => setScheduledTime(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-              >
-                <option value="">Selecione o horário</option>
-                {timeSlots.map(time => (
-                  <option key={time} value={time}>{time}</option>
-                ))}
-              </select>
+            {/* Dados do Responsável */}
+            <div className="mb-6">
+              <h4 className="font-bold text-gray-900 mb-3 text-lg border-b border-green-200 pb-2">
+                👥 Dados do Responsável
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div className="bg-white p-3 rounded-lg border border-green-100">
+                  <span className="font-semibold text-gray-700">Nome do Responsável:</span>
+                  <p className="text-gray-900 text-base mt-1">{lead.responsible_name}</p>
+                </div>
+                {lead.phone && (
+                  <div className="bg-white p-3 rounded-lg border border-green-100">
+                    <span className="font-semibold text-gray-700 flex items-center">
+                      <Phone className="w-4 h-4 mr-1" />
+                      Telefone:
+                    </span>
+                    <p className="text-gray-900 text-base mt-1">{lead.phone}</p>
+                  </div>
+                )}
+                {lead.email && (
+                  <div className="bg-white p-3 rounded-lg border border-green-100">
+                    <span className="font-semibold text-gray-700 flex items-center">
+                      <Mail className="w-4 h-4 mr-1" />
+                      E-mail:
+                    </span>
+                    <p className="text-gray-900 text-base mt-1">{lead.email}</p>
+                  </div>
+                )}
+                {lead.address && (
+                  <div className="bg-white p-3 rounded-lg border border-green-100">
+                    <span className="font-semibold text-gray-700 flex items-center">
+                      <MapPin className="w-4 h-4 mr-1" />
+                      Endereço:
+                    </span>
+                    <p className="text-gray-900 text-base mt-1">{lead.address}</p>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* Preview da data/hora */}
-          {scheduledDate && scheduledTime && (
-            <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-              <div className="flex items-center">
-                <Calendar className="h-5 w-5 text-green-600 mr-3" />
-                <div>
-                  <p className="font-semibold text-green-900">Visita Agendada Para:</p>
-                  <p className="text-green-700">
-                    {new Date(scheduledDate).toLocaleDateString('pt-BR', { 
-                      weekday: 'long', 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric' 
-                    })} às {scheduledTime}
+            {/* Informações Adicionais */}
+            <div>
+              <h4 className="font-bold text-gray-900 mb-3 text-lg border-b border-green-200 pb-2">
+                📊 Informações Adicionais
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div className="bg-white p-3 rounded-lg border border-green-100">
+                  <span className="font-semibold text-gray-700 flex items-center">
+                    <Tag className="w-4 h-4 mr-1" />
+                    Origem:
+                  </span>
+                  <p className="text-gray-900 text-base mt-1">{lead.source}</p>
+                </div>
+                {lead.budget_range && (
+                  <div className="bg-white p-3 rounded-lg border border-green-100">
+                    <span className="font-semibold text-gray-700 flex items-center">
+                      <DollarSign className="w-4 h-4 mr-1" />
+                      Faixa de Orçamento:
+                    </span>
+                    <p className="text-gray-900 text-base mt-1">{lead.budget_range}</p>
+                  </div>
+                )}
+                <div className="bg-white p-3 rounded-lg border border-green-100">
+                  <span className="font-semibold text-gray-700 flex items-center">
+                    <Calendar className="w-4 h-4 mr-1" />
+                    Data de Criação:
+                  </span>
+                  <p className="text-gray-900 text-base mt-1">
+                    {new Date(lead.created_at).toLocaleDateString('pt-BR')}
                   </p>
                 </div>
               </div>
+              
+              {lead.notes && (
+                <div className="mt-4 bg-white p-4 rounded-lg border border-green-100">
+                  <span className="font-semibold text-gray-700 flex items-center mb-2">
+                    <MessageSquare className="w-4 h-4 mr-1" />
+                    Observações do Lead:
+                  </span>
+                  <p className="text-gray-700 text-base leading-relaxed">{lead.notes}</p>
+                </div>
+              )}
             </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Observações
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-              rows={4}
-              placeholder="Informações importantes sobre a visita..."
-            />
           </div>
+        )}
 
-          <div className="flex justify-end gap-3 pt-6 border-t border-gray-200">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-6 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all font-medium"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all font-medium shadow-lg flex items-center"
-            >
-              <Save className="h-5 w-5 mr-2" />
-              Confirmar Agendamento
-            </button>
+        {/* Atualizar Status da Visita */}
+        <div className="bg-gray-50 rounded-2xl p-6 mb-6 border border-gray-200">
+          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+            <Check className="w-5 h-5 mr-2 text-blue-600" />
+            Atualizar Status da Visita
+          </h3>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Status da Visita
+              </label>
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value as Visit['status'])}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              >
+                {Object.entries(statusConfig).map(([value, config]) => (
+                  <option key={value} value={value}>{config.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Temperatura do lead após visita */}
+            {selectedStatus === 'completed' && (
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
+                  🌡️ Como o lead ficou após a visita? *
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTemperature('hot')}
+                    className={`p-4 rounded-xl border-2 transition-all ${
+                      selectedTemperature === 'hot'
+                        ? 'border-red-500 bg-red-50'
+                        : 'border-gray-300 hover:border-red-300'
+                    }`}
+                  >
+                    <Flame className={`w-8 h-8 mx-auto mb-2 ${
+                      selectedTemperature === 'hot' ? 'text-red-500' : 'text-gray-400'
+                    }`} />
+                    <p className="text-sm font-bold text-center">🔥 Quente</p>
+                    <p className="text-xs text-gray-600 text-center mt-1">Muito interessado</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTemperature('warm')}
+                    className={`p-4 rounded-xl border-2 transition-all ${
+                      selectedTemperature === 'warm'
+                        ? 'border-yellow-500 bg-yellow-50'
+                        : 'border-gray-300 hover:border-yellow-300'
+                    }`}
+                  >
+                    <Sun className={`w-8 h-8 mx-auto mb-2 ${
+                      selectedTemperature === 'warm' ? 'text-yellow-500' : 'text-gray-400'
+                    }`} />
+                    <p className="text-sm font-bold text-center">☀️ Morno</p>
+                    <p className="text-xs text-gray-600 text-center mt-1">Interesse moderado</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTemperature('cold')}
+                    className={`p-4 rounded-xl border-2 transition-all ${
+                      selectedTemperature === 'cold'
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-300 hover:border-blue-300'
+                    }`}
+                  >
+                    <Snowflake className={`w-8 h-8 mx-auto mb-2 ${
+                      selectedTemperature === 'cold' ? 'text-blue-500' : 'text-gray-400'
+                    }`} />
+                    <p className="text-sm font-bold text-center">❄️ Frio</p>
+                    <p className="text-xs text-gray-600 text-center mt-1">Pouco interessado</p>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        </form>
+        </div>
+
+        {/* Botões de Ação */}
+        <div className="flex justify-end gap-3 pt-6 border-t border-gray-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-6 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all font-medium"
+          >
+            Fechar
+          </button>
+          <button
+            type="button"
+            onClick={handleComplete}
+            className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all font-medium shadow-lg flex items-center"
+          >
+            <Check className="h-5 w-5 mr-2" />
+            Salvar Status
+          </button>
+        </div>
       </div>
     </div>
   )
 }
 
-export default function LeadKanban() {
+export default function VisitCalendar() {
   const { user } = useAuth()
+  const [visits, setVisits] = useState<Visit[]>([])
   const [leads, setLeads] = useState<Lead[]>([])
   const [users, setUsers] = useState<AppUser[]>([])
   const [loading, setLoading] = useState(true)
-  const [showNewLeadModal, setShowNewLeadModal] = useState(false)
-  const [editingLead, setEditingLead] = useState<Lead | null>(null)
-  const [error, setError] = useState('')
+  const [currentDate, setCurrentDate] = useState(new Date())
+  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar')
+  const [filterStatus, setFilterStatus] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
-  const [filterSource, setFilterSource] = useState('')
-  const [filterStartDate, setFilterStartDate] = useState('')
-  const [filterEndDate, setFilterEndDate] = useState('')
-  const [showHistory, setShowHistory] = useState(false)
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
-  const [loadingHistory, setLoadingHistory] = useState(false)
-  const [leadHistory, setLeadHistory] = useState<any[]>([])
-  const [newAction, setNewAction] = useState('')
-  const [savingAction, setSavingAction] = useState(false)
-  const [editingAction, setEditingAction] = useState<string | null>(null)
-  const [editingActionText, setEditingActionText] = useState('')
   
-  // 🆕 NOVO STATE - Modal de agendamento de visita
-  const [showScheduleVisitModal, setShowScheduleVisitModal] = useState(false)
-  const [leadToSchedule, setLeadToSchedule] = useState<Lead | null>(null)
+  const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null)
 
   useEffect(() => {
-    if (user?.institution_id) loadData()
+    if (user?.institution_id) {
+      loadData()
+    }
   }, [user])
 
   const loadData = async () => {
     try {
       setLoading(true)
-      setError('')
-      const [leadsData, usersData] = await Promise.all([
-        DatabaseService.getLeads(user!.institution_id),
-        DatabaseService.getUsers(user!.institution_id)
+      const [visitsData, leadsData, usersData] = await Promise.all([
+        DatabaseService.getVisits(user!.institution_id!),
+        DatabaseService.getLeads(user!.institution_id!),
+        DatabaseService.getUsers(user!.institution_id!)
       ])
+      setVisits(visitsData)
       setLeads(leadsData)
       setUsers(usersData)
     } catch (error) {
-      console.error('Erro ao carregar dados:', error)
-      setError('Erro ao carregar dados dos leads')
+      console.error('Error loading data:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSave = async (data: Partial<Lead>) => {
+  const handleStatusChange = async (visitId: string, newStatus: Visit['status'], temperature?: 'hot' | 'warm' | 'cold') => {
     try {
-      setError('')
-      const leadData = { ...data, institution_id: user!.institution_id, status: editingLead ? editingLead.status : 'new' as Lead['status'] }
+      await DatabaseService.updateVisit(visitId, { status: newStatus })
       
-      if (editingLead) {
-        await DatabaseService.updateLead(editingLead.id, leadData)
-        const changes: any = {}, previousData: any = {}
-        Object.keys(data).forEach(key => {
-          const newValue = (data as any)[key], oldValue = (editingLead as any)[key]
-          if (newValue !== oldValue && newValue !== undefined && newValue !== null && newValue !== '') {
-            changes[key] = newValue
-            previousData[key] = oldValue
-          }
-        })
-        if (Object.keys(changes).length > 0) {
+      if (newStatus === 'completed' && temperature) {
+        const visit = visits.find(v => v.id === visitId)
+        if (visit && visit.lead_id) {
           await DatabaseService.logActivity({
-            user_id: user!.id, action: 'Lead editado', entity_type: 'lead', entity_id: editingLead.id,
-            details: { changes, previous: previousData, student_name: data.student_name || editingLead.student_name, responsible_name: data.responsible_name || editingLead.responsible_name },
+            user_id: user!.id,
+            action: 'Visita realizada',
+            entity_type: 'lead',
+            entity_id: visit.lead_id,
+            details: {
+              visit_id: visitId,
+              temperature: temperature,
+              temperature_label: temperature === 'hot' ? 'Quente 🔥' : temperature === 'warm' ? 'Morno ☀️' : 'Frio ❄️',
+              notes: `Lead ficou ${temperature === 'hot' ? 'muito interessado' : temperature === 'warm' ? 'moderadamente interessado' : 'pouco interessado'} após a visita`
+            },
             institution_id: user!.institution_id
           })
         }
-      } else {
-        const newLead = await DatabaseService.createLead(leadData)
-        await DatabaseService.logActivity({
-          user_id: user!.id, action: 'Lead criado', entity_type: 'lead', entity_id: newLead.id,
-          details: { student_name: newLead.student_name, responsible_name: newLead.responsible_name, source: newLead.source, grade_interest: newLead.grade_interest, phone: newLead.phone || '', email: newLead.email || '', address: newLead.address || '', budget_range: newLead.budget_range || '', notes: newLead.notes || '' },
-          institution_id: user!.institution_id
-        })
-      }
-      await loadData()
-      setEditingLead(null)
-    } catch (error) {
-      console.error('Erro ao salvar lead:', error)
-      setError('Erro ao salvar lead: ' + (error as Error).message)
-    }
-  }
-
-  const handleStatusChange = async (leadId: string, newStatus: Lead['status']) => {
-    try {
-      const currentLead = leads.find(l => l.id === leadId)
-      const previousStatus = currentLead?.status
-      
-      await DatabaseService.updateLead(leadId, { status: newStatus })
-      
-      if (currentLead && previousStatus !== newStatus) {
-        await DatabaseService.logActivity({
-          user_id: user!.id, action: 'Status alterado', entity_type: 'lead', entity_id: leadId,
-          details: { previous_status: previousStatus, new_status: newStatus, student_name: currentLead.student_name, responsible_name: currentLead.responsible_name },
-          institution_id: user!.institution_id
-        })
       }
       
       await loadData()
+      setShowDetailsModal(false)
+      setSelectedVisit(null)
     } catch (error) {
-      console.error('Erro ao atualizar status:', error)
-      setError('Erro ao atualizar status do lead')
+      console.error('Error updating visit status:', error)
     }
   }
 
-  const handleDelete = async (leadId: string) => {
-    const lead = leads.find(l => l.id === leadId)
-    if (!lead || !confirm(`Tem certeza que deseja excluir o lead "${lead.student_name}"?\n\nEsta ação não pode ser desfeita.`)) return
+  const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string; notes: string }) => {
     try {
-      await DatabaseService.deleteLead(leadId)
+      await DatabaseService.updateVisit(visitId, data)
       await loadData()
+      alert('Visita atualizada com sucesso!')
     } catch (error) {
-      console.error('Erro ao excluir lead:', error)
-      setError('Erro ao excluir lead: ' + (error as Error).message)
+      console.error('Error updating visit:', error)
+      alert('Erro ao atualizar visita')
     }
   }
 
-  // 🆕 NOVA FUNÇÃO - Agendar visita para o lead
-  const handleScheduleVisit = async (data: { scheduled_date: string; scheduled_time: string; notes: string }) => {
-    if (!leadToSchedule) return
-    
+  const handleDeleteVisit = async (visitId: string) => {
     try {
-      const scheduledDateTime = `${data.scheduled_date}T${data.scheduled_time}:00.000Z`
-      
-      // Criar a visita
-      await DatabaseService.createVisit({
-        institution_id: user!.institution_id,
-        lead_id: leadToSchedule.id,
-        student_name: leadToSchedule.student_name,
-        scheduled_date: scheduledDateTime,
-        notes: data.notes,
-        status: 'scheduled'
-      })
-      
-      // Atualizar status do lead para "scheduled" ou "visit"
-      await DatabaseService.updateLead(leadToSchedule.id, { status: 'scheduled' })
-      
-      // Registrar no histórico
-      await DatabaseService.logActivity({
-        user_id: user!.id,
-        action: 'Visita agendada',
-        entity_type: 'lead',
-        entity_id: leadToSchedule.id,
-        details: {
-          scheduled_date: scheduledDateTime,
-          scheduled_time: data.scheduled_time,
-          notes: data.notes,
-          student_name: leadToSchedule.student_name,
-          responsible_name: leadToSchedule.responsible_name
-        },
-        institution_id: user!.institution_id
-      })
-      
+      await DatabaseService.deleteVisit(visitId)
       await loadData()
-      setShowScheduleVisitModal(false)
-      setLeadToSchedule(null)
-      
-      alert('Visita agendada com sucesso!')
+      alert('Visita excluída com sucesso!')
     } catch (error) {
-      console.error('Erro ao agendar visita:', error)
-      setError('Erro ao agendar visita: ' + (error as Error).message)
+      console.error('Error deleting visit:', error)
+      alert('Erro ao excluir visita')
     }
   }
 
-  const loadLeadHistory = async (leadId: string) => {
-    try {
-      setLoadingHistory(true)
-      const history = await DatabaseService.getActivityLogs(user!.institution_id, leadId)
-      
-      const historyWithUsers = history.map(item => {
-        const userName = users.find(u => u.id === item.user_id)?.full_name || user?.full_name || 'Sistema'
-        return { ...item, user_name: userName }
-      })
-      
-      setLeadHistory(historyWithUsers)
-    } catch (error) {
-      console.error('Erro ao carregar histórico:', error)
-      setLeadHistory([])
-    } finally {
-      setLoadingHistory(false)
-    }
+  const handleVisitClick = (visit: Visit) => {
+    setSelectedVisit(visit)
+    setShowDetailsModal(true)
   }
 
-  const handleAddAction = async () => {
-    if (!newAction.trim() || !selectedLead) return
-    try {
-      setSavingAction(true)
-      await DatabaseService.logActivity({
-        user_id: user!.id, action: 'Ação manual adicionada', entity_type: 'lead', entity_id: selectedLead.id,
-        details: { description: newAction.trim(), student_name: selectedLead.student_name, responsible_name: selectedLead.responsible_name },
-        institution_id: user!.institution_id
-      })
-      await loadLeadHistory(selectedLead.id)
-      setNewAction('')
-    } catch (error) {
-      console.error('Erro ao salvar ação:', error)
-      setError('Erro ao adicionar ação ao histórico')
-    } finally {
-      setSavingAction(false)
-    }
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString('pt-BR')
   }
 
-  const handleSaveEditAction = async (actionId: string) => {
-    if (!editingActionText.trim()) return
-    try {
-      await DatabaseService.updateActivityLog(actionId, {
-        details: { ...leadHistory.find(h => h.id === actionId)?.details, description: editingActionText.trim() }
-      })
-      await loadLeadHistory(selectedLead!.id)
-      setEditingAction(null)
-      setEditingActionText('')
-    } catch (error) {
-      console.error('Erro ao atualizar ação:', error)
-      setError('Erro ao atualizar ação')
-    }
-  }
-
-  const handleDeleteAction = async (actionId: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta ação?\n\nEsta ação não pode ser desfeita.')) return
-    try {
-      await DatabaseService.deleteActivityLog(actionId)
-      await loadLeadHistory(selectedLead!.id)
-    } catch (error) {
-      console.error('Erro ao excluir ação:', error)
-      setError('Erro ao excluir ação')
-    }
-  }
-
-  const getLeadsByStatus = (status: Lead['status']) => {
-    return leads.filter(lead => {
-      const matchesStatus = lead.status === status
-      const matchesSearch = searchTerm === '' || lead.student_name.toLowerCase().includes(searchTerm.toLowerCase()) || lead.responsible_name.toLowerCase().includes(searchTerm.toLowerCase())
-      const matchesSource = filterSource === '' || lead.source === filterSource
-      let matchesDate = true
-      if (filterStartDate || filterEndDate) {
-        const leadDate = new Date(lead.created_at).setHours(0, 0, 0, 0)
-        if (filterStartDate) matchesDate = matchesDate && leadDate >= new Date(filterStartDate).setHours(0, 0, 0, 0)
-        if (filterEndDate) matchesDate = matchesDate && leadDate <= new Date(filterEndDate).setHours(23, 59, 59, 999)
-      }
-      return matchesStatus && matchesSearch && matchesSource && matchesDate
+  const formatTime = (dateString: string) => {
+    return new Date(dateString).toLocaleTimeString('pt-BR', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
     })
   }
 
-  const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('pt-BR')
-  const formatDateTime = (dateString: string) => new Date(dateString).toLocaleString('pt-BR')
-
-  const getLeadStats = () => {
-    const total = leads.length, thisMonth = new Date().toISOString().slice(0, 7)
-    const newThisMonth = leads.filter(l => l.created_at.startsWith(thisMonth)).length
-    const converted = leads.filter(l => l.status === 'enrolled').length
-    const conversionRate = total > 0 ? (converted / total) * 100 : 0
-    return { total, newThisMonth, converted, conversionRate }
+  const getVisitsByStatus = (status: Visit['status']) => {
+    return visits.filter(visit => {
+      const matchesStatus = visit.status === status
+      const matchesSearch = searchTerm === '' || 
+        (visit.student_name && visit.student_name.toLowerCase().includes(searchTerm.toLowerCase()))
+      const matchesFilter = filterStatus === '' || visit.status === filterStatus
+      
+      return matchesStatus && matchesSearch && matchesFilter
+    })
   }
 
-  const stats = getLeadStats()
+  const getVisitsForDate = (date: Date) => {
+    const dateStr = date.toISOString().split('T')[0]
+    return visits.filter(visit => visit.scheduled_date.startsWith(dateStr))
+  }
+
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear()
+    const month = date.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const lastDay = new Date(year, month + 1, 0)
+    const daysInMonth = lastDay.getDate()
+    const startingDayOfWeek = firstDay.getDay()
+
+    const days = []
+    
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(null)
+    }
+    
+    for (let day = 1; day <= daysInMonth; day++) {
+      days.push(new Date(year, month, day))
+    }
+    
+    return days
+  }
+
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    setCurrentDate(prev => {
+      const newDate = new Date(prev)
+      if (direction === 'prev') {
+        newDate.setMonth(prev.getMonth() - 1)
+      } else {
+        newDate.setMonth(prev.getMonth() + 1)
+      }
+      return newDate
+    })
+  }
+
+  const getVisitStats = () => {
+    const today = new Date().toISOString().split('T')[0]
+    const thisWeek = new Date()
+    thisWeek.setDate(thisWeek.getDate() - thisWeek.getDay())
+    const thisWeekStr = thisWeek.toISOString().split('T')[0]
+
+    const todayVisits = visits.filter(v => v.scheduled_date.startsWith(today)).length
+    const weekVisits = visits.filter(v => v.scheduled_date >= thisWeekStr).length
+    const completedVisits = visits.filter(v => v.status === 'completed').length
+    const scheduledVisits = visits.filter(v => v.status === 'scheduled').length
+
+    return { todayVisits, weekVisits, completedVisits, scheduledVisits }
+  }
+
+  const stats = getVisitStats()
 
   if (loading) {
     return (
-      <div className="p-8">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-64 mb-6"></div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            {[1, 2, 3, 4].map(i => <div key={i} className="h-96 bg-gray-200 rounded-2xl"></div>)}
-          </div>
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     )
   }
 
   return (
-    <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
-      <div className="mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+    <div className="p-8 bg-gradient-to-br from-blue-50 via-white to-indigo-50 min-h-screen">
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Kanban de Leads</h1>
-            <p className="text-sm sm:text-base text-gray-600">Gerencie seus leads de forma visual e eficiente</p>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Calendário de Visitas</h1>
+            <p className="text-gray-600 text-lg">Gerencie e acompanhe todas as visitas agendadas</p>
           </div>
-          <button onClick={() => { setEditingLead(null); setShowNewLeadModal(true) }}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 sm:px-6 py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all flex items-center justify-center shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 whitespace-nowrap">
-            <Plus className="h-5 w-5 mr-2" />
-            Novo Lead
-          </button>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
-          <div className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-100">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-600">Total de Leads</p>
-                <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.total}</p>
+                <p className="text-sm font-medium text-gray-600">Visitas Hoje</p>
+                <p className="text-3xl font-bold text-blue-600">{stats.todayVisits}</p>
               </div>
-              <Users className="h-6 w-6 sm:h-7 sm:w-7 text-blue-600" />
+              <Calendar className="h-8 w-8 text-blue-600" />
             </div>
           </div>
-          <div className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-100">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-600">Novos (Mês)</p>
-                <p className="text-xl sm:text-2xl font-bold text-green-600">{stats.newThisMonth}</p>
+                <p className="text-sm font-medium text-gray-600">Esta Semana</p>
+                <p className="text-3xl font-bold text-green-600">{stats.weekVisits}</p>
               </div>
-              <TrendingUp className="h-6 w-6 sm:h-7 sm:w-7 text-green-600" />
+              <Clock className="h-8 w-8 text-green-600" />
             </div>
           </div>
-          <div className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-100">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-600">Convertidos</p>
-                <p className="text-xl sm:text-2xl font-bold text-purple-600">{stats.converted}</p>
+                <p className="text-sm font-medium text-gray-600">Realizadas</p>
+                <p className="text-3xl font-bold text-purple-600">{stats.completedVisits}</p>
               </div>
-              <CheckCircle className="h-6 w-6 sm:h-7 sm:w-7 text-purple-600" />
+              <Eye className="h-8 w-8 text-purple-600" />
             </div>
           </div>
-          <div className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-100">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-600">Taxa Conversão</p>
-                <p className="text-xl sm:text-2xl font-bold text-orange-600">{stats.conversionRate.toFixed(1)}%</p>
+                <p className="text-sm font-medium text-gray-600">Agendadas</p>
+                <p className="text-3xl font-bold text-orange-600">{stats.scheduledVisits}</p>
               </div>
-              <TrendingUp className="h-6 w-6 sm:h-7 sm:w-7 text-orange-600" />
+              <User className="h-8 w-8 text-orange-600" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm sm:text-md font-semibold text-gray-900 flex items-center">
-              <Filter className="h-4 w-4 mr-2" />
-              Filtros
-            </h3>
-            {(searchTerm || filterSource || filterStartDate || filterEndDate) && (
-              <button onClick={() => { setSearchTerm(''); setFilterSource(''); setFilterStartDate(''); setFilterEndDate('') }}
-                className="text-xs text-blue-600 hover:text-blue-700 font-medium">
-                Limpar Filtros
-              </button>
-            )}
+        <div className="flex flex-col lg:flex-row gap-4 mb-8">
+          <div className="flex gap-4">
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={`px-6 py-3 rounded-xl font-medium transition-all ${
+                viewMode === 'calendar'
+                  ? 'bg-blue-600 text-white shadow-lg'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+              }`}
+            >
+              <Calendar className="h-4 w-4 inline mr-2" />
+              Calendário
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-6 py-3 rounded-xl font-medium transition-all ${
+                viewMode === 'list'
+                  ? 'bg-blue-600 text-white shadow-lg'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+              }`}
+            >
+              <Filter className="h-4 w-4 inline mr-2" />
+              Lista
+            </button>
           </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <input type="text" placeholder="Buscar por nome..." value={searchTerm}
+
+          <div className="flex gap-4 flex-1">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+              <input
+                type="text"
+                placeholder="Buscar por nome do visitante..."
+                value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 pr-3 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm" />
+                className="pl-10 pr-4 py-3 w-full border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              />
             </div>
-            <select value={filterSource} onChange={(e) => setFilterSource(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm">
-              <option value="">Todas as origens</option>
-              {sourceOptions.map(source => <option key={source} value={source}>{source}</option>)}
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+            >
+              <option value="">Todos os status</option>
+              {Object.entries(statusConfig).map(([status, config]) => (
+                <option key={status} value={status}>{config.label}</option>
+              ))}
             </select>
-            <input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm" />
-            <input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm" />
           </div>
         </div>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 flex items-center text-sm">
-          <X className="h-4 w-4 mr-2" />
-          {error}
+      {viewMode === 'calendar' && (
+        <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden">
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => navigateMonth('prev')}
+                className="p-2 hover:bg-white hover:bg-opacity-20 rounded-full transition-all"
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </button>
+              <h2 className="text-2xl font-bold">
+                {currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+              </h2>
+              <button
+                onClick={() => navigateMonth('next')}
+                className="p-2 hover:bg-white hover:bg-opacity-20 rounded-full transition-all"
+              >
+                <ChevronRight className="h-6 w-6" />
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <div className="grid grid-cols-7 gap-4 mb-4">
+              {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
+                <div key={day} className="text-center font-semibold text-gray-600 py-2">
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-4">
+              {getDaysInMonth(currentDate).map((date, index) => {
+                if (!date) {
+                  return <div key={index} className="h-24"></div>
+                }
+
+                const dayVisits = getVisitsForDate(date)
+                const isToday = date.toDateString() === new Date().toDateString()
+
+                return (
+                  <div
+                    key={index}
+                    className={`h-24 border rounded-xl p-2 transition-all hover:shadow-md ${
+                      isToday 
+                        ? 'bg-blue-50 border-blue-200' 
+                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    <div className={`text-sm font-medium mb-1 ${
+                      isToday ? 'text-blue-600' : 'text-gray-700'
+                    }`}>
+                      {date.getDate()}
+                    </div>
+                    <div className="space-y-1">
+                      {dayVisits.slice(0, 2).map(visit => (
+                        <div
+                          key={visit.id}
+                          onClick={() => handleVisitClick(visit)}
+                          className={`text-xs px-2 py-1 rounded-lg truncate cursor-pointer hover:opacity-75 transition-all ${
+                            statusConfig[visit.status].bgColor
+                          } ${statusConfig[visit.status].textColor}`}
+                        >
+                          {formatTime(visit.scheduled_date)} - {visit.student_name}
+                        </div>
+                      ))}
+                      {dayVisits.length > 2 && (
+                        <div className="text-xs text-gray-500 px-2">
+                          +{dayVisits.length - 2} mais
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         </div>
       )}
 
-      <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-        <div className="p-3 border-b border-gray-200 bg-gray-50 rounded-t-xl">
-          <p className="text-sm font-semibold text-gray-700 flex items-center">
-            <TrendingUp className="h-4 w-4 mr-2 text-blue-600" />
-            Pipeline de Vendas
-          </p>
-        </div>
-        
-        <div className="overflow-x-auto overflow-y-hidden" style={{ height: 'auto', minHeight: '600px', maxHeight: '800px', paddingBottom: '1rem' }}>
-          <div className="flex gap-3 sm:gap-4 p-3 sm:p-4 pb-6">
-            {Object.entries(statusConfig).map(([status, config]) => {
-              const statusLeads = getLeadsByStatus(status as Lead['status'])
-              
-              return (
-                <div key={status} className={`${config.bgColor} rounded-xl p-3 sm:p-4 flex-shrink-0 w-[300px] ${config.borderColor} border-2 transition-all hover:shadow-md flex flex-col`}>
-                  
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center">
-                      <div className={`w-3 h-3 rounded-full ${config.color} mr-2 shadow-sm`}></div>
-                      <h3 className={`font-bold text-sm ${config.textColor}`}>{config.label}</h3>
-                    </div>
-                    <span className={`${config.color} text-white text-xs px-2.5 py-1 rounded-full font-bold shadow-sm`}>
-                      {statusLeads.length}
-                    </span>
+      {viewMode === 'list' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {Object.entries(statusConfig).map(([status, config]) => {
+            const statusVisits = getVisitsByStatus(status as Visit['status'])
+            
+            return (
+              <div key={status} className={`${config.bgColor} rounded-3xl p-6 min-h-96 ${config.borderColor} border-2`}>
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center">
+                    <div className={`w-4 h-4 rounded-full ${config.color} mr-3`}></div>
+                    <h3 className={`font-bold text-lg ${config.textColor}`}>{config.label}</h3>
                   </div>
-
-                  <div className="space-y-3 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-500" style={{ height: '550px', maxHeight: '70vh' }}>
-                    {statusLeads.map((lead) => (
-                      <div key={lead.id} className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all cursor-pointer group min-h-[200px]">
-                        
-                        <div className="flex justify-between items-start mb-3">
-                          <div className="flex-1 min-w-0 pr-2">
-                            <h4 className="font-bold text-gray-900 text-sm mb-1.5 group-hover:text-blue-600 transition-colors truncate">
-                              {lead.student_name}
-                            </h4>
-                            <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-bold ${
-                              lead.source === 'Facebook' ? 'bg-blue-100 text-blue-700' :
-                              lead.source === 'Instagram' ? 'bg-pink-100 text-pink-700' :
-                              lead.source === 'Google' ? 'bg-green-100 text-green-700' :
-                              lead.source === 'WhatsApp' ? 'bg-emerald-100 text-emerald-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
-                              <Tag className="w-3 h-3 mr-1" />
-                              {lead.source}
-                            </span>
-                          </div>
-                          <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                            {/* 🆕 BOTÃO DE AGENDAR VISITA */}
-                            <button 
-                              onClick={(e) => { 
-                                e.stopPropagation(); 
-                                setLeadToSchedule(lead); 
-                                setShowScheduleVisitModal(true) 
-                              }}
-                              className="text-gray-400 hover:text-purple-600 p-1.5 hover:bg-purple-50 rounded-md transition-all" 
-                              title="Agendar visita">
-                              <Calendar className="w-4 h-4" />
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); setSelectedLead(lead); setShowHistory(true); setNewAction(''); setEditingAction(null); setEditingActionText(''); loadLeadHistory(lead.id) }}
-                              className="text-gray-400 hover:text-green-600 p-1.5 hover:bg-green-50 rounded-md transition-all" title="Ver histórico">
-                              <Clock className="w-4 h-4" />
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); setEditingLead(lead); setShowNewLeadModal(true) }}
-                              className="text-gray-400 hover:text-blue-600 p-1.5 hover:bg-blue-50 rounded-md transition-all" title="Editar lead">
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); handleDelete(lead.id) }}
-                              className="text-gray-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-md transition-all" title="Excluir lead">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2 mb-3">
-                          <div className="flex items-center text-xs text-gray-700 bg-gray-50 p-2 rounded-md">
-                            <User className="w-3.5 h-3.5 mr-2 text-gray-500 flex-shrink-0" />
-                            <span className="font-semibold truncate">{lead.grade_interest}</span>
-                          </div>
-                          <div className="flex items-center text-xs text-gray-700 bg-gray-50 p-2 rounded-md">
-                            <Users className="w-3.5 h-3.5 mr-2 text-gray-500 flex-shrink-0" />
-                            <span className="truncate">{lead.responsible_name}</span>
-                          </div>
-                          {lead.phone && (
-                            <div className="flex items-center text-xs text-blue-700 bg-blue-50 p-2 rounded-md">
-                              <Phone className="w-3.5 h-3.5 mr-2 text-blue-600 flex-shrink-0" />
-                              <span className="font-medium truncate">{lead.phone}</span>
-                            </div>
-                          )}
-                          {lead.budget_range && (
-                            <div className="flex items-center text-xs text-green-700 bg-green-50 p-2 rounded-md">
-                              <DollarSign className="w-3.5 h-3.5 mr-2 text-green-600 flex-shrink-0" />
-                              <span className="font-medium truncate">{lead.budget_range}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {lead.notes && (
-                          <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded-md">
-                            <p className="text-xs text-gray-700 flex items-start">
-                              <MessageSquare className="w-3 h-3 mr-1.5 mt-0.5 flex-shrink-0 text-amber-600" />
-                              <span className="line-clamp-2 leading-relaxed">{lead.notes}</span>
-                            </p>
-                          </div>
-                        )}
-
-                        <div className="pt-3 border-t border-gray-100 space-y-2">
-                          <div className="flex items-center text-xs text-gray-500">
-                            <Calendar className="w-3 h-3 mr-1.5 flex-shrink-0" />
-                            <span>{formatDate(lead.created_at)}</span>
-                          </div>
-                          <select value={lead.status}
-                            onChange={(e) => { e.stopPropagation(); handleStatusChange(lead.id, e.target.value as Lead['status']) }}
-                            className="w-full text-xs font-semibold border border-gray-200 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white hover:bg-gray-50 transition-all cursor-pointer"
-                            onClick={(e) => e.stopPropagation()}>
-                            {Object.entries(statusConfig).map(([value, cfg]) => <option key={value} value={value}>{cfg.label}</option>)}
-                          </select>
-                        </div>
-                      </div>
-                    ))}
-
-                    {statusLeads.length === 0 && (
-                      <div className="text-center py-12">
-                        <div className={`w-12 h-12 ${config.color} rounded-full flex items-center justify-center mx-auto mb-3 opacity-20`}>
-                          <Users className="w-6 h-6 text-white" />
-                        </div>
-                        <p className="text-xs font-medium text-gray-500">Nenhum lead</p>
-                        <p className="text-xs text-gray-400">nesta etapa</p>
-                      </div>
-                    )}
-                  </div>
+                  <span className={`${config.color} text-white text-sm px-3 py-1 rounded-full font-medium`}>
+                    {statusVisits.length}
+                  </span>
                 </div>
-              )
-            })}
-          </div>
+
+                <div className="space-y-4">
+                  {statusVisits.map((visit) => (
+                    <div
+                      key={visit.id}
+                      onClick={() => handleVisitClick(visit)}
+                      className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer group"
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <h4 className="font-semibold text-gray-900 text-sm group-hover:text-blue-600 transition-colors">
+                          {visit.student_name || 'Visitante'}
+                        </h4>
+                      </div>
+
+                      <div className="space-y-2 mb-4">
+                        <p className="text-xs text-gray-600 flex items-center">
+                          <Calendar className="w-3 h-3 mr-1" />
+                          {formatDate(visit.scheduled_date)}
+                        </p>
+                        {visit.notes && (
+                          <p className="text-xs text-gray-600 line-clamp-2">
+                            {visit.notes}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="pt-3 border-t border-gray-100">
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${config.bgColor} ${config.textColor}`}>
+                          {config.label}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+
+                  {statusVisits.length === 0 && (
+                    <div className="text-center py-8">
+                      <div className={`w-12 h-12 ${config.color} rounded-full flex items-center justify-center mx-auto mb-3 opacity-20`}>
+                        <Calendar className="w-6 h-6 text-white" />
+                      </div>
+                      <p className="text-sm text-gray-500">Nenhuma visita neste status</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
-      </div>
+      )}
 
-      <NewLeadModal 
-        isOpen={showNewLeadModal}
-        onClose={() => { setShowNewLeadModal(false); setEditingLead(null) }}
-        onSave={handleSave} 
-        editingLead={editingLead} 
-      />
-
-      {/* 🆕 MODAL DE AGENDAR VISITA */}
-      {showScheduleVisitModal && leadToSchedule && (
-        <ScheduleVisitModal
-          isOpen={showScheduleVisitModal}
+      {showDetailsModal && selectedVisit && (
+        <VisitDetailsModal
+          isOpen={showDetailsModal}
           onClose={() => {
-            setShowScheduleVisitModal(false)
-            setLeadToSchedule(null)
+            setShowDetailsModal(false)
+            setSelectedVisit(null)
           }}
-          lead={leadToSchedule}
-          onSchedule={handleScheduleVisit}
+          visit={selectedVisit}
+          lead={leads.find(l => l.id === selectedVisit.lead_id) || null}
+          onStatusChange={handleStatusChange}
+          onUpdateVisit={handleUpdateVisit}
+          onDeleteVisit={handleDeleteVisit}
         />
       )}
-
-      {/* Modal de histórico omitido por brevidade - você já tem no arquivo original */}
     </div>
   )
 }
