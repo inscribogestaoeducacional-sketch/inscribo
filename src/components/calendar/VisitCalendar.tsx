@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Calendar, Clock, User, Plus, Edit, Eye, MapPin, Phone, Mail, ChevronLeft, ChevronRight, Filter, Search, X } from 'lucide-react'
+import { Calendar, Clock, User, Plus, Edit, Eye, MapPin, Phone, Mail, ChevronLeft, ChevronRight, Filter, Search, X, Flame, Snowflake, Sun, MessageSquare, Check, AlertCircle } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, Visit, Lead, User as AppUser } from '../../lib/supabase'
 
@@ -64,7 +64,6 @@ function NewVisitModal({ isOpen, onClose, onSave, editingVisit, leads }: NewVisi
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Validação dos campos obrigatórios
     if (!formData.scheduled_date || !formData.scheduled_time) {
       alert('Data e horário são obrigatórios!')
       return
@@ -109,7 +108,6 @@ function NewVisitModal({ isOpen, onClose, onSave, editingVisit, leads }: NewVisi
           </button>
         </div>
 
-        {/* Progress Steps */}
         <div className="flex items-center justify-center mb-10">
           {[1, 2, 3].map((step) => (
             <div key={step} className="flex items-center">
@@ -145,7 +143,6 @@ function NewVisitModal({ isOpen, onClose, onSave, editingVisit, leads }: NewVisi
         </div>
         
         <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Step 1: Lead Selection */}
           {currentStep === 1 && (
             <div className="space-y-6">
               <div>
@@ -207,7 +204,6 @@ function NewVisitModal({ isOpen, onClose, onSave, editingVisit, leads }: NewVisi
             </div>
           )}
 
-          {/* Step 2: Date and Time */}
           {currentStep === 2 && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -263,7 +259,6 @@ function NewVisitModal({ isOpen, onClose, onSave, editingVisit, leads }: NewVisi
             </div>
           )}
 
-          {/* Step 3: Additional Info */}
           {currentStep === 3 && (
             <div className="space-y-6">
               <div>
@@ -279,7 +274,6 @@ function NewVisitModal({ isOpen, onClose, onSave, editingVisit, leads }: NewVisi
                 />
               </div>
 
-              {/* Summary */}
               <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-2xl p-6">
                 <h4 className="font-bold text-gray-900 mb-4 flex items-center">
                   <Eye className="h-5 w-5 mr-2 text-green-600" />
@@ -356,6 +350,232 @@ function NewVisitModal({ isOpen, onClose, onSave, editingVisit, leads }: NewVisi
   )
 }
 
+// 🔥 NOVO COMPONENTE - Modal de Detalhes da Visita com Lead
+interface VisitDetailsModalProps {
+  isOpen: boolean
+  onClose: () => void
+  visit: Visit
+  lead: Lead | null
+  onStatusChange: (visitId: string, status: Visit['status'], temperature?: 'hot' | 'warm' | 'cold') => void
+}
+
+function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange }: VisitDetailsModalProps) {
+  const [selectedStatus, setSelectedStatus] = useState<Visit['status']>(visit.status)
+  const [selectedTemperature, setSelectedTemperature] = useState<'hot' | 'warm' | 'cold' | null>(null)
+  const [notes, setNotes] = useState('')
+
+  if (!isOpen) return null
+
+  const handleComplete = () => {
+    if (selectedStatus === 'completed' && !selectedTemperature) {
+      alert('Por favor, selecione a temperatura do lead!')
+      return
+    }
+    onStatusChange(visit.id, selectedStatus, selectedTemperature || undefined)
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-3xl p-8 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">📋 Detalhes da Visita</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+
+        {/* Informações da Visita */}
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-6 mb-6 border border-blue-200">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="font-semibold text-gray-700 flex items-center">
+                <User className="w-4 h-4 mr-1" />
+                Visitante:
+              </span>
+              <p className="text-gray-900 mt-1">{visit.student_name || 'Não informado'}</p>
+            </div>
+            <div>
+              <span className="font-semibold text-gray-700 flex items-center">
+                <Calendar className="w-4 h-4 mr-1" />
+                Data/Hora:
+              </span>
+              <p className="text-gray-900 mt-1">
+                {new Date(visit.scheduled_date).toLocaleString('pt-BR', {
+                  weekday: 'short',
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </p>
+            </div>
+          </div>
+
+          {visit.notes && (
+            <div className="mt-4 p-3 bg-white rounded-lg border border-gray-200">
+              <span className="font-semibold text-gray-700 flex items-center text-sm mb-2">
+                <MessageSquare className="w-4 h-4 mr-1" />
+                Observações:
+              </span>
+              <p className="text-gray-700 text-sm">{visit.notes}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Informações do Lead (se existir) */}
+        {lead && (
+          <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-2xl p-6 mb-6 border border-green-200">
+            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+              <User className="w-5 h-5 mr-2 text-green-600" />
+              Informações do Lead
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="font-semibold text-gray-700">Aluno:</span>
+                <p className="text-gray-900">{lead.student_name}</p>
+              </div>
+              <div>
+                <span className="font-semibold text-gray-700">Responsável:</span>
+                <p className="text-gray-900">{lead.responsible_name}</p>
+              </div>
+              <div>
+                <span className="font-semibold text-gray-700">Série:</span>
+                <p className="text-gray-900">{lead.grade_interest}</p>
+              </div>
+              <div>
+                <span className="font-semibold text-gray-700">Origem:</span>
+                <p className="text-gray-900">{lead.source}</p>
+              </div>
+              {lead.phone && (
+                <div>
+                  <span className="font-semibold text-gray-700 flex items-center">
+                    <Phone className="w-3.5 h-3.5 mr-1" />
+                    Telefone:
+                  </span>
+                  <p className="text-gray-900">{lead.phone}</p>
+                </div>
+              )}
+              {lead.email && (
+                <div>
+                  <span className="font-semibold text-gray-700 flex items-center">
+                    <Mail className="w-3.5 h-3.5 mr-1" />
+                    E-mail:
+                  </span>
+                  <p className="text-gray-900">{lead.email}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Atualizar Status da Visita */}
+        <div className="bg-gray-50 rounded-2xl p-6 mb-6 border border-gray-200">
+          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+            <Check className="w-5 h-5 mr-2 text-blue-600" />
+            Atualizar Status
+          </h3>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Status da Visita
+              </label>
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value as Visit['status'])}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              >
+                {Object.entries(statusConfig).map(([value, config]) => (
+                  <option key={value} value={value}>{config.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Mostrar seleção de temperatura apenas se completar a visita */}
+            {selectedStatus === 'completed' && (
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
+                  🌡️ Como o lead ficou após a visita? *
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTemperature('hot')}
+                    className={`p-4 rounded-xl border-2 transition-all ${
+                      selectedTemperature === 'hot'
+                        ? 'border-red-500 bg-red-50'
+                        : 'border-gray-300 hover:border-red-300'
+                    }`}
+                  >
+                    <Flame className={`w-8 h-8 mx-auto mb-2 ${
+                      selectedTemperature === 'hot' ? 'text-red-500' : 'text-gray-400'
+                    }`} />
+                    <p className="text-sm font-bold text-center">🔥 Quente</p>
+                    <p className="text-xs text-gray-600 text-center mt-1">Muito interessado</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTemperature('warm')}
+                    className={`p-4 rounded-xl border-2 transition-all ${
+                      selectedTemperature === 'warm'
+                        ? 'border-yellow-500 bg-yellow-50'
+                        : 'border-gray-300 hover:border-yellow-300'
+                    }`}
+                  >
+                    <Sun className={`w-8 h-8 mx-auto mb-2 ${
+                      selectedTemperature === 'warm' ? 'text-yellow-500' : 'text-gray-400'
+                    }`} />
+                    <p className="text-sm font-bold text-center">☀️ Morno</p>
+                    <p className="text-xs text-gray-600 text-center mt-1">Interesse moderado</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTemperature('cold')}
+                    className={`p-4 rounded-xl border-2 transition-all ${
+                      selectedTemperature === 'cold'
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-300 hover:border-blue-300'
+                    }`}
+                  >
+                    <Snowflake className={`w-8 h-8 mx-auto mb-2 ${
+                      selectedTemperature === 'cold' ? 'text-blue-500' : 'text-gray-400'
+                    }`} />
+                    <p className="text-sm font-bold text-center">❄️ Frio</p>
+                    <p className="text-xs text-gray-600 text-center mt-1">Pouco interessado</p>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Botões de Ação */}
+        <div className="flex justify-end gap-3 pt-6 border-t border-gray-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-6 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all font-medium"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleComplete}
+            className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all font-medium shadow-lg flex items-center"
+          >
+            <Check className="h-5 w-5 mr-2" />
+            Salvar Alterações
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function VisitCalendar() {
   const { user } = useAuth()
   const [visits, setVisits] = useState<Visit[]>([])
@@ -368,6 +588,10 @@ export default function VisitCalendar() {
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar')
   const [filterStatus, setFilterStatus] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  
+  // 🔥 NOVOS STATES - Modal de detalhes
+  const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null)
 
   useEffect(() => {
     if (user?.institution_id) {
@@ -397,7 +621,6 @@ export default function VisitCalendar() {
     try {
       console.log('🔄 Iniciando salvamento da visita:', data)
       
-      // Validação mais robusta
       if (!data.scheduled_date) {
         throw new Error('Data da visita é obrigatória')
       }
@@ -437,13 +660,44 @@ export default function VisitCalendar() {
     setShowForm(true)
   }
 
-  const handleStatusChange = async (visitId: string, newStatus: Visit['status']) => {
+  // 🔥 FUNÇÃO MODIFICADA - Inclui temperatura do lead
+  const handleStatusChange = async (visitId: string, newStatus: Visit['status'], temperature?: 'hot' | 'warm' | 'cold') => {
     try {
       await DatabaseService.updateVisit(visitId, { status: newStatus })
+      
+      // Se completou a visita e tem temperatura, atualiza o lead também
+      if (newStatus === 'completed' && temperature) {
+        const visit = visits.find(v => v.id === visitId)
+        if (visit && visit.lead_id) {
+          // Registra no histórico do lead
+          await DatabaseService.logActivity({
+            user_id: user!.id,
+            action: 'Visita realizada',
+            entity_type: 'lead',
+            entity_id: visit.lead_id,
+            details: {
+              visit_id: visitId,
+              temperature: temperature,
+              temperature_label: temperature === 'hot' ? 'Quente 🔥' : temperature === 'warm' ? 'Morno ☀️' : 'Frio ❄️',
+              notes: `Lead ficou ${temperature === 'hot' ? 'muito interessado' : temperature === 'warm' ? 'moderadamente interessado' : 'pouco interessado'} após a visita`
+            },
+            institution_id: user!.institution_id
+          })
+        }
+      }
+      
       await loadData()
+      setShowDetailsModal(false)
+      setSelectedVisit(null)
     } catch (error) {
       console.error('Error updating visit status:', error)
     }
+  }
+
+  // 🔥 NOVA FUNÇÃO - Abre modal de detalhes
+  const handleVisitClick = (visit: Visit) => {
+    setSelectedVisit(visit)
+    setShowDetailsModal(true)
   }
 
   const formatDate = (dateString: string) => {
@@ -483,12 +737,10 @@ export default function VisitCalendar() {
 
     const days = []
     
-    // Add empty cells for days before the first day of the month
     for (let i = 0; i < startingDayOfWeek; i++) {
       days.push(null)
     }
     
-    // Add all days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       days.push(new Date(year, month, day))
     }
@@ -534,7 +786,6 @@ export default function VisitCalendar() {
 
   return (
     <div className="p-8 bg-gradient-to-br from-blue-50 via-white to-indigo-50 min-h-screen">
-      {/* Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -550,7 +801,6 @@ export default function VisitCalendar() {
           </button>
         </div>
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
             <div className="flex items-center justify-between">
@@ -590,7 +840,6 @@ export default function VisitCalendar() {
           </div>
         </div>
 
-        {/* Controls */}
         <div className="flex flex-col lg:flex-row gap-4 mb-8">
           <div className="flex gap-4">
             <button
@@ -642,10 +891,8 @@ export default function VisitCalendar() {
         </div>
       </div>
 
-      {/* Calendar View */}
       {viewMode === 'calendar' && (
         <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden">
-          {/* Calendar Header */}
           <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
             <div className="flex items-center justify-between">
               <button
@@ -666,9 +913,7 @@ export default function VisitCalendar() {
             </div>
           </div>
 
-          {/* Calendar Grid */}
           <div className="p-6">
-            {/* Days of week header */}
             <div className="grid grid-cols-7 gap-4 mb-4">
               {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
                 <div key={day} className="text-center font-semibold text-gray-600 py-2">
@@ -677,7 +922,6 @@ export default function VisitCalendar() {
               ))}
             </div>
 
-            {/* Calendar days */}
             <div className="grid grid-cols-7 gap-4">
               {getDaysInMonth(currentDate).map((date, index) => {
                 if (!date) {
@@ -705,7 +949,8 @@ export default function VisitCalendar() {
                       {dayVisits.slice(0, 2).map(visit => (
                         <div
                           key={visit.id}
-                          className={`text-xs px-2 py-1 rounded-lg truncate ${
+                          onClick={() => handleVisitClick(visit)}
+                          className={`text-xs px-2 py-1 rounded-lg truncate cursor-pointer hover:opacity-75 transition-all ${
                             statusConfig[visit.status].bgColor
                           } ${statusConfig[visit.status].textColor}`}
                         >
@@ -726,7 +971,6 @@ export default function VisitCalendar() {
         </div>
       )}
 
-      {/* List View */}
       {viewMode === 'list' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {Object.entries(statusConfig).map(([status, config]) => {
@@ -748,6 +992,7 @@ export default function VisitCalendar() {
                   {statusVisits.map((visit) => (
                     <div
                       key={visit.id}
+                      onClick={() => handleVisitClick(visit)}
                       className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer group"
                     >
                       <div className="flex justify-between items-start mb-3">
@@ -780,22 +1025,10 @@ export default function VisitCalendar() {
                         )}
                       </div>
 
-                      <div className="mt-4 pt-3 border-t border-gray-100">
-                        <select
-                          value={visit.status}
-                          onChange={(e) => {
-                            e.stopPropagation()
-                            handleStatusChange(visit.id, e.target.value as Visit['status'])
-                          }}
-                          className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {Object.entries(statusConfig).map(([value, config]) => (
-                            <option key={value} value={value}>
-                              {config.label}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="pt-3 border-t border-gray-100">
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${config.bgColor} ${config.textColor}`}>
+                          {config.label}
+                        </span>
                       </div>
                     </div>
                   ))}
@@ -815,7 +1048,6 @@ export default function VisitCalendar() {
         </div>
       )}
 
-      {/* Modal */}
       <NewVisitModal
         isOpen={showForm}
         onClose={() => {
@@ -826,6 +1058,20 @@ export default function VisitCalendar() {
         editingVisit={editingVisit}
         leads={leads}
       />
+
+      {/* 🔥 NOVO MODAL - Detalhes da Visita */}
+      {showDetailsModal && selectedVisit && (
+        <VisitDetailsModal
+          isOpen={showDetailsModal}
+          onClose={() => {
+            setShowDetailsModal(false)
+            setSelectedVisit(null)
+          }}
+          visit={selectedVisit}
+          lead={leads.find(l => l.id === selectedVisit.lead_id) || null}
+          onStatusChange={handleStatusChange}
+        />
+      )}
     </div>
   )
 }
