@@ -18,7 +18,6 @@ const Sidebar = () => {
   const location = useLocation()
   const { user } = useAuth()
 
-  // Define menu items based on user role
   const getMenuItemsByRole = (role: string) => {
     const baseItems = [
       { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
@@ -52,31 +51,20 @@ const Sidebar = () => {
   }
 
   const menuItems = getMenuItemsByRole(user?.role || 'user')
-
   const isActive = (path: string) => location.pathname === path
-
-  const getRoleInfo = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return { label: '🛡️ Administrador', color: 'text-red-600', bg: 'bg-red-50' }
-      case 'manager':
-        return { label: '👨‍💼 Gestor', color: 'text-blue-600', bg: 'bg-blue-50' }
-      case 'user':
-      default:
-        return { label: '👤 Consultor', color: 'text-gray-600', bg: 'bg-gray-50' }
-    }
-  }
-
-  const roleInfo = getRoleInfo(user?.role || 'user')
 
   return (
     <div className="bg-white shadow-lg h-full w-64 fixed left-0 top-0 z-40">
-      <div className="p-6">
-        <h1 className="text-2xl font-bold text-gray-800">Inscribo</h1>
-        <p className="text-sm text-gray-600 mt-1">Sistema de Gestão</p>
+      {/* Logo - Substituído */}
+      <div className="p-6 border-b border-gray-100">
+        <img 
+          src="/Inscribologo.png" 
+          alt="Inscribo" 
+          className="h-12 w-auto"
+        />
       </div>
       
-      <nav className="mt-6">
+      <nav className="mt-4">
         <ul className="space-y-1">
           {menuItems.map((item) => {
             const Icon = item.icon
@@ -84,9 +72,9 @@ const Sidebar = () => {
               <li key={item.path}>
                 <Link
                   to={item.path}
-                  className={`flex items-center px-6 py-3 text-sm font-medium transition-colors duration-200 ${
+                  className={`flex items-center px-6 py-3 text-sm font-medium transition-all duration-200 ${
                     isActive(item.path)
-                      ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
+                      ? 'bg-gradient-to-r from-[#00D4C4]/10 to-[#2D3E9E]/10 text-[#2D3E9E] border-r-4 border-[#00D4C4]'
                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                   }`}
                 >
@@ -97,72 +85,25 @@ const Sidebar = () => {
             )
           })}
         </ul>
-        
-        {/* Role Indicator */}
-        <div className="mt-8 px-6">
-          {user?.is_super_admin ? (
-            <div className="bg-gradient-to-r from-red-50 to-pink-50 rounded-lg p-4 border border-red-200">
-              <div className="text-xs font-medium text-red-600 mb-1">Super Admin:</div>
-              <div className="text-sm font-semibold text-red-700">
-                🛡️ Acesso Total
-              </div>
-              <div className="text-xs text-red-600 mt-1">
-                Controle completo do SaaS
-              </div>
-              <div className="mt-2 pt-2 border-t border-red-200">
-                <div className="text-xs text-red-600">Sistema:</div>
-                <div className="text-xs font-mono bg-red-100 px-2 py-1 rounded mt-1 text-red-700">
-                  Inscribo Master
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className={`${roleInfo.bg} rounded-lg p-4 border`}>
-              <div className="text-xs font-medium text-gray-600 mb-1">Seu Perfil:</div>
-              <div className={`text-sm font-semibold ${roleInfo.color}`}>
-                {roleInfo.label}
-              </div>
-              <div className="text-xs text-gray-500 mt-1">
-                {user?.role === 'admin' && 'Acesso completo à instituição'}
-                {user?.role === 'manager' && 'Gestão e relatórios'}
-                {user?.role === 'user' && 'Leads, visitas e matrículas'}
-              </div>
-              {user?.institution_name && (
-                <div className="mt-2 pt-2 border-t border-gray-200">
-                  <div className="text-xs text-gray-600">Instituição:</div>
-                  <div className="text-xs bg-gray-100 px-2 py-1 rounded mt-1 font-medium">
-                    {user.institution_name}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
       </nav>
 
+      {/* User Info na parte inferior */}
       {user && (
-        <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-gray-200">
+        <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-gray-200 bg-gradient-to-br from-gray-50 to-white">
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-medium">
+              <div className="w-10 h-10 bg-gradient-to-br from-[#00D4C4] to-[#2D3E9E] rounded-full flex items-center justify-center shadow-md">
+                <span className="text-white text-sm font-bold">
                   {user.full_name.charAt(0).toUpperCase()}
                 </span>
               </div>
             </div>
-            <div className="ml-3">
-              <p className="text-sm font-medium text-gray-700">{user.full_name}</p>
-              <div className="flex items-center space-x-2">
-                <p className="text-xs text-gray-500 capitalize">
-                  {user.role === 'admin' ? 'Administrador' : 
-                   user.role === 'manager' ? 'Gestor' : 'Consultor'}
-                </p>
-                {user.institution_id && (
-                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                    ID: {user.institution_id.slice(-6)}
-                  </span>
-                )}
-              </div>
+            <div className="ml-3 flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900 truncate">{user.full_name}</p>
+              <p className="text-xs text-gray-500 capitalize truncate">
+                {user.role === 'admin' ? 'Administrador' : 
+                 user.role === 'manager' ? 'Gestor' : 'Consultor'}
+              </p>
             </div>
           </div>
         </div>
