@@ -390,6 +390,255 @@ function ScheduleVisitModal({ isOpen, onClose, lead, onSchedule }: ScheduleVisit
   )
 }
 
+// 🔥 MODAL DE HISTÓRICO
+interface HistoryModalProps {
+  isOpen: boolean
+  onClose: () => void
+  lead: Lead | null
+  history: any[]
+  loading: boolean
+  newAction: string
+  setNewAction: (text: string) => void
+  savingAction: boolean
+  editingAction: string | null
+  setEditingAction: (id: string | null) => void
+  editingActionText: string
+  setEditingActionText: (text: string) => void
+  onAddAction: () => void
+  onSaveEditAction: (id: string) => void
+  onDeleteAction: (id: string) => void
+}
+
+function HistoryModal({ 
+  isOpen, onClose, lead, history, loading, 
+  newAction, setNewAction, savingAction,
+  editingAction, setEditingAction, editingActionText, setEditingActionText,
+  onAddAction, onSaveEditAction, onDeleteAction
+}: HistoryModalProps) {
+  if (!isOpen || !lead) return null
+
+  const formatDateTime = (dateString: string) => {
+    return new Date(dateString).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl p-6 sm:p-8 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-1">📋 Histórico do Lead</h2>
+            <p className="text-gray-600">
+              <span className="font-semibold">{lead.student_name}</span> - {lead.responsible_name}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+
+        {/* Informações do Lead */}
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 mb-6 border border-blue-200">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <div>
+              <span className="font-semibold text-gray-700">Série:</span>
+              <p className="text-gray-900">{lead.grade_interest}</p>
+            </div>
+            <div>
+              <span className="font-semibold text-gray-700">Origem:</span>
+              <p className="text-gray-900">{lead.source}</p>
+            </div>
+            {lead.phone && (
+              <div>
+                <span className="font-semibold text-gray-700">Telefone:</span>
+                <p className="text-gray-900">{lead.phone}</p>
+              </div>
+            )}
+            <div>
+              <span className="font-semibold text-gray-700">Status:</span>
+              <p className="text-gray-900 capitalize">{statusConfig[lead.status]?.label}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Adicionar nova ação */}
+        <div className="bg-gray-50 rounded-xl p-4 mb-6 border border-gray-200">
+          <h3 className="font-semibold text-gray-900 mb-3 flex items-center">
+            <Plus className="w-4 h-4 mr-2 text-blue-600" />
+            Adicionar Ação Manual
+          </h3>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={newAction}
+              onChange={(e) => setNewAction(e.target.value)}
+              placeholder="Descreva a ação realizada..."
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onKeyPress={(e) => e.key === 'Enter' && onAddAction()}
+            />
+            <button
+              onClick={onAddAction}
+              disabled={!newAction.trim() || savingAction}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+            >
+              {savingAction ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                  Salvando...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  Adicionar
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Histórico de Ações */}
+        <div className="space-y-4">
+          <h3 className="font-semibold text-gray-900 flex items-center">
+            <Clock className="w-5 h-5 mr-2 text-green-600" />
+            Histórico de Atividades
+          </h3>
+
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-600 border-t-transparent"></div>
+            </div>
+          ) : history.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <Clock className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+              <p>Nenhuma atividade registrada ainda</p>
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {history.map((item) => (
+                <div key={item.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-gray-900">{item.action}</span>
+                        <span className="text-xs text-gray-500">por {item.user_name}</span>
+                      </div>
+                      <p className="text-xs text-gray-500">{formatDateTime(item.created_at)}</p>
+                    </div>
+                    
+                    {item.action === 'Ação manual adicionada' && (
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => {
+                            setEditingAction(item.id)
+                            setEditingActionText(item.details?.description || '')
+                          }}
+                          className="text-gray-400 hover:text-blue-600 p-1"
+                          title="Editar"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => onDeleteAction(item.id)}
+                          className="text-gray-400 hover:text-red-600 p-1"
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {editingAction === item.id ? (
+                    <div className="mt-3">
+                      <input
+                        type="text"
+                        value={editingActionText}
+                        onChange={(e) => setEditingActionText(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-2"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => onSaveEditAction(item.id)}
+                          className="px-3 py-1 bg-blue-600 text-white rounded text-sm"
+                        >
+                          Salvar
+                        </button>
+                        <button
+                          onClick={() => setEditingAction(null)}
+                          className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-2">
+                      {item.details?.description && (
+                        <p className="text-sm text-gray-700">{item.details.description}</p>
+                      )}
+                      
+                      {item.details?.changes && (
+                        <div className="mt-2 text-sm">
+                          <p className="font-medium text-gray-700">Alterações:</p>
+                          <ul className="list-disc list-inside text-gray-600 mt-1">
+                            {Object.entries(item.details.changes).map(([key, value]) => (
+                              <li key={key}>
+                                <span className="font-medium">{key}:</span> {value as string}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {item.details?.previous_status && item.details?.new_status && (
+                        <div className="mt-2 flex items-center gap-2 text-sm">
+                          <span className="px-2 py-1 bg-gray-100 rounded">
+                            {statusConfig[item.details.previous_status as keyof typeof statusConfig]?.label}
+                          </span>
+                          <span>→</span>
+                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded font-medium">
+                            {statusConfig[item.details.new_status as keyof typeof statusConfig]?.label}
+                          </span>
+                        </div>
+                      )}
+
+                      {item.details?.scheduled_time && (
+                        <p className="text-sm text-gray-600 mt-2">
+                          🕐 Horário: {item.details.scheduled_time}
+                        </p>
+                      )}
+
+                      {item.details?.temperature_label && (
+                        <p className="text-sm text-gray-600 mt-2">
+                          🌡️ {item.details.temperature_label}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end mt-6 pt-6 border-t border-gray-200">
+          <button
+            onClick={onClose}
+            className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-all font-medium"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function LeadKanban() {
   const { user } = useAuth()
   const [leads, setLeads] = useState<Lead[]>([])
@@ -509,12 +758,10 @@ export default function LeadKanban() {
     }
   }
 
-  // 🔥 CORRIGIDO: Salvar horário sem conversão de timezone
   const handleScheduleVisit = async (data: { scheduled_date: string; scheduled_time: string; notes: string }) => {
     if (!leadToSchedule) return
     
     try {
-      // 🔥 FIX: Criar datetime sem conversão de timezone
       const [hours, minutes] = data.scheduled_time.split(':')
       const visitDate = new Date(data.scheduled_date)
       visitDate.setHours(parseInt(hours), parseInt(minutes), 0, 0)
@@ -788,14 +1035,12 @@ export default function LeadKanban() {
                     {statusLeads.map((lead) => (
                       <div key={lead.id} className="bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all group">
                         
-                        {/* 🔥 HEADER COM MENU DROPDOWN */}
                         <div className="flex justify-between items-start mb-3">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-2">
                               <h4 className="font-bold text-gray-900 text-sm group-hover:text-blue-600 transition-colors truncate">
                                 {lead.student_name}
                               </h4>
-                              {/* 🌡️ INDICADOR DE TEMPERATURA */}
                               {(lead as any).temperature && (
                                 <span className="flex-shrink-0" title={
                                   (lead as any).temperature === 'hot' ? 'Lead Quente - Muito Interessado' :
@@ -820,7 +1065,6 @@ export default function LeadKanban() {
                             </span>
                           </div>
                           
-                          {/* 🆕 MENU DROPDOWN ÚNICO */}
                           <div className="relative opacity-0 group-hover:opacity-100 transition-all">
                             <button 
                               onClick={(e) => { 
@@ -889,7 +1133,6 @@ export default function LeadKanban() {
                           </div>
                         </div>
 
-                        {/* 🔥 LAYOUT HORIZONTAL MELHORADO */}
                         <div className="grid grid-cols-2 gap-2 mb-3">
                           <div className="flex items-center text-xs text-gray-700 bg-gray-50 p-2 rounded-md">
                             <User className="w-3.5 h-3.5 mr-1.5 text-gray-500 flex-shrink-0" />
@@ -972,6 +1215,28 @@ export default function LeadKanban() {
           onSchedule={handleScheduleVisit}
         />
       )}
+
+      {/* 🔥 MODAL DE HISTÓRICO */}
+      <HistoryModal
+        isOpen={showHistory}
+        onClose={() => {
+          setShowHistory(false)
+          setSelectedLead(null)
+        }}
+        lead={selectedLead}
+        history={leadHistory}
+        loading={loadingHistory}
+        newAction={newAction}
+        setNewAction={setNewAction}
+        savingAction={savingAction}
+        editingAction={editingAction}
+        setEditingAction={setEditingAction}
+        editingActionText={editingActionText}
+        setEditingActionText={setEditingActionText}
+        onAddAction={handleAddAction}
+        onSaveEditAction={handleSaveEditAction}
+        onDeleteAction={handleDeleteAction}
+      />
     </div>
   )
 }
