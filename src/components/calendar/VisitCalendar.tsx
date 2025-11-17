@@ -506,26 +506,36 @@ export default function VisitCalendar() {
     }
   }
 
-  // 🔥 FUNÇÃO CORRIGIDA - Corrigir bug de horário
-  const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string; notes: string }) => {
-    try {
-      // 🔥 FIX: Corrigir timezone
-      const [hours, minutes] = data.scheduled_date.split('T')[1].split(':')
-      const visitDate = new Date(data.scheduled_date.split('T')[0])
-      visitDate.setHours(parseInt(hours), parseInt(minutes), 0, 0)
-      
-      await DatabaseService.updateVisit(visitId, {
-        scheduled_date: visitDate.toISOString(),
-        notes: data.notes
-      })
-      await loadData()
-      alert('Visita atualizada com sucesso!')
-    } catch (error) {
-      console.error('Error updating visit:', error)
-      alert('Erro ao atualizar visita')
-    }
+// Na função handleUpdateVisit, substitua por:
+const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string; notes: string }) => {
+  try {
+    // 🔥 FIX: Extrair data e hora corretamente
+    const [datePart, timePart] = data.scheduled_date.split('T')
+    const [year, month, day] = datePart.split('-')
+    const [hours, minutes] = timePart.split(':')
+    
+    // Criar data no horário local sem conversão UTC
+    const visitDate = new Date(
+      parseInt(year),
+      parseInt(month) - 1, // Mês começa em 0
+      parseInt(day),
+      parseInt(hours),
+      parseInt(minutes),
+      0,
+      0
+    )
+    
+    await DatabaseService.updateVisit(visitId, {
+      scheduled_date: visitDate.toISOString(),
+      notes: data.notes
+    })
+    await loadData()
+    alert('Visita atualizada com sucesso!')
+  } catch (error) {
+    console.error('Error updating visit:', error)
+    alert('Erro ao atualizar visita')
   }
-
+}
   const handleDeleteVisit = async (visitId: string) => {
     try {
       await DatabaseService.deleteVisit(visitId)
