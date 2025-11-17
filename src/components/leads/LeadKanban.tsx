@@ -808,10 +808,22 @@ export default function LeadKanban() {
   const loadLeadHistory = async (leadId: string) => {
     try {
       setLoadingHistory(true)
+      
+      // 🔥 CORREÇÃO: Recarregar TODOS os usuários para garantir nomes corretos
+      const allUsers = await DatabaseService.getUsers(user!.institution_id)
+      
       const history = await DatabaseService.getActivityLogs(user!.institution_id, leadId)
       
       const historyWithUsers = history.map(item => {
-        const userName = users.find(u => u.id === item.user_id)?.full_name || user?.full_name || 'Sistema'
+        const foundUser = allUsers.find(u => u.id === item.user_id)
+        
+        // 🔥 CORREÇÃO: Mostra o nome do usuário que FEZ a ação, não o usuário logado
+        // Se não encontrar o usuário, mostra "Usuário desconhecido"
+        // Nunca usa o nome do usuário logado como fallback (exceto se for ele mesmo)
+        const userName = foundUser 
+          ? foundUser.full_name 
+          : (item.user_id === user?.id ? user?.full_name || 'Você' : 'Usuário desconhecido')
+        
         return { ...item, user_name: userName }
       })
       
