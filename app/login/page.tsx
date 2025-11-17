@@ -12,25 +12,56 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
+ const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault()
+  setLoading(true)
+  setError('')
 
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      if (email.includes('admin@inscribo.com')) {
+  try {
+    // Importar o supabase
+    const { supabase } = await import('../../../src/lib/supabase')
+    
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    })
+
+    if (authError) {
+      setError('Email ou senha incorretos')
+      return
+    }
+
+    if (data.session) {
+      // Verificar se é super admin
+      if (email === 'admin@inscribo.com') {
+        // Super Admin
+        const superAdminUser = {
+          id: data.user.id,
+          full_name: 'Super Administrador',
+          email: email,
+          role: 'admin',
+          institution_id: 'super-admin',
+          active: true,
+          is_super_admin: true,
+          institution_name: 'Inscribo - Super Admin'
+        }
+        
+        localStorage.setItem('inscribo-user', JSON.stringify(superAdminUser))
+        localStorage.setItem('inscribo-auth-token', JSON.stringify(data.session))
+        
         window.location.href = '/super-admin'
       } else {
+        // Usuário normal
         window.location.href = '/dashboard'
       }
-    } catch (err: any) {
-      setError('Email ou senha incorretos')
-    } finally {
-      setLoading(false)
     }
+  } catch (err: any) {
+    console.error('Erro no login:', err)
+    setError('Erro ao fazer login. Tente novamente.')
+  } finally {
+    setLoading(false)
   }
+}
 
   return (
     <div className="min-h-screen flex">
