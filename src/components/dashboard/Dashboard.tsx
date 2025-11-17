@@ -12,7 +12,7 @@ import {
   BarChart3,
   Target,
   Eye,
-  LogOut
+  Sparkles
 } from 'lucide-react'
 import { DatabaseService } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -66,7 +66,7 @@ function KPICard({ title, value, change, icon, color, onClick }: KPICardProps) {
 }
 
 export default function Dashboard() {
-  const { user, signOut } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const [error, setError] = useState('')
   const [kpis, setKpis] = useState({
@@ -113,7 +113,6 @@ export default function Dashboard() {
       setError('')
       console.log('📊 Carregando dados do dashboard...')
       
-      // Carregar dados em paralelo
       let leads = [], visits = [], enrollments = [], campaigns = []
       
       try {
@@ -152,39 +151,32 @@ export default function Dashboard() {
         campaigns = []
       }
 
-      // Datas para cálculos
       const today = new Date()
       const todayStr = today.toISOString().split('T')[0]
       const thisMonth = today.toISOString().slice(0, 7)
       const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().slice(0, 7)
       
-      // Início da semana (domingo)
       const startOfWeek = new Date(today)
       startOfWeek.setDate(today.getDate() - today.getDay())
       const startOfWeekStr = startOfWeek.toISOString().split('T')[0]
 
-      // KPIs atuais
       const totalLeads = leads.length
       const leadsNovos = leads.filter(l => l.created_at.startsWith(thisMonth)).length
       const visitasHoje = visits.filter(v => v.scheduled_date.startsWith(todayStr)).length
       const visitasSemana = visits.filter(v => v.scheduled_date >= startOfWeekStr).length
       const matriculasMes = enrollments.filter(e => e.created_at.startsWith(thisMonth)).length
       
-      // Taxa de conversão
       const leadsConvertidos = leads.filter(l => l.status === 'enrolled').length
       const taxaConversao = totalLeads > 0 ? (leadsConvertidos / totalLeads) * 100 : 0
 
-      // CPA
       const totalInvestment = campaigns.reduce((sum, c) => sum + c.investment, 0)
       const totalLeadsGenerated = campaigns.reduce((sum, c) => sum + c.leads_generated, 0)
       const cpaAtual = totalLeadsGenerated > 0 ? totalInvestment / totalLeadsGenerated : 0
 
-      // KPIs do mês anterior para comparação
       const leadsLastMonth = leads.filter(l => l.created_at.startsWith(lastMonth)).length
       const enrollmentsLastMonth = enrollments.filter(e => e.created_at.startsWith(lastMonth)).length
       const taxaConversaoLastMonth = leadsLastMonth > 0 ? (enrollmentsLastMonth / leadsLastMonth) * 100 : 0
 
-      // Dados do funil
       const leadsCount = leads.length
       const contatosCount = leads.filter(l => ['contact', 'scheduled', 'visit', 'proposal', 'enrolled'].includes(l.status)).length
       const agendamentosCount = leads.filter(l => ['scheduled', 'visit', 'proposal', 'enrolled'].includes(l.status)).length
@@ -198,14 +190,14 @@ export default function Dashboard() {
         matriculasMes,
         taxaConversao: Math.round(taxaConversao * 10) / 10,
         cpaAtual: Math.round(cpaAtual),
-        taxaRematricula: 92.5, // Valor fixo por enquanto
+        taxaRematricula: 92.5,
         leadsNovos,
         visitasSemana
       })
 
       setPreviousMonthKpis({
         totalLeads: leadsLastMonth,
-        visitasHoje: 0, // Não faz sentido comparar visitas de hoje com mês anterior
+        visitasHoje: 0,
         matriculasMes: enrollmentsLastMonth,
         taxaConversao: Math.round(taxaConversaoLastMonth * 10) / 10
       })
@@ -220,7 +212,6 @@ export default function Dashboard() {
       })
 
       console.log('✅ Dashboard carregado com sucesso!')
-      console.log('📊 KPIs:', { totalLeads, leadsNovos, matriculasMes, taxaConversao })
     } catch (error) {
       console.error('❌ Erro ao carregar dashboard:', error)
       setError('Erro ao carregar dados do dashboard: ' + (error as Error).message)
@@ -232,12 +223,6 @@ export default function Dashboard() {
   const calculateChange = (current: number, previous: number) => {
     if (previous === 0) return current > 0 ? 100 : 0
     return Math.round(((current - previous) / previous) * 100)
-  }
-
-  const handleForceLogin = async () => {
-    if (confirm('Tem certeza que deseja fazer logout e limpar todos os dados da sessão?')) {
-      await signOut()
-    }
   }
 
   const handleQuickAction = (action: string) => {
@@ -259,9 +244,6 @@ export default function Dashboard() {
     }
   }
 
-  // Debug info
-  console.log('🔍 Dashboard render - User:', user?.full_name, 'Loading:', loading, 'Error:', error)
-
   if (loading) {
     return (
       <div className="p-8 bg-gradient-to-br from-blue-50 via-white to-indigo-50 min-h-screen">
@@ -271,10 +253,6 @@ export default function Dashboard() {
             {[1, 2, 3, 4, 5, 6].map(i => (
               <div key={i} className="h-40 bg-gray-200 rounded-2xl"></div>
             ))}
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 h-96 bg-gray-200 rounded-2xl"></div>
-            <div className="h-96 bg-gray-200 rounded-2xl"></div>
           </div>
         </div>
       </div>
@@ -286,33 +264,23 @@ export default function Dashboard() {
       <div className="p-8 bg-gradient-to-br from-red-50 via-white to-red-50 min-h-screen">
         <div className="max-w-2xl mx-auto text-center">
           <div className="bg-white rounded-2xl p-8 shadow-lg border border-red-200">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <X className="w-8 h-8 text-red-600" />
-            </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Erro no Dashboard</h2>
             <p className="text-gray-600 mb-6">{error}</p>
-            <div className="space-x-4">
-              <button
-                onClick={() => {
-                  setError('')
-                  loadDashboardData()
-                }}
-                className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-all"
-              >
-                Tentar Novamente
-              </button>
-              <button
-                onClick={handleForceLogin}
-                className="bg-red-600 text-white px-6 py-3 rounded-xl hover:bg-red-700 transition-all"
-              >
-                Fazer Logout
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                setError('')
+                loadDashboardData()
+              }}
+              className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-all"
+            >
+              Tentar Novamente
+            </button>
           </div>
         </div>
       </div>
     )
   }
+
   const kpiCards = [
     {
       title: 'Total de Leads',
@@ -325,7 +293,7 @@ export default function Dashboard() {
     {
       title: 'Visitas Hoje',
       value: kpis.visitasHoje,
-      change: undefined, // Não faz sentido comparar visitas de hoje
+      change: undefined,
       icon: <Calendar className="h-6 w-6 text-green-600" />,
       color: 'bg-green-100',
       onClick: () => navigate('/visits')
@@ -349,7 +317,7 @@ export default function Dashboard() {
     {
       title: 'CPA Atual',
       value: `R$ ${kpis.cpaAtual}`,
-      change: -2.1, // Valor fixo por enquanto
+      change: -2.1,
       icon: <DollarSign className="h-6 w-6 text-red-600" />,
       color: 'bg-red-100',
       onClick: () => navigate('/marketing')
@@ -357,7 +325,7 @@ export default function Dashboard() {
     {
       title: 'Taxa Rematrícula',
       value: `${kpis.taxaRematricula}%`,
-      change: 2.1, // Valor fixo por enquanto
+      change: 2.1,
       icon: <RefreshCw className="h-6 w-6 text-teal-600" />,
       color: 'bg-teal-100',
       onClick: () => navigate('/reenrollments')
@@ -366,35 +334,15 @@ export default function Dashboard() {
 
   return (
     <div className="p-8 bg-gradient-to-br from-blue-50 via-white to-indigo-50 min-h-screen">
-      {/* Header */}
+      {/* Header Simplificado - NOVO */}
       <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Dashboard</h1>
-            <p className="text-gray-600 text-lg">Visão geral do sistema Inscribo</p>
-            {user && (
-              <p className="text-sm text-gray-500 mt-1">
-                Bem-vindo, <strong>{user.full_name}</strong> • {user.role === 'admin' ? 'Administrador' : user.role === 'manager' ? 'Gestor' : 'Consultor'}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={() => loadDashboardData()}
-              className="flex items-center px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-xl border border-blue-200 hover:border-blue-300 transition-colors"
-              title="Atualizar dados do dashboard"
-            >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Atualizar
-            </button>
-            <button
-              onClick={handleForceLogin}
-              className="flex items-center px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-xl border border-red-200 hover:border-red-300 transition-colors"
-              title="Forçar novo login (limpa sessão e cookies)"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Logout
-            </button>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center">
+              <Sparkles className="w-8 h-8 mr-3 text-[#00D4C4]" />
+              Olá, {user?.full_name?.split(' ')[0] || 'Usuário'}! Seja bem-vindo.
+            </h1>
+            <p className="text-lg text-gray-600">Vamos matricular! 🎓</p>
           </div>
         </div>
       </div>
