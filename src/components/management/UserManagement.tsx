@@ -10,15 +10,16 @@ import {
   User, 
   UserCheck, 
   Search,
-  Filter,
   Eye,
   EyeOff,
   Mail,
-  Phone,
   Calendar,
   CheckCircle,
   XCircle,
-  AlertCircle
+  Key,
+  X,
+  Building2,
+  AlertTriangle
 } from 'lucide-react'
 
 interface AppUser {
@@ -30,6 +31,7 @@ interface AppUser {
   active: boolean
   created_at: string
   updated_at: string
+  institutions?: { name: string }
 }
 
 interface NewUserModalProps {
@@ -40,18 +42,19 @@ interface NewUserModalProps {
 }
 
 function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProps) {
+  const { user } = useAuth()
   const [formData, setFormData] = useState({
     full_name: '',
     email: '',
     role: 'user' as 'admin' | 'manager' | 'user',
     password: '',
     confirmPassword: '',
-    active: true,
-    institution_id: ''
+    active: true
   })
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     if (editingUser) {
@@ -61,8 +64,7 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
         role: editingUser.role,
         password: '',
         confirmPassword: '',
-        active: editingUser.active,
-        institution_id: editingUser.institution_id || ''
+        active: editingUser.active
       })
     } else {
       setFormData({
@@ -71,31 +73,34 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
         role: 'user',
         password: '',
         confirmPassword: '',
-        active: true,
-        institution_id: ''
+        active: true
       })
     }
+    setError('')
   }, [editingUser, isOpen])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError('')
     
-    if (!editingUser && formData.password !== formData.confirmPassword) {
-      alert('As senhas não coincidem')
-      return
-    }
-    
-    if (!editingUser && formData.password.length < 6) {
-      alert('A senha deve ter pelo menos 6 caracteres')
-      return
+    if (!editingUser) {
+      if (formData.password !== formData.confirmPassword) {
+        setError('As senhas não coincidem')
+        return
+      }
+      
+      if (formData.password.length < 6) {
+        setError('A senha deve ter pelo menos 6 caracteres')
+        return
+      }
     }
     
     setLoading(true)
     try {
       await onSave(formData)
       onClose()
-    } catch (error) {
-      console.error('Error saving user:', error)
+    } catch (error: any) {
+      setError(error.message || 'Erro ao salvar usuário')
     } finally {
       setLoading(false)
     }
@@ -107,16 +112,24 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-3xl p-8 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="flex items-center justify-between mb-8">
-          <h2 className="text-3xl font-bold text-gray-900">
+          <h2 className="text-3xl font-bold text-gray-900 flex items-center">
+            {editingUser ? <Edit className="w-8 h-8 mr-3 text-blue-600" /> : <Plus className="w-8 h-8 mr-3 text-green-600" />}
             {editingUser ? 'Editar Usuário' : 'Novo Usuário'}
           </h2>
           <button 
             onClick={onClose} 
             className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-full"
           >
-            ✕
+            <X className="w-6 h-6" />
           </button>
         </div>
+
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-center text-red-700">
+            <AlertTriangle className="w-5 h-5 mr-2 flex-shrink-0" />
+            <span className="text-sm">{error}</span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -129,7 +142,7 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
                 required
                 value={formData.full_name}
                 onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
                 placeholder="Nome completo do usuário"
               />
             </div>
@@ -146,14 +159,15 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   disabled={!!editingUser}
-                  className={`pl-10 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${
-                    editingUser ? 'bg-gray-100 cursor-not-allowed' : ''
+                  className={`pl-10 w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-[#00D4C4] transition-all ${
+                    editingUser ? 'bg-gray-100 border-gray-300 cursor-not-allowed' : 'border-gray-300 focus:border-[#00D4C4]'
                   }`}
                   placeholder="usuario@email.com"
                 />
               </div>
               {editingUser && (
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 mt-1 flex items-center">
+                  <AlertTriangle className="w-3 h-3 mr-1" />
                   O email não pode ser alterado
                 </p>
               )}
@@ -168,17 +182,37 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
               required
               value={formData.role}
               onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
             >
-              <option value="user">👤 Consultor - Acesso a leads e visitas</option>
-              <option value="manager">👨‍💼 Gestor - Acesso a relatórios e gestão</option>
+              <option value="user">👤 Consultor - Leads, visitas e matrículas</option>
+              <option value="manager">👨‍💼 Gestor - Marketing, funil e relatórios</option>
               <option value="admin">🛡️ Administrador - Acesso completo</option>
             </select>
-            <div className="mt-2 text-xs text-gray-600">
-              <div className="space-y-1">
-                <p><strong>Consultor:</strong> Leads, Visitas, Matrículas</p>
-                <p><strong>Gestor:</strong> + Marketing, Funil, Rematrículas, Ações, Relatórios</p>
-                <p><strong>Admin:</strong> + Gestão de Usuários, Configurações</p>
+            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs">
+              <p className="font-semibold text-blue-900 mb-2">Permissões do perfil:</p>
+              <div className="space-y-1 text-blue-700">
+                {formData.role === 'user' && (
+                  <>
+                    <p>✓ Leads: visualizar e gerenciar</p>
+                    <p>✓ Visitas: agendar e acompanhar</p>
+                    <p>✓ Matrículas: registrar</p>
+                  </>
+                )}
+                {formData.role === 'manager' && (
+                  <>
+                    <p>✓ Tudo do Consultor +</p>
+                    <p>✓ Marketing: campanhas e investimentos</p>
+                    <p>✓ Funil: métricas e metas</p>
+                    <p>✓ Relatórios: análises completas</p>
+                  </>
+                )}
+                {formData.role === 'admin' && (
+                  <>
+                    <p>✓ Tudo do Gestor +</p>
+                    <p>✓ Usuários: criar e gerenciar</p>
+                    <p>✓ Configurações: sistema completo</p>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -195,21 +229,18 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
                     required
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    className="w-full px-4 py-3 pr-12 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
                     placeholder="Mínimo 6 caracteres"
                     minLength={6}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-[#00D4C4] transition-colors"
                   >
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  A senha deve ter pelo menos 6 caracteres
-                </p>
               </div>
 
               <div>
@@ -222,19 +253,20 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
                     required
                     value={formData.confirmPassword}
                     onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    className="w-full px-4 py-3 pr-12 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
                     placeholder="Confirme a senha"
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-[#00D4C4] transition-colors"
                   >
                     {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
                 {formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword && (
-                  <p className="text-xs text-red-500 mt-1">
+                  <p className="text-xs text-red-500 mt-1 flex items-center">
+                    <XCircle className="w-3 h-3 mr-1" />
                     As senhas não coincidem
                   </p>
                 )}
@@ -242,15 +274,16 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
             </div>
           )}
 
-          <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-xl">
+          <div className="flex items-center space-x-3 p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200">
             <input
               type="checkbox"
               id="active"
               checked={formData.active}
               onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-              className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              className="w-5 h-5 text-[#00D4C4] border-gray-300 rounded focus:ring-[#00D4C4]"
             />
-            <label htmlFor="active" className="text-sm font-medium text-gray-700">
+            <label htmlFor="active" className="text-sm font-medium text-gray-700 flex items-center">
+              <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
               Usuário ativo no sistema
             </label>
           </div>
@@ -259,14 +292,14 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
             <button
               type="button"
               onClick={onClose}
-              className="px-8 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all font-medium"
+              className="px-8 py-3 border-2 border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all font-medium"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              className={`px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all font-medium shadow-lg ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`px-8 py-3 bg-gradient-to-r from-[#00D4C4] to-[#2D3E9E] text-white rounded-xl hover:from-[#00B8AA] hover:to-[#252F7E] transition-all font-medium shadow-lg ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {loading ? (
                 <div className="flex items-center">
@@ -284,113 +317,182 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
   )
 }
 
+// Modal de Alterar Senha
+interface ChangePasswordModalProps {
+  isOpen: boolean
+  onClose: () => void
+  user: AppUser
+  onSave: (newPassword: string) => void
+}
+
+function ChangePasswordModal({ isOpen, onClose, user, onSave }: ChangePasswordModalProps) {
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    if (newPassword !== confirmPassword) {
+      setError('As senhas não coincidem')
+      return
+    }
+
+    if (newPassword.length < 6) {
+      setError('A senha deve ter pelo menos 6 caracteres')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await onSave(newPassword)
+      onClose()
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (error: any) {
+      setError(error.message || 'Erro ao alterar senha')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-3xl p-8 w-full max-w-md mx-4 shadow-2xl">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+            <Key className="w-7 h-7 mr-3 text-[#00D4C4]" />
+            Alterar Senha
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-full">
+            <X className="w-6 w-6" />
+          </button>
+        </div>
+
+        <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-sm text-blue-900">
+            <strong>Usuário:</strong> {user.full_name}
+          </p>
+          <p className="text-sm text-blue-700">{user.email}</p>
+        </div>
+
+        {error && (
+          <div className="mb-4 bg-red-50 border border-red-200 rounded-xl p-3 flex items-center text-red-700">
+            <AlertTriangle className="w-4 h-4 mr-2 flex-shrink-0" />
+            <span className="text-sm">{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Nova Senha *
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full px-4 py-3 pr-12 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
+                placeholder="Mínimo 6 caracteres"
+                minLength={6}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-[#00D4C4]"
+              >
+                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Confirmar Nova Senha *
+            </label>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              required
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
+              placeholder="Confirme a nova senha"
+            />
+            {newPassword && confirmPassword && newPassword !== confirmPassword && (
+              <p className="text-xs text-red-500 mt-1 flex items-center">
+                <XCircle className="w-3 h-3 mr-1" />
+                As senhas não coincidem
+              </p>
+            )}
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-6 py-2.5 border-2 border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all font-medium"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className={`px-6 py-2.5 bg-gradient-to-r from-[#00D4C4] to-[#2D3E9E] text-white rounded-xl hover:from-[#00B8AA] hover:to-[#252F7E] transition-all font-medium shadow-lg ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {loading ? 'Alterando...' : 'Alterar Senha'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function UserManagement() {
   const { user } = useAuth()
   const [users, setUsers] = useState<AppUser[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [editingUser, setEditingUser] = useState<AppUser | null>(null)
+  const [selectedUserForPassword, setSelectedUserForPassword] = useState<AppUser | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterRole, setFilterRole] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
 
   useEffect(() => {
-    if (user?.role === 'admin') {
+    if (user?.role === 'admin' || user?.is_super_admin) {
       loadUsers()
     }
-  }, [])
+  }, [user])
 
   const loadUsers = async () => {
     try {
       setLoading(true)
-      console.log('🔄 ADMIN: Carregando TODOS os usuários do sistema...')
+      console.log('🔄 Carregando usuários da instituição:', user?.institution_id)
       
-      // Para admins, usar uma query mais direta
-      console.log('📊 Tentando query administrativa...')
-      
-      const { data: adminData, error: adminError } = await supabase
-        .from('users')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(1000) // Limite alto para pegar todos
-
-      if (!adminError && adminData && adminData.length > 0) {
-        console.log('✅ Usuários carregados via query admin:', adminData.length)
-        setUsers(adminData)
-        return
-      }
-      
-      console.warn('⚠️ Query admin falhou, tentando métodos alternativos:', adminError)
-      
-      // Método alternativo 1: Query sem ordenação
-      const { data: simpleData, error: simpleError } = await supabase
+      const { data, error } = await supabase
         .from('users')
         .select(`
-          id,
-          full_name,
-          email,
-          role,
-          institution_id,
-          active,
-          created_at,
-          updated_at
+          *,
+          institutions(name)
         `)
+        .eq('institution_id', user!.institution_id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
       
-      if (!simpleError && simpleData && simpleData.length > 0) {
-        console.log('✅ Usuários carregados via query simples:', simpleData.length)
-        setUsers(simpleData.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()))
-        return
-      }
-      
-      console.warn('⚠️ Query simples falhou:', simpleError)
-      
-      // Método alternativo 2: Tentar com RPC se disponível
-      try {
-        const { data: rpcData, error: rpcError } = await supabase
-          .rpc('get_all_users')
-        
-        if (!rpcError && rpcData) {
-          console.log('✅ Usuários carregados via RPC:', rpcData.length)
-          setUsers(rpcData)
-          return
-        }
-      } catch (rpcErr) {
-        console.warn('⚠️ RPC não disponível:', rpcErr)
-      }
-      
-      // Método alternativo 3: Query básica
-      const { data: basicData, error: basicError } = await supabase
-        .from('users')
-        .select('*')
-      
-      if (!basicError && basicData) {
-        console.log('✅ Usuários carregados via query básica:', basicData.length)
-        setUsers(basicData)
-        return
-      }
-      
-      console.error('❌ Todos os métodos falharam')
-      console.error('Último erro:', basicError)
-      
-      // Criar usuário de exemplo se não conseguir carregar nenhum
-      const exampleUsers = [
-        {
-          id: 'example-1',
-          full_name: 'Usuário de Exemplo',
-          email: 'exemplo@sistema.com',
-          role: 'admin' as const,
-          institution_id: null,
-          active: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-      ]
-      
-      console.log('📊 Usando dados de exemplo')
-      setUsers(exampleUsers)
-      
+      console.log('✅ Usuários carregados:', data?.length || 0)
+      setUsers(data || [])
     } catch (error) {
-      console.error('❌ Erro crítico ao carregar usuários:', error)
+      console.error('❌ Erro ao carregar usuários:', error)
       setUsers([])
     } finally {
       setLoading(false)
@@ -399,124 +501,76 @@ export default function UserManagement() {
 
   const handleSave = async (formData: any) => {
     try {
-      console.log('💾 Salvando usuário:', formData)
-
       if (editingUser) {
-        console.log('✏️ Atualizando usuário existente:', editingUser.id)
+        // Atualizar usuário existente
         const { error } = await supabase
           .from('users')
           .update({
             full_name: formData.full_name,
             role: formData.role,
-            active: formData.active,
-            institution_id: formData.institution_id || null
+            active: formData.active
           })
           .eq('id', editingUser.id)
 
         if (error) throw error
-        console.log('✅ Usuário atualizado com sucesso')
+        console.log('✅ Usuário atualizado')
       } else {
-        console.log('➕ Criando novo usuário')
-        
-        // Verificar se email já existe primeiro
-        const { data: existingUser } = await supabase
-          .from('users')
-          .select('id, email')
-          .eq('email', formData.email)
-          .single()
-
-        if (existingUser) {
-          throw new Error(`❌ Este email já está sendo usado por outro usuário (ID: ${existingUser.id})`)
-        }
-
-        console.log('🔐 Criando usuário no Supabase Auth...')
-        
-        // Tentar criar usuário no auth (pode falhar se não tiver permissão de admin)
-        let authUserId = null
-        
-        try {
-          const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-            email: formData.email,
-            password: formData.password,
-            email_confirm: true,
-            user_metadata: {
+        // Criar novo usuário
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            data: {
               full_name: formData.full_name,
               role: formData.role
             }
-          })
-
-          if (authError) {
-            console.warn('⚠️ Erro ao criar no Auth (tentando método alternativo):', authError)
-            
-            // Método alternativo: usar signUp normal
-            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-              email: formData.email,
-              password: formData.password,
-              options: {
-                data: {
-                  full_name: formData.full_name,
-                  role: formData.role
-                }
-              }
-            })
-            
-            if (signUpError) {
-              throw new Error(`Erro ao criar usuário: ${signUpError.message}`)
-            }
-            
-            authUserId = signUpData.user?.id
-          } else {
-            authUserId = authData.user?.id
           }
-        } catch (authError) {
-          console.warn('⚠️ Falha na criação via Auth, criando apenas perfil:', authError)
-          // Gerar um UUID temporário se não conseguir criar no auth
-          authUserId = crypto.randomUUID()
+        })
+
+        if (authError) throw authError
+
+        if (authData.user) {
+          const { error: profileError } = await supabase
+            .from('users')
+            .insert({
+              id: authData.user.id,
+              email: formData.email,
+              full_name: formData.full_name,
+              role: formData.role,
+              institution_id: user!.institution_id,
+              active: formData.active
+            })
+
+          if (profileError) throw profileError
+          console.log('✅ Usuário criado')
         }
-
-        if (!authUserId) {
-          throw new Error('Não foi possível criar o usuário')
-        }
-
-        console.log('👤 Criando perfil na tabela users...')
-        
-        // Criar perfil na tabela users
-        const { error: profileError } = await supabase
-          .from('users')
-          .insert({
-            id: authUserId,
-            email: formData.email,
-            full_name: formData.full_name,
-            role: formData.role,
-            institution_id: formData.institution_id || null,
-            active: formData.active
-          })
-
-        if (profileError) {
-          console.error('❌ Erro ao criar perfil:', profileError)
-          throw new Error(`Erro ao criar perfil: ${profileError.message}`)
-        }
-
-        console.log('✅ Usuário criado com sucesso')
       }
 
       await loadUsers()
       setEditingUser(null)
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Erro ao salvar usuário:', error)
-      
-      let errorMessage = 'Erro ao salvar usuário'
-      if (error instanceof Error) {
-        errorMessage = error.message
-      }
-      
-      throw new Error(errorMessage)
+      throw new Error(error.message || 'Erro ao salvar usuário')
     }
   }
 
-  const handleEdit = (user: AppUser) => {
-    setEditingUser(user)
-    setShowModal(true)
+  const handleChangePassword = async (newPassword: string) => {
+    if (!selectedUserForPassword) return
+
+    try {
+      const { error } = await supabase.auth.admin.updateUserById(
+        selectedUserForPassword.id,
+        { password: newPassword }
+      )
+
+      if (error) throw error
+      
+      alert('Senha alterada com sucesso!')
+      setSelectedUserForPassword(null)
+    } catch (error: any) {
+      console.error('❌ Erro ao alterar senha:', error)
+      throw new Error(error.message || 'Erro ao alterar senha')
+    }
   }
 
   const handleToggleStatus = async (userId: string, currentStatus: boolean) => {
@@ -535,54 +589,26 @@ export default function UserManagement() {
   }
 
   const handleDelete = async (userId: string) => {
-    const user = users.find(u => u.id === userId)
-    if (!user) return
+    const userToDelete = users.find(u => u.id === userId)
+    if (!userToDelete) return
 
-    const confirmMessage = `⚠️ ATENÇÃO: Você está prestes a EXCLUIR PERMANENTEMENTE o usuário "${user.full_name}".\n\n` +
-      `Esta ação irá:\n` +
-      `• Remover o usuário do Supabase Auth\n` +
-      `• Excluir todos os dados do usuário\n` +
-      `• Esta ação é IRREVERSÍVEL\n\n` +
-      `Digite "EXCLUIR" para confirmar:`
-    
-    const confirmation = prompt(confirmMessage)
-    if (confirmation !== 'EXCLUIR') {
-      alert('Exclusão cancelada.')
+    if (!confirm(`⚠️ Tem certeza que deseja EXCLUIR permanentemente o usuário "${userToDelete.full_name}"?\n\nEsta ação não pode ser desfeita.`)) {
       return
     }
 
     try {
-      console.log('🗑️ Excluindo usuário permanentemente:', userId)
-      
-      // 1. Excluir do Supabase Auth (se possível)
-      try {
-        const { error: authError } = await supabase.auth.admin.deleteUser(userId)
-        if (authError) {
-          console.warn('⚠️ Erro ao excluir do Auth (pode não ter permissão):', authError)
-        } else {
-          console.log('✅ Usuário removido do Supabase Auth')
-        }
-      } catch (authError) {
-        console.warn('⚠️ Não foi possível excluir do Auth:', authError)
-      }
-      
-      // 2. Excluir da tabela users
       const { error } = await supabase
         .from('users')
         .delete()
         .eq('id', userId)
 
-      if (error) {
-        console.error('❌ Erro ao excluir da tabela users:', error)
-        throw error
-      }
+      if (error) throw error
       
-      console.log('✅ Usuário excluído permanentemente')
       await loadUsers()
-      alert('Usuário excluído permanentemente do sistema.')
-    } catch (error) {
+      alert('Usuário excluído com sucesso!')
+    } catch (error: any) {
       console.error('❌ Erro ao excluir usuário:', error)
-      alert('Erro ao excluir usuário: ' + (error as Error).message)
+      alert('Erro ao excluir usuário: ' + error.message)
     }
   }
 
@@ -610,14 +636,14 @@ export default function UserManagement() {
     }
   }
 
-  const filteredUsers = users.filter(user => {
+  const filteredUsers = users.filter(u => {
     const matchesSearch = searchTerm === '' || 
-      user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesRole = filterRole === '' || user.role === filterRole
+      u.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.email.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesRole = filterRole === '' || u.role === filterRole
     const matchesStatus = filterStatus === '' || 
-      (filterStatus === 'active' && user.active) ||
-      (filterStatus === 'inactive' && !user.active)
+      (filterStatus === 'active' && u.active) ||
+      (filterStatus === 'inactive' && !u.active)
     
     return matchesSearch && matchesRole && matchesStatus
   })
@@ -635,8 +661,11 @@ export default function UserManagement() {
 
   if (loading && users.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#00D4C4] mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando usuários...</p>
+        </div>
       </div>
     )
   }
@@ -648,7 +677,7 @@ export default function UserManagement() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-4xl font-bold text-gray-900 mb-2 flex items-center">
-              <Users className="w-10 h-10 text-blue-600 mr-4" />
+              <Users className="w-10 h-10 text-[#00D4C4] mr-4" />
               Gestão de Usuários
             </h1>
             <p className="text-gray-600 text-lg">Controle de acesso e permissões do sistema</p>
@@ -658,7 +687,7 @@ export default function UserManagement() {
               setEditingUser(null)
               setShowModal(true)
             }}
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-4 rounded-2xl hover:from-blue-700 hover:to-indigo-700 transition-all flex items-center shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+            className="bg-gradient-to-r from-[#00D4C4] to-[#2D3E9E] text-white px-8 py-4 rounded-2xl hover:from-[#00B8AA] hover:to-[#252F7E] transition-all flex items-center shadow-lg hover:shadow-xl transform hover:-translate-y-1"
           >
             <Plus className="w-5 h-5 mr-2" />
             Novo Usuário
@@ -714,13 +743,13 @@ export default function UserManagement() {
               placeholder="Buscar por nome ou email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-3 w-full border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              className="pl-10 pr-4 py-3 w-full border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
             />
           </div>
           <select
             value={filterRole}
             onChange={(e) => setFilterRole(e.target.value)}
-            className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+            className="px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
           >
             <option value="">Todos os perfis</option>
             <option value="admin">Administradores</option>
@@ -730,7 +759,7 @@ export default function UserManagement() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+            className="px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
           >
             <option value="">Todos os status</option>
             <option value="active">Ativos</option>
@@ -771,7 +800,7 @@ export default function UserManagement() {
                   <td className="px-6 py-4">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-12 w-12">
-                        <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
+                        <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#00D4C4] to-[#2D3E9E] flex items-center justify-center shadow-lg">
                           <span className="text-white font-bold text-lg">
                             {user.full_name.charAt(0).toUpperCase()}
                           </span>
@@ -795,8 +824,9 @@ export default function UserManagement() {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900">
-                      {(user as any).institutions?.name || 'Sem instituição'}
+                    <div className="text-sm text-gray-900 flex items-center">
+                      <Building2 className="w-4 h-4 mr-1 text-gray-400" />
+                      {user.institutions?.name || 'Sem instituição'}
                     </div>
                   </td>
                   <td className="px-6 py-4">
@@ -830,16 +860,29 @@ export default function UserManagement() {
                   <td className="px-6 py-4">
                     <div className="flex items-center space-x-2">
                       <button
-                        onClick={() => handleEdit(user)}
+                        onClick={() => {
+                          setEditingUser(user)
+                          setShowModal(true)
+                        }}
                         className="text-blue-600 hover:text-blue-900 p-2 hover:bg-blue-50 rounded-lg transition-all"
                         title="Editar usuário"
                       >
                         <Edit className="w-4 h-4" />
                       </button>
                       <button
+                        onClick={() => {
+                          setSelectedUserForPassword(user)
+                          setShowPasswordModal(true)
+                        }}
+                        className="text-purple-600 hover:text-purple-900 p-2 hover:bg-purple-50 rounded-lg transition-all"
+                        title="Alterar senha"
+                      >
+                        <Key className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => handleDelete(user.id)}
                         className="text-red-600 hover:text-red-900 p-2 hover:bg-red-50 rounded-lg transition-all"
-                        title="Desativar usuário"
+                        title="Excluir usuário"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -854,22 +897,23 @@ export default function UserManagement() {
             <div className="text-center py-12">
               <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                {users.length === 0 ? 'Nenhum usuário carregado' : 'Nenhum usuário encontrado'}
+                {users.length === 0 ? 'Nenhum usuário cadastrado' : 'Nenhum usuário encontrado'}
               </h3>
               <p className="text-gray-500">
                 {users.length === 0 
-                  ? 'Verifique as permissões do Supabase ou políticas RLS'
-                  : searchTerm || filterRole || filterStatus 
-                    ? 'Tente ajustar os filtros de busca'
-                    : 'Comece criando o primeiro usuário do sistema'
+                  ? 'Comece criando o primeiro usuário da instituição'
+                  : 'Tente ajustar os filtros de busca'
                 }
               </p>
               {users.length === 0 && (
                 <button
-                  onClick={loadUsers}
-                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  onClick={() => {
+                    setEditingUser(null)
+                    setShowModal(true)
+                  }}
+                  className="mt-4 px-6 py-2 bg-gradient-to-r from-[#00D4C4] to-[#2D3E9E] text-white rounded-lg hover:from-[#00B8AA] hover:to-[#252F7E] transition-colors"
                 >
-                  Tentar Novamente
+                  Criar Primeiro Usuário
                 </button>
               )}
             </div>
@@ -877,7 +921,7 @@ export default function UserManagement() {
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Modals */}
       <NewUserModal
         isOpen={showModal}
         onClose={() => {
@@ -887,6 +931,18 @@ export default function UserManagement() {
         onSave={handleSave}
         editingUser={editingUser}
       />
+
+      {selectedUserForPassword && (
+        <ChangePasswordModal
+          isOpen={showPasswordModal}
+          onClose={() => {
+            setShowPasswordModal(false)
+            setSelectedUserForPassword(null)
+          }}
+          user={selectedUserForPassword}
+          onSave={handleChangePassword}
+        />
+      )}
     </div>
   )
 }
