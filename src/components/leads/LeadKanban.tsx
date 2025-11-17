@@ -758,52 +758,63 @@ export default function LeadKanban() {
     }
   }
 
-  const handleScheduleVisit = async (data: { scheduled_date: string; scheduled_time: string; notes: string }) => {
-    if (!leadToSchedule) return
+ const handleScheduleVisit = async (data: { scheduled_date: string; scheduled_time: string; notes: string }) => {
+  if (!leadToSchedule) return
+  
+  try {
+    // 🔥 FIX: Criar data sem conversão de timezone
+    const [hours, minutes] = data.scheduled_time.split(':')
+    const [year, month, day] = data.scheduled_date.split('-')
     
-    try {
-      const [hours, minutes] = data.scheduled_time.split(':')
-      const visitDate = new Date(data.scheduled_date)
-      visitDate.setHours(parseInt(hours), parseInt(minutes), 0, 0)
-      
-      const scheduledDateTime = visitDate.toISOString()
-      
-      await DatabaseService.createVisit({
-        institution_id: user!.institution_id,
-        lead_id: leadToSchedule.id,
-        student_name: leadToSchedule.student_name,
+    // Criar data no horário local sem conversão UTC
+    const visitDate = new Date(
+      parseInt(year),
+      parseInt(month) - 1, // Mês começa em 0
+      parseInt(day),
+      parseInt(hours),
+      parseInt(minutes),
+      0,
+      0
+    )
+    
+    const scheduledDateTime = visitDate.toISOString()
+    
+    await DatabaseService.createVisit({
+      institution_id: user!.institution_id,
+      lead_id: leadToSchedule.id,
+      student_name: leadToSchedule.student_name,
+      scheduled_date: scheduledDateTime,
+      notes: data.notes,
+      status: 'scheduled'
+    })
+    
+    await DatabaseService.updateLead(leadToSchedule.id, { status: 'scheduled' })
+    
+    await DatabaseService.logActivity({
+      user_id: user!.id,
+      action: 'Visita agendada',
+      entity_type: 'lead',
+      entity_id: leadToSchedule.id,
+      details: {
         scheduled_date: scheduledDateTime,
+        scheduled_time: data.scheduled_time,
         notes: data.notes,
-        status: 'scheduled'
-      })
-      
-      await DatabaseService.updateLead(leadToSchedule.id, { status: 'scheduled' })
-      
-      await DatabaseService.logActivity({
-        user_id: user!.id,
-        action: 'Visita agendada',
-        entity_type: 'lead',
-        entity_id: leadToSchedule.id,
-        details: {
-          scheduled_date: scheduledDateTime,
-          scheduled_time: data.scheduled_time,
-          notes: data.notes,
-          student_name: leadToSchedule.student_name,
-          responsible_name: leadToSchedule.responsible_name
-        },
-        institution_id: user!.institution_id
-      })
-      
-      await loadData()
-      setShowScheduleVisitModal(false)
-      setLeadToSchedule(null)
-      
-      alert('Visita agendada com sucesso!')
-    } catch (error) {
-      console.error('Erro ao agendar visita:', error)
-      setError('Erro ao agendar visita: ' + (error as Error).message)
-    }
+        student_name: leadToSchedule.student_name,
+        responsible_name: leadToSchedule.responsible_name
+      },
+      institution_id: user!.institution_id
+    })
+    
+    await loadData()
+    setShowScheduleVisitModal(false)
+    setLeadToSchedule(null)
+    
+    alert('Visita agendada com sucesso!')
+  } catch (error) {
+    console.error('Erro ao agendar visita:', error)
+    setError('Erro ao agendar visita: ' + (error as Error).message)
   }
+}
 
   const loadLeadHistory = async (leadId: string) => {
     try {
