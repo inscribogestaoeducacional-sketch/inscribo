@@ -3,6 +3,18 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Building, Users, Calendar, Edit, Trash2, Eye, Search, Filter } from 'lucide-react'
 import { DatabaseService, Institution } from '../../../src/lib/supabase'
+import { 
+  Plus, 
+  Building, 
+  Users, 
+  Calendar, 
+  Edit, 
+  Trash2, 
+  Eye, 
+  Search, 
+  Filter,
+  DollarSign  // <-- ADICIONAR ESTA LINHA
+} from 'lucide-react'
 
 interface InstitutionWithStats extends Institution {
   plan: 'starter' | 'professional' | 'enterprise'
