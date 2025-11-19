@@ -40,14 +40,14 @@ function AppContent() {
   if (initializing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-        <div className="text-center">
-          <div className="w-16 h-16 mb-6 mx-auto">
-            <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600"></div>
+        <div className="text-center px-4">
+          <div className="w-12 h-12 sm:w-16 sm:h-16 mb-4 sm:mb-6 mx-auto">
+            <div className="animate-spin rounded-full h-12 w-12 sm:h-16 sm:w-16 border-4 border-blue-200 border-t-blue-600"></div>
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Inscribo</h2>
-          <p className="text-gray-600 mb-4">Verificando sua sessão...</p>
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">Inscribo</h2>
+          <p className="text-sm sm:text-base text-gray-600 mb-4">Verificando sua sessão...</p>
           
-          <div className="space-y-2 text-sm text-gray-500">
+          <div className="space-y-2 text-xs sm:text-sm text-gray-500">
             <div className="flex items-center justify-center space-x-2">
               <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
               <span>Verificando autenticação</span>
@@ -80,9 +80,15 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Sidebar />
-      <div className="ml-64">
+      
+      {/* Main Content - Ajustado para mobile */}
+      <div className="lg:ml-64">
+        {/* Espaço para o header mobile */}
+        <div className="lg:hidden h-16"></div>
+        
         <TopBar />
-        <main>
+        
+        <main className="min-h-screen">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/dashboard" element={<Dashboard />} />
