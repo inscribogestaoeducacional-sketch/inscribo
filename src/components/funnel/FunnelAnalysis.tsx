@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { 
   Target, TrendingUp, TrendingDown, Users, Calendar, Eye, GraduationCap, 
-  BarChart3, Plus, X, AlertCircle, CheckCircle, ArrowDown, Filter, Download, Info
+  BarChart3, Plus, X, AlertCircle, CheckCircle, ArrowDown, Filter, Download
 } from 'lucide-react'
 import { DatabaseService, FunnelMetrics } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -15,6 +15,7 @@ interface FunnelStage {
   conversion: number
   status: 'success' | 'warning' | 'danger'
   icon: React.ReactNode
+  color: string
 }
 
 interface ParsedPeriod {
@@ -61,12 +62,10 @@ const MONTH_NAMES = [
 ]
 
 function parsePeriod(period: string): ParsedPeriod | null {
-  // Extrair ano
   const yearMatch = period.match(/\d{4}/)
   if (!yearMatch) return null
   const year = parseInt(yearMatch[0])
   
-  // Extrair mês pelo nome
   let month = 0
   let monthName = ''
   
@@ -78,7 +77,6 @@ function parsePeriod(period: string): ParsedPeriod | null {
     }
   }
   
-  // Se não encontrou pelo nome, tentar pelo número (formato: MM/YYYY)
   if (month === 0) {
     const monthMatch = period.match(/^(\d{1,2})\//)
     if (monthMatch) {
@@ -129,17 +127,20 @@ function AnnualGoalsModal({ isOpen, onClose, onSave, currentYear, existingGoals 
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold">Metas Anuais - {formData.year}</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+      <div className="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 shadow-2xl">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">Metas Anuais - {formData.year}</h2>
+          <button 
+            onClick={onClose} 
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
             <X className="h-6 w-6" />
           </button>
         </div>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
               Ano *
             </label>
             <input
@@ -149,13 +150,13 @@ function AnnualGoalsModal({ isOpen, onClose, onSave, currentYear, existingGoals 
               max="2050"
               value={formData.year}
               onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Meta Anual de Cadastros *
               </label>
               <input
@@ -164,11 +165,11 @@ function AnnualGoalsModal({ isOpen, onClose, onSave, currentYear, existingGoals 
                 min="0"
                 value={formData.annual_registrations_target}
                 onChange={(e) => setFormData({ ...formData, annual_registrations_target: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Meta Anual de Agendamentos *
               </label>
               <input
@@ -177,14 +178,14 @@ function AnnualGoalsModal({ isOpen, onClose, onSave, currentYear, existingGoals 
                 min="0"
                 value={formData.annual_schedules_target}
                 onChange={(e) => setFormData({ ...formData, annual_schedules_target: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Meta Anual de Visitas *
               </label>
               <input
@@ -193,11 +194,11 @@ function AnnualGoalsModal({ isOpen, onClose, onSave, currentYear, existingGoals 
                 min="0"
                 value={formData.annual_visits_target}
                 onChange={(e) => setFormData({ ...formData, annual_visits_target: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Meta Anual de Matrículas *
               </label>
               <input
@@ -206,34 +207,24 @@ function AnnualGoalsModal({ isOpen, onClose, onSave, currentYear, existingGoals 
                 min="0"
                 value={formData.annual_enrollments_target}
                 onChange={(e) => setFormData({ ...formData, annual_enrollments_target: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
               />
             </div>
           </div>
 
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-start">
-              <Info className="h-5 w-5 text-blue-600 mt-0.5 mr-2 flex-shrink-0" />
-              <div className="text-sm text-blue-800">
-                <p className="font-medium mb-1">Distribuição Automática</p>
-                <p>Defina as metas totais para o ano {formData.year}. Você poderá acompanhar o progresso nos cards de resumo.</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end space-x-2 pt-4">
+          <div className="flex justify-end space-x-3 pt-4">
             <button 
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors font-medium"
             >
               Cancelar
             </button>
             <button 
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              className="px-6 py-3 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-colors font-medium shadow-sm"
             >
-              Salvar Metas Anuais
+              Salvar Metas
             </button>
           </div>
         </form>
@@ -314,25 +305,30 @@ function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel }: NewFunnelMod
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold">{editingFunnel ? 'Editar Período' : 'Novo Período'}</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+      <div className="bg-white rounded-xl p-6 w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">
+            {editingFunnel ? 'Editar Período' : 'Novo Período'}
+          </h2>
+          <button 
+            onClick={onClose} 
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
             <X className="h-6 w-6" />
           </button>
         </div>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Ano *
               </label>
               <select
                 required
                 value={formData.year}
                 onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
               >
                 {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map(year => (
                   <option key={year} value={year}>{year}</option>
@@ -340,14 +336,14 @@ function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel }: NewFunnelMod
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Mês *
               </label>
               <select
                 required
                 value={formData.month}
                 onChange={(e) => setFormData({ ...formData, month: parseInt(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
               >
                 {MONTH_NAMES.map((month, index) => (
                   <option key={index + 1} value={index + 1}>{month}</option>
@@ -356,11 +352,11 @@ function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel }: NewFunnelMod
             </div>
           </div>
 
-          <div className="border-t border-gray-200 pt-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Dados Realizados</h3>
+          <div className="border-t border-gray-200 pt-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Dados Realizados</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Cadastros Realizados *
                 </label>
                 <input
@@ -369,11 +365,11 @@ function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel }: NewFunnelMod
                   min="0"
                   value={formData.registrations}
                   onChange={(e) => setFormData({ ...formData, registrations: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Agendamentos Realizados *
                 </label>
                 <input
@@ -382,11 +378,11 @@ function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel }: NewFunnelMod
                   min="0"
                   value={formData.schedules}
                   onChange={(e) => setFormData({ ...formData, schedules: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Visitas Realizadas *
                 </label>
                 <input
@@ -395,11 +391,11 @@ function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel }: NewFunnelMod
                   min="0"
                   value={formData.visits}
                   onChange={(e) => setFormData({ ...formData, visits: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Matrículas Realizadas *
                 </label>
                 <input
@@ -408,17 +404,17 @@ function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel }: NewFunnelMod
                   min="0"
                   value={formData.enrollments}
                   onChange={(e) => setFormData({ ...formData, enrollments: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
                 />
               </div>
             </div>
           </div>
 
-          <div className="border-t border-gray-200 pt-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Metas do Mês</h3>
+          <div className="border-t border-gray-200 pt-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Metas do Mês</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Meta de Cadastros *
                 </label>
                 <input
@@ -427,11 +423,11 @@ function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel }: NewFunnelMod
                   min="0"
                   value={formData.registrations_target}
                   onChange={(e) => setFormData({ ...formData, registrations_target: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Meta de Agendamentos *
                 </label>
                 <input
@@ -440,11 +436,11 @@ function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel }: NewFunnelMod
                   min="0"
                   value={formData.schedules_target}
                   onChange={(e) => setFormData({ ...formData, schedules_target: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Meta de Visitas *
                 </label>
                 <input
@@ -453,11 +449,11 @@ function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel }: NewFunnelMod
                   min="0"
                   value={formData.visits_target}
                   onChange={(e) => setFormData({ ...formData, visits_target: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Meta de Matrículas *
                 </label>
                 <input
@@ -466,23 +462,23 @@ function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel }: NewFunnelMod
                   min="0"
                   value={formData.enrollments_target}
                   onChange={(e) => setFormData({ ...formData, enrollments_target: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all"
                 />
               </div>
             </div>
           </div>
 
-          <div className="flex justify-end space-x-2 pt-4">
+          <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
             <button 
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors font-medium"
             >
               Cancelar
             </button>
             <button 
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              className="px-6 py-3 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-colors font-medium shadow-sm"
             >
               {editingFunnel ? 'Atualizar' : 'Salvar'}
             </button>
@@ -521,7 +517,6 @@ export default function FunnelAnalysis() {
       setLoading(true)
       const data = await DatabaseService.getFunnelMetrics(user!.institution_id)
       
-      // Adicionar informações parseadas
       const dataWithParsed: FunnelWithParsed[] = data.map(item => ({
         ...item,
         parsed: parsePeriod(item.period)
@@ -615,7 +610,8 @@ export default function FunnelAnalysis() {
       target: currentMonthData.registrations_target,
       conversion: 100,
       status: currentMonthData.registrations >= currentMonthData.registrations_target ? 'success' : 'warning',
-      icon: <Users className="h-5 w-5" />
+      icon: <Users className="h-6 w-6" />,
+      color: 'blue'
     },
     {
       name: 'Agendamentos',
@@ -623,7 +619,8 @@ export default function FunnelAnalysis() {
       target: currentMonthData.schedules_target,
       conversion: currentMonthData.registrations > 0 ? (currentMonthData.schedules / currentMonthData.registrations) * 100 : 0,
       status: currentMonthData.schedules >= currentMonthData.schedules_target ? 'success' : 'warning',
-      icon: <Calendar className="h-5 w-5" />
+      icon: <Calendar className="h-6 w-6" />,
+      color: 'purple'
     },
     {
       name: 'Visitas',
@@ -631,7 +628,8 @@ export default function FunnelAnalysis() {
       target: currentMonthData.visits_target,
       conversion: currentMonthData.schedules > 0 ? (currentMonthData.visits / currentMonthData.schedules) * 100 : 0,
       status: currentMonthData.visits >= currentMonthData.visits_target ? 'success' : 'warning',
-      icon: <Eye className="h-5 w-5" />
+      icon: <Eye className="h-6 w-6" />,
+      color: 'orange'
     },
     {
       name: 'Matrículas',
@@ -639,18 +637,19 @@ export default function FunnelAnalysis() {
       target: currentMonthData.enrollments_target,
       conversion: currentMonthData.visits > 0 ? (currentMonthData.enrollments / currentMonthData.visits) * 100 : 0,
       status: currentMonthData.enrollments >= currentMonthData.enrollments_target ? 'success' : 'warning',
-      icon: <GraduationCap className="h-5 w-5" />
+      icon: <GraduationCap className="h-6 w-6" />,
+      color: 'green'
     }
   ] : []
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="min-h-screen bg-gray-50 p-6">
         <div className="animate-pulse">
           <div className="h-8 bg-gray-200 rounded w-64 mb-6"></div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             {[1, 2, 3, 4].map(i => (
-              <div key={i} className="h-32 bg-gray-200 rounded-lg"></div>
+              <div key={i} className="h-32 bg-white rounded-xl shadow-sm"></div>
             ))}
           </div>
         </div>
@@ -659,450 +658,381 @@ export default function FunnelAnalysis() {
   }
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Planejamento & Funil</h1>
-          <p className="text-gray-600">Análise completa do funil de vendas com comparativos históricos</p>
-        </div>
-        <div className="flex items-center space-x-3">
-          {availableYears.length > 0 && (
-            <div className="flex items-center space-x-2">
-              <Filter className="h-4 w-4 text-gray-500" />
+    <div className="min-h-screen bg-gray-50">
+      <div className="p-6 max-w-[1600px] mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <div className="flex items-center space-x-3 mb-2">
+              <div className="p-2 bg-cyan-100 rounded-lg">
+                <BarChart3 className="h-7 w-7 text-cyan-600" />
+              </div>
+              <h1 className="text-3xl font-bold text-gray-900">Planejamento & Funil</h1>
+            </div>
+            <p className="text-gray-600">Análise do funil de vendas e metas</p>
+          </div>
+          <div className="flex items-center space-x-3">
+            {availableYears.length > 0 && (
               <select
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all bg-white font-medium"
               >
                 {availableYears.map(year => (
                   <option key={year} value={year}>{year}</option>
                 ))}
               </select>
-            </div>
-          )}
-          <button
-            onClick={() => setShowAnnualGoalsModal(true)}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center"
-          >
-            <Target className="h-4 w-4 mr-2" />
-            Metas Anuais
-          </button>
-          <button
-            onClick={handleNew}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Período
-          </button>
-        </div>
-      </div>
-
-      {yearData.length > 0 ? (
-        <>
-          {/* Cards de Resumo Anual */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            {/* Cadastros */}
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6 border border-blue-200">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-blue-900">Cadastros no Ano</h3>
-                <Users className="h-5 w-5 text-blue-600" />
-              </div>
-              <p className="text-3xl font-bold text-blue-900">{yearTotals.registrations}</p>
-              {annualGoals.registrations > 0 && (
-                <>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-sm text-blue-700">Meta: {annualGoals.registrations}</span>
-                    {yearTotals.registrations >= annualGoals.registrations ? (
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <AlertCircle className="h-4 w-4 text-yellow-600" />
-                    )}
-                  </div>
-                  <div className="mt-2 text-xs text-blue-700">
-                    {((yearTotals.registrations / annualGoals.registrations) * 100).toFixed(1)}% da meta
-                  </div>
-                </>
-              )}
-              {annualGoals.registrations === 0 && (
-                <div className="mt-2 text-xs text-blue-700">Meta não definida</div>
-              )}
-            </div>
-
-            {/* Agendamentos */}
-            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-6 border border-purple-200">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-purple-900">Agendamentos no Ano</h3>
-                <Calendar className="h-5 w-5 text-purple-600" />
-              </div>
-              <p className="text-3xl font-bold text-purple-900">{yearTotals.schedules}</p>
-              {annualGoals.schedules > 0 && (
-                <>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-sm text-purple-700">Meta: {annualGoals.schedules}</span>
-                    {yearTotals.schedules >= annualGoals.schedules ? (
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <AlertCircle className="h-4 w-4 text-yellow-600" />
-                    )}
-                  </div>
-                </>
-              )}
-              <div className="mt-2 text-xs text-purple-700">
-                Taxa: {yearTotals.registrations > 0 
-                  ? `${((yearTotals.schedules / yearTotals.registrations) * 100).toFixed(1)}%`
-                  : '0%'}
-              </div>
-            </div>
-
-            {/* Visitas */}
-            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-6 border border-orange-200">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-orange-900">Visitas no Ano</h3>
-                <Eye className="h-5 w-5 text-orange-600" />
-              </div>
-              <p className="text-3xl font-bold text-orange-900">{yearTotals.visits}</p>
-              {annualGoals.visits > 0 && (
-                <>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-sm text-orange-700">Meta: {annualGoals.visits}</span>
-                    {yearTotals.visits >= annualGoals.visits ? (
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <AlertCircle className="h-4 w-4 text-yellow-600" />
-                    )}
-                  </div>
-                </>
-              )}
-              <div className="mt-2 text-xs text-orange-700">
-                Taxa: {yearTotals.schedules > 0 
-                  ? `${((yearTotals.visits / yearTotals.schedules) * 100).toFixed(1)}%`
-                  : '0%'}
-              </div>
-            </div>
-
-            {/* Matrículas */}
-            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-6 border border-green-200">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-green-900">Matrículas no Ano</h3>
-                <GraduationCap className="h-5 w-5 text-green-600" />
-              </div>
-              <p className="text-3xl font-bold text-green-900">{yearTotals.enrollments}</p>
-              {annualGoals.enrollments > 0 && (
-                <>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-sm text-green-700">Meta: {annualGoals.enrollments}</span>
-                    {yearTotals.enrollments >= annualGoals.enrollments ? (
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <AlertCircle className="h-4 w-4 text-yellow-600" />
-                    )}
-                  </div>
-                </>
-              )}
-              <div className="mt-2 text-xs text-green-700">
-                Conversão: {yearTotals.registrations > 0 
-                  ? `${((yearTotals.enrollments / yearTotals.registrations) * 100).toFixed(1)}%`
-                  : '0%'}
-              </div>
-            </div>
+            )}
+            <button
+              onClick={() => setShowAnnualGoalsModal(true)}
+              className="px-5 py-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center font-medium text-gray-700 shadow-sm"
+            >
+              <Target className="h-5 w-5 mr-2" />
+              Metas Anuais
+            </button>
+            <button
+              onClick={handleNew}
+              className="px-5 py-3 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-colors flex items-center font-medium shadow-sm"
+            >
+              <Plus className="h-5 w-5 mr-2" />
+              Novo Período
+            </button>
           </div>
+        </div>
 
-          {/* Funil do Mês Atual */}
-          {FUNNEL_STAGES.length > 0 && currentMonthData && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Funil do Mês - {currentMonthData.parsed?.monthName} {selectedYear}
-                </h3>
-                <button
-                  onClick={() => handleEdit(currentMonthData)}
-                  className="text-blue-600 hover:text-blue-700 text-sm flex items-center"
-                >
-                  <Target className="h-4 w-4 mr-1" />
-                  Editar Dados
-                </button>
+        {yearData.length > 0 ? (
+          <>
+            {/* Cards de Resumo */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              {/* Total de Usuários */}
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm font-medium text-gray-600">Cadastros no Ano</p>
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <Users className="h-5 w-5 text-blue-600" />
+                  </div>
+                </div>
+                <p className="text-3xl font-bold text-gray-900 mb-1">{yearTotals.registrations}</p>
+                {annualGoals.registrations > 0 && (
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-gray-500">Meta: {annualGoals.registrations}</p>
+                    {yearTotals.registrations >= annualGoals.registrations ? (
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-yellow-500" />
+                    )}
+                  </div>
+                )}
               </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                {FUNNEL_STAGES.map((stage, index) => {
-                  const deviation = stage.target > 0 ? ((stage.actual - stage.target) / stage.target * 100) : 0
-                  const isLast = index === FUNNEL_STAGES.length - 1
-                  
-                  return (
-                    <div key={stage.name} className="relative">
-                      <div className={`rounded-lg p-6 ${
-                        stage.status === 'success' ? 'bg-green-50 border border-green-200' :
-                        stage.status === 'warning' ? 'bg-yellow-50 border border-yellow-200' :
-                        'bg-red-50 border border-red-200'
-                      }`}>
-                        <div className="flex items-center justify-between mb-3">
-                          <div className={`p-2 rounded-lg ${
-                            stage.status === 'success' ? 'bg-green-100 text-green-600' :
-                            stage.status === 'warning' ? 'bg-yellow-100 text-yellow-600' :
-                            'bg-red-100 text-red-600'
-                          }`}>
-                            {stage.icon}
-                          </div>
-                          <div className="flex items-center">
+
+              {/* Usuários Ativos */}
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm font-medium text-gray-600">Agendamentos no Ano</p>
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <Calendar className="h-5 w-5 text-purple-600" />
+                  </div>
+                </div>
+                <p className="text-3xl font-bold text-gray-900 mb-1">{yearTotals.schedules}</p>
+                <p className="text-xs text-gray-500">
+                  Taxa: {yearTotals.registrations > 0 
+                    ? `${((yearTotals.schedules / yearTotals.registrations) * 100).toFixed(1)}%`
+                    : '0%'}
+                </p>
+              </div>
+
+              {/* Administradores */}
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm font-medium text-gray-600">Visitas no Ano</p>
+                  <div className="p-2 bg-orange-100 rounded-lg">
+                    <Eye className="h-5 w-5 text-orange-600" />
+                  </div>
+                </div>
+                <p className="text-3xl font-bold text-gray-900 mb-1">{yearTotals.visits}</p>
+                <p className="text-xs text-gray-500">
+                  Taxa: {yearTotals.schedules > 0 
+                    ? `${((yearTotals.visits / yearTotals.schedules) * 100).toFixed(1)}%`
+                    : '0%'}
+                </p>
+              </div>
+
+              {/* Gestores */}
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm font-medium text-gray-600">Matrículas no Ano</p>
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <GraduationCap className="h-5 w-5 text-green-600" />
+                  </div>
+                </div>
+                <p className="text-3xl font-bold text-gray-900 mb-1">{yearTotals.enrollments}</p>
+                <p className="text-xs text-gray-500">
+                  Conversão: {yearTotals.registrations > 0 
+                    ? `${((yearTotals.enrollments / yearTotals.registrations) * 100).toFixed(1)}%`
+                    : '0%'}
+                </p>
+              </div>
+            </div>
+
+            {/* Funil do Mês Atual */}
+            {FUNNEL_STAGES.length > 0 && currentMonthData && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-gray-900">
+                    Funil do Mês - {currentMonthData.parsed?.monthName} {selectedYear}
+                  </h3>
+                  <button
+                    onClick={() => handleEdit(currentMonthData)}
+                    className="text-cyan-600 hover:text-cyan-700 text-sm font-medium flex items-center"
+                  >
+                    <Target className="h-4 w-4 mr-1" />
+                    Editar Dados
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  {FUNNEL_STAGES.map((stage, index) => {
+                    const deviation = stage.target > 0 ? ((stage.actual - stage.target) / stage.target * 100) : 0
+                    const isLast = index === FUNNEL_STAGES.length - 1
+                    
+                    return (
+                      <div key={stage.name} className="relative">
+                        <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className={`p-3 rounded-lg ${
+                              stage.color === 'blue' ? 'bg-blue-100' :
+                              stage.color === 'purple' ? 'bg-purple-100' :
+                              stage.color === 'orange' ? 'bg-orange-100' :
+                              'bg-green-100'
+                            }`}>
+                              <div className={
+                                stage.color === 'blue' ? 'text-blue-600' :
+                                stage.color === 'purple' ? 'text-purple-600' :
+                                stage.color === 'orange' ? 'text-orange-600' :
+                                'text-green-600'
+                              }>
+                                {stage.icon}
+                              </div>
+                            </div>
                             {deviation >= 0 ? (
-                              <TrendingUp className="h-4 w-4 text-green-500" />
+                              <TrendingUp className="h-5 w-5 text-green-500" />
                             ) : (
-                              <TrendingDown className="h-4 w-4 text-red-500" />
+                              <TrendingDown className="h-5 w-5 text-red-500" />
+                            )}
+                          </div>
+                          
+                          <h4 className="text-sm font-semibold text-gray-600 mb-3">{stage.name}</h4>
+                          
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-gray-500">Realizado</span>
+                              <span className="text-2xl font-bold text-gray-900">{stage.actual}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-gray-500">Meta</span>
+                              <span className="text-sm font-medium text-gray-600">{stage.target}</span>
+                            </div>
+                            <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                              <span className="text-xs text-gray-500">Desvio</span>
+                              <span className={`text-sm font-bold ${
+                                deviation >= 0 ? 'text-green-600' : 'text-red-600'
+                              }`}>
+                                {deviation >= 0 ? '+' : ''}{deviation.toFixed(1)}%
+                              </span>
+                            </div>
+                            {index > 0 && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs text-gray-500">Conversão</span>
+                                <span className="text-sm font-bold text-cyan-600">
+                                  {stage.conversion.toFixed(1)}%
+                                </span>
+                              </div>
                             )}
                           </div>
                         </div>
                         
-                        <h4 className="text-sm font-medium text-gray-900 mb-2">{stage.name}</h4>
-                        
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs text-gray-600">Realizado</span>
-                            <span className="text-lg font-bold text-gray-900">{stage.actual}</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs text-gray-600">Meta</span>
-                            <span className="text-sm text-gray-700">{stage.target}</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs text-gray-600">Desvio</span>
-                            <span className={`text-sm font-medium ${
-                              deviation >= 0 ? 'text-green-600' : 'text-red-600'
-                            }`}>
-                              {deviation >= 0 ? '+' : ''}{deviation.toFixed(1)}%
-                            </span>
-                          </div>
-                          {index > 0 && (
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs text-gray-600">Conversão</span>
-                              <span className="text-sm font-medium text-blue-600">
-                                {stage.conversion.toFixed(1)}%
-                              </span>
+                        {!isLast && (
+                          <div className="hidden md:flex absolute top-1/2 -right-3 transform -translate-y-1/2 z-10 items-center justify-center">
+                            <div className="bg-white rounded-full p-1 shadow-sm border border-gray-200">
+                              <ArrowDown className="h-4 w-4 text-gray-400 rotate-[-90deg]" />
                             </div>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
-                      
-                      {!isLast && (
-                        <div className="hidden md:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10">
-                          <ArrowDown className="h-6 w-6 text-gray-400 rotate-[-90deg]" />
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Gráfico de Performance Mensal */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-            <h3 className="text-lg font-semibold text-gray-900 mb-6">Performance Mês a Mês - {selectedYear}</h3>
-            <div className="space-y-6">
-              {['Cadastros', 'Agendamentos', 'Visitas', 'Matrículas'].map((metric, metricIndex) => {
-                const dataKey = ['registrations', 'schedules', 'visits', 'enrollments'][metricIndex] as keyof FunnelMetrics
-                const targetKey = `${dataKey}_target` as keyof FunnelMetrics
-                
-                const maxValue = Math.max(
-                  ...yearData.map(f => Math.max(f[dataKey] as number, f[targetKey] as number)),
-                  1
-                )
-
-                return (
-                  <div key={metric}>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-700">{metric}</span>
-                      <div className="flex items-center space-x-4 text-xs">
-                        <div className="flex items-center">
-                          <div className="w-3 h-3 bg-blue-500 rounded-full mr-1"></div>
-                          <span>Realizado</span>
-                        </div>
-                        <div className="flex items-center">
-                          <div className="w-3 h-3 bg-gray-300 rounded-full mr-1"></div>
-                          <span>Meta</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-end space-x-2 h-24">
-                      {yearData.map((month, idx) => {
-                        const actual = month[dataKey] as number
-                        const target = month[targetKey] as number
-                        const actualHeight = maxValue > 0 ? (actual / maxValue) * 100 : 0
-                        const targetHeight = maxValue > 0 ? (target / maxValue) * 100 : 0
-
-                        return (
-                          <div key={idx} className="flex-1 flex flex-col items-center">
-                            <div className="w-full flex items-end justify-center space-x-1 h-20">
-                              <div 
-                                className="w-1/2 bg-blue-500 rounded-t transition-all hover:bg-blue-600 cursor-pointer"
-                                style={{ height: `${actualHeight}%`, minHeight: '2px' }}
-                                title={`${month.parsed?.monthName}: ${actual}`}
-                              ></div>
-                              <div 
-                                className="w-1/2 bg-gray-300 rounded-t transition-all hover:bg-gray-400 cursor-pointer"
-                                style={{ height: `${targetHeight}%`, minHeight: '2px' }}
-                                title={`Meta: ${target}`}
-                              ></div>
-                            </div>
-                            <span className="text-xs text-gray-600 mt-1">
-                              {month.parsed?.monthName.substring(0, 3)}
-                            </span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Tabela Histórica */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Histórico Completo - {selectedYear}</h3>
-              <button
-                className="text-gray-600 hover:text-gray-900 flex items-center text-sm"
-                onClick={() => {
-                  const csv = [
-                    ['Mês', 'Cadastros', 'Meta Cadastros', 'Agendamentos', 'Meta Agendamentos', 'Visitas', 'Meta Visitas', 'Matrículas', 'Meta Matrículas'],
-                    ...yearData.map(f => [
-                      f.parsed?.monthName || '',
-                      f.registrations,
-                      f.registrations_target,
-                      f.schedules,
-                      f.schedules_target,
-                      f.visits,
-                      f.visits_target,
-                      f.enrollments,
-                      f.enrollments_target
-                    ])
-                  ].map(row => row.join(',')).join('\n')
-                  
-                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-                  const url = window.URL.createObjectURL(blob)
-                  const a = document.createElement('a')
-                  a.href = url
-                  a.download = `funil-${selectedYear}.csv`
-                  document.body.appendChild(a)
-                  a.click()
-                  document.body.removeChild(a)
-                  window.URL.revokeObjectURL(url)
-                }}
-              >
-                <Download className="h-4 w-4 mr-1" />
-                Exportar CSV
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mês</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cadastros</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Agendamentos</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Visitas</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Matrículas</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Taxa Final</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {yearData.map((period) => {
-                    const finalRate = period.registrations > 0 ? (period.enrollments / period.registrations) * 100 : 0
-                    
-                    return (
-                      <tr key={period.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {period.parsed?.monthName}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <div className="flex flex-col">
-                            <span className="font-medium">{period.registrations}</span>
-                            <span className="text-xs text-gray-500">Meta: {period.registrations_target}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <div className="flex flex-col">
-                            <span className="font-medium">{period.schedules}</span>
-                            <span className="text-xs text-gray-500">Meta: {period.schedules_target}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <div className="flex flex-col">
-                            <span className="font-medium">{period.visits}</span>
-                            <span className="text-xs text-gray-500">Meta: {period.visits_target}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <div className="flex flex-col">
-                            <span className="font-medium">{period.enrollments}</span>
-                            <span className="text-xs text-gray-500">Meta: {period.enrollments_target}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
-                          {finalRate.toFixed(1)}%
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <button
-                            onClick={() => handleEdit(period)}
-                            className="text-blue-600 hover:text-blue-900"
-                          >
-                            Editar
-                          </button>
-                        </td>
-                      </tr>
                     )
                   })}
-                </tbody>
-              </table>
+                </div>
+              </div>
+            )}
+
+            {/* Tabela Histórica */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 className="text-lg font-bold text-gray-900">Histórico Completo - {selectedYear}</h3>
+                <button
+                  className="text-gray-600 hover:text-gray-900 flex items-center text-sm font-medium"
+                  onClick={() => {
+                    const csv = [
+                      ['Mês', 'Cadastros', 'Meta', 'Agendamentos', 'Meta', 'Visitas', 'Meta', 'Matrículas', 'Meta'],
+                      ...yearData.map(f => [
+                        f.parsed?.monthName || '',
+                        f.registrations,
+                        f.registrations_target,
+                        f.schedules,
+                        f.schedules_target,
+                        f.visits,
+                        f.visits_target,
+                        f.enrollments,
+                        f.enrollments_target
+                      ])
+                    ].map(row => row.join(',')).join('\n')
+                    
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+                    const url = window.URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `funil-${selectedYear}.csv`
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                    window.URL.revokeObjectURL(url)
+                  }}
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Exportar
+                </button>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        MÊS
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        CADASTROS
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        AGENDAMENTOS
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        VISITAS
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        MATRÍCULAS
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        TAXA FINAL
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        AÇÕES
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {yearData.map((period) => {
+                      const finalRate = period.registrations > 0 ? (period.enrollments / period.registrations) * 100 : 0
+                      
+                      return (
+                        <tr key={period.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm font-medium text-gray-900">{period.parsed?.monthName}</span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex flex-col">
+                              <span className="text-sm font-bold text-gray-900">{period.registrations}</span>
+                              <span className="text-xs text-gray-500">Meta: {period.registrations_target}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex flex-col">
+                              <span className="text-sm font-bold text-gray-900">{period.schedules}</span>
+                              <span className="text-xs text-gray-500">Meta: {period.schedules_target}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex flex-col">
+                              <span className="text-sm font-bold text-gray-900">{period.visits}</span>
+                              <span className="text-xs text-gray-500">Meta: {period.visits_target}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex flex-col">
+                              <span className="text-sm font-bold text-gray-900">{period.enrollments}</span>
+                              <span className="text-xs text-gray-500">Meta: {period.enrollments_target}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm font-bold text-green-600">
+                              {finalRate.toFixed(1)}%
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <button
+                              onClick={() => handleEdit(period)}
+                              className="text-cyan-600 hover:text-cyan-700 font-medium text-sm"
+                            >
+                              Editar
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12">
+            <div className="text-center">
+              <div className="inline-flex p-4 bg-gray-100 rounded-full mb-4">
+                <BarChart3 className="h-12 w-12 text-gray-400" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                Nenhum dado configurado para {selectedYear}
+              </h3>
+              <p className="text-gray-600 mb-6">
+                Configure seus dados mensais e metas anuais para começar a analisar o funil
+              </p>
+              <div className="flex items-center justify-center space-x-3">
+                <button
+                  onClick={() => setShowAnnualGoalsModal(true)}
+                  className="px-6 py-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors font-medium text-gray-700 shadow-sm"
+                >
+                  Definir Metas Anuais
+                </button>
+                <button
+                  onClick={handleNew}
+                  className="px-6 py-3 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-colors font-medium shadow-sm"
+                >
+                  Adicionar Primeiro Período
+                </button>
+              </div>
             </div>
           </div>
-        </>
-      ) : (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-          <div className="text-center">
-            <BarChart3 className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum dado configurado para {selectedYear}</h3>
-            <p className="text-gray-600 mb-4">
-              Configure seus dados mensais e metas anuais para começar a analisar o funil
-            </p>
-            <div className="flex items-center justify-center space-x-3">
-              <button
-                onClick={() => setShowAnnualGoalsModal(true)}
-                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors"
-              >
-                Definir Metas Anuais
-              </button>
-              <button
-                onClick={handleNew}
-                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Adicionar Primeiro Período
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        )}
 
-      {/* Modals */}
-      <NewFunnelModal
-        isOpen={showNewFunnelModal}
-        onClose={() => {
-          setShowNewFunnelModal(false)
-          setEditingFunnel(null)
-        }}
-        onSave={handleSave}
-        editingFunnel={editingFunnel}
-      />
+        {/* Modals */}
+        <NewFunnelModal
+          isOpen={showNewFunnelModal}
+          onClose={() => {
+            setShowNewFunnelModal(false)
+            setEditingFunnel(null)
+          }}
+          onSave={handleSave}
+          editingFunnel={editingFunnel}
+        />
 
-      <AnnualGoalsModal
-        isOpen={showAnnualGoalsModal}
-        onClose={() => setShowAnnualGoalsModal(false)}
-        onSave={handleSaveAnnualGoals}
-        currentYear={selectedYear}
-        existingGoals={annualGoals}
-      />
+        <AnnualGoalsModal
+          isOpen={showAnnualGoalsModal}
+          onClose={() => setShowAnnualGoalsModal(false)}
+          onSave={handleSaveAnnualGoals}
+          currentYear={selectedYear}
+          existingGoals={annualGoals}
+        />
+      </div>
     </div>
   )
 }
