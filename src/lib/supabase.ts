@@ -152,6 +152,9 @@ export interface ReEnrollment {
 export interface FunnelMetrics {
   id: string
   period: string
+  year: number
+  month: number
+  month_name: string
   registrations: number
   registrations_target: number
   schedules: number
@@ -160,8 +163,47 @@ export interface FunnelMetrics {
   visits_target: number
   enrollments: number
   enrollments_target: number
+  annual_registrations_target: number
+  annual_schedules_target: number
+  annual_visits_target: number
+  annual_enrollments_target: number
+  notes?: string
   institution_id: string
   created_at: string
+}
+export interface FunnelAnalysisView extends FunnelMetrics {
+  conversion_reg_to_schedule: number
+  conversion_schedule_to_visit: number
+  conversion_visit_to_enrollment: number
+  conversion_overall: number
+  registrations_deviation_pct: number
+  schedules_deviation_pct: number
+  visits_deviation_pct: number
+  enrollments_deviation_pct: number
+}
+
+export interface AnnualFunnelTotals {
+  year: number
+  total_registrations: number
+  total_schedules: number
+  total_visits: number
+  total_enrollments: number
+  annual_registrations_target: number
+  annual_schedules_target: number
+  annual_visits_target: number
+  annual_enrollments_target: number
+  overall_conversion_rate: number
+}
+
+export interface YearComparison {
+  month: number
+  month_name: string
+  year1_registrations: number
+  year2_registrations: number
+  registrations_variation: number
+  year1_enrollments: number
+  year2_enrollments: number
+  enrollments_variation: number
 }
 
 export interface Action {
