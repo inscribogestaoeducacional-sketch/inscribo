@@ -32,19 +32,19 @@ function KPICard({ title, value, change, icon, color, onClick }: KPICardProps) {
   
   return (
     <div 
-      className={`bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-200 ${onClick ? 'cursor-pointer' : ''}`}
+      className={`bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6 hover:shadow-lg transition-all duration-200 ${onClick ? 'cursor-pointer' : ''}`}
       onClick={onClick}
     >
       <div className="flex items-center justify-between">
         <div className="flex-1">
-          <p className="text-sm font-medium text-gray-600 mb-2">{title}</p>
-          <p className="text-3xl font-bold text-gray-900 mb-2">{value}</p>
+          <p className="text-xs sm:text-sm font-medium text-gray-600 mb-2">{title}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">{value}</p>
           {change !== undefined && (
             <div className="flex items-center">
               {isPositive ? (
-                <ArrowUpRight className="h-4 w-4 text-green-500 mr-1" />
+                <ArrowUpRight className="h-3 w-3 sm:h-4 sm:w-4 text-green-500 mr-1" />
               ) : (
-                <ArrowDownRight className="h-4 w-4 text-red-500 mr-1" />
+                <ArrowDownRight className="h-3 w-3 sm:h-4 sm:w-4 text-red-500 mr-1" />
               )}
               <span
                 className={`text-xs font-medium ${
@@ -53,11 +53,11 @@ function KPICard({ title, value, change, icon, color, onClick }: KPICardProps) {
               >
                 {isPositive ? '+' : ''}{change}%
               </span>
-              <span className="text-xs text-gray-500 ml-2">vs. mês anterior</span>
+              <span className="text-xs text-gray-500 ml-2 hidden sm:inline">vs. mês anterior</span>
             </div>
           )}
         </div>
-        <div className={`p-4 rounded-2xl ${color} flex-shrink-0 shadow-sm`}>
+        <div className={`p-3 sm:p-4 rounded-2xl ${color} flex-shrink-0 shadow-sm`}>
           {icon}
         </div>
       </div>
@@ -246,12 +246,12 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="p-8 bg-gradient-to-br from-blue-50 via-white to-indigo-50 min-h-screen">
+      <div className="p-4 sm:p-6 md:p-8 bg-gradient-to-br from-blue-50 via-white to-indigo-50 min-h-screen">
         <div className="animate-pulse">
-          <div className="h-12 bg-gray-200 rounded-xl w-80 mb-8"></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          <div className="h-8 sm:h-12 bg-gray-200 rounded-xl w-48 sm:w-80 mb-6 sm:mb-8"></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {[1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} className="h-40 bg-gray-200 rounded-2xl"></div>
+              <div key={i} className="h-32 sm:h-40 bg-gray-200 rounded-2xl"></div>
             ))}
           </div>
         </div>
@@ -261,17 +261,17 @@ export default function Dashboard() {
 
   if (error) {
     return (
-      <div className="p-8 bg-gradient-to-br from-red-50 via-white to-red-50 min-h-screen">
+      <div className="p-4 sm:p-6 md:p-8 bg-gradient-to-br from-red-50 via-white to-red-50 min-h-screen">
         <div className="max-w-2xl mx-auto text-center">
-          <div className="bg-white rounded-2xl p-8 shadow-lg border border-red-200">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Erro no Dashboard</h2>
-            <p className="text-gray-600 mb-6">{error}</p>
+          <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-lg border border-red-200">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">Erro no Dashboard</h2>
+            <p className="text-sm sm:text-base text-gray-600 mb-6">{error}</p>
             <button
               onClick={() => {
                 setError('')
                 loadDashboardData()
               }}
-              className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-all"
+              className="bg-blue-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-xl hover:bg-blue-700 transition-all text-sm sm:text-base"
             >
               Tentar Novamente
             </button>
@@ -286,7 +286,7 @@ export default function Dashboard() {
       title: 'Total de Leads',
       value: kpis.totalLeads,
       change: calculateChange(kpis.leadsNovos, previousMonthKpis.totalLeads),
-      icon: <Users className="h-6 w-6 text-blue-600" />,
+      icon: <Users className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />,
       color: 'bg-blue-100',
       onClick: () => navigate('/leads')
     },
@@ -294,7 +294,7 @@ export default function Dashboard() {
       title: 'Visitas Hoje',
       value: kpis.visitasHoje,
       change: undefined,
-      icon: <Calendar className="h-6 w-6 text-green-600" />,
+      icon: <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />,
       color: 'bg-green-100',
       onClick: () => navigate('/visits')
     },
@@ -302,7 +302,7 @@ export default function Dashboard() {
       title: 'Matrículas do Mês',
       value: kpis.matriculasMes,
       change: calculateChange(kpis.matriculasMes, previousMonthKpis.matriculasMes),
-      icon: <GraduationCap className="h-6 w-6 text-purple-600" />,
+      icon: <GraduationCap className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />,
       color: 'bg-purple-100',
       onClick: () => navigate('/enrollments')
     },
@@ -310,7 +310,7 @@ export default function Dashboard() {
       title: 'Taxa de Conversão',
       value: `${kpis.taxaConversao}%`,
       change: calculateChange(kpis.taxaConversao, previousMonthKpis.taxaConversao),
-      icon: <TrendingUp className="h-6 w-6 text-orange-600" />,
+      icon: <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />,
       color: 'bg-orange-100',
       onClick: () => navigate('/funnel')
     },
@@ -318,7 +318,7 @@ export default function Dashboard() {
       title: 'CPA Atual',
       value: `R$ ${kpis.cpaAtual}`,
       change: -2.1,
-      icon: <DollarSign className="h-6 w-6 text-red-600" />,
+      icon: <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-red-600" />,
       color: 'bg-red-100',
       onClick: () => navigate('/marketing')
     },
@@ -326,43 +326,44 @@ export default function Dashboard() {
       title: 'Taxa Rematrícula',
       value: `${kpis.taxaRematricula}%`,
       change: 2.1,
-      icon: <RefreshCw className="h-6 w-6 text-teal-600" />,
+      icon: <RefreshCw className="h-5 w-5 sm:h-6 sm:w-6 text-teal-600" />,
       color: 'bg-teal-100',
       onClick: () => navigate('/reenrollments')
     }
   ]
 
   return (
-    <div className="p-8 bg-gradient-to-br from-blue-50 via-white to-indigo-50 min-h-screen">
-      {/* Header Simplificado - NOVO */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-6 md:p-8 bg-gradient-to-br from-blue-50 via-white to-indigo-50 min-h-screen">
+      {/* Header Simplificado */}
+      <div className="mb-6 sm:mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center">
-              <Sparkles className="w-8 h-8 mr-3 text-[#00D4C4]" />
-              Olá, {user?.full_name?.split(' ')[0] || 'Usuário'}! Seja bem-vindo.
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 flex items-center flex-wrap">
+              <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-[#00D4C4]" />
+              <span>Olá, {user?.full_name?.split(' ')[0] || 'Usuário'}!</span>
+              <span className="ml-2 hidden sm:inline">Seja bem-vindo.</span>
             </h1>
-            <p className="text-lg text-gray-600">Vamos matricular! 🎓</p>
+            <p className="text-base sm:text-lg text-gray-600">Vamos matricular! 🎓</p>
           </div>
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 mb-6 sm:mb-10">
         {kpiCards.map((kpi, index) => (
           <KPICard key={index} {...kpi} />
         ))}
       </div>
 
       {/* Charts and Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
         {/* Funil de Conversão */}
-        <div className="lg:col-span-2 bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-2xl font-bold text-gray-900">Funil de Conversão</h3>
-            <BarChart3 className="h-5 w-5 text-gray-500" />
+        <div className="lg:col-span-2 bg-white rounded-xl md:rounded-2xl shadow-lg border border-gray-100 p-4 sm:p-6 md:p-8">
+          <div className="flex items-center justify-between mb-4 sm:mb-6">
+            <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900">Funil de Conversão</h3>
+            <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 text-gray-500" />
           </div>
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {[
               { etapa: 'Leads Cadastrados', valor: funnelData.leads, percentual: 100, cor: 'bg-blue-500', icon: Users },
               { etapa: 'Contatos Realizados', valor: funnelData.contatos, percentual: funnelData.leads > 0 ? (funnelData.contatos / funnelData.leads) * 100 : 0, cor: 'bg-green-500', icon: Users },
@@ -376,17 +377,17 @@ export default function Dashboard() {
                 <div key={index} className="relative">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center">
-                      <Icon className="h-4 w-4 text-gray-500 mr-2" />
-                      <span className="text-sm font-medium text-gray-700">{item.etapa}</span>
+                      <Icon className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500 mr-2" />
+                      <span className="text-xs sm:text-sm font-medium text-gray-700">{item.etapa}</span>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <span className="text-sm text-gray-600">{item.valor}</span>
+                      <span className="text-xs sm:text-sm text-gray-600">{item.valor}</span>
                       <span className="text-xs text-gray-500">({item.percentual.toFixed(1)}%)</span>
                     </div>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-4">
+                  <div className="w-full bg-gray-200 rounded-full h-3 sm:h-4">
                     <div 
-                      className={`h-4 rounded-full ${item.cor} transition-all duration-500 shadow-sm`}
+                      className={`h-3 sm:h-4 rounded-full ${item.cor} transition-all duration-500 shadow-sm`}
                       style={{ width: `${Math.max(item.percentual, 2)}%` }}
                     ></div>
                   </div>
@@ -397,55 +398,55 @@ export default function Dashboard() {
         </div>
 
         {/* Ações Rápidas */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
-          <h3 className="text-2xl font-bold text-gray-900 mb-6">Ações Rápidas</h3>
-          <div className="space-y-3">
+        <div className="bg-white rounded-xl md:rounded-2xl shadow-lg border border-gray-100 p-4 sm:p-6 md:p-8">
+          <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 mb-4 sm:mb-6">Ações Rápidas</h3>
+          <div className="space-y-2 sm:space-y-3">
             <button 
               onClick={() => handleQuickAction('new-lead')}
-              className="w-full flex items-center justify-between p-4 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all duration-200 group hover:shadow-md"
+              className="w-full flex items-center justify-between p-3 sm:p-4 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all duration-200 group hover:shadow-md"
             >
-              <span className="text-sm font-semibold text-blue-700">Novo Lead</span>
+              <span className="text-xs sm:text-sm font-semibold text-blue-700">Novo Lead</span>
               <div className="flex items-center space-x-2">
-                <Users className="h-4 w-4 text-blue-600" />
+                <Users className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600" />
                 <Plus className="h-3 w-3 text-blue-500 group-hover:scale-110 transition-transform" />
               </div>
             </button>
             <button 
               onClick={() => handleQuickAction('schedule-visit')}
-              className="w-full flex items-center justify-between p-4 bg-green-50 hover:bg-green-100 rounded-xl transition-all duration-200 group hover:shadow-md"
+              className="w-full flex items-center justify-between p-3 sm:p-4 bg-green-50 hover:bg-green-100 rounded-xl transition-all duration-200 group hover:shadow-md"
             >
-              <span className="text-sm font-semibold text-green-700">Agendar Visita</span>
+              <span className="text-xs sm:text-sm font-semibold text-green-700">Agendar Visita</span>
               <div className="flex items-center space-x-2">
-                <Calendar className="h-4 w-4 text-green-600" />
+                <Calendar className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
                 <Plus className="h-3 w-3 text-green-500 group-hover:scale-110 transition-transform" />
               </div>
             </button>
             <button 
               onClick={() => handleQuickAction('new-enrollment')}
-              className="w-full flex items-center justify-between p-4 bg-purple-50 hover:bg-purple-100 rounded-xl transition-all duration-200 group hover:shadow-md"
+              className="w-full flex items-center justify-between p-3 sm:p-4 bg-purple-50 hover:bg-purple-100 rounded-xl transition-all duration-200 group hover:shadow-md"
             >
-              <span className="text-sm font-semibold text-purple-700">Nova Matrícula</span>
+              <span className="text-xs sm:text-sm font-semibold text-purple-700">Nova Matrícula</span>
               <div className="flex items-center space-x-2">
-                <GraduationCap className="h-4 w-4 text-purple-600" />
+                <GraduationCap className="h-3 w-3 sm:h-4 sm:w-4 text-purple-600" />
                 <Plus className="h-3 w-3 text-purple-500 group-hover:scale-110 transition-transform" />
               </div>
             </button>
             <button 
               onClick={() => handleQuickAction('view-reports')}
-              className="w-full flex items-center justify-between p-4 bg-orange-50 hover:bg-orange-100 rounded-xl transition-all duration-200 group hover:shadow-md"
+              className="w-full flex items-center justify-between p-3 sm:p-4 bg-orange-50 hover:bg-orange-100 rounded-xl transition-all duration-200 group hover:shadow-md"
             >
-              <span className="text-sm font-semibold text-orange-700">Ver Relatórios</span>
+              <span className="text-xs sm:text-sm font-semibold text-orange-700">Ver Relatórios</span>
               <div className="flex items-center space-x-2">
-                <BarChart3 className="h-4 w-4 text-orange-600" />
+                <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 text-orange-600" />
                 <ArrowUpRight className="h-3 w-3 text-orange-500 group-hover:scale-110 transition-transform" />
               </div>
             </button>
           </div>
 
           {/* Resumo Rápido */}
-          <div className="mt-8 pt-6 border-t border-gray-200">
-            <h4 className="text-lg font-bold text-gray-900 mb-4">Resumo Rápido</h4>
-            <div className="space-y-2 text-sm">
+          <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200">
+            <h4 className="text-base sm:text-lg font-bold text-gray-900 mb-3 sm:mb-4">Resumo Rápido</h4>
+            <div className="space-y-2 text-xs sm:text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Leads Novos (mês)</span>
                 <span className="font-bold text-blue-600">{kpis.leadsNovos}</span>
