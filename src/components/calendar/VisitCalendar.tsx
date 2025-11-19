@@ -15,7 +15,6 @@ const timeSlots = [
   '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00'
 ]
 
-// 🔥 MODAL MODIFICADO - Mostra informações completas do LEAD ao clicar na visita
 interface VisitDetailsModalProps {
   isOpen: boolean
   onClose: () => void
@@ -79,55 +78,55 @@ function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpd
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-3xl p-8 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-8">
           <div>
             <h2 className="text-3xl font-bold text-gray-900 mb-1">📋 Detalhes da Visita</h2>
             {lead && (
               <p className="text-gray-600">Lead: <span className="font-semibold">{lead.student_name}</span></p>
             )}
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-full">
             <X className="h-6 w-6" />
           </button>
         </div>
 
-        {/* 🔥 SEÇÃO DE EDIÇÃO DA VISITA */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 mb-6 border border-blue-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-gray-900 flex items-center">
-              <Calendar className="w-5 h-5 mr-2 text-blue-600" />
+        {/* Seção de Edição da Visita */}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 mb-8 border-2 border-blue-100">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-bold text-gray-900 flex items-center">
+              <Calendar className="w-6 h-6 mr-2 text-[#00D4C4]" />
               Informações da Visita
             </h3>
             {!isEditing && (
               <div className="flex gap-2">
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="text-blue-600 hover:text-blue-700 p-2 hover:bg-blue-100 rounded-lg transition-all"
+                  className="text-blue-600 hover:text-blue-700 p-2 hover:bg-blue-100 rounded-xl transition-all"
                   title="Editar visita"
                 >
-                  <Edit className="w-4 h-4" />
+                  <Edit className="w-5 h-5" />
                 </button>
                 <button
                   onClick={handleDelete}
-                  className="text-red-600 hover:text-red-700 p-2 hover:bg-red-100 rounded-lg transition-all"
+                  className="text-red-600 hover:text-red-700 p-2 hover:bg-red-100 rounded-xl transition-all"
                   title="Excluir visita"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-5 h-5" />
                 </button>
               </div>
             )}
           </div>
 
           {isEditing ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Data da Visita *</label>
                   <input
                     type="date"
                     value={editDate}
                     onChange={(e) => setEditDate(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
                   />
                 </div>
                 <div>
@@ -135,7 +134,7 @@ function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpd
                   <select
                     value={editTime}
                     onChange={(e) => setEditTime(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
                   >
                     {timeSlots.map(time => (
                       <option key={time} value={time}>{time}</option>
@@ -148,41 +147,41 @@ function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpd
                 <textarea
                   value={editNotes}
                   onChange={(e) => setEditNotes(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
                   rows={3}
                 />
               </div>
-              <div className="flex justify-end gap-3">
+              <div className="flex justify-end gap-4">
                 <button
                   onClick={() => setIsEditing(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all"
+                  className="px-6 py-3 border-2 border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all font-medium"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleSaveEdit}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all flex items-center"
+                  className="px-6 py-3 bg-gradient-to-r from-[#00D4C4] to-[#2D3E9E] text-white rounded-xl hover:from-[#00B8AA] hover:to-[#252F7E] transition-all flex items-center font-medium shadow-lg"
                 >
-                  <Save className="w-4 h-4 mr-2" />
+                  <Save className="w-5 h-5 mr-2" />
                   Salvar Alterações
                 </button>
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="font-semibold text-gray-700 flex items-center">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+              <div className="bg-white p-4 rounded-xl border-2 border-gray-100">
+                <span className="font-semibold text-gray-700 flex items-center mb-2">
                   <User className="w-4 h-4 mr-1" />
                   Visitante:
                 </span>
-                <p className="text-gray-900 mt-1">{visit.student_name || 'Não informado'}</p>
+                <p className="text-gray-900">{visit.student_name || 'Não informado'}</p>
               </div>
-              <div>
-                <span className="font-semibold text-gray-700 flex items-center">
+              <div className="bg-white p-4 rounded-xl border-2 border-gray-100">
+                <span className="font-semibold text-gray-700 flex items-center mb-2">
                   <Calendar className="w-4 h-4 mr-1" />
                   Data/Hora:
                 </span>
-                <p className="text-gray-900 mt-1">
+                <p className="text-gray-900">
                   {new Date(visit.scheduled_date).toLocaleString('pt-BR', {
                     weekday: 'long',
                     day: '2-digit',
@@ -194,7 +193,7 @@ function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpd
                 </p>
               </div>
               {visit.notes && (
-                <div className="md:col-span-2 p-3 bg-white rounded-lg border border-gray-200">
+                <div className="md:col-span-2 p-4 bg-white rounded-xl border-2 border-gray-100">
                   <span className="font-semibold text-gray-700 flex items-center text-sm mb-2">
                     <MessageSquare className="w-4 h-4 mr-1" />
                     Observações:
@@ -206,30 +205,30 @@ function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpd
           )}
         </div>
 
-        {/* 🔥 INFORMAÇÕES COMPLETAS DO LEAD */}
+        {/* Informações Completas do Lead */}
         {lead && (
-          <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-6 mb-6 border border-green-200">
-            <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-6 mb-8 border-2 border-green-100">
+            <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
               <User className="w-6 h-6 mr-2 text-green-600" />
               Informações Completas do Lead
             </h3>
             
             {/* Dados do Aluno */}
             <div className="mb-6">
-              <h4 className="font-bold text-gray-900 mb-3 text-lg border-b border-green-200 pb-2">
+              <h4 className="font-bold text-gray-900 mb-4 text-lg border-b-2 border-green-200 pb-3">
                 👨‍🎓 Dados do Aluno
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div className="bg-white p-3 rounded-lg border border-green-100">
+                <div className="bg-white p-4 rounded-xl border-2 border-green-50">
                   <span className="font-semibold text-gray-700">Nome do Aluno:</span>
                   <p className="text-gray-900 text-base mt-1">{lead.student_name}</p>
                 </div>
-                <div className="bg-white p-3 rounded-lg border border-green-100">
+                <div className="bg-white p-4 rounded-xl border-2 border-green-50">
                   <span className="font-semibold text-gray-700">Série/Ano de Interesse:</span>
                   <p className="text-gray-900 text-base mt-1">{lead.grade_interest}</p>
                 </div>
                 {lead.cpf && (
-                  <div className="bg-white p-3 rounded-lg border border-green-100">
+                  <div className="bg-white p-4 rounded-xl border-2 border-green-50">
                     <span className="font-semibold text-gray-700">CPF:</span>
                     <p className="text-gray-900 text-base mt-1">{lead.cpf}</p>
                   </div>
@@ -239,16 +238,16 @@ function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpd
 
             {/* Dados do Responsável */}
             <div className="mb-6">
-              <h4 className="font-bold text-gray-900 mb-3 text-lg border-b border-green-200 pb-2">
+              <h4 className="font-bold text-gray-900 mb-4 text-lg border-b-2 border-green-200 pb-3">
                 👥 Dados do Responsável
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div className="bg-white p-3 rounded-lg border border-green-100">
+                <div className="bg-white p-4 rounded-xl border-2 border-green-50">
                   <span className="font-semibold text-gray-700">Nome do Responsável:</span>
                   <p className="text-gray-900 text-base mt-1">{lead.responsible_name}</p>
                 </div>
                 {lead.phone && (
-                  <div className="bg-white p-3 rounded-lg border border-green-100">
+                  <div className="bg-white p-4 rounded-xl border-2 border-green-50">
                     <span className="font-semibold text-gray-700 flex items-center">
                       <Phone className="w-4 h-4 mr-1" />
                       Telefone:
@@ -257,7 +256,7 @@ function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpd
                   </div>
                 )}
                 {lead.email && (
-                  <div className="bg-white p-3 rounded-lg border border-green-100">
+                  <div className="bg-white p-4 rounded-xl border-2 border-green-50">
                     <span className="font-semibold text-gray-700 flex items-center">
                       <Mail className="w-4 h-4 mr-1" />
                       E-mail:
@@ -266,7 +265,7 @@ function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpd
                   </div>
                 )}
                 {lead.address && (
-                  <div className="bg-white p-3 rounded-lg border border-green-100">
+                  <div className="bg-white p-4 rounded-xl border-2 border-green-50">
                     <span className="font-semibold text-gray-700 flex items-center">
                       <MapPin className="w-4 h-4 mr-1" />
                       Endereço:
@@ -279,11 +278,11 @@ function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpd
 
             {/* Informações Adicionais */}
             <div>
-              <h4 className="font-bold text-gray-900 mb-3 text-lg border-b border-green-200 pb-2">
+              <h4 className="font-bold text-gray-900 mb-4 text-lg border-b-2 border-green-200 pb-3">
                 📊 Informações Adicionais
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                <div className="bg-white p-3 rounded-lg border border-green-100">
+                <div className="bg-white p-4 rounded-xl border-2 border-green-50">
                   <span className="font-semibold text-gray-700 flex items-center">
                     <Tag className="w-4 h-4 mr-1" />
                     Origem:
@@ -291,7 +290,7 @@ function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpd
                   <p className="text-gray-900 text-base mt-1">{lead.source}</p>
                 </div>
                 {lead.budget_range && (
-                  <div className="bg-white p-3 rounded-lg border border-green-100">
+                  <div className="bg-white p-4 rounded-xl border-2 border-green-50">
                     <span className="font-semibold text-gray-700 flex items-center">
                       <DollarSign className="w-4 h-4 mr-1" />
                       Faixa de Orçamento:
@@ -299,7 +298,7 @@ function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpd
                     <p className="text-gray-900 text-base mt-1">{lead.budget_range}</p>
                   </div>
                 )}
-                <div className="bg-white p-3 rounded-lg border border-green-100">
+                <div className="bg-white p-4 rounded-xl border-2 border-green-50">
                   <span className="font-semibold text-gray-700 flex items-center">
                     <Calendar className="w-4 h-4 mr-1" />
                     Data de Criação:
@@ -311,7 +310,7 @@ function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpd
               </div>
               
               {lead.notes && (
-                <div className="mt-4 bg-white p-4 rounded-lg border border-green-100">
+                <div className="mt-4 bg-white p-5 rounded-xl border-2 border-green-50">
                   <span className="font-semibold text-gray-700 flex items-center mb-2">
                     <MessageSquare className="w-4 h-4 mr-1" />
                     Observações do Lead:
@@ -324,13 +323,13 @@ function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpd
         )}
 
         {/* Atualizar Status da Visita */}
-        <div className="bg-gray-50 rounded-2xl p-6 mb-6 border border-gray-200">
-          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-            <Check className="w-5 h-5 mr-2 text-blue-600" />
+        <div className="bg-gray-50 rounded-2xl p-6 mb-8 border-2 border-gray-200">
+          <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
+            <Check className="w-6 h-6 mr-2 text-[#00D4C4]" />
             Atualizar Status da Visita
           </h3>
           
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Status da Visita
@@ -338,7 +337,7 @@ function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpd
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value as Visit['status'])}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
               >
                 {Object.entries(statusConfig).map(([value, config]) => (
                   <option key={value} value={value}>{config.label}</option>
@@ -349,56 +348,56 @@ function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpd
             {/* Temperatura do lead após visita */}
             {selectedStatus === 'completed' && (
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">
+                <label className="block text-sm font-semibold text-gray-700 mb-4">
                   🌡️ Como o lead ficou após a visita? *
                 </label>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-4">
                   <button
                     type="button"
                     onClick={() => setSelectedTemperature('hot')}
-                    className={`p-4 rounded-xl border-2 transition-all ${
+                    className={`p-5 rounded-2xl border-2 transition-all ${
                       selectedTemperature === 'hot'
-                        ? 'border-red-500 bg-red-50'
+                        ? 'border-red-500 bg-red-50 shadow-lg'
                         : 'border-gray-300 hover:border-red-300'
                     }`}
                   >
-                    <Flame className={`w-8 h-8 mx-auto mb-2 ${
+                    <Flame className={`w-10 h-10 mx-auto mb-3 ${
                       selectedTemperature === 'hot' ? 'text-red-500' : 'text-gray-400'
                     }`} />
                     <p className="text-sm font-bold text-center">🔥 Quente</p>
-                    <p className="text-xs text-gray-600 text-center mt-1">Muito interessado</p>
+                    <p className="text-xs text-gray-600 text-center mt-2">Muito interessado</p>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setSelectedTemperature('warm')}
-                    className={`p-4 rounded-xl border-2 transition-all ${
+                    className={`p-5 rounded-2xl border-2 transition-all ${
                       selectedTemperature === 'warm'
-                        ? 'border-yellow-500 bg-yellow-50'
+                        ? 'border-yellow-500 bg-yellow-50 shadow-lg'
                         : 'border-gray-300 hover:border-yellow-300'
                     }`}
                   >
-                    <Sun className={`w-8 h-8 mx-auto mb-2 ${
+                    <Sun className={`w-10 h-10 mx-auto mb-3 ${
                       selectedTemperature === 'warm' ? 'text-yellow-500' : 'text-gray-400'
                     }`} />
                     <p className="text-sm font-bold text-center">☀️ Morno</p>
-                    <p className="text-xs text-gray-600 text-center mt-1">Interesse moderado</p>
+                    <p className="text-xs text-gray-600 text-center mt-2">Interesse moderado</p>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setSelectedTemperature('cold')}
-                    className={`p-4 rounded-xl border-2 transition-all ${
+                    className={`p-5 rounded-2xl border-2 transition-all ${
                       selectedTemperature === 'cold'
-                        ? 'border-blue-500 bg-blue-50'
+                        ? 'border-blue-500 bg-blue-50 shadow-lg'
                         : 'border-gray-300 hover:border-blue-300'
                     }`}
                   >
-                    <Snowflake className={`w-8 h-8 mx-auto mb-2 ${
+                    <Snowflake className={`w-10 h-10 mx-auto mb-3 ${
                       selectedTemperature === 'cold' ? 'text-blue-500' : 'text-gray-400'
                     }`} />
                     <p className="text-sm font-bold text-center">❄️ Frio</p>
-                    <p className="text-xs text-gray-600 text-center mt-1">Pouco interessado</p>
+                    <p className="text-xs text-gray-600 text-center mt-2">Pouco interessado</p>
                   </button>
                 </div>
               </div>
@@ -407,18 +406,18 @@ function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpd
         </div>
 
         {/* Botões de Ação */}
-        <div className="flex justify-end gap-3 pt-6 border-t border-gray-200">
+        <div className="flex justify-end gap-4 pt-6 border-t-2 border-gray-200">
           <button
             type="button"
             onClick={onClose}
-            className="px-6 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all font-medium"
+            className="px-8 py-3 border-2 border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all font-medium"
           >
             Fechar
           </button>
           <button
             type="button"
             onClick={handleComplete}
-            className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all font-medium shadow-lg flex items-center"
+            className="px-8 py-3 bg-gradient-to-r from-[#00D4C4] to-[#2D3E9E] text-white rounded-xl hover:from-[#00B8AA] hover:to-[#252F7E] transition-all font-medium shadow-lg hover:shadow-xl transform hover:-translate-y-1 flex items-center"
           >
             <Check className="h-5 w-5 mr-2" />
             Salvar Status
@@ -467,22 +466,18 @@ export default function VisitCalendar() {
     }
   }
 
-  // 🔥 FUNÇÃO CORRIGIDA - Visita realizada → Lead vai para "Visita"
   const handleStatusChange = async (visitId: string, newStatus: Visit['status'], temperature?: 'hot' | 'warm' | 'cold') => {
     try {
       await DatabaseService.updateVisit(visitId, { status: newStatus })
       
       const visit = visits.find(v => v.id === visitId)
       
-      // 🔥 QUANDO MARCAR COMO "REALIZADA", ATUALIZAR LEAD PARA "VISITA"
       if (newStatus === 'completed' && visit && visit.lead_id) {
-        // Atualizar status do lead para "visit"
         await DatabaseService.updateLead(visit.lead_id, { 
           status: 'visit',
-          temperature: temperature || null  // Salvar temperatura no lead
+          temperature: temperature || null
         })
         
-        // Registrar no histórico
         await DatabaseService.logActivity({
           user_id: user!.id,
           action: 'Visita realizada',
@@ -506,36 +501,34 @@ export default function VisitCalendar() {
     }
   }
 
-// Na função handleUpdateVisit, substitua por:
-const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string; notes: string }) => {
-  try {
-    // 🔥 FIX: Extrair data e hora corretamente
-    const [datePart, timePart] = data.scheduled_date.split('T')
-    const [year, month, day] = datePart.split('-')
-    const [hours, minutes] = timePart.split(':')
-    
-    // Criar data no horário local sem conversão UTC
-    const visitDate = new Date(
-      parseInt(year),
-      parseInt(month) - 1, // Mês começa em 0
-      parseInt(day),
-      parseInt(hours),
-      parseInt(minutes),
-      0,
-      0
-    )
-    
-    await DatabaseService.updateVisit(visitId, {
-      scheduled_date: visitDate.toISOString(),
-      notes: data.notes
-    })
-    await loadData()
-    alert('Visita atualizada com sucesso!')
-  } catch (error) {
-    console.error('Error updating visit:', error)
-    alert('Erro ao atualizar visita')
+  const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string; notes: string }) => {
+    try {
+      const [datePart, timePart] = data.scheduled_date.split('T')
+      const [year, month, day] = datePart.split('-')
+      const [hours, minutes] = timePart.split(':')
+      
+      const visitDate = new Date(
+        parseInt(year),
+        parseInt(month) - 1,
+        parseInt(day),
+        parseInt(hours),
+        parseInt(minutes),
+        0,
+        0
+      )
+      
+      await DatabaseService.updateVisit(visitId, {
+        scheduled_date: visitDate.toISOString(),
+        notes: data.notes
+      })
+      await loadData()
+      alert('Visita atualizada com sucesso!')
+    } catch (error) {
+      console.error('Error updating visit:', error)
+      alert('Erro ao atualizar visita')
+    }
   }
-}
+
   const handleDeleteVisit = async (visitId: string) => {
     try {
       await DatabaseService.deleteVisit(visitId)
@@ -630,8 +623,11 @@ const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#00D4C4] border-t-transparent mx-auto mb-4"></div>
+          <p className="text-gray-600 text-lg">Carregando visitas...</p>
+        </div>
       </div>
     )
   }
@@ -639,13 +635,17 @@ const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string
   return (
     <div className="p-8 bg-gradient-to-br from-blue-50 via-white to-indigo-50 min-h-screen">
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Calendário de Visitas</h1>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2 flex items-center">
+              <Calendar className="w-10 h-10 text-[#00D4C4] mr-4" />
+              Calendário de Visitas
+            </h1>
             <p className="text-gray-600 text-lg">Gerencie e acompanhe todas as visitas agendadas</p>
           </div>
         </div>
 
+        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
             <div className="flex items-center justify-between">
@@ -685,28 +685,29 @@ const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string
           </div>
         </div>
 
+        {/* Filters */}
         <div className="flex flex-col lg:flex-row gap-4 mb-8">
           <div className="flex gap-4">
             <button
               onClick={() => setViewMode('calendar')}
-              className={`px-6 py-3 rounded-xl font-medium transition-all ${
+              className={`px-6 py-3 rounded-xl font-medium transition-all shadow-lg ${
                 viewMode === 'calendar'
-                  ? 'bg-blue-600 text-white shadow-lg'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                  ? 'bg-gradient-to-r from-[#00D4C4] to-[#2D3E9E] text-white'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 border-2 border-gray-200'
               }`}
             >
-              <Calendar className="h-4 w-4 inline mr-2" />
+              <Calendar className="h-5 w-5 inline mr-2" />
               Calendário
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`px-6 py-3 rounded-xl font-medium transition-all ${
+              className={`px-6 py-3 rounded-xl font-medium transition-all shadow-lg ${
                 viewMode === 'list'
-                  ? 'bg-blue-600 text-white shadow-lg'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                  ? 'bg-gradient-to-r from-[#00D4C4] to-[#2D3E9E] text-white'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 border-2 border-gray-200'
               }`}
             >
-              <Filter className="h-4 w-4 inline mr-2" />
+              <Filter className="h-5 w-5 inline mr-2" />
               Lista
             </button>
           </div>
@@ -719,13 +720,13 @@ const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string
                 placeholder="Buscar por nome do visitante..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-3 w-full border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                className="pl-10 pr-4 py-3 w-full border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
               />
             </div>
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              className="px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
             >
               <option value="">Todos os status</option>
               {Object.entries(statusConfig).map(([status, config]) => (
@@ -737,12 +738,12 @@ const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string
       </div>
 
       {viewMode === 'calendar' && (
-        <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
+        <div className="bg-white rounded-3xl shadow-lg border-2 border-gray-100 overflow-hidden">
+          <div className="bg-gradient-to-r from-[#00D4C4] to-[#2D3E9E] text-white p-6">
             <div className="flex items-center justify-between">
               <button
                 onClick={() => navigateMonth('prev')}
-                className="p-2 hover:bg-white hover:bg-opacity-20 rounded-full transition-all"
+                className="p-3 hover:bg-white hover:bg-opacity-20 rounded-2xl transition-all"
               >
                 <ChevronLeft className="h-6 w-6" />
               </button>
@@ -751,7 +752,7 @@ const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string
               </h2>
               <button
                 onClick={() => navigateMonth('next')}
-                className="p-2 hover:bg-white hover:bg-opacity-20 rounded-full transition-all"
+                className="p-3 hover:bg-white hover:bg-opacity-20 rounded-2xl transition-all"
               >
                 <ChevronRight className="h-6 w-6" />
               </button>
@@ -761,7 +762,7 @@ const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string
           <div className="p-6">
             <div className="grid grid-cols-7 gap-4 mb-4">
               {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
-                <div key={day} className="text-center font-semibold text-gray-600 py-2">
+                <div key={day} className="text-center font-semibold text-gray-600 py-3">
                   {day}
                 </div>
               ))}
@@ -770,7 +771,7 @@ const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string
             <div className="grid grid-cols-7 gap-4">
               {getDaysInMonth(currentDate).map((date, index) => {
                 if (!date) {
-                  return <div key={index} className="h-24"></div>
+                  return <div key={index} className="h-28"></div>
                 }
 
                 const dayVisits = getVisitsForDate(date)
@@ -779,13 +780,13 @@ const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string
                 return (
                   <div
                     key={index}
-                    className={`h-24 border rounded-xl p-2 transition-all hover:shadow-md ${
+                    className={`h-28 border-2 rounded-2xl p-3 transition-all hover:shadow-lg ${
                       isToday 
-                        ? 'bg-blue-50 border-blue-200' 
+                        ? 'bg-blue-50 border-blue-300' 
                         : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
                     }`}
                   >
-                    <div className={`text-sm font-medium mb-1 ${
+                    <div className={`text-sm font-medium mb-2 ${
                       isToday ? 'text-blue-600' : 'text-gray-700'
                     }`}>
                       {date.getDate()}
@@ -797,7 +798,7 @@ const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string
                           onClick={() => handleVisitClick(visit)}
                           className={`text-xs px-2 py-1 rounded-lg truncate cursor-pointer hover:opacity-75 transition-all ${
                             statusConfig[visit.status].bgColor
-                          } ${statusConfig[visit.status].textColor}`}
+                          } ${statusConfig[visit.status].textColor} border ${statusConfig[visit.status].borderColor}`}
                         >
                           {formatTime(visit.scheduled_date)} - {visit.student_name}
                         </div>
@@ -822,13 +823,13 @@ const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string
             const statusVisits = getVisitsByStatus(status as Visit['status'])
             
             return (
-              <div key={status} className={`${config.bgColor} rounded-3xl p-6 min-h-96 ${config.borderColor} border-2`}>
+              <div key={status} className={`${config.bgColor} rounded-3xl p-6 min-h-96 ${config.borderColor} border-2 shadow-lg`}>
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center">
-                    <div className={`w-4 h-4 rounded-full ${config.color} mr-3`}></div>
+                    <div className={`w-4 h-4 rounded-full ${config.color} mr-3 shadow-sm`}></div>
                     <h3 className={`font-bold text-lg ${config.textColor}`}>{config.label}</h3>
                   </div>
-                  <span className={`${config.color} text-white text-sm px-3 py-1 rounded-full font-medium`}>
+                  <span className={`${config.color} text-white text-sm px-4 py-1 rounded-full font-medium shadow-lg`}>
                     {statusVisits.length}
                   </span>
                 </div>
@@ -838,10 +839,10 @@ const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string
                     <div
                       key={visit.id}
                       onClick={() => handleVisitClick(visit)}
-                      className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer group"
+                      className="bg-white p-5 rounded-2xl shadow-sm border-2 border-gray-100 hover:shadow-lg transition-all cursor-pointer group"
                     >
-                      <div className="flex justify-between items-start mb-3">
-                        <h4 className="font-semibold text-gray-900 text-sm group-hover:text-blue-600 transition-colors">
+                      <div className="flex justify-between items-start mb-4">
+                        <h4 className="font-semibold text-gray-900 text-sm group-hover:text-[#00D4C4] transition-colors">
                           {visit.student_name || 'Visitante'}
                         </h4>
                       </div>
@@ -858,8 +859,8 @@ const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string
                         )}
                       </div>
 
-                      <div className="pt-3 border-t border-gray-100">
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${config.bgColor} ${config.textColor}`}>
+                      <div className="pt-3 border-t-2 border-gray-100">
+                        <span className={`text-xs px-3 py-1 rounded-full font-medium border-2 ${config.bgColor} ${config.textColor} ${config.borderColor}`}>
                           {config.label}
                         </span>
                       </div>
@@ -867,11 +868,11 @@ const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string
                   ))}
 
                   {statusVisits.length === 0 && (
-                    <div className="text-center py-8">
-                      <div className={`w-12 h-12 ${config.color} rounded-full flex items-center justify-center mx-auto mb-3 opacity-20`}>
-                        <Calendar className="w-6 h-6 text-white" />
+                    <div className="text-center py-12">
+                      <div className={`w-16 h-16 ${config.color} rounded-full flex items-center justify-center mx-auto mb-4 opacity-20 shadow-lg`}>
+                        <Calendar className="w-8 h-8 text-white" />
                       </div>
-                      <p className="text-sm text-gray-500">Nenhuma visita neste status</p>
+                      <p className="text-sm text-gray-500 font-medium">Nenhuma visita neste status</p>
                     </div>
                   )}
                 </div>
