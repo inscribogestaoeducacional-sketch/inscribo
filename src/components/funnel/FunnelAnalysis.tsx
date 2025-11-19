@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { 
   Target, TrendingUp, TrendingDown, Users, Calendar, Eye, GraduationCap, 
-  BarChart3, Plus, X, AlertCircle, CheckCircle, ArrowUp, ArrowDown,
-  Filter, Download, Info
+  BarChart3, Plus, X, AlertCircle, CheckCircle, ArrowDown, Filter, Download, Info
 } from 'lucide-react'
-import { DatabaseService, FunnelMetrics, FunnelAnalysisView, AnnualFunnelTotals, YearComparison } from '../../lib/supabase'
+import { DatabaseService, FunnelMetrics } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 
 // ===== INTERFACES =====
@@ -18,12 +17,21 @@ interface FunnelStage {
   icon: React.ReactNode
 }
 
+interface ParsedPeriod {
+  year: number
+  month: number
+  monthName: string
+}
+
+interface FunnelWithParsed extends FunnelMetrics {
+  parsed?: ParsedPeriod | null
+}
+
 interface NewFunnelModalProps {
   isOpen: boolean
   onClose: () => void
   onSave: (data: Partial<FunnelMetrics>) => void
   editingFunnel?: FunnelMetrics | null
-  availableYears: number[]
 }
 
 interface AnnualGoalsModalProps {
@@ -37,7 +45,57 @@ interface AnnualGoalsModalProps {
     annual_enrollments_target: number
   }) => void
   currentYear: number
-  existingGoals?: AnnualFunnelTotals | null
+  existingGoals: {
+    registrations: number
+    schedules: number
+    visits: number
+    enrollments: number
+  }
+}
+
+// ===== HELPER FUNCTIONS =====
+
+const MONTH_NAMES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+]
+
+function parsePeriod(period: string): ParsedPeriod | null {
+  // Extrair ano
+  const yearMatch = period.match(/\d{4}/)
+  if (!yearMatch) return null
+  const year = parseInt(yearMatch[0])
+  
+  // Extrair mês pelo nome
+  let month = 0
+  let monthName = ''
+  
+  for (let i = 0; i < MONTH_NAMES.length; i++) {
+    if (period.toLowerCase().includes(MONTH_NAMES[i].toLowerCase())) {
+      month = i + 1
+      monthName = MONTH_NAMES[i]
+      break
+    }
+  }
+  
+  // Se não encontrou pelo nome, tentar pelo número (formato: MM/YYYY)
+  if (month === 0) {
+    const monthMatch = period.match(/^(\d{1,2})\//)
+    if (monthMatch) {
+      month = parseInt(monthMatch[1])
+      if (month >= 1 && month <= 12) {
+        monthName = MONTH_NAMES[month - 1]
+      }
+    }
+  }
+  
+  if (month === 0) return null
+  
+  return { year, month, monthName }
+}
+
+function createPeriodString(year: number, month: number): string {
+  return `${MONTH_NAMES[month - 1]} ${year}`
 }
 
 // ===== MODAL DE METAS ANUAIS =====
@@ -45,23 +103,21 @@ interface AnnualGoalsModalProps {
 function AnnualGoalsModal({ isOpen, onClose, onSave, currentYear, existingGoals }: AnnualGoalsModalProps) {
   const [formData, setFormData] = useState({
     year: currentYear,
-    annual_registrations_target: existingGoals?.annual_registrations_target || 0,
-    annual_schedules_target: existingGoals?.annual_schedules_target || 0,
-    annual_visits_target: existingGoals?.annual_visits_target || 0,
-    annual_enrollments_target: existingGoals?.annual_enrollments_target || 0
+    annual_registrations_target: existingGoals.registrations,
+    annual_schedules_target: existingGoals.schedules,
+    annual_visits_target: existingGoals.visits,
+    annual_enrollments_target: existingGoals.enrollments
   })
 
   useEffect(() => {
-    if (existingGoals) {
-      setFormData({
-        year: existingGoals.year,
-        annual_registrations_target: existingGoals.annual_registrations_target,
-        annual_schedules_target: existingGoals.annual_schedules_target,
-        annual_visits_target: existingGoals.annual_visits_target,
-        annual_enrollments_target: existingGoals.annual_enrollments_target
-      })
-    }
-  }, [existingGoals])
+    setFormData({
+      year: currentYear,
+      annual_registrations_target: existingGoals.registrations,
+      annual_schedules_target: existingGoals.schedules,
+      annual_visits_target: existingGoals.visits,
+      annual_enrollments_target: existingGoals.enrollments
+    })
+  }, [currentYear, existingGoals, isOpen])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -157,10 +213,10 @@ function AnnualGoalsModal({ isOpen, onClose, onSave, currentYear, existingGoals 
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <div className="flex items-start">
-              <Info className="h-5 w-5 text-blue-600 mt-0.5 mr-2" />
+              <Info className="h-5 w-5 text-blue-600 mt-0.5 mr-2 flex-shrink-0" />
               <div className="text-sm text-blue-800">
                 <p className="font-medium mb-1">Distribuição Automática</p>
-                <p>As metas mensais serão distribuídas automaticamente com base nas metas anuais definidas acima.</p>
+                <p>Defina as metas totais para o ano {formData.year}. Você poderá acompanhar o progresso nos cards de resumo.</p>
               </div>
             </div>
           </div>
@@ -186,13 +242,15 @@ function AnnualGoalsModal({ isOpen, onClose, onSave, currentYear, existingGoals 
   )
 }
 
-// ===== MODAL DE NOVO FUNIL =====
+// ===== MODAL DE NOVO/EDITAR PERÍODO =====
 
-function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel, availableYears }: NewFunnelModalProps) {
+function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel }: NewFunnelModalProps) {
   const currentYear = new Date().getFullYear()
+  const currentMonth = new Date().getMonth() + 1
+  
   const [formData, setFormData] = useState({
     year: currentYear,
-    month: 1,
+    month: currentMonth,
     registrations: 0,
     registrations_target: 0,
     schedules: 0,
@@ -201,14 +259,14 @@ function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel, availableYears
     visits_target: 0,
     enrollments: 0,
     enrollments_target: 0,
-    notes: ''
   })
 
   useEffect(() => {
     if (editingFunnel) {
+      const parsed = parsePeriod(editingFunnel.period)
       setFormData({
-        year: editingFunnel.year,
-        month: editingFunnel.month,
+        year: parsed?.year || currentYear,
+        month: parsed?.month || currentMonth,
         registrations: editingFunnel.registrations,
         registrations_target: editingFunnel.registrations_target,
         schedules: editingFunnel.schedules,
@@ -217,12 +275,11 @@ function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel, availableYears
         visits_target: editingFunnel.visits_target,
         enrollments: editingFunnel.enrollments,
         enrollments_target: editingFunnel.enrollments_target,
-        notes: editingFunnel.notes || ''
       })
     } else {
       setFormData({
         year: currentYear,
-        month: new Date().getMonth() + 1,
+        month: currentMonth,
         registrations: 0,
         registrations_target: 0,
         schedules: 0,
@@ -231,21 +288,27 @@ function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel, availableYears
         visits_target: 0,
         enrollments: 0,
         enrollments_target: 0,
-        notes: ''
       })
     }
-  }, [editingFunnel, isOpen, currentYear])
+  }, [editingFunnel, isOpen, currentYear, currentMonth])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onSave(formData)
-    onClose()
+    
+    const period = createPeriodString(formData.year, formData.month)
+    
+    onSave({
+      period,
+      registrations: formData.registrations,
+      registrations_target: formData.registrations_target,
+      schedules: formData.schedules,
+      schedules_target: formData.schedules_target,
+      visits: formData.visits,
+      visits_target: formData.visits_target,
+      enrollments: formData.enrollments,
+      enrollments_target: formData.enrollments_target,
+    })
   }
-
-  const monthNames = [
-    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-  ]
 
   if (!isOpen) return null
 
@@ -286,7 +349,7 @@ function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel, availableYears
                 onChange={(e) => setFormData({ ...formData, month: parseInt(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
-                {monthNames.map((month, index) => (
+                {MONTH_NAMES.map((month, index) => (
                   <option key={index + 1} value={index + 1}>{month}</option>
                 ))}
               </select>
@@ -409,19 +472,6 @@ function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel, availableYears
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Observações
-            </label>
-            <textarea
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Adicione observações sobre este período..."
-            />
-          </div>
-
           <div className="flex justify-end space-x-2 pt-4">
             <button 
               type="button"
@@ -447,62 +497,42 @@ function NewFunnelModal({ isOpen, onClose, onSave, editingFunnel, availableYears
 
 export default function FunnelAnalysis() {
   const { user } = useAuth()
-  const [funnelData, setFunnelData] = useState<FunnelMetrics[]>([])
+  const [funnelData, setFunnelData] = useState<FunnelWithParsed[]>([])
   const [loading, setLoading] = useState(true)
   const [showNewFunnelModal, setShowNewFunnelModal] = useState(false)
   const [showAnnualGoalsModal, setShowAnnualGoalsModal] = useState(false)
   const [editingFunnel, setEditingFunnel] = useState<FunnelMetrics | null>(null)
-  const [availableYears, setAvailableYears] = useState<number[]>([])
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
-  const [annualTotals, setAnnualTotals] = useState<AnnualFunnelTotals | null>(null)
-  const [yearComparison, setYearComparison] = useState<YearComparison[]>([])
-  const [comparisonYears, setComparisonYears] = useState<[number, number] | null>(null)
+  const [annualGoals, setAnnualGoals] = useState({
+    registrations: 0,
+    schedules: 0,
+    visits: 0,
+    enrollments: 0
+  })
 
   useEffect(() => {
     if (user?.institution_id) {
-      loadAllData()
+      loadFunnelData()
     }
-  }, [user, selectedYear])
+  }, [user])
 
-  const loadAllData = async () => {
+  const loadFunnelData = async () => {
     try {
       setLoading(true)
-      await Promise.all([
-        loadAvailableYears(),
-        loadFunnelData(),
-        loadAnnualTotals(),
-      ])
+      const data = await DatabaseService.getFunnelMetrics(user!.institution_id)
+      
+      // Adicionar informações parseadas
+      const dataWithParsed: FunnelWithParsed[] = data.map(item => ({
+        ...item,
+        parsed: parsePeriod(item.period)
+      }))
+      
+      setFunnelData(dataWithParsed)
     } catch (error) {
-      console.error('Error loading data:', error)
+      console.error('Error loading funnel data:', error)
     } finally {
       setLoading(false)
     }
-  }
-
-  const loadAvailableYears = async () => {
-    const years = await DatabaseService.getAvailableYears(user!.institution_id)
-    setAvailableYears(years)
-    
-    // Se houver anos e nenhum selecionado, selecionar o mais recente
-    if (years.length > 0 && !selectedYear) {
-      setSelectedYear(years[0])
-    }
-  }
-
-  const loadFunnelData = async () => {
-    const data = await DatabaseService.getFunnelMetricsByYear(user!.institution_id, selectedYear)
-    setFunnelData(data)
-  }
-
-  const loadAnnualTotals = async () => {
-    const totals = await DatabaseService.getAnnualFunnelTotals(user!.institution_id, selectedYear)
-    setAnnualTotals(totals)
-  }
-
-  const loadYearComparison = async (year1: number, year2: number) => {
-    const comparison = await DatabaseService.compareYearsFunnel(user!.institution_id, year1, year2)
-    setYearComparison(comparison)
-    setComparisonYears([year1, year2])
   }
 
   const handleSave = async (data: Partial<FunnelMetrics>) => {
@@ -510,50 +540,37 @@ export default function FunnelAnalysis() {
       const funnelMetrics = {
         ...data,
         institution_id: user!.institution_id,
-        // Copiar metas anuais se existirem
-        annual_registrations_target: annualTotals?.annual_registrations_target || 0,
-        annual_schedules_target: annualTotals?.annual_schedules_target || 0,
-        annual_visits_target: annualTotals?.annual_visits_target || 0,
-        annual_enrollments_target: annualTotals?.annual_enrollments_target || 0,
       }
 
       if (editingFunnel) {
-        await DatabaseService.updateFunnelMetricsWithDate(editingFunnel.id, funnelMetrics)
+        await DatabaseService.updateFunnelMetrics(editingFunnel.id, funnelMetrics)
       } else {
-        await DatabaseService.createFunnelMetricsWithDate(funnelMetrics)
+        await DatabaseService.createFunnelMetrics(funnelMetrics)
       }
 
-      await loadAllData()
+      await loadFunnelData()
       setEditingFunnel(null)
+      setShowNewFunnelModal(false)
     } catch (error) {
       console.error('Error saving funnel data:', error)
+      alert('Erro ao salvar dados. Por favor, tente novamente.')
     }
   }
 
-  const handleSaveAnnualGoals = async (data: {
+  const handleSaveAnnualGoals = (data: {
     year: number
     annual_registrations_target: number
     annual_schedules_target: number
     annual_visits_target: number
     annual_enrollments_target: number
   }) => {
-    try {
-      // Atualizar todas as entradas deste ano com as novas metas anuais
-      const yearData = await DatabaseService.getFunnelMetricsByYear(user!.institution_id, data.year)
-      
-      for (const entry of yearData) {
-        await DatabaseService.updateFunnelMetricsWithDate(entry.id, {
-          annual_registrations_target: data.annual_registrations_target,
-          annual_schedules_target: data.annual_schedules_target,
-          annual_visits_target: data.annual_visits_target,
-          annual_enrollments_target: data.annual_enrollments_target,
-        })
-      }
-
-      await loadAllData()
-    } catch (error) {
-      console.error('Error saving annual goals:', error)
-    }
+    setAnnualGoals({
+      registrations: data.annual_registrations_target,
+      schedules: data.annual_schedules_target,
+      visits: data.annual_visits_target,
+      enrollments: data.annual_enrollments_target
+    })
+    setShowAnnualGoalsModal(false)
   }
 
   const handleEdit = (funnel: FunnelMetrics) => {
@@ -566,23 +583,31 @@ export default function FunnelAnalysis() {
     setShowNewFunnelModal(true)
   }
 
-  // Calcular dados do mês atual
-  const currentMonth = new Date().getMonth() + 1
-  const currentMonthData = funnelData.find(f => f.month === currentMonth)
-  
-  // Calcular totais do ano até agora
-  const yearToDateTotals = funnelData.reduce((acc, curr) => {
-    if (curr.month <= currentMonth) {
-      return {
-        registrations: acc.registrations + curr.registrations,
-        schedules: acc.schedules + curr.schedules,
-        visits: acc.visits + curr.visits,
-        enrollments: acc.enrollments + curr.enrollments,
-      }
-    }
-    return acc
-  }, { registrations: 0, schedules: 0, visits: 0, enrollments: 0 })
+  // Filtrar dados do ano selecionado
+  const yearData = funnelData
+    .filter(f => f.parsed?.year === selectedYear)
+    .sort((a, b) => (a.parsed?.month || 0) - (b.parsed?.month || 0))
 
+  // Calcular totais do ano
+  const yearTotals = yearData.reduce((acc, curr) => ({
+    registrations: acc.registrations + curr.registrations,
+    schedules: acc.schedules + curr.schedules,
+    visits: acc.visits + curr.visits,
+    enrollments: acc.enrollments + curr.enrollments,
+  }), { registrations: 0, schedules: 0, visits: 0, enrollments: 0 })
+
+  // Mês atual
+  const currentMonth = new Date().getMonth() + 1
+  const currentMonthData = yearData.find(f => f.parsed?.month === currentMonth)
+
+  // Anos disponíveis
+  const availableYears = Array.from(new Set(
+    funnelData
+      .map(f => f.parsed?.year)
+      .filter((y): y is number => y !== null && y !== undefined)
+  )).sort((a, b) => b - a)
+
+  // Estágios do funil
   const FUNNEL_STAGES: FunnelStage[] = currentMonthData ? [
     {
       name: 'Cadastros',
@@ -642,21 +667,20 @@ export default function FunnelAnalysis() {
           <p className="text-gray-600">Análise completa do funil de vendas com comparativos históricos</p>
         </div>
         <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-2">
-            <Filter className="h-4 w-4 text-gray-500" />
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              {availableYears.map(year => (
-                <option key={year} value={year}>{year}</option>
-              ))}
-              {!availableYears.includes(new Date().getFullYear()) && (
-                <option value={new Date().getFullYear()}>{new Date().getFullYear()}</option>
-              )}
-            </select>
-          </div>
+          {availableYears.length > 0 && (
+            <div className="flex items-center space-x-2">
+              <Filter className="h-4 w-4 text-gray-500" />
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {availableYears.map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <button
             onClick={() => setShowAnnualGoalsModal(true)}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center"
@@ -674,192 +698,214 @@ export default function FunnelAnalysis() {
         </div>
       </div>
 
-      {/* Cards de Resumo Anual */}
-      {annualTotals && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6 border border-blue-200">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-blue-900">Cadastros no Ano</h3>
-              <Users className="h-5 w-5 text-blue-600" />
-            </div>
-            <p className="text-3xl font-bold text-blue-900">{annualTotals.total_registrations}</p>
-            <div className="flex items-center justify-between mt-2">
-              <span className="text-sm text-blue-700">Meta: {annualTotals.annual_registrations_target}</span>
-              {annualTotals.total_registrations >= annualTotals.annual_registrations_target ? (
-                <CheckCircle className="h-4 w-4 text-green-600" />
-              ) : (
-                <AlertCircle className="h-4 w-4 text-yellow-600" />
-              )}
-            </div>
-            <div className="mt-2 text-xs text-blue-700">
-              {annualTotals.annual_registrations_target > 0 
-                ? `${((annualTotals.total_registrations / annualTotals.annual_registrations_target) * 100).toFixed(1)}% da meta`
-                : 'Meta não definida'}
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-6 border border-purple-200">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-purple-900">Agendamentos no Ano</h3>
-              <Calendar className="h-5 w-5 text-purple-600" />
-            </div>
-            <p className="text-3xl font-bold text-purple-900">{annualTotals.total_schedules}</p>
-            <div className="flex items-center justify-between mt-2">
-              <span className="text-sm text-purple-700">Meta: {annualTotals.annual_schedules_target}</span>
-              {annualTotals.total_schedules >= annualTotals.annual_schedules_target ? (
-                <CheckCircle className="h-4 w-4 text-green-600" />
-              ) : (
-                <AlertCircle className="h-4 w-4 text-yellow-600" />
-              )}
-            </div>
-            <div className="mt-2 text-xs text-purple-700">
-              Taxa: {annualTotals.total_registrations > 0 
-                ? `${((annualTotals.total_schedules / annualTotals.total_registrations) * 100).toFixed(1)}%`
-                : '0%'}
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-6 border border-orange-200">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-orange-900">Visitas no Ano</h3>
-              <Eye className="h-5 w-5 text-orange-600" />
-            </div>
-            <p className="text-3xl font-bold text-orange-900">{annualTotals.total_visits}</p>
-            <div className="flex items-center justify-between mt-2">
-              <span className="text-sm text-orange-700">Meta: {annualTotals.annual_visits_target}</span>
-              {annualTotals.total_visits >= annualTotals.annual_visits_target ? (
-                <CheckCircle className="h-4 w-4 text-green-600" />
-              ) : (
-                <AlertCircle className="h-4 w-4 text-yellow-600" />
-              )}
-            </div>
-            <div className="mt-2 text-xs text-orange-700">
-              Taxa: {annualTotals.total_schedules > 0 
-                ? `${((annualTotals.total_visits / annualTotals.total_schedules) * 100).toFixed(1)}%`
-                : '0%'}
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-6 border border-green-200">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-green-900">Matrículas no Ano</h3>
-              <GraduationCap className="h-5 w-5 text-green-600" />
-            </div>
-            <p className="text-3xl font-bold text-green-900">{annualTotals.total_enrollments}</p>
-            <div className="flex items-center justify-between mt-2">
-              <span className="text-sm text-green-700">Meta: {annualTotals.annual_enrollments_target}</span>
-              {annualTotals.total_enrollments >= annualTotals.annual_enrollments_target ? (
-                <CheckCircle className="h-4 w-4 text-green-600" />
-              ) : (
-                <AlertCircle className="h-4 w-4 text-yellow-600" />
-              )}
-            </div>
-            <div className="mt-2 text-xs text-green-700">
-              Conversão Geral: {annualTotals.overall_conversion_rate.toFixed(1)}%
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Resto do conteúdo continua... */}
-      {FUNNEL_STAGES.length > 0 ? (
+      {yearData.length > 0 ? (
         <>
-          {/* Funil do Mês Atual */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Funil do Mês - {currentMonthData?.month_name} {selectedYear}
-              </h3>
-              <button
-                onClick={() => currentMonthData && handleEdit(currentMonthData)}
-                className="text-blue-600 hover:text-blue-700 text-sm flex items-center"
-              >
-                <Target className="h-4 w-4 mr-1" />
-                Editar Dados
-              </button>
+          {/* Cards de Resumo Anual */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            {/* Cadastros */}
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6 border border-blue-200">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-blue-900">Cadastros no Ano</h3>
+                <Users className="h-5 w-5 text-blue-600" />
+              </div>
+              <p className="text-3xl font-bold text-blue-900">{yearTotals.registrations}</p>
+              {annualGoals.registrations > 0 && (
+                <>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-sm text-blue-700">Meta: {annualGoals.registrations}</span>
+                    {yearTotals.registrations >= annualGoals.registrations ? (
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-yellow-600" />
+                    )}
+                  </div>
+                  <div className="mt-2 text-xs text-blue-700">
+                    {((yearTotals.registrations / annualGoals.registrations) * 100).toFixed(1)}% da meta
+                  </div>
+                </>
+              )}
+              {annualGoals.registrations === 0 && (
+                <div className="mt-2 text-xs text-blue-700">Meta não definida</div>
+              )}
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              {FUNNEL_STAGES.map((stage, index) => {
-                const deviation = stage.target > 0 ? ((stage.actual - stage.target) / stage.target * 100) : 0
-                const isLast = index === FUNNEL_STAGES.length - 1
-                
-                return (
-                  <div key={stage.name} className="relative">
-                    <div className={`rounded-lg p-6 ${
-                      stage.status === 'success' ? 'bg-green-50 border border-green-200' :
-                      stage.status === 'warning' ? 'bg-yellow-50 border border-yellow-200' :
-                      'bg-red-50 border border-red-200'
-                    }`}>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className={`p-2 rounded-lg ${
-                          stage.status === 'success' ? 'bg-green-100 text-green-600' :
-                          stage.status === 'warning' ? 'bg-yellow-100 text-yellow-600' :
-                          'bg-red-100 text-red-600'
-                        }`}>
-                          {stage.icon}
+
+            {/* Agendamentos */}
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-6 border border-purple-200">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-purple-900">Agendamentos no Ano</h3>
+                <Calendar className="h-5 w-5 text-purple-600" />
+              </div>
+              <p className="text-3xl font-bold text-purple-900">{yearTotals.schedules}</p>
+              {annualGoals.schedules > 0 && (
+                <>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-sm text-purple-700">Meta: {annualGoals.schedules}</span>
+                    {yearTotals.schedules >= annualGoals.schedules ? (
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-yellow-600" />
+                    )}
+                  </div>
+                </>
+              )}
+              <div className="mt-2 text-xs text-purple-700">
+                Taxa: {yearTotals.registrations > 0 
+                  ? `${((yearTotals.schedules / yearTotals.registrations) * 100).toFixed(1)}%`
+                  : '0%'}
+              </div>
+            </div>
+
+            {/* Visitas */}
+            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-6 border border-orange-200">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-orange-900">Visitas no Ano</h3>
+                <Eye className="h-5 w-5 text-orange-600" />
+              </div>
+              <p className="text-3xl font-bold text-orange-900">{yearTotals.visits}</p>
+              {annualGoals.visits > 0 && (
+                <>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-sm text-orange-700">Meta: {annualGoals.visits}</span>
+                    {yearTotals.visits >= annualGoals.visits ? (
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-yellow-600" />
+                    )}
+                  </div>
+                </>
+              )}
+              <div className="mt-2 text-xs text-orange-700">
+                Taxa: {yearTotals.schedules > 0 
+                  ? `${((yearTotals.visits / yearTotals.schedules) * 100).toFixed(1)}%`
+                  : '0%'}
+              </div>
+            </div>
+
+            {/* Matrículas */}
+            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-6 border border-green-200">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-green-900">Matrículas no Ano</h3>
+                <GraduationCap className="h-5 w-5 text-green-600" />
+              </div>
+              <p className="text-3xl font-bold text-green-900">{yearTotals.enrollments}</p>
+              {annualGoals.enrollments > 0 && (
+                <>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-sm text-green-700">Meta: {annualGoals.enrollments}</span>
+                    {yearTotals.enrollments >= annualGoals.enrollments ? (
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-yellow-600" />
+                    )}
+                  </div>
+                </>
+              )}
+              <div className="mt-2 text-xs text-green-700">
+                Conversão: {yearTotals.registrations > 0 
+                  ? `${((yearTotals.enrollments / yearTotals.registrations) * 100).toFixed(1)}%`
+                  : '0%'}
+              </div>
+            </div>
+          </div>
+
+          {/* Funil do Mês Atual */}
+          {FUNNEL_STAGES.length > 0 && currentMonthData && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Funil do Mês - {currentMonthData.parsed?.monthName} {selectedYear}
+                </h3>
+                <button
+                  onClick={() => handleEdit(currentMonthData)}
+                  className="text-blue-600 hover:text-blue-700 text-sm flex items-center"
+                >
+                  <Target className="h-4 w-4 mr-1" />
+                  Editar Dados
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                {FUNNEL_STAGES.map((stage, index) => {
+                  const deviation = stage.target > 0 ? ((stage.actual - stage.target) / stage.target * 100) : 0
+                  const isLast = index === FUNNEL_STAGES.length - 1
+                  
+                  return (
+                    <div key={stage.name} className="relative">
+                      <div className={`rounded-lg p-6 ${
+                        stage.status === 'success' ? 'bg-green-50 border border-green-200' :
+                        stage.status === 'warning' ? 'bg-yellow-50 border border-yellow-200' :
+                        'bg-red-50 border border-red-200'
+                      }`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className={`p-2 rounded-lg ${
+                            stage.status === 'success' ? 'bg-green-100 text-green-600' :
+                            stage.status === 'warning' ? 'bg-yellow-100 text-yellow-600' :
+                            'bg-red-100 text-red-600'
+                          }`}>
+                            {stage.icon}
+                          </div>
+                          <div className="flex items-center">
+                            {deviation >= 0 ? (
+                              <TrendingUp className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <TrendingDown className="h-4 w-4 text-red-500" />
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center">
-                          {deviation >= 0 ? (
-                            <TrendingUp className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <TrendingDown className="h-4 w-4 text-red-500" />
+                        
+                        <h4 className="text-sm font-medium text-gray-900 mb-2">{stage.name}</h4>
+                        
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-gray-600">Realizado</span>
+                            <span className="text-lg font-bold text-gray-900">{stage.actual}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-gray-600">Meta</span>
+                            <span className="text-sm text-gray-700">{stage.target}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-gray-600">Desvio</span>
+                            <span className={`text-sm font-medium ${
+                              deviation >= 0 ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              {deviation >= 0 ? '+' : ''}{deviation.toFixed(1)}%
+                            </span>
+                          </div>
+                          {index > 0 && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-gray-600">Conversão</span>
+                              <span className="text-sm font-medium text-blue-600">
+                                {stage.conversion.toFixed(1)}%
+                              </span>
+                            </div>
                           )}
                         </div>
                       </div>
                       
-                      <h4 className="text-sm font-medium text-gray-900 mb-2">{stage.name}</h4>
-                      
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs text-gray-600">Realizado</span>
-                          <span className="text-lg font-bold text-gray-900">{stage.actual}</span>
+                      {!isLast && (
+                        <div className="hidden md:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10">
+                          <ArrowDown className="h-6 w-6 text-gray-400 rotate-[-90deg]" />
                         </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs text-gray-600">Meta</span>
-                          <span className="text-sm text-gray-700">{stage.target}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs text-gray-600">Desvio</span>
-                          <span className={`text-sm font-medium ${
-                            deviation >= 0 ? 'text-green-600' : 'text-red-600'
-                          }`}>
-                            {deviation >= 0 ? '+' : ''}{deviation.toFixed(1)}%
-                          </span>
-                        </div>
-                        {index > 0 && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs text-gray-600">Conversão</span>
-                            <span className="text-sm font-medium text-blue-600">
-                              {stage.conversion.toFixed(1)}%
-                            </span>
-                          </div>
-                        )}
-                      </div>
+                      )}
                     </div>
-                    
-                    {!isLast && (
-                      <div className="hidden md:block absolute top-1/2 -right-3 transform -translate-y-1/2 z-10">
-                        <ArrowDown className="h-6 w-6 text-gray-400 rotate-[-90deg]" />
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Gráfico Mensal - Performance Mês a Mês */}
+          {/* Gráfico de Performance Mensal */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Performance Mês a Mês - {selectedYear}</h3>
             <div className="space-y-6">
               {['Cadastros', 'Agendamentos', 'Visitas', 'Matrículas'].map((metric, metricIndex) => {
-                const dataKey = metricIndex === 0 ? 'registrations' : 
-                              metricIndex === 1 ? 'schedules' : 
-                              metricIndex === 2 ? 'visits' : 'enrollments'
+                const dataKey = ['registrations', 'schedules', 'visits', 'enrollments'][metricIndex] as keyof FunnelMetrics
                 const targetKey = `${dataKey}_target` as keyof FunnelMetrics
+                
                 const maxValue = Math.max(
-                  ...funnelData.map(f => Math.max(f[dataKey] as number, f[targetKey] as number))
+                  ...yearData.map(f => Math.max(f[dataKey] as number, f[targetKey] as number)),
+                  1
                 )
 
                 return (
@@ -878,7 +924,7 @@ export default function FunnelAnalysis() {
                       </div>
                     </div>
                     <div className="flex items-end space-x-2 h-24">
-                      {funnelData.map((month, idx) => {
+                      {yearData.map((month, idx) => {
                         const actual = month[dataKey] as number
                         const target = month[targetKey] as number
                         const actualHeight = maxValue > 0 ? (actual / maxValue) * 100 : 0
@@ -888,18 +934,18 @@ export default function FunnelAnalysis() {
                           <div key={idx} className="flex-1 flex flex-col items-center">
                             <div className="w-full flex items-end justify-center space-x-1 h-20">
                               <div 
-                                className="w-1/2 bg-blue-500 rounded-t transition-all hover:bg-blue-600"
-                                style={{ height: `${actualHeight}%` }}
-                                title={`${month.month_name}: ${actual}`}
+                                className="w-1/2 bg-blue-500 rounded-t transition-all hover:bg-blue-600 cursor-pointer"
+                                style={{ height: `${actualHeight}%`, minHeight: '2px' }}
+                                title={`${month.parsed?.monthName}: ${actual}`}
                               ></div>
                               <div 
-                                className="w-1/2 bg-gray-300 rounded-t transition-all hover:bg-gray-400"
-                                style={{ height: `${targetHeight}%` }}
+                                className="w-1/2 bg-gray-300 rounded-t transition-all hover:bg-gray-400 cursor-pointer"
+                                style={{ height: `${targetHeight}%`, minHeight: '2px' }}
                                 title={`Meta: ${target}`}
                               ></div>
                             </div>
                             <span className="text-xs text-gray-600 mt-1">
-                              {month.month_name.substring(0, 3)}
+                              {month.parsed?.monthName.substring(0, 3)}
                             </span>
                           </div>
                         )
@@ -911,147 +957,17 @@ export default function FunnelAnalysis() {
             </div>
           </div>
 
-          {/* Comparativo de Anos */}
-          {availableYears.length >= 2 && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold text-gray-900">Comparativo entre Anos</h3>
-                <div className="flex items-center space-x-2">
-                  <select
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    onChange={(e) => {
-                      const year1 = parseInt(e.target.value)
-                      if (comparisonYears) {
-                        loadYearComparison(year1, comparisonYears[1])
-                      }
-                    }}
-                    value={comparisonYears?.[0] || ''}
-                  >
-                    <option value="">Ano 1</option>
-                    {availableYears.map(year => (
-                      <option key={year} value={year}>{year}</option>
-                    ))}
-                  </select>
-                  <span className="text-gray-600">vs</span>
-                  <select
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    onChange={(e) => {
-                      const year2 = parseInt(e.target.value)
-                      if (comparisonYears) {
-                        loadYearComparison(comparisonYears[0], year2)
-                      }
-                    }}
-                    value={comparisonYears?.[1] || ''}
-                  >
-                    <option value="">Ano 2</option>
-                    {availableYears.map(year => (
-                      <option key={year} value={year}>{year}</option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={() => {
-                      if (availableYears.length >= 2) {
-                        loadYearComparison(availableYears[1], availableYears[0])
-                      }
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-                  >
-                    Comparar
-                  </button>
-                </div>
-              </div>
-
-              {yearComparison.length > 0 && comparisonYears && (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Mês
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Cadastros {comparisonYears[0]}
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Cadastros {comparisonYears[1]}
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Variação
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Matrículas {comparisonYears[0]}
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Matrículas {comparisonYears[1]}
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Variação
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {yearComparison.map((row) => (
-                        <tr key={row.month} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {row.month_name}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {row.year1_registrations}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {row.year2_registrations}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <span className={`flex items-center ${
-                              row.registrations_variation >= 0 ? 'text-green-600' : 'text-red-600'
-                            }`}>
-                              {row.registrations_variation >= 0 ? (
-                                <ArrowUp className="h-4 w-4 mr-1" />
-                              ) : (
-                                <ArrowDown className="h-4 w-4 mr-1" />
-                              )}
-                              {Math.abs(row.registrations_variation).toFixed(1)}%
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {row.year1_enrollments}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {row.year2_enrollments}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <span className={`flex items-center ${
-                              row.enrollments_variation >= 0 ? 'text-green-600' : 'text-red-600'
-                            }`}>
-                              {row.enrollments_variation >= 0 ? (
-                                <ArrowUp className="h-4 w-4 mr-1" />
-                              ) : (
-                                <ArrowDown className="h-4 w-4 mr-1" />
-                              )}
-                              {Math.abs(row.enrollments_variation).toFixed(1)}%
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Tabela Histórica Completa */}
+          {/* Tabela Histórica */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Histórico Completo - {selectedYear}</h3>
               <button
                 className="text-gray-600 hover:text-gray-900 flex items-center text-sm"
                 onClick={() => {
-                  // Exportar dados como CSV
                   const csv = [
                     ['Mês', 'Cadastros', 'Meta Cadastros', 'Agendamentos', 'Meta Agendamentos', 'Visitas', 'Meta Visitas', 'Matrículas', 'Meta Matrículas'],
-                    ...funnelData.map(f => [
-                      f.month_name,
+                    ...yearData.map(f => [
+                      f.parsed?.monthName || '',
                       f.registrations,
                       f.registrations_target,
                       f.schedules,
@@ -1063,12 +979,15 @@ export default function FunnelAnalysis() {
                     ])
                   ].map(row => row.join(',')).join('\n')
                   
-                  const blob = new Blob([csv], { type: 'text/csv' })
+                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
                   const url = window.URL.createObjectURL(blob)
                   const a = document.createElement('a')
                   a.href = url
                   a.download = `funil-${selectedYear}.csv`
+                  document.body.appendChild(a)
                   a.click()
+                  document.body.removeChild(a)
+                  window.URL.revokeObjectURL(url)
                 }}
               >
                 <Download className="h-4 w-4 mr-1" />
@@ -1079,37 +998,23 @@ export default function FunnelAnalysis() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Mês
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Cadastros
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Agendamentos
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Visitas
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Matrículas
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Taxa Final
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Ações
-                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mês</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cadastros</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Agendamentos</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Visitas</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Matrículas</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Taxa Final</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {funnelData.map((period) => {
+                  {yearData.map((period) => {
                     const finalRate = period.registrations > 0 ? (period.enrollments / period.registrations) * 100 : 0
                     
                     return (
                       <tr key={period.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {period.month_name}
+                          {period.parsed?.monthName}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           <div className="flex flex-col">
@@ -1189,7 +1094,6 @@ export default function FunnelAnalysis() {
         }}
         onSave={handleSave}
         editingFunnel={editingFunnel}
-        availableYears={availableYears}
       />
 
       <AnnualGoalsModal
@@ -1197,7 +1101,7 @@ export default function FunnelAnalysis() {
         onClose={() => setShowAnnualGoalsModal(false)}
         onSave={handleSaveAnnualGoals}
         currentYear={selectedYear}
-        existingGoals={annualTotals}
+        existingGoals={annualGoals}
       />
     </div>
   )
