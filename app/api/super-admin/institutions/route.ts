@@ -1,9 +1,13 @@
 // app/api/super-admin/institutions/route.ts
-// VERSÃO MOCKADA PARA TESTE
+// API otimizada para Vercel Edge Runtime
 
 import { NextResponse } from "next/server";
 
-// Dados mockados para teste
+// Configurações para Edge Runtime
+export const runtime = 'edge';
+export const dynamic = 'force-dynamic';
+
+// Dados mockados para demonstração
 const mockInstitutions = [
   {
     id: "1",
@@ -39,7 +43,7 @@ const mockInstitutions = [
     cnpj: "11.222.333/0001-44",
     email: "contato@mundonovo.edu.br",
     phone: "(31) 99876-5432",
-    status: "active",
+    status: "inactive",
     plan: "basic",
     monthlyFee: 500.0,
     dueDay: 5,
@@ -49,6 +53,7 @@ const mockInstitutions = [
   },
 ];
 
+// GET - Listar instituições
 export async function GET() {
   try {
     return NextResponse.json(mockInstitutions);
@@ -61,12 +66,13 @@ export async function GET() {
   }
 }
 
+// POST - Criar instituição
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     
     const newInstitution = {
-      id: String(mockInstitutions.length + 1),
+      id: String(Date.now()),
       ...body,
       usersCount: 1,
       createdAt: new Date().toISOString(),
@@ -84,3 +90,57 @@ export async function POST(request: Request) {
     );
   }
 }
+
+/*
+VERSÃO COM SUPABASE (use depois de configurar):
+
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+export async function GET() {
+  try {
+    const { data: institutions, error } = await supabase
+      .from('institutions')
+      .select(`
+        *,
+        users:users(count)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const formatted = institutions?.map(inst => ({
+      ...inst,
+      usersCount: inst.users?.[0]?.count || 0,
+    }));
+
+    return NextResponse.json(formatted);
+  } catch (error) {
+    console.error("Erro:", error);
+    return NextResponse.json({ error: "Erro ao buscar instituições" }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    
+    const { data, error } = await supabase
+      .from('institutions')
+      .insert([body])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return NextResponse.json(data, { status: 201 });
+  } catch (error) {
+    console.error("Erro:", error);
+    return NextResponse.json({ error: "Erro ao criar instituição" }, { status: 500 });
+  }
+}
+*/
