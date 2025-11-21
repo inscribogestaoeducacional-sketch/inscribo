@@ -1,178 +1,257 @@
-'use client'
+"use client";
 
-import React, { useEffect, useState } from 'react'
-import { 
-  Building, 
-  Users, 
-  GraduationCap, 
-  TrendingUp, 
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Building2,
+  Users,
   DollarSign,
-  ArrowUpRight,
-  ArrowDownRight,
-  BarChart3
-} from 'lucide-react'
+  TrendingUp,
+  AlertCircle,
+  CheckCircle,
+  Clock,
+} from "lucide-react";
+import Link from "next/link";
 
-interface KPICardProps {
-  title: string
-  value: string | number
-  change: number
-  icon: React.ReactNode
-  color: string
-}
-
-function KPICard({ title, value, change, icon, color }: KPICardProps) {
-  const isPositive = change >= 0
-  
-  return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-200">
-      <div className="flex items-center justify-between">
-        <div className="flex-1">
-          <p className="text-sm font-medium text-gray-600 mb-2">{title}</p>
-          <p className="text-3xl font-bold text-gray-900 mb-2">{value}</p>
-          <div className="flex items-center">
-            {isPositive ? (
-              <ArrowUpRight className="h-4 w-4 text-green-500 mr-1" />
-            ) : (
-              <ArrowDownRight className="h-4 w-4 text-red-500 mr-1" />
-            )}
-            <span className={`text-xs font-medium ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-              {isPositive ? '+' : ''}{change}%
-            </span>
-            <span className="text-xs text-gray-500 ml-2">vs. mês anterior</span>
-          </div>
-        </div>
-        <div className={`p-4 rounded-2xl ${color} flex-shrink-0 shadow-sm`}>
-          {icon}
-        </div>
-      </div>
-    </div>
-  )
+interface DashboardStats {
+  totalInstitutions: number;
+  activeInstitutions: number;
+  inactiveInstitutions: number;
+  totalUsers: number;
+  totalRevenue: number;
+  pendingPayments: number;
+  overduePayments: number;
 }
 
 export default function SuperAdminDashboard() {
-  const [loading, setLoading] = useState(false)
+  const [stats, setStats] = useState<DashboardStats>({
+    totalInstitutions: 0,
+    activeInstitutions: 0,
+    inactiveInstitutions: 0,
+    totalUsers: 0,
+    totalRevenue: 0,
+    pendingPayments: 0,
+    overduePayments: 0,
+  });
+  const [loading, setLoading] = useState(true);
 
-  const kpiCards = [
-    {
-      title: 'Instituições Ativas',
-      value: 12,
-      change: 15.3,
-      icon: <Building className="h-6 w-6 text-blue-600" />,
-      color: 'bg-blue-100'
-    },
-    {
-      title: 'Usuários Totais',
-      value: 247,
-      change: 8.2,
-      icon: <Users className="h-6 w-6 text-green-600" />,
-      color: 'bg-green-100'
-    },
-    {
-      title: 'Leads Processados',
-      value: '15.2K',
-      change: 12.5,
-      icon: <TrendingUp className="h-6 w-6 text-purple-600" />,
-      color: 'bg-purple-100'
-    },
-    {
-      title: 'Matrículas do Mês',
-      value: '3.8K',
-      change: 5.1,
-      icon: <GraduationCap className="h-6 w-6 text-orange-600" />,
-      color: 'bg-orange-100'
-    },
-    {
-      title: 'Receita Recorrente',
-      value: 'R$ 24.8K',
-      change: 18.9,
-      icon: <DollarSign className="h-6 w-6 text-emerald-600" />,
-      color: 'bg-emerald-100'
-    },
-    {
-      title: 'Taxa de Churn',
-      value: '2.1%',
-      change: -0.8,
-      icon: <BarChart3 className="h-6 w-6 text-red-600" />,
-      color: 'bg-red-100'
+  useEffect(() => {
+    fetchDashboardStats();
+  }, []);
+
+  const fetchDashboardStats = async () => {
+    try {
+      const response = await fetch("/api/super-admin/dashboard");
+      const data = await response.json();
+      setStats(data);
+    } catch (error) {
+      console.error("Erro ao carregar estatísticas:", error);
+    } finally {
+      setLoading(false);
     }
-  ]
+  };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 p-6">
       {/* Header */}
-      <div>
-        <h1 className="text-4xl font-bold text-gray-900 mb-2">🛡️ Dashboard Super Admin</h1>
-        <p className="text-gray-600 text-lg">Visão geral completa do SaaS Inscribo</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Super Admin Dashboard</h1>
+          <p className="text-muted-foreground mt-1">
+            Visão geral do sistema Inscribo
+          </p>
+        </div>
+        <Link href="/super-admin/institutions/new">
+          <Button size="lg">
+            <Building2 className="mr-2 h-4 w-4" />
+            Nova Instituição
+          </Button>
+        </Link>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {kpiCards.map((kpi, index) => (
-          <KPICard key={index} {...kpi} />
-        ))}
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Total Institutions */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Total de Instituições
+            </CardTitle>
+            <Building2 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalInstitutions}</div>
+            <div className="flex gap-2 mt-2">
+              <Badge variant="default" className="text-xs">
+                <CheckCircle className="mr-1 h-3 w-3" />
+                {stats.activeInstitutions} Ativas
+              </Badge>
+              <Badge variant="secondary" className="text-xs">
+                {stats.inactiveInstitutions} Inativas
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Total Users */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Total de Usuários
+            </CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalUsers}</div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Em todas as instituições
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Revenue */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Receita Total
+            </CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              R$ {stats.totalRevenue.toLocaleString("pt-BR")}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              <TrendingUp className="inline h-3 w-3 mr-1" />
+              Todas as parcelas pagas
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Pending Payments */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Pagamentos Pendentes
+            </CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.pendingPayments}</div>
+            <Badge variant="destructive" className="text-xs mt-2">
+              <AlertCircle className="mr-1 h-3 w-3" />
+              {stats.overduePayments} Vencidas
+            </Badge>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+          <Link href="/super-admin/institutions">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Building2 className="mr-2 h-5 w-5" />
+                Gerenciar Instituições
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Visualize, edite e gerencie todas as instituições cadastradas
+              </p>
+            </CardContent>
+          </Link>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+          <Link href="/super-admin/users">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Users className="mr-2 h-5 w-5" />
+                Gerenciar Usuários
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Adicione, edite ou remova usuários das instituições
+              </p>
+            </CardContent>
+          </Link>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+          <Link href="/super-admin/financial">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <DollarSign className="mr-2 h-5 w-5" />
+                Financeiro
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Acompanhe parcelas, pagamentos e inadimplência
+              </p>
+            </CardContent>
+          </Link>
+        </Card>
       </div>
 
       {/* Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Latest Institutions */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-xl font-bold text-gray-900 mb-6">Instituições Recentes</h3>
+      <Card>
+        <CardHeader>
+          <CardTitle>Atividades Recentes</CardTitle>
+        </CardHeader>
+        <CardContent>
           <div className="space-y-4">
-            {[
-              { name: 'Colégio Ágape Patos', plan: 'Professional', date: '2 dias atrás', status: 'active' },
-              { name: 'Instituto Educacional', plan: 'Enterprise', date: '5 dias atrás', status: 'active' },
-              { name: 'Escola Criativa', plan: 'Starter', date: '1 semana atrás', status: 'trial' }
-            ].map((institution, index) => (
-              <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
-                <div className="flex items-center">
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
-                    <Building className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="ml-3">
-                    <div className="text-sm font-semibold text-gray-900">{institution.name}</div>
-                    <div className="text-xs text-gray-500">{institution.plan} • {institution.date}</div>
-                  </div>
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-3">
+                <div className="bg-green-100 p-2 rounded-full">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
                 </div>
-                <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                  institution.status === 'active' 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-yellow-100 text-yellow-800'
-                }`}>
-                  {institution.status === 'active' ? 'Ativo' : 'Trial'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* System Health */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-xl font-bold text-gray-900 mb-6">Status do Sistema</h3>
-          <div className="space-y-4">
-            {[
-              { service: 'API Principal', status: 'online', uptime: '99.9%' },
-              { service: 'Banco de Dados', status: 'online', uptime: '99.8%' },
-              { service: 'Autenticação', status: 'online', uptime: '100%' },
-              { service: 'Relatórios', status: 'online', uptime: '98.5%' }
-            ].map((service, index) => (
-              <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                <div className="flex items-center">
-                  <div className={`w-3 h-3 rounded-full mr-3 ${
-                    service.status === 'online' ? 'bg-green-500 animate-pulse' : 'bg-red-500'
-                  }`}></div>
-                  <div>
-                    <div className="text-sm font-semibold text-gray-900">{service.service}</div>
-                    <div className="text-xs text-gray-500">Uptime: {service.uptime}</div>
-                  </div>
+                <div>
+                  <p className="text-sm font-medium">
+                    Nova instituição cadastrada
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Colégio São Francisco - há 2 horas
+                  </p>
                 </div>
-                <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                  Online
-                </span>
               </div>
-            ))}
+            </div>
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-3">
+                <div className="bg-blue-100 p-2 rounded-full">
+                  <Users className="h-4 w-4 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">
+                    Novo usuário adicionado
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Maria Silva - Escola ABC - há 5 horas
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-orange-100 p-2 rounded-full">
+                  <DollarSign className="h-4 w-4 text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Pagamento recebido</p>
+                  <p className="text-xs text-muted-foreground">
+                    R$ 500,00 - Instituto Educacional - há 1 dia
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
-  )
+  );
 }
