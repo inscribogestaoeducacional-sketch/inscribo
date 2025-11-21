@@ -17,12 +17,9 @@ import SystemSettings from './components/management/SystemSettings'
 import UserProfile from './components/management/UserProfile'
 import Sidebar from './components/layout/Sidebar'
 import TopBar from './components/layout/TopBar'
+import SuperAdminDashboard from './components/superadmin/SuperAdminDashboard'
+import SuperAdminInstitutions from './components/superadmin/SuperAdminInstitutions'
 
-// ⭐ IMPORTAR PÁGINAS DO SUPER ADMIN
-import SuperAdminDashboard from './pages/SuperAdminDashboard'
-import SuperAdminInstitutions from './pages/SuperAdminInstitutions'
-
-// Route protection component
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: string[] }) {
   const { user } = useAuth()
   
@@ -40,7 +37,6 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode,
 function AppContent() {
   const { user, initializing } = useAuth()
 
-  // Mostrar loading apenas enquanto inicializa
   if (initializing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
@@ -49,18 +45,17 @@ function AppContent() {
             <div className="animate-spin rounded-full h-12 w-12 sm:h-16 sm:w-16 border-4 border-blue-200 border-t-blue-600"></div>
           </div>
           <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">Inscribo</h2>
-          <p className="text-sm sm:text-base text-gray-600 mb-4">Verificando sua sessão...</p>
+          <p className="text-sm sm:text-base text-gray-600">Carregando...</p>
         </div>
       </div>
     )
   }
 
-  // Mostrar tela de login se não houver usuário
   if (!user) {
     return <LoginForm />
   }
 
-  // ⭐ SE FOR SUPER ADMIN, MOSTRAR LAYOUT DIFERENTE
+  // SE FOR SUPER ADMIN
   if (user.is_super_admin) {
     return (
       <Routes>
@@ -71,7 +66,7 @@ function AppContent() {
     )
   }
 
-  // ⭐ USUÁRIO NORMAL - LAYOUT ORIGINAL
+  // USUÁRIO NORMAL
   return (
     <div className="min-h-screen bg-gray-50">
       <Sidebar />
