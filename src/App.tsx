@@ -17,6 +17,27 @@ import SystemSettings from './components/management/SystemSettings'
 import UserProfile from './components/management/UserProfile'
 import Sidebar from './components/layout/Sidebar'
 import TopBar from './components/layout/TopBar'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import SuperAdminDashboard from './pages/SuperAdminDashboard'
+import SuperAdminInstitutions from './pages/SuperAdminInstitutions'
+import NewInstitution from './pages/NewInstitution'
+import SuperAdminUsers from './pages/SuperAdminUsers'
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* ... suas rotas existentes ... */}
+        
+        {/* Rotas Super Admin */}
+        <Route path="/super-admin" element={<SuperAdminDashboard />} />
+        <Route path="/super-admin/institutions" element={<SuperAdminInstitutions />} />
+        <Route path="/super-admin/institutions/new" element={<NewInstitution />} />
+        <Route path="/super-admin/users" element={<SuperAdminUsers />} />
+      </Routes>
+    </BrowserRouter>
+  )
+}
 
 // Route protection component
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: string[] }) {
