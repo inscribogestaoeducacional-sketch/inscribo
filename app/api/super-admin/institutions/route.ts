@@ -1,39 +1,57 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { hash } from "bcrypt";
+// app/api/super-admin/institutions/route.ts
+// VERSÃO MOCKADA PARA TESTE
 
-// GET - Listar todas as instituições
+import { NextResponse } from "next/server";
+
+// Dados mockados para teste
+const mockInstitutions = [
+  {
+    id: "1",
+    name: "Colégio São Francisco",
+    cnpj: "12.345.678/0001-90",
+    email: "contato@saofran.edu.br",
+    phone: "(11) 98765-4321",
+    status: "active",
+    plan: "premium",
+    monthlyFee: 1500.0,
+    dueDay: 10,
+    usersCount: 5,
+    createdAt: new Date().toISOString(),
+    lastPayment: new Date().toISOString(),
+  },
+  {
+    id: "2",
+    name: "Instituto Educacional ABC",
+    cnpj: "98.765.432/0001-10",
+    email: "contato@abc.edu.br",
+    phone: "(21) 91234-5678",
+    status: "active",
+    plan: "standard",
+    monthlyFee: 800.0,
+    dueDay: 15,
+    usersCount: 3,
+    createdAt: new Date().toISOString(),
+    lastPayment: new Date().toISOString(),
+  },
+  {
+    id: "3",
+    name: "Escola Mundo Novo",
+    cnpj: "11.222.333/0001-44",
+    email: "contato@mundonovo.edu.br",
+    phone: "(31) 99876-5432",
+    status: "active",
+    plan: "basic",
+    monthlyFee: 500.0,
+    dueDay: 5,
+    usersCount: 4,
+    createdAt: new Date().toISOString(),
+    lastPayment: null,
+  },
+];
+
 export async function GET() {
   try {
-    const institutions = await prisma.institution.findMany({
-      include: {
-        _count: {
-          select: { users: true },
-        },
-        payments: {
-          orderBy: { createdAt: "desc" },
-          take: 1,
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    const formattedInstitutions = institutions.map((inst) => ({
-      id: inst.id,
-      name: inst.name,
-      cnpj: inst.cnpj,
-      email: inst.email,
-      phone: inst.phone,
-      status: inst.status,
-      plan: inst.plan,
-      monthlyFee: inst.monthlyFee,
-      dueDay: inst.dueDay,
-      usersCount: inst._count.users,
-      createdAt: inst.createdAt,
-      lastPayment: inst.payments[0]?.paymentDate || null,
-    }));
-
-    return NextResponse.json(formattedInstitutions);
+    return NextResponse.json(mockInstitutions);
   } catch (error) {
     console.error("Erro ao buscar instituições:", error);
     return NextResponse.json(
@@ -43,103 +61,21 @@ export async function GET() {
   }
 }
 
-// POST - Criar nova instituição
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     
-    const {
-      name,
-      cnpj,
-      email,
-      phone,
-      address,
-      plan,
-      monthlyFee,
-      dueDay,
-      status,
-      adminUser,
-    } = body;
+    const newInstitution = {
+      id: String(mockInstitutions.length + 1),
+      ...body,
+      usersCount: 1,
+      createdAt: new Date().toISOString(),
+      lastPayment: null,
+    };
 
-    // Verificar se CNPJ já existe
-    const existingInstitution = await prisma.institution.findUnique({
-      where: { cnpj },
-    });
+    mockInstitutions.push(newInstitution);
 
-    if (existingInstitution) {
-      return NextResponse.json(
-        { error: "CNPJ já cadastrado" },
-        { status: 400 }
-      );
-    }
-
-    // Verificar se email do admin já existe
-    const existingUser = await prisma.user.findUnique({
-      where: { email: adminUser.email },
-    });
-
-    if (existingUser) {
-      return NextResponse.json(
-        { error: "Email do administrador já cadastrado" },
-        { status: 400 }
-      );
-    }
-
-    // Criar instituição e usuário admin em uma transação
-    const institution = await prisma.$transaction(async (tx) => {
-      // Criar instituição
-      const newInstitution = await tx.institution.create({
-        data: {
-          name,
-          cnpj,
-          email,
-          phone,
-          address: JSON.stringify(address),
-          plan,
-          monthlyFee: parseFloat(monthlyFee),
-          dueDay: parseInt(dueDay),
-          status,
-        },
-      });
-
-      // Gerar senha temporária
-      const tempPassword = Math.random().toString(36).slice(-8);
-      const hashedPassword = await hash(tempPassword, 10);
-
-      // Criar usuário admin
-      const adminUserCreated = await tx.user.create({
-        data: {
-          name: adminUser.name,
-          email: adminUser.email,
-          phone: adminUser.phone,
-          password: hashedPassword,
-          role: "admin",
-          status: "active",
-          institutionId: newInstitution.id,
-        },
-      });
-
-      // Criar primeira parcela (mês atual)
-      const now = new Date();
-      const dueDate = new Date(now.getFullYear(), now.getMonth(), parseInt(dueDay));
-      
-      await tx.payment.create({
-        data: {
-          institutionId: newInstitution.id,
-          amount: parseFloat(monthlyFee),
-          dueDate,
-          status: "pending",
-          reference: `${newInstitution.id}-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`,
-        },
-      });
-
-      // TODO: Enviar email para o admin com a senha temporária
-      // await sendWelcomeEmail(adminUser.email, tempPassword);
-
-      return newInstitution;
-    });
-
-    return NextResponse.json(institution, { status: 201 });
+    return NextResponse.json(newInstitution, { status: 201 });
   } catch (error) {
     console.error("Erro ao criar instituição:", error);
     return NextResponse.json(
