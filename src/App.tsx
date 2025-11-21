@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import LoginForm from './components/auth/LoginForm'
@@ -17,27 +17,10 @@ import SystemSettings from './components/management/SystemSettings'
 import UserProfile from './components/management/UserProfile'
 import Sidebar from './components/layout/Sidebar'
 import TopBar from './components/layout/TopBar'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+
+// ⭐ IMPORTAR PÁGINAS DO SUPER ADMIN
 import SuperAdminDashboard from './pages/SuperAdminDashboard'
 import SuperAdminInstitutions from './pages/SuperAdminInstitutions'
-import NewInstitution from './pages/NewInstitution'
-import SuperAdminUsers from './pages/SuperAdminUsers'
-
-function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        {/* ... suas rotas existentes ... */}
-        
-        {/* Rotas Super Admin */}
-        <Route path="/super-admin" element={<SuperAdminDashboard />} />
-        <Route path="/super-admin/institutions" element={<SuperAdminInstitutions />} />
-        <Route path="/super-admin/institutions/new" element={<NewInstitution />} />
-        <Route path="/super-admin/users" element={<SuperAdminUsers />} />
-      </Routes>
-    </BrowserRouter>
-  )
-}
 
 // Route protection component
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: string[] }) {
@@ -67,21 +50,6 @@ function AppContent() {
           </div>
           <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">Inscribo</h2>
           <p className="text-sm sm:text-base text-gray-600 mb-4">Verificando sua sessão...</p>
-          
-          <div className="space-y-2 text-xs sm:text-sm text-gray-500">
-            <div className="flex items-center justify-center space-x-2">
-              <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
-              <span>Verificando autenticação</span>
-            </div>
-            <div className="flex items-center justify-center space-x-2">
-              <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse delay-100"></div>
-              <span>Carregando perfil</span>
-            </div>
-            <div className="flex items-center justify-center space-x-2">
-              <div className="w-2 h-2 bg-purple-600 rounded-full animate-pulse delay-200"></div>
-              <span>Preparando sistema</span>
-            </div>
-          </div>
         </div>
       </div>
     )
@@ -92,21 +60,24 @@ function AppContent() {
     return <LoginForm />
   }
 
-  // Redirecionar super admin para painel específico
-  if (user.is_super_admin && !window.location.pathname.startsWith('/super-admin')) {
-    return <Navigate to="/super-admin" replace />
+  // ⭐ SE FOR SUPER ADMIN, MOSTRAR LAYOUT DIFERENTE
+  if (user.is_super_admin) {
+    return (
+      <Routes>
+        <Route path="/super-admin" element={<SuperAdminDashboard />} />
+        <Route path="/super-admin/institutions" element={<SuperAdminInstitutions />} />
+        <Route path="*" element={<Navigate to="/super-admin" replace />} />
+      </Routes>
+    )
   }
 
-  // Renderizar aplicação principal
+  // ⭐ USUÁRIO NORMAL - LAYOUT ORIGINAL
   return (
     <div className="min-h-screen bg-gray-50">
       <Sidebar />
       
-      {/* Main Content - Ajustado para mobile */}
       <div className="lg:ml-64">
-        {/* Espaço para o header mobile */}
         <div className="lg:hidden h-16"></div>
-        
         <TopBar />
         
         <main className="min-h-screen">
