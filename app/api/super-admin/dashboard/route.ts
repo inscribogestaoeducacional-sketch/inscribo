@@ -1,13 +1,17 @@
 // app/api/super-admin/dashboard/route.ts
+// API otimizada para Vercel Edge Runtime
+
 import { NextResponse } from "next/server";
 
-// VERSÃO SIMPLIFICADA PARA TESTE (sem Prisma)
-// Use esta versão se ainda não configurou o Prisma
+// Configurações para Edge Runtime
+export const runtime = 'edge';
+export const dynamic = 'force-dynamic';
 
+// VERSÃO MOCKADA (use enquanto configura o banco)
 export async function GET() {
   try {
-    // Dados mockados para teste
-    const mockData = {
+    // Dados mockados para demonstração
+    const mockStats = {
       totalInstitutions: 4,
       activeInstitutions: 3,
       inactiveInstitutions: 1,
@@ -17,7 +21,7 @@ export async function GET() {
       overduePayments: 1,
     };
 
-    return NextResponse.json(mockData);
+    return NextResponse.json(mockStats);
   } catch (error) {
     console.error("Erro ao buscar estatísticas:", error);
     return NextResponse.json(
@@ -27,50 +31,51 @@ export async function GET() {
   }
 }
 
-// VERSÃO COM PRISMA (use depois de configurar o banco)
-/*
-import { prisma } from "@/lib/prisma";
+/* 
+VERSÃO COM SUPABASE (use depois de configurar):
+
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function GET() {
   try {
-    const totalInstitutions = await prisma.institution.count();
-    const activeInstitutions = await prisma.institution.count({
-      where: { status: "active" },
-    });
-    const inactiveInstitutions = await prisma.institution.count({
-      where: { status: "inactive" },
-    });
-    const totalUsers = await prisma.user.count();
+    // Buscar estatísticas do Supabase
+    const { count: totalInstitutions } = await supabase
+      .from('institutions')
+      .select('*', { count: 'exact', head: true });
     
-    const paymentsData = await prisma.payment.aggregate({
-      where: { status: "paid" },
-      _sum: { amount: true },
-    });
-    const totalRevenue = paymentsData._sum.amount || 0;
+    const { count: activeInstitutions } = await supabase
+      .from('institutions')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'active');
     
-    const pendingPayments = await prisma.payment.count({
-      where: { status: "pending" },
-    });
+    const { count: totalUsers } = await supabase
+      .from('users')
+      .select('*', { count: 'exact', head: true });
     
-    const overduePayments = await prisma.payment.count({
-      where: { status: "overdue" },
-    });
-
+    const { data: payments } = await supabase
+      .from('payments')
+      .select('amount')
+      .eq('status', 'paid');
+    
+    const totalRevenue = payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
+    
     return NextResponse.json({
-      totalInstitutions,
-      activeInstitutions,
-      inactiveInstitutions,
-      totalUsers,
+      totalInstitutions: totalInstitutions || 0,
+      activeInstitutions: activeInstitutions || 0,
+      inactiveInstitutions: (totalInstitutions || 0) - (activeInstitutions || 0),
+      totalUsers: totalUsers || 0,
       totalRevenue,
-      pendingPayments,
-      overduePayments,
+      pendingPayments: 0,
+      overduePayments: 0,
     });
   } catch (error) {
-    console.error("Erro ao buscar estatísticas:", error);
-    return NextResponse.json(
-      { error: "Erro ao buscar estatísticas" },
-      { status: 500 }
-    );
+    console.error("Erro:", error);
+    return NextResponse.json({ error: "Erro ao buscar dados" }, { status: 500 });
   }
 }
 */
