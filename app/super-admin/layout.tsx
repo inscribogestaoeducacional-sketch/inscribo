@@ -1,88 +1,187 @@
-'use client'
+"use client";
 
-import React, { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import SuperAdminSidebar from './components/SuperAdminSidebar'
-import SuperAdminTopBar from './components/SuperAdminTopBar'
+import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
+import {
+  LayoutDashboard,
+  Building2,
+  Users,
+  DollarSign,
+  Settings,
+  LogOut,
+  Menu,
+  X,
+  ChevronRight,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-export default function SuperAdminLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  const router = useRouter()
-  const [loading, setLoading] = useState(true)
-  const [authorized, setAuthorized] = useState(false)
+interface SuperAdminLayoutProps {
+  children: React.ReactNode;
+}
 
-  useEffect(() => {
-    checkAuth()
-  }, [])
+const navigation = [
+  {
+    name: "Dashboard",
+    href: "/super-admin",
+    icon: LayoutDashboard,
+  },
+  {
+    name: "Instituições",
+    href: "/super-admin/institutions",
+    icon: Building2,
+  },
+  {
+    name: "Usuários",
+    href: "/super-admin/users",
+    icon: Users,
+  },
+  {
+    name: "Financeiro",
+    href: "/super-admin/financial",
+    icon: DollarSign,
+  },
+  {
+    name: "Configurações",
+    href: "/super-admin/settings",
+    icon: Settings,
+  },
+];
 
-  const checkAuth = async () => {
-    try {
-      console.log('🔐 Verificando autorização de Super Admin...')
-      
-      // Verificar se está logado como super admin
-      const userStr = localStorage.getItem('inscribo-user')
-      if (!userStr) {
-        console.warn('❌ Sem usuário no localStorage')
-        router.push('/login')
-        return
-      }
-
-      const user = JSON.parse(userStr)
-      console.log('👤 Usuário:', user)
-      
-      if (!user.is_super_admin) {
-        console.warn('❌ Acesso negado: não é super admin')
-        alert('Acesso negado! Você não tem permissão para acessar esta área.')
-        router.push('/dashboard')
-        return
-      }
-
-      console.log('✅ Super Admin autorizado:', user.email)
-      setAuthorized(true)
-    } catch (error) {
-      console.error('❌ Erro na verificação:', error)
-      router.push('/login')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 via-white to-pink-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-red-600 mx-auto mb-4"></div>
-          <p className="text-xl font-semibold text-gray-900 mb-2">Super Admin</p>
-          <p className="text-gray-600">Verificando permissões...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!authorized) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-red-100">
-        <div className="text-center bg-white p-8 rounded-2xl shadow-xl">
-          <div className="text-6xl mb-4">🚫</div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Acesso Negado</h1>
-          <p className="text-gray-600">Você não tem permissão para acessar esta área.</p>
-        </div>
-      </div>
-    )
-  }
+export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
+  const pathname = usePathname();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <SuperAdminSidebar />
-      <div className="ml-64">
-        <SuperAdminTopBar />
-        <main className="p-8">
+      {/* Mobile sidebar backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={cn(
+          "fixed top-0 left-0 z-50 h-full w-64 bg-white border-r border-gray-200 transition-transform duration-300 lg:translate-x-0",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        {/* Logo */}
+        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
+          <Link href="/super-admin" className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-lg">I</span>
+            </div>
+            <div>
+              <h1 className="font-bold text-lg">Inscribo</h1>
+              <p className="text-xs text-muted-foreground">Super Admin</p>
+            </div>
+          </Link>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 px-4 py-6 space-y-1">
+          {navigation.map((item) => {
+            const isActive = pathname === item.href || 
+              (item.href !== "/super-admin" && pathname?.startsWith(item.href));
+            
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-blue-50 text-blue-700"
+                    : "text-gray-700 hover:bg-gray-100"
+                )}
+                onClick={() => setSidebarOpen(false)}
+              >
+                <item.icon className="h-5 w-5" />
+                {item.name}
+                {isActive && <ChevronRight className="h-4 w-4 ml-auto" />}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* User Menu */}
+        <div className="border-t border-gray-200 p-4">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className="w-full justify-start gap-3 h-auto py-3"
+              >
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src="/avatar.png" />
+                  <AvatarFallback>SA</AvatarFallback>
+                </Avatar>
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-medium">Super Admin</p>
+                  <p className="text-xs text-muted-foreground">
+                    admin@inscribo.com
+                  </p>
+                </div>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>
+                <Settings className="mr-2 h-4 w-4" />
+                Configurações
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="text-red-600">
+                <LogOut className="mr-2 h-4 w-4" />
+                Sair
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <div className="lg:pl-64">
+        {/* Top bar - Mobile */}
+        <header className="sticky top-0 z-30 flex items-center h-16 px-4 bg-white border-b border-gray-200 lg:hidden">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          <h1 className="ml-4 font-bold text-lg">Inscribo Super Admin</h1>
+        </header>
+
+        {/* Page content */}
+        <main className="min-h-[calc(100vh-4rem)] lg:min-h-screen">
           {children}
         </main>
       </div>
     </div>
-  )
+  );
 }
