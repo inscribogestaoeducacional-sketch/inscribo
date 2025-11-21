@@ -1,50 +1,32 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { SuperAdminService } from "@/lib/supabase";
 import {
+  LayoutDashboard,
   Building2,
   Users,
-  DollarSign,
   TrendingUp,
   AlertCircle,
-  CheckCircle,
-  Clock,
 } from "lucide-react";
-import Link from "next/link";
-
-interface DashboardStats {
-  totalInstitutions: number;
-  activeInstitutions: number;
-  inactiveInstitutions: number;
-  totalUsers: number;
-  totalRevenue: number;
-  pendingPayments: number;
-  overduePayments: number;
-}
 
 export default function SuperAdminDashboard() {
-  const [stats, setStats] = useState<DashboardStats>({
+  const [stats, setStats] = useState({
     totalInstitutions: 0,
     activeInstitutions: 0,
     inactiveInstitutions: 0,
     totalUsers: 0,
-    totalRevenue: 0,
-    pendingPayments: 0,
-    overduePayments: 0,
   });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchDashboardStats();
+    loadStats();
   }, []);
 
-  const fetchDashboardStats = async () => {
+  const loadStats = async () => {
     try {
-      const response = await fetch("/api/super-admin/dashboard");
-      const data = await response.json();
+      const data = await SuperAdminService.getStats();
       setStats(data);
     } catch (error) {
       console.error("Erro ao carregar estatísticas:", error);
@@ -53,205 +35,115 @@ export default function SuperAdminDashboard() {
     }
   };
 
-  return (
-    <div className="space-y-6 p-6">
-      {/* Header */}
+  const StatCard = ({ title, value, icon: Icon, color, subtext }: any) => (
+    <div className="bg-white rounded-lg shadow p-6 border-l-4" style={{ borderColor: color }}>
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Super Admin Dashboard</h1>
-          <p className="text-muted-foreground mt-1">
-            Visão geral do sistema Inscribo
+        <div className="flex-1">
+          <p className="text-sm font-medium text-gray-600">{title}</p>
+          <p className="text-3xl font-bold text-gray-900 mt-2">
+            {loading ? "..." : value}
           </p>
+          {subtext && (
+            <p className="text-xs text-gray-500 mt-1">{subtext}</p>
+          )}
         </div>
-        <Link href="/super-admin/institutions/new">
-          <Button size="lg">
-            <Building2 className="mr-2 h-4 w-4" />
-            Nova Instituição
-          </Button>
-        </Link>
+        <Icon className="h-12 w-12" style={{ color }} />
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="p-6">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-gray-600 mt-2">Visão geral do sistema Inscribo</p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {/* Total Institutions */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total de Instituições
-            </CardTitle>
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalInstitutions}</div>
-            <div className="flex gap-2 mt-2">
-              <Badge variant="default" className="text-xs">
-                <CheckCircle className="mr-1 h-3 w-3" />
-                {stats.activeInstitutions} Ativas
-              </Badge>
-              <Badge variant="secondary" className="text-xs">
-                {stats.inactiveInstitutions} Inativas
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Total Users */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total de Usuários
-            </CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalUsers}</div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Em todas as instituições
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Revenue */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Receita Total
-            </CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              R$ {stats.totalRevenue.toLocaleString("pt-BR")}
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              <TrendingUp className="inline h-3 w-3 mr-1" />
-              Todas as parcelas pagas
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Pending Payments */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Pagamentos Pendentes
-            </CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.pendingPayments}</div>
-            <Badge variant="destructive" className="text-xs mt-2">
-              <AlertCircle className="mr-1 h-3 w-3" />
-              {stats.overduePayments} Vencidas
-            </Badge>
-          </CardContent>
-        </Card>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <StatCard
+          title="Total de Instituições"
+          value={stats.totalInstitutions}
+          icon={Building2}
+          color="#3B82F6"
+        />
+        <StatCard
+          title="Instituições Ativas"
+          value={stats.activeInstitutions}
+          icon={TrendingUp}
+          color="#10B981"
+        />
+        <StatCard
+          title="Instituições Inativas"
+          value={stats.inactiveInstitutions}
+          icon={AlertCircle}
+          color="#6B7280"
+        />
+        <StatCard
+          title="Total de Usuários"
+          value={stats.totalUsers}
+          icon={Users}
+          color="#8B5CF6"
+        />
       </div>
 
       {/* Quick Actions */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-          <Link href="/super-admin/institutions">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Building2 className="mr-2 h-5 w-5" />
-                Gerenciar Instituições
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Visualize, edite e gerencie todas as instituições cadastradas
-              </p>
-            </CardContent>
-          </Link>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Link
+          href="/super-admin/institutions"
+          className="group relative overflow-hidden bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 p-8 text-white"
+        >
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-4">
+              <Building2 className="h-12 w-12" />
+              <svg className="h-6 w-6 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </div>
+            <h3 className="text-2xl font-bold mb-2">Gerenciar Instituições</h3>
+            <p className="text-blue-100">
+              Criar, editar e visualizar todas as instituições cadastradas no sistema
+            </p>
+          </div>
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32 group-hover:scale-110 transition-transform duration-500" />
+        </Link>
 
-        <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-          <Link href="/super-admin/users">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Users className="mr-2 h-5 w-5" />
-                Gerenciar Usuários
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Adicione, edite ou remova usuários das instituições
-              </p>
-            </CardContent>
-          </Link>
-        </Card>
-
-        <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-          <Link href="/super-admin/financial">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <DollarSign className="mr-2 h-5 w-5" />
-                Financeiro
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Acompanhe parcelas, pagamentos e inadimplência
-              </p>
-            </CardContent>
-          </Link>
-        </Card>
+        <Link
+          href="/super-admin/users"
+          className="group relative overflow-hidden bg-gradient-to-br from-green-500 to-green-700 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 p-8 text-white"
+        >
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-4">
+              <Users className="h-12 w-12" />
+              <svg className="h-6 w-6 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </div>
+            <h3 className="text-2xl font-bold mb-2">Gerenciar Usuários</h3>
+            <p className="text-green-100">
+              Adicionar, editar e gerenciar usuários de todas as instituições
+            </p>
+          </div>
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32 group-hover:scale-110 transition-transform duration-500" />
+        </Link>
       </div>
 
-      {/* Recent Activity */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Atividades Recentes</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b pb-3">
-              <div className="flex items-center gap-3">
-                <div className="bg-green-100 p-2 rounded-full">
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">
-                    Nova instituição cadastrada
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Colégio São Francisco - há 2 horas
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center justify-between border-b pb-3">
-              <div className="flex items-center gap-3">
-                <div className="bg-blue-100 p-2 rounded-full">
-                  <Users className="h-4 w-4 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">
-                    Novo usuário adicionado
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Maria Silva - Escola ABC - há 5 horas
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="bg-orange-100 p-2 rounded-full">
-                  <DollarSign className="h-4 w-4 text-orange-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Pagamento recebido</p>
-                  <p className="text-xs text-muted-foreground">
-                    R$ 500,00 - Instituto Educacional - há 1 dia
-                  </p>
-                </div>
-              </div>
-            </div>
+      {/* Info Box */}
+      <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
+        <div className="flex items-start gap-4">
+          <div className="bg-blue-100 rounded-lg p-3">
+            <LayoutDashboard className="h-6 w-6 text-blue-600" />
           </div>
-        </CardContent>
-      </Card>
+          <div>
+            <h4 className="font-semibold text-gray-900 mb-1">Super Admin Dashboard</h4>
+            <p className="text-sm text-gray-600">
+              Você tem acesso completo para gerenciar todas as instituições e usuários do sistema. 
+              Use as opções acima para navegar entre as diferentes seções.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
