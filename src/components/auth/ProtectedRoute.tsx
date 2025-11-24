@@ -1,17 +1,16 @@
-// src/components/auth/ProtectedRoute.tsx
 import { useEffect, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
-  requiredRole?: 'super_admin' | 'admin' | 'manager' | 'user'
+  requiredRole?: string
 }
 
 export default function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
   const [loading, setLoading] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [hasPermission, setHasPermission] = useState(false)
+  const [userRole, setUserRole] = useState<string | null>(null)
   const location = useLocation()
 
   useEffect(() => {
@@ -19,118 +18,128 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
     
     // Subscribe to auth changes
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT') {
-        setIsAuthenticated(false)
-        setHasPermission(false)
-        localStorage.removeItem('inscribo-user')
-        localStorage.removeItem('inscribo-auth-token')
-      } else if (event === 'SIGNED_IN' && session) {
-        await checkAuth()
+      console.log('Auth state changed:', event, session?.user?.id)
+      
+      if (event === 'SIGNED_IN' && session) {
+        await loadUserData(session.user.id)
+      } else if (event === 'SIGNED_OUT') {
+        clearUserData()
       }
     })
 
     return () => {
-      authListener?.subscription.unsubscribe()
+      authListener.subscription.unsubscribe()
     }
-  }, [requiredRole])
+  }, [])
 
   const checkAuth = async () => {
     try {
-      // Check for session
+      console.log('🔍 Checking authentication...')
+      
+      // 1. Verificar sessão do Supabase
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       
-      if (sessionError) throw sessionError
-
-      if (!session) {
+      if (sessionError) {
+        console.error('❌ Session error:', sessionError)
+        clearUserData()
         setIsAuthenticated(false)
-        setHasPermission(false)
         setLoading(false)
         return
       }
 
-      setIsAuthenticated(true)
-
-      // Check for stored user data
-      const storedUser = localStorage.getItem('inscribo-user')
-      
-      if (storedUser) {
-        const userData = JSON.parse(storedUser)
-        
-        // Store auth token if not already stored
-        if (!localStorage.getItem('inscribo-auth-token')) {
-          localStorage.setItem('inscribo-auth-token', session.access_token)
-        }
-
-        // Check role permission
-        if (requiredRole) {
-          setHasPermission(userData.role === requiredRole)
-        } else {
-          setHasPermission(true)
-        }
-      } else {
-        // If no stored user, fetch from database
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
-
-        if (userError) throw userError
-
-        if (userData) {
-          // Store user data
-          localStorage.setItem('inscribo-user', JSON.stringify(userData))
-          localStorage.setItem('inscribo-auth-token', session.access_token)
-
-          // Check role permission
-          if (requiredRole) {
-            setHasPermission(userData.role === requiredRole)
-          } else {
-            setHasPermission(true)
-          }
-        } else {
-          setIsAuthenticated(false)
-          setHasPermission(false)
-        }
+      if (!session) {
+        console.log('❌ No session found')
+        clearUserData()
+        setIsAuthenticated(false)
+        setLoading(false)
+        return
       }
+
+      console.log('✅ Session found:', session.user.id)
+
+      // 2. Verificar localStorage
+      const storedUser = localStorage.getItem('inscribo-user')
+      const storedToken = localStorage.getItem('inscribo-auth-token')
+
+      if (storedUser && storedToken) {
+        console.log('✅ User data in localStorage')
+        const userData = JSON.parse(storedUser)
+        setUserRole(userData.role)
+        setIsAuthenticated(true)
+        setLoading(false)
+        return
+      }
+
+      // 3. Se não tem no localStorage, buscar do banco
+      console.log('⏳ Loading user data from database...')
+      await loadUserData(session.user.id)
+
     } catch (error) {
-      console.error('Auth check error:', error)
+      console.error('❌ Auth check error:', error)
+      clearUserData()
       setIsAuthenticated(false)
-      setHasPermission(false)
-    } finally {
       setLoading(false)
     }
   }
 
+  const loadUserData = async (userId: string) => {
+    try {
+      const { data: userData, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single()
+
+      if (error) throw error
+
+      console.log('✅ User data loaded:', userData.email, userData.role)
+
+      // Salvar no localStorage
+      localStorage.setItem('inscribo-user', JSON.stringify(userData))
+      localStorage.setItem('inscribo-auth-token', 'authenticated')
+
+      setUserRole(userData.role)
+      setIsAuthenticated(true)
+      setLoading(false)
+    } catch (error) {
+      console.error('❌ Error loading user data:', error)
+      clearUserData()
+      setIsAuthenticated(false)
+      setLoading(false)
+    }
+  }
+
+  const clearUserData = () => {
+    localStorage.removeItem('inscribo-user')
+    localStorage.removeItem('inscribo-auth-token')
+    setIsAuthenticated(false)
+    setUserRole(null)
+  }
+
+  // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-cyan-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Carregando...</p>
+          <p className="text-gray-600 font-medium">Verificando autenticação...</p>
         </div>
       </div>
     )
   }
 
+  // Not authenticated
   if (!isAuthenticated) {
-    // Store the attempted location for redirect after login
+    console.log('❌ Not authenticated, redirecting to login')
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
-  if (requiredRole && !hasPermission) {
-    // Redirect to unauthorized page or dashboard based on user role
-    const storedUser = localStorage.getItem('inscribo-user')
-    if (storedUser) {
-      const userData = JSON.parse(storedUser)
-      if (userData.role === 'super_admin') {
-        return <Navigate to="/super-admin" replace />
-      } else {
-        return <Navigate to="/dashboard" replace />
-      }
-    }
-    return <Navigate to="/login" replace />
+  // Check role if required
+  if (requiredRole && userRole !== requiredRole) {
+    console.log('❌ Insufficient permissions:', userRole, 'required:', requiredRole)
+    return <Navigate to="/unauthorized" replace />
   }
 
+  console.log('✅ Authenticated, rendering protected content')
   return <>{children}</>
 }
