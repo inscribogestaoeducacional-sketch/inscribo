@@ -1,5 +1,4 @@
-// src/components/superadmin/SuperAdminLayout.tsx
-import { useState, useEffect, ReactNode } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import {
@@ -20,7 +19,7 @@ import {
 } from 'lucide-react'
 
 interface SuperAdminLayoutProps {
-  children: ReactNode
+  children: React.ReactNode
 }
 
 interface User {
@@ -68,14 +67,17 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
 
   const loadNotifications = async () => {
     try {
-      const { data, error} = await supabase
+      const { data, error } = await supabase
         .from('notifications')
         .select('*')
-        .eq('user_role', 'super_admin')
+        .eq('target_role', 'super_admin')
         .order('created_at', { ascending: false })
         .limit(10)
 
-      if (error) throw error
+      if (error) {
+        console.error('Erro ao carregar notificações:', error)
+        return
+      }
       
       setNotifications(data || [])
       setUnreadCount(data?.filter(n => !n.read).length || 0)
@@ -126,15 +128,15 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
   }
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+    <div className="flex h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 overflow-hidden">
       {/* Sidebar */}
       <div
         className={`${
           sidebarOpen ? 'w-72' : 'w-20'
-        } bg-white border-r border-gray-200 transition-all duration-300 flex flex-col shadow-lg`}
+        } bg-white border-r border-gray-200 transition-all duration-300 flex flex-col shadow-lg flex-shrink-0`}
       >
         {/* Logo */}
-        <div className="h-20 flex items-center justify-between px-6 border-b border-gray-200">
+        <div className="h-20 flex items-center justify-between px-6 border-b border-gray-200 flex-shrink-0">
           {sidebarOpen ? (
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
@@ -152,7 +154,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
           )}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
           >
             {sidebarOpen ? (
               <X className="w-5 h-5 text-gray-600" />
@@ -183,12 +185,12 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
         </nav>
 
         {/* User Profile */}
-        <div className="p-4 border-t border-gray-200">
+        <div className="p-4 border-t border-gray-200 flex-shrink-0">
           <div
             className="flex items-center space-x-3 p-3 rounded-xl hover:bg-gray-100 cursor-pointer transition-colors"
             onClick={() => setProfileOpen(!profileOpen)}
           >
-            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-bold">
+            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0">
               {user?.full_name?.charAt(0) || 'S'}
             </div>
             {sidebarOpen && (
@@ -199,7 +201,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                   </p>
                   <p className="text-xs text-gray-500 truncate">{user?.email}</p>
                 </div>
-                <ChevronDown className="w-4 h-4 text-gray-400" />
+                <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
               </>
             )}
           </div>
@@ -209,7 +211,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Bar */}
-        <div className="h-20 bg-white border-b border-gray-200 px-8 flex items-center justify-between shadow-sm">
+        <div className="h-20 bg-white border-b border-gray-200 px-8 flex items-center justify-between shadow-sm flex-shrink-0">
           {/* Search Bar */}
           <div className="flex-1 max-w-2xl">
             <div className="relative">
@@ -242,11 +244,11 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
 
               {/* Notifications Dropdown */}
               {notificationsOpen && (
-                <div className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50">
+                <div className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 max-h-96 overflow-hidden">
                   <div className="p-4 border-b border-gray-200">
                     <h3 className="font-bold text-gray-900">Notificações</h3>
                   </div>
-                  <div className="max-h-96 overflow-y-auto">
+                  <div className="overflow-y-auto max-h-80">
                     {notifications.length > 0 ? (
                       notifications.map((notif) => (
                         <div
@@ -331,7 +333,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
           </div>
         </div>
 
-        {/* Page Content */}
+        {/* Page Content - SCROLLABLE */}
         <div className="flex-1 overflow-auto">
           {children}
         </div>
