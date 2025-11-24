@@ -19,6 +19,19 @@ import Sidebar from './components/layout/Sidebar'
 import TopBar from './components/layout/TopBar'
 import SuperAdminDashboard from './components/superadmin/SuperAdminDashboard'
 import SuperAdminInstitutions from './components/superadmin/SuperAdminInstitutions'
+// Auth
+import ProtectedRoute from './components/auth/ProtectedRoute'
+import Login from './components/auth/Login'
+
+// Super Admin
+import SuperAdminDashboard from './components/superadmin/SuperAdminDashboard'
+import SuperAdminInstitutions from './components/superadmin/SuperAdminInstitutions'
+import InstitutionDetails from './components/superadmin/InstitutionDetails'
+import SuperAdminsPage from './components/superadmin/SuperAdminsPage'
+import NotificationsPage from './components/superadmin/NotificationsPage'
+import AllUsersPage from './components/superadmin/AllUsersPage'
+import AnalyticsPage from './components/superadmin/AnalyticsPage'
+import SettingsPage from './components/superadmin/SettingsPage'
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: string[] }) {
   const { user } = useAuth()
