@@ -1,3 +1,4 @@
+// src/components/superadmin/SuperAdminInstitutions.tsx
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -157,6 +158,43 @@ export default function SuperAdminInstitutions() {
             <Plus className="h-5 w-5" />
             <span className="font-semibold">Nova Instituição</span>
           </button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 mb-1">Total</p>
+              <p className="text-3xl font-bold text-gray-900">{institutions.length}</p>
+            </div>
+            <div className="p-4 bg-blue-100 rounded-2xl">
+              <Building2 className="h-6 w-6 text-blue-600" />
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 mb-1">Ativas</p>
+              <p className="text-3xl font-bold text-green-600">{institutions.filter(i => i.active).length}</p>
+            </div>
+            <div className="p-4 bg-green-100 rounded-2xl">
+              <Building2 className="h-6 w-6 text-green-600" />
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 mb-1">Inativas</p>
+              <p className="text-3xl font-bold text-red-600">{institutions.filter(i => !i.active).length}</p>
+            </div>
+            <div className="p-4 bg-red-100 rounded-2xl">
+              <Building2 className="h-6 w-6 text-red-600" />
+            </div>
+          </div>
         </div>
       </div>
 
