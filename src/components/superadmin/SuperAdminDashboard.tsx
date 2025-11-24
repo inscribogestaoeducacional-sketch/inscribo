@@ -1,7 +1,8 @@
+// src/components/superadmin/SuperAdminDashboard.tsx
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { Building2, Users, LogOut, Sparkles, TrendingUp, ArrowUpRight } from 'lucide-react'
+import { Building2, Users, LogOut, Sparkles, TrendingUp, ArrowUpRight, Shield } from 'lucide-react'
 
 interface KPICardProps {
   title: string
@@ -31,6 +32,7 @@ export default function SuperAdminDashboard() {
     totalInstitutions: 0,
     totalUsers: 0,
     activeInstitutions: 0,
+    totalSuperAdmins: 0,
   })
   const [loading, setLoading] = useState(true)
 
@@ -53,10 +55,16 @@ export default function SuperAdminDashboard() {
         .from('users')
         .select('*', { count: 'exact', head: true })
 
+      const { count: superAdminCount } = await supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .eq('role', 'super_admin')
+
       setStats({
         totalInstitutions: instCount || 0,
         activeInstitutions: activeInst || 0,
         totalUsers: userCount || 0,
+        totalSuperAdmins: superAdminCount || 0,
       })
     } catch (error) {
       console.error('Erro:', error)
@@ -108,7 +116,7 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-10">
         <KPICard
           title="Total de Instituições"
           value={stats.totalInstitutions}
@@ -126,6 +134,12 @@ export default function SuperAdminDashboard() {
           value={stats.totalUsers}
           icon={<Users className="h-6 w-6 text-purple-600" />}
           color="bg-purple-100"
+        />
+        <KPICard
+          title="Super Admins"
+          value={stats.totalSuperAdmins}
+          icon={<Shield className="h-6 w-6 text-cyan-600" />}
+          color="bg-cyan-100"
         />
       </div>
 
