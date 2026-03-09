@@ -22,9 +22,9 @@ export default function LoginForm() {
       console.log('✅ Login realizado, aguardando redirecionamento...')
     } catch (err: any) {
       console.error('Login error:', err)
-      
+
       let errorMessage = 'Erro ao processar solicitação'
-      
+
       if (err.message) {
         if (err.message.includes('Invalid login credentials')) {
           errorMessage = 'Email ou senha incorretos'
@@ -36,7 +36,7 @@ export default function LoginForm() {
           errorMessage = err.message
         }
       }
-      
+
       setError(errorMessage)
     } finally {
       setLoading(false)
@@ -46,7 +46,7 @@ export default function LoginForm() {
   return (
     <div className="min-h-screen flex">
       {/* Left Side - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-[#00D4C4] via-[#00B8AA] to-[#2D3E9E] relative overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-[#1e2d6b] via-[#0d9488] to-[#14b8a6] relative overflow-hidden">
         {/* Animated Background Elements */}
         <div className="absolute inset-0">
           <div className="absolute top-20 left-20 w-72 h-72 bg-white/5 rounded-full blur-3xl animate-pulse"></div>
@@ -61,31 +61,34 @@ export default function LoginForm() {
             backgroundSize: '50px 50px'
           }}></div>
         </div>
-        
+
         <div className="relative z-10 flex flex-col justify-between p-12 text-white w-full">
-          {/* Logo - Removida do lado colorido */}
+          {/* Logo */}
           <div className="animate-fade-in-down">
-            <div className="text-4xl font-bold mb-2">Inscribo</div>
-            <div className="text-white/80 text-sm">Sistema de Gestão Educacional</div>
+            <img
+              src="/Inscribologo.png"
+              alt="Inscribo"
+              className="h-14 w-auto"
+            />
           </div>
 
-          {/* Main Content com Animações */}
+          {/* Main Content */}
           <div className="space-y-8">
             <div className="space-y-4 animate-fade-in-up animation-delay-200">
-              <h1 className="text-6xl font-bold leading-tight">
-                Gestão inteligente de
-                <br />
+              <h1 className="text-5xl font-bold leading-tight">
+                Gestão inteligente de{' '}
                 <span className="text-[#FFD700] inline-block animate-gradient-text">
-                  matrículas escolares
-                </span>
+                  matrículas
+                </span>{' '}
+                escolares
               </h1>
-              
+
               <p className="text-xl text-white/90 max-w-md animate-fade-in-up animation-delay-400">
                 Simplifique o processo de captação de alunos e aumente suas matrículas com nossa plataforma completa.
               </p>
             </div>
 
-            {/* Features com Animações Escalonadas */}
+            {/* Features */}
             <div className="space-y-5 pt-4">
               <div className="flex items-start space-x-4 animate-slide-in-left animation-delay-600 group hover:translate-x-2 transition-transform duration-300">
                 <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center mt-1 group-hover:bg-white/20 transition-all duration-300 group-hover:scale-110">
@@ -118,7 +121,7 @@ export default function LoginForm() {
               </div>
             </div>
 
-            {/* Badge Animado */}
+            {/* Badge */}
             <div className="inline-flex items-center space-x-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full animate-fade-in-up animation-delay-1200">
               <Sparkles className="w-4 h-4 text-[#FFD700] animate-pulse" />
               <span className="text-sm font-medium">Sistema completo para sua escola</span>
@@ -135,11 +138,11 @@ export default function LoginForm() {
       {/* Right Side - Login Form */}
       <div className="flex-1 flex items-center justify-center p-8 bg-white">
         <div className="w-full max-w-md">
-          {/* Logo Original - Agora no Lado Branco */}
-          <div className="mb-10 flex justify-center animate-fade-in-down">
-            <img 
-              src="/Inscribologo.png" 
-              alt="Inscribo" 
+          {/* Logo - Mobile only */}
+          <div className="mb-10 flex justify-center animate-fade-in-down lg:hidden">
+            <img
+              src="/Inscribologo.png"
+              alt="Inscribo"
               className="h-16 w-auto"
             />
           </div>
@@ -147,7 +150,7 @@ export default function LoginForm() {
           {/* Login Card */}
           <div className="space-y-8">
             <div className="animate-fade-in-up animation-delay-200">
-              <h2 className="text-3xl font-bold text-[#2D3E9E] mb-2">
+              <h2 className="text-3xl font-bold text-[#1e2d6b] mb-2">
                 Entrar no Sistema
               </h2>
               <p className="text-gray-600">
@@ -168,7 +171,7 @@ export default function LoginForm() {
                   E-mail
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5 transition-colors group-focus-within:text-[#00D4C4]" />
+                  <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5 transition-colors group-focus-within:text-[#14b8a6]" />
                   <input
                     id="email"
                     name="email"
@@ -176,7 +179,7 @@ export default function LoginForm() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="pl-12 block w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#00D4C4]/20 focus:border-[#00D4C4] transition-all text-base hover:border-gray-300"
+                    className="pl-12 block w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#14b8a6]/20 focus:border-[#14b8a6] transition-all text-base hover:border-gray-300"
                     placeholder="seu@email.com"
                   />
                 </div>
@@ -187,7 +190,7 @@ export default function LoginForm() {
                   Senha
                 </label>
                 <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5 transition-colors group-focus-within:text-[#00D4C4]" />
+                  <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5 transition-colors group-focus-within:text-[#14b8a6]" />
                   <input
                     id="password"
                     name="password"
@@ -195,12 +198,12 @@ export default function LoginForm() {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="pl-12 pr-12 block w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#00D4C4]/20 focus:border-[#00D4C4] transition-all text-base hover:border-gray-300"
+                    className="pl-12 pr-12 block w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#14b8a6]/20 focus:border-[#14b8a6] transition-all text-base hover:border-gray-300"
                     placeholder="••••••••"
                   />
                   <button
                     type="button"
-                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-[#00D4C4] transition-colors"
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-[#14b8a6] transition-colors"
                     onClick={() => setShowPassword(!showPassword)}
                   >
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -214,7 +217,7 @@ export default function LoginForm() {
                     id="remember-me"
                     name="remember-me"
                     type="checkbox"
-                    className="h-4 w-4 text-[#00D4C4] focus:ring-[#00D4C4] border-gray-300 rounded transition-all"
+                    className="h-4 w-4 text-[#14b8a6] focus:ring-[#14b8a6] border-gray-300 rounded transition-all"
                   />
                   <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
                     Lembrar de mim
@@ -222,7 +225,7 @@ export default function LoginForm() {
                 </div>
 
                 <div className="text-sm">
-                  <a href="#" className="font-semibold text-[#00D4C4] hover:text-[#00B8AA] transition-colors">
+                  <a href="#" className="font-semibold text-[#14b8a6] hover:text-[#0d9488] transition-colors">
                     Esqueceu a senha?
                   </a>
                 </div>
@@ -231,7 +234,7 @@ export default function LoginForm() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center items-center py-4 px-4 rounded-xl text-base font-semibold text-white bg-gradient-to-r from-[#00D4C4] to-[#2D3E9E] hover:from-[#00B8AA] hover:to-[#252F7E] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#00D4C4] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg hover:shadow-2xl transform hover:-translate-y-1 active:translate-y-0"
+                className="w-full flex justify-center items-center py-4 px-4 rounded-xl text-base font-semibold text-white bg-gradient-to-r from-[#14b8a6] to-[#1e2d6b] hover:from-[#0d9488] hover:to-[#151b4e] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#14b8a6] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg hover:shadow-2xl transform hover:-translate-y-1 active:translate-y-0"
               >
                 {loading ? (
                   <>
@@ -251,7 +254,7 @@ export default function LoginForm() {
             <div className="text-center pt-6 border-t border-gray-200 animate-fade-in-up animation-delay-600">
               <p className="text-sm text-gray-600">
                 Precisa de ajuda?{' '}
-                <a href="#" className="font-semibold text-[#00D4C4] hover:text-[#00B8AA] transition-colors">
+                <a href="#" className="font-semibold text-[#14b8a6] hover:text-[#0d9488] transition-colors">
                   Entre em contato
                 </a>
               </p>
@@ -261,137 +264,50 @@ export default function LoginForm() {
       </div>
 
       {/* Estilos de Animação */}
-      <style jsx>{`
+      <style>{`
         @keyframes fadeInDown {
-          from {
-            opacity: 0;
-            transform: translateY(-20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(-20px); }
+          to { opacity: 1; transform: translateY(0); }
         }
-
         @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
         }
-
         @keyframes fadeIn {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
-
         @keyframes slideInLeft {
-          from {
-            opacity: 0;
-            transform: translateX(-30px);
-          }
-          to {
-            opacity: 1;
-            transform: translateX(0);
-          }
+          from { opacity: 0; transform: translateX(-30px); }
+          to { opacity: 1; transform: translateX(0); }
         }
-
         @keyframes shake {
           0%, 100% { transform: translateX(0); }
           10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
           20%, 40%, 60%, 80% { transform: translateX(5px); }
         }
-
         @keyframes bounceSlow {
-          0%, 100% {
-            transform: translateY(-5%);
-            animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
-          }
-          50% {
-            transform: translateY(0);
-            animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
-          }
+          0%, 100% { transform: translateY(-5%); animation-timing-function: cubic-bezier(0.8,0,1,1); }
+          50% { transform: translateY(0); animation-timing-function: cubic-bezier(0,0,0.2,1); }
         }
-
         @keyframes gradientText {
-          0%, 100% {
-            filter: brightness(1);
-          }
-          50% {
-            filter: brightness(1.2);
-          }
+          0%, 100% { filter: brightness(1); }
+          50% { filter: brightness(1.2); }
         }
-
-        .animate-fade-in-down {
-          animation: fadeInDown 0.6s ease-out forwards;
-        }
-
-        .animate-fade-in-up {
-          animation: fadeInUp 0.6s ease-out forwards;
-        }
-
-        .animate-fade-in {
-          animation: fadeIn 0.6s ease-out forwards;
-        }
-
-        .animate-slide-in-left {
-          animation: slideInLeft 0.6s ease-out forwards;
-        }
-
-        .animate-shake {
-          animation: shake 0.5s ease-out;
-        }
-
-        .animate-bounce-slow {
-          animation: bounceSlow 3s infinite;
-        }
-
-        .animate-gradient-text {
-          animation: gradientText 2s ease-in-out infinite;
-        }
-
-        .animation-delay-200 {
-          animation-delay: 0.2s;
-          opacity: 0;
-        }
-
-        .animation-delay-400 {
-          animation-delay: 0.4s;
-          opacity: 0;
-        }
-
-        .animation-delay-600 {
-          animation-delay: 0.6s;
-          opacity: 0;
-        }
-
-        .animation-delay-800 {
-          animation-delay: 0.8s;
-          opacity: 0;
-        }
-
-        .animation-delay-1000 {
-          animation-delay: 1s;
-          opacity: 0;
-        }
-
-        .animation-delay-1200 {
-          animation-delay: 1.2s;
-          opacity: 0;
-        }
-
-        .animation-delay-1400 {
-          animation-delay: 1.4s;
-          opacity: 0;
-        }
+        .animate-fade-in-down { animation: fadeInDown 0.6s ease-out forwards; }
+        .animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
+        .animate-fade-in { animation: fadeIn 0.6s ease-out forwards; }
+        .animate-slide-in-left { animation: slideInLeft 0.6s ease-out forwards; }
+        .animate-shake { animation: shake 0.5s ease-out; }
+        .animate-bounce-slow { animation: bounceSlow 3s infinite; }
+        .animate-gradient-text { animation: gradientText 2s ease-in-out infinite; }
+        .animation-delay-200 { animation-delay: 0.2s; opacity: 0; }
+        .animation-delay-400 { animation-delay: 0.4s; opacity: 0; }
+        .animation-delay-600 { animation-delay: 0.6s; opacity: 0; }
+        .animation-delay-800 { animation-delay: 0.8s; opacity: 0; }
+        .animation-delay-1000 { animation-delay: 1s; opacity: 0; }
+        .animation-delay-1200 { animation-delay: 1.2s; opacity: 0; }
+        .animation-delay-1400 { animation-delay: 1.4s; opacity: 0; }
       `}</style>
     </div>
   )

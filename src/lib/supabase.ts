@@ -36,53 +36,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 })
 
-// ========================================
-// PREVINE RELOAD AO TROCAR DE ABA
-// ========================================
-if (typeof window !== 'undefined') {
-  let isTabVisible = true
-  let sessionCheckInProgress = false
-  
-  // Monitora quando a aba fica visível/invisível
-  document.addEventListener('visibilitychange', () => {
-    const wasHidden = !isTabVisible
-    isTabVisible = document.visibilityState === 'visible'
-    
-    if (isTabVisible && wasHidden && !sessionCheckInProgress) {
-      // Aba voltou a ficar visível - verifica sessão silenciosamente
-      sessionCheckInProgress = true
-      
-      supabase.auth.getSession()
-        .then(({ data }) => {
-          if (data.session) {
-            console.log('✅ Sessão ativa - mantendo estado')
-          } else {
-            console.log('⚠️ Sem sessão - redirecionando para login')
-            window.location.href = '/login'
-          }
-        })
-        .catch((error) => {
-          console.error('Erro ao verificar sessão:', error)
-        })
-        .finally(() => {
-          sessionCheckInProgress = false
-        })
-    }
-  })
-  
-  // Listener otimizado do Supabase Auth
-  supabase.auth.onAuthStateChange((event, session) => {
-    if (event === 'TOKEN_REFRESHED') {
-      console.log('🔄 Token atualizado silenciosamente')
-    } else if (event === 'SIGNED_OUT') {
-      console.log('🚪 Usuário deslogado')
-      window.location.href = '/login'
-    } else if (event === 'SIGNED_IN') {
-      console.log('✅ Usuário logado')
-    }
-  })
-}
-
 // Types
 export interface Lead {
   id: string

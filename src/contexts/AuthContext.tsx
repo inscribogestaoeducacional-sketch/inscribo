@@ -46,33 +46,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initializeAuth()
   }, [])
 
-  // Listener para mudanças de visibilidade da página
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden && session) {
-        console.log('👁️ Página ficou visível, verificando sessão...')
-        // Verificar se a sessão ainda é válida quando a página fica visível
-        refreshSession()
-      }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [session])
-
-  // Listener para mudanças de foco da janela
-  useEffect(() => {
-    const handleFocus = () => {
-      if (session) {
-        console.log('🎯 Janela ganhou foco, verificando sessão...')
-        refreshSession()
-      }
-    }
-
-    window.addEventListener('focus', handleFocus)
-    return () => window.removeEventListener('focus', handleFocus)
-  }, [session])
-
   // Listener para storage changes (sincronização entre abas)
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
