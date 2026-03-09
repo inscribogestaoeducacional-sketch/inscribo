@@ -60,21 +60,21 @@ const Sidebar = () => {
   return (
     <>
       {/* Mobile Header - Só aparece no mobile */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-50">
+      <div className="lg:hidden fixed top-0 left-0 right-0 bg-[#1e2d6b] border-b border-[#151b4e] z-50">
         <div className="flex items-center justify-between px-4 py-3">
-          <img 
-            src="/Inscribologo.png" 
-            alt="Inscribo" 
+          <img
+            src="/Inscribologo.png"
+            alt="Inscribo"
             className="h-10 w-auto"
           />
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
           >
             {isMobileMenuOpen ? (
-              <X className="h-6 w-6 text-gray-600" />
+              <X className="h-6 w-6 text-white" />
             ) : (
-              <Menu className="h-6 w-6 text-gray-600" />
+              <Menu className="h-6 w-6 text-white" />
             )}
           </button>
         </div>
@@ -82,7 +82,7 @@ const Sidebar = () => {
 
       {/* Overlay - Só aparece quando menu mobile está aberto */}
       {isMobileMenuOpen && (
-        <div 
+        <div
           className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
           onClick={() => setIsMobileMenuOpen(false)}
         />
@@ -90,39 +90,39 @@ const Sidebar = () => {
 
       {/* Sidebar Desktop e Mobile */}
       <div className={`
-        bg-white shadow-lg h-full w-64 fixed left-0 top-0 z-50 flex flex-col
+        bg-[#1e2d6b] shadow-lg h-full w-64 fixed left-0 top-0 z-50 flex flex-col
         transition-transform duration-300 ease-in-out
         lg:translate-x-0
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         {/* Logo - Desktop */}
-        <div className="hidden lg:block p-6 border-b border-gray-100 bg-gradient-to-br from-white to-gray-50">
+        <div className="hidden lg:block p-6 border-b border-[#151b4e]">
           <div className="flex items-center justify-center">
-            <img 
-              src="/Inscribologo.png" 
-              alt="Inscribo" 
+            <img
+              src="/Inscribologo.png"
+              alt="Inscribo"
               className="h-16 w-auto transition-transform duration-300 hover:scale-105"
             />
           </div>
         </div>
 
         {/* Logo - Mobile (dentro do drawer) */}
-        <div className="lg:hidden p-6 border-b border-gray-100 bg-gradient-to-br from-white to-gray-50">
+        <div className="lg:hidden p-6 border-b border-[#151b4e]">
           <div className="flex items-center justify-between">
-            <img 
-              src="/Inscribologo.png" 
-              alt="Inscribo" 
+            <img
+              src="/Inscribologo.png"
+              alt="Inscribo"
               className="h-12 w-auto"
             />
             <button
               onClick={() => setIsMobileMenuOpen(false)}
-              className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              className="lg:hidden p-2 rounded-lg hover:bg-white/10 transition-colors"
             >
-              <X className="h-6 w-6 text-gray-600" />
+              <X className="h-6 w-6 text-white" />
             </button>
           </div>
         </div>
-        
+
         {/* Navigation Menu */}
         <nav className="flex-1 mt-4 overflow-y-auto">
           <ul className="space-y-1 px-2">
@@ -135,11 +135,11 @@ const Sidebar = () => {
                     onClick={handleLinkClick}
                     className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 ${
                       isActive(item.path)
-                        ? 'bg-gradient-to-r from-[#00D4C4]/10 to-[#2D3E9E]/10 text-[#2D3E9E] shadow-sm'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                        ? 'border-l-4 border-[#14b8a6] bg-white/10 text-white'
+                        : 'text-white/70 hover:bg-white/10 hover:text-white'
                     }`}
                   >
-                    <Icon className={`mr-3 h-5 w-5 ${isActive(item.path) ? 'text-[#00D4C4]' : ''}`} />
+                    <Icon className={`mr-3 h-5 w-5 ${isActive(item.path) ? 'text-[#14b8a6]' : 'text-white/70'}`} />
                     {item.label}
                   </Link>
                 </li>
@@ -149,8 +149,8 @@ const Sidebar = () => {
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-gray-100">
-          <div className="text-center text-xs text-gray-400">
+        <div className="p-4 border-t border-[#151b4e]">
+          <div className="text-center text-xs text-white/40">
             © 2024 Inscribo
           </div>
         </div>

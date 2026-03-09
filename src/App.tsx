@@ -6,6 +6,7 @@ import { supabase } from './lib/supabase'
 // Auth Components
 import LoginForm from './components/auth/LoginForm'
 import InitialSetup from './components/auth/InitialSetup'
+import LandingPage from './components/landing/LandingPage'
 
 // Regular User Components
 import Dashboard from './components/dashboard/Dashboard'
@@ -157,9 +158,10 @@ function AppContent() {
   if (!user) {
     return (
       <Routes>
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginForm />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     )
   }
@@ -195,7 +197,7 @@ function AppContent() {
         
         <main className="min-h-screen">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/leads" element={<LeadKanban />} />
             <Route path="/visits" element={<VisitCalendar />} />
