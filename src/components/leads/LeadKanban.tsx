@@ -13,7 +13,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useAuth } from '../../contexts/AuthContext'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { DatabaseService, Lead, ActivityLog } from '../../lib/supabase'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -592,7 +592,7 @@ function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory,
     <div
       className={`group relative rounded-xl border transition-all duration-150 overflow-hidden ${
         isFlashing
-          ? 'bg-green-50/30 border-green-300 ring-2 ring-green-400 shadow-md'
+          ? 'bg-teal-50/40 border-teal-400 ring-2 ring-teal-500 shadow-md animate-pulse'
           : overlay
           ? 'bg-white border-gray-200 shadow-xl scale-105 opacity-50'
           : 'bg-white border-gray-200 shadow-sm hover:shadow-md hover:border-teal-300 hover:bg-gray-50'
@@ -747,6 +747,7 @@ function DroppableColumn({ id, isOver, children }: { id: string; isOver: boolean
 export default function LeadKanban() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
   const [showNewLeadModal, setShowNewLeadModal] = useState(false)
@@ -780,6 +781,15 @@ export default function LeadKanban() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [overColumnId, setOverColumnId] = useState<string | null>(null)
   const [flashingLeadId, setFlashingLeadId] = useState<string | null>(null)
+
+  // Highlight lead from ?highlight=ID (e.g. navigating from VisitCalendar)
+  useEffect(() => {
+    const highlightId = searchParams.get('highlight')
+    if (highlightId) {
+      setFlashingLeadId(highlightId)
+      setTimeout(() => setFlashingLeadId(null), 3000)
+    }
+  }, [searchParams])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })

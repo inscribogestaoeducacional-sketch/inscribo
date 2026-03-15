@@ -1,901 +1,626 @@
-import React, { useState, useEffect } from 'react'
-import { Calendar, Clock, User, Plus, Edit, Eye, MapPin, Phone, Mail, ChevronLeft, ChevronRight, Filter, Search, X, Flame, Snowflake, Sun, MessageSquare, Check, AlertCircle, Save, Trash2, DollarSign, Tag, Users as UsersIcon } from 'lucide-react'
+import React, { useState, useEffect, useCallback } from 'react'
+import {
+  ChevronLeft, ChevronRight, Plus, X, Search, Check, Trash2,
+  Calendar, Clock
+} from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { DatabaseService, Visit, Lead, User as AppUser } from '../../lib/supabase'
+import { DatabaseService, Visit, Lead } from '../../lib/supabase'
 
-const statusConfig = {
-  scheduled: { label: 'Agendada', color: 'bg-blue-500', bgColor: 'bg-blue-50', textColor: 'text-blue-700', borderColor: 'border-blue-200' },
-  completed: { label: 'Realizada', color: 'bg-green-500', bgColor: 'bg-green-50', textColor: 'text-green-700', borderColor: 'border-green-200' },
-  cancelled: { label: 'Cancelada', color: 'bg-red-500', bgColor: 'bg-red-50', textColor: 'text-red-700', borderColor: 'border-red-200' },
-  no_show: { label: 'Não Compareceu', color: 'bg-gray-500', bgColor: 'bg-gray-50', textColor: 'text-gray-700', borderColor: 'border-gray-200' }
+// ─── Config ───────────────────────────────────────────────────────────────────
+const visitStatus = {
+  scheduled: { label: 'Agendada',       dot: 'bg-amber-400',  badge: 'bg-amber-100 text-amber-700' },
+  completed: { label: 'Realizada',      dot: 'bg-green-400',  badge: 'bg-green-100 text-green-700' },
+  no_show:   { label: 'Não compareceu', dot: 'bg-gray-400',   badge: 'bg-gray-100 text-gray-600'  },
+  cancelled: { label: 'Cancelada',      dot: 'bg-red-400',    badge: 'bg-red-100 text-red-700'    },
 }
 
 const timeSlots = [
-  '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-  '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00'
+  '07:30', '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+  '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
 ]
 
-interface VisitDetailsModalProps {
-  isOpen: boolean
-  onClose: () => void
-  visit: Visit
-  lead: Lead | null
-  onStatusChange: (visitId: string, status: Visit['status'], temperature?: 'hot' | 'warm' | 'cold') => void
-  onUpdateVisit: (visitId: string, data: { scheduled_date: string; notes: string }) => void
-  onDeleteVisit: (visitId: string) => void
+const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none transition-all'
+const btnPrimary = 'px-4 py-2 bg-gradient-to-r from-[#14b8a6] to-[#1e2d6b] text-white rounded-lg hover:from-[#0d9488] hover:to-[#151b4e] transition-all font-semibold text-sm flex items-center gap-2'
+
+function toLocalDateStr(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
-function VisitDetailsModal({ isOpen, onClose, visit, lead, onStatusChange, onUpdateVisit, onDeleteVisit }: VisitDetailsModalProps) {
-  const [selectedStatus, setSelectedStatus] = useState<Visit['status']>(visit.status)
-  const [selectedTemperature, setSelectedTemperature] = useState<'hot' | 'warm' | 'cold' | null>(null)
-  const [isEditing, setIsEditing] = useState(false)
-  const [editDate, setEditDate] = useState('')
-  const [editTime, setEditTime] = useState('')
-  const [editNotes, setEditNotes] = useState('')
+// ─── Nova Visita Modal ─────────────────────────────────────────────────────────
+interface NovaVisitaProps {
+  isOpen: boolean
+  onClose: () => void
+  onSave: (data: { lead_id: string; student_name: string; date: string; time: string; notes: string }) => Promise<void>
+  defaultDate: string
+  leads: Lead[]
+}
+
+function NovaVisitaModal({ isOpen, onClose, onSave, defaultDate, leads }: NovaVisitaProps) {
+  const [search, setSearch] = useState('')
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
+  const [date, setDate] = useState(defaultDate)
+  const [time, setTime] = useState('09:00')
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [showDropdown, setShowDropdown] = useState(false)
 
   useEffect(() => {
-    if (visit) {
-      const dateTime = new Date(visit.scheduled_date)
-      setEditDate(dateTime.toISOString().split('T')[0])
-      setEditTime(dateTime.toTimeString().slice(0, 5))
-      setEditNotes(visit.notes || '')
-      setSelectedStatus(visit.status)
+    if (isOpen) {
+      setSearch('')
+      setSelectedLead(null)
+      setDate(defaultDate)
+      setTime('09:00')
+      setNotes('')
     }
-  }, [visit])
+  }, [isOpen, defaultDate])
+
+  const filtered = search.length >= 2
+    ? leads.filter(l =>
+        l.student_name.toLowerCase().includes(search.toLowerCase()) ||
+        (l.phone && l.phone.includes(search)) ||
+        l.responsible_name.toLowerCase().includes(search.toLowerCase())
+      ).slice(0, 8)
+    : []
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedLead || !date || !time) return
+    setSaving(true)
+    try {
+      await onSave({ lead_id: selectedLead.id, student_name: selectedLead.student_name, date, time, notes })
+      onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
 
   if (!isOpen) return null
 
-  const handleComplete = () => {
-    if (selectedStatus === 'completed' && !selectedTemperature) {
-      alert('Por favor, selecione a temperatura do lead!')
-      return
-    }
-    onStatusChange(visit.id, selectedStatus, selectedTemperature || undefined)
-    onClose()
-  }
-
-  const handleSaveEdit = () => {
-    if (!editDate || !editTime) {
-      alert('Data e horário são obrigatórios!')
-      return
-    }
-    
-    const scheduledDateTime = `${editDate}T${editTime}:00.000Z`
-    onUpdateVisit(visit.id, {
-      scheduled_date: scheduledDateTime,
-      notes: editNotes
-    })
-    setIsEditing(false)
-  }
-
-  const handleDelete = () => {
-    if (confirm('Tem certeza que deseja excluir esta visita?\n\nEsta ação não pode ser desfeita.')) {
-      onDeleteVisit(visit.id)
-      onClose()
-    }
-  }
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-3xl p-8 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-1">📋 Detalhes da Visita</h2>
-            {lead && (
-              <p className="text-gray-600">Lead: <span className="font-semibold">{lead.student_name}</span></p>
-            )}
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-full">
-            <X className="h-6 w-6" />
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="text-base font-bold text-[#1e2d6b]">Nova Visita</h2>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded">
+            <X className="w-4 h-4" />
           </button>
         </div>
-
-        {/* Seção de Edição da Visita */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 mb-8 border-2 border-blue-100">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-bold text-gray-900 flex items-center">
-              <Calendar className="w-6 h-6 mr-2 text-[#00D4C4]" />
-              Informações da Visita
-            </h3>
-            {!isEditing && (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="text-blue-600 hover:text-blue-700 p-2 hover:bg-blue-100 rounded-xl transition-all"
-                  title="Editar visita"
-                >
-                  <Edit className="w-5 h-5" />
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {/* Lead search */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Lead *</label>
+            {selectedLead ? (
+              <div className="flex items-center justify-between px-3 py-2 border border-gray-200 rounded-lg bg-teal-50">
+                <div>
+                  <span className="text-sm font-medium text-teal-800">{selectedLead.student_name}</span>
+                  {selectedLead.phone && (
+                    <span className="text-xs text-teal-600 ml-2">{selectedLead.phone}</span>
+                  )}
+                </div>
+                <button type="button" onClick={() => { setSelectedLead(null); setSearch('') }}
+                  className="text-gray-400 hover:text-gray-600 ml-2">
+                  <X className="w-3.5 h-3.5" />
                 </button>
-                <button
-                  onClick={handleDelete}
-                  className="text-red-600 hover:text-red-700 p-2 hover:bg-red-100 rounded-xl transition-all"
-                  title="Excluir visita"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setShowDropdown(true) }}
+                  onFocus={() => setShowDropdown(true)}
+                  placeholder="Buscar por nome ou telefone..."
+                  className={`${inputCls} pl-8`}
+                />
+                {showDropdown && filtered.length > 0 && (
+                  <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {filtered.map(lead => (
+                      <button
+                        key={lead.id}
+                        type="button"
+                        onClick={() => { setSelectedLead(lead); setShowDropdown(false) }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                      >
+                        <span className="font-medium text-gray-800">{lead.student_name}</span>
+                        {lead.phone && <span className="text-gray-400 ml-2 text-xs">{lead.phone}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {showDropdown && search.length >= 2 && filtered.length === 0 && (
+                  <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-3">
+                    <p className="text-xs text-gray-400">Nenhum lead encontrado</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {isEditing ? (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Data da Visita *</label>
-                  <input
-                    type="date"
-                    value={editDate}
-                    onChange={(e) => setEditDate(e.target.value)}
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Horário *</label>
-                  <select
-                    value={editTime}
-                    onChange={(e) => setEditTime(e.target.value)}
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
-                  >
-                    {timeSlots.map(time => (
-                      <option key={time} value={time}>{time}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Observações</label>
-                <textarea
-                  value={editNotes}
-                  onChange={(e) => setEditNotes(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
-                  rows={3}
-                />
-              </div>
-              <div className="flex justify-end gap-4">
-                <button
-                  onClick={() => setIsEditing(false)}
-                  className="px-6 py-3 border-2 border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all font-medium"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleSaveEdit}
-                  className="px-6 py-3 bg-gradient-to-r from-[#00D4C4] to-[#2D3E9E] text-white rounded-xl hover:from-[#00B8AA] hover:to-[#252F7E] transition-all flex items-center font-medium shadow-lg"
-                >
-                  <Save className="w-5 h-5 mr-2" />
-                  Salvar Alterações
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-              <div className="bg-white p-4 rounded-xl border-2 border-gray-100">
-                <span className="font-semibold text-gray-700 flex items-center mb-2">
-                  <User className="w-4 h-4 mr-1" />
-                  Visitante:
-                </span>
-                <p className="text-gray-900">{visit.student_name || 'Não informado'}</p>
-              </div>
-              <div className="bg-white p-4 rounded-xl border-2 border-gray-100">
-                <span className="font-semibold text-gray-700 flex items-center mb-2">
-                  <Calendar className="w-4 h-4 mr-1" />
-                  Data/Hora:
-                </span>
-                <p className="text-gray-900">
-                  {new Date(visit.scheduled_date).toLocaleString('pt-BR', {
-                    weekday: 'long',
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </p>
-              </div>
-              {visit.notes && (
-                <div className="md:col-span-2 p-4 bg-white rounded-xl border-2 border-gray-100">
-                  <span className="font-semibold text-gray-700 flex items-center text-sm mb-2">
-                    <MessageSquare className="w-4 h-4 mr-1" />
-                    Observações:
-                  </span>
-                  <p className="text-gray-700 text-sm">{visit.notes}</p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Informações Completas do Lead */}
-        {lead && (
-          <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-6 mb-8 border-2 border-green-100">
-            <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
-              <User className="w-6 h-6 mr-2 text-green-600" />
-              Informações Completas do Lead
-            </h3>
-            
-            {/* Dados do Aluno */}
-            <div className="mb-6">
-              <h4 className="font-bold text-gray-900 mb-4 text-lg border-b-2 border-green-200 pb-3">
-                👨‍🎓 Dados do Aluno
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div className="bg-white p-4 rounded-xl border-2 border-green-50">
-                  <span className="font-semibold text-gray-700">Nome do Aluno:</span>
-                  <p className="text-gray-900 text-base mt-1">{lead.student_name}</p>
-                </div>
-                <div className="bg-white p-4 rounded-xl border-2 border-green-50">
-                  <span className="font-semibold text-gray-700">Série/Ano de Interesse:</span>
-                  <p className="text-gray-900 text-base mt-1">{lead.grade_interest}</p>
-                </div>
-                {lead.cpf && (
-                  <div className="bg-white p-4 rounded-xl border-2 border-green-50">
-                    <span className="font-semibold text-gray-700">CPF:</span>
-                    <p className="text-gray-900 text-base mt-1">{lead.cpf}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Dados do Responsável */}
-            <div className="mb-6">
-              <h4 className="font-bold text-gray-900 mb-4 text-lg border-b-2 border-green-200 pb-3">
-                👥 Dados do Responsável
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div className="bg-white p-4 rounded-xl border-2 border-green-50">
-                  <span className="font-semibold text-gray-700">Nome do Responsável:</span>
-                  <p className="text-gray-900 text-base mt-1">{lead.responsible_name}</p>
-                </div>
-                {lead.phone && (
-                  <div className="bg-white p-4 rounded-xl border-2 border-green-50">
-                    <span className="font-semibold text-gray-700 flex items-center">
-                      <Phone className="w-4 h-4 mr-1" />
-                      Telefone:
-                    </span>
-                    <p className="text-gray-900 text-base mt-1">{lead.phone}</p>
-                  </div>
-                )}
-                {lead.email && (
-                  <div className="bg-white p-4 rounded-xl border-2 border-green-50">
-                    <span className="font-semibold text-gray-700 flex items-center">
-                      <Mail className="w-4 h-4 mr-1" />
-                      E-mail:
-                    </span>
-                    <p className="text-gray-900 text-base mt-1">{lead.email}</p>
-                  </div>
-                )}
-                {lead.address && (
-                  <div className="bg-white p-4 rounded-xl border-2 border-green-50">
-                    <span className="font-semibold text-gray-700 flex items-center">
-                      <MapPin className="w-4 h-4 mr-1" />
-                      Endereço:
-                    </span>
-                    <p className="text-gray-900 text-base mt-1">{lead.address}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Informações Adicionais */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <h4 className="font-bold text-gray-900 mb-4 text-lg border-b-2 border-green-200 pb-3">
-                📊 Informações Adicionais
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                <div className="bg-white p-4 rounded-xl border-2 border-green-50">
-                  <span className="font-semibold text-gray-700 flex items-center">
-                    <Tag className="w-4 h-4 mr-1" />
-                    Origem:
-                  </span>
-                  <p className="text-gray-900 text-base mt-1">{lead.source}</p>
-                </div>
-                {lead.budget_range && (
-                  <div className="bg-white p-4 rounded-xl border-2 border-green-50">
-                    <span className="font-semibold text-gray-700 flex items-center">
-                      <DollarSign className="w-4 h-4 mr-1" />
-                      Faixa de Orçamento:
-                    </span>
-                    <p className="text-gray-900 text-base mt-1">{lead.budget_range}</p>
-                  </div>
-                )}
-                <div className="bg-white p-4 rounded-xl border-2 border-green-50">
-                  <span className="font-semibold text-gray-700 flex items-center">
-                    <Calendar className="w-4 h-4 mr-1" />
-                    Data de Criação:
-                  </span>
-                  <p className="text-gray-900 text-base mt-1">
-                    {new Date(lead.created_at).toLocaleDateString('pt-BR')}
-                  </p>
-                </div>
-              </div>
-              
-              {lead.notes && (
-                <div className="mt-4 bg-white p-5 rounded-xl border-2 border-green-50">
-                  <span className="font-semibold text-gray-700 flex items-center mb-2">
-                    <MessageSquare className="w-4 h-4 mr-1" />
-                    Observações do Lead:
-                  </span>
-                  <p className="text-gray-700 text-base leading-relaxed">{lead.notes}</p>
-                </div>
-              )}
+              <label className="block text-xs font-medium text-gray-700 mb-1">Data *</label>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputCls} required />
             </div>
-          </div>
-        )}
-
-        {/* Atualizar Status da Visita */}
-        <div className="bg-gray-50 rounded-2xl p-6 mb-8 border-2 border-gray-200">
-          <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
-            <Check className="w-6 h-6 mr-2 text-[#00D4C4]" />
-            Atualizar Status da Visita
-          </h3>
-          
-          <div className="space-y-6">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Status da Visita
-              </label>
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value as Visit['status'])}
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
-              >
-                {Object.entries(statusConfig).map(([value, config]) => (
-                  <option key={value} value={value}>{config.label}</option>
-                ))}
+              <label className="block text-xs font-medium text-gray-700 mb-1">Horário *</label>
+              <select value={time} onChange={e => setTime(e.target.value)} className={inputCls}>
+                {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-
-            {/* Temperatura do lead após visita */}
-            {selectedStatus === 'completed' && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-4">
-                  🌡️ Como o lead ficou após a visita? *
-                </label>
-                <div className="grid grid-cols-3 gap-4">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedTemperature('hot')}
-                    className={`p-5 rounded-2xl border-2 transition-all ${
-                      selectedTemperature === 'hot'
-                        ? 'border-red-500 bg-red-50 shadow-lg'
-                        : 'border-gray-300 hover:border-red-300'
-                    }`}
-                  >
-                    <Flame className={`w-10 h-10 mx-auto mb-3 ${
-                      selectedTemperature === 'hot' ? 'text-red-500' : 'text-gray-400'
-                    }`} />
-                    <p className="text-sm font-bold text-center">🔥 Quente</p>
-                    <p className="text-xs text-gray-600 text-center mt-2">Muito interessado</p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setSelectedTemperature('warm')}
-                    className={`p-5 rounded-2xl border-2 transition-all ${
-                      selectedTemperature === 'warm'
-                        ? 'border-yellow-500 bg-yellow-50 shadow-lg'
-                        : 'border-gray-300 hover:border-yellow-300'
-                    }`}
-                  >
-                    <Sun className={`w-10 h-10 mx-auto mb-3 ${
-                      selectedTemperature === 'warm' ? 'text-yellow-500' : 'text-gray-400'
-                    }`} />
-                    <p className="text-sm font-bold text-center">☀️ Morno</p>
-                    <p className="text-xs text-gray-600 text-center mt-2">Interesse moderado</p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setSelectedTemperature('cold')}
-                    className={`p-5 rounded-2xl border-2 transition-all ${
-                      selectedTemperature === 'cold'
-                        ? 'border-blue-500 bg-blue-50 shadow-lg'
-                        : 'border-gray-300 hover:border-blue-300'
-                    }`}
-                  >
-                    <Snowflake className={`w-10 h-10 mx-auto mb-3 ${
-                      selectedTemperature === 'cold' ? 'text-blue-500' : 'text-gray-400'
-                    }`} />
-                    <p className="text-sm font-bold text-center">❄️ Frio</p>
-                    <p className="text-xs text-gray-600 text-center mt-2">Pouco interessado</p>
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
-        </div>
 
-        {/* Botões de Ação */}
-        <div className="flex justify-end gap-4 pt-6 border-t-2 border-gray-200">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-8 py-3 border-2 border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all font-medium"
-          >
-            Fechar
-          </button>
-          <button
-            type="button"
-            onClick={handleComplete}
-            className="px-8 py-3 bg-gradient-to-r from-[#00D4C4] to-[#2D3E9E] text-white rounded-xl hover:from-[#00B8AA] hover:to-[#252F7E] transition-all font-medium shadow-lg hover:shadow-xl transform hover:-translate-y-1 flex items-center"
-          >
-            <Check className="h-5 w-5 mr-2" />
-            Salvar Status
-          </button>
-        </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Observações</label>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              rows={3}
+              className={inputCls}
+              style={{ resize: 'none' }}
+              placeholder="Observações sobre a visita..."
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 font-medium">
+              Cancelar
+            </button>
+            <button type="submit" disabled={!selectedLead || saving}
+              className={`${btnPrimary} disabled:opacity-50 disabled:cursor-not-allowed`}>
+              {saving ? 'Salvando...' : 'Agendar Visita'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )
 }
 
+// ─── VisitCalendar ────────────────────────────────────────────────────────────
 export default function VisitCalendar() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [visits, setVisits] = useState<Visit[]>([])
   const [leads, setLeads] = useState<Lead[]>([])
-  const [users, setUsers] = useState<AppUser[]>([])
   const [loading, setLoading] = useState(true)
-  const [currentDate, setCurrentDate] = useState(new Date())
-  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar')
-  const [filterStatus, setFilterStatus] = useState('')
-  const [searchTerm, setSearchTerm] = useState('')
-  
-  const [showDetailsModal, setShowDetailsModal] = useState(false)
-  const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null)
+  const [calendarMonth, setCalendarMonth] = useState(new Date())
+  const [selectedDate, setSelectedDate] = useState(new Date())
+  const [showModal, setShowModal] = useState(false)
+
+  // Inline completion
+  const [completingId, setCompletingId] = useState<string | null>(null)
+  const [completionNotes, setCompletionNotes] = useState('')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (user?.institution_id) {
-      loadData()
-    }
+    if (user?.institution_id) loadData()
   }, [user])
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const [visitsData, leadsData, usersData] = await Promise.all([
+      const [visitsData, leadsData] = await Promise.all([
         DatabaseService.getVisits(user!.institution_id!),
-        DatabaseService.getLeads(user!.institution_id!),
-        DatabaseService.getUsers(user!.institution_id!)
+        DatabaseService.getLeads(user!.institution_id!)
       ])
       setVisits(visitsData)
       setLeads(leadsData)
-      setUsers(usersData)
-    } catch (error) {
-      console.error('Error loading data:', error)
+    } catch (err) {
+      console.error('Erro ao carregar visitas:', err)
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
 
-  const handleStatusChange = async (visitId: string, newStatus: Visit['status'], temperature?: 'hot' | 'warm' | 'cold') => {
-    try {
-      await DatabaseService.updateVisit(visitId, { status: newStatus })
-      
-      const visit = visits.find(v => v.id === visitId)
-      
-      if (newStatus === 'completed' && visit && visit.lead_id) {
-        await DatabaseService.updateLead(visit.lead_id, { 
-          status: 'visit',
-          temperature: temperature || null
-        })
-        
-        await DatabaseService.logActivity({
-          user_id: user!.id,
-          action: 'Visita realizada',
-          entity_type: 'lead',
-          entity_id: visit.lead_id,
-          details: {
-            visit_id: visitId,
-            temperature: temperature,
-            temperature_label: temperature === 'hot' ? 'Quente 🔥' : temperature === 'warm' ? 'Morno ☀️' : 'Frio ❄️',
-            notes: `Lead ficou ${temperature === 'hot' ? 'muito interessado' : temperature === 'warm' ? 'moderadamente interessado' : 'pouco interessado'} após a visita. Status atualizado para "Visita".`
-          },
-          institution_id: user!.institution_id
-        })
-      }
-      
-      await loadData()
-      setShowDetailsModal(false)
-      setSelectedVisit(null)
-    } catch (error) {
-      console.error('Error updating visit status:', error)
-    }
-  }
+  // ── Stats ──────────────────────────────────────────────────────────────────
+  const today = new Date()
+  const todayStr = toLocalDateStr(today)
+  const weekStart = new Date(today)
+  weekStart.setDate(today.getDate() - today.getDay())
+  const weekStartStr = toLocalDateStr(weekStart)
 
-  const handleUpdateVisit = async (visitId: string, data: { scheduled_date: string; notes: string }) => {
-    try {
-      const [datePart, timePart] = data.scheduled_date.split('T')
-      const [year, month, day] = datePart.split('-')
-      const [hours, minutes] = timePart.split(':')
-      
-      const visitDate = new Date(
-        parseInt(year),
-        parseInt(month) - 1,
-        parseInt(day),
-        parseInt(hours),
-        parseInt(minutes),
-        0,
-        0
-      )
-      
-      await DatabaseService.updateVisit(visitId, {
-        scheduled_date: visitDate.toISOString(),
-        notes: data.notes
-      })
-      await loadData()
-      alert('Visita atualizada com sucesso!')
-    } catch (error) {
-      console.error('Error updating visit:', error)
-      alert('Erro ao atualizar visita')
-    }
-  }
+  const statsToday = visits.filter(v => toLocalDateStr(new Date(v.scheduled_date)) === todayStr).length
+  const statsWeek = visits.filter(v => toLocalDateStr(new Date(v.scheduled_date)) >= weekStartStr).length
+  const statsCompleted = visits.filter(v => v.status === 'completed').length
+  const statsDone = visits.filter(v => v.status === 'completed' || v.status === 'no_show').length
+  const statsRate = statsDone > 0 ? Math.round((statsCompleted / statsDone) * 100) : 0
 
-  const handleDeleteVisit = async (visitId: string) => {
-    try {
-      await DatabaseService.deleteVisit(visitId)
-      await loadData()
-      alert('Visita excluída com sucesso!')
-    } catch (error) {
-      console.error('Error deleting visit:', error)
-      alert('Erro ao excluir visita')
-    }
-  }
-
-  const handleVisitClick = (visit: Visit) => {
-    setSelectedVisit(visit)
-    setShowDetailsModal(true)
-  }
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString('pt-BR')
-  }
-
-  const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString('pt-BR', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    })
-  }
-
-  const getVisitsByStatus = (status: Visit['status']) => {
-    return visits.filter(visit => {
-      const matchesStatus = visit.status === status
-      const matchesSearch = searchTerm === '' || 
-        (visit.student_name && visit.student_name.toLowerCase().includes(searchTerm.toLowerCase()))
-      const matchesFilter = filterStatus === '' || visit.status === filterStatus
-      
-      return matchesStatus && matchesSearch && matchesFilter
-    })
-  }
-
-  const getVisitsForDate = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0]
-    return visits.filter(visit => visit.scheduled_date.startsWith(dateStr))
-  }
-
-  const getDaysInMonth = (date: Date) => {
-    const year = date.getFullYear()
-    const month = date.getMonth()
-    const firstDay = new Date(year, month, 1)
-    const lastDay = new Date(year, month + 1, 0)
-    const daysInMonth = lastDay.getDate()
-    const startingDayOfWeek = firstDay.getDay()
-
-    const days = []
-    
-    for (let i = 0; i < startingDayOfWeek; i++) {
-      days.push(null)
-    }
-    
-    for (let day = 1; day <= daysInMonth; day++) {
-      days.push(new Date(year, month, day))
-    }
-    
+  // ── Calendar helpers ────────────────────────────────────────────────────────
+  const getDaysInMonth = (d: Date) => {
+    const year = d.getFullYear()
+    const month = d.getMonth()
+    const firstDay = new Date(year, month, 1).getDay()
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
+    const days: (Date | null)[] = []
+    for (let i = 0; i < firstDay; i++) days.push(null)
+    for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month, i))
     return days
   }
 
-  const navigateMonth = (direction: 'prev' | 'next') => {
-    setCurrentDate(prev => {
-      const newDate = new Date(prev)
-      if (direction === 'prev') {
-        newDate.setMonth(prev.getMonth() - 1)
-      } else {
-        newDate.setMonth(prev.getMonth() + 1)
-      }
-      return newDate
+  const getVisitsForDate = (date: Date) => {
+    const dateStr = toLocalDateStr(date)
+    return visits.filter(v => toLocalDateStr(new Date(v.scheduled_date)) === dateStr)
+  }
+
+  const getDotColor = (dayVisitsArr: Visit[]) => {
+    if (dayVisitsArr.length === 0) return null
+    if (dayVisitsArr.some(v => v.status === 'scheduled')) return 'bg-amber-400'
+    if (dayVisitsArr.some(v => v.status === 'completed')) return 'bg-green-400'
+    if (dayVisitsArr.some(v => v.status === 'no_show')) return 'bg-gray-400'
+    return 'bg-red-400'
+  }
+
+  // ── Selected day ────────────────────────────────────────────────────────────
+  const selectedStr = toLocalDateStr(selectedDate)
+  const dayVisits = visits
+    .filter(v => toLocalDateStr(new Date(v.scheduled_date)) === selectedStr)
+    .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
+
+  // ── Upcoming (next 7 days, scheduled only, excluding selected day) ──────────
+  const next7 = new Date(today)
+  next7.setDate(today.getDate() + 7)
+  const next7Str = toLocalDateStr(next7)
+  const upcomingVisits = visits
+    .filter(v => {
+      const d = toLocalDateStr(new Date(v.scheduled_date))
+      return d >= todayStr && d <= next7Str && d !== selectedStr && v.status === 'scheduled'
     })
+    .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
+    .slice(0, 10)
+
+  // ── Actions ─────────────────────────────────────────────────────────────────
+  const handleCreateVisit = async (data: { lead_id: string; student_name: string; date: string; time: string; notes: string }) => {
+    const [year, month, day] = data.date.split('-')
+    const [hours, minutes] = data.time.split(':')
+    const visitDate = new Date(+year, +month - 1, +day, +hours, +minutes, 0)
+    await DatabaseService.createVisit({
+      institution_id: user!.institution_id,
+      lead_id: data.lead_id,
+      student_name: data.student_name,
+      scheduled_date: visitDate.toISOString(),
+      notes: data.notes || undefined,
+      status: 'scheduled',
+    })
+    await DatabaseService.updateLead(data.lead_id, { status: 'scheduled' })
+    await loadData()
   }
 
-  const getVisitStats = () => {
-    const today = new Date().toISOString().split('T')[0]
-    const thisWeek = new Date()
-    thisWeek.setDate(thisWeek.getDate() - thisWeek.getDay())
-    const thisWeekStr = thisWeek.toISOString().split('T')[0]
-
-    const todayVisits = visits.filter(v => v.scheduled_date.startsWith(today)).length
-    const weekVisits = visits.filter(v => v.scheduled_date >= thisWeekStr).length
-    const completedVisits = visits.filter(v => v.status === 'completed').length
-    const scheduledVisits = visits.filter(v => v.status === 'scheduled').length
-
-    return { todayVisits, weekVisits, completedVisits, scheduledVisits }
+  const handleMarkCompleted = async (visitId: string) => {
+    setSaving(true)
+    try {
+      await DatabaseService.updateVisit(visitId, {
+        status: 'completed',
+        ...(completionNotes ? { notes: completionNotes } : {}),
+      })
+      const visit = visits.find(v => v.id === visitId)
+      if (visit?.lead_id) await DatabaseService.updateLead(visit.lead_id, { status: 'visit' })
+      setCompletingId(null)
+      setCompletionNotes('')
+      await loadData()
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const stats = getVisitStats()
+  const handleMarkNoShow = async (visitId: string) => {
+    await DatabaseService.updateVisit(visitId, { status: 'no_show' })
+    await loadData()
+  }
+
+  const handleCancel = async (visitId: string) => {
+    if (!confirm('Cancelar esta visita?')) return
+    await DatabaseService.updateVisit(visitId, { status: 'cancelled' })
+    await loadData()
+  }
+
+  const formatTime = (dateStr: string) =>
+    new Date(dateStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+
+  const formatSelectedDate = (d: Date) =>
+    d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#00D4C4] border-t-transparent mx-auto mb-4"></div>
-          <p className="text-gray-600 text-lg">Carregando visitas...</p>
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#14b8a6] border-t-transparent" />
       </div>
     )
   }
 
+  const calDays = getDaysInMonth(calendarMonth)
+  const weekLabels = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
+
   return (
-    <div className="p-8 bg-gradient-to-br from-blue-50 via-white to-indigo-50 min-h-screen">
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2 flex items-center">
-              <Calendar className="w-10 h-10 text-[#00D4C4] mr-4" />
-              Calendário de Visitas
-            </h1>
-            <p className="text-gray-600 text-lg">Gerencie e acompanhe todas as visitas agendadas</p>
-          </div>
-        </div>
+    <div className="flex overflow-hidden bg-gray-50" style={{ height: 'calc(100vh - 56px)' }}>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Visitas Hoje</p>
-                <p className="text-3xl font-bold text-blue-600">{stats.todayVisits}</p>
-              </div>
-              <Calendar className="h-8 w-8 text-blue-600" />
-            </div>
-          </div>
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Esta Semana</p>
-                <p className="text-3xl font-bold text-green-600">{stats.weekVisits}</p>
-              </div>
-              <Clock className="h-8 w-8 text-green-600" />
-            </div>
-          </div>
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Realizadas</p>
-                <p className="text-3xl font-bold text-purple-600">{stats.completedVisits}</p>
-              </div>
-              <Eye className="h-8 w-8 text-purple-600" />
-            </div>
-          </div>
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Agendadas</p>
-                <p className="text-3xl font-bold text-orange-600">{stats.scheduledVisits}</p>
-              </div>
-              <User className="h-8 w-8 text-orange-600" />
-            </div>
-          </div>
-        </div>
+      {/* ── Left column ──────────────────────────────────────────────────────── */}
+      <div className="w-80 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
+        <div className="p-4">
 
-        {/* Filters */}
-        <div className="flex flex-col lg:flex-row gap-4 mb-8">
-          <div className="flex gap-4">
+          {/* KPI 2x2 */}
+          <div className="grid grid-cols-2 gap-2 mb-5">
+            <div className="bg-blue-50 rounded-xl p-3">
+              <p className="text-xs text-blue-600 font-medium mb-0.5">Hoje</p>
+              <p className="text-2xl font-bold text-blue-700">{statsToday}</p>
+            </div>
+            <div className="bg-[#14b8a6]/10 rounded-xl p-3">
+              <p className="text-xs text-[#0d9488] font-medium mb-0.5">Semana</p>
+              <p className="text-2xl font-bold text-[#0d9488]">{statsWeek}</p>
+            </div>
+            <div className="bg-green-50 rounded-xl p-3">
+              <p className="text-xs text-green-600 font-medium mb-0.5">Realizadas</p>
+              <p className="text-2xl font-bold text-green-700">{statsCompleted}</p>
+            </div>
+            <div className="bg-purple-50 rounded-xl p-3">
+              <p className="text-xs text-purple-600 font-medium mb-0.5">Taxa</p>
+              <p className="text-2xl font-bold text-purple-700">{statsRate}%</p>
+            </div>
+          </div>
+
+          {/* Month navigation */}
+          <div className="flex items-center justify-between mb-2">
             <button
-              onClick={() => setViewMode('calendar')}
-              className={`px-6 py-3 rounded-xl font-medium transition-all shadow-lg ${
-                viewMode === 'calendar'
-                  ? 'bg-gradient-to-r from-[#00D4C4] to-[#2D3E9E] text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 border-2 border-gray-200'
-              }`}
+              onClick={() => setCalendarMonth(d => { const n = new Date(d); n.setMonth(d.getMonth() - 1); return n })}
+              className="p-1 rounded hover:bg-gray-100 text-gray-500 transition-colors"
             >
-              <Calendar className="h-5 w-5 inline mr-2" />
-              Calendário
+              <ChevronLeft className="w-4 h-4" />
             </button>
+            <span className="text-xs font-semibold text-gray-700 capitalize">
+              {calendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+            </span>
             <button
-              onClick={() => setViewMode('list')}
-              className={`px-6 py-3 rounded-xl font-medium transition-all shadow-lg ${
-                viewMode === 'list'
-                  ? 'bg-gradient-to-r from-[#00D4C4] to-[#2D3E9E] text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 border-2 border-gray-200'
-              }`}
+              onClick={() => setCalendarMonth(d => { const n = new Date(d); n.setMonth(d.getMonth() + 1); return n })}
+              className="p-1 rounded hover:bg-gray-100 text-gray-500 transition-colors"
             >
-              <Filter className="h-5 w-5 inline mr-2" />
-              Lista
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="flex gap-4 flex-1">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-              <input
-                type="text"
-                placeholder="Buscar por nome do visitante..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-3 w-full border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
-              />
-            </div>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00D4C4] focus:border-[#00D4C4] transition-all"
-            >
-              <option value="">Todos os status</option>
-              {Object.entries(statusConfig).map(([status, config]) => (
-                <option key={status} value={status}>{config.label}</option>
-              ))}
-            </select>
+          {/* Week day labels */}
+          <div className="grid grid-cols-7 mb-1">
+            {weekLabels.map((d, i) => (
+              <div key={i} className="text-center text-xs text-gray-400 font-medium py-1">{d}</div>
+            ))}
+          </div>
+
+          {/* Calendar grid */}
+          <div className="grid grid-cols-7">
+            {calDays.map((date, i) => {
+              if (!date) return <div key={i} className="h-8 w-8" />
+              const dayVisitsArr = getVisitsForDate(date)
+              const dotColor = getDotColor(dayVisitsArr)
+              const isToday = date.toDateString() === today.toDateString()
+              const isSelected = date.toDateString() === selectedDate.toDateString()
+              return (
+                <div key={i} className="flex flex-col items-center justify-center py-0.5">
+                  <button
+                    onClick={() => setSelectedDate(date)}
+                    className={`h-8 w-8 rounded-full text-xs font-medium flex items-center justify-center transition-colors ${
+                      isSelected
+                        ? 'bg-teal-500 text-white'
+                        : isToday && !dotColor
+                        ? 'bg-gray-100 text-gray-800 font-semibold'
+                        : isToday
+                        ? 'text-teal-600 font-bold'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    {date.getDate()}
+                  </button>
+                  {dotColor && (
+                    <div className={`w-1.5 h-1.5 rounded-full mt-0.5 ${isSelected ? 'bg-white' : dotColor}`} />
+                  )}
+                  {!dotColor && <div className="h-2 mt-0.5" />}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Legend */}
+          <div className="mt-4 pt-3 border-t border-gray-100 flex flex-wrap gap-x-3 gap-y-1">
+            {Object.entries(visitStatus).map(([, cfg]) => (
+              <div key={cfg.label} className="flex items-center gap-1">
+                <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+                <span className="text-xs text-gray-500">{cfg.label}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {viewMode === 'calendar' && (
-        <div className="bg-white rounded-3xl shadow-lg border-2 border-gray-100 overflow-hidden">
-          <div className="bg-gradient-to-r from-[#00D4C4] to-[#2D3E9E] text-white p-6">
-            <div className="flex items-center justify-between">
-              <button
-                onClick={() => navigateMonth('prev')}
-                className="p-3 hover:bg-white hover:bg-opacity-20 rounded-2xl transition-all"
-              >
-                <ChevronLeft className="h-6 w-6" />
-              </button>
-              <h2 className="text-2xl font-bold">
-                {currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-              </h2>
-              <button
-                onClick={() => navigateMonth('next')}
-                className="p-3 hover:bg-white hover:bg-opacity-20 rounded-2xl transition-all"
-              >
-                <ChevronRight className="h-6 w-6" />
-              </button>
-            </div>
+      {/* ── Right column ─────────────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 bg-white border-b border-gray-200">
+          <div>
+            <h2 className="text-base font-bold text-[#1e2d6b]">Visitas</h2>
+            <p className="text-xs text-gray-500 capitalize">{formatSelectedDate(selectedDate)}</p>
           </div>
+          <button onClick={() => setShowModal(true)} className={btnPrimary}>
+            <Plus className="w-4 h-4" />
+            Nova Visita
+          </button>
+        </div>
 
-          <div className="p-6">
-            <div className="grid grid-cols-7 gap-4 mb-4">
-              {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
-                <div key={day} className="text-center font-semibold text-gray-600 py-3">
-                  {day}
-                </div>
-              ))}
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+
+          {/* Day visit cards */}
+          {dayVisits.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <Calendar className="w-10 h-10 text-gray-200 mb-3" />
+              <p className="text-sm font-medium text-gray-400 mb-1">Nenhuma visita neste dia</p>
+              <p className="text-xs text-gray-300 mb-4">Clique em "Nova Visita" para agendar</p>
+              <button onClick={() => setShowModal(true)} className={btnPrimary}>
+                <Plus className="w-4 h-4" />
+                Agendar Visita
+              </button>
             </div>
-
-            <div className="grid grid-cols-7 gap-4">
-              {getDaysInMonth(currentDate).map((date, index) => {
-                if (!date) {
-                  return <div key={index} className="h-28"></div>
-                }
-
-                const dayVisits = getVisitsForDate(date)
-                const isToday = date.toDateString() === new Date().toDateString()
+          ) : (
+            <div className="space-y-3 mb-6">
+              {dayVisits.map(visit => {
+                const lead = leads.find(l => l.id === visit.lead_id)
+                const cfg = visitStatus[visit.status]
+                const isCompleting = completingId === visit.id
 
                 return (
-                  <div
-                    key={index}
-                    className={`h-28 border-2 rounded-2xl p-3 transition-all hover:shadow-lg ${
-                      isToday 
-                        ? 'bg-blue-50 border-blue-300' 
-                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                    }`}
-                  >
-                    <div className={`text-sm font-medium mb-2 ${
-                      isToday ? 'text-blue-600' : 'text-gray-700'
-                    }`}>
-                      {date.getDate()}
-                    </div>
-                    <div className="space-y-1">
-                      {dayVisits.slice(0, 2).map(visit => (
-                        <div
-                          key={visit.id}
-                          onClick={() => handleVisitClick(visit)}
-                          className={`text-xs px-2 py-1 rounded-lg truncate cursor-pointer hover:opacity-75 transition-all ${
-                            statusConfig[visit.status].bgColor
-                          } ${statusConfig[visit.status].textColor} border ${statusConfig[visit.status].borderColor}`}
-                        >
-                          {formatTime(visit.scheduled_date)} - {visit.student_name}
+                  <div key={visit.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="p-4">
+                      <div className="flex items-start gap-3">
+                        {/* Avatar */}
+                        <div className="w-9 h-9 rounded-full bg-teal-500 text-white text-sm font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                          {(visit.student_name || '?').charAt(0).toUpperCase()}
                         </div>
-                      ))}
-                      {dayVisits.length > 2 && (
-                        <div className="text-xs text-gray-500 px-2">
-                          +{dayVisits.length - 2} mais
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold text-gray-800">{visit.student_name || 'Visitante'}</span>
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-[#14b8a6]/10 text-[#0d9488] font-medium flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {formatTime(visit.scheduled_date)}
+                            </span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.badge}`}>
+                              {cfg.label}
+                            </span>
+                          </div>
+                          {lead && (
+                            <p className="text-xs text-gray-500 mt-0.5">{lead.responsible_name}</p>
+                          )}
+                          {visit.notes && !isCompleting && (
+                            <p className="text-xs text-gray-400 mt-1 italic">{visit.notes}</p>
+                          )}
+                        </div>
+
+                        {/* Ver Lead button */}
+                        {visit.lead_id && (
+                          <button
+                            onClick={() => navigate(`/leads?highlight=${visit.lead_id}`)}
+                            className="flex-shrink-0 text-xs px-2 py-1 rounded-md bg-[#1e2d6b]/10 text-[#1e2d6b] hover:bg-[#1e2d6b]/20 font-medium transition-colors whitespace-nowrap"
+                          >
+                            Ver Lead
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Inline completion notes */}
+                      {isCompleting && (
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                          <textarea
+                            value={completionNotes}
+                            onChange={e => setCompletionNotes(e.target.value)}
+                            placeholder="Observações sobre a visita realizada..."
+                            rows={2}
+                            className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none"
+                            style={{ resize: 'none' }}
+                            autoFocus
+                          />
+                          <div className="flex gap-2 mt-2">
+                            <button
+                              onClick={() => handleMarkCompleted(visit.id)}
+                              disabled={saving}
+                              className="px-3 py-1.5 text-xs font-medium bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
+                            >
+                              {saving ? 'Salvando...' : 'Confirmar Realizada'}
+                            </button>
+                            <button
+                              onClick={() => { setCompletingId(null); setCompletionNotes('') }}
+                              className="px-3 py-1.5 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
+
+                    {/* Action bar — scheduled only */}
+                    {visit.status === 'scheduled' && !isCompleting && (
+                      <div className="flex border-t border-gray-100">
+                        <button
+                          onClick={() => { setCompletingId(visit.id); setCompletionNotes('') }}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-green-700 hover:bg-green-50 transition-colors"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          Realizada
+                        </button>
+                        <div className="w-px bg-gray-100" />
+                        <button
+                          onClick={() => handleMarkNoShow(visit.id)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          Não compareceu
+                        </button>
+                        <div className="w-px bg-gray-100" />
+                        <button
+                          onClick={() => handleCancel(visit.id)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Cancelar
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )
               })}
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {viewMode === 'list' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {Object.entries(statusConfig).map(([status, config]) => {
-            const statusVisits = getVisitsByStatus(status as Visit['status'])
-            
-            return (
-              <div key={status} className={`${config.bgColor} rounded-3xl p-6 min-h-96 ${config.borderColor} border-2 shadow-lg`}>
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center">
-                    <div className={`w-4 h-4 rounded-full ${config.color} mr-3 shadow-sm`}></div>
-                    <h3 className={`font-bold text-lg ${config.textColor}`}>{config.label}</h3>
-                  </div>
-                  <span className={`${config.color} text-white text-sm px-4 py-1 rounded-full font-medium shadow-lg`}>
-                    {statusVisits.length}
-                  </span>
-                </div>
-
-                <div className="space-y-4">
-                  {statusVisits.map((visit) => (
+          {/* Upcoming visits */}
+          {upcomingVisits.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                Próximas visitas — 7 dias
+              </h3>
+              <div className="space-y-2">
+                {upcomingVisits.map(visit => {
+                  const visitDate = new Date(visit.scheduled_date)
+                  return (
                     <div
                       key={visit.id}
-                      onClick={() => handleVisitClick(visit)}
-                      className="bg-white p-5 rounded-2xl shadow-sm border-2 border-gray-100 hover:shadow-lg transition-all cursor-pointer group"
+                      className="flex items-center gap-3 px-3 py-2.5 bg-white border border-gray-100 rounded-xl hover:border-gray-200 transition-colors"
                     >
-                      <div className="flex justify-between items-start mb-4">
-                        <h4 className="font-semibold text-gray-900 text-sm group-hover:text-[#00D4C4] transition-colors">
-                          {visit.student_name || 'Visitante'}
-                        </h4>
+                      <div className="w-7 h-7 rounded-full bg-gray-100 text-gray-500 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                        {(visit.student_name || '?').charAt(0).toUpperCase()}
                       </div>
-
-                      <div className="space-y-2 mb-4">
-                        <p className="text-xs text-gray-600 flex items-center">
-                          <Calendar className="w-3 h-3 mr-1" />
-                          {formatDate(visit.scheduled_date)}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-gray-800 truncate">{visit.student_name}</p>
+                        <p className="text-xs text-gray-400">
+                          {visitDate.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}
+                          {' · '}
+                          {formatTime(visit.scheduled_date)}
                         </p>
-                        {visit.notes && (
-                          <p className="text-xs text-gray-600 line-clamp-2">
-                            {visit.notes}
-                          </p>
-                        )}
                       </div>
-
-                      <div className="pt-3 border-t-2 border-gray-100">
-                        <span className={`text-xs px-3 py-1 rounded-full font-medium border-2 ${config.bgColor} ${config.textColor} ${config.borderColor}`}>
-                          {config.label}
-                        </span>
-                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedDate(new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate()))
+                          setCalendarMonth(new Date(visitDate.getFullYear(), visitDate.getMonth(), 1))
+                        }}
+                        className="text-xs text-teal-600 hover:underline font-medium whitespace-nowrap"
+                      >
+                        Ver dia
+                      </button>
                     </div>
-                  ))}
-
-                  {statusVisits.length === 0 && (
-                    <div className="text-center py-12">
-                      <div className={`w-16 h-16 ${config.color} rounded-full flex items-center justify-center mx-auto mb-4 opacity-20 shadow-lg`}>
-                        <Calendar className="w-8 h-8 text-white" />
-                      </div>
-                      <p className="text-sm text-gray-500 font-medium">Nenhuma visita neste status</p>
-                    </div>
-                  )}
-                </div>
+                  )
+                })}
               </div>
-            )
-          })}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
-      {showDetailsModal && selectedVisit && (
-        <VisitDetailsModal
-          isOpen={showDetailsModal}
-          onClose={() => {
-            setShowDetailsModal(false)
-            setSelectedVisit(null)
-          }}
-          visit={selectedVisit}
-          lead={leads.find(l => l.id === selectedVisit.lead_id) || null}
-          onStatusChange={handleStatusChange}
-          onUpdateVisit={handleUpdateVisit}
-          onDeleteVisit={handleDeleteVisit}
-        />
-      )}
+      {/* Nova Visita modal */}
+      <NovaVisitaModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        onSave={handleCreateVisit}
+        defaultDate={selectedStr}
+        leads={leads}
+      />
     </div>
   )
 }
