@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+* { box-sizing: border-box; }
+
+body { font-size: 14px; }
+
 :root {
   --teal: #14b8a6;
   --teal-dark: #0d9488;

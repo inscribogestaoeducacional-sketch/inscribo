@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { 
   Bell, 
@@ -45,7 +45,7 @@ export default function TopBar() {
   const RoleIcon = roleInfo.icon
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200">
+    <header className="h-14 bg-white shadow-sm border-b border-gray-200 flex flex-col justify-center">
       <div className="flex items-center justify-between px-4 py-3">
         {/* Mobile menu button */}
         <button

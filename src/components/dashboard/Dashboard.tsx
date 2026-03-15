@@ -25,26 +25,22 @@ interface KPICardProps {
   change?: number
   icon: React.ReactNode
   iconBg: string
-  accentColor: string
   onClick?: () => void
 }
 
-function KPICard({ title, value, change, icon, iconBg, accentColor, onClick }: KPICardProps) {
+function KPICard({ title, value, change, icon, iconBg, onClick }: KPICardProps) {
   const isPositive = change !== undefined ? change >= 0 : true
 
   return (
     <div
-      className={`relative bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md ${onClick ? 'cursor-pointer' : ''}`}
+      className={`bg-white rounded-xl border-t-2 border-t-teal-500 border border-gray-200 shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md ${onClick ? 'cursor-pointer' : ''}`}
       onClick={onClick}
     >
-      {/* Accent bar */}
-      <div className={`absolute top-0 left-0 right-0 h-[3px] ${accentColor}`} />
-
-      <div className="p-5 sm:p-6 pt-6">
+      <div className="p-4">
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">{title}</p>
-            <p className="text-3xl sm:text-4xl font-bold text-[#1e2d6b] leading-none mb-3">{value}</p>
+            <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">{title}</p>
+            <p className="text-2xl font-bold text-[#1e2d6b] leading-none mb-2">{value}</p>
             {change !== undefined && (
               <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${isPositive ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
                 {isPositive
@@ -55,7 +51,7 @@ function KPICard({ title, value, change, icon, iconBg, accentColor, onClick }: K
               </div>
             )}
           </div>
-          <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
             {icon}
           </div>
         </div>
@@ -274,55 +270,49 @@ export default function Dashboard() {
       title: 'Total de Leads',
       value: kpis.totalLeads,
       change: calculateChange(kpis.leadsNovos, previousMonthKpis.totalLeads),
-      icon: <Users className="h-6 w-6 text-blue-600" />,
+      icon: <Users className="h-5 w-5 text-blue-600" />,
       iconBg: 'bg-blue-50',
-      accentColor: 'bg-blue-500',
       onClick: () => navigate('/leads')
     },
     {
       title: 'Visitas Hoje',
       value: kpis.visitasHoje,
       change: undefined,
-      icon: <Calendar className="h-6 w-6 text-[#14b8a6]" />,
+      icon: <Calendar className="h-5 w-5 text-[#14b8a6]" />,
       iconBg: 'bg-[#14b8a6]/10',
-      accentColor: 'bg-[#14b8a6]',
       onClick: () => navigate('/visits')
     },
     {
       title: 'Matrículas do Mês',
       value: kpis.matriculasMes,
       change: calculateChange(kpis.matriculasMes, previousMonthKpis.matriculasMes),
-      icon: <GraduationCap className="h-6 w-6 text-purple-600" />,
+      icon: <GraduationCap className="h-5 w-5 text-purple-600" />,
       iconBg: 'bg-purple-50',
-      accentColor: 'bg-purple-500',
       onClick: () => navigate('/enrollments')
     },
     {
       title: 'Taxa de Conversão',
       value: `${kpis.taxaConversao}%`,
       change: calculateChange(kpis.taxaConversao, previousMonthKpis.taxaConversao),
-      icon: <TrendingUp className="h-6 w-6 text-orange-500" />,
+      icon: <TrendingUp className="h-5 w-5 text-orange-500" />,
       iconBg: 'bg-orange-50',
-      accentColor: 'bg-orange-400',
-      onClick: () => navigate('/funnel')
+      onClick: () => navigate('/reports')
     },
     {
       title: 'CPA Atual',
       value: `R$ ${kpis.cpaAtual}`,
       change: -2.1,
-      icon: <DollarSign className="h-6 w-6 text-rose-500" />,
+      icon: <DollarSign className="h-5 w-5 text-rose-500" />,
       iconBg: 'bg-rose-50',
-      accentColor: 'bg-rose-400',
-      onClick: () => navigate('/marketing')
+      onClick: () => navigate('/reports')
     },
     {
       title: 'Taxa Rematrícula',
       value: `${kpis.taxaRematricula}%`,
       change: 2.1,
-      icon: <RefreshCw className="h-6 w-6 text-[#14b8a6]" />,
+      icon: <RefreshCw className="h-5 w-5 text-[#14b8a6]" />,
       iconBg: 'bg-[#14b8a6]/10',
-      accentColor: 'bg-[#0d9488]',
-      onClick: () => navigate('/reenrollments')
+      onClick: () => navigate('/reports')
     }
   ]
 
@@ -362,7 +352,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── KPI Cards ──────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 mb-8">
+      <div className="grid grid-cols-3 gap-4 mb-6">
         {kpiCards.map((kpi, i) => (
           <KPICard key={i} {...kpi} />
         ))}

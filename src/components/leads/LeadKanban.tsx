@@ -512,14 +512,19 @@ function CardContent({ lead, config, isFlashing, overlay, openMenuId, setOpenMen
       style={{ borderLeft: `3px solid ${config.accent}` }}
       onClick={() => !overlay && setOpenMenuId(null)}
     >
-      <div className="p-4">
+      <div className="p-3">
         {/* Card header */}
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex-1 min-w-0">
-            <h4 className="font-bold text-[#1e2d6b] text-sm leading-tight truncate group-hover:text-[#14b8a6] transition-colors">
-              {lead.student_name}
-            </h4>
-            <p className="text-xs text-gray-400 mt-0.5 truncate">{lead.responsible_name}</p>
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-teal-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+              {lead.student_name.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <h4 className="text-sm font-semibold text-gray-800 leading-tight truncate">
+                {lead.student_name}
+              </h4>
+              <p className="text-xs text-gray-500 truncate">{lead.responsible_name}</p>
+            </div>
           </div>
 
           {/* 3-dot menu */}
@@ -997,7 +1002,7 @@ export default function LeadKanban() {
               const colLeads = getLeadsByStatus(status as Lead['status'])
 
               return (
-                <div key={status} className="flex-shrink-0 w-[280px] flex flex-col">
+                <div key={status} className="flex-shrink-0 min-w-[260px] max-w-[260px] flex flex-col">
                   {/* Column header */}
                   <div className={`${config.headerBg} rounded-t-xl px-4 py-3 flex items-center justify-between border-b-2`}
                     style={{ borderBottomColor: config.accent }}>
@@ -1040,7 +1045,7 @@ export default function LeadKanban() {
         {/* Drag overlay (ghost card) */}
         <DragOverlay dropAnimation={null}>
           {activeLead ? (
-            <div className="w-[280px] rotate-1 cursor-grabbing">
+            <div className="w-[260px] rotate-1 cursor-grabbing">
               <CardContent
                 lead={activeLead}
                 config={statusConfig[activeLead.status]}
