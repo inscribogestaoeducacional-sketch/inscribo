@@ -13,6 +13,7 @@ import Dashboard from './components/dashboard/Dashboard'
 import LeadKanban from './components/leads/LeadKanban'
 import VisitCalendar from './components/calendar/VisitCalendar'
 import EnrollmentManager from './components/enrollments/EnrollmentManager'
+import WhatsAppHub from './components/whatsapp/WhatsAppHub'
 import MarketingCPA from './components/marketing/MarketingCPA'
 import ReEnrollments from './components/reenrollments/ReEnrollments'
 import FunnelAnalysis from './components/funnel/FunnelAnalysis'
@@ -202,7 +203,8 @@ function AppContent() {
             <Route path="/leads" element={<LeadKanban />} />
             <Route path="/visits" element={<VisitCalendar />} />
             <Route path="/enrollments" element={<EnrollmentManager />} />
-            
+            <Route path="/whatsapp" element={<WhatsAppHub />} />
+
             <Route path="/marketing" element={
               <ProtectedRoute allowedRoles={['manager', 'admin']}>
                 <MarketingCPA />

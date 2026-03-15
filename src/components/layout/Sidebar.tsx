@@ -12,6 +12,7 @@ import {
   BarChart3,
   Settings,
   GraduationCap,
+  MessageCircle,
   Menu,
   X
 } from 'lucide-react'
@@ -26,7 +27,8 @@ const Sidebar = () => {
       { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
       { icon: Users, label: 'Leads', path: '/leads' },
       { icon: Calendar, label: 'Visitas', path: '/visits' },
-      { icon: GraduationCap, label: 'Matrículas', path: '/enrollments' }
+      { icon: GraduationCap, label: 'Matrículas', path: '/enrollments' },
+      { icon: MessageCircle, label: 'WhatsApp', path: '/whatsapp' }
     ]
     const managerItems = [
       { icon: TrendingUp, label: 'Marketing', path: '/marketing' },
