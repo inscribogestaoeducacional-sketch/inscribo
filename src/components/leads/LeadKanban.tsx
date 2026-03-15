@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
-  Plus, User, Phone, Calendar, Edit, Trash2, X, Search,
-  Clock, Tag, Users, Send, CheckCircle, Save, MoreVertical,
+  Plus, Phone, Calendar, Edit, Trash2, X, Search,
+  Clock, Users, Send, CheckCircle, Save,
   MessageCircle
 } from 'lucide-react'
 import {
@@ -42,8 +42,9 @@ const timeSlots = [
 ]
 
 // Shared input/button classes
-const inputCls = 'w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] transition-all outline-none'
-const btnPrimary = 'px-6 py-3 bg-gradient-to-r from-[#14b8a6] to-[#1e2d6b] text-white rounded-xl hover:from-[#0d9488] hover:to-[#151b4e] transition-all font-semibold shadow-md hover:shadow-lg flex items-center gap-2'
+const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] transition-all outline-none'
+const btnPrimary = 'px-5 py-2.5 bg-gradient-to-r from-[#14b8a6] to-[#1e2d6b] text-white rounded-lg hover:from-[#0d9488] hover:to-[#151b4e] transition-all font-semibold flex items-center gap-2 text-sm'
+const btnSecondary = 'px-5 py-2.5 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-all font-semibold text-sm'
 
 // Phone mask helper: formats as "XX XXXXX-XXXX"
 function applyPhoneMask(value: string): string {
@@ -66,7 +67,7 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
   const [saving, setSaving] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [formData, setFormData] = useState({
-    student_name: '', grade_interest: '', cpf: '', responsible_name: '',
+    student_name: '', grade_interest: '', responsible_name: '',
     phone: '', email: '', address: '', budget_range: '', source: '', notes: ''
   })
 
@@ -74,13 +75,13 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
     if (editingLead) {
       setFormData({
         student_name: editingLead.student_name, grade_interest: editingLead.grade_interest,
-        cpf: editingLead.cpf || '', responsible_name: editingLead.responsible_name,
+        responsible_name: editingLead.responsible_name,
         phone: editingLead.phone || '', email: editingLead.email || '',
         address: editingLead.address || '', budget_range: editingLead.budget_range || '',
         source: editingLead.source, notes: editingLead.notes || ''
       })
     } else {
-      setFormData({ student_name: '', grade_interest: '', cpf: '', responsible_name: '', phone: '', email: '', address: '', budget_range: '', source: '', notes: '' })
+      setFormData({ student_name: '', grade_interest: '', responsible_name: '', phone: '', email: '', address: '', budget_range: '', source: '', notes: '' })
     }
     setCurrentStep(1)
     setFieldErrors({})
@@ -115,7 +116,7 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl p-8 w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-[#1e2d6b]">{editingLead ? 'Editar Lead' : 'Novo Lead'}</h2>
+          <h2 className="text-xl font-bold text-[#1e2d6b]">{editingLead ? 'Editar Lead' : 'Novo Lead'}</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-600">
             <X className="h-5 w-5" />
           </button>
@@ -125,11 +126,11 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
         <div className="flex items-center justify-center mb-8">
           {[1, 2, 3].map((step) => (
             <div key={step} className="flex items-center">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                step === currentStep ? 'bg-[#14b8a6] text-white shadow-md' :
-                step < currentStep ? 'bg-[#1e2d6b] text-white' : 'bg-gray-100 text-gray-400'
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                step === currentStep ? 'bg-[#14b8a6] text-white' :
+                step < currentStep ? 'bg-[#14b8a6] text-white' : 'bg-gray-200 text-gray-500'
               }`}>{step}</div>
-              {step < 3 && <div className={`w-16 h-1 mx-2 rounded-full transition-all ${step < currentStep ? 'bg-[#1e2d6b]' : 'bg-gray-200'}`} />}
+              {step < 3 && <div className={`w-12 h-0.5 mx-2 rounded-full transition-all ${step < currentStep ? 'bg-[#14b8a6]' : 'bg-gray-200'}`} />}
             </div>
           ))}
         </div>
@@ -140,14 +141,14 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
             <div className="space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Nome do Aluno *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome do Aluno *</label>
                   <input type="text" value={formData.student_name}
                     onChange={(e) => { setFormData({ ...formData, student_name: e.target.value }); setFieldErrors(prev => ({ ...prev, student_name: '' })) }}
                     className={inputCls + (fieldErrors.student_name ? ' border-red-400' : '')} placeholder="Nome completo do aluno" />
                   {fieldErrors.student_name && <p className="text-red-500 text-xs mt-1">{fieldErrors.student_name}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Série/Ano de Interesse</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Série/Ano de Interesse</label>
                   <select value={formData.grade_interest}
                     onChange={(e) => setFormData({ ...formData, grade_interest: e.target.value })}
                     className={inputCls}>
@@ -156,19 +157,13 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
                   </select>
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">CPF do Aluno</label>
-                <input type="text" value={formData.cpf}
-                  onChange={(e) => setFormData({ ...formData, cpf: e.target.value })}
-                  className={inputCls} placeholder="000.000.000-00" />
-              </div>
             </div>
           )}
 
           {currentStep === 2 && (
             <div className="space-y-5">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Nome do Responsável *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome do Responsável *</label>
                 <input type="text" value={formData.responsible_name}
                   onChange={(e) => { setFormData({ ...formData, responsible_name: e.target.value }); setFieldErrors(prev => ({ ...prev, responsible_name: '' })) }}
                   className={inputCls + (fieldErrors.responsible_name ? ' border-red-400' : '')} placeholder="Nome completo do responsável" />
@@ -176,21 +171,21 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Telefone *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Telefone *</label>
                   <input type="tel" value={formData.phone}
                     onChange={(e) => { setFormData({ ...formData, phone: applyPhoneMask(e.target.value) }); setFieldErrors(prev => ({ ...prev, phone: '' })) }}
                     className={inputCls + (fieldErrors.phone ? ' border-red-400' : '')} placeholder="11 99999-9999" />
                   {fieldErrors.phone && <p className="text-red-500 text-xs mt-1">{fieldErrors.phone}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">E-mail</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">E-mail</label>
                   <input type="email" value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     className={inputCls} placeholder="email@exemplo.com" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Endereço</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Endereço</label>
                 <input type="text" value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   className={inputCls} placeholder="Endereço completo" />
@@ -202,7 +197,7 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
             <div className="space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Faixa de Orçamento</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Faixa de Orçamento</label>
                   <select value={formData.budget_range}
                     onChange={(e) => setFormData({ ...formData, budget_range: e.target.value })}
                     className={inputCls}>
@@ -215,7 +210,7 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Origem do Lead</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Origem do Lead</label>
                   <select value={formData.source}
                     onChange={(e) => setFormData({ ...formData, source: e.target.value })}
                     className={inputCls}>
@@ -225,7 +220,7 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Observações</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Observações</label>
                 <textarea value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   className={inputCls} rows={4} placeholder="Informações adicionais sobre o lead" />
@@ -233,23 +228,20 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
             </div>
           )}
 
-          <div className="flex justify-between pt-5 border-t border-gray-200">
+          <div className="flex justify-between pt-4 border-t border-gray-100">
             <div>
               {currentStep > 1 && (
-                <button type="button" onClick={() => setCurrentStep(currentStep - 1)}
-                  className="px-6 py-3 border-2 border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 transition-all font-semibold">
+                <button type="button" onClick={() => setCurrentStep(currentStep - 1)} className={btnSecondary}>
                   Anterior
                 </button>
               )}
             </div>
-            <div className="flex gap-3">
-              <button type="button" onClick={onClose}
-                className="px-6 py-3 border-2 border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 transition-all font-semibold">
+            <div className="flex gap-2">
+              <button type="button" onClick={onClose} className={btnSecondary}>
                 Cancelar
               </button>
               {currentStep < 3 ? (
-                <button type="button" onClick={() => setCurrentStep(currentStep + 1)}
-                  className={btnPrimary}>
+                <button type="button" onClick={() => setCurrentStep(currentStep + 1)} className={btnPrimary}>
                   Próximo
                 </button>
               ) : (
@@ -346,7 +338,7 @@ function ScheduleVisitModal({ isOpen, onClose, lead, onSchedule }: ScheduleVisit
           )}
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Observações</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Observações</label>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
               className={inputCls} rows={3} placeholder="Informações importantes sobre a visita..." />
           </div>
@@ -587,8 +579,6 @@ interface CardContentProps {
   config: { accent: string; headerBg: string; headerText: string; badgeBg: string; label: string }
   isFlashing: boolean
   overlay?: boolean
-  openMenuId: string | null
-  setOpenMenuId: (id: string | null) => void
   onSchedule: (lead: Lead) => void
   onHistory: (lead: Lead) => void
   onEdit: (lead: Lead) => void
@@ -597,168 +587,107 @@ interface CardContentProps {
   onWhatsApp: (lead: Lead) => void
 }
 
-function CardContent({ lead, config, isFlashing, overlay, openMenuId, setOpenMenuId, onSchedule, onHistory, onEdit, onDelete, onStatusChange, onWhatsApp }: CardContentProps) {
-  const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('pt-BR')
-
+function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory, onDelete, onWhatsApp }: CardContentProps) {
   return (
     <div
-      className={`bg-white rounded-xl shadow-sm border border-gray-100 group relative transition-all ${
+      className={`bg-white rounded-xl border border-gray-100 group relative transition-all ${
         isFlashing
-          ? 'ring-2 ring-green-400 shadow-green-100 bg-green-50/30'
+          ? 'ring-2 ring-green-400 shadow-green-100 bg-green-50/30 shadow-md'
           : overlay
           ? 'shadow-2xl'
-          : 'hover:shadow-md hover:border-[#14b8a6]/40'
+          : 'shadow-sm hover:shadow-md'
       }`}
       style={{ borderLeft: `3px solid ${config.accent}` }}
-      onClick={() => !overlay && setOpenMenuId(null)}
     >
       <div className="p-3">
-        {/* Card header */}
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-teal-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
-              {lead.student_name.charAt(0).toUpperCase()}
-            </div>
-            <div className="min-w-0">
-              <h4 className="text-sm font-semibold text-gray-800 leading-tight truncate">
-                {lead.student_name}
-              </h4>
-              <p className="text-xs text-gray-500 truncate">{lead.responsible_name}</p>
-            </div>
-          </div>
 
-          {/* 3-dot menu */}
+        {/* Row 1: avatar + name + delete (hover) */}
+        <div className="flex items-start gap-2 mb-1.5">
+          <div className="w-8 h-8 rounded-full bg-teal-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+            {lead.student_name.charAt(0).toUpperCase()}
+          </div>
+          <div className="flex-1 min-w-0">
+            {/* Row 1: name */}
+            <h4 className="text-sm font-semibold text-gray-800 leading-tight truncate">
+              {lead.student_name}
+            </h4>
+            {/* Row 2: responsible */}
+            <p className="text-xs text-gray-500 truncate">{lead.responsible_name}</p>
+          </div>
+          {/* Delete icon — top right on hover */}
           {!overlay && (
-            <div className="relative ml-2 flex-shrink-0">
-              <button
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === lead.id ? null : lead.id) }}
-                className="p-1 text-gray-300 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-              >
-                <MoreVertical className="w-4 h-4" />
-              </button>
-              {openMenuId === lead.id && (
-                <div className="absolute right-0 mt-1 w-48 bg-white rounded-xl shadow-xl border border-gray-100 z-20 overflow-hidden">
-                  {[
-                    { icon: <Calendar className="w-4 h-4 text-amber-500" />, label: 'Agendar Visita', action: () => { onSchedule(lead); setOpenMenuId(null) } },
-                    { icon: <Clock className="w-4 h-4 text-[#14b8a6]" />, label: 'Ver Histórico', action: () => { onHistory(lead); setOpenMenuId(null) } },
-                    { icon: <Edit className="w-4 h-4 text-blue-500" />, label: 'Editar', action: () => { onEdit(lead); setOpenMenuId(null) } },
-                    { icon: <Trash2 className="w-4 h-4 text-red-500" />, label: 'Excluir', action: () => { onDelete(lead.id); setOpenMenuId(null) } },
-                  ].map((item, i, arr) => (
-                    <button key={item.label}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => { e.stopPropagation(); item.action() }}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors ${i < arr.length - 1 ? 'border-b border-gray-50' : ''}`}
-                    >
-                      {item.icon}
-                      <span className="font-medium">{item.label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <button
+              title="Excluir"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onDelete(lead.id) }}
+              className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
           )}
         </div>
 
-        {/* Grade chip */}
-        {lead.grade_interest && (
-          <div className="inline-flex items-center gap-1 bg-[#14b8a6]/10 text-[#0d9488] text-xs font-semibold px-2.5 py-1 rounded-full border border-[#14b8a6]/20 mb-3">
-            <User className="w-3 h-3" />
-            {lead.grade_interest}
+        {/* Row 3: chips (grade + source) */}
+        {(lead.grade_interest || lead.source) && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {lead.grade_interest && (
+              <span className="inline-flex items-center gap-1 bg-[#14b8a6]/10 text-[#0d9488] text-xs font-medium px-2 py-0.5 rounded-full border border-[#14b8a6]/20">
+                {lead.grade_interest}
+              </span>
+            )}
+            {lead.source && (
+              <span className="inline-flex items-center bg-gray-100 text-gray-500 text-xs font-medium px-2 py-0.5 rounded-full">
+                {lead.source}
+              </span>
+            )}
           </div>
         )}
 
-        {/* Phone — navigates to WhatsApp Hub */}
+        {/* Row 4: phone */}
         {lead.phone && (
           <button
             type="button"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); onWhatsApp(lead) }}
-            className="w-full flex items-center gap-2 text-xs text-green-700 bg-green-50 px-2.5 py-1.5 rounded-lg mb-2 border border-green-100 hover:bg-green-100 transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 text-xs text-teal-600 font-medium hover:text-teal-700 transition-colors mb-2"
           >
-            <Phone className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-            <span className="truncate font-medium">{lead.phone}</span>
+            <Phone className="w-3 h-3 flex-shrink-0" />
+            <span className="truncate">{lead.phone}</span>
           </button>
         )}
 
-        {/* Source tag */}
-        {lead.source && (
-          <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
-            <Tag className="w-3 h-3" />
-            <span>{lead.source}</span>
+        {/* Row 5: action buttons — visible on hover */}
+        {!overlay && (
+          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity pt-2 border-t border-gray-100">
+            <button
+              title="WhatsApp"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onWhatsApp(lead) }}
+              className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-semibold rounded-lg bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
+            >
+              <MessageCircle className="w-3 h-3" />
+              WA
+            </button>
+            <button
+              title="Agendar Visita"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onSchedule(lead) }}
+              className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-semibold rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
+            >
+              <Calendar className="w-3 h-3" />
+              Visita
+            </button>
+            <button
+              title="Histórico"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onHistory(lead) }}
+              className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+            >
+              <Clock className="w-3 h-3" />
+              Hist.
+            </button>
           </div>
         )}
-
-        {/* Notes */}
-        {lead.notes && (
-          <p className="text-xs text-gray-500 bg-gray-50 px-2.5 py-2 rounded-lg mb-3 line-clamp-2 leading-relaxed border border-gray-100">
-            {lead.notes}
-          </p>
-        )}
-
-        {/* Footer */}
-        <div className="pt-3 border-t border-gray-100">
-          <p className="text-xs text-gray-400 flex items-center gap-1 mb-2">
-            <Calendar className="w-3 h-3" />
-            {formatDate(lead.created_at)}
-          </p>
-
-          {/* Action buttons — visible on hover */}
-          {!overlay && (
-            <div className="flex gap-1 mb-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button
-                title="WhatsApp"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); onWhatsApp(lead) }}
-                className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-semibold rounded-lg bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
-              >
-                <MessageCircle className="w-3 h-3" />
-                WA
-              </button>
-              <button
-                title="Agendar Visita"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); onSchedule(lead) }}
-                className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-semibold rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
-              >
-                <Calendar className="w-3 h-3" />
-                Visita
-              </button>
-              <button
-                title="Histórico"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); onHistory(lead) }}
-                className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
-              >
-                <Clock className="w-3 h-3" />
-                Hist.
-              </button>
-              <button
-                title="Excluir"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); onDelete(lead.id) }}
-                className="flex items-center justify-center p-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
-            </div>
-          )}
-
-          {!overlay && (
-            <select
-              value={lead.status}
-              onPointerDown={(e) => e.stopPropagation()}
-              onChange={(e) => { e.stopPropagation(); onStatusChange(lead.id, e.target.value as Lead['status']) }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full text-xs font-semibold border border-gray-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] bg-white hover:bg-gray-50 transition-all cursor-pointer outline-none"
-              style={{ color: config.accent }}
-            >
-              {Object.entries(statusConfig).map(([value, cfg]) => (
-                <option key={value} value={value}>{cfg.label}</option>
-              ))}
-            </select>
-          )}
-        </div>
       </div>
     </div>
   )
@@ -829,7 +758,6 @@ export default function LeadKanban() {
   const [editingActionText, setEditingActionText] = useState('')
   const [showScheduleVisitModal, setShowScheduleVisitModal] = useState(false)
   const [leadToSchedule, setLeadToSchedule] = useState<Lead | null>(null)
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
 
   // Contact form state
   const [contactForm, setContactForm] = useState({ tipo: 'Ligação', descricao: '', data: new Date().toISOString().split('T')[0] })
@@ -1042,7 +970,6 @@ export default function LeadKanban() {
   // ── Drag handlers ─────────────────────────────────────────────────────────
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string)
-    setOpenMenuId(null)
   }
 
   const handleDragOver = (event: DragOverEvent) => {
@@ -1123,8 +1050,6 @@ export default function LeadKanban() {
 
   // Shared card action props
   const cardActions = {
-    openMenuId,
-    setOpenMenuId,
     onSchedule: (lead: Lead) => { setLeadToSchedule(lead); setShowScheduleVisitModal(true) },
     onHistory: (lead: Lead) => {
       setSelectedLead(lead)
@@ -1264,8 +1189,6 @@ export default function LeadKanban() {
                 config={statusConfig[activeLead.status]}
                 isFlashing={false}
                 overlay
-                openMenuId={null}
-                setOpenMenuId={() => {}}
                 onSchedule={() => {}}
                 onHistory={() => {}}
                 onEdit={() => {}}
