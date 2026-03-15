@@ -1,8 +1,23 @@
-import React from 'react'
-import { MessageCircle, Settings, AlertCircle } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { MessageCircle, Settings, AlertCircle, X } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
 
 export default function WhatsAppHub() {
+  const [searchParams] = useSearchParams()
+  const phoneParam = searchParams.get('phone')
+  const nameParam = searchParams.get('name')
+
+  const [bannerVisible, setBannerVisible] = useState(!!phoneParam)
+  const [searchValue, setSearchValue] = useState(phoneParam || '')
+
+  // Sync if query params change (e.g. navigating from a different card)
+  useEffect(() => {
+    if (phoneParam) {
+      setBannerVisible(true)
+      setSearchValue(phoneParam)
+    }
+  }, [phoneParam, nameParam])
+
   return (
     <div className="flex overflow-hidden bg-gray-100" style={{ height: 'calc(100vh - 56px)' }}>
 
@@ -14,6 +29,20 @@ export default function WhatsAppHub() {
             <span className="text-sm font-bold text-white">WhatsApp CRM</span>
           </div>
         </div>
+
+        {/* Search / phone input */}
+        {phoneParam && (
+          <div className="px-3 pt-3 flex-shrink-0">
+            <input
+              type="text"
+              value={searchValue}
+              onChange={(e) => setSearchValue(e.target.value)}
+              placeholder="Número ou nome..."
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none"
+            />
+          </div>
+        )}
+
         <div className="flex-1 flex items-center justify-center px-4 text-center">
           <p className="text-xs text-gray-400 leading-relaxed">
             Nenhuma conversa ainda.<br />Conecte a Evolution API nas Configurações.
@@ -23,6 +52,28 @@ export default function WhatsAppHub() {
 
       {/* ── Center: Empty State ────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] px-8 text-center">
+
+        {/* Incoming lead banner */}
+        {bannerVisible && phoneParam && (
+          <div className="w-full max-w-md mb-6 bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex items-start gap-3 text-left">
+            <MessageCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-green-800">Iniciando conversa</p>
+              <p className="text-xs text-green-700 mt-0.5 truncate">
+                {nameParam ? <><span className="font-semibold">{decodeURIComponent(nameParam)}</span> — </> : null}
+                {phoneParam}
+              </p>
+            </div>
+            <button
+              onClick={() => setBannerVisible(false)}
+              className="p-1 text-green-500 hover:text-green-700 hover:bg-green-100 rounded transition-colors flex-shrink-0"
+              aria-label="Fechar banner"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* Config banner */}
         <div className="w-full max-w-md mb-8 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3 text-left">
           <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />

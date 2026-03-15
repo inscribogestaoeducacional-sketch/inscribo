@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Plus, User, Phone, Calendar, Edit, Trash2, X, Search,
-  Clock, Tag, Users, Send, CheckCircle, Save, MoreVertical
+  Clock, Tag, Users, Send, CheckCircle, Save, MoreVertical,
+  MessageCircle
 } from 'lucide-react'
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors, useDroppable,
@@ -12,7 +13,8 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useAuth } from '../../contexts/AuthContext'
-import { DatabaseService, Lead } from '../../lib/supabase'
+import { useNavigate } from 'react-router-dom'
+import { DatabaseService, Lead, ActivityLog } from '../../lib/supabase'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const statusConfig = {
@@ -43,16 +45,26 @@ const timeSlots = [
 const inputCls = 'w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] transition-all outline-none'
 const btnPrimary = 'px-6 py-3 bg-gradient-to-r from-[#14b8a6] to-[#1e2d6b] text-white rounded-xl hover:from-[#0d9488] hover:to-[#151b4e] transition-all font-semibold shadow-md hover:shadow-lg flex items-center gap-2'
 
+// Phone mask helper: formats as "XX XXXXX-XXXX"
+function applyPhoneMask(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  if (digits.length <= 2) return digits
+  if (digits.length <= 7) return `${digits.slice(0, 2)} ${digits.slice(2)}`
+  return `${digits.slice(0, 2)} ${digits.slice(2, 7)}-${digits.slice(7)}`
+}
+
 // ─── NewLeadModal ─────────────────────────────────────────────────────────────
 interface NewLeadModalProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (data: Partial<Lead>) => void
+  onSave: (data: Partial<Lead>) => Promise<void>
   editingLead?: Lead | null
 }
 
 function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProps) {
   const [currentStep, setCurrentStep] = useState(1)
+  const [saving, setSaving] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [formData, setFormData] = useState({
     student_name: '', grade_interest: '', cpf: '', responsible_name: '',
     phone: '', email: '', address: '', budget_range: '', source: '', notes: ''
@@ -71,12 +83,28 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
       setFormData({ student_name: '', grade_interest: '', cpf: '', responsible_name: '', phone: '', email: '', address: '', budget_range: '', source: '', notes: '' })
     }
     setCurrentStep(1)
+    setFieldErrors({})
   }, [editingLead, isOpen])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const validate = (): boolean => {
+    const errors: Record<string, string> = {}
+    if (!formData.student_name.trim()) errors.student_name = 'Nome do aluno é obrigatório'
+    if (!formData.responsible_name.trim()) errors.responsible_name = 'Nome do responsável é obrigatório'
+    if (!formData.phone.trim()) errors.phone = 'Telefone é obrigatório'
+    setFieldErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    onSave(formData)
-    onClose()
+    if (!validate()) return
+    setSaving(true)
+    try {
+      await onSave(formData)
+      onClose()
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (!isOpen) return null
@@ -113,13 +141,14 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Nome do Aluno *</label>
-                  <input type="text" required value={formData.student_name}
-                    onChange={(e) => setFormData({ ...formData, student_name: e.target.value })}
-                    className={inputCls} placeholder="Nome completo do aluno" />
+                  <input type="text" value={formData.student_name}
+                    onChange={(e) => { setFormData({ ...formData, student_name: e.target.value }); setFieldErrors(prev => ({ ...prev, student_name: '' })) }}
+                    className={inputCls + (fieldErrors.student_name ? ' border-red-400' : '')} placeholder="Nome completo do aluno" />
+                  {fieldErrors.student_name && <p className="text-red-500 text-xs mt-1">{fieldErrors.student_name}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Série/Ano de Interesse *</label>
-                  <select required value={formData.grade_interest}
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Série/Ano de Interesse</label>
+                  <select value={formData.grade_interest}
                     onChange={(e) => setFormData({ ...formData, grade_interest: e.target.value })}
                     className={inputCls}>
                     <option value="">Selecione a série</option>
@@ -140,16 +169,18 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
             <div className="space-y-5">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Nome do Responsável *</label>
-                <input type="text" required value={formData.responsible_name}
-                  onChange={(e) => setFormData({ ...formData, responsible_name: e.target.value })}
-                  className={inputCls} placeholder="Nome completo do responsável" />
+                <input type="text" value={formData.responsible_name}
+                  onChange={(e) => { setFormData({ ...formData, responsible_name: e.target.value }); setFieldErrors(prev => ({ ...prev, responsible_name: '' })) }}
+                  className={inputCls + (fieldErrors.responsible_name ? ' border-red-400' : '')} placeholder="Nome completo do responsável" />
+                {fieldErrors.responsible_name && <p className="text-red-500 text-xs mt-1">{fieldErrors.responsible_name}</p>}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Telefone *</label>
-                  <input type="tel" required value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className={inputCls} placeholder="(11) 99999-9999" />
+                  <input type="tel" value={formData.phone}
+                    onChange={(e) => { setFormData({ ...formData, phone: applyPhoneMask(e.target.value) }); setFieldErrors(prev => ({ ...prev, phone: '' })) }}
+                    className={inputCls + (fieldErrors.phone ? ' border-red-400' : '')} placeholder="11 99999-9999" />
+                  {fieldErrors.phone && <p className="text-red-500 text-xs mt-1">{fieldErrors.phone}</p>}
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">E-mail</label>
@@ -184,8 +215,8 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Origem do Lead *</label>
-                  <select required value={formData.source}
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Origem do Lead</label>
+                  <select value={formData.source}
                     onChange={(e) => setFormData({ ...formData, source: e.target.value })}
                     className={inputCls}>
                     <option value="">Selecione a origem</option>
@@ -222,9 +253,8 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
                   Próximo
                 </button>
               ) : (
-                <button type="submit" className={btnPrimary}>
-                  <Save className="w-4 h-4" />
-                  {editingLead ? 'Atualizar' : 'Salvar'} Lead
+                <button type="submit" disabled={saving} className={btnPrimary + ' disabled:opacity-50 disabled:cursor-not-allowed'}>
+                  {saving ? <><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />Salvando...</> : <><Save className="w-4 h-4" />{editingLead ? 'Atualizar' : 'Salvar'} Lead</>}
                 </button>
               )}
             </div>
@@ -339,16 +369,36 @@ function ScheduleVisitModal({ isOpen, onClose, lead, onSchedule }: ScheduleVisit
 
 // ─── HistoryModal ─────────────────────────────────────────────────────────────
 interface HistoryModalProps {
-  isOpen: boolean; onClose: () => void; lead: Lead | null; history: any[]; loading: boolean
-  newAction: string; setNewAction: (t: string) => void; savingAction: boolean
-  editingAction: string | null; setEditingAction: (id: string | null) => void
-  editingActionText: string; setEditingActionText: (t: string) => void
-  onAddAction: () => void; onSaveEditAction: (id: string) => void; onDeleteAction: (id: string) => void
+  isOpen: boolean
+  onClose: () => void
+  lead: Lead | null
+  history: ActivityLog[]
+  loading: boolean
+  newAction: string
+  setNewAction: (t: string) => void
+  savingAction: boolean
+  editingAction: string | null
+  setEditingAction: (id: string | null) => void
+  editingActionText: string
+  setEditingActionText: (t: string) => void
+  onAddAction: () => void
+  onSaveEditAction: (id: string) => void
+  onDeleteAction: (id: string) => void
+  // New "Registrar Contato" form
+  contactForm: { tipo: string; descricao: string; data: string }
+  setContactForm: (f: { tipo: string; descricao: string; data: string }) => void
+  showContactForm: boolean
+  setShowContactForm: (v: boolean) => void
+  savingContact: boolean
+  onSaveContact: () => void
 }
 
-function HistoryModal({ isOpen, onClose, lead, history, loading, newAction, setNewAction, savingAction,
+function HistoryModal({
+  isOpen, onClose, lead, history, loading, newAction, setNewAction, savingAction,
   editingAction, setEditingAction, editingActionText, setEditingActionText,
-  onAddAction, onSaveEditAction, onDeleteAction }: HistoryModalProps) {
+  onAddAction, onSaveEditAction, onDeleteAction,
+  contactForm, setContactForm, showContactForm, setShowContactForm, savingContact, onSaveContact
+}: HistoryModalProps) {
   if (!isOpen || !lead) return null
 
   const formatDateTime = (d: string) => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -358,8 +408,8 @@ function HistoryModal({ isOpen, onClose, lead, history, loading, newAction, setN
       <div className="bg-white rounded-2xl p-8 w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-[#1e2d6b]">Histórico do Lead</h2>
-            <p className="text-gray-500 text-sm mt-1"><span className="font-semibold text-gray-700">{lead.student_name}</span> — {lead.responsible_name}</p>
+            <h2 className="text-2xl font-bold text-[#1e2d6b]">Histórico — {lead.student_name}</h2>
+            <p className="text-gray-500 text-sm mt-1"><span className="font-semibold text-gray-700">{lead.responsible_name}</span></p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-600">
             <X className="h-5 w-5" />
@@ -375,21 +425,70 @@ function HistoryModal({ isOpen, onClose, lead, history, loading, newAction, setN
           </div>
         </div>
 
-        {/* Add action */}
+        {/* Registrar Contato */}
         <div className="bg-gray-50 rounded-xl p-5 mb-6 border border-gray-200">
-          <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-            <Plus className="w-4 h-4 text-[#14b8a6]" /> Adicionar Ação Manual
-          </h3>
-          <div className="flex gap-3">
-            <input type="text" value={newAction} onChange={(e) => setNewAction(e.target.value)}
-              placeholder="Descreva a ação realizada..."
-              className={inputCls + ' flex-1'}
-              onKeyDown={(e) => e.key === 'Enter' && onAddAction()} />
-            <button onClick={onAddAction} disabled={!newAction.trim() || savingAction}
-              className={btnPrimary + ' disabled:opacity-50 disabled:cursor-not-allowed'}>
-              {savingAction ? <><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />Salvando...</> : <><Send className="w-4 h-4" />Adicionar</>}
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+              <Plus className="w-4 h-4 text-[#14b8a6]" /> Registrar Contato
+            </h3>
+            <button
+              onClick={() => setShowContactForm(!showContactForm)}
+              className="text-xs text-[#14b8a6] hover:underline font-semibold"
+            >
+              {showContactForm ? 'Ocultar' : 'Mostrar'}
             </button>
           </div>
+
+          {showContactForm && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Tipo</label>
+                  <select value={contactForm.tipo}
+                    onChange={(e) => setContactForm({ ...contactForm, tipo: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none">
+                    <option value="Ligação">Ligação</option>
+                    <option value="WhatsApp">WhatsApp</option>
+                    <option value="E-mail">E-mail</option>
+                    <option value="Visita">Visita</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Data</label>
+                  <input type="date" value={contactForm.data}
+                    onChange={(e) => setContactForm({ ...contactForm, data: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Descrição</label>
+                <textarea value={contactForm.descricao}
+                  onChange={(e) => setContactForm({ ...contactForm, descricao: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none"
+                  rows={2} placeholder="Descreva o contato realizado..." />
+              </div>
+              <div className="flex justify-end">
+                <button onClick={onSaveContact} disabled={savingContact}
+                  className={btnPrimary + ' disabled:opacity-50 disabled:cursor-not-allowed text-sm py-2 px-4'}>
+                  {savingContact ? <><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />Salvando...</> : <><Send className="w-3 h-3" />Registrar</>}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Legacy manual action */}
+          {!showContactForm && (
+            <div className="flex gap-3">
+              <input type="text" value={newAction} onChange={(e) => setNewAction(e.target.value)}
+                placeholder="Descreva a ação realizada..."
+                className={inputCls + ' flex-1'}
+                onKeyDown={(e) => e.key === 'Enter' && onAddAction()} />
+              <button onClick={onAddAction} disabled={!newAction.trim() || savingAction}
+                className={btnPrimary + ' disabled:opacity-50 disabled:cursor-not-allowed'}>
+                {savingAction ? <><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />Salvando...</> : <><Send className="w-4 h-4" />Adicionar</>}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* History list */}
@@ -495,9 +594,10 @@ interface CardContentProps {
   onEdit: (lead: Lead) => void
   onDelete: (id: string) => void
   onStatusChange: (id: string, status: Lead['status']) => void
+  onWhatsApp: (lead: Lead) => void
 }
 
-function CardContent({ lead, config, isFlashing, overlay, openMenuId, setOpenMenuId, onSchedule, onHistory, onEdit, onDelete, onStatusChange }: CardContentProps) {
+function CardContent({ lead, config, isFlashing, overlay, openMenuId, setOpenMenuId, onSchedule, onHistory, onEdit, onDelete, onStatusChange, onWhatsApp }: CardContentProps) {
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('pt-BR')
 
   return (
@@ -568,12 +668,17 @@ function CardContent({ lead, config, isFlashing, overlay, openMenuId, setOpenMen
           </div>
         )}
 
-        {/* Phone */}
+        {/* Phone — navigates to WhatsApp Hub */}
         {lead.phone && (
-          <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 px-2.5 py-1.5 rounded-lg mb-2 border border-green-100">
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onWhatsApp(lead) }}
+            className="w-full flex items-center gap-2 text-xs text-green-700 bg-green-50 px-2.5 py-1.5 rounded-lg mb-2 border border-green-100 hover:bg-green-100 transition-colors cursor-pointer"
+          >
             <Phone className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
             <span className="truncate font-medium">{lead.phone}</span>
-          </div>
+          </button>
         )}
 
         {/* Source tag */}
@@ -597,6 +702,48 @@ function CardContent({ lead, config, isFlashing, overlay, openMenuId, setOpenMen
             <Calendar className="w-3 h-3" />
             {formatDate(lead.created_at)}
           </p>
+
+          {/* Action buttons — visible on hover */}
+          {!overlay && (
+            <div className="flex gap-1 mb-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                title="WhatsApp"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onWhatsApp(lead) }}
+                className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-semibold rounded-lg bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
+              >
+                <MessageCircle className="w-3 h-3" />
+                WA
+              </button>
+              <button
+                title="Agendar Visita"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onSchedule(lead) }}
+                className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-semibold rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
+              >
+                <Calendar className="w-3 h-3" />
+                Visita
+              </button>
+              <button
+                title="Histórico"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onHistory(lead) }}
+                className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+              >
+                <Clock className="w-3 h-3" />
+                Hist.
+              </button>
+              <button
+                title="Excluir"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onDelete(lead.id) }}
+                className="flex items-center justify-center p-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
           {!overlay && (
             <select
               value={lead.status}
@@ -661,6 +808,7 @@ function DroppableColumn({ id, isOver, children }: { id: string; isOver: boolean
 // ─── LeadKanban ───────────────────────────────────────────────────────────────
 export default function LeadKanban() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
   const [showNewLeadModal, setShowNewLeadModal] = useState(false)
@@ -669,12 +817,12 @@ export default function LeadKanban() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterSource, setFilterSource] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
-  const [filterStartDate, setFilterStartDate] = useState('')
-  const [filterEndDate, setFilterEndDate] = useState('')
+  const [filterStartDate] = useState('')
+  const [filterEndDate] = useState('')
   const [showHistory, setShowHistory] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [loadingHistory, setLoadingHistory] = useState(false)
-  const [leadHistory, setLeadHistory] = useState<any[]>([])
+  const [leadHistory, setLeadHistory] = useState<ActivityLog[]>([])
   const [newAction, setNewAction] = useState('')
   const [savingAction, setSavingAction] = useState(false)
   const [editingAction, setEditingAction] = useState<string | null>(null)
@@ -682,6 +830,14 @@ export default function LeadKanban() {
   const [showScheduleVisitModal, setShowScheduleVisitModal] = useState(false)
   const [leadToSchedule, setLeadToSchedule] = useState<Lead | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+
+  // Contact form state
+  const [contactForm, setContactForm] = useState({ tipo: 'Ligação', descricao: '', data: new Date().toISOString().split('T')[0] })
+  const [showContactForm, setShowContactForm] = useState(false)
+  const [savingContact, setSavingContact] = useState(false)
+
+  // Toast state
+  const [toast, setToast] = useState<{ msg: string; type: 'error' | 'success' } | null>(null)
 
   // Drag & drop state
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -692,6 +848,11 @@ export default function LeadKanban() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   )
 
+  const showToast = useCallback((msg: string, type: 'error' | 'success') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3000)
+  }, [])
+
   useEffect(() => {
     if (user?.institution_id) loadData()
   }, [user])
@@ -699,13 +860,10 @@ export default function LeadKanban() {
   const loadData = async () => {
     try {
       setLoading(true); setError('')
-      const [leadsData, usersData] = await Promise.all([
-        DatabaseService.getLeads(user!.institution_id),
-        DatabaseService.getUsers(user!.institution_id)
-      ])
+      const leadsData = await DatabaseService.getLeads(user!.institution_id)
       setLeads(leadsData)
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error)
+    } catch (err) {
+      console.error('Erro ao carregar dados:', err)
       setError('Erro ao carregar dados dos leads')
     } finally {
       setLoading(false)
@@ -713,27 +871,32 @@ export default function LeadKanban() {
   }
 
   const handleSave = async (data: Partial<Lead>) => {
-    try {
-      setError('')
-      const leadData = { ...data, institution_id: user!.institution_id, status: editingLead ? editingLead.status : 'new' as Lead['status'] }
-      if (editingLead) {
-        await DatabaseService.updateLead(editingLead.id, leadData)
-        const changes: any = {}, previousData: any = {}
-        Object.keys(data).forEach(key => {
-          const newValue = (data as any)[key], oldValue = (editingLead as any)[key]
-          if (newValue !== oldValue && newValue !== undefined && newValue !== null && newValue !== '') { changes[key] = newValue; previousData[key] = oldValue }
-        })
-        if (Object.keys(changes).length > 0) {
-          await DatabaseService.logActivity({ user_id: user!.id, action: 'Lead editado', entity_type: 'lead', entity_id: editingLead.id, details: { changes, previous: previousData, student_name: data.student_name || editingLead.student_name, responsible_name: data.responsible_name || editingLead.responsible_name }, institution_id: user!.institution_id })
-        }
-      } else {
-        const newLead = await DatabaseService.createLead(leadData)
-        await DatabaseService.logActivity({ user_id: user!.id, action: 'Lead criado', entity_type: 'lead', entity_id: newLead.id, details: { student_name: newLead.student_name, responsible_name: newLead.responsible_name, source: newLead.source, grade_interest: newLead.grade_interest, phone: newLead.phone || '', email: newLead.email || '', address: newLead.address || '', budget_range: newLead.budget_range || '', notes: newLead.notes || '' }, institution_id: user!.institution_id })
-      }
-      await loadData(); setEditingLead(null)
-    } catch (error) {
-      console.error('Erro ao salvar lead:', error); setError('Erro ao salvar lead: ' + (error as Error).message)
+    setError('')
+    const leadData: Partial<Lead> = {
+      ...data,
+      institution_id: user!.institution_id,
+      status: editingLead ? editingLead.status : 'new',
     }
+    if (editingLead) {
+      await DatabaseService.updateLead(editingLead.id, leadData)
+      const changes: Record<string, unknown> = {}
+      const previousData: Record<string, unknown> = {}
+      Object.keys(data).forEach(key => {
+        const newValue = (data as Record<string, unknown>)[key]
+        const oldValue = (editingLead as unknown as Record<string, unknown>)[key]
+        if (newValue !== oldValue && newValue !== undefined && newValue !== null && newValue !== '') {
+          changes[key] = newValue; previousData[key] = oldValue
+        }
+      })
+      if (Object.keys(changes).length > 0) {
+        await DatabaseService.logActivity({ user_id: user!.id, action: 'Lead editado', entity_type: 'lead', entity_id: editingLead.id, details: { changes, previous: previousData, student_name: data.student_name || editingLead.student_name, responsible_name: data.responsible_name || editingLead.responsible_name }, institution_id: user!.institution_id })
+      }
+    } else {
+      const newLead = await DatabaseService.createLead(leadData)
+      await DatabaseService.logActivity({ user_id: user!.id, action: 'Lead criado', entity_type: 'lead', entity_id: newLead.id, details: { student_name: newLead.student_name, responsible_name: newLead.responsible_name, source: newLead.source, grade_interest: newLead.grade_interest, phone: newLead.phone || '', email: newLead.email || '', address: newLead.address || '', budget_range: newLead.budget_range || '', notes: newLead.notes || '' }, institution_id: user!.institution_id })
+    }
+    await loadData()
+    setEditingLead(null)
   }
 
   const handleStatusChange = async (leadId: string, newStatus: Lead['status']) => {
@@ -745,8 +908,10 @@ export default function LeadKanban() {
         await DatabaseService.logActivity({ user_id: user!.id, action: 'Status alterado', entity_type: 'lead', entity_id: leadId, details: { previous_status: previousStatus, new_status: newStatus, student_name: currentLead.student_name, responsible_name: currentLead.responsible_name }, institution_id: user!.institution_id })
       }
       await loadData()
-    } catch (error) {
-      console.error('Erro ao atualizar status:', error); setError('Erro ao atualizar status do lead')
+    } catch (err) {
+      console.error('Erro ao atualizar status:', err)
+      setError('Erro ao atualizar status do lead')
+      throw err
     }
   }
 
@@ -755,8 +920,8 @@ export default function LeadKanban() {
     if (!lead || !confirm(`Tem certeza que deseja excluir o lead "${lead.student_name}"?\n\nEsta ação não pode ser desfeita.`)) return
     try {
       await DatabaseService.deleteLead(leadId); await loadData()
-    } catch (error) {
-      console.error('Erro ao excluir lead:', error); setError('Erro ao excluir lead: ' + (error as Error).message)
+    } catch (err) {
+      console.error('Erro ao excluir lead:', err); setError('Erro ao excluir lead: ' + (err as Error).message)
     }
   }
 
@@ -769,24 +934,22 @@ export default function LeadKanban() {
       await DatabaseService.createVisit({ institution_id: user!.institution_id, lead_id: leadToSchedule.id, student_name: leadToSchedule.student_name, scheduled_date: visitDate.toISOString(), notes: data.notes, status: 'scheduled' })
       await DatabaseService.updateLead(leadToSchedule.id, { status: 'scheduled' })
       await DatabaseService.logActivity({ user_id: user!.id, action: 'Visita agendada', entity_type: 'lead', entity_id: leadToSchedule.id, details: { scheduled_date: data.scheduled_date, scheduled_time: data.scheduled_time, notes: data.notes, student_name: leadToSchedule.student_name, responsible_name: leadToSchedule.responsible_name }, institution_id: user!.institution_id })
-      await loadData(); setShowScheduleVisitModal(false); setLeadToSchedule(null)
-      alert('Visita agendada com sucesso!')
-    } catch (error) {
-      console.error('Erro ao agendar visita:', error); setError('Erro ao agendar visita: ' + (error as Error).message)
+      await loadData()
+      setShowScheduleVisitModal(false)
+      setLeadToSchedule(null)
+      showToast('Visita agendada com sucesso!', 'success')
+    } catch (err) {
+      console.error('Erro ao agendar visita:', err); setError('Erro ao agendar visita: ' + (err as Error).message)
     }
   }
 
   const loadLeadHistory = async (leadId: string) => {
     try {
       setLoadingHistory(true)
-      const allUsers = await DatabaseService.getUsers(user!.institution_id)
       const history = await DatabaseService.getActivityLogs(user!.institution_id, leadId)
-      setLeadHistory(history.map(item => {
-        const foundUser = allUsers.find(u => u.id === item.user_id)
-        return { ...item, user_name: foundUser ? foundUser.full_name : (item.user_id === user?.id ? user?.full_name || 'Você' : 'Usuário desconhecido') }
-      }))
-    } catch (error) {
-      console.error('Erro ao carregar histórico:', error); setLeadHistory([])
+      setLeadHistory(history)
+    } catch (err) {
+      console.error('Erro ao carregar histórico:', err); setLeadHistory([])
     } finally {
       setLoadingHistory(false)
     }
@@ -798,10 +961,39 @@ export default function LeadKanban() {
       setSavingAction(true)
       await DatabaseService.logActivity({ user_id: user!.id, action: 'Ação manual adicionada', entity_type: 'lead', entity_id: selectedLead.id, details: { description: newAction.trim(), student_name: selectedLead.student_name, responsible_name: selectedLead.responsible_name }, institution_id: user!.institution_id })
       await loadLeadHistory(selectedLead.id); setNewAction('')
-    } catch (error) {
-      console.error('Erro ao salvar ação:', error); setError('Erro ao adicionar ação ao histórico')
+    } catch (err) {
+      console.error('Erro ao salvar ação:', err); setError('Erro ao adicionar ação ao histórico')
     } finally {
       setSavingAction(false)
+    }
+  }
+
+  const handleSaveContact = async () => {
+    if (!selectedLead) return
+    setSavingContact(true)
+    try {
+      await DatabaseService.logActivity({
+        user_id: user!.id,
+        action: contactForm.tipo,
+        entity_type: 'lead',
+        entity_id: selectedLead.id,
+        details: {
+          description: contactForm.descricao,
+          contact_date: contactForm.data,
+          student_name: selectedLead.student_name,
+          responsible_name: selectedLead.responsible_name,
+        },
+        institution_id: user!.institution_id,
+      })
+      await loadLeadHistory(selectedLead.id)
+      setContactForm({ tipo: 'Ligação', descricao: '', data: new Date().toISOString().split('T')[0] })
+      setShowContactForm(false)
+      showToast('Contato registrado!', 'success')
+    } catch (err) {
+      console.error('Erro ao registrar contato:', err)
+      showToast('Erro ao registrar contato', 'error')
+    } finally {
+      setSavingContact(false)
     }
   }
 
@@ -810,8 +1002,8 @@ export default function LeadKanban() {
     try {
       await DatabaseService.updateActivityLog(actionId, { details: { ...leadHistory.find(h => h.id === actionId)?.details, description: editingActionText.trim() } })
       await loadLeadHistory(selectedLead!.id); setEditingAction(null); setEditingActionText('')
-    } catch (error) {
-      console.error('Erro ao atualizar ação:', error); setError('Erro ao atualizar ação')
+    } catch (err) {
+      console.error('Erro ao atualizar ação:', err); setError('Erro ao atualizar ação')
     }
   }
 
@@ -819,8 +1011,8 @@ export default function LeadKanban() {
     if (!confirm('Tem certeza que deseja excluir esta ação?\n\nEsta ação não pode ser desfeita.')) return
     try {
       await DatabaseService.deleteActivityLog(actionId); await loadLeadHistory(selectedLead!.id)
-    } catch (error) {
-      console.error('Erro ao excluir ação:', error); setError('Erro ao excluir ação')
+    } catch (err) {
+      console.error('Erro ao excluir ação:', err); setError('Erro ao excluir ação')
     }
   }
 
@@ -887,6 +1079,9 @@ export default function LeadKanban() {
     const draggedLead = leads.find(l => l.id === active.id as string)
     if (!draggedLead || draggedLead.status === targetStatus) return
 
+    // Snapshot for revert
+    const previousLeads = [...leads]
+
     // Optimistic update
     setLeads(prev => prev.map(l => l.id === active.id ? { ...l, status: targetStatus! } : l))
 
@@ -894,8 +1089,16 @@ export default function LeadKanban() {
     setFlashingLeadId(active.id as string)
     setTimeout(() => setFlashingLeadId(null), 1000)
 
-    // Persist to DB
-    handleStatusChange(active.id as string, targetStatus)
+    // Persist to DB — revert on error
+    handleStatusChange(active.id as string, targetStatus).catch(() => {
+      setLeads(previousLeads)
+      showToast('Erro ao mover o card. Tente novamente.', 'error')
+    })
+  }
+
+  const handleWhatsApp = (lead: Lead) => {
+    const phone = (lead.phone || '').replace(/\D/g, '')
+    navigate(`/whatsapp?phone=${phone}&name=${encodeURIComponent(lead.responsible_name)}`)
   }
 
   const stats = getLeadStats()
@@ -923,10 +1126,20 @@ export default function LeadKanban() {
     openMenuId,
     setOpenMenuId,
     onSchedule: (lead: Lead) => { setLeadToSchedule(lead); setShowScheduleVisitModal(true) },
-    onHistory: (lead: Lead) => { setSelectedLead(lead); setShowHistory(true); setNewAction(''); setEditingAction(null); setEditingActionText(''); loadLeadHistory(lead.id) },
+    onHistory: (lead: Lead) => {
+      setSelectedLead(lead)
+      setShowHistory(true)
+      setNewAction('')
+      setEditingAction(null)
+      setEditingActionText('')
+      setShowContactForm(false)
+      setContactForm({ tipo: 'Ligação', descricao: '', data: new Date().toISOString().split('T')[0] })
+      loadLeadHistory(lead.id)
+    },
     onEdit: (lead: Lead) => { setEditingLead(lead); setShowNewLeadModal(true) },
     onDelete: handleDelete,
     onStatusChange: handleStatusChange,
+    onWhatsApp: handleWhatsApp,
   }
 
   return (
@@ -1058,6 +1271,7 @@ export default function LeadKanban() {
                 onEdit={() => {}}
                 onDelete={() => {}}
                 onStatusChange={() => {}}
+                onWhatsApp={() => {}}
               />
             </div>
           ) : null}
@@ -1097,7 +1311,25 @@ export default function LeadKanban() {
         onAddAction={handleAddAction}
         onSaveEditAction={handleSaveEditAction}
         onDeleteAction={handleDeleteAction}
+        contactForm={contactForm}
+        setContactForm={setContactForm}
+        showContactForm={showContactForm}
+        setShowContactForm={setShowContactForm}
+        savingContact={savingContact}
+        onSaveContact={handleSaveContact}
       />
+
+      {/* ── Toast ──────────────────────────────────────────────────────────── */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-[100] flex items-center gap-3 px-5 py-3 rounded-xl shadow-xl text-sm font-semibold transition-all ${
+          toast.type === 'success'
+            ? 'bg-green-600 text-white'
+            : 'bg-red-600 text-white'
+        }`}>
+          {toast.type === 'success' ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <X className="w-4 h-4 flex-shrink-0" />}
+          {toast.msg}
+        </div>
+      )}
     </div>
   )
 }
