@@ -587,7 +587,7 @@ interface CardContentProps {
   onWhatsApp: (lead: Lead) => void
 }
 
-function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory, onDelete, onWhatsApp }: CardContentProps) {
+function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory, onEdit, onDelete, onWhatsApp }: CardContentProps) {
   return (
     <div
       className={`group relative rounded-xl border transition-all duration-150 overflow-hidden ${
@@ -686,6 +686,15 @@ function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory,
           >
             <Clock className="w-3 h-3" />
             Hist.
+          </button>
+          <button
+            title="Editar"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onEdit(lead) }}
+            className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium rounded-md text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <Edit className="w-3 h-3" />
+            Editar
           </button>
         </div>
       )}
