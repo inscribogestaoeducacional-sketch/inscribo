@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
-  Plus, Phone, Calendar, Edit, Trash2, X, Search,
+  Plus, Phone, Calendar, Edit, Edit2, Trash2, X, Search,
   Clock, Users, Send, CheckCircle, Save,
   MessageCircle
 } from 'lucide-react'
@@ -614,16 +614,26 @@ function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory,
             {/* Row 2: responsible */}
             <p className="text-xs text-gray-500 truncate">{lead.responsible_name}</p>
           </div>
-          {/* Delete — top right on hover */}
+          {/* Edit + Delete — top right on hover */}
           {!overlay && (
-            <button
-              title="Excluir"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); onDelete(lead.id) }}
-              className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1 rounded-md text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 flex-shrink-0 transition-opacity">
+              <button
+                title="Editar"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onEdit(lead) }}
+                className="p-1 rounded-md text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                title="Excluir"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onDelete(lead.id) }}
+                className="p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
           )}
         </div>
 
@@ -686,15 +696,6 @@ function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory,
           >
             <Clock className="w-3 h-3" />
             Hist.
-          </button>
-          <button
-            title="Editar"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); onEdit(lead) }}
-            className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium rounded-md text-gray-600 hover:bg-gray-100 transition-colors"
-          >
-            <Edit className="w-3 h-3" />
-            Editar
           </button>
         </div>
       )}
