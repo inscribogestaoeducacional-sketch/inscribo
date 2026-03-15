@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
   ChevronLeft, ChevronRight, Plus, X, Search, Check, Trash2,
-  Calendar, Clock
+  Calendar, Clock, TrendingUp
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -337,96 +337,127 @@ export default function VisitCalendar() {
     <div className="flex overflow-hidden bg-gray-50" style={{ height: 'calc(100vh - 56px)' }}>
 
       {/* ── Left column ──────────────────────────────────────────────────────── */}
-      <div className="w-80 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
-        <div className="p-4">
+      <div className="w-80 flex-shrink-0 border-r border-gray-200 flex flex-col overflow-y-auto bg-gray-50">
+        <div className="p-4 space-y-3">
 
-          {/* KPI 2x2 */}
-          <div className="grid grid-cols-2 gap-2 mb-5">
-            <div className="bg-blue-50 rounded-xl p-3">
-              <p className="text-xs text-blue-600 font-medium mb-0.5">Hoje</p>
-              <p className="text-2xl font-bold text-blue-700">{statsToday}</p>
-            </div>
-            <div className="bg-[#14b8a6]/10 rounded-xl p-3">
-              <p className="text-xs text-[#0d9488] font-medium mb-0.5">Semana</p>
-              <p className="text-2xl font-bold text-[#0d9488]">{statsWeek}</p>
-            </div>
-            <div className="bg-green-50 rounded-xl p-3">
-              <p className="text-xs text-green-600 font-medium mb-0.5">Realizadas</p>
-              <p className="text-2xl font-bold text-green-700">{statsCompleted}</p>
-            </div>
-            <div className="bg-purple-50 rounded-xl p-3">
-              <p className="text-xs text-purple-600 font-medium mb-0.5">Taxa</p>
-              <p className="text-2xl font-bold text-purple-700">{statsRate}%</p>
-            </div>
-          </div>
-
-          {/* Month navigation */}
-          <div className="flex items-center justify-between mb-2">
-            <button
-              onClick={() => setCalendarMonth(d => { const n = new Date(d); n.setMonth(d.getMonth() - 1); return n })}
-              className="p-1 rounded hover:bg-gray-100 text-gray-500 transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-xs font-semibold text-gray-700 capitalize">
-              {calendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-            </span>
-            <button
-              onClick={() => setCalendarMonth(d => { const n = new Date(d); n.setMonth(d.getMonth() + 1); return n })}
-              className="p-1 rounded hover:bg-gray-100 text-gray-500 transition-colors"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Week day labels */}
-          <div className="grid grid-cols-7 mb-1">
-            {weekLabels.map((d, i) => (
-              <div key={i} className="text-center text-xs text-gray-400 font-medium py-1">{d}</div>
-            ))}
-          </div>
-
-          {/* Calendar grid */}
-          <div className="grid grid-cols-7">
-            {calDays.map((date, i) => {
-              if (!date) return <div key={i} className="h-8 w-8" />
-              const dayVisitsArr = getVisitsForDate(date)
-              const dotColor = getDotColor(dayVisitsArr)
-              const isToday = date.toDateString() === today.toDateString()
-              const isSelected = date.toDateString() === selectedDate.toDateString()
-              return (
-                <div key={i} className="flex flex-col items-center justify-center py-0.5">
-                  <button
-                    onClick={() => setSelectedDate(date)}
-                    className={`h-8 w-8 rounded-full text-xs font-medium flex items-center justify-center transition-colors ${
-                      isSelected
-                        ? 'bg-teal-500 text-white'
-                        : isToday && !dotColor
-                        ? 'bg-gray-100 text-gray-800 font-semibold'
-                        : isToday
-                        ? 'text-teal-600 font-bold'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    {date.getDate()}
-                  </button>
-                  {dotColor && (
-                    <div className={`w-1.5 h-1.5 rounded-full mt-0.5 ${isSelected ? 'bg-white' : dotColor}`} />
-                  )}
-                  {!dotColor && <div className="h-2 mt-0.5" />}
+          {/* KPI cards — Dashboard style */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-white rounded-xl border-t-2 border-t-teal-500 border border-gray-200 shadow-sm p-3">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Hoje</p>
+                  <p className="text-2xl font-bold text-[#1e2d6b] leading-none">{statsToday}</p>
                 </div>
-              )
-            })}
+                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                  <Calendar className="w-4 h-4 text-blue-500" />
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border-t-2 border-t-teal-500 border border-gray-200 shadow-sm p-3">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Semana</p>
+                  <p className="text-2xl font-bold text-[#1e2d6b] leading-none">{statsWeek}</p>
+                </div>
+                <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center flex-shrink-0">
+                  <Clock className="w-4 h-4 text-teal-500" />
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border-t-2 border-t-teal-500 border border-gray-200 shadow-sm p-3">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Realizadas</p>
+                  <p className="text-2xl font-bold text-[#1e2d6b] leading-none">{statsCompleted}</p>
+                </div>
+                <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center flex-shrink-0">
+                  <Check className="w-4 h-4 text-green-500" />
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border-t-2 border-t-teal-500 border border-gray-200 shadow-sm p-3">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Taxa</p>
+                  <p className="text-2xl font-bold text-[#1e2d6b] leading-none">{statsRate}%</p>
+                </div>
+                <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
+                  <TrendingUp className="w-4 h-4 text-purple-500" />
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Legend */}
-          <div className="mt-4 pt-3 border-t border-gray-100 flex flex-wrap gap-x-3 gap-y-1">
-            {Object.entries(visitStatus).map(([, cfg]) => (
-              <div key={cfg.label} className="flex items-center gap-1">
-                <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-                <span className="text-xs text-gray-500">{cfg.label}</span>
-              </div>
-            ))}
+          {/* Calendar card */}
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+            {/* Month navigation */}
+            <div className="flex items-center justify-between mb-3">
+              <button
+                onClick={() => setCalendarMonth(d => { const n = new Date(d); n.setMonth(d.getMonth() - 1); return n })}
+                className="p-1 rounded hover:bg-gray-100 text-gray-400 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-sm font-semibold text-[#1e2d6b] capitalize">
+                {calendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+              </span>
+              <button
+                onClick={() => setCalendarMonth(d => { const n = new Date(d); n.setMonth(d.getMonth() + 1); return n })}
+                className="p-1 rounded hover:bg-gray-100 text-gray-400 transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Week day labels */}
+            <div className="grid grid-cols-7 mb-1">
+              {weekLabels.map((d, i) => (
+                <div key={i} className="text-center text-xs text-gray-400 font-medium py-1">{d}</div>
+              ))}
+            </div>
+
+            {/* Calendar grid */}
+            <div className="grid grid-cols-7">
+              {calDays.map((date, i) => {
+                if (!date) return <div key={i} className="h-8 w-8" />
+                const dayVisitsArr = getVisitsForDate(date)
+                const dotColor = getDotColor(dayVisitsArr)
+                const isToday = date.toDateString() === today.toDateString()
+                const isSelected = date.toDateString() === selectedDate.toDateString()
+                return (
+                  <div key={i} className="flex flex-col items-center justify-center py-0.5">
+                    <button
+                      onClick={() => setSelectedDate(date)}
+                      className={`h-8 w-8 rounded-full text-xs flex items-center justify-center transition-colors ${
+                        isSelected
+                          ? 'bg-teal-500 text-white font-semibold'
+                          : isToday && !dotColor
+                          ? 'bg-gray-100 text-gray-800 font-semibold'
+                          : isToday
+                          ? 'text-teal-600 font-bold'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {date.getDate()}
+                    </button>
+                    {dotColor && (
+                      <div className={`w-1.5 h-1.5 rounded-full mt-0.5 ${isSelected ? 'bg-teal-300' : dotColor}`} />
+                    )}
+                    {!dotColor && <div className="h-2 mt-0.5" />}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Legend */}
+            <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-x-3 gap-y-1">
+              {Object.entries(visitStatus).map(([, cfg]) => (
+                <div key={cfg.label} className="flex items-center gap-1">
+                  <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+                  <span className="text-xs text-gray-400">{cfg.label}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -436,10 +467,13 @@ export default function VisitCalendar() {
         {/* Header */}
         <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 bg-white border-b border-gray-200">
           <div>
-            <h2 className="text-base font-bold text-[#1e2d6b]">Visitas</h2>
+            <h2 className="text-lg font-bold text-[#1e2d6b]">Visitas</h2>
             <p className="text-xs text-gray-500 capitalize">{formatSelectedDate(selectedDate)}</p>
           </div>
-          <button onClick={() => setShowModal(true)} className={btnPrimary}>
+          <button
+            onClick={() => setShowModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#14b8a6] text-white rounded-lg text-sm font-semibold hover:bg-[#0d9488] transition-colors"
+          >
             <Plus className="w-4 h-4" />
             Nova Visita
           </button>
@@ -451,10 +485,15 @@ export default function VisitCalendar() {
           {/* Day visit cards */}
           {dayVisits.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <Calendar className="w-10 h-10 text-gray-200 mb-3" />
-              <p className="text-sm font-medium text-gray-400 mb-1">Nenhuma visita neste dia</p>
+              <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                <Calendar className="w-6 h-6 text-gray-300" />
+              </div>
+              <p className="text-sm font-semibold text-gray-400 mb-1">Nenhuma visita neste dia</p>
               <p className="text-xs text-gray-300 mb-4">Clique em "Nova Visita" para agendar</p>
-              <button onClick={() => setShowModal(true)} className={btnPrimary}>
+              <button
+                onClick={() => setShowModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[#14b8a6] text-white rounded-lg text-sm font-semibold hover:bg-[#0d9488] transition-colors"
+              >
                 <Plus className="w-4 h-4" />
                 Agendar Visita
               </button>
@@ -467,22 +506,22 @@ export default function VisitCalendar() {
                 const isCompleting = completingId === visit.id
 
                 return (
-                  <div key={visit.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                  <div key={visit.id} className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                     <div className="p-4">
                       <div className="flex items-start gap-3">
                         {/* Avatar */}
-                        <div className="w-9 h-9 rounded-full bg-teal-500 text-white text-sm font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <div className="w-10 h-10 rounded-full bg-teal-500 text-white text-sm font-bold flex items-center justify-center flex-shrink-0">
                           {(visit.student_name || '?').charAt(0).toUpperCase()}
                         </div>
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-sm font-semibold text-gray-800">{visit.student_name || 'Visitante'}</span>
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-[#14b8a6]/10 text-[#0d9488] font-medium flex items-center gap-1">
+                            <span className="text-xs px-2 py-1 rounded-full bg-teal-50 text-teal-700 font-medium flex items-center gap-1">
                               <Clock className="w-3 h-3" />
                               {formatTime(visit.scheduled_date)}
                             </span>
-                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.badge}`}>
+                            <span className={`text-xs px-2 py-1 rounded-full font-medium ${cfg.badge}`}>
                               {cfg.label}
                             </span>
                           </div>
@@ -572,8 +611,8 @@ export default function VisitCalendar() {
 
           {/* Upcoming visits */}
           {upcomingVisits.length > 0 && (
-            <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+            <div className="bg-gray-50 rounded-xl p-3">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
                 Próximas visitas — 7 dias
               </h3>
               <div className="space-y-2">
@@ -582,13 +621,13 @@ export default function VisitCalendar() {
                   return (
                     <div
                       key={visit.id}
-                      className="flex items-center gap-3 px-3 py-2.5 bg-white border border-gray-100 rounded-xl hover:border-gray-200 transition-colors"
+                      className="flex items-center gap-3 px-3 py-2.5 bg-white border border-gray-100 rounded-lg hover:shadow-sm transition-shadow"
                     >
-                      <div className="w-7 h-7 rounded-full bg-gray-100 text-gray-500 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                      <div className="w-7 h-7 rounded-full bg-teal-100 text-teal-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
                         {(visit.student_name || '?').charAt(0).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-gray-800 truncate">{visit.student_name}</p>
+                        <p className="text-xs font-semibold text-gray-700 truncate">{visit.student_name}</p>
                         <p className="text-xs text-gray-400">
                           {visitDate.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}
                           {' · '}
@@ -600,7 +639,7 @@ export default function VisitCalendar() {
                           setSelectedDate(new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate()))
                           setCalendarMonth(new Date(visitDate.getFullYear(), visitDate.getMonth(), 1))
                         }}
-                        className="text-xs text-teal-600 hover:underline font-medium whitespace-nowrap"
+                        className="text-xs text-teal-600 hover:text-teal-700 font-semibold whitespace-nowrap"
                       >
                         Ver dia
                       </button>
