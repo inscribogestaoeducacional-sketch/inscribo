@@ -19,6 +19,7 @@ CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_timestamp ON public.whatsapp_me
 
 ALTER TABLE public.whatsapp_messages ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Institution can manage own messages" ON public.whatsapp_messages;
 CREATE POLICY "Institution can manage own messages" ON public.whatsapp_messages
   FOR ALL USING (
     institution_id IN (
