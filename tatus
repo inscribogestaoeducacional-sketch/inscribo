@@ -1,0 +1,36 @@
+[33mcommit 096a80943e4ec72bc4e4f59f84899c22cab1d998[m[33m ([m[1;31mupstream/2[m[33m, [m[1;31morigin/2[m[33m)[m
+Author: inscribogestaoeducacional-sketch <inscribogestaoeducacional@gmail.com>
+Date:   Tue Oct 21 09:26:18 2025 -0300
+
+    Fix Tailwind CSS custom colors configuration
+
+.next/build-manifest.json
+.next/cache/webpack/client-development/index.pack.gz
+.next/cache/webpack/client-development/index.pack.gz.old
+.next/fallback-build-manifest.json
+.next/prerender-manifest.json
+.next/routes-manifest.json
+.next/server/app/page.js
+.next/server/middleware-build-manifest.js
+.next/server/server-reference-manifest.json
+.next/server/vendor-chunks/@swc.js
+.next/server/vendor-chunks/lucide-react.js
+.next/server/vendor-chunks/next.js
+.next/server/webpack-runtime.js
+.next/static/chunks/fallback/amp.js
+.next/static/chunks/fallback/main-app.js
+.next/static/chunks/fallback/main.js
+.next/static/chunks/fallback/pages/_app.js
+.next/static/chunks/fallback/pages/_error.js
+.next/static/chunks/fallback/react-refresh.js
+.next/static/chunks/fallback/webpack.js
+.next/static/development/_buildManifest.js
+.next/trace
+.next/types/app/layout.ts
+.next/types/app/page.ts
+.next/types/cache-life.d.ts
+.next/types/routes.d.ts
+.next/types/validator.ts
+next-env.d.ts
+package-lock.json
+tailwind.config.js
