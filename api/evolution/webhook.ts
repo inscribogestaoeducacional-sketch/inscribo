@@ -18,7 +18,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('[webhook] event:', body?.event)
   console.log('[webhook] body:', JSON.stringify(body).slice(0, 500))
 
-  if (body?.event === 'MESSAGES_UPSERT') {
+  const event = (body?.event || '').toLowerCase().replace('.', '_')
+
+  if (event === 'messages_upsert') {
     const msg = body?.data
     const key = msg?.key
     const message = msg?.message
