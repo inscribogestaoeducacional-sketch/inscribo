@@ -267,7 +267,7 @@ function WhatsAppTab() {
       const res = await fetch('/api/evolution/create-instance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceName: instance })
+        body: JSON.stringify({ instanceName: instance, institutionId: user?.institution_id })
       })
       const data = await res.json()
       const base64 = data?.qrcode?.base64 || data?.instance?.qrcode?.base64 || null
@@ -372,25 +372,23 @@ function WhatsAppTab() {
             Abra o WhatsApp → <strong>Dispositivos Vinculados</strong> → <strong>Vincular dispositivo</strong> → Escaneie o QR Code
           </p>
 
-          <div className="relative inline-block mb-4">
+          <div className="inline-block mb-3">
             <img
               src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`}
               alt="QR Code WhatsApp"
               className="h-56 w-56 object-contain rounded-xl border-2 border-gray-100"
             />
-            {/* countdown ring overlay */}
-            <div className="absolute -top-2 -right-2 w-9 h-9 bg-white rounded-full border-2 border-gray-200 flex items-center justify-center shadow-sm">
-              <span className={`text-xs font-bold tabular-nums ${countdown <= 10 ? 'text-red-500' : 'text-gray-600'}`}>
-                {countdown}
-              </span>
-            </div>
           </div>
 
-          <div className="flex items-center justify-center gap-2 text-xs text-amber-600 mb-2">
+          <p className={`text-2xl font-bold tabular-nums mb-1 ${countdown <= 10 ? 'text-red-500' : 'text-amber-500'}`}>
+            {countdown}s
+          </p>
+          <p className="text-xs text-gray-500 mb-3">QR Code expira em {countdown} segundos</p>
+
+          <div className="flex items-center justify-center gap-2 text-xs text-amber-600">
             <RefreshCw className="h-3 w-3 animate-spin" />
             Verificando conexão automaticamente...
           </div>
-          <p className="text-xs text-gray-400">QR Code expira em {countdown}s</p>
         </div>
       </div>
     )

@@ -2,10 +2,12 @@ import React, { useState, useRef, useEffect } from 'react'
 import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight,
-  CheckCheck, Check, Tag, Calendar, Zap, AlertCircle, Settings, User,
+  CheckCheck, Check, Tag, Calendar, Zap, Settings, User,
   X, MoreVertical, Phone
 } from 'lucide-react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../../contexts/AuthContext'
+import { DatabaseService, WhatsappMessage, supabase } from '../../lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MsgType = 'text' | 'audio' | 'image' | 'video' | 'document'
@@ -60,72 +62,57 @@ const QUICK_REPLIES = [
   { id: 'enc', label: 'Encerramento',       text: 'Foi um prazer te atender! Se surgir qualquer dúvida, estarei sempre aqui. Tenha um ótimo dia! 😊' },
 ]
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-const MOCK_CONVERSATIONS: Conversation[] = [
-  {
-    id: '1', name: 'Ana Paula Mendes', phone: '11 98765-4321', avatarColor: 'bg-violet-500',
-    lastMessage: 'Que horas é a visita amanhã mesmo?', lastTime: new Date(Date.now() - 5 * 60000),
-    unreadCount: 2, status: 'open', online: true,
-    labels: [{ text: 'Interessada', color: 'bg-green-100 text-green-700' }],
-    leadId: 'mock-lead-1', grade: '1º Ano EF', source: 'Instagram', responsible: 'João Silva',
-    messages: [
-      { id: 'm1', type: 'text', content: 'Olá! Vi o anúncio de vocês no Instagram. Gostaria de saber mais sobre as vagas para o 1º ano.', from: 'them', ts: new Date(Date.now() - 4 * 3600000), status: 'read' },
-      { id: 'm2', type: 'text', content: 'Olá Ana Paula! Temos vagas disponíveis para o 1º ano. Nossa estrutura é incrível — laboratórios, piscina e aulas de inglês desde o início. Posso te enviar mais informações?', from: 'me', ts: new Date(Date.now() - 3.9 * 3600000), status: 'read' },
-      { id: 'm3', type: 'image', content: 'foto_escola.jpg', from: 'me', ts: new Date(Date.now() - 3.8 * 3600000), status: 'read' },
-      { id: 'm4', type: 'text', content: 'Que lindo! Quero muito visitar. Quando tem horário disponível?', from: 'them', ts: new Date(Date.now() - 2 * 3600000), status: 'read' },
-      { id: 'm5', type: 'text', content: 'Temos horários amanhã às 9h, 10h e 14h. Qual prefere?', from: 'me', ts: new Date(Date.now() - 1.9 * 3600000), status: 'read' },
-      { id: 'm6', type: 'audio', content: '', duration: 12, from: 'them', ts: new Date(Date.now() - 30 * 60000), status: 'read' },
-      { id: 'm7', type: 'text', content: 'Que horas é a visita amanhã mesmo?', from: 'them', ts: new Date(Date.now() - 5 * 60000), status: 'delivered' },
-    ],
-  },
-  {
-    id: '2', name: 'Carlos Eduardo Lopes', phone: '21 99876-5432', avatarColor: 'bg-blue-500',
-    lastMessage: 'Recebi a proposta, vou analisar com minha esposa', lastTime: new Date(Date.now() - 45 * 60000),
-    unreadCount: 0, status: 'waiting', online: false,
-    labels: [{ text: 'Proposta enviada', color: 'bg-purple-100 text-purple-700' }],
-    leadId: 'mock-lead-2', grade: '6º Ano EF', source: 'Google', responsible: 'Maria Costa',
-    messages: [
-      { id: 'm1', type: 'text', content: 'Carlos, tudo bem? Segue em anexo nossa proposta de matrícula com todas as condições especiais.', from: 'me', ts: new Date(Date.now() - 2 * 3600000), status: 'read' },
-      { id: 'm2', type: 'document', content: 'Proposta_Matricula_2026.pdf', fileName: 'Proposta_Matricula_2026.pdf', fileSize: '245 KB', from: 'me', ts: new Date(Date.now() - 2 * 3600000 + 30000), status: 'read' },
-      { id: 'm3', type: 'text', content: 'Recebi a proposta, vou analisar com minha esposa', from: 'them', ts: new Date(Date.now() - 45 * 60000), status: 'delivered' },
-    ],
-  },
-  {
-    id: '3', name: 'Fernanda Rocha', phone: '31 97654-3210', avatarColor: 'bg-rose-500',
-    lastMessage: 'Muito obrigada pelo atendimento! Estamos felizes 😊', lastTime: new Date(Date.now() - 3 * 3600000),
-    unreadCount: 0, status: 'resolved', online: false,
-    labels: [{ text: 'Matriculada', color: 'bg-teal-100 text-teal-700' }],
-    leadId: 'mock-lead-3', grade: '2º Ano EF', source: 'Indicação', responsible: 'João Silva',
-    messages: [
-      { id: 'm1', type: 'text', content: 'Fernanda, que notícia maravilhosa! A matrícula foi realizada com sucesso. Bem-vinda à família Inscribo! 🎉', from: 'me', ts: new Date(Date.now() - 4 * 3600000), status: 'read' },
-      { id: 'm2', type: 'text', content: 'Muito obrigada pelo atendimento! Estamos felizes 😊', from: 'them', ts: new Date(Date.now() - 3 * 3600000), status: 'read' },
-    ],
-  },
-  {
-    id: '4', name: 'Roberto Alves', phone: '41 98765-1234', avatarColor: 'bg-amber-500',
-    lastMessage: 'Tenho uma dúvida sobre o material didático do EM', lastTime: new Date(Date.now() - 6 * 3600000),
-    unreadCount: 1, status: 'open', online: false,
-    labels: [],
-    leadId: 'mock-lead-4', grade: '3ª Série EM', source: 'Facebook', responsible: 'Maria Costa',
-    messages: [
-      { id: 'm1', type: 'text', content: 'Olá! Gostaria de saber mais sobre o ensino médio. Meu filho está no 3º ano.', from: 'them', ts: new Date(Date.now() - 8 * 3600000), status: 'read' },
-      { id: 'm2', type: 'text', content: 'Claro Roberto! Nosso EM tem foco em preparação para o ENEM e vestibulares com professores especializados. Quer agendar uma visita?', from: 'me', ts: new Date(Date.now() - 7.5 * 3600000), status: 'read' },
-      { id: 'm3', type: 'text', content: 'Tenho uma dúvida sobre o material didático do EM', from: 'them', ts: new Date(Date.now() - 6 * 3600000), status: 'delivered' },
-    ],
-  },
-  {
-    id: '5', name: 'Luciana Martins', phone: '85 99999-8888', avatarColor: 'bg-emerald-500',
-    lastMessage: 'Perfeito! Até amanhã então 👋', lastTime: new Date(Date.now() - 24 * 3600000),
-    unreadCount: 0, status: 'waiting', online: false,
-    labels: [{ text: 'Visita agendada', color: 'bg-amber-100 text-amber-700' }],
-    leadId: 'mock-lead-5', grade: 'Infantil IV', source: 'Site', responsible: 'João Silva',
-    messages: [
-      { id: 'm1', type: 'text', content: 'Oi, queria confirmar a visita para amanhã às 10h. Pode ser?', from: 'them', ts: new Date(Date.now() - 25 * 3600000), status: 'read' },
-      { id: 'm2', type: 'text', content: 'Perfeito! Está confirmada a visita amanhã às 10h. Estaremos te esperando! 😊', from: 'me', ts: new Date(Date.now() - 24.5 * 3600000), status: 'read' },
-      { id: 'm3', type: 'text', content: 'Perfeito! Até amanhã então 👋', from: 'them', ts: new Date(Date.now() - 24 * 3600000), status: 'read' },
-    ],
-  },
-]
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const AVATAR_COLORS = ['bg-violet-500','bg-blue-500','bg-rose-500','bg-amber-500','bg-emerald-500','bg-teal-500','bg-pink-500','bg-indigo-500']
+
+function jidToColor(jid: string): string {
+  let hash = 0
+  for (let i = 0; i < jid.length; i++) hash = jid.charCodeAt(i) + ((hash << 5) - hash)
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
+}
+
+function formatPhone(jid: string): string {
+  const num = jid.replace(/@.*/, '')
+  if (num.startsWith('55') && num.length >= 12) {
+    const local = num.slice(2)
+    if (local.length === 11) return `${local.slice(0,2)} ${local.slice(2,7)}-${local.slice(7)}`
+    if (local.length === 10) return `${local.slice(0,2)} ${local.slice(2,6)}-${local.slice(6)}`
+  }
+  return num
+}
+
+function buildConversations(msgs: WhatsappMessage[]): Conversation[] {
+  const byJid = new Map<string, WhatsappMessage[]>()
+  msgs.forEach(m => {
+    if (!byJid.has(m.remote_jid)) byJid.set(m.remote_jid, [])
+    byJid.get(m.remote_jid)!.push(m)
+  })
+  return Array.from(byJid.entries()).map(([jid, jidMsgs]) => {
+    const sorted = [...jidMsgs].sort((a, b) => a.timestamp - b.timestamp)
+    const last = sorted[sorted.length - 1]
+    const name = jidMsgs.find(m => !m.from_me && m.contact_name)?.contact_name || formatPhone(jid)
+    return {
+      id: jid,
+      name,
+      phone: formatPhone(jid),
+      avatarColor: jidToColor(jid),
+      lastMessage: last.content,
+      lastTime: new Date(last.timestamp * 1000),
+      unreadCount: 0,
+      status: 'open' as ConvStatus,
+      online: false,
+      labels: [],
+      messages: sorted.map(m => ({
+        id: m.id,
+        type: (m.message_type === 'conversation' ? 'text' : m.message_type) as MsgType,
+        content: m.content,
+        from: m.from_me ? 'me' : 'them' as 'me' | 'them',
+        ts: new Date(m.timestamp * 1000),
+        status: 'delivered' as const,
+      })),
+    }
+  }).sort((a, b) => b.lastTime.getTime() - a.lastTime.getTime())
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtTime(d: Date) {
@@ -279,13 +266,17 @@ function MessageBubble({ msg }: { msg: Message }) {
 
 // ─── WhatsAppHub ──────────────────────────────────────────────────────────────
 export default function WhatsAppHub() {
+  const { user } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const phoneParam = searchParams.get('phone')
   const nameParam  = searchParams.get('name')
 
-  const [conversations, setConversations] = useState<Conversation[]>(MOCK_CONVERSATIONS)
-  const [activeId, setActiveId] = useState<string>(MOCK_CONVERSATIONS[0].id)
+  const instance = user?.institution_id ? `inst-${user.institution_id.slice(0, 8)}` : ''
+
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [loading, setLoading] = useState(true)
+  const [activeId, setActiveId] = useState<string | null>(null)
   const [filter, setFilter] = useState<ConvFilter>('all')
   const [search, setSearch] = useState('')
   const [inputText, setInputText] = useState('')
@@ -294,48 +285,74 @@ export default function WhatsAppHub() {
   const [showContactInfo, setShowContactInfo] = useState(true)
   const [collapseQuick, setCollapseQuick] = useState(false)
   const [collapseHistory, setCollapseHistory] = useState(true)
+  const [sendError, setSendError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  const activeConv = conversations.find(c => c.id === activeId)!
+  const loadMessages = async () => {
+    if (!user?.institution_id) return
+    const msgs = await DatabaseService.getWhatsappMessages(user.institution_id)
+    const convs = buildConversations(msgs)
+    setConversations(convs)
+    setActiveId(id => id ?? (convs[0]?.id ?? null))
+    setLoading(false)
+  }
+
+  // Load on mount + realtime + polling
+  useEffect(() => {
+    if (!user?.institution_id) { setLoading(false); return }
+    loadMessages()
+    const channel = supabase
+      .channel(`wamsg-${user.institution_id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_messages',
+        filter: `institution_id=eq.${user.institution_id}` }, loadMessages)
+      .subscribe()
+    const interval = setInterval(loadMessages, 10000)
+    return () => { supabase.removeChannel(channel); clearInterval(interval) }
+  }, [user?.institution_id])
+
+  const activeConv = conversations.find(c => c.id === activeId) ?? null
   const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0)
 
   // Handle incoming phone param from LeadKanban
   useEffect(() => {
-    if (phoneParam) {
-      const phone = phoneParam.replace(/(\d{2})(\d{5})(\d{4})/, '$1 $2-$3')
-      const existing = conversations.find(c => c.phone.replace(/\D/g,'') === phoneParam)
-      if (existing) {
-        setActiveId(existing.id)
-      } else {
-        const name = nameParam ? decodeURIComponent(nameParam) : `+55 ${phone}`
-        const newConv: Conversation = {
-          id: `new-${Date.now()}`,
-          name, phone,
-          avatarColor: 'bg-teal-500',
-          lastMessage: '',
-          lastTime: new Date(),
-          unreadCount: 0,
-          status: 'open', online: false,
-          labels: [{ text: 'Novo contato', color: 'bg-blue-100 text-blue-700' }],
-          messages: [],
-        }
-        setConversations(prev => [newConv, ...prev])
-        setActiveId(newConv.id)
+    if (!phoneParam) return
+    const digits = phoneParam.replace(/\D/g, '')
+    const jid = `55${digits}@s.whatsapp.net`
+    const existing = conversations.find(c => c.id === jid || c.phone.replace(/\D/g,'') === digits)
+    if (existing) {
+      setActiveId(existing.id)
+    } else {
+      const phone = digits.replace(/(\d{2})(\d{5})(\d{4})/, '$1 $2-$3')
+      const name = nameParam ? decodeURIComponent(nameParam) : `+55 ${phone}`
+      const newConv: Conversation = {
+        id: jid, name, phone,
+        avatarColor: jidToColor(jid),
+        lastMessage: '', lastTime: new Date(),
+        unreadCount: 0, status: 'open', online: false,
+        labels: [{ text: 'Novo contato', color: 'bg-blue-100 text-blue-700' }],
+        messages: [],
       }
+      setConversations(prev => [newConv, ...prev])
+      setActiveId(jid)
     }
   }, [phoneParam, nameParam])
 
-  // Scroll to bottom when active conversation or messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeId, conversations])
 
-  // Mark as read when opening
   useEffect(() => {
     setConversations(prev => prev.map(c =>
       c.id === activeId ? { ...c, unreadCount: 0 } : c
     ))
   }, [activeId])
+
+  // Auto-hide send error
+  useEffect(() => {
+    if (!sendError) return
+    const t = setTimeout(() => setSendError(null), 4000)
+    return () => clearTimeout(t)
+  }, [sendError])
 
   const filteredConvs = conversations.filter(c => {
     const matchSearch = !search ||
@@ -350,20 +367,36 @@ export default function WhatsAppHub() {
     return matchSearch && matchFilter
   })
 
-  const handleSend = () => {
-    if (!inputText.trim()) return
-    const msg: Message = {
-      id: `msg-${Date.now()}`, type: 'text',
-      content: inputText.trim(), from: 'me',
-      ts: new Date(), status: 'sent',
-    }
+  const handleSend = async () => {
+    if (!inputText.trim() || !activeId) return
+    const text = inputText.trim()
+    const tempId = `temp-${Date.now()}`
+    const tempMsg: Message = { id: tempId, type: 'text', content: text, from: 'me', ts: new Date(), status: 'sent' }
     setConversations(prev => prev.map(c =>
       c.id === activeId
-        ? { ...c, messages: [...c.messages, msg], lastMessage: msg.content, lastTime: msg.ts }
+        ? { ...c, messages: [...c.messages, tempMsg], lastMessage: text, lastTime: tempMsg.ts }
         : c
     ))
     setInputText('')
     setShowQuickReplies(false)
+    try {
+      const res = await fetch('/api/evolution/send-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceName: instance, remoteJid: activeId, message: text, institutionId: user?.institution_id }),
+      })
+      if (!res.ok) throw new Error()
+      setConversations(prev => prev.map(c =>
+        c.id === activeId
+          ? { ...c, messages: c.messages.map(m => m.id === tempId ? { ...m, status: 'delivered' as const } : m) }
+          : c
+      ))
+    } catch {
+      setConversations(prev => prev.map(c =>
+        c.id === activeId ? { ...c, messages: c.messages.filter(m => m.id !== tempId) } : c
+      ))
+      setSendError('Erro ao enviar mensagem. Verifique a conexão do WhatsApp.')
+    }
   }
 
   const handleStatusChange = (status: ConvStatus) => {
@@ -379,6 +412,39 @@ export default function WhatsAppHub() {
   ]
 
   const msgGroups = activeConv ? groupByDate(activeConv.messages) : []
+
+  // ── Loading ──
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center bg-[#f0f2f5]" style={{ height: 'calc(100vh - 56px)' }}>
+        <div className="animate-spin rounded-full h-8 w-8 border-4 border-[#14b8a6] border-t-transparent" />
+      </div>
+    )
+  }
+
+  // ── Empty state ──
+  if (!loading && conversations.length === 0) {
+    return (
+      <div className="flex items-center justify-center bg-[#f0f2f5]" style={{ height: 'calc(100vh - 56px)' }}>
+        <div className="text-center max-w-sm">
+          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <MessageCircle className="w-10 h-10 text-gray-300" />
+          </div>
+          <h2 className="text-base font-bold text-gray-700 mb-2">Nenhuma conversa ainda</h2>
+          <p className="text-sm text-gray-400 mb-6 leading-relaxed">
+            Conecte seu WhatsApp nas Configurações e comece a atender!
+          </p>
+          <button
+            onClick={() => navigate('/settings')}
+            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#14b8a6] to-[#0d9488] text-white text-sm font-semibold rounded-xl shadow-md hover:shadow-lg transition-all mx-auto"
+          >
+            <Settings className="w-4 h-4" />
+            Ir para Configurações
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex overflow-hidden bg-[#f0f2f5]" style={{ height: 'calc(100vh - 56px)' }}>
@@ -816,21 +882,14 @@ export default function WhatsAppHub() {
         </div>
       )}
 
-      {/* Evolution API not configured — dismissible top banner */}
-      <div className="absolute top-0 left-0 right-0 pointer-events-none">
-        <div className="mx-auto max-w-lg mt-2 mx-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-sm pointer-events-auto opacity-90">
-          <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-          <p className="text-xs text-amber-700 flex-1">
-            <span className="font-semibold">Modo demonstração</span> — Configure a{' '}
-            <Link to="/settings" className="underline font-semibold hover:text-amber-900">Evolution API</Link>
-            {' '}para conectar ao WhatsApp real.
-          </p>
-          <Link to="/settings" className="flex-shrink-0 flex items-center gap-1 text-xs font-semibold text-amber-700 hover:text-amber-900">
-            <Settings className="w-3.5 h-3.5" />
-            Configurar
-          </Link>
+      {/* Send error toast */}
+      {sendError && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+          <div className="bg-red-600 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg">
+            {sendError}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

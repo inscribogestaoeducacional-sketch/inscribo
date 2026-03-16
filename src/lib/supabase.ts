@@ -209,6 +209,19 @@ export interface Institution {
   updated_at: string
 }
 
+export interface WhatsappMessage {
+  id: string
+  institution_id: string
+  remote_jid: string
+  from_me: boolean
+  message_id?: string
+  message_type: string
+  content: string
+  contact_name?: string
+  timestamp: number
+  created_at: string
+}
+
 export interface SuperAdmin {
   id: string
   email: string
@@ -654,6 +667,21 @@ export class DatabaseService {
       .eq('id', id)
 
     if (error) throw error
+  }
+
+  // WhatsApp Messages
+  static async getWhatsappMessages(institutionId: string): Promise<WhatsappMessage[]> {
+    const { data, error } = await supabase
+      .from('whatsapp_messages')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .order('timestamp', { ascending: false })
+
+    if (error) {
+      console.error('Error loading whatsapp messages:', error)
+      return []
+    }
+    return data || []
   }
 
   // Super Admin Methods
