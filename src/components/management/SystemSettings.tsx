@@ -212,7 +212,7 @@ function WhatsAppTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           instanceName: instance,
-          webhookUrl: 'https://meuinscribo.com.br/api/evolution/webhook',
+          webhookUrl: `https://www.meuinscribo.com.br/api/evolution/webhook?institution_id=${user?.institution_id}`,
         })
       })
     } catch { /* ignore */ } finally {
