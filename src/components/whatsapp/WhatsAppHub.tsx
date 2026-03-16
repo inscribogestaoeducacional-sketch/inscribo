@@ -276,6 +276,7 @@ export default function WhatsAppHub() {
 
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
+  const [isConnected, setIsConnected] = useState<boolean | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [filter, setFilter] = useState<ConvFilter>('all')
   const [search, setSearch] = useState('')
@@ -288,24 +289,68 @@ export default function WhatsAppHub() {
   const [sendError, setSendError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  const addMessageToConversations = (newMsg: WhatsappMessage) => {
+    const msg: Message = {
+      id: newMsg.id,
+      type: (newMsg.message_type === 'conversation' ? 'text' : newMsg.message_type) as MsgType,
+      content: newMsg.content,
+      from: newMsg.from_me ? 'me' : 'them',
+      ts: new Date(newMsg.timestamp),
+      status: 'delivered',
+    }
+    setConversations(prev => {
+      const existing = prev.find(c => c.id === newMsg.remote_jid)
+      if (existing) {
+        // Avoid duplicate
+        if (existing.messages.some(m => m.id === newMsg.id)) return prev
+        return prev.map(c => c.id === newMsg.remote_jid
+          ? { ...c, messages: [...c.messages, msg], lastMessage: newMsg.content, lastTime: new Date(newMsg.timestamp), unreadCount: c.unreadCount + (newMsg.from_me ? 0 : 1) }
+          : c
+        ).sort((a, b) => b.lastTime.getTime() - a.lastTime.getTime())
+      }
+      const conv: Conversation = {
+        id: newMsg.remote_jid,
+        name: formatPhone(newMsg.remote_jid),
+        phone: formatPhone(newMsg.remote_jid),
+        avatarColor: jidToColor(newMsg.remote_jid),
+        lastMessage: newMsg.content,
+        lastTime: new Date(newMsg.timestamp),
+        unreadCount: newMsg.from_me ? 0 : 1,
+        status: 'open', online: false, labels: [],
+        messages: [msg],
+      }
+      return [conv, ...prev]
+    })
+  }
+
   const loadMessages = async () => {
     if (!user?.institution_id) return
     const msgs = await DatabaseService.getWhatsappMessages(user.institution_id)
     const convs = buildConversations(msgs)
     setConversations(convs)
     setActiveId(id => id ?? (convs[0]?.id ?? null))
-    setLoading(false)
   }
 
-  // Load on mount + realtime + polling
+  // Load on mount + check connected + realtime
   useEffect(() => {
     if (!user?.institution_id) { setLoading(false); return }
-    loadMessages()
+
+    const init = async () => {
+      const inst = await DatabaseService.getInstitution(user.institution_id!)
+      setIsConnected(!!inst?.evolution_instance)
+      await loadMessages()
+      setLoading(false)
+    }
+    init()
+
     const channel = supabase
       .channel(`wamsg-${user.institution_id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_messages',
-        filter: `institution_id=eq.${user.institution_id}` }, loadMessages)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'whatsapp_messages',
+        filter: `institution_id=eq.${user.institution_id}`
+      }, (payload) => addMessageToConversations(payload.new as WhatsappMessage))
       .subscribe()
+
     const interval = setInterval(loadMessages, 10000)
     return () => { supabase.removeChannel(channel); clearInterval(interval) }
   }, [user?.institution_id])
@@ -422,17 +467,17 @@ export default function WhatsAppHub() {
     )
   }
 
-  // ── Empty state ──
-  if (!loading && conversations.length === 0) {
+  // ── Not connected ──
+  if (!isConnected) {
     return (
       <div className="flex items-center justify-center bg-[#f0f2f5]" style={{ height: 'calc(100vh - 56px)' }}>
         <div className="text-center max-w-sm">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <MessageCircle className="w-10 h-10 text-gray-300" />
           </div>
-          <h2 className="text-base font-bold text-gray-700 mb-2">Nenhuma conversa ainda</h2>
+          <h2 className="text-base font-bold text-gray-700 mb-2">WhatsApp não conectado</h2>
           <p className="text-sm text-gray-400 mb-6 leading-relaxed">
-            Conecte seu WhatsApp nas Configurações e comece a atender!
+            Conecte seu WhatsApp nas Configurações para começar a atender.
           </p>
           <button
             onClick={() => navigate('/settings')}
@@ -604,9 +649,26 @@ export default function WhatsAppHub() {
 
         {/* Messages area */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-0.5">
+          {/* No conversation selected */}
+          {!activeConv && conversations.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <div className="w-16 h-16 bg-[#14b8a6]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <MessageCircle className="w-8 h-8 text-[#14b8a6] animate-pulse" />
+              </div>
+              <p className="text-sm font-semibold text-gray-600 mb-1">Aguardando mensagens</p>
+              <p className="text-xs text-gray-400 leading-relaxed max-w-xs">
+                Seu WhatsApp está conectado. As conversas aparecerão aqui assim que chegarem novas mensagens.
+              </p>
+            </div>
+          )}
+          {!activeConv && conversations.length > 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <MessageCircle className="w-10 h-10 text-gray-200 mb-3" />
+              <p className="text-sm text-gray-400">Selecione uma conversa</p>
+            </div>
+          )}
           {msgGroups.map((group, gi) => (
             <div key={gi}>
-              {/* Date separator */}
               <div className="flex items-center justify-center my-4">
                 <span className="text-xs text-gray-500 bg-white/80 px-3 py-1 rounded-full shadow-sm border border-gray-100">
                   {group.label}
