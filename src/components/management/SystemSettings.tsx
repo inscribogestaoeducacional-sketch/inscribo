@@ -192,6 +192,7 @@ function WhatsAppTab() {
   const [connectedAt, setConnectedAt] = useState<Date | null>(null)
   const [disconnecting, setDisconnecting] = useState(false)
   const [justConnected, setJustConnected] = useState(false)
+  const [configuringWebhook, setConfiguringWebhook] = useState(false)
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -203,6 +204,22 @@ function WhatsAppTab() {
     if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null }
   }
 
+  const configureWebhook = async () => {
+    setConfiguringWebhook(true)
+    try {
+      await fetch('/api/evolution/set-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instanceName: instance,
+          webhookUrl: 'https://meuinscribo.com.br/api/evolution/webhook',
+        })
+      })
+    } catch { /* ignore */ } finally {
+      setConfiguringWebhook(false)
+    }
+  }
+
   const onConnected = (phone?: string) => {
     stopPolling()
     stopCountdown()
@@ -212,6 +229,7 @@ function WhatsAppTab() {
     setJustConnected(true)
     setStatus('connected')
     setTimeout(() => setJustConnected(false), 3000)
+    configureWebhook()
   }
 
   const checkState = async () => {
@@ -351,6 +369,12 @@ function WhatsAppTab() {
             <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
             <span className="text-sm font-semibold text-green-700">Online e recebendo mensagens</span>
           </div>
+
+          <button onClick={configureWebhook} disabled={configuringWebhook}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-600 text-sm font-semibold rounded-xl transition-colors disabled:opacity-60 mb-3">
+            <RefreshCw className={`h-4 w-4 ${configuringWebhook ? 'animate-spin' : ''}`} />
+            {configuringWebhook ? 'Configurando...' : 'Reconfigurar Webhook'}
+          </button>
 
           <button onClick={handleDisconnect} disabled={disconnecting}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-semibold rounded-xl transition-colors disabled:opacity-60">
