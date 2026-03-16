@@ -240,6 +240,7 @@ export interface WhatsappConversation {
   contact_type?: string
   tags?: string[]
   profile_picture_url?: string
+  conversation_history?: any[]
   created_at: string
 }
 
