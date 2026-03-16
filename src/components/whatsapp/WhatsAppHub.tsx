@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect } from 'react'
 import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight,
-  CheckCheck, Check, Calendar, Zap, Settings, User, Users,
-  X, MoreVertical, Phone, Download
+  CheckCheck, Check, Zap, Settings, User, Users,
+  X, MoreVertical, Download
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -11,8 +11,8 @@ import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConvers
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MsgType = 'text' | 'audio' | 'image' | 'video' | 'document' | 'sticker'
-type ConvStatus = 'open' | 'waiting' | 'resolved'
-type ConvFilter = 'all' | 'unread' | 'open' | 'waiting' | 'resolved'
+type ConvStatus = 'waiting' | 'open' | 'closed'
+type ConvFilter = 'all' | 'unread' | 'waiting' | 'open' | 'closed'
 type ConvTypeFilter = 'all' | 'contacts' | 'groups'
 type ConvOwnerFilter = 'all' | 'mine' | 'unassigned'
 type RightPanelTab = 'details' | 'history'
@@ -52,13 +52,15 @@ interface Conversation {
   assigned_user_id?: string
   assigned_user_name?: string
   contact_type?: string
+  tags?: string[]
+  profile_picture_url?: string
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STATUS_CFG: Record<ConvStatus, { label: string; badge: string; dot: string }> = {
-  open:     { label: 'Aberto',     badge: 'bg-blue-100 text-blue-700',   dot: 'bg-blue-400'  },
-  waiting:  { label: 'Aguardando', badge: 'bg-amber-100 text-amber-700', dot: 'bg-amber-400' },
-  resolved: { label: 'Resolvido',  badge: 'bg-green-100 text-green-700', dot: 'bg-green-400' },
+  waiting: { label: 'Aguardando',     badge: 'bg-amber-100 text-amber-700',  dot: 'bg-amber-400' },
+  open:    { label: 'Em Atendimento', badge: 'bg-blue-100 text-blue-700',    dot: 'bg-blue-400'  },
+  closed:  { label: 'Concluído',      badge: 'bg-green-100 text-green-700',  dot: 'bg-green-400' },
 }
 
 const QUICK_REPLIES = [
@@ -68,6 +70,14 @@ const QUICK_REPLIES = [
   { id: 'vl',  label: 'Valores',          text: 'Sobre os valores: temos planos de pagamento flexíveis e condições especiais. Posso te passar mais detalhes?' },
   { id: 'dc',  label: 'Documentos',       text: 'Para a matrícula precisamos de: RG/CPF dos responsáveis, certidão de nascimento, histórico escolar e comprovante de residência. 📄' },
   { id: 'enc', label: 'Encerramento',     text: 'Foi um prazer te atender! Se surgir qualquer dúvida, estarei sempre aqui. Tenha um ótimo dia! 😊' },
+]
+
+const FILTERS = [
+  { key: 'all',     label: 'Todas'          },
+  { key: 'unread',  label: 'Não lidas'      },
+  { key: 'waiting', label: 'Aguardando'     },
+  { key: 'open',    label: 'Em Atendimento' },
+  { key: 'closed',  label: 'Concluídas'     },
 ]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -108,6 +118,22 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
+function toBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve((reader.result as string).split(',')[1])
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+const TAG_COLORS = ['bg-violet-500','bg-blue-500','bg-rose-500','bg-amber-500','bg-emerald-500','bg-teal-500','bg-pink-500','bg-indigo-500','bg-orange-500','bg-cyan-500']
+function tagColor(tag: string): string {
+  let hash = 0
+  for (let i = 0; i < tag.length; i++) hash = tag.charCodeAt(i) + ((hash << 5) - hash)
+  return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length]
+}
+
 function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, WhatsappConversation>): Conversation[] {
   const byJid = new Map<string, WhatsappMessage[]>()
   msgs.forEach(m => {
@@ -137,7 +163,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
       lastMessage: last.content,
       lastTime: new Date(last.timestamp),
       unreadCount: convData?.unread_count ?? 0,
-      status: ((convData?.status ?? 'open') as ConvStatus),
+      status: ((convData?.status ?? 'waiting') as ConvStatus),
       online: false,
       labels: [],
       isGroup,
@@ -145,6 +171,8 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
       assigned_user_id: convData?.assigned_user_id,
       assigned_user_name: convData?.assigned_user_name,
       contact_type: convData?.contact_type,
+      tags: convData?.tags || [],
+      profile_picture_url: convData?.profile_picture_url,
       messages: sorted.map(m => ({
         id: m.id,
         type: mapMsgType(m.message_type),
@@ -392,13 +420,24 @@ export default function WhatsAppHub() {
   const [showAttach, setShowAttach] = useState(false)
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [showContactInfo, setShowContactInfo] = useState(true)
-  const [collapseQuick, setCollapseQuick] = useState(false)
   const [collapseHistory, setCollapseHistory] = useState(true)
   const [sendError, setSendError] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [linkingLead, setLinkingLead] = useState(false)
   const [leadSearch, setLeadSearch] = useState('')
   const [leadResults, setLeadResults] = useState<any[]>([])
+
+  // New state variables
+  const [showNewConvModal, setShowNewConvModal] = useState(false)
+  const [newConvPhone, setNewConvPhone] = useState('')
+  const [showLeadModal, setShowLeadModal] = useState(false)
+  const [showClientModal, setShowClientModal] = useState(false)
+  const [leadForm, setLeadForm] = useState({ responsible_name: '', student_name: '', phone: '', email: '', grade_interest: '', source: 'WhatsApp' })
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [addingTag, setAddingTag] = useState(false)
+  const [newTag, setNewTag] = useState('')
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
@@ -408,40 +447,43 @@ export default function WhatsAppHub() {
     if (!activeId) return
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const recorder = new MediaRecorder(stream)
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg'
+      const recorder = new MediaRecorder(stream, { mimeType })
       audioChunksRef.current = []
-      recorder.ondataavailable = e => audioChunksRef.current.push(e.data)
-      recorder.start()
+      recorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
+      recorder.onstop = async () => {
+        const blob = new Blob(audioChunksRef.current, { type: mimeType })
+        const reader = new FileReader()
+        reader.onloadend = async () => {
+          const base64 = (reader.result as string).split(',')[1]
+          try {
+            await fetch('/api/evolution/send-media', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                instanceName: instance,
+                remoteJid: activeId,
+                mediatype: 'audio',
+                mimetype: mimeType,
+                media: base64,
+              })
+            })
+          } catch { setSendError('Erro ao enviar áudio.') }
+        }
+        reader.readAsDataURL(blob)
+        stream.getTracks().forEach(t => t.stop())
+      }
+      recorder.start(200)
       mediaRecorderRef.current = recorder
       setIsRecording(true)
-    } catch { /* mic not available */ }
+    } catch {
+      setSendError('Permissão de microfone negada.')
+    }
   }
 
   const stopRecording = () => {
     const recorder = mediaRecorderRef.current
-    if (!recorder) return
-    recorder.onstop = async () => {
-      const blob = new Blob(audioChunksRef.current, { type: 'audio/ogg; codecs=opus' })
-      const reader = new FileReader()
-      reader.onloadend = async () => {
-        const base64 = (reader.result as string).split(',')[1]
-        try {
-          await fetch('/api/evolution/send-media', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              instanceName: instance,
-              remoteJid: activeId,
-              mediatype: 'audio',
-              mimetype: 'audio/ogg; codecs=opus',
-              media: base64,
-            })
-          })
-        } catch { /* ignore */ }
-      }
-      reader.readAsDataURL(blob)
-      recorder.stream.getTracks().forEach(t => t.stop())
-    }
+    if (!recorder || recorder.state === 'inactive') return
     recorder.stop()
     setIsRecording(false)
   }
@@ -508,8 +550,9 @@ export default function WhatsAppHub() {
         lastMessage: newMsg.content,
         lastTime: new Date(newMsg.timestamp),
         unreadCount: newMsg.from_me ? 0 : 1,
-        status: 'open', online: false, labels: [],
+        status: 'waiting', online: false, labels: [],
         isGroup,
+        tags: [],
         messages: [msg],
       }
       return [conv, ...prev]
@@ -573,7 +616,7 @@ export default function WhatsAppHub() {
     }
   }, [user?.institution_id])
 
-  // Reset unread, auto-assign, auto-link lead when opening conversation
+  // Reset unread, auto-assign, auto-link lead, auto-transition waiting→open when opening conversation
   useEffect(() => {
     if (!activeId || !user?.institution_id) return
     // Reset unread
@@ -581,6 +624,23 @@ export default function WhatsAppHub() {
     DatabaseService.resetConversationUnread(user.institution_id, activeId).catch(() => {})
 
     const conv = conversations.find(c => c.id === activeId)
+
+    // Auto-transition: waiting → open
+    if (conv && conv.status === 'waiting' && user.id) {
+      DatabaseService.upsertConversationStatus(user.institution_id, activeId, 'open')
+        .then(() => {
+          setConversations(prev => prev.map(c => c.id === activeId ? { ...c, status: 'open' as ConvStatus } : c))
+          DatabaseService.logConversationEvent({
+            institution_id: user.institution_id!,
+            remote_jid: activeId,
+            event_type: 'status_change',
+            description: 'Em atendimento',
+            user_id: user.id,
+            user_name: user.full_name || user.email,
+          }).catch(() => {})
+        })
+        .catch(() => {})
+    }
 
     // Auto-assign to current user if unassigned
     if (conv && !conv.assigned_user_id && user.id) {
@@ -618,6 +678,22 @@ export default function WhatsAppHub() {
         })
         .catch(() => {})
     }
+
+    // Fetch profile picture if not loaded yet
+    if (conv && !conv.profile_picture_url && !conv.isGroup && instance && user.institution_id) {
+      fetch(`/api/evolution/fetch-profile?instanceName=${instance}&number=${conv.phone.replace(/\D/g,'')}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data?.profilePictureUrl) {
+            DatabaseService.updateProfilePicture(user.institution_id!, activeId, data.profilePictureUrl)
+            setConversations(prev => prev.map(c => c.id === activeId
+              ? { ...c, profile_picture_url: data.profilePictureUrl }
+              : c
+            ))
+          }
+        })
+        .catch(() => {})
+    }
   }, [activeId])
 
   // Load history when switching to history tab
@@ -641,7 +717,7 @@ export default function WhatsAppHub() {
         avatarColor: jidToColor(jid),
         lastMessage: '', lastTime: new Date(),
         unreadCount: 0, status: 'open', online: false,
-        labels: [], isGroup: false,
+        labels: [], isGroup: false, tags: [],
         messages: [],
       }
       setConversations(prev => [newConv, ...prev])
@@ -680,7 +756,7 @@ export default function WhatsAppHub() {
       filter === 'unread'   ? c.unreadCount > 0 :
       filter === 'open'     ? c.status === 'open' :
       filter === 'waiting'  ? c.status === 'waiting' :
-      c.status === 'resolved'
+      c.status === 'closed'
     return matchType && matchOwner && matchSearch && matchFilter
   })
 
@@ -754,6 +830,19 @@ export default function WhatsAppHub() {
 
   const handleContactType = async (type: string) => {
     if (!activeId || !user?.institution_id) return
+    if (type === 'lead') {
+      setLeadForm(prev => ({
+        ...prev,
+        responsible_name: activeConv && activeConv.name !== formatPhone(activeConv.id) ? activeConv.name : '',
+        phone: activeConv?.phone || '',
+      }))
+      setShowLeadModal(true)
+      return
+    }
+    if (type === 'client') {
+      setShowClientModal(true)
+      return
+    }
     await DatabaseService.setConversationContactType(user.institution_id, activeId, type)
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, contact_type: type } : c))
     await DatabaseService.logConversationEvent({
@@ -769,41 +858,128 @@ export default function WhatsAppHub() {
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !activeId) return
-    const reader = new FileReader()
-    reader.onloadend = async () => {
-      const base64 = (reader.result as string).split(',')[1]
-      const mediatype = file.type.startsWith('image/') ? 'image'
-        : file.type.startsWith('video/') ? 'video'
-        : file.type.startsWith('audio/') ? 'audio'
-        : 'document'
-      try {
-        await fetch('/api/evolution/send-media', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            instanceName: instance,
-            remoteJid: activeId,
-            mediatype,
-            mimetype: file.type,
-            media: base64,
-            fileName: file.name,
-            caption: '',
-          })
-        })
-      } catch { setSendError('Erro ao enviar arquivo.') }
-    }
-    reader.readAsDataURL(file)
+    setPendingFile(file)
     if (fileInputRef.current) fileInputRef.current.value = ''
     setShowAttach(false)
   }
 
-  const FILTERS: { key: ConvFilter; label: string }[] = [
-    { key: 'all',      label: 'Todas'      },
-    { key: 'unread',   label: 'Não lidas'  },
-    { key: 'open',     label: 'Abertas'    },
-    { key: 'waiting',  label: 'Aguardando' },
-    { key: 'resolved', label: 'Resolvidas' },
-  ]
+  const sendPendingFile = async () => {
+    if (!pendingFile || !activeId) return
+    setUploadProgress(10)
+    try {
+      const base64 = await toBase64(pendingFile)
+      setUploadProgress(60)
+      const mediatype = pendingFile.type.startsWith('image/') ? 'image'
+        : pendingFile.type.startsWith('video/') ? 'video'
+        : pendingFile.type.startsWith('audio/') ? 'audio'
+        : 'document'
+      const res = await fetch('/api/evolution/send-media', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instanceName: instance,
+          remoteJid: activeId,
+          mediatype,
+          mimetype: pendingFile.type,
+          media: base64,
+          fileName: pendingFile.name,
+          caption: '',
+        })
+      })
+      setUploadProgress(100)
+      if (!res.ok) throw new Error()
+      setTimeout(() => { setPendingFile(null); setUploadProgress(0) }, 800)
+    } catch {
+      setSendError('Erro ao enviar arquivo.')
+      setPendingFile(null)
+      setUploadProgress(0)
+    }
+  }
+
+  const handleNewConv = () => {
+    if (!newConvPhone.trim()) return
+    const digits = newConvPhone.replace(/\D/g, '')
+    const normalized = digits.startsWith('55') ? digits : `55${digits}`
+    const jid = `${normalized}@s.whatsapp.net`
+    const existing = conversations.find(c => c.id === jid)
+    if (existing) {
+      setActiveId(existing.id)
+    } else {
+      const phone = formatPhone(jid)
+      const newConv: Conversation = {
+        id: jid, name: phone, phone,
+        avatarColor: jidToColor(jid),
+        lastMessage: '', lastTime: new Date(),
+        unreadCount: 0, status: 'open', online: false,
+        labels: [], isGroup: false, tags: [],
+        messages: [],
+      }
+      if (user?.institution_id) {
+        DatabaseService.upsertConversationStatus(user.institution_id, jid, 'open').catch(() => {})
+      }
+      setConversations(prev => [newConv, ...prev])
+      setActiveId(jid)
+    }
+    setShowNewConvModal(false)
+    setNewConvPhone('')
+  }
+
+  const handleAddTag = async (tag: string) => {
+    if (!tag.trim() || !activeId || !user?.institution_id) return
+    const currentTags = activeConv?.tags || []
+    if (currentTags.includes(tag.trim())) return
+    const newTags = [...currentTags, tag.trim()]
+    setConversations(prev => prev.map(c => c.id === activeId ? { ...c, tags: newTags } : c))
+    await DatabaseService.updateConversationTags(user.institution_id, activeId, newTags)
+    setAddingTag(false)
+    setNewTag('')
+  }
+
+  const handleRemoveTag = async (tag: string) => {
+    if (!activeId || !user?.institution_id) return
+    const newTags = (activeConv?.tags || []).filter(t => t !== tag)
+    setConversations(prev => prev.map(c => c.id === activeId ? { ...c, tags: newTags } : c))
+    await DatabaseService.updateConversationTags(user.institution_id, activeId, newTags)
+  }
+
+  const handleCloseConversation = async () => {
+    if (!activeId || !user?.institution_id) return
+    await DatabaseService.closeConversation(user.institution_id, activeId)
+    await DatabaseService.logConversationEvent({
+      institution_id: user.institution_id,
+      remote_jid: activeId,
+      event_type: 'status_change',
+      description: 'Conversa concluída',
+      user_id: user.id,
+      user_name: user.full_name || user.email,
+    })
+    setConversations(prev => prev.map(c => c.id === activeId
+      ? { ...c, status: 'closed' as ConvStatus, assigned_user_id: undefined, assigned_user_name: undefined }
+      : c
+    ))
+  }
+
+  const handleCreateLead = async () => {
+    if (!user?.institution_id || !leadForm.responsible_name) return
+    try {
+      const lead = await DatabaseService.createLead({
+        ...leadForm,
+        institution_id: user.institution_id,
+        status: 'new',
+      })
+      if (activeId) {
+        await DatabaseService.updateWhatsappMessageLead(activeId, user.institution_id, lead.id)
+        await DatabaseService.upsertConversationStatus(user.institution_id, activeId, activeConv?.status || 'open', lead.id)
+        await DatabaseService.setConversationContactType(user.institution_id, activeId, 'lead')
+        setConversations(prev => prev.map(c => c.id === activeId
+          ? { ...c, lead_id: lead.id, contact_type: 'lead', name: leadForm.responsible_name || c.name }
+          : c
+        ))
+      }
+      setShowLeadModal(false)
+      setLeadForm({ responsible_name: '', student_name: '', phone: '', email: '', grade_interest: '', source: 'WhatsApp' })
+    } catch { setSendError('Erro ao criar lead.') }
+  }
 
   const TYPE_TABS: { key: ConvTypeFilter; label: string }[] = [
     { key: 'all',      label: 'Todos'    },
@@ -847,641 +1023,811 @@ export default function WhatsAppHub() {
   }
 
   return (
-    <div className="flex overflow-hidden bg-[#f0f2f5]" style={{ height: 'calc(100vh - 56px)' }}>
-
-      {/* Hidden file input for attachments */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xlsx,.xls"
-        className="hidden"
-        onChange={handleFileSelect}
-      />
-
-      {/* ── Col 1: Conversation List ──────────────────────────────────────────── */}
-      <div className="w-[300px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
-
-        {/* Header */}
-        <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <MessageCircle className="w-5 h-5 text-[#14b8a6]" />
-            <span className="text-sm font-bold text-[#1e2d6b]">WhatsApp</span>
-            {totalUnread > 0 && (
-              <span className="bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
-                {totalUnread}
-              </span>
-            )}
-          </div>
-          <button className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors" title="Nova conversa">
-            <Plus className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Search */}
-        <div className="px-3 py-2 flex-shrink-0">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+    <>
+      {/* New Conversation Modal */}
+      {showNewConvModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-80 shadow-xl">
+            <h3 className="text-sm font-bold text-[#1e2d6b] mb-4">Nova Conversa</h3>
             <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar nome ou número..."
-              className="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14b8a6] focus:bg-white transition-all"
+              autoFocus
+              type="tel"
+              value={newConvPhone}
+              onChange={e => setNewConvPhone(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleNewConv() }}
+              placeholder="+55 (00) 00000-0000"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#14b8a6] outline-none mb-4"
             />
+            <div className="flex gap-2">
+              <button onClick={() => { setShowNewConvModal(false); setNewConvPhone('') }}
+                className="flex-1 py-2 text-xs font-medium text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50">
+                Cancelar
+              </button>
+              <button onClick={handleNewConv} disabled={!newConvPhone.trim()}
+                className="flex-1 py-2 text-xs font-bold text-white bg-[#14b8a6] rounded-xl hover:bg-[#0d9488] disabled:opacity-40">
+                Iniciar
+              </button>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Type tabs: Todos | Contatos | Grupos */}
-        <div className="flex-shrink-0 flex border-b border-gray-100 px-3">
-          {TYPE_TABS.map(t => (
-            <button
-              key={t.key}
-              onClick={() => setConvTypeFilter(t.key)}
-              className={`flex-1 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
-                convTypeFilter === t.key
-                  ? 'border-[#14b8a6] text-[#14b8a6]'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Owner filter pills */}
-        <div className="px-3 py-1.5 flex gap-1 flex-shrink-0 border-b border-gray-100">
-          {[
-            { key: 'all',        label: 'Todos' },
-            { key: 'mine',       label: 'Meus' },
-            { key: 'unassigned', label: 'Sem atendente' },
-          ].map(o => (
-            <button key={o.key} onClick={() => setConvOwnerFilter(o.key as ConvOwnerFilter)}
-              className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
-                convOwnerFilter === o.key ? 'bg-[#1e2d6b] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}>{o.label}</button>
-          ))}
-        </div>
-
-        {/* Filter pills */}
-        <div className="px-3 py-2 flex-shrink-0 flex gap-1 overflow-x-auto scrollbar-hide">
-          {FILTERS.map(f => (
-            <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
-              className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                filter === f.key
-                  ? 'bg-[#14b8a6] text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Conversation list */}
-        <div className="flex-1 overflow-y-auto">
-          {filteredConvs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 text-center px-4">
-              <p className="text-xs text-gray-400">Nenhuma conversa encontrada</p>
+      {/* Lead Modal */}
+      {showLeadModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-96 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-[#1e2d6b]">Criar Lead</h3>
+              <button onClick={() => setShowLeadModal(false)} className="p-1 text-gray-400 hover:text-gray-600">
+                <X className="w-4 h-4" />
+              </button>
             </div>
-          ) : (
-            filteredConvs.map(conv => {
-              const isActive = conv.id === activeId
-              const statusDot = STATUS_CFG[conv.status].dot
-              return (
-                <button
-                  key={conv.id}
-                  onClick={() => setActiveId(conv.id)}
-                  className={`w-full text-left px-3 py-3 flex items-center gap-3 transition-all border-l-4 ${
-                    isActive
-                      ? 'bg-teal-50 border-l-teal-500'
-                      : 'border-l-transparent hover:bg-gray-50'
-                  }`}
-                >
-                  {/* Avatar with attendant badge */}
-                  <div className="relative flex-shrink-0">
-                    <div className={`w-10 h-10 rounded-full ${conv.avatarColor} text-white text-sm font-bold flex items-center justify-center`}>
-                      {conv.isGroup
-                        ? <Users className="w-5 h-5 text-white/90" />
-                        : conv.name.charAt(0).toUpperCase()
-                      }
-                    </div>
-                    {conv.online && (
-                      <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
-                    )}
-                    {conv.assigned_user_name && (
-                      <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-[#1e2d6b] text-white rounded-full flex items-center justify-center text-[8px] font-bold border border-white">
-                        {getInitials(conv.assigned_user_name)}
-                      </div>
-                    )}
-                  </div>
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1 mb-0.5">
-                      <span className="text-sm font-semibold text-gray-800 truncate">{conv.name}</span>
-                      <span className="text-xs text-gray-400 flex-shrink-0">{fmtConvTime(conv.lastTime)}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-xs text-gray-500 truncate">{conv.lastMessage}</span>
-                      {conv.unreadCount > 0 && (
-                        <span className="flex-shrink-0 bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                          {conv.unreadCount}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 mt-1 flex-wrap">
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium inline-flex items-center gap-0.5 ${STATUS_CFG[conv.status].badge}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
-                        {STATUS_CFG[conv.status].label}
-                      </span>
-                      {conv.isGroup && (
-                        <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700">
-                          Grupo
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              )
-            })
-          )}
-        </div>
-      </div>
-
-      {/* ── Col 2: Chat ───────────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-
-        {/* Chat header */}
-        {activeConv && (
-          <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
-            <div className="relative">
-              <div className={`w-10 h-10 rounded-full ${activeConv.avatarColor} text-white text-sm font-bold flex items-center justify-center`}>
-                {activeConv.isGroup
-                  ? <Users className="w-5 h-5 text-white/90" />
-                  : activeConv.name.charAt(0)
-                }
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Nome do Responsável *</label>
+                <input value={leadForm.responsible_name} onChange={e => setLeadForm(f => ({...f, responsible_name: e.target.value}))}
+                  placeholder="Nome completo"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] outline-none" />
               </div>
-              {activeConv.online && (
-                <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Nome do Aluno</label>
+                <input value={leadForm.student_name} onChange={e => setLeadForm(f => ({...f, student_name: e.target.value}))}
+                  placeholder="Nome do aluno"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Telefone</label>
+                <input value={leadForm.phone} onChange={e => setLeadForm(f => ({...f, phone: e.target.value}))}
+                  placeholder="+55 00 00000-0000"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">E-mail</label>
+                <input type="email" value={leadForm.email} onChange={e => setLeadForm(f => ({...f, email: e.target.value}))}
+                  placeholder="email@exemplo.com"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Série de Interesse</label>
+                <select value={leadForm.grade_interest} onChange={e => setLeadForm(f => ({...f, grade_interest: e.target.value}))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] outline-none">
+                  <option value="">Selecionar...</option>
+                  {['Educação Infantil','1º Ano','2º Ano','3º Ano','4º Ano','5º Ano','6º Ano','7º Ano','8º Ano','9º Ano','1º EM','2º EM','3º EM'].map(g => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setShowLeadModal(false)}
+                className="flex-1 py-2 text-xs font-medium text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50">
+                Cancelar
+              </button>
+              <button onClick={handleCreateLead} disabled={!leadForm.responsible_name.trim()}
+                className="flex-1 py-2 text-xs font-bold text-white bg-[#1e2d6b] rounded-xl hover:bg-[#151b4e] disabled:opacity-40">
+                Criar Lead
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Client Modal (placeholder) */}
+      {showClientModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-80 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-[#1e2d6b]">Marcar como Cliente</h3>
+              <button onClick={() => setShowClientModal(false)} className="p-1 text-gray-400 hover:text-gray-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mb-4">
+              Este contato será marcado como cliente existente.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setShowClientModal(false)}
+                className="flex-1 py-2 text-xs font-medium text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50">
+                Cancelar
+              </button>
+              <button onClick={async () => {
+                if (!activeId || !user?.institution_id) return
+                await DatabaseService.setConversationContactType(user.institution_id, activeId, 'client')
+                setConversations(prev => prev.map(c => c.id === activeId ? { ...c, contact_type: 'client' } : c))
+                await DatabaseService.logConversationEvent({
+                  institution_id: user.institution_id,
+                  remote_jid: activeId,
+                  event_type: 'contact_identified',
+                  description: 'Contato identificado como: Cliente',
+                  user_id: user.id,
+                  user_name: user.full_name || user.email,
+                })
+                setShowClientModal(false)
+              }}
+                className="flex-1 py-2 text-xs font-bold text-white bg-[#1e2d6b] rounded-xl hover:bg-[#151b4e]">
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex overflow-hidden bg-[#f0f2f5]" style={{ height: 'calc(100vh - 56px)' }}>
+
+        {/* Hidden file input for attachments */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xlsx,.xls"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+
+        {/* ── Col 1: Conversation List ──────────────────────────────────────────── */}
+        <div className="w-[300px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
+
+          {/* Header */}
+          <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <div className="flex items-center gap-2">
+              <MessageCircle className="w-5 h-5 text-[#14b8a6]" />
+              <span className="text-sm font-bold text-[#1e2d6b]">WhatsApp</span>
+              {totalUnread > 0 && (
+                <span className="bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                  {totalUnread}
+                </span>
               )}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-800">{activeConv.name}</p>
-              <p className="text-xs text-gray-500">
-                {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
-                {activeConv.online && <span className="ml-1.5 text-green-500 font-medium">• online</span>}
-              </p>
-            </div>
-            <div className="flex items-center gap-1">
-              <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
-                <Search className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setShowContactInfo(v => !v)}
-                className={`p-2 rounded-lg transition-colors ${showContactInfo ? 'bg-teal-50 text-teal-600' : 'hover:bg-gray-100 text-gray-500'}`}
-              >
-                <Info className="w-4 h-4" />
-              </button>
-              <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
-                <MoreVertical className="w-4 h-4" />
-              </button>
+            <button
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+              title="Nova conversa"
+              onClick={() => setShowNewConvModal(true)}
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Search */}
+          <div className="px-3 py-2 flex-shrink-0">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar nome ou número..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14b8a6] focus:bg-white transition-all"
+              />
             </div>
           </div>
-        )}
 
-        {/* Messages area */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-0.5">
-          {!activeConv && conversations.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <div className="w-16 h-16 bg-[#14b8a6]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <MessageCircle className="w-8 h-8 text-[#14b8a6] animate-pulse" />
-              </div>
-              <p className="text-sm font-semibold text-gray-600 mb-1">Aguardando mensagens</p>
-              <p className="text-xs text-gray-400 leading-relaxed max-w-xs">
-                Seu WhatsApp está conectado. As conversas aparecerão aqui assim que chegarem novas mensagens.
-              </p>
-            </div>
-          )}
-          {!activeConv && conversations.length > 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <MessageCircle className="w-10 h-10 text-gray-200 mb-3" />
-              <p className="text-sm text-gray-400">Selecione uma conversa</p>
-            </div>
-          )}
-          {msgGroups.map((group, gi) => (
-            <div key={gi}>
-              <div className="flex items-center justify-center my-4">
-                <span className="text-xs text-gray-500 bg-white/80 px-3 py-1 rounded-full shadow-sm border border-gray-100">
-                  {group.label}
-                </span>
-              </div>
-              {group.msgs.map(msg => (
-                <MessageBubble key={msg.id} msg={msg} />
-              ))}
-            </div>
-          ))}
-          {activeConv?.messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-center py-16">
-              <MessageCircle className="w-10 h-10 text-gray-200 mb-3" />
-              <p className="text-sm text-gray-400">Nenhuma mensagem ainda</p>
-              <p className="text-xs text-gray-300 mt-1">Envie a primeira mensagem abaixo</p>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Composer */}
-        <div className="flex-shrink-0 bg-white border-t border-gray-200 px-4 py-3">
-
-          {/* Quick replies panel */}
-          {showQuickReplies && (
-            <div className="mb-2 bg-gray-50 rounded-xl border border-gray-200 p-2">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-gray-600">Respostas rápidas</span>
-                <button onClick={() => setShowQuickReplies(false)} className="p-0.5 text-gray-400 hover:text-gray-600">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-1.5">
-                {QUICK_REPLIES.map(qr => (
-                  <button
-                    key={qr.id}
-                    onClick={() => { setInputText(qr.text); setShowQuickReplies(false) }}
-                    className="text-left px-2.5 py-2 bg-white border border-gray-100 rounded-lg hover:border-teal-300 hover:bg-teal-50 transition-all"
-                  >
-                    <p className="text-xs font-semibold text-[#1e2d6b]">{qr.label}</p>
-                    <p className="text-xs text-gray-400 truncate mt-0.5">{qr.text}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Attachment menu */}
-          {showAttach && (
-            <div className="mb-2 flex gap-2">
-              {[
-                { icon: Image,    label: 'Imagem',    color: 'bg-purple-100 text-purple-600' },
-                { icon: Video,    label: 'Vídeo',     color: 'bg-blue-100 text-blue-600'   },
-                { icon: FileText, label: 'Documento', color: 'bg-orange-100 text-orange-600' },
-                { icon: Mic,      label: 'Áudio',     color: 'bg-green-100 text-green-600' },
-              ].map(item => (
-                <button
-                  key={item.label}
-                  onClick={() => { fileInputRef.current?.click(); setShowAttach(false) }}
-                  className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl ${item.color} text-xs font-medium hover:opacity-80 transition-opacity`}
-                >
-                  <item.icon className="w-4 h-4" />
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Input row */}
-          <div className="flex items-end gap-2">
-            <button
-              onClick={() => { setShowAttach(v => !v); setShowQuickReplies(false) }}
-              className={`p-2 rounded-lg transition-colors flex-shrink-0 ${showAttach ? 'bg-teal-100 text-teal-600' : 'hover:bg-gray-100 text-gray-500'}`}
-            >
-              <Paperclip className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => { setShowQuickReplies(v => !v); setShowAttach(false) }}
-              className={`p-2 rounded-lg transition-colors flex-shrink-0 ${showQuickReplies ? 'bg-teal-100 text-teal-600' : 'hover:bg-gray-100 text-gray-500'}`}
-              title="Respostas rápidas"
-            >
-              <Zap className="w-4 h-4" />
-            </button>
-            <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors flex-shrink-0">
-              <Smile className="w-4 h-4" />
-            </button>
-            <textarea
-              value={inputText}
-              onChange={e => setInputText(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-              placeholder="Digite uma mensagem..."
-              rows={1}
-              className="flex-1 px-3 py-2 text-sm bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#14b8a6] focus:bg-white transition-all resize-none"
-              style={{ minHeight: '38px', maxHeight: '96px' }}
-            />
-            {inputText.trim() ? (
+          {/* Type tabs: Todos | Contatos | Grupos */}
+          <div className="flex-shrink-0 flex border-b border-gray-100 px-3">
+            {TYPE_TABS.map(t => (
               <button
-                onClick={handleSend}
-                className="p-2 rounded-xl bg-[#14b8a6] text-white hover:bg-[#0d9488] transition-colors flex-shrink-0"
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                onMouseDown={startRecording}
-                onMouseUp={stopRecording}
-                onTouchStart={startRecording}
-                onTouchEnd={stopRecording}
-                className={`p-2 rounded-xl transition-colors flex-shrink-0 ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'hover:bg-gray-100 text-gray-500'}`}
-                title="Segurar para gravar áudio"
-              >
-                <Mic className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Col 3: Contact Panel ──────────────────────────────────────────────── */}
-      {showContactInfo && activeConv && (
-        <div className="w-[280px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
-
-          {/* Tab bar */}
-          <div className="flex-shrink-0 flex border-b border-gray-200">
-            {([
-              { key: 'details', label: 'Detalhes' },
-              { key: 'history', label: 'Histórico' },
-            ] as { key: RightPanelTab; label: string }[]).map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setRightPanelTab(tab.key)}
-                className={`flex-1 py-2.5 text-xs font-semibold transition-colors border-b-2 -mb-px ${
-                  rightPanelTab === tab.key
+                key={t.key}
+                onClick={() => setConvTypeFilter(t.key)}
+                className={`flex-1 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
+                  convTypeFilter === t.key
                     ? 'border-[#14b8a6] text-[#14b8a6]'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
-                {tab.label}
+                {t.label}
               </button>
             ))}
           </div>
 
-          {/* ── Detalhes tab ── */}
-          {rightPanelTab === 'details' && (
-            <div className="flex-1 overflow-y-auto">
+          {/* Owner filter pills */}
+          <div className="px-3 py-1.5 flex gap-1 flex-shrink-0 border-b border-gray-100">
+            {[
+              { key: 'all',        label: 'Todos' },
+              { key: 'mine',       label: 'Meus' },
+              { key: 'unassigned', label: 'Sem atendente' },
+            ].map(o => (
+              <button key={o.key} onClick={() => setConvOwnerFilter(o.key as ConvOwnerFilter)}
+                className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                  convOwnerFilter === o.key ? 'bg-[#1e2d6b] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}>{o.label}</button>
+            ))}
+          </div>
 
-              {/* Contact header */}
-              <div className="flex-shrink-0 flex flex-col items-center px-4 pt-6 pb-4 border-b border-gray-100">
-                <div className={`w-16 h-16 rounded-full ${activeConv.avatarColor} text-white text-2xl font-bold flex items-center justify-center mb-3`}>
-                  {activeConv.isGroup
-                    ? <Users className="w-8 h-8 text-white/90" />
-                    : activeConv.name.charAt(0)
-                  }
-                </div>
-                <p className="text-sm font-bold text-[#1e2d6b] text-center">{activeConv.name}</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
-                </p>
-                {activeConv.isGroup && (
-                  <span className="mt-1.5 text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700">Grupo</span>
-                )}
-                {activeConv.labels.map(lb => (
-                  <span key={lb.text} className={`mt-1.5 text-xs px-2 py-0.5 rounded-full font-medium ${lb.color}`}>
-                    {lb.text}
-                  </span>
-                ))}
+          {/* Filter pills */}
+          <div className="px-3 py-2 flex-shrink-0 flex gap-1 overflow-x-auto scrollbar-hide">
+            {FILTERS.map(f => (
+              <button
+                key={f.key}
+                onClick={() => setFilter(f.key as ConvFilter)}
+                className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  filter === f.key
+                    ? 'bg-[#14b8a6] text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Conversation list */}
+          <div className="flex-1 overflow-y-auto">
+            {filteredConvs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-32 text-center px-4">
+                <p className="text-xs text-gray-400">Nenhuma conversa encontrada</p>
               </div>
-
-              {/* Who is this contact? — only for unknown non-group, non-linked contacts */}
-              {!activeConv.isGroup && (!activeConv.contact_type || activeConv.contact_type === 'unknown') && !activeConv.lead_id && (
-                <div className="px-4 py-3 border-b border-gray-100 bg-amber-50">
-                  <p className="text-xs font-semibold text-amber-700 mb-2">Quem é esse contato?</p>
-                  <div className="flex flex-col gap-1.5">
-                    <button onClick={() => handleContactType('lead')}
-                      className="w-full text-left px-3 py-1.5 text-xs font-medium bg-white border border-amber-200 rounded-lg hover:bg-amber-100 hover:border-amber-400 text-amber-800 transition-colors">
-                      É um Lead
-                    </button>
-                    <button onClick={() => handleContactType('client')}
-                      className="w-full text-left px-3 py-1.5 text-xs font-medium bg-white border border-amber-200 rounded-lg hover:bg-amber-100 hover:border-amber-400 text-amber-800 transition-colors">
-                      É um Cliente
-                    </button>
-                    <button onClick={() => handleContactType('other')}
-                      className="w-full text-left px-3 py-1.5 text-xs font-medium bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
-                      Ignorar
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Status select */}
-              <div className="px-4 py-3 border-b border-gray-100">
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                  Status do atendimento
-                </label>
-                <select
-                  value={activeConv.status}
-                  onChange={e => handleStatusChange(e.target.value as ConvStatus)}
-                  className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none"
-                >
-                  <option value="open">Aberto</option>
-                  <option value="waiting">Aguardando</option>
-                  <option value="resolved">Resolvido</option>
-                </select>
-              </div>
-
-              {/* Attendant section */}
-              <div className="px-4 py-3 border-b border-gray-100">
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                  Atendente
-                </label>
-                {transferring ? (
-                  <div className="space-y-2">
-                    <select
-                      value={transferTarget}
-                      onChange={e => setTransferTarget(e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none"
-                    >
-                      <option value="">Selecionar atendente...</option>
-                      {users.filter(u => u.id !== activeConv.assigned_user_id).map(u => (
-                        <option key={u.id} value={u.id}>{u.full_name}</option>
-                      ))}
-                    </select>
-                    <div className="flex gap-1.5">
-                      <button onClick={handleTransfer} disabled={!transferTarget}
-                        className="flex-1 px-2.5 py-1.5 bg-[#1e2d6b] text-white text-xs font-semibold rounded-lg disabled:opacity-40 hover:bg-[#151b4e] transition-colors">
-                        Transferir
-                      </button>
-                      <button onClick={() => { setTransferring(false); setTransferTarget('') }}
-                        className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg transition-colors">
-                        Cancelar
-                      </button>
+            ) : (
+              filteredConvs.map(conv => {
+                const isActive = conv.id === activeId
+                const statusDot = STATUS_CFG[conv.status].dot
+                return (
+                  <button
+                    key={conv.id}
+                    onClick={() => setActiveId(conv.id)}
+                    className={`w-full text-left px-3 py-3 flex items-center gap-3 transition-all border-l-4 ${
+                      isActive
+                        ? 'bg-teal-50 border-l-teal-500'
+                        : 'border-l-transparent hover:bg-gray-50'
+                    }`}
+                  >
+                    {/* Avatar with profile picture support */}
+                    <div className="relative flex-shrink-0">
+                      <div className={`w-10 h-10 rounded-full ${conv.avatarColor} text-white text-sm font-bold flex items-center justify-center overflow-hidden`}>
+                        {conv.profile_picture_url ? (
+                          <img src={conv.profile_picture_url} alt={conv.name} className="w-full h-full object-cover" />
+                        ) : conv.isGroup ? (
+                          <Users className="w-5 h-5 text-white/90" />
+                        ) : (
+                          conv.name.charAt(0).toUpperCase()
+                        )}
+                      </div>
+                      {conv.online && (
+                        <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
+                      )}
+                      {conv.assigned_user_name && (
+                        <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-[#1e2d6b] text-white rounded-full flex items-center justify-center text-[8px] font-bold border border-white">
+                          {getInitials(conv.assigned_user_name)}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-700">
-                      {activeConv.assigned_user_name || <span className="text-gray-400 italic">Sem atendente</span>}
-                    </span>
-                    <button onClick={() => setTransferring(true)}
-                      className="text-xs text-[#14b8a6] hover:text-[#0d9488] font-medium transition-colors">
-                      Transferir
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Lead linking — only for individual contacts */}
-              {!activeConv.isGroup && (
-                <div className="px-4 py-3 border-b border-gray-100">
-                  {activeConv.lead_id ? (
-                    <button
-                      onClick={() => navigate(`/leads?highlight=${activeConv.lead_id}`)}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#1e2d6b] text-white text-xs font-semibold rounded-lg hover:bg-[#151b4e] transition-colors"
-                    >
-                      <User className="w-3.5 h-3.5" />
-                      Ver Lead no CRM
-                    </button>
-                  ) : linkingLead ? (
-                    <div className="space-y-2">
-                      <input
-                        autoFocus
-                        value={leadSearch}
-                        onChange={e => searchLeads(e.target.value)}
-                        placeholder="Buscar lead por nome ou tel..."
-                        className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] outline-none"
-                      />
-                      {leadResults.map(l => (
-                        <button key={l.id} onClick={() => handleLinkLead(l.id)}
-                          className="w-full text-left px-2.5 py-1.5 text-xs bg-gray-50 hover:bg-teal-50 rounded-lg transition-colors">
-                          <p className="font-semibold text-gray-700">{l.responsible_name}</p>
-                          <p className="text-gray-400">{l.student_name} · {l.grade_interest}</p>
-                        </button>
-                      ))}
-                      <button onClick={() => { setLinkingLead(false); setLeadSearch(''); setLeadResults([]) }}
-                        className="w-full text-xs text-gray-400 hover:text-gray-600 py-1">
-                        Cancelar
-                      </button>
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1 mb-0.5">
+                        <span className="text-sm font-semibold text-gray-800 truncate">{conv.name}</span>
+                        <span className="text-xs text-gray-400 flex-shrink-0">{fmtConvTime(conv.lastTime)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-xs text-gray-500 truncate">{conv.lastMessage}</span>
+                        {conv.unreadCount > 0 && (
+                          <span className="flex-shrink-0 bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                            {conv.unreadCount}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 mt-1 flex-wrap">
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium inline-flex items-center gap-0.5 ${STATUS_CFG[conv.status].badge}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
+                          {STATUS_CFG[conv.status].label}
+                        </span>
+                        {conv.isGroup && (
+                          <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700">
+                            Grupo
+                          </span>
+                        )}
+                      </div>
                     </div>
+                  </button>
+                )
+              })
+            )}
+          </div>
+        </div>
+
+        {/* ── Col 2: Chat ───────────────────────────────────────────────────────── */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+
+          {/* Chat header */}
+          {activeConv && (
+            <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
+              <div className="relative">
+                <div className={`w-10 h-10 rounded-full ${activeConv.avatarColor} text-white text-sm font-bold flex items-center justify-center overflow-hidden`}>
+                  {activeConv.profile_picture_url ? (
+                    <img src={activeConv.profile_picture_url} alt={activeConv.name} className="w-full h-full object-cover" />
+                  ) : activeConv.isGroup ? (
+                    <Users className="w-5 h-5 text-white/90" />
                   ) : (
-                    <button onClick={() => setLinkingLead(true)}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-gray-300 text-gray-500 text-xs font-medium rounded-lg hover:border-teal-400 hover:text-teal-600 transition-colors">
-                      <User className="w-3.5 h-3.5" />
-                      Vincular a um Lead
-                    </button>
+                    activeConv.name.charAt(0)
                   )}
                 </div>
-              )}
+                {activeConv.online && (
+                  <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-800">{activeConv.name}</p>
+                <p className="text-xs text-gray-500">
+                  {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
+                  {activeConv.online && <span className="ml-1.5 text-green-500 font-medium">• online</span>}
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+                  <Search className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setShowContactInfo(v => !v)}
+                  className={`p-2 rounded-lg transition-colors ${showContactInfo ? 'bg-teal-50 text-teal-600' : 'hover:bg-gray-100 text-gray-500'}`}
+                >
+                  <Info className="w-4 h-4" />
+                </button>
+                <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
 
-              {/* Ações Rápidas */}
-              <div className="px-4 py-3 border-b border-gray-100">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Ações Rápidas</p>
-                <div className="space-y-1.5">
-                  <button
-                    onClick={() => navigate('/calendar')}
-                    className="w-full flex items-center gap-2 px-3 py-2 bg-amber-50 text-amber-700 text-xs font-medium rounded-lg hover:bg-amber-100 transition-colors"
-                  >
-                    <Calendar className="w-3.5 h-3.5" />
-                    Agendar Visita
+          {/* Messages area */}
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-0.5">
+            {!activeConv && conversations.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <div className="w-16 h-16 bg-[#14b8a6]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <MessageCircle className="w-8 h-8 text-[#14b8a6] animate-pulse" />
+                </div>
+                <p className="text-sm font-semibold text-gray-600 mb-1">Aguardando mensagens</p>
+                <p className="text-xs text-gray-400 leading-relaxed max-w-xs">
+                  Seu WhatsApp está conectado. As conversas aparecerão aqui assim que chegarem novas mensagens.
+                </p>
+              </div>
+            )}
+            {!activeConv && conversations.length > 0 && (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <MessageCircle className="w-10 h-10 text-gray-200 mb-3" />
+                <p className="text-sm text-gray-400">Selecione uma conversa</p>
+              </div>
+            )}
+            {msgGroups.map((group, gi) => (
+              <div key={gi}>
+                <div className="flex items-center justify-center my-4">
+                  <span className="text-xs text-gray-500 bg-white/80 px-3 py-1 rounded-full shadow-sm border border-gray-100">
+                    {group.label}
+                  </span>
+                </div>
+                {group.msgs.map(msg => (
+                  <MessageBubble key={msg.id} msg={msg} />
+                ))}
+              </div>
+            ))}
+            {activeConv?.messages.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-full text-center py-16">
+                <MessageCircle className="w-10 h-10 text-gray-200 mb-3" />
+                <p className="text-sm text-gray-400">Nenhuma mensagem ainda</p>
+                <p className="text-xs text-gray-300 mt-1">Envie a primeira mensagem abaixo</p>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Composer */}
+          <div className="flex-shrink-0 bg-white border-t border-gray-200 px-4 py-3">
+
+            {/* Quick replies panel */}
+            {showQuickReplies && (
+              <div className="mb-2 bg-gray-50 rounded-xl border border-gray-200 p-2">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-gray-600">Respostas rápidas</span>
+                  <button onClick={() => setShowQuickReplies(false)} className="p-0.5 text-gray-400 hover:text-gray-600">
+                    <X className="w-3.5 h-3.5" />
                   </button>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {QUICK_REPLIES.map(qr => (
+                    <button
+                      key={qr.id}
+                      onClick={() => { setInputText(qr.text); setShowQuickReplies(false) }}
+                      className="text-left px-2.5 py-2 bg-white border border-gray-100 rounded-lg hover:border-teal-300 hover:bg-teal-50 transition-all"
+                    >
+                      <p className="text-xs font-semibold text-[#1e2d6b]">{qr.label}</p>
+                      <p className="text-xs text-gray-400 truncate mt-0.5">{qr.text}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Attachment menu */}
+            {showAttach && (
+              <div className="mb-2 flex gap-2">
+                {[
+                  { icon: Image,    label: 'Imagem',    color: 'bg-purple-100 text-purple-600' },
+                  { icon: Video,    label: 'Vídeo',     color: 'bg-blue-100 text-blue-600'   },
+                  { icon: FileText, label: 'Documento', color: 'bg-orange-100 text-orange-600' },
+                  { icon: Mic,      label: 'Áudio',     color: 'bg-green-100 text-green-600' },
+                ].map(item => (
                   <button
-                    onClick={() => navigate(`/leads${activeConv.lead_id ? `?highlight=${activeConv.lead_id}` : ''}`)}
-                    className="w-full flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-100 transition-colors"
+                    key={item.label}
+                    onClick={() => { fileInputRef.current?.click(); setShowAttach(false) }}
+                    className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl ${item.color} text-xs font-medium hover:opacity-80 transition-opacity`}
                   >
-                    <User className="w-3.5 h-3.5" />
-                    Ver no Kanban
+                    <item.icon className="w-4 h-4" />
+                    {item.label}
                   </button>
-                  <button
-                    onClick={() => setInputText(QUICK_REPLIES[0].text)}
-                    className="w-full flex items-center gap-2 px-3 py-2 bg-teal-50 text-teal-700 text-xs font-medium rounded-lg hover:bg-teal-100 transition-colors"
-                  >
-                    <Phone className="w-3.5 h-3.5" />
-                    Registrar Contato
+                ))}
+              </div>
+            )}
+
+            {/* File preview area */}
+            {pendingFile && (
+              <div className="mb-2 bg-gray-50 rounded-xl border border-gray-200 p-2 flex items-center gap-2">
+                {pendingFile.type.startsWith('image/') ? (
+                  <img src={URL.createObjectURL(pendingFile)} alt="preview" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                ) : (
+                  <div className="w-12 h-12 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-5 h-5 text-gray-500" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-gray-700 truncate">{pendingFile.name}</p>
+                  <p className="text-xs text-gray-400">{(pendingFile.size / 1024).toFixed(1)} KB</p>
+                  {uploadProgress > 0 && (
+                    <div className="mt-1 h-1 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-teal-500 transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <button onClick={sendPendingFile} className="p-1.5 bg-teal-500 text-white rounded-lg hover:bg-teal-600">
+                    <Send className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => setPendingFile(null)} className="p-1.5 text-gray-400 hover:text-gray-600">
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
+            )}
 
-              {/* Respostas Rápidas — colapsável */}
-              <div className="px-4 py-3 border-b border-gray-100">
+            {/* Input row */}
+            <div className="flex items-end gap-2">
+              <button
+                onClick={() => { setShowAttach(v => !v); setShowQuickReplies(false) }}
+                className={`p-2 rounded-lg transition-colors flex-shrink-0 ${showAttach ? 'bg-teal-100 text-teal-600' : 'hover:bg-gray-100 text-gray-500'}`}
+              >
+                <Paperclip className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => { setShowQuickReplies(v => !v); setShowAttach(false) }}
+                className={`p-2 rounded-lg transition-colors flex-shrink-0 ${showQuickReplies ? 'bg-teal-100 text-teal-600' : 'hover:bg-gray-100 text-gray-500'}`}
+                title="Respostas rápidas"
+              >
+                <Zap className="w-4 h-4" />
+              </button>
+              <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors flex-shrink-0">
+                <Smile className="w-4 h-4" />
+              </button>
+              <textarea
+                value={inputText}
+                onChange={e => setInputText(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+                placeholder="Digite uma mensagem..."
+                rows={1}
+                className="flex-1 px-3 py-2 text-sm bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#14b8a6] focus:bg-white transition-all resize-none"
+                style={{ minHeight: '38px', maxHeight: '96px' }}
+              />
+              {inputText.trim() ? (
                 <button
-                  onClick={() => setCollapseQuick(v => !v)}
-                  className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wide"
+                  onClick={handleSend}
+                  className="p-2 rounded-xl bg-[#14b8a6] text-white hover:bg-[#0d9488] transition-colors flex-shrink-0"
                 >
-                  <span>Respostas Rápidas</span>
-                  {collapseQuick ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  <Send className="w-4 h-4" />
                 </button>
-                {!collapseQuick && (
-                  <div className="mt-2 space-y-1">
-                    {QUICK_REPLIES.map(qr => (
-                      <button
-                        key={qr.id}
-                        onClick={() => setInputText(qr.text)}
-                        className="w-full text-left px-2.5 py-1.5 bg-gray-50 hover:bg-teal-50 hover:text-teal-700 rounded-lg transition-colors"
-                      >
-                        <p className="text-xs font-medium text-gray-700">{qr.label}</p>
-                      </button>
-                    ))}
+              ) : (
+                <button
+                  onMouseDown={startRecording}
+                  onMouseUp={stopRecording}
+                  onTouchStart={startRecording}
+                  onTouchEnd={stopRecording}
+                  className={`p-2 rounded-xl transition-colors flex-shrink-0 ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'hover:bg-gray-100 text-gray-500'}`}
+                  title="Segurar para gravar áudio"
+                >
+                  <Mic className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Col 3: Contact Panel ──────────────────────────────────────────────── */}
+        {showContactInfo && activeConv && (
+          <div className="w-[280px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
+
+            {/* Tab bar */}
+            <div className="flex-shrink-0 flex border-b border-gray-200">
+              {([
+                { key: 'details', label: 'Detalhes' },
+                { key: 'history', label: 'Histórico' },
+              ] as { key: RightPanelTab; label: string }[]).map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setRightPanelTab(tab.key)}
+                  className={`flex-1 py-2.5 text-xs font-semibold transition-colors border-b-2 -mb-px ${
+                    rightPanelTab === tab.key
+                      ? 'border-[#14b8a6] text-[#14b8a6]'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* ── Detalhes tab ── */}
+            {rightPanelTab === 'details' && (
+              <div className="flex-1 overflow-y-auto">
+
+                {/* Concluir Conversa button */}
+                {activeConv.status !== 'closed' && (
+                  <div className="px-4 py-2 border-b border-gray-100 bg-gray-50">
+                    <button onClick={handleCloseConversation}
+                      className="w-full py-2 text-xs font-semibold text-green-700 bg-green-50 hover:bg-green-100 rounded-lg border border-green-200 transition-colors">
+                      ✓ Concluir Conversa
+                    </button>
                   </div>
                 )}
-              </div>
 
-              {/* Histórico CRM — colapsável */}
-              <div className="px-4 py-3">
-                <button
-                  onClick={() => setCollapseHistory(v => !v)}
-                  className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wide"
-                >
-                  <span>Histórico CRM</span>
-                  {collapseHistory ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                </button>
-                {!collapseHistory && (
-                  <div className="mt-2 space-y-2">
-                    {[
-                      { action: 'Lead criado',      time: '2 dias atrás', color: 'bg-blue-400'  },
-                      { action: 'Contato realizado', time: '1 dia atrás',  color: 'bg-teal-400'  },
-                      { action: 'Visita agendada',   time: 'Hoje',         color: 'bg-amber-400' },
-                    ].map((ev, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${ev.color}`} />
-                        <div>
-                          <p className="text-xs font-medium text-gray-700">{ev.action}</p>
-                          <p className="text-xs text-gray-400">{ev.time}</p>
+                {/* Contact header */}
+                <div className="flex-shrink-0 flex flex-col items-center px-4 pt-6 pb-4 border-b border-gray-100">
+                  <div className={`w-16 h-16 rounded-full ${activeConv.avatarColor} text-white text-2xl font-bold flex items-center justify-center mb-3 overflow-hidden`}>
+                    {activeConv.profile_picture_url ? (
+                      <img src={activeConv.profile_picture_url} alt={activeConv.name} className="w-full h-full object-cover" />
+                    ) : activeConv.isGroup ? (
+                      <Users className="w-8 h-8 text-white/90" />
+                    ) : (
+                      activeConv.name.charAt(0)
+                    )}
+                  </div>
+                  <p className="text-sm font-bold text-[#1e2d6b] text-center">{activeConv.name}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
+                  </p>
+                  {activeConv.isGroup && (
+                    <span className="mt-1.5 text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700">Grupo</span>
+                  )}
+                  {activeConv.labels.map(lb => (
+                    <span key={lb.text} className={`mt-1.5 text-xs px-2 py-0.5 rounded-full font-medium ${lb.color}`}>
+                      {lb.text}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Who is this contact? — only for unknown non-group, non-linked contacts */}
+                {!activeConv.isGroup && (!activeConv.contact_type || activeConv.contact_type === 'unknown') && !activeConv.lead_id && (
+                  <div className="px-4 py-3 border-b border-gray-100 bg-amber-50">
+                    <p className="text-xs font-semibold text-amber-700 mb-2">Quem é esse contato?</p>
+                    <div className="flex flex-col gap-1.5">
+                      <button onClick={() => {
+                        setLeadForm(prev => ({
+                          ...prev,
+                          responsible_name: activeConv.name !== formatPhone(activeConv.id) ? activeConv.name : '',
+                          phone: activeConv.phone,
+                        }))
+                        setShowLeadModal(true)
+                      }}
+                        className="w-full text-left px-3 py-1.5 text-xs font-medium bg-white border border-amber-200 rounded-lg hover:bg-amber-100 hover:border-amber-400 text-amber-800 transition-colors">
+                        É um Lead
+                      </button>
+                      <button onClick={() => setShowClientModal(true)}
+                        className="w-full text-left px-3 py-1.5 text-xs font-medium bg-white border border-amber-200 rounded-lg hover:bg-amber-100 hover:border-amber-400 text-amber-800 transition-colors">
+                        É um Cliente
+                      </button>
+                      <button onClick={() => handleContactType('other')}
+                        className="w-full text-left px-3 py-1.5 text-xs font-medium bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+                        Ignorar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Status select */}
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                    Status do atendimento
+                  </label>
+                  <select
+                    value={activeConv.status}
+                    onChange={e => handleStatusChange(e.target.value as ConvStatus)}
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none"
+                  >
+                    <option value="waiting">Aguardando</option>
+                    <option value="open">Em Atendimento</option>
+                    <option value="closed">Concluído</option>
+                  </select>
+                </div>
+
+                {/* Attendant section */}
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                    Atendente
+                  </label>
+                  {transferring ? (
+                    <div className="space-y-2">
+                      <select
+                        value={transferTarget}
+                        onChange={e => setTransferTarget(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none"
+                      >
+                        <option value="">Selecionar atendente...</option>
+                        {users.filter(u => u.id !== activeConv.assigned_user_id).map(u => (
+                          <option key={u.id} value={u.id}>{u.full_name}</option>
+                        ))}
+                      </select>
+                      <div className="flex gap-1.5">
+                        <button onClick={handleTransfer} disabled={!transferTarget}
+                          className="flex-1 px-2.5 py-1.5 bg-[#1e2d6b] text-white text-xs font-semibold rounded-lg disabled:opacity-40 hover:bg-[#151b4e] transition-colors">
+                          Transferir
+                        </button>
+                        <button onClick={() => { setTransferring(false); setTransferTarget('') }}
+                          className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg transition-colors">
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-700">
+                        {activeConv.assigned_user_name || <span className="text-gray-400 italic">Sem atendente</span>}
+                      </span>
+                      <button onClick={() => setTransferring(true)}
+                        className="text-xs text-[#14b8a6] hover:text-[#0d9488] font-medium transition-colors">
+                        Transferir
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Etiquetas */}
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                    Etiquetas
+                  </label>
+                  <div className="flex flex-wrap gap-1">
+                    {(activeConv.tags || []).map(tag => (
+                      <span key={tag} className={`inline-flex items-center gap-0.5 text-xs px-2 py-0.5 rounded-full font-medium text-white ${tagColor(tag)}`}>
+                        {tag}
+                        <button onClick={() => handleRemoveTag(tag)} className="hover:opacity-70 ml-0.5">×</button>
+                      </span>
+                    ))}
+                    {addingTag ? (
+                      <input
+                        autoFocus
+                        value={newTag}
+                        onChange={e => setNewTag(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleAddTag(newTag); if (e.key === 'Escape') { setAddingTag(false); setNewTag('') } }}
+                        onBlur={() => { if (newTag.trim()) handleAddTag(newTag); else { setAddingTag(false); setNewTag('') } }}
+                        placeholder="Nova etiqueta..."
+                        className="text-xs px-2 py-0.5 rounded-full border border-dashed border-gray-300 outline-none focus:border-teal-400 w-28"
+                        maxLength={20}
+                      />
+                    ) : (
+                      <button onClick={() => setAddingTag(true)}
+                        className="text-xs px-2 py-0.5 rounded-full border border-dashed border-gray-300 text-gray-400 hover:border-teal-400 hover:text-teal-600 transition-colors">
+                        + Etiqueta
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Lead linking — only for individual contacts */}
+                {!activeConv.isGroup && (
+                  <div className="px-4 py-3 border-b border-gray-100">
+                    {activeConv.lead_id ? (
+                      <button
+                        onClick={() => navigate(`/leads?highlight=${activeConv.lead_id}`)}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#1e2d6b] text-white text-xs font-semibold rounded-lg hover:bg-[#151b4e] transition-colors"
+                      >
+                        <User className="w-3.5 h-3.5" />
+                        Ver Lead no CRM
+                      </button>
+                    ) : linkingLead ? (
+                      <div className="space-y-2">
+                        <input
+                          autoFocus
+                          value={leadSearch}
+                          onChange={e => searchLeads(e.target.value)}
+                          placeholder="Buscar lead por nome ou tel..."
+                          className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] outline-none"
+                        />
+                        {leadResults.map(l => (
+                          <button key={l.id} onClick={() => handleLinkLead(l.id)}
+                            className="w-full text-left px-2.5 py-1.5 text-xs bg-gray-50 hover:bg-teal-50 rounded-lg transition-colors">
+                            <p className="font-semibold text-gray-700">{l.responsible_name}</p>
+                            <p className="text-gray-400">{l.student_name} · {l.grade_interest}</p>
+                          </button>
+                        ))}
+                        <button onClick={() => { setLinkingLead(false); setLeadSearch(''); setLeadResults([]) }}
+                          className="w-full text-xs text-gray-400 hover:text-gray-600 py-1">
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setLinkingLead(true)}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-gray-300 text-gray-500 text-xs font-medium rounded-lg hover:border-teal-400 hover:text-teal-600 transition-colors">
+                        <User className="w-3.5 h-3.5" />
+                        Vincular a um Lead
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Histórico CRM — colapsável */}
+                <div className="px-4 py-3">
+                  <button
+                    onClick={() => setCollapseHistory(v => !v)}
+                    className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wide"
+                  >
+                    <span>Histórico CRM</span>
+                    {collapseHistory ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </button>
+                  {!collapseHistory && (
+                    <div className="mt-2 space-y-2">
+                      {[
+                        { action: 'Lead criado',      time: '2 dias atrás', color: 'bg-blue-400'  },
+                        { action: 'Contato realizado', time: '1 dia atrás',  color: 'bg-teal-400'  },
+                        { action: 'Visita agendada',   time: 'Hoje',         color: 'bg-amber-400' },
+                      ].map((ev, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${ev.color}`} />
+                          <div>
+                            <p className="text-xs font-medium text-gray-700">{ev.action}</p>
+                            <p className="text-xs text-gray-400">{ev.time}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Histórico tab ── */}
+            {rightPanelTab === 'history' && (
+              <div className="flex-1 overflow-y-auto px-4 py-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Histórico de eventos</p>
+                {historyLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-[#14b8a6] border-t-transparent" />
+                  </div>
+                ) : convHistory.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-8">Nenhum evento registrado</p>
+                ) : (
+                  <div className="space-y-3">
+                    {convHistory.map(ev => (
+                      <div key={ev.id} className="flex items-start gap-2">
+                        <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${eventDotColor(ev.event_type)}`} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium text-gray-700 leading-snug">{ev.description || ev.event_type}</p>
+                          {ev.user_name && (
+                            <p className="text-xs text-gray-400 mt-0.5">{ev.user_name}</p>
+                          )}
+                          <p className="text-xs text-gray-300 mt-0.5">
+                            {new Date(ev.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </p>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* ── Histórico tab ── */}
-          {rightPanelTab === 'history' && (
-            <div className="flex-1 overflow-y-auto px-4 py-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Histórico de eventos</p>
-              {historyLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-[#14b8a6] border-t-transparent" />
-                </div>
-              ) : convHistory.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-8">Nenhum evento registrado</p>
-              ) : (
-                <div className="space-y-3">
-                  {convHistory.map(ev => (
-                    <div key={ev.id} className="flex items-start gap-2">
-                      <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${eventDotColor(ev.event_type)}`} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium text-gray-700 leading-snug">{ev.description || ev.event_type}</p>
-                        {ev.user_name && (
-                          <p className="text-xs text-gray-400 mt-0.5">{ev.user_name}</p>
-                        )}
-                        <p className="text-xs text-gray-300 mt-0.5">
-                          {new Date(ev.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Send error toast */}
-      {sendError && (
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-          <div className="bg-red-600 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg">
-            {sendError}
+            )}
           </div>
-        </div>
-      )}
-    </div>
+        )}
+
+        {/* Send error toast */}
+        {sendError && (
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+            <div className="bg-red-600 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg">
+              {sendError}
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   )
 }

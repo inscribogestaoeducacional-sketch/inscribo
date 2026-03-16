@@ -238,6 +238,8 @@ export interface WhatsappConversation {
   transferred_from?: string
   transferred_at?: string
   contact_type?: string
+  tags?: string[]
+  profile_picture_url?: string
   created_at: string
 }
 
@@ -857,6 +859,25 @@ export class DatabaseService {
   static async setConversationContactType(institutionId: string, remoteJid: string, contactType: string): Promise<void> {
     await supabase.from('whatsapp_conversations')
       .upsert({ institution_id: institutionId, remote_jid: remoteJid, contact_type: contactType }, { onConflict: 'institution_id,remote_jid' })
+  }
+
+  static async updateConversationTags(institutionId: string, remoteJid: string, tags: string[]): Promise<void> {
+    await supabase.from('whatsapp_conversations')
+      .update({ tags })
+      .eq('institution_id', institutionId)
+      .eq('remote_jid', remoteJid)
+  }
+
+  static async closeConversation(institutionId: string, remoteJid: string): Promise<void> {
+    await supabase.from('whatsapp_conversations')
+      .update({ status: 'closed', assigned_user_id: null, assigned_user_name: null })
+      .eq('institution_id', institutionId)
+      .eq('remote_jid', remoteJid)
+  }
+
+  static async updateProfilePicture(institutionId: string, remoteJid: string, url: string): Promise<void> {
+    await supabase.from('whatsapp_conversations')
+      .upsert({ institution_id: institutionId, remote_jid: remoteJid, profile_picture_url: url }, { onConflict: 'institution_id,remote_jid' })
   }
 
   static async updateSaasMetrics(): Promise<void> {

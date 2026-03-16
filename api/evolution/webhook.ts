@@ -132,14 +132,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('[webhook] saved successfully')
 
-    // Upsert conversation record
-    await supabase.from('whatsapp_conversations').upsert({
-      institution_id,
-      remote_jid: remoteJid,
-      contact_name: contact_name || null,
-      lead_id,
-      last_message_at: timestamp,
-    }, { onConflict: 'institution_id,remote_jid' })
+    // Upsert conversation record — new conversations start as 'waiting'
+    // If conversation is 'closed' and new message received, reopen as 'waiting'
+    if (!key?.fromMe) {
+      // Check current status
+      const { data: existingConv } = await supabase
+        .from('whatsapp_conversations')
+        .select('status')
+        .eq('institution_id', institution_id)
+        .eq('remote_jid', remoteJid)
+        .single()
+
+      const shouldReopen = existingConv?.status === 'closed'
+      const isNew = !existingConv
+
+      await supabase.from('whatsapp_conversations').upsert({
+        institution_id,
+        remote_jid: remoteJid,
+        contact_name: contact_name || null,
+        lead_id,
+        last_message_at: timestamp,
+        ...(isNew && { status: 'waiting' }),
+        ...(shouldReopen && { status: 'waiting', assigned_user_id: null, assigned_user_name: null }),
+      }, { onConflict: 'institution_id,remote_jid' })
+    } else {
+      // Message from us: just update last_message_at
+      await supabase.from('whatsapp_conversations').upsert({
+        institution_id,
+        remote_jid: remoteJid,
+        last_message_at: timestamp,
+        ...(true && {}), // keep existing status
+      }, { onConflict: 'institution_id,remote_jid' })
+    }
 
     // Increment unread count for received messages
     if (!key?.fromMe) {
