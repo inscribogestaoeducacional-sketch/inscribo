@@ -224,6 +224,18 @@ export interface WhatsappMessage {
   created_at: string
 }
 
+export interface WhatsappConversation {
+  id: string
+  institution_id: string
+  remote_jid: string
+  contact_name?: string
+  lead_id?: string
+  status: string
+  last_message_at?: string
+  unread_count: number
+  created_at: string
+}
+
 export interface SuperAdmin {
   id: string
   email: string
@@ -684,6 +696,35 @@ export class DatabaseService {
       return []
     }
     return data || []
+  }
+
+  static async getWhatsappConversations(institutionId: string): Promise<WhatsappConversation[]> {
+    const { data, error } = await supabase
+      .from('whatsapp_conversations')
+      .select('*')
+      .eq('institution_id', institutionId)
+    if (error) {
+      console.error('Error loading whatsapp conversations:', error)
+      return []
+    }
+    return data || []
+  }
+
+  static async upsertConversationStatus(institutionId: string, remoteJid: string, status: string, leadId?: string): Promise<void> {
+    const updates: any = { status }
+    if (leadId) updates.lead_id = leadId
+    const { error } = await supabase
+      .from('whatsapp_conversations')
+      .upsert({ institution_id: institutionId, remote_jid: remoteJid, ...updates }, { onConflict: 'institution_id,remote_jid' })
+    if (error) throw error
+  }
+
+  static async resetConversationUnread(institutionId: string, remoteJid: string): Promise<void> {
+    await supabase
+      .from('whatsapp_conversations')
+      .update({ unread_count: 0 })
+      .eq('institution_id', institutionId)
+      .eq('remote_jid', remoteJid)
   }
 
   static async updateWhatsappMessageLead(remoteJid: string, institutionId: string, leadId: string): Promise<void> {

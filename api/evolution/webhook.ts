@@ -24,9 +24,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const message = msg?.message || {}
     const msgType = Object.keys(message)[0] || 'conversation'
 
-    // Skip group messages and status broadcasts
+    // Skip status broadcasts only; groups (@g.us) are now saved and shown in hub
     const remoteJid: string = key?.remoteJid || ''
-    if (remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') {
+    if (remoteJid === 'status@broadcast') {
       return res.status(200).json({ status: 'ok' })
     }
 
@@ -96,6 +96,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     console.log('[webhook] saved successfully')
+
+    // Upsert conversation record
+    await supabase.from('whatsapp_conversations').upsert({
+      institution_id,
+      remote_jid: remoteJid,
+      contact_name: contact_name || null,
+      lead_id,
+      last_message_at: timestamp,
+    }, { onConflict: 'institution_id,remote_jid' })
+
+    // Increment unread count for received messages
+    if (!key?.fromMe) {
+      await supabase.rpc('increment_conversation_unread', {
+        p_institution_id: institution_id,
+        p_remote_jid: remoteJid,
+      })
+    }
   }
 
   res.status(200).json({ status: 'ok' })

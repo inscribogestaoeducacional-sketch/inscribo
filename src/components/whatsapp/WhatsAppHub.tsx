@@ -2,17 +2,18 @@ import React, { useState, useRef, useEffect } from 'react'
 import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight,
-  CheckCheck, Check, Tag, Calendar, Zap, Settings, User,
+  CheckCheck, Check, Tag, Calendar, Zap, Settings, User, Users,
   X, MoreVertical, Phone
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { DatabaseService, WhatsappMessage, supabase } from '../../lib/supabase'
+import { DatabaseService, WhatsappMessage, WhatsappConversation, supabase } from '../../lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type MsgType = 'text' | 'audio' | 'image' | 'video' | 'document'
+type MsgType = 'text' | 'audio' | 'image' | 'video' | 'document' | 'sticker'
 type ConvStatus = 'open' | 'waiting' | 'resolved'
 type ConvFilter = 'all' | 'unread' | 'open' | 'waiting' | 'resolved'
+type ConvTypeFilter = 'all' | 'contacts' | 'groups'
 
 interface Message {
   id: string
@@ -40,7 +41,7 @@ interface Conversation {
   online: boolean
   labels: Label[]
   messages: Message[]
-  leadId?: string
+  isGroup: boolean
   lead_id?: string
   grade?: string
   source?: string
@@ -55,12 +56,12 @@ const STATUS_CFG: Record<ConvStatus, { label: string; badge: string; dot: string
 }
 
 const QUICK_REPLIES = [
-  { id: 'bv',  label: 'Boas-vindas',       text: 'Olá! Seja bem-vindo(a) ao Colégio Inscribo! 🎓 Estou aqui para ajudar. Como posso te auxiliar?' },
-  { id: 'cv',  label: 'Confirmar visita',   text: 'Sua visita está confirmada! Estaremos te esperando no horário combinado. Qualquer dúvida, estou aqui. 📅' },
-  { id: 'pr',  label: 'Enviar proposta',    text: 'Preparei uma proposta especial para vocês! Vou encaminhar agora. Qualquer dúvida, pode perguntar. 📋' },
-  { id: 'vl',  label: 'Valores',            text: 'Sobre os valores: temos planos de pagamento flexíveis e condições especiais para matrícula antecipada. Posso te passar mais detalhes?' },
-  { id: 'dc',  label: 'Documentos',         text: 'Para a matrícula, precisamos de: RG e CPF dos pais/responsáveis, certidão de nascimento, histórico escolar e comprovante de residência. 📄' },
-  { id: 'enc', label: 'Encerramento',       text: 'Foi um prazer te atender! Se surgir qualquer dúvida, estarei sempre aqui. Tenha um ótimo dia! 😊' },
+  { id: 'bv',  label: 'Boas-vindas',     text: 'Olá! Seja bem-vindo(a)! 🎓 Estou aqui para ajudar. Como posso te auxiliar?' },
+  { id: 'cv',  label: 'Confirmar visita', text: 'Sua visita está confirmada! Estaremos te esperando no horário combinado. 📅' },
+  { id: 'pr',  label: 'Enviar proposta',  text: 'Preparei uma proposta especial para vocês! Vou encaminhar agora. 📋' },
+  { id: 'vl',  label: 'Valores',          text: 'Sobre os valores: temos planos de pagamento flexíveis e condições especiais. Posso te passar mais detalhes?' },
+  { id: 'dc',  label: 'Documentos',       text: 'Para a matrícula precisamos de: RG/CPF dos responsáveis, certidão de nascimento, histórico escolar e comprovante de residência. 📄' },
+  { id: 'enc', label: 'Encerramento',     text: 'Foi um prazer te atender! Se surgir qualquer dúvida, estarei sempre aqui. Tenha um ótimo dia! 😊' },
 ]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -82,7 +83,19 @@ function formatPhone(jid: string): string {
   return num
 }
 
-function buildConversations(msgs: WhatsappMessage[]): Conversation[] {
+function mapMsgType(messageType: string): MsgType {
+  switch (messageType) {
+    case 'imageMessage':        return 'image'
+    case 'audioMessage':        return 'audio'
+    case 'videoMessage':        return 'video'
+    case 'documentMessage':     return 'document'
+    case 'stickerMessage':      return 'sticker'
+    case 'extendedTextMessage': return 'text'
+    default:                    return 'text'
+  }
+}
+
+function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, WhatsappConversation>): Conversation[] {
   const byJid = new Map<string, WhatsappMessage[]>()
   msgs.forEach(m => {
     if (!byJid.has(m.remote_jid)) byJid.set(m.remote_jid, [])
@@ -91,22 +104,34 @@ function buildConversations(msgs: WhatsappMessage[]): Conversation[] {
   return Array.from(byJid.entries()).map(([jid, jidMsgs]) => {
     const sorted = [...jidMsgs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
     const last = sorted[sorted.length - 1]
-    const name = jidMsgs.find(m => !m.from_me && m.contact_name)?.contact_name || formatPhone(jid)
+    const isGroup = jid.endsWith('@g.us')
+    const convData = convMap?.get(jid)
+
+    let name: string
+    if (isGroup) {
+      name = jidMsgs.find(m => m.contact_name)?.contact_name || jid.replace(/@g\.us$/, '')
+    } else {
+      name = jidMsgs.find(m => !m.from_me && m.contact_name)?.contact_name
+        || convData?.contact_name
+        || formatPhone(jid)
+    }
+
     return {
       id: jid,
       name,
-      phone: formatPhone(jid),
+      phone: isGroup ? jid.replace(/@g\.us$/, '') : formatPhone(jid),
       avatarColor: jidToColor(jid),
       lastMessage: last.content,
       lastTime: new Date(last.timestamp),
-      unreadCount: 0,
-      status: 'open' as ConvStatus,
+      unreadCount: convData?.unread_count ?? 0,
+      status: ((convData?.status ?? 'open') as ConvStatus),
       online: false,
       labels: [],
-      lead_id: jidMsgs.find(m => m.lead_id)?.lead_id,
+      isGroup,
+      lead_id: convData?.lead_id || jidMsgs.find(m => m.lead_id)?.lead_id,
       messages: sorted.map(m => ({
         id: m.id,
-        type: (m.message_type === 'conversation' ? 'text' : m.message_type) as MsgType,
+        type: mapMsgType(m.message_type),
         content: m.content,
         from: m.from_me ? 'me' : 'them' as 'me' | 'them',
         ts: new Date(m.timestamp),
@@ -116,7 +141,7 @@ function buildConversations(msgs: WhatsappMessage[]): Conversation[] {
   }).sort((a, b) => b.lastTime.getTime() - a.lastTime.getTime())
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Time helpers ──────────────────────────────────────────────────────────────
 function fmtTime(d: Date) {
   return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
@@ -207,14 +232,24 @@ function MessageBubble({ msg }: { msg: Message }) {
     ? 'bg-teal-500 text-white rounded-2xl rounded-tr-sm'
     : 'bg-white border border-gray-100 text-gray-800 rounded-2xl rounded-tl-sm shadow-sm'
 
+  // Fallback: detect type from content string for legacy messages saved as text
+  const effectiveType: MsgType =
+    msg.type !== 'text' ? msg.type :
+    msg.content === '[Imagem]'    ? 'image'   :
+    msg.content === '[Áudio]'     ? 'audio'   :
+    msg.content === '[Vídeo]'     ? 'video'   :
+    msg.content === '[Figurinha]' ? 'sticker' :
+    'text'
+
   const renderContent = () => {
-    switch (msg.type) {
+    switch (effectiveType) {
       case 'audio':
         return <AudioPlayer duration={msg.duration} from={msg.from} />
       case 'image':
         return (
-          <div className="w-48 h-32 rounded-xl overflow-hidden bg-gray-200 flex items-center justify-center">
+          <div className="w-48 h-32 rounded-xl overflow-hidden bg-gray-200 flex flex-col items-center justify-center gap-1">
             <Image className={`w-8 h-8 ${isMe ? 'text-white/50' : 'text-gray-400'}`} />
+            <span className={`text-xs ${isMe ? 'text-white/60' : 'text-gray-400'}`}>Imagem</span>
           </div>
         )
       case 'video':
@@ -230,7 +265,7 @@ function MessageBubble({ msg }: { msg: Message }) {
         )
       case 'document':
         return (
-          <div className={`flex items-center gap-2 min-w-[180px] px-1 py-0.5`}>
+          <div className="flex items-center gap-2 min-w-[180px] px-1 py-0.5">
             <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${isMe ? 'bg-white/20' : 'bg-blue-50'}`}>
               <FileText className={`w-5 h-5 ${isMe ? 'text-white' : 'text-blue-500'}`} />
             </div>
@@ -242,6 +277,12 @@ function MessageBubble({ msg }: { msg: Message }) {
                 <p className={`text-xs ${isMe ? 'text-white/60' : 'text-gray-400'}`}>{msg.fileSize}</p>
               )}
             </div>
+          </div>
+        )
+      case 'sticker':
+        return (
+          <div className="flex items-center justify-center w-16 h-16">
+            <span className="text-4xl" role="img" aria-label="Figurinha">🎭</span>
           </div>
         )
       default:
@@ -281,6 +322,7 @@ export default function WhatsAppHub() {
   const [isConnected, setIsConnected] = useState<boolean | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [filter, setFilter] = useState<ConvFilter>('all')
+  const [convTypeFilter, setConvTypeFilter] = useState<ConvTypeFilter>('all')
   const [search, setSearch] = useState('')
   const [inputText, setInputText] = useState('')
   const [showAttach, setShowAttach] = useState(false)
@@ -342,9 +384,12 @@ export default function WhatsAppHub() {
   const handleLinkLead = async (leadId: string) => {
     if (!activeId || !user?.institution_id) return
     await DatabaseService.updateWhatsappMessageLead(activeId, user.institution_id, leadId)
+    await DatabaseService.upsertConversationStatus(user.institution_id, activeId, 'open', leadId)
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, lead_id: leadId } : c))
     const found = leadResults.find(l => l.id === leadId)
-    if (found) setConversations(prev => prev.map(c => c.id === activeId ? { ...c, name: found.responsible_name || found.student_name || c.name } : c))
+    if (found) setConversations(prev => prev.map(c =>
+      c.id === activeId ? { ...c, name: found.responsible_name || found.student_name || c.name } : c
+    ))
     setLinkingLead(false)
     setLeadSearch('')
     setLeadResults([])
@@ -354,7 +399,6 @@ export default function WhatsAppHub() {
     setLeadSearch(q)
     if (!user?.institution_id || q.length < 2) { setLeadResults([]); return }
     const results = await DatabaseService.searchLeadsByPhone(user.institution_id, q)
-    // Also search by name
     const allLeads = await DatabaseService.getLeads(user.institution_id)
     const byName = allLeads.filter(l =>
       l.responsible_name?.toLowerCase().includes(q.toLowerCase()) ||
@@ -365,9 +409,10 @@ export default function WhatsAppHub() {
   }
 
   const addMessageToConversations = (newMsg: WhatsappMessage) => {
+    const isGroup = newMsg.remote_jid.endsWith('@g.us')
     const msg: Message = {
       id: newMsg.id,
-      type: (newMsg.message_type === 'conversation' ? 'text' : newMsg.message_type) as MsgType,
+      type: mapMsgType(newMsg.message_type),
       content: newMsg.content,
       from: newMsg.from_me ? 'me' : 'them',
       ts: new Date(newMsg.timestamp),
@@ -376,7 +421,6 @@ export default function WhatsAppHub() {
     setConversations(prev => {
       const existing = prev.find(c => c.id === newMsg.remote_jid)
       if (existing) {
-        // Avoid duplicate
         if (existing.messages.some(m => m.id === newMsg.id)) return prev
         return prev.map(c => c.id === newMsg.remote_jid
           ? {
@@ -385,20 +429,21 @@ export default function WhatsAppHub() {
               messages: [...c.messages, msg],
               lastMessage: newMsg.content,
               lastTime: new Date(newMsg.timestamp),
-              unreadCount: c.unreadCount + (newMsg.from_me ? 0 : 1)
+              unreadCount: c.unreadCount + (newMsg.from_me ? 0 : 1),
             }
           : c
         ).sort((a, b) => b.lastTime.getTime() - a.lastTime.getTime())
       }
       const conv: Conversation = {
         id: newMsg.remote_jid,
-        name: newMsg.contact_name || formatPhone(newMsg.remote_jid),
-        phone: formatPhone(newMsg.remote_jid),
+        name: newMsg.contact_name || (isGroup ? newMsg.remote_jid.replace(/@g\.us$/, '') : formatPhone(newMsg.remote_jid)),
+        phone: isGroup ? newMsg.remote_jid.replace(/@g\.us$/, '') : formatPhone(newMsg.remote_jid),
         avatarColor: jidToColor(newMsg.remote_jid),
         lastMessage: newMsg.content,
         lastTime: new Date(newMsg.timestamp),
         unreadCount: newMsg.from_me ? 0 : 1,
         status: 'open', online: false, labels: [],
+        isGroup,
         messages: [msg],
       }
       return [conv, ...prev]
@@ -407,10 +452,14 @@ export default function WhatsAppHub() {
 
   const loadMessages = async () => {
     if (!user?.institution_id) return
-    const msgs = await DatabaseService.getWhatsappMessages(user.institution_id)
-    const convs = buildConversations(msgs)
-    setConversations(convs)
-    setActiveId(id => id ?? (convs[0]?.id ?? null))
+    const [msgs, convs] = await Promise.all([
+      DatabaseService.getWhatsappMessages(user.institution_id),
+      DatabaseService.getWhatsappConversations(user.institution_id),
+    ])
+    const convMap = new Map(convs.map(c => [c.remote_jid, c]))
+    const built = buildConversations(msgs, convMap)
+    setConversations(built)
+    setActiveId(id => id ?? (built[0]?.id ?? null))
   }
 
   // Load on mount + check connected + realtime
@@ -425,7 +474,7 @@ export default function WhatsAppHub() {
     }
     init()
 
-    const channel = supabase
+    const msgChannel = supabase
       .channel(`wamsg-${user.institution_id}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'whatsapp_messages',
@@ -433,12 +482,30 @@ export default function WhatsAppHub() {
       }, (payload) => addMessageToConversations(payload.new as WhatsappMessage))
       .subscribe()
 
+    const convChannel = supabase
+      .channel(`waconv-${user.institution_id}`)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'whatsapp_conversations',
+        filter: `institution_id=eq.${user.institution_id}`
+      }, () => loadMessages())
+      .subscribe()
+
     const interval = setInterval(loadMessages, 10000)
-    return () => { supabase.removeChannel(channel); clearInterval(interval) }
+    return () => {
+      supabase.removeChannel(msgChannel)
+      supabase.removeChannel(convChannel)
+      clearInterval(interval)
+    }
   }, [user?.institution_id])
 
-  const activeConv = conversations.find(c => c.id === activeId) ?? null
-  const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0)
+  // Reset unread when opening conversation
+  useEffect(() => {
+    if (!activeId || !user?.institution_id) return
+    setConversations(prev => prev.map(c =>
+      c.id === activeId ? { ...c, unreadCount: 0 } : c
+    ))
+    DatabaseService.resetConversationUnread(user.institution_id, activeId).catch(() => {})
+  }, [activeId])
 
   // Handle incoming phone param from LeadKanban
   useEffect(() => {
@@ -456,7 +523,7 @@ export default function WhatsAppHub() {
         avatarColor: jidToColor(jid),
         lastMessage: '', lastTime: new Date(),
         unreadCount: 0, status: 'open', online: false,
-        labels: [{ text: 'Novo contato', color: 'bg-blue-100 text-blue-700' }],
+        labels: [], isGroup: false,
         messages: [],
       }
       setConversations(prev => [newConv, ...prev])
@@ -468,12 +535,6 @@ export default function WhatsAppHub() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeId, conversations])
 
-  useEffect(() => {
-    setConversations(prev => prev.map(c =>
-      c.id === activeId ? { ...c, unreadCount: 0 } : c
-    ))
-  }, [activeId])
-
   // Auto-hide send error
   useEffect(() => {
     if (!sendError) return
@@ -481,7 +542,14 @@ export default function WhatsAppHub() {
     return () => clearTimeout(t)
   }, [sendError])
 
+  const activeConv = conversations.find(c => c.id === activeId) ?? null
+  const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0)
+
   const filteredConvs = conversations.filter(c => {
+    const matchType =
+      convTypeFilter === 'all'      ? true :
+      convTypeFilter === 'contacts' ? !c.isGroup :
+      c.isGroup
     const matchSearch = !search ||
       c.name.toLowerCase().includes(search.toLowerCase()) ||
       c.phone.includes(search)
@@ -491,7 +559,7 @@ export default function WhatsAppHub() {
       filter === 'open'     ? c.status === 'open' :
       filter === 'waiting'  ? c.status === 'waiting' :
       c.status === 'resolved'
-    return matchSearch && matchFilter
+    return matchType && matchSearch && matchFilter
   })
 
   const handleSend = async () => {
@@ -526,16 +594,24 @@ export default function WhatsAppHub() {
     }
   }
 
-  const handleStatusChange = (status: ConvStatus) => {
+  const handleStatusChange = async (status: ConvStatus) => {
+    if (!activeId || !user?.institution_id) return
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, status } : c))
+    await DatabaseService.upsertConversationStatus(user.institution_id, activeId, status)
   }
 
   const FILTERS: { key: ConvFilter; label: string }[] = [
-    { key: 'all',      label: 'Todas'       },
-    { key: 'unread',   label: 'Não lidas'   },
-    { key: 'open',     label: 'Abertas'     },
-    { key: 'waiting',  label: 'Aguardando'  },
-    { key: 'resolved', label: 'Resolvidas'  },
+    { key: 'all',      label: 'Todas'      },
+    { key: 'unread',   label: 'Não lidas'  },
+    { key: 'open',     label: 'Abertas'    },
+    { key: 'waiting',  label: 'Aguardando' },
+    { key: 'resolved', label: 'Resolvidas' },
+  ]
+
+  const TYPE_TABS: { key: ConvTypeFilter; label: string }[] = [
+    { key: 'all',      label: 'Todos'    },
+    { key: 'contacts', label: 'Contatos' },
+    { key: 'groups',   label: 'Grupos'   },
   ]
 
   const msgGroups = activeConv ? groupByDate(activeConv.messages) : []
@@ -609,8 +685,25 @@ export default function WhatsAppHub() {
           </div>
         </div>
 
+        {/* Type tabs: Todos | Contatos | Grupos */}
+        <div className="flex-shrink-0 flex border-b border-gray-100 px-3">
+          {TYPE_TABS.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setConvTypeFilter(t.key)}
+              className={`flex-1 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
+                convTypeFilter === t.key
+                  ? 'border-[#14b8a6] text-[#14b8a6]'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         {/* Filter pills */}
-        <div className="px-3 pb-2 flex-shrink-0 flex gap-1 overflow-x-auto scrollbar-hide">
+        <div className="px-3 py-2 flex-shrink-0 flex gap-1 overflow-x-auto scrollbar-hide">
           {FILTERS.map(f => (
             <button
               key={f.key}
@@ -649,7 +742,10 @@ export default function WhatsAppHub() {
                   {/* Avatar */}
                   <div className="relative flex-shrink-0">
                     <div className={`w-10 h-10 rounded-full ${conv.avatarColor} text-white text-sm font-bold flex items-center justify-center`}>
-                      {conv.name.charAt(0).toUpperCase()}
+                      {conv.isGroup
+                        ? <Users className="w-5 h-5 text-white/90" />
+                        : conv.name.charAt(0).toUpperCase()
+                      }
                     </div>
                     {conv.online && (
                       <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
@@ -669,20 +765,17 @@ export default function WhatsAppHub() {
                         </span>
                       )}
                     </div>
-                    {/* Labels + status */}
-                    {(conv.labels.length > 0 || true) && (
-                      <div className="flex items-center gap-1 mt-1 flex-wrap">
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium inline-flex items-center gap-0.5 ${STATUS_CFG[conv.status].badge}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
-                          {STATUS_CFG[conv.status].label}
+                    <div className="flex items-center gap-1 mt-1 flex-wrap">
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium inline-flex items-center gap-0.5 ${STATUS_CFG[conv.status].badge}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
+                        {STATUS_CFG[conv.status].label}
+                      </span>
+                      {conv.isGroup && (
+                        <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700">
+                          Grupo
                         </span>
-                        {conv.labels.slice(0, 1).map(lb => (
-                          <span key={lb.text} className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${lb.color}`}>
-                            {lb.text}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </button>
               )
@@ -699,7 +792,10 @@ export default function WhatsAppHub() {
           <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
             <div className="relative">
               <div className={`w-10 h-10 rounded-full ${activeConv.avatarColor} text-white text-sm font-bold flex items-center justify-center`}>
-                {activeConv.name.charAt(0)}
+                {activeConv.isGroup
+                  ? <Users className="w-5 h-5 text-white/90" />
+                  : activeConv.name.charAt(0)
+                }
               </div>
               {activeConv.online && (
                 <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
@@ -708,7 +804,7 @@ export default function WhatsAppHub() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-gray-800">{activeConv.name}</p>
               <p className="text-xs text-gray-500">
-                {activeConv.phone}
+                {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
                 {activeConv.online && <span className="ml-1.5 text-green-500 font-medium">• online</span>}
               </p>
             </div>
@@ -731,7 +827,6 @@ export default function WhatsAppHub() {
 
         {/* Messages area */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-0.5">
-          {/* No conversation selected */}
           {!activeConv && conversations.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <div className="w-16 h-16 bg-[#14b8a6]/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -876,10 +971,18 @@ export default function WhatsAppHub() {
           {/* Contact header */}
           <div className="flex-shrink-0 flex flex-col items-center px-4 pt-6 pb-4 border-b border-gray-100">
             <div className={`w-16 h-16 rounded-full ${activeConv.avatarColor} text-white text-2xl font-bold flex items-center justify-center mb-3`}>
-              {activeConv.name.charAt(0)}
+              {activeConv.isGroup
+                ? <Users className="w-8 h-8 text-white/90" />
+                : activeConv.name.charAt(0)
+              }
             </div>
             <p className="text-sm font-bold text-[#1e2d6b] text-center">{activeConv.name}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{activeConv.phone}</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
+            </p>
+            {activeConv.isGroup && (
+              <span className="mt-1.5 text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700">Grupo</span>
+            )}
             {activeConv.labels.map(lb => (
               <span key={lb.text} className={`mt-1.5 text-xs px-2 py-0.5 rounded-full font-medium ${lb.color}`}>
                 {lb.text}
@@ -903,80 +1006,47 @@ export default function WhatsAppHub() {
             </select>
           </div>
 
-          {/* Lead Vinculado ou Vincular */}
-          <div className="px-4 py-3 border-b border-gray-100">
-            {activeConv.lead_id ? (
-              <button
-                onClick={() => navigate(`/leads?highlight=${activeConv.lead_id}`)}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#1e2d6b] text-white text-xs font-semibold rounded-lg hover:bg-[#151b4e] transition-colors"
-              >
-                <User className="w-3.5 h-3.5" />
-                Ver Lead no CRM
-              </button>
-            ) : linkingLead ? (
-              <div className="space-y-2">
-                <input
-                  autoFocus
-                  value={leadSearch}
-                  onChange={e => searchLeads(e.target.value)}
-                  placeholder="Buscar lead por nome ou tel..."
-                  className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] outline-none"
-                />
-                {leadResults.map(l => (
-                  <button key={l.id} onClick={() => handleLinkLead(l.id)}
-                    className="w-full text-left px-2.5 py-1.5 text-xs bg-gray-50 hover:bg-teal-50 rounded-lg transition-colors">
-                    <p className="font-semibold text-gray-700">{l.responsible_name}</p>
-                    <p className="text-gray-400">{l.student_name} · {l.grade_interest}</p>
-                  </button>
-                ))}
-                <button onClick={() => { setLinkingLead(false); setLeadSearch(''); setLeadResults([]) }}
-                  className="w-full text-xs text-gray-400 hover:text-gray-600 py-1">
-                  Cancelar
+          {/* Lead linking — only for individual contacts */}
+          {!activeConv.isGroup && (
+            <div className="px-4 py-3 border-b border-gray-100">
+              {activeConv.lead_id ? (
+                <button
+                  onClick={() => navigate(`/leads?highlight=${activeConv.lead_id}`)}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#1e2d6b] text-white text-xs font-semibold rounded-lg hover:bg-[#151b4e] transition-colors"
+                >
+                  <User className="w-3.5 h-3.5" />
+                  Ver Lead no CRM
                 </button>
-              </div>
-            ) : (
-              <button onClick={() => setLinkingLead(true)}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-gray-300 text-gray-500 text-xs font-medium rounded-lg hover:border-teal-400 hover:text-teal-600 transition-colors">
-                <User className="w-3.5 h-3.5" />
-                Vincular a um Lead
-              </button>
-            )}
-          </div>
-
-          {/* Informações */}
-          <div className="px-4 py-3 border-b border-gray-100">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Informações</p>
-            <div className="space-y-2">
-              {activeConv.grade && (
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-400">Série interesse</span>
-                  <span className="text-xs font-medium text-gray-700">{activeConv.grade}</span>
+              ) : linkingLead ? (
+                <div className="space-y-2">
+                  <input
+                    autoFocus
+                    value={leadSearch}
+                    onChange={e => searchLeads(e.target.value)}
+                    placeholder="Buscar lead por nome ou tel..."
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] outline-none"
+                  />
+                  {leadResults.map(l => (
+                    <button key={l.id} onClick={() => handleLinkLead(l.id)}
+                      className="w-full text-left px-2.5 py-1.5 text-xs bg-gray-50 hover:bg-teal-50 rounded-lg transition-colors">
+                      <p className="font-semibold text-gray-700">{l.responsible_name}</p>
+                      <p className="text-gray-400">{l.student_name} · {l.grade_interest}</p>
+                    </button>
+                  ))}
+                  <button onClick={() => { setLinkingLead(false); setLeadSearch(''); setLeadResults([]) }}
+                    className="w-full text-xs text-gray-400 hover:text-gray-600 py-1">
+                    Cancelar
+                  </button>
                 </div>
-              )}
-              {activeConv.source && (
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-400">Origem</span>
-                  <span className="text-xs font-medium text-gray-700">{activeConv.source}</span>
-                </div>
-              )}
-              {activeConv.responsible && (
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-400">Responsável</span>
-                  <span className="text-xs font-medium text-gray-700">{activeConv.responsible}</span>
-                </div>
+              ) : (
+                <button onClick={() => setLinkingLead(true)}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-gray-300 text-gray-500 text-xs font-medium rounded-lg hover:border-teal-400 hover:text-teal-600 transition-colors">
+                  <User className="w-3.5 h-3.5" />
+                  Vincular a um Lead
+                </button>
               )}
             </div>
-            <div className="mt-2 flex flex-wrap gap-1">
-              {activeConv.labels.map(lb => (
-                <span key={lb.text} className={`text-xs px-2 py-0.5 rounded-full font-medium ${lb.color}`}>
-                  {lb.text}
-                </span>
-              ))}
-              <button className="text-xs px-2 py-0.5 rounded-full border border-dashed border-gray-300 text-gray-400 hover:border-teal-400 hover:text-teal-600 transition-colors">
-                <Tag className="w-3 h-3 inline mr-0.5" />+
-              </button>
-            </div>
-          </div>
+          )}
 
           {/* Ações Rápidas */}
           <div className="px-4 py-3 border-b border-gray-100">
@@ -1042,9 +1112,9 @@ export default function WhatsAppHub() {
             {!collapseHistory && (
               <div className="mt-2 space-y-2">
                 {[
-                  { action: 'Lead criado',      time: '2 dias atrás',   color: 'bg-blue-400'   },
-                  { action: 'Contato realizado', time: '1 dia atrás',   color: 'bg-teal-400'   },
-                  { action: 'Visita agendada',   time: 'Hoje',          color: 'bg-amber-400'  },
+                  { action: 'Lead criado',      time: '2 dias atrás', color: 'bg-blue-400'  },
+                  { action: 'Contato realizado', time: '1 dia atrás',  color: 'bg-teal-400'  },
+                  { action: 'Visita agendada',   time: 'Hoje',         color: 'bg-amber-400' },
                 ].map((ev, i) => (
                   <div key={i} className="flex items-start gap-2">
                     <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${ev.color}`} />
