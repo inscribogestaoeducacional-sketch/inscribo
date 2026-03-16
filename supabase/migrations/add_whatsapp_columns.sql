@@ -1,0 +1,3 @@
+ALTER TABLE whatsapp_messages
+ADD COLUMN IF NOT EXISTS contact_name TEXT,
+ADD COLUMN IF NOT EXISTS lead_id UUID REFERENCES leads(id);

@@ -217,6 +217,9 @@ export interface WhatsappMessage {
   message_id?: string
   message_type: string
   content: string
+  media_url?: string
+  contact_name?: string
+  lead_id?: string
   timestamp: string
   created_at: string
 }
@@ -681,6 +684,26 @@ export class DatabaseService {
       return []
     }
     return data || []
+  }
+
+  static async updateWhatsappMessageLead(remoteJid: string, institutionId: string, leadId: string): Promise<void> {
+    const { error } = await supabase
+      .from('whatsapp_messages')
+      .update({ lead_id: leadId })
+      .eq('institution_id', institutionId)
+      .eq('remote_jid', remoteJid)
+    if (error) throw error
+  }
+
+  static async searchLeadsByPhone(institutionId: string, phone: string): Promise<Lead[]> {
+    const digits = phone.replace(/\D/g, '').slice(-8)
+    const { data, error } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .limit(50)
+    if (error) return []
+    return (data || []).filter((l: Lead) => l.phone && l.phone.replace(/\D/g, '').endsWith(digits))
   }
 
   // Super Admin Methods

@@ -41,6 +41,7 @@ interface Conversation {
   labels: Label[]
   messages: Message[]
   leadId?: string
+  lead_id?: string
   grade?: string
   source?: string
   responsible?: string
@@ -90,7 +91,7 @@ function buildConversations(msgs: WhatsappMessage[]): Conversation[] {
   return Array.from(byJid.entries()).map(([jid, jidMsgs]) => {
     const sorted = [...jidMsgs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
     const last = sorted[sorted.length - 1]
-    const name = formatPhone(jid)
+    const name = jidMsgs.find(m => !m.from_me && m.contact_name)?.contact_name || formatPhone(jid)
     return {
       id: jid,
       name,
@@ -102,6 +103,7 @@ function buildConversations(msgs: WhatsappMessage[]): Conversation[] {
       status: 'open' as ConvStatus,
       online: false,
       labels: [],
+      lead_id: jidMsgs.find(m => m.lead_id)?.lead_id,
       messages: sorted.map(m => ({
         id: m.id,
         type: (m.message_type === 'conversation' ? 'text' : m.message_type) as MsgType,
@@ -287,7 +289,80 @@ export default function WhatsAppHub() {
   const [collapseQuick, setCollapseQuick] = useState(false)
   const [collapseHistory, setCollapseHistory] = useState(true)
   const [sendError, setSendError] = useState<string | null>(null)
+  const [isRecording, setIsRecording] = useState(false)
+  const [linkingLead, setLinkingLead] = useState(false)
+  const [leadSearch, setLeadSearch] = useState('')
+  const [leadResults, setLeadResults] = useState<any[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+
+  const startRecording = async () => {
+    if (!activeId) return
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream)
+      audioChunksRef.current = []
+      recorder.ondataavailable = e => audioChunksRef.current.push(e.data)
+      recorder.start()
+      mediaRecorderRef.current = recorder
+      setIsRecording(true)
+    } catch { /* mic not available */ }
+  }
+
+  const stopRecording = () => {
+    const recorder = mediaRecorderRef.current
+    if (!recorder) return
+    recorder.onstop = async () => {
+      const blob = new Blob(audioChunksRef.current, { type: 'audio/ogg; codecs=opus' })
+      const reader = new FileReader()
+      reader.onloadend = async () => {
+        const base64 = (reader.result as string).split(',')[1]
+        try {
+          await fetch('/api/evolution/send-media', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              instanceName: instance,
+              remoteJid: activeId,
+              mediatype: 'audio',
+              mimetype: 'audio/ogg; codecs=opus',
+              media: base64,
+            })
+          })
+        } catch { /* ignore */ }
+      }
+      reader.readAsDataURL(blob)
+      recorder.stream.getTracks().forEach(t => t.stop())
+    }
+    recorder.stop()
+    setIsRecording(false)
+  }
+
+  const handleLinkLead = async (leadId: string) => {
+    if (!activeId || !user?.institution_id) return
+    await DatabaseService.updateWhatsappMessageLead(activeId, user.institution_id, leadId)
+    setConversations(prev => prev.map(c => c.id === activeId ? { ...c, lead_id: leadId } : c))
+    const found = leadResults.find(l => l.id === leadId)
+    if (found) setConversations(prev => prev.map(c => c.id === activeId ? { ...c, name: found.responsible_name || found.student_name || c.name } : c))
+    setLinkingLead(false)
+    setLeadSearch('')
+    setLeadResults([])
+  }
+
+  const searchLeads = async (q: string) => {
+    setLeadSearch(q)
+    if (!user?.institution_id || q.length < 2) { setLeadResults([]); return }
+    const results = await DatabaseService.searchLeadsByPhone(user.institution_id, q)
+    // Also search by name
+    const allLeads = await DatabaseService.getLeads(user.institution_id)
+    const byName = allLeads.filter(l =>
+      l.responsible_name?.toLowerCase().includes(q.toLowerCase()) ||
+      l.student_name?.toLowerCase().includes(q.toLowerCase())
+    )
+    const combined = [...results, ...byName.filter(l => !results.find(r => r.id === l.id))].slice(0, 8)
+    setLeadResults(combined)
+  }
 
   const addMessageToConversations = (newMsg: WhatsappMessage) => {
     const msg: Message = {
@@ -304,13 +379,20 @@ export default function WhatsAppHub() {
         // Avoid duplicate
         if (existing.messages.some(m => m.id === newMsg.id)) return prev
         return prev.map(c => c.id === newMsg.remote_jid
-          ? { ...c, messages: [...c.messages, msg], lastMessage: newMsg.content, lastTime: new Date(newMsg.timestamp), unreadCount: c.unreadCount + (newMsg.from_me ? 0 : 1) }
+          ? {
+              ...c,
+              name: (!c.name || c.name === formatPhone(newMsg.remote_jid)) && newMsg.contact_name ? newMsg.contact_name : c.name,
+              messages: [...c.messages, msg],
+              lastMessage: newMsg.content,
+              lastTime: new Date(newMsg.timestamp),
+              unreadCount: c.unreadCount + (newMsg.from_me ? 0 : 1)
+            }
           : c
         ).sort((a, b) => b.lastTime.getTime() - a.lastTime.getTime())
       }
       const conv: Conversation = {
         id: newMsg.remote_jid,
-        name: formatPhone(newMsg.remote_jid),
+        name: newMsg.contact_name || formatPhone(newMsg.remote_jid),
         phone: formatPhone(newMsg.remote_jid),
         avatarColor: jidToColor(newMsg.remote_jid),
         lastMessage: newMsg.content,
@@ -772,7 +854,14 @@ export default function WhatsAppHub() {
                 <Send className="w-4 h-4" />
               </button>
             ) : (
-              <button className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition-colors flex-shrink-0">
+              <button
+                onMouseDown={startRecording}
+                onMouseUp={stopRecording}
+                onTouchStart={startRecording}
+                onTouchEnd={stopRecording}
+                className={`p-2 rounded-xl transition-colors flex-shrink-0 ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'hover:bg-gray-100 text-gray-500'}`}
+                title="Segurar para gravar áudio"
+              >
                 <Mic className="w-4 h-4" />
               </button>
             )}
@@ -814,18 +903,45 @@ export default function WhatsAppHub() {
             </select>
           </div>
 
-          {/* Ver Lead */}
-          {activeConv.leadId && (
-            <div className="px-4 py-3 border-b border-gray-100">
+          {/* Lead Vinculado ou Vincular */}
+          <div className="px-4 py-3 border-b border-gray-100">
+            {activeConv.lead_id ? (
               <button
-                onClick={() => navigate(`/leads?highlight=${activeConv.leadId}`)}
+                onClick={() => navigate(`/leads?highlight=${activeConv.lead_id}`)}
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#1e2d6b] text-white text-xs font-semibold rounded-lg hover:bg-[#151b4e] transition-colors"
               >
                 <User className="w-3.5 h-3.5" />
                 Ver Lead no CRM
               </button>
-            </div>
-          )}
+            ) : linkingLead ? (
+              <div className="space-y-2">
+                <input
+                  autoFocus
+                  value={leadSearch}
+                  onChange={e => searchLeads(e.target.value)}
+                  placeholder="Buscar lead por nome ou tel..."
+                  className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] outline-none"
+                />
+                {leadResults.map(l => (
+                  <button key={l.id} onClick={() => handleLinkLead(l.id)}
+                    className="w-full text-left px-2.5 py-1.5 text-xs bg-gray-50 hover:bg-teal-50 rounded-lg transition-colors">
+                    <p className="font-semibold text-gray-700">{l.responsible_name}</p>
+                    <p className="text-gray-400">{l.student_name} · {l.grade_interest}</p>
+                  </button>
+                ))}
+                <button onClick={() => { setLinkingLead(false); setLeadSearch(''); setLeadResults([]) }}
+                  className="w-full text-xs text-gray-400 hover:text-gray-600 py-1">
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setLinkingLead(true)}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-gray-300 text-gray-500 text-xs font-medium rounded-lg hover:border-teal-400 hover:text-teal-600 transition-colors">
+                <User className="w-3.5 h-3.5" />
+                Vincular a um Lead
+              </button>
+            )}
+          </div>
 
           {/* Informações */}
           <div className="px-4 py-3 border-b border-gray-100">
@@ -874,7 +990,7 @@ export default function WhatsAppHub() {
                 Agendar Visita
               </button>
               <button
-                onClick={() => navigate(`/leads${activeConv.leadId ? `?highlight=${activeConv.leadId}` : ''}`)}
+                onClick={() => navigate(`/leads${activeConv.lead_id ? `?highlight=${activeConv.lead_id}` : ''}`)}
                 className="w-full flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-100 transition-colors"
               >
                 <User className="w-3.5 h-3.5" />
