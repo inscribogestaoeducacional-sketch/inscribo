@@ -177,8 +177,6 @@ function GeralTab() {
 }
 
 // ─── Tab: WhatsApp ────────────────────────────────────────────────────────────
-const EVOLUTION_URL = 'https://evolution-api-production-a00c.up.railway.app'
-const EVOLUTION_KEY = '08234626b6cf2b4a47e750a38f98d53a36846971a58bb4290c78eb67c5003da5'
 const QR_TTL = 60
 
 type ConnStatus = 'checking' | 'disconnected' | 'connecting' | 'waiting_qr' | 'connected'
@@ -186,7 +184,6 @@ type ConnStatus = 'checking' | 'disconnected' | 'connecting' | 'waiting_qr' | 'c
 function WhatsAppTab() {
   const { user } = useAuth()
   const instance = user?.institution_id ? `inst-${user.institution_id.slice(0, 8)}` : ''
-  const url = EVOLUTION_URL
 
   const [status, setStatus] = useState<ConnStatus>('checking')
   const [qrCode, setQrCode] = useState<string | null>(null)
@@ -219,9 +216,7 @@ function WhatsAppTab() {
 
   const checkState = async () => {
     try {
-      const res = await fetch(`${url}/instance/connectionState/${instance}`, {
-        headers: { apikey: EVOLUTION_KEY }
-      })
+      const res = await fetch(`/api/evolution/connection-state?instanceName=${instance}`)
       if (!res.ok) return
       const data = await res.json()
       const state = data?.instance?.state || data?.state
@@ -269,10 +264,10 @@ function WhatsAppTab() {
     setQrCode(null)
     stopPolling()
     try {
-      const res = await fetch(`${url}/instance/create`, {
+      const res = await fetch('/api/evolution/create-instance', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_KEY },
-        body: JSON.stringify({ instanceName: instance, qrcode: true, integration: 'WHATSAPP-BAILEYS' })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceName: instance })
       })
       const data = await res.json()
       const base64 = data?.qrcode?.base64 || data?.instance?.qrcode?.base64 || null
@@ -284,23 +279,8 @@ function WhatsAppTab() {
         startPolling()
         startCountdown()
       } else {
-        // Instance may already exist — try connect endpoint
-        const cr = await fetch(`${url}/instance/connect/${instance}`, { headers: { apikey: EVOLUTION_KEY } })
-        if (cr.ok) {
-          const cd = await cr.json()
-          const qr = cd?.qrcode?.base64 || cd?.base64 || null
-          if (qr) {
-            setQrCode(qr)
-            setStatus('waiting_qr')
-            startPolling()
-            startCountdown()
-          } else {
-            await checkState()
-            setStatus(s => s === 'checking' ? 'disconnected' : s)
-          }
-        } else {
-          setStatus('disconnected')
-        }
+        await checkState()
+        setStatus(s => s === 'checking' ? 'disconnected' : s)
       }
     } catch {
       setStatus('disconnected')
@@ -313,9 +293,10 @@ function WhatsAppTab() {
     stopPolling()
     stopCountdown()
     try {
-      await fetch(`${url}/instance/delete/${instance}`, {
+      await fetch('/api/evolution/delete-instance', {
         method: 'DELETE',
-        headers: { apikey: EVOLUTION_KEY }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceName: instance })
       })
       setStatus('disconnected')
       setQrCode(null)
