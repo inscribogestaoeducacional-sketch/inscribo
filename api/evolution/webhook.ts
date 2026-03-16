@@ -27,9 +27,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const message = msg?.message || {}
     const msgType = Object.keys(message)[0] || 'conversation'
 
-    // Skip status broadcasts only; groups (@g.us) are now saved and shown in hub
     const remoteJid: string = key?.remoteJid || ''
-    if (remoteJid === 'status@broadcast') {
+    // Skip status broadcasts and groups
+    if (remoteJid === 'status@broadcast' || remoteJid.endsWith('@g.us')) {
       return res.status(200).json({ status: 'ok' })
     }
 

@@ -13,10 +13,9 @@ import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConvers
 type MsgType = 'text' | 'audio' | 'image' | 'video' | 'document' | 'sticker'
 type ConvStatus = 'waiting' | 'open' | 'closed'
 type ConvFilter = 'all' | 'unread' | 'waiting' | 'open' | 'closed'
-type ConvTypeFilter = 'all' | 'contacts' | 'groups'
 type ConvOwnerFilter = 'all' | 'mine' | 'unassigned'
 type RightPanelTab = 'details' | 'history'
-type MainView = 'conversations' | 'contacts' | 'groups'
+type MainView = 'conversations' | 'contacts'
 
 interface Message {
   id: string
@@ -443,6 +442,10 @@ export default function WhatsAppHub() {
   const [addingTag, setAddingTag] = useState(false)
   const [newTag, setNewTag] = useState('')
 
+  // Edit contact inline form
+  const [editingContact, setEditingContact] = useState(false)
+  const [editForm, setEditForm] = useState({ name: '', contact_type: '', notes: '' })
+
   // New feature states
   const [mainView, setMainView] = useState<MainView>('conversations')
   const [showMsgSearch, setShowMsgSearch] = useState(false)
@@ -695,13 +698,18 @@ export default function WhatsAppHub() {
 
     // Fetch profile picture if not loaded yet
     if (conv && !conv.profile_picture_url && !conv.isGroup && instance && user.institution_id) {
-      fetch(`/api/evolution/fetch-profile?instanceName=${instance}&number=${conv.phone.replace(/\D/g,'')}`)
+      fetch('/api/evolution/get-profile-picture', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceName: instance, number: conv.phone.replace(/\D/g,'') })
+      })
         .then(r => r.ok ? r.json() : null)
         .then(data => {
-          if (data?.profilePictureUrl) {
-            DatabaseService.updateProfilePicture(user.institution_id!, activeId, data.profilePictureUrl)
+          const pictureUrl = data?.profilePictureUrl || data?.picture
+          if (pictureUrl) {
+            DatabaseService.updateProfilePicture(user.institution_id!, activeId, pictureUrl)
             setConversations(prev => prev.map(c => c.id === activeId
-              ? { ...c, profile_picture_url: data.profilePictureUrl }
+              ? { ...c, profile_picture_url: pictureUrl }
               : c
             ))
           }
@@ -766,10 +774,7 @@ export default function WhatsAppHub() {
   const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0)
 
   const filteredConvs = conversations.filter(c => {
-    const matchMainView =
-      mainView === 'conversations' ? !c.isGroup :
-      mainView === 'groups'        ? c.isGroup :
-      !c.isGroup  // contacts view also uses non-group but shown as table
+    const matchMainView = !c.isGroup  // always filter out groups
     const matchOwner =
       convOwnerFilter === 'all'        ? true :
       convOwnerFilter === 'mine'       ? c.assigned_user_id === user?.id :
@@ -1225,12 +1230,11 @@ export default function WhatsAppHub() {
             </button>
           </div>
 
-          {/* Main view tabs: Conversas | Contatos | Grupos */}
+          {/* Main view tabs: Conversas | Contatos */}
           <div className="flex border-b border-gray-100 flex-shrink-0">
             {([
               { key: 'conversations', label: 'Conversas' },
               { key: 'contacts',      label: 'Contatos'  },
-              { key: 'groups',        label: 'Grupos'    },
             ] as { key: MainView; label: string }[]).map(t => (
               <button key={t.key} onClick={() => setMainView(t.key)}
                 className={`flex-1 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
@@ -1743,6 +1747,18 @@ export default function WhatsAppHub() {
                   <p className="text-xs text-gray-500 mt-0.5">
                     {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
                   </p>
+                  {activeConv.contact_type && activeConv.contact_type !== 'unknown' && (
+                    <span className={`mt-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+                      activeConv.contact_type === 'lead'     ? 'bg-blue-100 text-blue-700' :
+                      activeConv.contact_type === 'client'   ? 'bg-green-100 text-green-700' :
+                      activeConv.contact_type === 'supplier' ? 'bg-purple-100 text-purple-700' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>
+                      {activeConv.contact_type === 'lead' ? 'Lead' :
+                       activeConv.contact_type === 'client' ? 'Cliente' :
+                       activeConv.contact_type === 'supplier' ? 'Fornecedor' : activeConv.contact_type}
+                    </span>
+                  )}
                   {activeConv.isGroup && (
                     <span className="mt-1.5 text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700">Grupo</span>
                   )}
@@ -1751,7 +1767,64 @@ export default function WhatsAppHub() {
                       {lb.text}
                     </span>
                   ))}
+                  {!activeConv.isGroup && (
+                    <button
+                      onClick={() => {
+                        setEditForm({ name: activeConv.name, contact_type: activeConv.contact_type || '', notes: '' })
+                        setEditingContact(true)
+                      }}
+                      className="mt-2 text-xs text-[#14b8a6] hover:text-[#0d9488] flex items-center gap-1 font-medium"
+                    >
+                      ✏️ Editar
+                    </button>
+                  )}
                 </div>
+
+                {/* Inline edit form */}
+                {editingContact && (
+                  <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Nome</label>
+                        <input value={editForm.name} onChange={e => setEditForm(f => ({...f, name: e.target.value}))}
+                          className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Tipo</label>
+                        <select value={editForm.contact_type} onChange={e => setEditForm(f => ({...f, contact_type: e.target.value}))}
+                          className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] outline-none">
+                          <option value="">Desconhecido</option>
+                          <option value="lead">Lead</option>
+                          <option value="client">Cliente</option>
+                          <option value="supplier">Fornecedor</option>
+                          <option value="other">Outro</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex gap-1.5 mt-3">
+                      <button onClick={async () => {
+                        if (!activeId || !user?.institution_id) return
+                        if (editForm.name && editForm.name !== activeConv.name) {
+                          setConversations(prev => prev.map(c => c.id === activeId ? {...c, name: editForm.name} : c))
+                          await supabase.from('whatsapp_conversations').update({ contact_name: editForm.name })
+                            .eq('institution_id', user.institution_id).eq('remote_jid', activeId)
+                        }
+                        if (editForm.contact_type && editForm.contact_type !== (activeConv.contact_type || '')) {
+                          await DatabaseService.setConversationContactType(user.institution_id, activeId, editForm.contact_type)
+                          setConversations(prev => prev.map(c => c.id === activeId ? {...c, contact_type: editForm.contact_type} : c))
+                        }
+                        setEditingContact(false)
+                      }}
+                        className="flex-1 py-1.5 text-xs font-semibold text-white bg-[#14b8a6] rounded-lg hover:bg-[#0d9488] transition-colors">
+                        Salvar
+                      </button>
+                      <button onClick={() => setEditingContact(false)}
+                        className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Who is this contact? — only for unknown non-group, non-linked contacts */}
                 {!activeConv.isGroup && (!activeConv.contact_type || activeConv.contact_type === 'unknown') && !activeConv.lead_id && (
@@ -1766,17 +1839,23 @@ export default function WhatsAppHub() {
                         }))
                         setShowLeadModal(true)
                       }}
-                        className="w-full text-left px-3 py-1.5 text-xs font-medium bg-white border border-amber-200 rounded-lg hover:bg-amber-100 hover:border-amber-400 text-amber-800 transition-colors">
-                        É um Lead
+                        className="w-full text-left px-3 py-1.5 text-xs font-semibold bg-[#1e2d6b] text-white rounded-lg hover:bg-[#151b4e] transition-colors">
+                        🎓 Nova Família (Lead)
                       </button>
                       <button onClick={() => setShowClientModal(true)}
-                        className="w-full text-left px-3 py-1.5 text-xs font-medium bg-white border border-amber-200 rounded-lg hover:bg-amber-100 hover:border-amber-400 text-amber-800 transition-colors">
-                        É um Cliente
+                        className="w-full text-left px-3 py-1.5 text-xs font-medium bg-white border border-amber-200 rounded-lg hover:bg-amber-100 text-amber-800 transition-colors">
+                        ✅ Família da Casa (Cliente)
                       </button>
-                      <button onClick={() => handleContactType('other')}
-                        className="w-full text-left px-3 py-1.5 text-xs font-medium bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
-                        Ignorar
-                      </button>
+                      <div className="flex gap-1.5">
+                        <button onClick={() => handleContactType('supplier')}
+                          className="flex-1 text-xs px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors">
+                          🏢 Fornecedor
+                        </button>
+                        <button onClick={() => handleContactType('other')}
+                          className="flex-1 text-xs px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors">
+                          Outro
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
