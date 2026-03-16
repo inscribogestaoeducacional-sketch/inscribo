@@ -2,18 +2,20 @@ import React, { useState, useRef, useEffect } from 'react'
 import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight,
-  CheckCheck, Check, Tag, Calendar, Zap, Settings, User, Users,
-  X, MoreVertical, Phone
+  CheckCheck, Check, Calendar, Zap, Settings, User, Users,
+  X, MoreVertical, Phone, Download
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { DatabaseService, WhatsappMessage, WhatsappConversation, supabase } from '../../lib/supabase'
+import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConversationEvent, User as UserType, supabase } from '../../lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MsgType = 'text' | 'audio' | 'image' | 'video' | 'document' | 'sticker'
 type ConvStatus = 'open' | 'waiting' | 'resolved'
 type ConvFilter = 'all' | 'unread' | 'open' | 'waiting' | 'resolved'
 type ConvTypeFilter = 'all' | 'contacts' | 'groups'
+type ConvOwnerFilter = 'all' | 'mine' | 'unassigned'
+type RightPanelTab = 'details' | 'history'
 
 interface Message {
   id: string
@@ -25,6 +27,7 @@ interface Message {
   duration?: number
   fileName?: string
   fileSize?: string
+  media_url?: string
 }
 
 interface Label { text: string; color: string }
@@ -46,6 +49,9 @@ interface Conversation {
   grade?: string
   source?: string
   responsible?: string
+  assigned_user_id?: string
+  assigned_user_name?: string
+  contact_type?: string
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -95,6 +101,13 @@ function mapMsgType(messageType: string): MsgType {
   }
 }
 
+function getInitials(name: string): string {
+  if (!name) return '?'
+  const parts = name.trim().split(' ').filter(Boolean)
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
 function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, WhatsappConversation>): Conversation[] {
   const byJid = new Map<string, WhatsappMessage[]>()
   msgs.forEach(m => {
@@ -129,6 +142,9 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
       labels: [],
       isGroup,
       lead_id: convData?.lead_id || jidMsgs.find(m => m.lead_id)?.lead_id,
+      assigned_user_id: convData?.assigned_user_id,
+      assigned_user_name: convData?.assigned_user_name,
+      contact_type: convData?.contact_type,
       messages: sorted.map(m => ({
         id: m.id,
         type: mapMsgType(m.message_type),
@@ -136,6 +152,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
         from: m.from_me ? 'me' : 'them' as 'me' | 'them',
         ts: new Date(m.timestamp),
         status: 'delivered' as const,
+        media_url: m.media_url,
       })),
     }
   }).sort((a, b) => b.lastTime.getTime() - a.lastTime.getTime())
@@ -174,10 +191,25 @@ function groupByDate(msgs: Message[]): { label: string; msgs: Message[] }[] {
 }
 
 // ─── AudioPlayer ──────────────────────────────────────────────────────────────
-function AudioPlayer({ duration = 15, from }: { duration?: number; from: 'me' | 'them' }) {
+function AudioPlayer({ duration = 15, from, mediaUrl }: { duration?: number; from: 'me' | 'them'; mediaUrl?: string }) {
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
   const itvRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => () => { if (itvRef.current) clearInterval(itvRef.current) }, [])
+
+  if (mediaUrl) {
+    return (
+      <audio
+        ref={audioRef}
+        src={mediaUrl}
+        controls
+        className="max-w-[240px]"
+        style={{ height: '36px' }}
+      />
+    )
+  }
 
   const toggle = () => {
     if (playing) {
@@ -193,8 +225,6 @@ function AudioPlayer({ duration = 15, from }: { duration?: number; from: 'me' | 
       }, 100)
     }
   }
-
-  useEffect(() => () => { if (itvRef.current) clearInterval(itvRef.current) }, [])
 
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`
   const elapsed = Math.round((progress / 100) * duration)
@@ -244,16 +274,25 @@ function MessageBubble({ msg }: { msg: Message }) {
   const renderContent = () => {
     switch (effectiveType) {
       case 'audio':
-        return <AudioPlayer duration={msg.duration} from={msg.from} />
+        return <AudioPlayer duration={msg.duration} from={msg.from} mediaUrl={msg.media_url} />
       case 'image':
-        return (
+        return msg.media_url ? (
+          <img
+            src={msg.media_url}
+            alt="Imagem"
+            className="max-w-[240px] rounded-xl cursor-pointer"
+            onClick={() => window.open(msg.media_url, '_blank')}
+          />
+        ) : (
           <div className="w-48 h-32 rounded-xl overflow-hidden bg-gray-200 flex flex-col items-center justify-center gap-1">
             <Image className={`w-8 h-8 ${isMe ? 'text-white/50' : 'text-gray-400'}`} />
             <span className={`text-xs ${isMe ? 'text-white/60' : 'text-gray-400'}`}>Imagem</span>
           </div>
         )
       case 'video':
-        return (
+        return msg.media_url ? (
+          <video src={msg.media_url} controls className="max-w-[240px] rounded-xl" />
+        ) : (
           <div className="w-48 h-32 rounded-xl overflow-hidden bg-gray-800 flex items-center justify-center relative">
             <Video className="w-6 h-6 text-white/50" />
             <div className="absolute inset-0 flex items-center justify-center">
@@ -269,7 +308,7 @@ function MessageBubble({ msg }: { msg: Message }) {
             <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${isMe ? 'bg-white/20' : 'bg-blue-50'}`}>
               <FileText className={`w-5 h-5 ${isMe ? 'text-white' : 'text-blue-500'}`} />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className={`text-xs font-medium truncate ${isMe ? 'text-white' : 'text-gray-800'}`}>
                 {msg.fileName || msg.content}
               </p>
@@ -277,6 +316,12 @@ function MessageBubble({ msg }: { msg: Message }) {
                 <p className={`text-xs ${isMe ? 'text-white/60' : 'text-gray-400'}`}>{msg.fileSize}</p>
               )}
             </div>
+            {msg.media_url && (
+              <a href={msg.media_url} download target="_blank" rel="noreferrer"
+                className={`p-1 rounded-lg flex-shrink-0 ${isMe ? 'text-white/70 hover:text-white' : 'text-gray-400 hover:text-blue-500'} transition-colors`}>
+                <Download className="w-4 h-4" />
+              </a>
+            )}
           </div>
         )
       case 'sticker':
@@ -307,6 +352,18 @@ function MessageBubble({ msg }: { msg: Message }) {
   )
 }
 
+// ─── Event type icon colors ───────────────────────────────────────────────────
+function eventDotColor(eventType: string): string {
+  switch (eventType) {
+    case 'assignment':         return 'bg-blue-400'
+    case 'transfer':           return 'bg-purple-400'
+    case 'status_change':      return 'bg-amber-400'
+    case 'contact_identified': return 'bg-teal-400'
+    case 'message_received':   return 'bg-gray-300'
+    default:                   return 'bg-gray-300'
+  }
+}
+
 // ─── WhatsAppHub ──────────────────────────────────────────────────────────────
 export default function WhatsAppHub() {
   const { user } = useAuth()
@@ -323,6 +380,13 @@ export default function WhatsAppHub() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [filter, setFilter] = useState<ConvFilter>('all')
   const [convTypeFilter, setConvTypeFilter] = useState<ConvTypeFilter>('all')
+  const [convOwnerFilter, setConvOwnerFilter] = useState<ConvOwnerFilter>('all')
+  const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('details')
+  const [convHistory, setConvHistory] = useState<WhatsappConversationEvent[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [users, setUsers] = useState<UserType[]>([])
+  const [transferring, setTransferring] = useState(false)
+  const [transferTarget, setTransferTarget] = useState('')
   const [search, setSearch] = useState('')
   const [inputText, setInputText] = useState('')
   const [showAttach, setShowAttach] = useState(false)
@@ -338,6 +402,7 @@ export default function WhatsAppHub() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const startRecording = async () => {
     if (!activeId) return
@@ -417,6 +482,7 @@ export default function WhatsAppHub() {
       from: newMsg.from_me ? 'me' : 'them',
       ts: new Date(newMsg.timestamp),
       status: 'delivered',
+      media_url: newMsg.media_url,
     }
     setConversations(prev => {
       const existing = prev.find(c => c.id === newMsg.remote_jid)
@@ -450,6 +516,14 @@ export default function WhatsAppHub() {
     })
   }
 
+  const loadHistory = async (jid: string) => {
+    if (!user?.institution_id || !jid) return
+    setHistoryLoading(true)
+    const events = await DatabaseService.getConversationEvents(user.institution_id, jid)
+    setConvHistory(events)
+    setHistoryLoading(false)
+  }
+
   const loadMessages = async () => {
     if (!user?.institution_id) return
     const [msgs, convs] = await Promise.all([
@@ -470,6 +544,7 @@ export default function WhatsAppHub() {
       const inst = await DatabaseService.getInstitution(user.institution_id!)
       setIsConnected(!!inst?.evolution_instance)
       await loadMessages()
+      DatabaseService.getUsers(user.institution_id!).then(setUsers).catch(() => {})
       setLoading(false)
     }
     init()
@@ -498,14 +573,57 @@ export default function WhatsAppHub() {
     }
   }, [user?.institution_id])
 
-  // Reset unread when opening conversation
+  // Reset unread, auto-assign, auto-link lead when opening conversation
   useEffect(() => {
     if (!activeId || !user?.institution_id) return
-    setConversations(prev => prev.map(c =>
-      c.id === activeId ? { ...c, unreadCount: 0 } : c
-    ))
+    // Reset unread
+    setConversations(prev => prev.map(c => c.id === activeId ? { ...c, unreadCount: 0 } : c))
     DatabaseService.resetConversationUnread(user.institution_id, activeId).catch(() => {})
+
+    const conv = conversations.find(c => c.id === activeId)
+
+    // Auto-assign to current user if unassigned
+    if (conv && !conv.assigned_user_id && user.id) {
+      DatabaseService.assignConversation(user.institution_id, activeId, user.id, user.full_name || user.email)
+        .then(() => {
+          setConversations(prev => prev.map(c => c.id === activeId
+            ? { ...c, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email }
+            : c
+          ))
+          DatabaseService.logConversationEvent({
+            institution_id: user.institution_id!,
+            remote_jid: activeId,
+            event_type: 'assignment',
+            description: `Atribuído para ${user.full_name || user.email}`,
+            user_id: user.id,
+            user_name: user.full_name || user.email,
+          }).catch(() => {})
+        })
+        .catch(() => {})
+    }
+
+    // Auto-link lead if not linked
+    if (conv && !conv.lead_id && !conv.isGroup && user.institution_id) {
+      DatabaseService.searchLeadsByPhone(user.institution_id, conv.phone)
+        .then(leads => {
+          if (leads.length > 0) {
+            const lead = leads[0]
+            DatabaseService.updateWhatsappMessageLead(activeId, user.institution_id!, lead.id)
+            DatabaseService.upsertConversationStatus(user.institution_id!, activeId, conv.status, lead.id)
+            setConversations(prev => prev.map(c => c.id === activeId
+              ? { ...c, lead_id: lead.id, name: c.name === formatPhone(activeId) ? (lead.responsible_name || lead.student_name || c.name) : c.name }
+              : c
+            ))
+          }
+        })
+        .catch(() => {})
+    }
   }, [activeId])
+
+  // Load history when switching to history tab
+  useEffect(() => {
+    if (rightPanelTab === 'history' && activeId) loadHistory(activeId)
+  }, [rightPanelTab, activeId])
 
   // Handle incoming phone param from LeadKanban
   useEffect(() => {
@@ -550,6 +668,10 @@ export default function WhatsAppHub() {
       convTypeFilter === 'all'      ? true :
       convTypeFilter === 'contacts' ? !c.isGroup :
       c.isGroup
+    const matchOwner =
+      convOwnerFilter === 'all'        ? true :
+      convOwnerFilter === 'mine'       ? c.assigned_user_id === user?.id :
+      !c.assigned_user_id
     const matchSearch = !search ||
       c.name.toLowerCase().includes(search.toLowerCase()) ||
       c.phone.includes(search)
@@ -559,7 +681,7 @@ export default function WhatsAppHub() {
       filter === 'open'     ? c.status === 'open' :
       filter === 'waiting'  ? c.status === 'waiting' :
       c.status === 'resolved'
-    return matchType && matchSearch && matchFilter
+    return matchType && matchOwner && matchSearch && matchFilter
   })
 
   const handleSend = async () => {
@@ -598,6 +720,81 @@ export default function WhatsAppHub() {
     if (!activeId || !user?.institution_id) return
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, status } : c))
     await DatabaseService.upsertConversationStatus(user.institution_id, activeId, status)
+    DatabaseService.logConversationEvent({
+      institution_id: user.institution_id,
+      remote_jid: activeId,
+      event_type: 'status_change',
+      description: `Status alterado para: ${STATUS_CFG[status].label}`,
+      user_id: user.id,
+      user_name: user.full_name || user.email,
+    }).catch(() => {})
+  }
+
+  const handleTransfer = async () => {
+    if (!activeId || !user?.institution_id || !transferTarget) return
+    const targetUser = users.find(u => u.id === transferTarget)
+    if (!targetUser) return
+    const fromName = activeConv?.assigned_user_name || user.full_name || user.email
+    await DatabaseService.transferConversation(user.institution_id, activeId, targetUser.id, targetUser.full_name, fromName)
+    await DatabaseService.logConversationEvent({
+      institution_id: user.institution_id,
+      remote_jid: activeId,
+      event_type: 'transfer',
+      description: `Transferido de ${fromName} para ${targetUser.full_name}`,
+      user_id: user.id,
+      user_name: user.full_name || user.email,
+    })
+    setConversations(prev => prev.map(c => c.id === activeId
+      ? { ...c, assigned_user_id: targetUser.id, assigned_user_name: targetUser.full_name }
+      : c
+    ))
+    setTransferring(false)
+    setTransferTarget('')
+  }
+
+  const handleContactType = async (type: string) => {
+    if (!activeId || !user?.institution_id) return
+    await DatabaseService.setConversationContactType(user.institution_id, activeId, type)
+    setConversations(prev => prev.map(c => c.id === activeId ? { ...c, contact_type: type } : c))
+    await DatabaseService.logConversationEvent({
+      institution_id: user.institution_id,
+      remote_jid: activeId,
+      event_type: 'contact_identified',
+      description: `Contato identificado como: ${type === 'lead' ? 'Lead' : type === 'client' ? 'Cliente' : 'Outro'}`,
+      user_id: user.id,
+      user_name: user.full_name || user.email,
+    })
+  }
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !activeId) return
+    const reader = new FileReader()
+    reader.onloadend = async () => {
+      const base64 = (reader.result as string).split(',')[1]
+      const mediatype = file.type.startsWith('image/') ? 'image'
+        : file.type.startsWith('video/') ? 'video'
+        : file.type.startsWith('audio/') ? 'audio'
+        : 'document'
+      try {
+        await fetch('/api/evolution/send-media', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            instanceName: instance,
+            remoteJid: activeId,
+            mediatype,
+            mimetype: file.type,
+            media: base64,
+            fileName: file.name,
+            caption: '',
+          })
+        })
+      } catch { setSendError('Erro ao enviar arquivo.') }
+    }
+    reader.readAsDataURL(file)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    setShowAttach(false)
   }
 
   const FILTERS: { key: ConvFilter; label: string }[] = [
@@ -652,6 +849,15 @@ export default function WhatsAppHub() {
   return (
     <div className="flex overflow-hidden bg-[#f0f2f5]" style={{ height: 'calc(100vh - 56px)' }}>
 
+      {/* Hidden file input for attachments */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xlsx,.xls"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+
       {/* ── Col 1: Conversation List ──────────────────────────────────────────── */}
       <div className="w-[300px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
 
@@ -702,6 +908,20 @@ export default function WhatsAppHub() {
           ))}
         </div>
 
+        {/* Owner filter pills */}
+        <div className="px-3 py-1.5 flex gap-1 flex-shrink-0 border-b border-gray-100">
+          {[
+            { key: 'all',        label: 'Todos' },
+            { key: 'mine',       label: 'Meus' },
+            { key: 'unassigned', label: 'Sem atendente' },
+          ].map(o => (
+            <button key={o.key} onClick={() => setConvOwnerFilter(o.key as ConvOwnerFilter)}
+              className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                convOwnerFilter === o.key ? 'bg-[#1e2d6b] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}>{o.label}</button>
+          ))}
+        </div>
+
         {/* Filter pills */}
         <div className="px-3 py-2 flex-shrink-0 flex gap-1 overflow-x-auto scrollbar-hide">
           {FILTERS.map(f => (
@@ -739,7 +959,7 @@ export default function WhatsAppHub() {
                       : 'border-l-transparent hover:bg-gray-50'
                   }`}
                 >
-                  {/* Avatar */}
+                  {/* Avatar with attendant badge */}
                   <div className="relative flex-shrink-0">
                     <div className={`w-10 h-10 rounded-full ${conv.avatarColor} text-white text-sm font-bold flex items-center justify-center`}>
                       {conv.isGroup
@@ -749,6 +969,11 @@ export default function WhatsAppHub() {
                     </div>
                     {conv.online && (
                       <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
+                    )}
+                    {conv.assigned_user_name && (
+                      <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-[#1e2d6b] text-white rounded-full flex items-center justify-center text-[8px] font-bold border border-white">
+                        {getInitials(conv.assigned_user_name)}
+                      </div>
                     )}
                   </div>
                   {/* Info */}
@@ -904,7 +1129,7 @@ export default function WhatsAppHub() {
               ].map(item => (
                 <button
                   key={item.label}
-                  onClick={() => setShowAttach(false)}
+                  onClick={() => { fileInputRef.current?.click(); setShowAttach(false) }}
                   className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl ${item.color} text-xs font-medium hover:opacity-80 transition-opacity`}
                 >
                   <item.icon className="w-4 h-4" />
@@ -966,167 +1191,286 @@ export default function WhatsAppHub() {
 
       {/* ── Col 3: Contact Panel ──────────────────────────────────────────────── */}
       {showContactInfo && activeConv && (
-        <div className="w-[280px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-y-auto">
+        <div className="w-[280px] flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
 
-          {/* Contact header */}
-          <div className="flex-shrink-0 flex flex-col items-center px-4 pt-6 pb-4 border-b border-gray-100">
-            <div className={`w-16 h-16 rounded-full ${activeConv.avatarColor} text-white text-2xl font-bold flex items-center justify-center mb-3`}>
-              {activeConv.isGroup
-                ? <Users className="w-8 h-8 text-white/90" />
-                : activeConv.name.charAt(0)
-              }
-            </div>
-            <p className="text-sm font-bold text-[#1e2d6b] text-center">{activeConv.name}</p>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
-            </p>
-            {activeConv.isGroup && (
-              <span className="mt-1.5 text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700">Grupo</span>
-            )}
-            {activeConv.labels.map(lb => (
-              <span key={lb.text} className={`mt-1.5 text-xs px-2 py-0.5 rounded-full font-medium ${lb.color}`}>
-                {lb.text}
-              </span>
+          {/* Tab bar */}
+          <div className="flex-shrink-0 flex border-b border-gray-200">
+            {([
+              { key: 'details', label: 'Detalhes' },
+              { key: 'history', label: 'Histórico' },
+            ] as { key: RightPanelTab; label: string }[]).map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setRightPanelTab(tab.key)}
+                className={`flex-1 py-2.5 text-xs font-semibold transition-colors border-b-2 -mb-px ${
+                  rightPanelTab === tab.key
+                    ? 'border-[#14b8a6] text-[#14b8a6]'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {tab.label}
+              </button>
             ))}
           </div>
 
-          {/* Status select */}
-          <div className="px-4 py-3 border-b border-gray-100">
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-              Status do atendimento
-            </label>
-            <select
-              value={activeConv.status}
-              onChange={e => handleStatusChange(e.target.value as ConvStatus)}
-              className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none"
-            >
-              <option value="open">Aberto</option>
-              <option value="waiting">Aguardando</option>
-              <option value="resolved">Resolvido</option>
-            </select>
-          </div>
+          {/* ── Detalhes tab ── */}
+          {rightPanelTab === 'details' && (
+            <div className="flex-1 overflow-y-auto">
 
-          {/* Lead linking — only for individual contacts */}
-          {!activeConv.isGroup && (
-            <div className="px-4 py-3 border-b border-gray-100">
-              {activeConv.lead_id ? (
-                <button
-                  onClick={() => navigate(`/leads?highlight=${activeConv.lead_id}`)}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#1e2d6b] text-white text-xs font-semibold rounded-lg hover:bg-[#151b4e] transition-colors"
-                >
-                  <User className="w-3.5 h-3.5" />
-                  Ver Lead no CRM
-                </button>
-              ) : linkingLead ? (
-                <div className="space-y-2">
-                  <input
-                    autoFocus
-                    value={leadSearch}
-                    onChange={e => searchLeads(e.target.value)}
-                    placeholder="Buscar lead por nome ou tel..."
-                    className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] outline-none"
-                  />
-                  {leadResults.map(l => (
-                    <button key={l.id} onClick={() => handleLinkLead(l.id)}
-                      className="w-full text-left px-2.5 py-1.5 text-xs bg-gray-50 hover:bg-teal-50 rounded-lg transition-colors">
-                      <p className="font-semibold text-gray-700">{l.responsible_name}</p>
-                      <p className="text-gray-400">{l.student_name} · {l.grade_interest}</p>
+              {/* Contact header */}
+              <div className="flex-shrink-0 flex flex-col items-center px-4 pt-6 pb-4 border-b border-gray-100">
+                <div className={`w-16 h-16 rounded-full ${activeConv.avatarColor} text-white text-2xl font-bold flex items-center justify-center mb-3`}>
+                  {activeConv.isGroup
+                    ? <Users className="w-8 h-8 text-white/90" />
+                    : activeConv.name.charAt(0)
+                  }
+                </div>
+                <p className="text-sm font-bold text-[#1e2d6b] text-center">{activeConv.name}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
+                </p>
+                {activeConv.isGroup && (
+                  <span className="mt-1.5 text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700">Grupo</span>
+                )}
+                {activeConv.labels.map(lb => (
+                  <span key={lb.text} className={`mt-1.5 text-xs px-2 py-0.5 rounded-full font-medium ${lb.color}`}>
+                    {lb.text}
+                  </span>
+                ))}
+              </div>
+
+              {/* Who is this contact? — only for unknown non-group, non-linked contacts */}
+              {!activeConv.isGroup && (!activeConv.contact_type || activeConv.contact_type === 'unknown') && !activeConv.lead_id && (
+                <div className="px-4 py-3 border-b border-gray-100 bg-amber-50">
+                  <p className="text-xs font-semibold text-amber-700 mb-2">Quem é esse contato?</p>
+                  <div className="flex flex-col gap-1.5">
+                    <button onClick={() => handleContactType('lead')}
+                      className="w-full text-left px-3 py-1.5 text-xs font-medium bg-white border border-amber-200 rounded-lg hover:bg-amber-100 hover:border-amber-400 text-amber-800 transition-colors">
+                      É um Lead
                     </button>
-                  ))}
-                  <button onClick={() => { setLinkingLead(false); setLeadSearch(''); setLeadResults([]) }}
-                    className="w-full text-xs text-gray-400 hover:text-gray-600 py-1">
-                    Cancelar
+                    <button onClick={() => handleContactType('client')}
+                      className="w-full text-left px-3 py-1.5 text-xs font-medium bg-white border border-amber-200 rounded-lg hover:bg-amber-100 hover:border-amber-400 text-amber-800 transition-colors">
+                      É um Cliente
+                    </button>
+                    <button onClick={() => handleContactType('other')}
+                      className="w-full text-left px-3 py-1.5 text-xs font-medium bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+                      Ignorar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Status select */}
+              <div className="px-4 py-3 border-b border-gray-100">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  Status do atendimento
+                </label>
+                <select
+                  value={activeConv.status}
+                  onChange={e => handleStatusChange(e.target.value as ConvStatus)}
+                  className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none"
+                >
+                  <option value="open">Aberto</option>
+                  <option value="waiting">Aguardando</option>
+                  <option value="resolved">Resolvido</option>
+                </select>
+              </div>
+
+              {/* Attendant section */}
+              <div className="px-4 py-3 border-b border-gray-100">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  Atendente
+                </label>
+                {transferring ? (
+                  <div className="space-y-2">
+                    <select
+                      value={transferTarget}
+                      onChange={e => setTransferTarget(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none"
+                    >
+                      <option value="">Selecionar atendente...</option>
+                      {users.filter(u => u.id !== activeConv.assigned_user_id).map(u => (
+                        <option key={u.id} value={u.id}>{u.full_name}</option>
+                      ))}
+                    </select>
+                    <div className="flex gap-1.5">
+                      <button onClick={handleTransfer} disabled={!transferTarget}
+                        className="flex-1 px-2.5 py-1.5 bg-[#1e2d6b] text-white text-xs font-semibold rounded-lg disabled:opacity-40 hover:bg-[#151b4e] transition-colors">
+                        Transferir
+                      </button>
+                      <button onClick={() => { setTransferring(false); setTransferTarget('') }}
+                        className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg transition-colors">
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-700">
+                      {activeConv.assigned_user_name || <span className="text-gray-400 italic">Sem atendente</span>}
+                    </span>
+                    <button onClick={() => setTransferring(true)}
+                      className="text-xs text-[#14b8a6] hover:text-[#0d9488] font-medium transition-colors">
+                      Transferir
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Lead linking — only for individual contacts */}
+              {!activeConv.isGroup && (
+                <div className="px-4 py-3 border-b border-gray-100">
+                  {activeConv.lead_id ? (
+                    <button
+                      onClick={() => navigate(`/leads?highlight=${activeConv.lead_id}`)}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#1e2d6b] text-white text-xs font-semibold rounded-lg hover:bg-[#151b4e] transition-colors"
+                    >
+                      <User className="w-3.5 h-3.5" />
+                      Ver Lead no CRM
+                    </button>
+                  ) : linkingLead ? (
+                    <div className="space-y-2">
+                      <input
+                        autoFocus
+                        value={leadSearch}
+                        onChange={e => searchLeads(e.target.value)}
+                        placeholder="Buscar lead por nome ou tel..."
+                        className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] outline-none"
+                      />
+                      {leadResults.map(l => (
+                        <button key={l.id} onClick={() => handleLinkLead(l.id)}
+                          className="w-full text-left px-2.5 py-1.5 text-xs bg-gray-50 hover:bg-teal-50 rounded-lg transition-colors">
+                          <p className="font-semibold text-gray-700">{l.responsible_name}</p>
+                          <p className="text-gray-400">{l.student_name} · {l.grade_interest}</p>
+                        </button>
+                      ))}
+                      <button onClick={() => { setLinkingLead(false); setLeadSearch(''); setLeadResults([]) }}
+                        className="w-full text-xs text-gray-400 hover:text-gray-600 py-1">
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setLinkingLead(true)}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-gray-300 text-gray-500 text-xs font-medium rounded-lg hover:border-teal-400 hover:text-teal-600 transition-colors">
+                      <User className="w-3.5 h-3.5" />
+                      Vincular a um Lead
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Ações Rápidas */}
+              <div className="px-4 py-3 border-b border-gray-100">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Ações Rápidas</p>
+                <div className="space-y-1.5">
+                  <button
+                    onClick={() => navigate('/calendar')}
+                    className="w-full flex items-center gap-2 px-3 py-2 bg-amber-50 text-amber-700 text-xs font-medium rounded-lg hover:bg-amber-100 transition-colors"
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    Agendar Visita
+                  </button>
+                  <button
+                    onClick={() => navigate(`/leads${activeConv.lead_id ? `?highlight=${activeConv.lead_id}` : ''}`)}
+                    className="w-full flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-100 transition-colors"
+                  >
+                    <User className="w-3.5 h-3.5" />
+                    Ver no Kanban
+                  </button>
+                  <button
+                    onClick={() => setInputText(QUICK_REPLIES[0].text)}
+                    className="w-full flex items-center gap-2 px-3 py-2 bg-teal-50 text-teal-700 text-xs font-medium rounded-lg hover:bg-teal-100 transition-colors"
+                  >
+                    <Phone className="w-3.5 h-3.5" />
+                    Registrar Contato
                   </button>
                 </div>
-              ) : (
-                <button onClick={() => setLinkingLead(true)}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-gray-300 text-gray-500 text-xs font-medium rounded-lg hover:border-teal-400 hover:text-teal-600 transition-colors">
-                  <User className="w-3.5 h-3.5" />
-                  Vincular a um Lead
+              </div>
+
+              {/* Respostas Rápidas — colapsável */}
+              <div className="px-4 py-3 border-b border-gray-100">
+                <button
+                  onClick={() => setCollapseQuick(v => !v)}
+                  className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wide"
+                >
+                  <span>Respostas Rápidas</span>
+                  {collapseQuick ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                 </button>
-              )}
+                {!collapseQuick && (
+                  <div className="mt-2 space-y-1">
+                    {QUICK_REPLIES.map(qr => (
+                      <button
+                        key={qr.id}
+                        onClick={() => setInputText(qr.text)}
+                        className="w-full text-left px-2.5 py-1.5 bg-gray-50 hover:bg-teal-50 hover:text-teal-700 rounded-lg transition-colors"
+                      >
+                        <p className="text-xs font-medium text-gray-700">{qr.label}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Histórico CRM — colapsável */}
+              <div className="px-4 py-3">
+                <button
+                  onClick={() => setCollapseHistory(v => !v)}
+                  className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wide"
+                >
+                  <span>Histórico CRM</span>
+                  {collapseHistory ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+                {!collapseHistory && (
+                  <div className="mt-2 space-y-2">
+                    {[
+                      { action: 'Lead criado',      time: '2 dias atrás', color: 'bg-blue-400'  },
+                      { action: 'Contato realizado', time: '1 dia atrás',  color: 'bg-teal-400'  },
+                      { action: 'Visita agendada',   time: 'Hoje',         color: 'bg-amber-400' },
+                    ].map((ev, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${ev.color}`} />
+                        <div>
+                          <p className="text-xs font-medium text-gray-700">{ev.action}</p>
+                          <p className="text-xs text-gray-400">{ev.time}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          {/* Ações Rápidas */}
-          <div className="px-4 py-3 border-b border-gray-100">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Ações Rápidas</p>
-            <div className="space-y-1.5">
-              <button
-                onClick={() => navigate('/calendar')}
-                className="w-full flex items-center gap-2 px-3 py-2 bg-amber-50 text-amber-700 text-xs font-medium rounded-lg hover:bg-amber-100 transition-colors"
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                Agendar Visita
-              </button>
-              <button
-                onClick={() => navigate(`/leads${activeConv.lead_id ? `?highlight=${activeConv.lead_id}` : ''}`)}
-                className="w-full flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-100 transition-colors"
-              >
-                <User className="w-3.5 h-3.5" />
-                Ver no Kanban
-              </button>
-              <button
-                onClick={() => setInputText(QUICK_REPLIES[0].text)}
-                className="w-full flex items-center gap-2 px-3 py-2 bg-teal-50 text-teal-700 text-xs font-medium rounded-lg hover:bg-teal-100 transition-colors"
-              >
-                <Phone className="w-3.5 h-3.5" />
-                Registrar Contato
-              </button>
-            </div>
-          </div>
-
-          {/* Respostas Rápidas — colapsável */}
-          <div className="px-4 py-3 border-b border-gray-100">
-            <button
-              onClick={() => setCollapseQuick(v => !v)}
-              className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wide"
-            >
-              <span>Respostas Rápidas</span>
-              {collapseQuick ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
-            {!collapseQuick && (
-              <div className="mt-2 space-y-1">
-                {QUICK_REPLIES.map(qr => (
-                  <button
-                    key={qr.id}
-                    onClick={() => setInputText(qr.text)}
-                    className="w-full text-left px-2.5 py-1.5 bg-gray-50 hover:bg-teal-50 hover:text-teal-700 rounded-lg transition-colors"
-                  >
-                    <p className="text-xs font-medium text-gray-700">{qr.label}</p>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Histórico CRM — colapsável */}
-          <div className="px-4 py-3">
-            <button
-              onClick={() => setCollapseHistory(v => !v)}
-              className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wide"
-            >
-              <span>Histórico CRM</span>
-              {collapseHistory ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
-            {!collapseHistory && (
-              <div className="mt-2 space-y-2">
-                {[
-                  { action: 'Lead criado',      time: '2 dias atrás', color: 'bg-blue-400'  },
-                  { action: 'Contato realizado', time: '1 dia atrás',  color: 'bg-teal-400'  },
-                  { action: 'Visita agendada',   time: 'Hoje',         color: 'bg-amber-400' },
-                ].map((ev, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${ev.color}`} />
-                    <div>
-                      <p className="text-xs font-medium text-gray-700">{ev.action}</p>
-                      <p className="text-xs text-gray-400">{ev.time}</p>
+          {/* ── Histórico tab ── */}
+          {rightPanelTab === 'history' && (
+            <div className="flex-1 overflow-y-auto px-4 py-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Histórico de eventos</p>
+              {historyLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-[#14b8a6] border-t-transparent" />
+                </div>
+              ) : convHistory.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-8">Nenhum evento registrado</p>
+              ) : (
+                <div className="space-y-3">
+                  {convHistory.map(ev => (
+                    <div key={ev.id} className="flex items-start gap-2">
+                      <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${eventDotColor(ev.event_type)}`} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-gray-700 leading-snug">{ev.description || ev.event_type}</p>
+                        {ev.user_name && (
+                          <p className="text-xs text-gray-400 mt-0.5">{ev.user_name}</p>
+                        )}
+                        <p className="text-xs text-gray-300 mt-0.5">
+                          {new Date(ev.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

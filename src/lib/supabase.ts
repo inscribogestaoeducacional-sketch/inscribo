@@ -233,6 +233,23 @@ export interface WhatsappConversation {
   status: string
   last_message_at?: string
   unread_count: number
+  assigned_user_id?: string
+  assigned_user_name?: string
+  transferred_from?: string
+  transferred_at?: string
+  contact_type?: string
+  created_at: string
+}
+
+export interface WhatsappConversationEvent {
+  id: string
+  institution_id: string
+  remote_jid: string
+  event_type: string
+  description?: string
+  user_id?: string
+  user_name?: string
+  metadata?: any
   created_at: string
 }
 
@@ -799,6 +816,47 @@ export class DatabaseService {
 
     if (error) throw error
     return data || []
+  }
+
+  static async getConversationEvents(institutionId: string, remoteJid: string): Promise<WhatsappConversationEvent[]> {
+    const { data, error } = await supabase
+      .from('whatsapp_conversation_events')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .eq('remote_jid', remoteJid)
+      .order('created_at', { ascending: false })
+      .limit(30)
+    if (error) return []
+    return data || []
+  }
+
+  static async logConversationEvent(event: {
+    institution_id: string
+    remote_jid: string
+    event_type: string
+    description?: string
+    user_id?: string
+    user_name?: string
+    metadata?: any
+  }): Promise<void> {
+    await supabase.from('whatsapp_conversation_events').insert(event)
+  }
+
+  static async assignConversation(institutionId: string, remoteJid: string, userId: string, userName: string): Promise<void> {
+    await supabase.from('whatsapp_conversations')
+      .upsert({ institution_id: institutionId, remote_jid: remoteJid, assigned_user_id: userId, assigned_user_name: userName }, { onConflict: 'institution_id,remote_jid' })
+  }
+
+  static async transferConversation(institutionId: string, remoteJid: string, newUserId: string, newUserName: string, fromUserName: string): Promise<void> {
+    await supabase.from('whatsapp_conversations')
+      .update({ assigned_user_id: newUserId, assigned_user_name: newUserName, transferred_from: fromUserName, transferred_at: new Date().toISOString() })
+      .eq('institution_id', institutionId)
+      .eq('remote_jid', remoteJid)
+  }
+
+  static async setConversationContactType(institutionId: string, remoteJid: string, contactType: string): Promise<void> {
+    await supabase.from('whatsapp_conversations')
+      .upsert({ institution_id: institutionId, remote_jid: remoteJid, contact_type: contactType }, { onConflict: 'institution_id,remote_jid' })
   }
 
   static async updateSaasMetrics(): Promise<void> {

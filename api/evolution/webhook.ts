@@ -6,6 +6,9 @@ const supabase = createClient(
   process.env.VITE_SUPABASE_ANON_KEY!
 )
 
+const EVOLUTION_URL = process.env.EVOLUTION_URL || process.env.VITE_EVOLUTION_URL || 'https://evolution-api-production-a00c.up.railway.app'
+const EVOLUTION_KEY = process.env.EVOLUTION_KEY || process.env.VITE_EVOLUTION_KEY || '08234626b6cf2b4a47e750a38f98d53a36846971a58bb4290c78eb67c5003da5'
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -61,6 +64,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('[webhook] saving message:', key?.id, 'from:', remoteJid, 'content:', content)
 
+    // Download media and upload to Supabase Storage
+    const mediaTypes = ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage']
+    if (mediaTypes.includes(msgType) && institution_id && key?.id) {
+      try {
+        const mediaRes = await fetch(`${EVOLUTION_URL}/chat/getBase64FromMediaMessage/${body.instance}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_KEY },
+          body: JSON.stringify({ message: msg.message, convertToMp4: false })
+        })
+        if (mediaRes.ok) {
+          const mediaData = await mediaRes.json()
+          if (mediaData.base64) {
+            const buffer = Buffer.from(mediaData.base64, 'base64')
+            const mimeType = mediaData.mimetype || 'application/octet-stream'
+            const ext = mimeType.split('/')[1]?.split(';')[0] || 'bin'
+            const storagePath = `${institution_id}/${key.id}.${ext}`
+            const { error: uploadError } = await supabase.storage
+              .from('whatsapp-media')
+              .upload(storagePath, buffer, { contentType: mimeType, upsert: true })
+            if (!uploadError) {
+              const { data: publicUrlData } = supabase.storage
+                .from('whatsapp-media')
+                .getPublicUrl(storagePath)
+              media_url = publicUrlData.publicUrl
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[webhook] media upload error:', e)
+      }
+    }
+
     // Try to find matching lead by phone number
     const phoneDigits = remoteJid.replace(/\D/g, '').replace(/^55/, '')
     let lead_id: string | null = null
@@ -112,6 +147,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         p_institution_id: institution_id,
         p_remote_jid: remoteJid,
       })
+    }
+
+    // Log conversation event for received messages
+    if (!key?.fromMe && institution_id) {
+      void Promise.resolve(supabase.from('whatsapp_conversation_events').insert({
+        institution_id,
+        remote_jid: remoteJid,
+        event_type: 'message_received',
+        description: `Mensagem recebida${contact_name ? ` de ${contact_name}` : ''}`,
+        created_at: timestamp,
+      })).catch(() => {})
     }
   }
 
