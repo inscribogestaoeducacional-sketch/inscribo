@@ -16,6 +16,7 @@ type ConvFilter = 'all' | 'unread' | 'waiting' | 'open' | 'closed'
 type ConvTypeFilter = 'all' | 'contacts' | 'groups'
 type ConvOwnerFilter = 'all' | 'mine' | 'unassigned'
 type RightPanelTab = 'details' | 'history'
+type MainView = 'conversations' | 'contacts' | 'groups'
 
 interface Message {
   id: string
@@ -81,6 +82,10 @@ const FILTERS = [
 ]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+function safeStatusCfg(status: string) {
+  return STATUS_CFG[status as ConvStatus] ?? STATUS_CFG['waiting']
+}
+
 const AVATAR_COLORS = ['bg-violet-500','bg-blue-500','bg-rose-500','bg-amber-500','bg-emerald-500','bg-teal-500','bg-pink-500','bg-indigo-500']
 
 function jidToColor(jid: string): string {
@@ -283,7 +288,7 @@ function AudioPlayer({ duration = 15, from, mediaUrl }: { duration?: number; fro
 }
 
 // ─── MessageBubble ────────────────────────────────────────────────────────────
-function MessageBubble({ msg }: { msg: Message }) {
+function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (url: string) => void }) {
   const isMe = msg.from === 'me'
 
   const bubbleBase = isMe
@@ -309,7 +314,7 @@ function MessageBubble({ msg }: { msg: Message }) {
             src={msg.media_url}
             alt="Imagem"
             className="max-w-[240px] rounded-xl cursor-pointer"
-            onClick={() => window.open(msg.media_url, '_blank')}
+            onClick={() => onImageClick ? onImageClick(msg.media_url!) : window.open(msg.media_url, '_blank')}
           />
         ) : (
           <div className="w-48 h-32 rounded-xl overflow-hidden bg-gray-200 flex flex-col items-center justify-center gap-1">
@@ -407,7 +412,7 @@ export default function WhatsAppHub() {
   const [isConnected, setIsConnected] = useState<boolean | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [filter, setFilter] = useState<ConvFilter>('all')
-  const [convTypeFilter, setConvTypeFilter] = useState<ConvTypeFilter>('all')
+  // convTypeFilter removed — superseded by mainView tabs
   const [convOwnerFilter, setConvOwnerFilter] = useState<ConvOwnerFilter>('all')
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('details')
   const [convHistory, setConvHistory] = useState<WhatsappConversationEvent[]>([])
@@ -438,6 +443,15 @@ export default function WhatsAppHub() {
   const [addingTag, setAddingTag] = useState(false)
   const [newTag, setNewTag] = useState('')
 
+  // New feature states
+  const [mainView, setMainView] = useState<MainView>('conversations')
+  const [showMsgSearch, setShowMsgSearch] = useState(false)
+  const [msgSearchText, setMsgSearchText] = useState('')
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+
+  const moreMenuRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
@@ -736,14 +750,26 @@ export default function WhatsAppHub() {
     return () => clearTimeout(t)
   }, [sendError])
 
+  // Close more menu on outside click
+  useEffect(() => {
+    if (!showMoreMenu) return
+    const handler = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setShowMoreMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showMoreMenu])
+
   const activeConv = conversations.find(c => c.id === activeId) ?? null
   const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0)
 
   const filteredConvs = conversations.filter(c => {
-    const matchType =
-      convTypeFilter === 'all'      ? true :
-      convTypeFilter === 'contacts' ? !c.isGroup :
-      c.isGroup
+    const matchMainView =
+      mainView === 'conversations' ? !c.isGroup :
+      mainView === 'groups'        ? c.isGroup :
+      !c.isGroup  // contacts view also uses non-group but shown as table
     const matchOwner =
       convOwnerFilter === 'all'        ? true :
       convOwnerFilter === 'mine'       ? c.assigned_user_id === user?.id :
@@ -757,7 +783,7 @@ export default function WhatsAppHub() {
       filter === 'open'     ? c.status === 'open' :
       filter === 'waiting'  ? c.status === 'waiting' :
       c.status === 'closed'
-    return matchType && matchOwner && matchSearch && matchFilter
+    return matchMainView && matchOwner && matchSearch && matchFilter
   })
 
   const handleSend = async () => {
@@ -800,7 +826,7 @@ export default function WhatsAppHub() {
       institution_id: user.institution_id,
       remote_jid: activeId,
       event_type: 'status_change',
-      description: `Status alterado para: ${STATUS_CFG[status].label}`,
+      description: `Status alterado para: ${safeStatusCfg(status).label}`,
       user_id: user.id,
       user_name: user.full_name || user.email,
     }).catch(() => {})
@@ -981,13 +1007,16 @@ export default function WhatsAppHub() {
     } catch { setSendError('Erro ao criar lead.') }
   }
 
-  const TYPE_TABS: { key: ConvTypeFilter; label: string }[] = [
-    { key: 'all',      label: 'Todos'    },
-    { key: 'contacts', label: 'Contatos' },
-    { key: 'groups',   label: 'Grupos'   },
-  ]
+  const filteredMessages = activeConv
+    ? (msgSearchText.trim()
+        ? activeConv.messages.filter(m => m.content.toLowerCase().includes(msgSearchText.toLowerCase()))
+        : activeConv.messages)
+    : []
+  const msgGroups = filteredMessages.length > 0 || (activeConv && !msgSearchText.trim())
+    ? (activeConv ? groupByDate(filteredMessages) : [])
+    : []
 
-  const msgGroups = activeConv ? groupByDate(activeConv.messages) : []
+  const COMMON_EMOJIS = ['😊','😂','❤️','👍','🙏','😍','🎉','😢','😮','👏','🔥','✅','🤔','😅','💪','🙌','😭','🥰','😎','🤩','💯','✨','🎓','📚','👋','🤝','📞','💬','⭐','🏫']
 
   // ── Loading ──
   if (loading) {
@@ -1024,6 +1053,16 @@ export default function WhatsAppHub() {
 
   return (
     <>
+      {/* Lightbox */}
+      {lightboxUrl && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setLightboxUrl(null)}>
+          <button className="absolute top-4 right-4 text-white/70 hover:text-white">
+            <X className="w-6 h-6" />
+          </button>
+          <img src={lightboxUrl} alt="Imagem" className="max-w-full max-h-full object-contain rounded-lg" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
+
       {/* New Conversation Modal */}
       {showNewConvModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -1186,6 +1225,23 @@ export default function WhatsAppHub() {
             </button>
           </div>
 
+          {/* Main view tabs: Conversas | Contatos | Grupos */}
+          <div className="flex border-b border-gray-100 flex-shrink-0">
+            {([
+              { key: 'conversations', label: 'Conversas' },
+              { key: 'contacts',      label: 'Contatos'  },
+              { key: 'groups',        label: 'Grupos'    },
+            ] as { key: MainView; label: string }[]).map(t => (
+              <button key={t.key} onClick={() => setMainView(t.key)}
+                className={`flex-1 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                  mainView === t.key
+                    ? 'border-[#14b8a6] text-[#14b8a6]'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >{t.label}</button>
+            ))}
+          </div>
+
           {/* Search */}
           <div className="px-3 py-2 flex-shrink-0">
             <div className="relative">
@@ -1198,23 +1254,6 @@ export default function WhatsAppHub() {
                 className="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#14b8a6] focus:bg-white transition-all"
               />
             </div>
-          </div>
-
-          {/* Type tabs: Todos | Contatos | Grupos */}
-          <div className="flex-shrink-0 flex border-b border-gray-100 px-3">
-            {TYPE_TABS.map(t => (
-              <button
-                key={t.key}
-                onClick={() => setConvTypeFilter(t.key)}
-                className={`flex-1 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
-                  convTypeFilter === t.key
-                    ? 'border-[#14b8a6] text-[#14b8a6]'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
           </div>
 
           {/* Owner filter pills */}
@@ -1257,7 +1296,7 @@ export default function WhatsAppHub() {
             ) : (
               filteredConvs.map(conv => {
                 const isActive = conv.id === activeId
-                const statusDot = STATUS_CFG[conv.status].dot
+                const statusDot = safeStatusCfg(conv.status).dot
                 return (
                   <button
                     key={conv.id}
@@ -1303,9 +1342,9 @@ export default function WhatsAppHub() {
                         )}
                       </div>
                       <div className="flex items-center gap-1 mt-1 flex-wrap">
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium inline-flex items-center gap-0.5 ${STATUS_CFG[conv.status].badge}`}>
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium inline-flex items-center gap-0.5 ${safeStatusCfg(conv.status).badge}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
-                          {STATUS_CFG[conv.status].label}
+                          {safeStatusCfg(conv.status).label}
                         </span>
                         {conv.isGroup && (
                           <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700">
@@ -1324,48 +1363,147 @@ export default function WhatsAppHub() {
         {/* ── Col 2: Chat ───────────────────────────────────────────────────────── */}
         <div className="flex-1 flex flex-col overflow-hidden">
 
-          {/* Chat header */}
-          {activeConv && (
-            <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
-              <div className="relative">
-                <div className={`w-10 h-10 rounded-full ${activeConv.avatarColor} text-white text-sm font-bold flex items-center justify-center overflow-hidden`}>
-                  {activeConv.profile_picture_url ? (
-                    <img src={activeConv.profile_picture_url} alt={activeConv.name} className="w-full h-full object-cover" />
-                  ) : activeConv.isGroup ? (
-                    <Users className="w-5 h-5 text-white/90" />
-                  ) : (
-                    activeConv.name.charAt(0)
-                  )}
-                </div>
-                {activeConv.online && (
-                  <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-800">{activeConv.name}</p>
-                <p className="text-xs text-gray-500">
-                  {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
-                  {activeConv.online && <span className="ml-1.5 text-green-500 font-medium">• online</span>}
-                </p>
-              </div>
-              <div className="flex items-center gap-1">
-                <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
-                  <Search className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setShowContactInfo(v => !v)}
-                  className={`p-2 rounded-lg transition-colors ${showContactInfo ? 'bg-teal-50 text-teal-600' : 'hover:bg-gray-100 text-gray-500'}`}
-                >
-                  <Info className="w-4 h-4" />
-                </button>
-                <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
-                  <MoreVertical className="w-4 h-4" />
-                </button>
-              </div>
+          {/* ── Contacts table view ── */}
+          {mainView === 'contacts' && (
+            <div className="flex-1 overflow-y-auto bg-white p-6">
+              <h2 className="text-sm font-bold text-[#1e2d6b] mb-4">Contatos</h2>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-100 text-gray-500 uppercase tracking-wide">
+                    <th className="text-left py-2 pr-4 font-semibold">Nome</th>
+                    <th className="text-left py-2 pr-4 font-semibold">Telefone</th>
+                    <th className="text-left py-2 pr-4 font-semibold">Tipo</th>
+                    <th className="text-left py-2 pr-4 font-semibold">Atendente</th>
+                    <th className="text-left py-2 pr-4 font-semibold">Etiquetas</th>
+                    <th className="text-left py-2 font-semibold">Última msg</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {conversations.filter(c => !c.isGroup).map(c => (
+                    <tr key={c.id}
+                      onClick={() => { setMainView('conversations'); setActiveId(c.id) }}
+                      className="border-b border-gray-50 hover:bg-teal-50 cursor-pointer transition-colors">
+                      <td className="py-2.5 pr-4">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-7 h-7 rounded-full ${c.avatarColor} text-white text-xs font-bold flex items-center justify-center flex-shrink-0 overflow-hidden`}>
+                            {c.profile_picture_url
+                              ? <img src={c.profile_picture_url} alt={c.name} className="w-full h-full object-cover" />
+                              : c.name.charAt(0).toUpperCase()}
+                          </div>
+                          <span className="font-medium text-gray-800 truncate max-w-[120px]">{c.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-2.5 pr-4 text-gray-500">{c.phone}</td>
+                      <td className="py-2.5 pr-4">
+                        {c.contact_type
+                          ? <span className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">{c.contact_type}</span>
+                          : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="py-2.5 pr-4 text-gray-500">{c.assigned_user_name || <span className="text-gray-300">—</span>}</td>
+                      <td className="py-2.5 pr-4">
+                        <div className="flex flex-wrap gap-1">
+                          {(c.tags || []).slice(0, 3).map(tag => (
+                            <span key={tag} className={`px-1.5 py-0.5 rounded-full text-white font-medium ${tagColor(tag)}`}>{tag}</span>
+                          ))}
+                          {(c.tags || []).length > 3 && <span className="text-gray-400">+{(c.tags || []).length - 3}</span>}
+                        </div>
+                      </td>
+                      <td className="py-2.5 text-gray-400">{fmtConvTime(c.lastTime)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {conversations.filter(c => !c.isGroup).length === 0 && (
+                <p className="text-xs text-gray-400 text-center py-12">Nenhum contato encontrado</p>
+              )}
             </div>
           )}
 
-          {/* Messages area */}
+          {/* Chat + composer — hidden in contacts view */}
+          {mainView !== 'contacts' && activeConv && (
+            <div className="relative flex-shrink-0 bg-white border-b border-gray-200 shadow-sm">
+              {/* Header row */}
+              <div className="flex items-center gap-3 px-4 py-3">
+                <div className="relative">
+                  <div className={`w-10 h-10 rounded-full ${activeConv.avatarColor} text-white text-sm font-bold flex items-center justify-center overflow-hidden`}>
+                    {activeConv.profile_picture_url ? (
+                      <img src={activeConv.profile_picture_url} alt={activeConv.name} className="w-full h-full object-cover" />
+                    ) : activeConv.isGroup ? (
+                      <Users className="w-5 h-5 text-white/90" />
+                    ) : (
+                      activeConv.name.charAt(0)
+                    )}
+                  </div>
+                  {activeConv.online && (
+                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-800">{activeConv.name}</p>
+                  <p className="text-xs text-gray-500">
+                    {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
+                    {activeConv.online && <span className="ml-1.5 text-green-500 font-medium">• online</span>}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => { setShowMsgSearch(v => !v); if (showMsgSearch) setMsgSearchText('') }}
+                    className={`p-2 rounded-lg transition-colors ${showMsgSearch ? 'bg-teal-50 text-teal-600' : 'hover:bg-gray-100 text-gray-500'}`}
+                  >
+                    <Search className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setShowContactInfo(v => !v)}
+                    className={`p-2 rounded-lg transition-colors ${showContactInfo ? 'bg-teal-50 text-teal-600' : 'hover:bg-gray-100 text-gray-500'}`}
+                  >
+                    <Info className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setShowMoreMenu(v => !v)}
+                    className={`p-2 rounded-lg transition-colors ${showMoreMenu ? 'bg-gray-100 text-gray-700' : 'hover:bg-gray-100 text-gray-500'}`}
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Message search bar */}
+              {showMsgSearch && (
+                <div className="flex-shrink-0 px-4 py-2 bg-gray-50 border-t border-gray-200 flex items-center gap-2">
+                  <Search className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                  <input autoFocus value={msgSearchText} onChange={e => setMsgSearchText(e.target.value)}
+                    placeholder="Buscar nas mensagens..."
+                    className="flex-1 text-xs bg-transparent outline-none text-gray-700"
+                  />
+                  <button onClick={() => { setShowMsgSearch(false); setMsgSearchText('') }}
+                    className="text-gray-400 hover:text-gray-600"><X className="w-3.5 h-3.5" /></button>
+                </div>
+              )}
+
+              {/* More menu dropdown */}
+              {showMoreMenu && (
+                <div ref={moreMenuRef} className="absolute right-4 top-14 z-30 bg-white rounded-xl shadow-lg border border-gray-100 py-1 min-w-[160px]">
+                  <button onClick={() => { setConversations(prev => prev.map(c => c.id === activeId ? {...c, messages: []} : c)); setShowMoreMenu(false) }}
+                    className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-50">
+                    Limpar conversa
+                  </button>
+                  <button onClick={() => { setShowMoreMenu(false) }}
+                    className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-50">
+                    Bloquear contato
+                  </button>
+                  {activeConv?.lead_id && (
+                    <button onClick={() => { navigate(`/leads?highlight=${activeConv.lead_id}`); setShowMoreMenu(false) }}
+                      className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-gray-50">
+                      Ver perfil no CRM
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Messages area + Composer — hidden in contacts view */}
+          {mainView !== 'contacts' && <>
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-0.5">
             {!activeConv && conversations.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-center">
@@ -1392,7 +1530,7 @@ export default function WhatsAppHub() {
                   </span>
                 </div>
                 {group.msgs.map(msg => (
-                  <MessageBubble key={msg.id} msg={msg} />
+                  <MessageBubble key={msg.id} msg={msg} onImageClick={url => setLightboxUrl(url)} />
                 ))}
               </div>
             ))}
@@ -1484,6 +1622,20 @@ export default function WhatsAppHub() {
               </div>
             )}
 
+            {/* Emoji picker */}
+            {showEmojiPicker && (
+              <div className="mb-2 bg-white rounded-xl border border-gray-200 p-2 shadow-lg">
+                <div className="grid grid-cols-10 gap-1">
+                  {COMMON_EMOJIS.map(e => (
+                    <button key={e} onClick={() => { setInputText(t => t + e); setShowEmojiPicker(false) }}
+                      className="w-7 h-7 text-base hover:bg-gray-100 rounded flex items-center justify-center transition-colors">
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Input row */}
             <div className="flex items-end gap-2">
               <button
@@ -1499,7 +1651,10 @@ export default function WhatsAppHub() {
               >
                 <Zap className="w-4 h-4" />
               </button>
-              <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors flex-shrink-0">
+              <button
+                onClick={() => { setShowEmojiPicker(v => !v); setShowAttach(false); setShowQuickReplies(false) }}
+                className={`p-2 rounded-lg transition-colors flex-shrink-0 ${showEmojiPicker ? 'bg-teal-100 text-teal-600' : 'hover:bg-gray-100 text-gray-500'}`}
+              >
                 <Smile className="w-4 h-4" />
               </button>
               <textarea
@@ -1532,6 +1687,7 @@ export default function WhatsAppHub() {
               )}
             </div>
           </div>
+          </>}
         </div>
 
         {/* ── Col 3: Contact Panel ──────────────────────────────────────────────── */}
