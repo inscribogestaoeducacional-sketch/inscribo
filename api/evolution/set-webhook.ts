@@ -6,31 +6,32 @@ const EVOLUTION_KEY = '08234626b6cf2b4a47e750a38f98d53a36846971a58bb4290c78eb67c
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { instanceName, webhookUrl } = req.body
 
+  console.log('[set-webhook] instanceName:', instanceName)
+  console.log('[set-webhook] webhookUrl:', webhookUrl)
+
+  const body = {
+    url: webhookUrl,
+    enabled: true,
+    events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE'],
+  }
+
+  console.log('[set-webhook] body:', JSON.stringify(body))
+
   const response = await fetch(`${EVOLUTION_URL}/webhook/set/${instanceName}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       apikey: EVOLUTION_KEY,
     },
-    body: JSON.stringify({
-      enabled: true,
-      url: webhookUrl,
-      webhookByEvents: false,
-      webhookBase64: false,
-      events: [
-        'MESSAGES_UPSERT',
-        'MESSAGES_UPDATE',
-        'CONNECTION_UPDATE',
-      ],
-    })
+    body: JSON.stringify(body),
   })
 
   const text = await response.text()
-  console.log('[webhook/set] status:', response.status, 'body:', text)
+  console.log('[set-webhook] response status:', response.status)
+  console.log('[set-webhook] response body:', text)
 
-  try {
-    res.status(response.status).json(JSON.parse(text))
-  } catch {
-    res.status(response.status).send(text)
-  }
+  res.status(200).json({
+    evolutionStatus: response.status,
+    evolutionBody: text,
+  })
 }
