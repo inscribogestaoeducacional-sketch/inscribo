@@ -4,23 +4,33 @@ const EVOLUTION_URL = 'https://evolution-api-production-a00c.up.railway.app'
 const EVOLUTION_KEY = '08234626b6cf2b4a47e750a38f98d53a36846971a58bb4290c78eb67c5003da5'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-
   const { instanceName, webhookUrl } = req.body
-  if (!instanceName || !webhookUrl) {
-    return res.status(400).json({ error: 'Missing instanceName or webhookUrl' })
-  }
 
   const response = await fetch(`${EVOLUTION_URL}/webhook/set/${instanceName}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_KEY },
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: EVOLUTION_KEY,
+    },
     body: JSON.stringify({
-      url: webhookUrl,
       enabled: true,
-      events: ['MESSAGES_UPSERT'],
+      url: webhookUrl,
+      webhookByEvents: false,
+      webhookBase64: false,
+      events: [
+        'MESSAGES_UPSERT',
+        'MESSAGES_UPDATE',
+        'CONNECTION_UPDATE',
+      ],
     })
   })
 
-  const data = await response.json()
-  return res.status(response.ok ? 200 : response.status).json(data)
+  const text = await response.text()
+  console.log('[webhook/set] status:', response.status, 'body:', text)
+
+  try {
+    res.status(response.status).json(JSON.parse(text))
+  } catch {
+    res.status(response.status).send(text)
+  }
 }
