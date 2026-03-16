@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Save, Upload, Building, Mail, Phone, Globe, Palette,
   MessageCircle, Key, Link, Wifi, WifiOff, RefreshCw, QrCode
@@ -178,13 +178,25 @@ function GeralTab() {
 }
 
 // ─── Tab: WhatsApp ────────────────────────────────────────────────────────────
-type ConnectionStatus = 'idle' | 'connected' | 'disconnected' | 'testing' | 'connecting'
+const DEFAULT_URL = 'https://evolution-api-production-a00c.up.railway.app'
+const DEFAULT_KEY = '08234626b6cf2b4a47e750a38f98d53a36846971a58bb4290c78eb67c5003da5'
+
+type ConnectionStatus = 'idle' | 'connected' | 'disconnected' | 'testing' | 'connecting' | 'waiting_qr'
+
+const STATUS_CFG: Record<ConnectionStatus, { cls: string; dot: string; label: string }> = {
+  idle:        { cls: 'bg-gray-100 text-gray-500',   dot: 'bg-gray-400',   label: 'Não verificado'      },
+  connected:   { cls: 'bg-green-100 text-green-700', dot: 'bg-green-500',  label: '✅ WhatsApp Conectado!' },
+  disconnected:{ cls: 'bg-red-100 text-red-700',     dot: 'bg-red-500',    label: 'Desconectado'        },
+  testing:     { cls: 'bg-gray-100 text-gray-500',   dot: 'bg-gray-400',   label: 'Testando conexão...' },
+  connecting:  { cls: 'bg-gray-100 text-gray-500',   dot: 'bg-gray-400',   label: 'Conectando...'       },
+  waiting_qr:  { cls: 'bg-amber-100 text-amber-700', dot: 'bg-amber-400',  label: 'Aguardando QR ●'     },
+}
 
 function WhatsAppTab() {
   const { user } = useAuth()
   const [fields, setFields] = useState({
-    evolution_url: '',
-    evolution_key: '',
+    evolution_url: DEFAULT_URL,
+    evolution_key: DEFAULT_KEY,
     evolution_instance: ''
   })
   const [loadingFields, setLoadingFields] = useState(true)
@@ -194,19 +206,43 @@ function WhatsAppTab() {
   const [testMsg, setTestMsg] = useState('')
   const [qrCode, setQrCode] = useState<string | null>(null)
   const [connecting, setConnecting] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Load existing values
+  const stopPolling = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+  }
+
+  const checkState = async (url: string, key: string, instance: string) => {
+    try {
+      const res = await fetch(`${url}/instance/connectionState/${instance}`, { headers: { apikey: key } })
+      if (!res.ok) return
+      const data = await res.json()
+      const state = data?.instance?.state || data?.state
+      if (state === 'open') {
+        setConnStatus('connected')
+        setQrCode(null)
+        stopPolling()
+      }
+    } catch { /* ignore */ }
+  }
+
+  const startPolling = (url: string, key: string, instance: string) => {
+    stopPolling()
+    pollRef.current = setInterval(() => checkState(url, key, instance), 3000)
+  }
+
   useEffect(() => {
     const load = async () => {
       if (!user?.institution_id) return
       try {
         const inst = await DatabaseService.getInstitution(user.institution_id)
         if (inst) {
-          setFields({
-            evolution_url: inst.evolution_url || '',
-            evolution_key: inst.evolution_key || '',
-            evolution_instance: inst.evolution_instance || ''
-          })
+          const url = inst.evolution_url || DEFAULT_URL
+          const key = inst.evolution_key || DEFAULT_KEY
+          const instance = inst.evolution_instance || ''
+          setFields({ evolution_url: url, evolution_key: key, evolution_instance: instance })
+          if (instance && url && key) checkState(url.replace(/\/$/, ''), key, instance)
         }
       } catch (err) {
         console.error('Erro ao carregar config WhatsApp:', err)
@@ -215,6 +251,7 @@ function WhatsAppTab() {
       }
     }
     load()
+    return () => stopPolling()
   }, [user])
 
   const handleSave = async () => {
@@ -229,8 +266,7 @@ function WhatsAppTab() {
       setSavedOk(true)
       setTimeout(() => setSavedOk(false), 3000)
     } catch (err) {
-      console.error('Erro ao salvar config WhatsApp:', err)
-      alert('Erro ao salvar configurações.')
+      console.error('Erro ao salvar:', err)
     } finally {
       setSaving(false)
     }
@@ -246,17 +282,15 @@ function WhatsAppTab() {
     setTestMsg('')
     try {
       const url = fields.evolution_url.replace(/\/$/, '')
-      const res = await fetch(`${url}/instance/fetchInstances`, {
-        headers: { apikey: fields.evolution_key }
-      })
+      const res = await fetch(`${url}/instance/fetchInstances`, { headers: { apikey: fields.evolution_key } })
       if (res.ok) {
         setConnStatus('connected')
         setTestMsg('Conexão bem-sucedida com a Evolution API.')
       } else {
         setConnStatus('disconnected')
-        setTestMsg(`Falha na conexão: HTTP ${res.status}`)
+        setTestMsg(`Falha: HTTP ${res.status}`)
       }
-    } catch (err) {
+    } catch {
       setConnStatus('disconnected')
       setTestMsg('Não foi possível conectar. Verifique a URL.')
     }
@@ -264,34 +298,73 @@ function WhatsAppTab() {
 
   const handleConnect = async () => {
     if (!fields.evolution_url || !fields.evolution_key || !fields.evolution_instance) {
-      alert('Salve as configurações antes de conectar.')
+      setTestMsg('Preencha e salve todos os campos antes de conectar.')
+      setConnStatus('disconnected')
       return
     }
     setConnecting(true)
     setQrCode(null)
+    stopPolling()
+    const url = fields.evolution_url.replace(/\/$/, '')
+    const { evolution_key: key, evolution_instance: instance } = fields
     try {
-      const url = fields.evolution_url.replace(/\/$/, '')
-      // Create instance (or connect if already exists)
       const res = await fetch(`${url}/instance/create`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: fields.evolution_key },
-        body: JSON.stringify({ instanceName: fields.evolution_instance, qrcode: true })
+        headers: { 'Content-Type': 'application/json', apikey: key },
+        body: JSON.stringify({ instanceName: instance, qrcode: true, integration: 'WHATSAPP-BAILEYS' })
       })
       const data = await res.json()
       const base64 = data?.qrcode?.base64 || data?.instance?.qrcode?.base64 || null
-      if (base64) {
-        setQrCode(base64)
-        setConnStatus('disconnected')
-      } else if (data?.instance?.state === 'open') {
+      if (data?.instance?.state === 'open') {
         setConnStatus('connected')
+      } else if (base64) {
+        setQrCode(base64)
+        setConnStatus('waiting_qr')
+        startPolling(url, key, instance)
       } else {
-        setConnStatus('disconnected')
+        // Instance may already exist — try to fetch its QR or connect
+        const connectRes = await fetch(`${url}/instance/connect/${instance}`, { headers: { apikey: key } })
+        if (connectRes.ok) {
+          const cd = await connectRes.json()
+          const qr = cd?.qrcode?.base64 || cd?.base64 || null
+          if (qr) {
+            setQrCode(qr)
+            setConnStatus('waiting_qr')
+            startPolling(url, key, instance)
+          } else {
+            await checkState(url, key, instance)
+          }
+        } else {
+          setConnStatus('disconnected')
+          setTestMsg('Erro ao criar instância. Verifique as configurações.')
+        }
       }
     } catch (err) {
       console.error('Erro ao conectar WhatsApp:', err)
-      alert('Erro ao conectar. Verifique as configurações.')
+      setConnStatus('disconnected')
+      setTestMsg('Erro ao conectar. Verifique a URL e a API Key.')
     } finally {
       setConnecting(false)
+    }
+  }
+
+  const handleDisconnect = async () => {
+    if (!fields.evolution_url || !fields.evolution_key || !fields.evolution_instance) return
+    if (!confirm(`Desconectar a instância "${fields.evolution_instance}"?`)) return
+    setDisconnecting(true)
+    stopPolling()
+    const url = fields.evolution_url.replace(/\/$/, '')
+    try {
+      await fetch(`${url}/instance/delete/${fields.evolution_instance}`, {
+        method: 'DELETE',
+        headers: { apikey: fields.evolution_key }
+      })
+      setConnStatus('disconnected')
+      setQrCode(null)
+    } catch (err) {
+      console.error('Erro ao desconectar:', err)
+    } finally {
+      setDisconnecting(false)
     }
   }
 
@@ -302,6 +375,8 @@ function WhatsAppTab() {
       </div>
     )
   }
+
+  const statusInfo = STATUS_CFG[connStatus]
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -319,13 +394,9 @@ function WhatsAppTab() {
               <label className="block text-xs font-medium text-gray-700 mb-1">URL da Evolution API</label>
               <div className="relative">
                 <Link className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <input
-                  type="url"
-                  value={fields.evolution_url}
+                <input type="url" value={fields.evolution_url}
                   onChange={(e) => setFields({ ...fields, evolution_url: e.target.value })}
-                  className={inputCls + ' pl-9'}
-                  placeholder="https://sua-api.evolutionapi.com"
-                />
+                  className={inputCls + ' pl-9'} placeholder={DEFAULT_URL} />
               </div>
             </div>
 
@@ -333,13 +404,9 @@ function WhatsAppTab() {
               <label className="block text-xs font-medium text-gray-700 mb-1">API Key</label>
               <div className="relative">
                 <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <input
-                  type="password"
-                  value={fields.evolution_key}
+                <input type="password" value={fields.evolution_key}
                   onChange={(e) => setFields({ ...fields, evolution_key: e.target.value })}
-                  className={inputCls + ' pl-9'}
-                  placeholder="••••••••••••••••"
-                />
+                  className={inputCls + ' pl-9'} placeholder="••••••••••••••••" />
               </div>
             </div>
 
@@ -347,54 +414,40 @@ function WhatsAppTab() {
               <label className="block text-xs font-medium text-gray-700 mb-1">Nome da Instância</label>
               <div className="relative">
                 <MessageCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <input
-                  type="text"
-                  value={fields.evolution_instance}
-                  onChange={(e) => setFields({ ...fields, evolution_instance: e.target.value })}
-                  className={inputCls + ' pl-9'}
-                  placeholder="minha-escola"
-                />
+                <input type="text" value={fields.evolution_instance}
+                  onChange={(e) => setFields({ ...fields, evolution_instance: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })}
+                  className={inputCls + ' pl-9'} placeholder="nome-da-escola" />
               </div>
+              <p className="text-xs text-gray-400 mt-1">Letras minúsculas, números e hífens. Ex: <code>colegio-inscribo</code></p>
             </div>
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center gap-3 mt-5 pt-5 border-t border-gray-100">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-[#1e2d6b] hover:bg-[#151b4e] text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
-            >
+          <div className="flex items-center gap-3 mt-5 pt-5 border-t border-gray-100 flex-wrap">
+            <button onClick={handleSave} disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 bg-[#1e2d6b] hover:bg-[#151b4e] text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50">
               <Save className="h-4 w-4" />
-              {saving ? 'Salvando...' : savedOk ? 'Salvo!' : 'Salvar'}
+              {saving ? 'Salvando...' : savedOk ? 'Salvo! ✓' : 'Salvar'}
             </button>
-
-            <button
-              onClick={handleTestConnection}
-              disabled={connStatus === 'testing'}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
-            >
+            <button onClick={handleTestConnection} disabled={connStatus === 'testing'}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg transition-colors disabled:opacity-50">
               <RefreshCw className={`h-4 w-4 ${connStatus === 'testing' ? 'animate-spin' : ''}`} />
-              {connStatus === 'testing' ? 'Testando...' : 'Testar Conexão'}
+              Testar Conexão
             </button>
           </div>
 
-          {/* Connection status badge */}
-          {connStatus !== 'idle' && connStatus !== 'testing' && (
-            <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${
-              connStatus === 'connected' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-            }`}>
-              {connStatus === 'connected'
-                ? <Wifi className="h-4 w-4" />
-                : <WifiOff className="h-4 w-4" />}
-              {connStatus === 'connected' ? 'Conectado ●' : 'Desconectado ●'}
-              {testMsg && <span className="font-normal ml-1">— {testMsg}</span>}
+          {/* Status badge */}
+          {connStatus !== 'idle' && (
+            <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${statusInfo.cls}`}>
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusInfo.dot} ${connStatus === 'waiting_qr' ? 'animate-pulse' : ''}`} />
+              {statusInfo.label}
+              {testMsg && <span className="font-normal ml-1 text-inherit">— {testMsg}</span>}
             </div>
           )}
         </div>
       </div>
 
-      {/* Right: QR Code + connect */}
+      {/* Right: QR Code + connect/disconnect */}
       <div className="space-y-5">
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
@@ -402,49 +455,65 @@ function WhatsAppTab() {
               <QrCode className="h-4 w-4 text-gray-500" />
               <h3 className="text-sm font-semibold text-gray-900">Conectar WhatsApp</h3>
             </div>
-
             {/* Status pill */}
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
-              connStatus === 'connected'
-                ? 'bg-green-100 text-green-700'
-                : 'bg-red-100 text-red-700'
-            }`}>
-              <span className={`w-2 h-2 rounded-full ${connStatus === 'connected' ? 'bg-green-500' : 'bg-red-500'}`} />
-              {connStatus === 'connected' ? 'Conectado' : 'Desconectado'}
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${statusInfo.cls}`}>
+              <span className={`w-2 h-2 rounded-full ${statusInfo.dot} ${connStatus === 'waiting_qr' ? 'animate-pulse' : ''}`} />
+              {connStatus === 'connected' ? 'Conectado' : connStatus === 'waiting_qr' ? 'Aguardando QR' : 'Desconectado'}
             </span>
           </div>
 
           {/* QR Code area */}
           <div className="flex items-center justify-center bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl h-56 mb-4">
-            {qrCode ? (
-              <img
-                src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`}
-                alt="QR Code WhatsApp"
-                className="h-48 w-48 object-contain"
-              />
+            {connStatus === 'connected' ? (
+              <div className="text-center">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <Wifi className="h-8 w-8 text-green-600" />
+                </div>
+                <p className="text-sm font-semibold text-green-700">WhatsApp Conectado!</p>
+                <p className="text-xs text-gray-400 mt-1">{fields.evolution_instance}</p>
+              </div>
+            ) : qrCode ? (
+              <div className="text-center">
+                <img
+                  src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`}
+                  alt="QR Code WhatsApp"
+                  className="h-44 w-44 object-contain mx-auto"
+                />
+              </div>
             ) : (
               <div className="text-center px-4">
                 <QrCode className="h-10 w-10 text-gray-300 mx-auto mb-3" />
                 <p className="text-xs text-gray-400 leading-relaxed">
-                  Salve as configurações e clique em <strong>Conectar</strong> para gerar o QR Code
+                  Preencha as configurações e clique em <strong>Conectar WhatsApp</strong> para gerar o QR Code
                 </p>
               </div>
             )}
           </div>
 
-          <button
-            onClick={handleConnect}
-            disabled={connecting}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white text-sm font-semibold rounded-lg transition-colors"
-          >
-            <MessageCircle className="h-4 w-4" />
-            {connecting ? 'Aguarde...' : 'Conectar WhatsApp'}
-          </button>
+          {/* Instruction when waiting QR */}
+          {connStatus === 'waiting_qr' && qrCode && (
+            <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-xs text-amber-700 font-medium">Escaneie o QR Code com seu WhatsApp</p>
+              <p className="text-xs text-amber-600 mt-0.5">Abra o WhatsApp → Dispositivos vinculados → Vincular dispositivo</p>
+              <p className="text-xs text-amber-500 mt-1 flex items-center gap-1">
+                <RefreshCw className="h-3 w-3 animate-spin" /> Verificando conexão automaticamente...
+              </p>
+            </div>
+          )}
 
-          {qrCode && (
-            <p className="text-xs text-gray-500 text-center mt-3">
-              Abra o WhatsApp no celular → Dispositivos vinculados → Vincular dispositivo
-            </p>
+          {/* Connect / Disconnect buttons */}
+          {connStatus !== 'connected' ? (
+            <button onClick={handleConnect} disabled={connecting}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white text-sm font-semibold rounded-lg transition-colors">
+              <MessageCircle className="h-4 w-4" />
+              {connecting ? 'Aguarde...' : 'Conectar WhatsApp'}
+            </button>
+          ) : (
+            <button onClick={handleDisconnect} disabled={disconnecting}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white text-sm font-semibold rounded-lg transition-colors">
+              <WifiOff className="h-4 w-4" />
+              {disconnecting ? 'Desconectando...' : 'Desconectar'}
+            </button>
           )}
         </div>
       </div>
