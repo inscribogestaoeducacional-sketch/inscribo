@@ -88,16 +88,16 @@ function buildConversations(msgs: WhatsappMessage[]): Conversation[] {
     byJid.get(m.remote_jid)!.push(m)
   })
   return Array.from(byJid.entries()).map(([jid, jidMsgs]) => {
-    const sorted = [...jidMsgs].sort((a, b) => a.timestamp - b.timestamp)
+    const sorted = [...jidMsgs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
     const last = sorted[sorted.length - 1]
-    const name = jidMsgs.find(m => !m.from_me && m.contact_name)?.contact_name || formatPhone(jid)
+    const name = formatPhone(jid)
     return {
       id: jid,
       name,
       phone: formatPhone(jid),
       avatarColor: jidToColor(jid),
       lastMessage: last.content,
-      lastTime: new Date(last.timestamp * 1000),
+      lastTime: new Date(last.timestamp),
       unreadCount: 0,
       status: 'open' as ConvStatus,
       online: false,
@@ -107,7 +107,7 @@ function buildConversations(msgs: WhatsappMessage[]): Conversation[] {
         type: (m.message_type === 'conversation' ? 'text' : m.message_type) as MsgType,
         content: m.content,
         from: m.from_me ? 'me' : 'them' as 'me' | 'them',
-        ts: new Date(m.timestamp * 1000),
+        ts: new Date(m.timestamp),
         status: 'delivered' as const,
       })),
     }

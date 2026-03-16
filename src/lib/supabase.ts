@@ -217,8 +217,7 @@ export interface WhatsappMessage {
   message_id?: string
   message_type: string
   content: string
-  contact_name?: string
-  timestamp: number
+  timestamp: string
   created_at: string
 }
 

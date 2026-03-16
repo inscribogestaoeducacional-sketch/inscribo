@@ -33,6 +33,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const supabase = createClient(supabaseUrl, supabaseKey)
 
+  const timestamp = data.messageTimestamp
+    ? new Date(data.messageTimestamp * 1000).toISOString()
+    : new Date().toISOString()
+
   const { error } = await supabase.from('whatsapp_messages').upsert({
     institution_id,
     remote_jid: remoteJid,
@@ -40,8 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     message_id: key.id || null,
     message_type: msgType,
     content,
-    contact_name: fromMe ? null : (data.pushName || null),
-    timestamp: data.messageTimestamp || Math.floor(Date.now() / 1000),
+    timestamp,
   }, { onConflict: 'message_id' })
 
   if (error) console.error('webhook insert error:', error)

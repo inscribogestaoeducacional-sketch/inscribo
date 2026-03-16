@@ -33,8 +33,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       message_id: data?.key?.id || null,
       message_type: 'conversation',
       content: message,
-      contact_name: null,
-      timestamp: Math.floor(Date.now() / 1000),
+      timestamp: new Date().toISOString(),
     })
   }
 
