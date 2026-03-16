@@ -232,17 +232,41 @@ function WhatsAppTab() {
     configureWebhook()
   }
 
-  const checkState = async () => {
+  const checkState = async (): Promise<{ exists: boolean; connected: boolean; phone?: string }> => {
     try {
+      console.log('[WA] checkState:', instance)
       const res = await fetch(`/api/evolution/connection-state?instanceName=${instance}`)
-      if (!res.ok) return
+      console.log('[WA] connectionState HTTP', res.status)
+      if (!res.ok) return { exists: false, connected: false }
       const data = await res.json()
+      console.log('[WA] connectionState data:', JSON.stringify(data))
       const state = data?.instance?.state || data?.state
+      const phone = data?.instance?.profileName || data?.instance?.wuid?.replace('@s.whatsapp.net', '') || undefined
       if (state === 'open') {
-        const phone = data?.instance?.profileName || data?.instance?.wuid?.replace('@s.whatsapp.net', '') || null
         onConnected(phone)
+        return { exists: true, connected: true, phone }
       }
-    } catch { /* ignore */ }
+      // 404 / instance not found responses vary — treat missing state as non-existent
+      const notFound = data?.error || data?.message?.toLowerCase?.().includes('not found') || data?.statusCode === 404
+      return { exists: !notFound, connected: false }
+    } catch (e) {
+      console.error('[WA] checkState error:', e)
+      return { exists: false, connected: false }
+    }
+  }
+
+  const fetchQrCode = async (): Promise<string | null> => {
+    try {
+      console.log('[WA] fetchQrCode for:', instance)
+      const res = await fetch(`/api/evolution/get-qrcode?instanceName=${instance}`)
+      console.log('[WA] getQrcode HTTP', res.status)
+      const data = await res.json()
+      console.log('[WA] getQrcode data:', JSON.stringify(data))
+      return data?.qrcode?.base64 || data?.base64 || null
+    } catch (e) {
+      console.error('[WA] fetchQrCode error:', e)
+      return null
+    }
   }
 
   const startPolling = () => {
@@ -270,8 +294,8 @@ function WhatsAppTab() {
   // Check state on mount
   useEffect(() => {
     if (!instance) return
-    checkState().then(() => {
-      setStatus(s => s === 'checking' ? 'disconnected' : s)
+    checkState().then(({ connected }) => {
+      if (!connected) setStatus(s => s === 'checking' ? 'disconnected' : s)
     })
     return () => { stopPolling(); stopCountdown() }
   }, [instance])
@@ -281,13 +305,38 @@ function WhatsAppTab() {
     setStatus('connecting')
     setQrCode(null)
     stopPolling()
+
     try {
+      // Step 1: check if instance already exists
+      console.log('[WA] handleConnect — step 1: check existing state')
+      const { exists, connected } = await checkState()
+      if (connected) return // onConnected already called inside checkState
+
+      if (exists) {
+        // Step 2a: instance exists but disconnected — fetch QR directly
+        console.log('[WA] instance exists, fetching QR')
+        const qr = await fetchQrCode()
+        if (qr) {
+          setQrCode(qr)
+          setStatus('waiting_qr')
+          startPolling()
+          startCountdown()
+          return
+        }
+        // QR not available yet — fall through to create
+        console.log('[WA] no QR from existing instance, recreating')
+      }
+
+      // Step 2b: instance doesn't exist (or QR unavailable) — create it
+      console.log('[WA] creating instance')
       const res = await fetch('/api/evolution/create-instance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ instanceName: instance, institutionId: user?.institution_id })
       })
       const data = await res.json()
+      console.log('[WA] create-instance response:', JSON.stringify(data))
+
       const base64 = data?.qrcode?.base64 || data?.instance?.qrcode?.base64 || null
       if (data?.instance?.state === 'open') {
         onConnected()
@@ -297,10 +346,20 @@ function WhatsAppTab() {
         startPolling()
         startCountdown()
       } else {
-        await checkState()
-        setStatus(s => s === 'checking' ? 'disconnected' : s)
+        // Last resort: try fetching QR from connect endpoint
+        console.log('[WA] no QR in create response, trying get-qrcode')
+        const qr = await fetchQrCode()
+        if (qr) {
+          setQrCode(qr)
+          setStatus('waiting_qr')
+          startPolling()
+          startCountdown()
+        } else {
+          setStatus('disconnected')
+        }
       }
-    } catch {
+    } catch (e) {
+      console.error('[WA] handleConnect error:', e)
       setStatus('disconnected')
     }
   }
