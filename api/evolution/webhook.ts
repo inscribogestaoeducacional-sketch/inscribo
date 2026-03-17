@@ -152,19 +152,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const supabase = getSupabaseAdmin()
 
-      // Upsert message — idempotent by message_id
+      // Upsert message — idempotent by message_id (TEXT), not id (UUID)
       const { error: msgErr } = await supabase.from('whatsapp_messages').upsert({
+        message_id:     key?.id,
         institution_id,
-        instance_name: body?.instance,
-        remote_jid: remoteJid,
-        message_id: key?.id,
-        from_me: key?.fromMe ?? false,
-        message_type: msgType,
+        instance_name:  body?.instance,
+        remote_jid:     remoteJid,
+        from_me:        key?.fromMe ?? false,
+        message_type:   msgType,
         content,
         media_url,
         contact_name,
         lead_id,
         timestamp,
+        raw_data:       msg,
       }, { onConflict: 'message_id' })
 
       if (msgErr) console.error('[webhook] upsert message error:', msgErr)

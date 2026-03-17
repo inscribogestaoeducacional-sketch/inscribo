@@ -1,19 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { EVOLUTION_URL, evolutionHeaders, getSupabaseAdmin, getInstanceForInstitution } from '../_config'
 
-function extractContent(message: Record<string, unknown>): { content: string; msgType: string; mediaUrl: string | null } {
-  const msg = message || {}
-  if (msg.conversation)                 return { content: msg.conversation as string,                                       msgType: 'conversation',       mediaUrl: null }
-  if ((msg as any).extendedTextMessage?.text) return { content: (msg as any).extendedTextMessage.text,                    msgType: 'extendedTextMessage', mediaUrl: null }
-  if ((msg as any).imageMessage)        return { content: (msg as any).imageMessage.caption || '[Imagem]',                 msgType: 'imageMessage',       mediaUrl: (msg as any).imageMessage.url || null }
-  if ((msg as any).videoMessage)        return { content: (msg as any).videoMessage.caption || '[Vídeo]',                  msgType: 'videoMessage',       mediaUrl: (msg as any).videoMessage.url || null }
-  if ((msg as any).audioMessage)        return { content: '[Áudio]',                                                        msgType: 'audioMessage',       mediaUrl: (msg as any).audioMessage.url || null }
-  if ((msg as any).pttMessage)          return { content: '[Áudio]',                                                        msgType: 'audioMessage',       mediaUrl: (msg as any).pttMessage.url || null }
-  if ((msg as any).documentMessage)     return { content: (msg as any).documentMessage.fileName || '[Documento]',          msgType: 'documentMessage',    mediaUrl: (msg as any).documentMessage.url || null }
-  if ((msg as any).stickerMessage)      return { content: '[Figurinha]',                                                    msgType: 'stickerMessage',     mediaUrl: null }
-  return { content: '[mídia]', msgType: 'unknown', mediaUrl: null }
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
@@ -78,31 +65,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const msgs: any[] = Array.isArray(msgsData) ? msgsData : msgsData.messages || []
       if (msgs.length === 0) continue
 
+      const phone = (chat.id as string).replace('@s.whatsapp.net', '')
       const rows = msgs
-        .filter((msg: any) => msg?.key?.id)
         .map((msg: any) => {
-          const remoteJid: string = msg.key.remoteJid || ''
-          if (!remoteJid || remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') return null
+          const remoteJid: string = msg.key?.remoteJid || ''
+          if (!msg.key?.id || !remoteJid || remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') return null
 
-          const { content, msgType, mediaUrl } = extractContent(msg.message || {})
+          const m = msg.message || {}
+          const content =
+            m.conversation ||
+            m.extendedTextMessage?.text ||
+            m.imageMessage?.caption ||
+            m.videoMessage?.caption ||
+            m.documentMessage?.fileName ||
+            (m.audioMessage || m.pttMessage ? '[Áudio]' : '') ||
+            (m.stickerMessage ? '[Figurinha]' : '') ||
+            '[mídia]'
+          const message_type =
+            m.imageMessage    ? 'imageMessage'    :
+            m.videoMessage    ? 'videoMessage'    :
+            m.audioMessage    ? 'audioMessage'    :
+            m.pttMessage      ? 'audioMessage'    :
+            m.documentMessage ? 'documentMessage' :
+            m.stickerMessage  ? 'stickerMessage'  :
+            'conversation'
+          const media_url =
+            m.imageMessage?.url    ||
+            m.videoMessage?.url    ||
+            m.audioMessage?.url    ||
+            m.pttMessage?.url      ||
+            m.documentMessage?.url ||
+            null
           const timestamp = msg.messageTimestamp
             ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
             : new Date().toISOString()
 
           return {
+            message_id:     msg.key.id,
             institution_id: institutionId,
-            instance_name: instanceName,
-            remote_jid: remoteJid,
-            message_id: msg.key.id,
-            from_me: msg.key.fromMe ?? false,
-            message_type: msgType,
+            instance_name:  instanceName,
+            remote_jid:     remoteJid,
+            from_me:        msg.key.fromMe ?? false,
+            message_type,
             content,
-            media_url: mediaUrl,
-            contact_name: msg.pushName || msg.notifyName || null,
+            media_url,
+            contact_name:   msg.pushName || msg.notifyName || (chat as any).name || phone,
             timestamp,
+            raw_data:       msg,
           }
         })
-        .filter(Boolean)
+        .filter((m: any) => m?.message_id)
 
       if (rows.length > 0) {
         const { error } = await supabase
