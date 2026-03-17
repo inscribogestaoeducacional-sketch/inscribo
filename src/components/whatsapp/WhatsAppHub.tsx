@@ -4,7 +4,7 @@ import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight,
   CheckCheck, Check, Zap, Settings, User, Users,
-  X, MoreVertical, Download
+  X, MoreVertical
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -13,8 +13,6 @@ import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConvers
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MsgType = 'text' | 'audio' | 'image' | 'video' | 'document' | 'sticker'
 type ConvStatus = 'waiting' | 'open' | 'closed'
-type ConvFilter = 'all' | 'unread' | 'waiting' | 'open' | 'closed'
-type ConvOwnerFilter = 'all' | 'mine' | 'unassigned'
 type RightPanelTab = 'details' | 'history'
 type MainView = 'conversations' | 'contacts'
 
@@ -72,22 +70,6 @@ const QUICK_REPLIES = [
   { id: 'dc',  label: 'Documentos',       text: 'Para a matrícula precisamos de: RG/CPF dos responsáveis, certidão de nascimento, histórico escolar e comprovante de residência. 📄' },
   { id: 'enc', label: 'Encerramento',     text: 'Foi um prazer te atender! Se surgir qualquer dúvida, estarei sempre aqui. Tenha um ótimo dia! 😊' },
 ]
-
-const FILTERS = [
-  { key: 'all',     label: 'Todas'          },
-  { key: 'unread',  label: 'Não lidas'      },
-  { key: 'waiting', label: 'Aguardando'     },
-  { key: 'open',    label: 'Em Atendimento' },
-  { key: 'closed',  label: 'Concluídas'     },
-]
-
-const FILTER_ACTIVE: Record<string, string> = {
-  all:     'bg-[#1A2B4A] text-white',
-  unread:  'bg-[#EDE9FE] text-[#7C3AED]',
-  waiting: 'bg-[#FEF3C7] text-[#D97706]',
-  open:    'bg-[#D1FAE5] text-[#059669]',
-  closed:  'bg-[#E2E8F0] text-[#64748B]',
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function safeStatusCfg(status: string) {
@@ -240,14 +222,6 @@ function getLastMsgPreview(lastMessage: string): { icon?: string; text: string }
   return { text: lastMessage }
 }
 
-// BUG 2: Proxy external media URLs through our backend to bypass CSP
-function getProxiedUrl(url?: string | null): string | undefined {
-  if (!url) return undefined
-  if (url.startsWith('data:') || url.startsWith('/')) return url
-  if (url.startsWith('blob:')) { console.warn('[getProxiedUrl] blob: URL ignorada — CSP'); return undefined }
-  return `/api/evolution/media-proxy?url=${encodeURIComponent(url)}`
-}
-
 // Compress images larger than 4MB before sending (uses FileReader data: URL — no blob: CSP issue)
 async function compressImage(file: File, maxMB = 4): Promise<File> {
   if (file.size < maxMB * 1024 * 1024) return file
@@ -350,42 +324,6 @@ function AudioPlayer({ duration = 15, mediaUrl, isDark = true }: { duration?: nu
           <button onClick={cycleSpeed} className={speedCls}>{speed}x</button>
         </div>
       </div>
-    </div>
-  )
-}
-
-// ─── ImagePreview (with loading + error states) ────────────────────────────────
-function ImagePreview({ src, isMe, onImageClick }: { src: string; isMe: boolean; onImageClick?: (url: string) => void }) {
-  const [loaded, setLoaded] = useState(false)
-  const [error, setError] = useState(false)
-
-  if (error) {
-    return (
-      <div
-        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-opacity hover:opacity-80 ${isMe ? 'bg-white/10' : 'bg-[#F1F5F9]'}`}
-        onClick={() => window.open(src, '_blank')}
-      >
-        <span className="text-lg">🖼️</span>
-        <span className={`text-xs ${isMe ? 'text-white/70' : 'text-[#64748B]'}`}>Imagem (clique para abrir)</span>
-      </div>
-    )
-  }
-
-  return (
-    <div className="relative max-w-[240px]">
-      {!loaded && (
-        <div className={`w-[240px] h-[160px] rounded-xl flex items-center justify-center ${isMe ? 'bg-white/10' : 'bg-[#E2E8F0]'}`}>
-          <div className="w-5 h-5 border-2 border-[#00A896] border-t-transparent rounded-full animate-spin" />
-        </div>
-      )}
-      <img
-        src={src}
-        alt="Imagem"
-        className={`max-w-[240px] rounded-xl cursor-pointer ${loaded ? 'block' : 'hidden'}`}
-        onLoad={() => setLoaded(true)}
-        onError={() => setError(true)}
-        onClick={() => onImageClick ? onImageClick(src) : window.open(src, '_blank')}
-      />
     </div>
   )
 }
@@ -509,7 +447,7 @@ function RenderMessageContent({ message, fromMe }: { message: any; fromMe: boole
 }
 
 // ─── MessageBubble ────────────────────────────────────────────────────────────
-function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (url: string) => void }) {
+function MessageBubble({ msg }: { msg: Message }) {
   const isMe = msg.from === 'me'
 
   const bubbleBase = isMe
@@ -606,6 +544,9 @@ export default function WhatsAppHub() {
 
   // Feature 1: Connection status
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'disconnected'>('unknown')
+
+  // Sync state
+  const [syncing, setSyncing] = useState(false)
 
   // Feature 4: ContactDrawer
   const [showDrawer, setShowDrawer] = useState(false)
@@ -868,13 +809,34 @@ export default function WhatsAppHub() {
     return () => clearInterval(iv)
   }, [instance, isConnected])
 
-  // Melhoria: sync recent messages when connection becomes active
+  // Sync 48h messages from Evolution API
+  const syncMessages = async () => {
+    if (!user?.institution_id || !instance || syncing) return
+    try {
+      setSyncing(true)
+      const res = await fetch('/api/evolution/sync-messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ institutionId: user.institution_id, instanceName: instance }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        console.log(`[sync] ${data.synced} mensagens sincronizadas de ${data.chats} conversas`)
+        await loadMessages()
+      }
+    } catch (err) {
+      console.warn('[sync] erro:', err)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  // Sync when connection becomes active (reconnect) or on first connect
   useEffect(() => {
     const prev = prevConnectionStatusRef.current
     prevConnectionStatusRef.current = connectionStatus
-    if (connectionStatus === 'connected' && prev !== 'connected' && prev !== 'unknown') {
-      // Just reconnected — reload messages to catch up
-      loadMessages().catch(() => {})
+    if (connectionStatus === 'connected' && prev !== 'connected') {
+      syncMessages()
     }
   }, [connectionStatus])
 
@@ -1626,7 +1588,7 @@ export default function WhatsAppHub() {
 
       <div className="flex flex-col overflow-hidden bg-[#F8FAFB] h-full">
 
-        {/* Feature 1: Connection warning banner */}
+        {/* Connection warning banner */}
         {connectionStatus === 'disconnected' && (
           <div className="flex-shrink-0 flex items-center gap-3 mx-4 my-2 px-4 py-2.5 rounded-lg" style={{ background: '#FEF3C7', border: '1px solid #F59E0B' }}>
             <span className="text-base">⚠️</span>
@@ -1634,6 +1596,13 @@ export default function WhatsAppHub() {
             <button onClick={() => navigate('/settings?tab=whatsapp')} className="text-xs font-semibold text-[#D97706] hover:text-[#B45309] underline whitespace-nowrap flex-shrink-0">
               Ir para Configurações
             </button>
+          </div>
+        )}
+        {/* Sync indicator */}
+        {syncing && (
+          <div className="flex-shrink-0 flex items-center justify-center gap-2 py-1.5" style={{ background: '#E6F7F5', borderBottom: '0.5px solid #D1FAE5' }}>
+            <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#00A896', animation: 'pulse 1s infinite' }} />
+            <span style={{ fontSize: 11, color: '#007A6E', fontWeight: 500 }}>Sincronizando mensagens...</span>
           </div>
         )}
 
