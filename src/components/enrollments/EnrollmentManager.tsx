@@ -55,14 +55,17 @@ function NewEnrollmentModal({ isOpen, onClose, onSave, editingEnrollment, leads 
   ]
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-3xl p-8 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="text-3xl font-bold text-gray-900">
-            {editingEnrollment ? 'Editar Matrícula' : 'Nova Matrícula'}
-          </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-full">
-            <X className="h-6 w-6" />
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,43,74,0.35)', backdropFilter: 'blur(3px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ background: '#FFFFFF', borderRadius: 20, padding: 28, width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto', border: '0.5px solid #D1FAE5', boxShadow: '0 20px 60px rgba(0,168,150,0.15)', animation: 'slideUp 0.2s ease' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#FFE4E6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <GraduationCap style={{ width: 16, height: 16, color: '#F43F5E' }} />
+            </div>
+            <h2 style={{ fontSize: 17, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{editingEnrollment ? 'Editar Matrícula' : 'Nova Matrícula'}</h2>
+          </div>
+          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: '0.5px solid #E2E8F0', background: '#F8FAFC', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8', fontSize: 18 }}>
+            <X style={{ width: 16, height: 16 }} />
           </button>
         </div>
 
@@ -396,78 +399,49 @@ export default function EnrollmentManager() {
   return (
     <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: 'var(--bg-page)' }}>
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Gestão de Matrículas</h1>
-            <p className="text-gray-600 text-lg">Controle completo de matrículas e alunos</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 12, background: '#FFE4E6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <GraduationCap style={{ width: 18, height: 18, color: '#F43F5E' }} />
           </div>
-          <button
-            onClick={() => setShowForm(true)}
-            className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-8 py-4 rounded-2xl hover:from-purple-700 hover:to-blue-700 transition-all flex items-center shadow-lg hover:shadow-xl transform hover:-translate-y-1"
-          >
-            <Plus className="w-5 h-5 mr-2" />
-            Nova Matrícula
-          </button>
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Matrículas</h1>
+            <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>Controle completo de matrículas e alunos</p>
+          </div>
         </div>
+        <button
+          onClick={() => setShowForm(true)}
+          style={{ background: '#00A896', color: 'white', border: 'none', padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,168,150,0.25)', transition: 'all 0.15s' }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#007A6E'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = '#00A896'; e.currentTarget.style.transform = 'translateY(0)' }}
+        >
+          <Plus style={{ width: 16, height: 16 }} />
+          Nova Matrícula
+        </button>
+      </div>
+      <div className="mb-0">
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total de Matrículas</p>
-                <p className="text-3xl font-bold text-purple-600">{stats.total}</p>
-                <div className="flex items-center mt-2">
-                  <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                  <span className="text-sm text-green-600">+{stats.monthlyGrowth.toFixed(1)}% este mês</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+          {[
+            { label: 'Total',       value: stats.total,                      sub: `+${stats.monthlyGrowth.toFixed(1)}% este mês`, iconBg: '#EDE9FE', iconColor: '#8B5CF6', Icon: GraduationCap },
+            { label: 'Receita',     value: formatCurrency(stats.totalValue),  sub: 'Acumulado',                                    iconBg: '#D1FAE5', iconColor: '#10B981', Icon: DollarSign    },
+            { label: 'Ticket Médio',value: formatCurrency(stats.averageValue),sub: 'Por matrícula',                                 iconBg: '#DBEAFE', iconColor: '#3B82F6', Icon: BarChart3     },
+            { label: 'Este Mês',    value: stats.thisMonthEnrollments,        sub: 'Novas matrículas',                              iconBg: '#FFE4E6', iconColor: '#F43F5E', Icon: Calendar      },
+          ].map(({ label, value, sub, iconBg, iconColor, Icon }) => (
+            <div key={label} style={{ background: '#FFFFFF', borderRadius: 16, border: '0.5px solid #E2E8F0', padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <div>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.05em', margin: '0 0 8px' }}>{label}</p>
+                  <p style={{ fontSize: 24, fontWeight: 700, color: '#1A2B4A', margin: '0 0 4px', lineHeight: 1.1 }}>{value}</p>
+                  <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>{sub}</p>
+                </div>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Icon style={{ width: 18, height: 18, color: iconColor }} />
                 </div>
               </div>
-              <GraduationCap className="h-12 w-12 text-purple-600 opacity-20" />
             </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Receita Total</p>
-                <p className="text-3xl font-bold text-green-600">{formatCurrency(stats.totalValue)}</p>
-                <div className="flex items-center mt-2">
-                  <DollarSign className="h-4 w-4 text-green-500 mr-1" />
-                  <span className="text-sm text-green-600">Acumulado</span>
-                </div>
-              </div>
-              <DollarSign className="h-12 w-12 text-green-600 opacity-20" />
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Ticket Médio</p>
-                <p className="text-3xl font-bold text-blue-600">{formatCurrency(stats.averageValue)}</p>
-                <div className="flex items-center mt-2">
-                  <BarChart3 className="h-4 w-4 text-blue-500 mr-1" />
-                  <span className="text-sm text-blue-600">Por matrícula</span>
-                </div>
-              </div>
-              <BarChart3 className="h-12 w-12 text-blue-600 opacity-20" />
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Este Mês</p>
-                <p className="text-3xl font-bold text-orange-600">{stats.thisMonthEnrollments}</p>
-                <div className="flex items-center mt-2">
-                  <Calendar className="h-4 w-4 text-orange-500 mr-1" />
-                  <span className="text-sm text-orange-600">Novas matrículas</span>
-                </div>
-              </div>
-              <Calendar className="h-12 w-12 text-orange-600 opacity-20" />
-            </div>
-          </div>
+          ))}
         </div>
 
         {/* Filters */}

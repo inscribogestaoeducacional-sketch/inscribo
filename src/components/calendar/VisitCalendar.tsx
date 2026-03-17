@@ -78,12 +78,17 @@ function NovaVisitaModal({ isOpen, onClose, onSave, defaultDate, leads }: NovaVi
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-base font-bold text-[#1e2d6b]">Nova Visita</h2>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded">
-            <X className="w-4 h-4" />
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,43,74,0.35)', backdropFilter: 'blur(3px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ background: '#FFFFFF', borderRadius: 20, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto', border: '0.5px solid #D1FAE5', boxShadow: '0 20px 60px rgba(0,168,150,0.15)', animation: 'slideUp 0.2s ease' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '0.5px solid #E6F7F5' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 8, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Calendar style={{ width: 15, height: 15, color: '#F59E0B' }} />
+            </div>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Nova Visita</h2>
+          </div>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: '0.5px solid #E2E8F0', background: '#F8FAFC', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8' }}>
+            <X style={{ width: 14, height: 14 }} />
           </button>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
@@ -337,59 +342,31 @@ export default function VisitCalendar() {
     <div style={{ display: 'flex', overflow: 'hidden', background: 'var(--bg-page)', height: '100%' }}>
 
       {/* ── Left column ──────────────────────────────────────────────────────── */}
-      <div className="w-80 flex-shrink-0 border-r border-gray-200 flex flex-col overflow-y-auto bg-gray-50">
+      <div className="w-80 flex-shrink-0 flex flex-col overflow-y-auto" style={{ borderRight: '0.5px solid #D1FAE5', background: '#F0FDFB' }}>
         <div className="p-4 space-y-3">
 
-          {/* KPI cards — Dashboard style */}
-          <div className="grid grid-cols-2 gap-2">
-            <div className="bg-white rounded-xl border-t-2 border-t-teal-500 border border-gray-200 shadow-sm p-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Hoje</p>
-                  <p className="text-2xl font-bold text-[#1e2d6b] leading-none">{statsToday}</p>
+          {/* KPI cards — Design System */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {[
+              { label: 'Hoje', value: statsToday, iconBg: '#FEF3C7', iconColor: '#F59E0B', Icon: Calendar },
+              { label: 'Semana', value: statsWeek, iconBg: '#E6F7F5', iconColor: '#00A896', Icon: Clock },
+              { label: 'Realizadas', value: statsCompleted, iconBg: '#D1FAE5', iconColor: '#10B981', Icon: Check },
+              { label: 'Taxa', value: `${statsRate}%`, iconBg: '#EDE9FE', iconColor: '#8B5CF6', Icon: TrendingUp },
+            ].map(({ label, value, iconBg, iconColor, Icon }) => (
+              <div key={label} style={{ background: '#FFFFFF', borderRadius: 12, border: '0.5px solid #E2E8F0', padding: '12px', boxShadow: '0 1px 3px rgba(0,168,150,0.04)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <p style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.05em', margin: 0 }}>{label}</p>
+                  <div style={{ width: 26, height: 26, borderRadius: 7, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Icon style={{ width: 13, height: 13, color: iconColor }} />
+                  </div>
                 </div>
-                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-                  <Calendar className="w-4 h-4 text-blue-500" />
-                </div>
+                <p style={{ fontSize: 22, fontWeight: 700, color: '#1A2B4A', margin: 0, lineHeight: 1 }}>{value}</p>
               </div>
-            </div>
-            <div className="bg-white rounded-xl border-t-2 border-t-teal-500 border border-gray-200 shadow-sm p-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Semana</p>
-                  <p className="text-2xl font-bold text-[#1e2d6b] leading-none">{statsWeek}</p>
-                </div>
-                <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center flex-shrink-0">
-                  <Clock className="w-4 h-4 text-teal-500" />
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border-t-2 border-t-teal-500 border border-gray-200 shadow-sm p-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Realizadas</p>
-                  <p className="text-2xl font-bold text-[#1e2d6b] leading-none">{statsCompleted}</p>
-                </div>
-                <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center flex-shrink-0">
-                  <Check className="w-4 h-4 text-green-500" />
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border-t-2 border-t-teal-500 border border-gray-200 shadow-sm p-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Taxa</p>
-                  <p className="text-2xl font-bold text-[#1e2d6b] leading-none">{statsRate}%</p>
-                </div>
-                <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
-                  <TrendingUp className="w-4 h-4 text-purple-500" />
-                </div>
-              </div>
-            </div>
+            ))}
           </div>
 
           {/* Calendar card */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+          <div style={{ background: '#FFFFFF', borderRadius: 16, border: '0.5px solid #E2E8F0', padding: 16, boxShadow: '0 1px 4px rgba(0,168,150,0.06)' }}>
             {/* Month navigation */}
             <div className="flex items-center justify-between mb-3">
               <button
@@ -428,15 +405,14 @@ export default function VisitCalendar() {
                   <div key={i} className="flex flex-col items-center justify-center py-0.5">
                     <button
                       onClick={() => setSelectedDate(date)}
-                      className={`h-8 w-8 rounded-full text-xs flex items-center justify-center transition-colors ${
-                        isSelected
-                          ? 'bg-teal-500 text-white font-semibold'
-                          : isToday && !dotColor
-                          ? 'bg-gray-100 text-gray-800 font-semibold'
-                          : isToday
-                          ? 'text-teal-600 font-bold'
-                          : 'text-gray-700 hover:bg-gray-100'
-                      }`}
+                      style={{
+                        width: 30, height: 30, borderRadius: '50%', fontSize: 12,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+                        background: isSelected ? '#00A896' : isToday ? '#E6F7F5' : 'transparent',
+                        color: isSelected ? '#FFFFFF' : isToday ? '#00A896' : '#1A2B4A',
+                        fontWeight: isSelected || isToday ? 700 : 400,
+                      }}
                     >
                       {date.getDate()}
                     </button>
@@ -465,16 +441,23 @@ export default function VisitCalendar() {
       {/* ── Right column ─────────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 bg-white border-b border-gray-200">
-          <div>
-            <h2 className="text-lg font-bold text-[#1e2d6b]">Visitas</h2>
-            <p className="text-xs text-gray-500 capitalize">{formatSelectedDate(selectedDate)}</p>
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', background: 'linear-gradient(135deg, #FFFFFF, #F0FDFB)', borderBottom: '0.5px solid #D1FAE5', boxShadow: '0 2px 8px rgba(0,168,150,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Calendar style={{ width: 16, height: 16, color: '#F59E0B' }} />
+            </div>
+            <div>
+              <h2 style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Visitas</h2>
+              <p style={{ fontSize: 11, color: '#94A3B8', margin: 0, textTransform: 'capitalize' }}>{formatSelectedDate(selectedDate)}</p>
+            </div>
           </div>
           <button
             onClick={() => setShowModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#14b8a6] text-white rounded-lg text-sm font-semibold hover:bg-[#0d9488] transition-colors"
+            style={{ background: '#00A896', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,168,150,0.25)', transition: 'all 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#007A6E' }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#00A896' }}
           >
-            <Plus className="w-4 h-4" />
+            <Plus style={{ width: 14, height: 14 }} />
             Nova Visita
           </button>
         </div>
@@ -492,7 +475,7 @@ export default function VisitCalendar() {
               <p className="text-xs text-gray-300 mb-4">Clique em "Nova Visita" para agendar</p>
               <button
                 onClick={() => setShowModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-[#14b8a6] text-white rounded-lg text-sm font-semibold hover:bg-[#0d9488] transition-colors"
+                style={{ background: '#00A896', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >
                 <Plus className="w-4 h-4" />
                 Agendar Visita

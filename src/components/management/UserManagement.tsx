@@ -109,15 +109,17 @@ function NewUserModal({ isOpen, onClose, onSave, editingUser }: NewUserModalProp
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-3xl p-8 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 flex items-center">
-            {editingUser ? <Edit className="w-8 h-8 mr-3 text-blue-600" /> : <Plus className="w-8 h-8 mr-3 text-green-600" />}
-            {editingUser ? 'Editar Usuário' : 'Novo Usuário'}
-          </h2>
-          <button 
-            onClick={onClose} 
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,43,74,0.35)', backdropFilter: 'blur(3px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ background: '#FFFFFF', borderRadius: 20, padding: 28, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto', border: '0.5px solid #D1FAE5', boxShadow: '0 20px 60px rgba(0,168,150,0.15)', animation: 'slideUp 0.2s ease' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Users style={{ width: 16, height: 16, color: '#64748B' }} />
+            </div>
+            <h2 style={{ fontSize: 17, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{editingUser ? 'Editar Usuário' : 'Novo Usuário'}</h2>
+          </div>
+          <button
+            onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-full"
           >
             <X className="w-6 h-6" />
@@ -673,65 +675,48 @@ export default function UserManagement() {
   return (
     <div style={{ padding: 24, minHeight: '100%', background: 'var(--bg-page)' }}>
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2 flex items-center">
-              <Users className="w-10 h-10 text-[#00D4C4] mr-4" />
-              Gestão de Usuários
-            </h1>
-            <p className="text-gray-600 text-lg">Controle de acesso e permissões do sistema</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 12, background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Users style={{ width: 18, height: 18, color: '#64748B' }} />
           </div>
-          <button
-            onClick={() => {
-              setEditingUser(null)
-              setShowModal(true)
-            }}
-            className="bg-gradient-to-r from-[#00D4C4] to-[#2D3E9E] text-white px-8 py-4 rounded-2xl hover:from-[#00B8AA] hover:to-[#252F7E] transition-all flex items-center shadow-lg hover:shadow-xl transform hover:-translate-y-1"
-          >
-            <Plus className="w-5 h-5 mr-2" />
-            Novo Usuário
-          </button>
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Usuários</h1>
+            <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>Controle de acesso e permissões do sistema</p>
+          </div>
         </div>
+        <button
+          onClick={() => { setEditingUser(null); setShowModal(true) }}
+          style={{ background: '#00A896', color: 'white', border: 'none', padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,168,150,0.25)', transition: 'all 0.15s' }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#007A6E'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = '#00A896'; e.currentTarget.style.transform = 'translateY(0)' }}
+        >
+          <Plus style={{ width: 16, height: 16 }} />
+          Novo Usuário
+        </button>
+      </div>
+      <div className="mb-8">
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total de Usuários</p>
-                <p className="text-3xl font-bold text-blue-600">{stats.total}</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+          {[
+            { label: 'Total', value: stats.total,    iconBg: '#DBEAFE', iconColor: '#3B82F6', Icon: Users      },
+            { label: 'Ativos',   value: stats.active,   iconBg: '#D1FAE5', iconColor: '#10B981', Icon: CheckCircle },
+            { label: 'Admins',   value: stats.admins,   iconBg: '#FFE4E6', iconColor: '#F43F5E', Icon: Shield     },
+            { label: 'Gestores', value: stats.managers, iconBg: '#EDE9FE', iconColor: '#8B5CF6', Icon: UserCheck  },
+          ].map(({ label, value, iconBg, iconColor, Icon }) => (
+            <div key={label} style={{ background: '#FFFFFF', borderRadius: 16, border: '0.5px solid #E2E8F0', padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <div>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.05em', margin: '0 0 8px' }}>{label}</p>
+                  <p style={{ fontSize: 28, fontWeight: 700, color: '#1A2B4A', margin: 0, lineHeight: 1.1 }}>{value}</p>
+                </div>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Icon style={{ width: 18, height: 18, color: iconColor }} />
+                </div>
               </div>
-              <Users className="h-8 w-8 text-blue-600" />
             </div>
-          </div>
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Usuários Ativos</p>
-                <p className="text-3xl font-bold text-green-600">{stats.active}</p>
-              </div>
-              <CheckCircle className="h-8 w-8 text-green-600" />
-            </div>
-          </div>
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Administradores</p>
-                <p className="text-3xl font-bold text-red-600">{stats.admins}</p>
-              </div>
-              <Shield className="h-8 w-8 text-red-600" />
-            </div>
-          </div>
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Gestores</p>
-                <p className="text-3xl font-bold text-purple-600">{stats.managers}</p>
-              </div>
-              <UserCheck className="h-8 w-8 text-purple-600" />
-            </div>
-          </div>
+          ))}
         </div>
 
         {/* Filters */}

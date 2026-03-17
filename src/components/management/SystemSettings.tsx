@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
   Save, Upload, Building, Mail, Phone, Globe, Palette,
-  MessageCircle, Wifi, WifiOff, RefreshCw, QrCode
+  MessageCircle, Wifi, WifiOff, RefreshCw, QrCode, Settings
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -533,13 +533,19 @@ export default function SystemSettings() {
 
   return (
     <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: 'var(--bg-page)' }}>
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-[#1e2d6b]">Configurações do Sistema</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Gerencie as configurações da instituição</p>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        <div style={{ width: 38, height: 38, borderRadius: 12, background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Settings style={{ width: 18, height: 18, color: '#64748B' }} />
+        </div>
+        <div>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Configurações</h1>
+          <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>Gerencie as configurações da instituição</p>
+        </div>
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 bg-white border border-gray-200 rounded-xl p-1 mb-6 w-fit">
+      <div style={{ display: 'flex', gap: 2, background: '#FFFFFF', border: '0.5px solid #E2E8F0', borderRadius: 12, padding: 4, width: 'fit-content' }}>
         {TABS.map(tab => {
           const Icon = tab.icon
           const active = activeTab === tab.id
@@ -547,13 +553,16 @@ export default function SystemSettings() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                active
-                  ? 'bg-[#1e2d6b] text-white shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-              }`}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '7px 14px', borderRadius: 8, fontSize: 13,
+                fontWeight: active ? 700 : 500,
+                color: active ? '#FFFFFF' : '#64748B',
+                background: active ? '#1A2B4A' : 'transparent',
+                border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+              }}
             >
-              <Icon className="h-4 w-4" />
+              <Icon style={{ width: 14, height: 14 }} />
               {tab.label}
             </button>
           )

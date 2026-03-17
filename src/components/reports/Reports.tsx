@@ -184,18 +184,25 @@ export default function Reports() {
   }
 
   return (
-    <div className="p-8 bg-gradient-to-br from-blue-50 via-white to-purple-50 min-h-screen">
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: 'var(--bg-page)' }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Relatórios Gerenciais</h1>
-          <p className="text-gray-600 text-lg">Análises detalhadas e insights do negócio</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 12, background: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <BarChart3 style={{ width: 18, height: 18, color: '#3B82F6' }} />
+          </div>
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Relatórios</h1>
+            <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>Análises detalhadas e insights do negócio</p>
+          </div>
         </div>
         <button
           onClick={handleGenerateReport}
-          className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-2xl hover:from-blue-700 hover:to-purple-700 transition-all flex items-center shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+          style={{ background: '#00A896', color: 'white', border: 'none', padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,168,150,0.25)', transition: 'all 0.15s' }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#007A6E'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = '#00A896'; e.currentTarget.style.transform = 'translateY(0)' }}
         >
-          <Download className="w-5 h-5 mr-2" />
+          <Download style={{ width: 16, height: 16 }} />
           Exportar PDF
         </button>
       </div>
