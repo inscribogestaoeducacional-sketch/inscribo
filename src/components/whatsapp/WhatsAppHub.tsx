@@ -447,23 +447,38 @@ function RenderMessageContent({ message, fromMe }: { message: any; fromMe: boole
 }
 
 // ─── MessageBubble ────────────────────────────────────────────────────────────
-function MessageBubble({ msg }: { msg: Message }) {
+function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (url: string) => void }) {
   const isMe = msg.from === 'me'
 
-  const bubbleBase = isMe
-    ? 'bg-[#1A2B4A] text-white rounded-xl rounded-tr-none'
-    : 'bg-white border border-[#E2E8F0] text-[#1A2B4A] rounded-xl rounded-tl-none shadow-sm'
-
   return (
-    <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-1`}>
-      <div className={`max-w-[72%] px-3 py-2 ${bubbleBase}`}>
+    <div style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', marginBottom: 4 }}>
+      <div style={{
+        maxWidth: '72%', padding: '8px 12px',
+        background: isMe ? '#1A2B4A' : '#FFFFFF',
+        color: isMe ? '#fff' : '#1A2B4A',
+        borderRadius: isMe ? '14px 2px 14px 14px' : '2px 14px 14px 14px',
+        border: isMe ? 'none' : '1px solid #D1FAE5',
+        boxShadow: isMe ? 'none' : '0 1px 3px rgba(0,0,0,0.05)',
+      }}>
         <RenderMessageContent message={msg} fromMe={isMe} />
-        <div className={`flex items-center gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
-          <span className={`text-[10px] ${isMe ? 'text-white/60' : 'text-[#94A3B8]'}`}>{fmtTime(msg.ts)}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
+          <span style={{ fontSize: 10, color: isMe ? 'rgba(255,255,255,0.5)' : '#94A3B8' }}>{fmtTime(msg.ts)}</span>
           {isMe && (
-            msg.status === 'read'      ? <CheckCheck className="w-3 h-3 text-[#00A896]" /> :
-            msg.status === 'delivered' ? <CheckCheck className="w-3 h-3 text-white/60" /> :
-            <Check className="w-3 h-3 text-white/60" />
+            msg.status === 'read' ? (
+              <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
+                <path d="M1 5L4 8L9 2" stroke="#0DD3BF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M5 5L8 8L13 2" stroke="#0DD3BF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            ) : msg.status === 'delivered' ? (
+              <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
+                <path d="M1 5L4 8L9 2" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M5 5L8 8L13 2" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            ) : (
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M1 5L4 8L9 2" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )
           )}
         </div>
       </div>
@@ -1416,7 +1431,7 @@ export default function WhatsAppHub() {
   // ── Loading ──
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full bg-[#F8FAFB]">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#F0FDFB' }}>
         <div className="animate-spin rounded-full h-8 w-8 border-4 border-[#00A896] border-t-transparent" />
       </div>
     )
@@ -1425,20 +1440,22 @@ export default function WhatsAppHub() {
   // ── Not connected ──
   if (!isConnected) {
     return (
-      <div className="flex items-center justify-center h-full bg-[#F8FAFB]">
-        <div className="text-center max-w-sm">
-          <div className="w-20 h-20 bg-white border border-[#E2E8F0] rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
-            <MessageCircle className="w-10 h-10 text-[#94A3B8]" />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#F0FDFB' }}>
+        <div style={{ textAlign: 'center', maxWidth: 360 }}>
+          <div style={{ width: 80, height: 80, background: '#E6F7F5', border: '2px solid #D1FAE5', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+            <MessageCircle style={{ width: 40, height: 40, color: '#00A896' }} />
           </div>
-          <h2 className="text-base font-bold text-[#1A2B4A] mb-2">WhatsApp não conectado</h2>
-          <p className="text-sm text-[#64748B] mb-6 leading-relaxed">
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', marginBottom: 8 }}>WhatsApp não conectado</h2>
+          <p style={{ fontSize: 14, color: '#64748B', marginBottom: 24, lineHeight: 1.6 }}>
             Conecte seu WhatsApp nas Configurações para começar a atender.
           </p>
           <button
             onClick={() => navigate('/settings')}
-            className="flex items-center gap-2 px-5 py-2.5 bg-[#00A896] text-white text-sm font-semibold rounded-lg hover:bg-[#008f81] transition-all mx-auto"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#00A896', color: '#fff', fontSize: 14, fontWeight: 600, borderRadius: 10, border: 'none', cursor: 'pointer' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#007A6E')}
+            onMouseLeave={e => (e.currentTarget.style.background = '#00A896')}
           >
-            <Settings className="w-4 h-4" />
+            <Settings style={{ width: 16, height: 16 }} />
             Ir para Configurações
           </button>
         </div>
@@ -1586,27 +1603,27 @@ export default function WhatsAppHub() {
         </div>
       )}
 
-      <div className="flex flex-col overflow-hidden bg-[#F8FAFB] h-full">
+      <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#F0FDFB', height: '100%' }}>
 
         {/* Connection warning banner */}
         {connectionStatus === 'disconnected' && (
-          <div className="flex-shrink-0 flex items-center gap-3 mx-4 my-2 px-4 py-2.5 rounded-lg" style={{ background: '#FEF3C7', border: '1px solid #F59E0B' }}>
-            <span className="text-base">⚠️</span>
-            <span className="text-sm text-[#92400E] flex-1">Conexão com WhatsApp instável ou desconectada. Verifique em Configurações → WhatsApp.</span>
-            <button onClick={() => navigate('/settings?tab=whatsapp')} className="text-xs font-semibold text-[#D97706] hover:text-[#B45309] underline whitespace-nowrap flex-shrink-0">
+          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12, margin: '8px 16px', padding: '10px 16px', borderRadius: 10, background: '#FEF3C7', border: '1px solid #F59E0B' }}>
+            <span style={{ fontSize: 16 }}>⚠️</span>
+            <span style={{ fontSize: 13, color: '#92400E', flex: 1 }}>Conexão com WhatsApp instável ou desconectada. Verifique em Configurações → WhatsApp.</span>
+            <button onClick={() => navigate('/settings?tab=whatsapp')} style={{ fontSize: 12, fontWeight: 600, color: '#D97706', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap', flexShrink: 0 }}>
               Ir para Configurações
             </button>
           </div>
         )}
         {/* Sync indicator */}
         {syncing && (
-          <div className="flex-shrink-0 flex items-center justify-center gap-2 py-1.5" style={{ background: '#E6F7F5', borderBottom: '0.5px solid #D1FAE5' }}>
+          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '6px 0', background: '#E6F7F5', borderBottom: '1px solid #D1FAE5' }}>
             <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#00A896', animation: 'pulse 1s infinite' }} />
             <span style={{ fontSize: 11, color: '#007A6E', fontWeight: 500 }}>Sincronizando mensagens...</span>
           </div>
         )}
 
-        <div className="flex flex-1 overflow-hidden">
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
         {/* Hidden file input for attachments */}
         <input
@@ -1618,60 +1635,68 @@ export default function WhatsAppHub() {
         />
 
         {/* ── Col 1: Conversation List ──────────────────────────────────────────── */}
-        <div className="w-[320px] flex-shrink-0 flex flex-col bg-white border-r border-[#E2E8F0]">
+        <div style={{ width: 320, flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#FFFFFF', borderRight: '1px solid #D1FAE5', overflow: 'hidden' }}>
 
           {/* Header */}
-          <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 bg-white border-b border-[#E2E8F0]">
-            <div className="flex items-center gap-2">
-              <MessageCircle className="w-5 h-5 text-[#00A896]" />
-              <span className="text-base font-bold text-[#1A2B4A]">WhatsApp</span>
+          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#FFFFFF', borderBottom: '1px solid #D1FAE5' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <MessageCircle style={{ width: 18, height: 18, color: '#00A896' }} />
+              </div>
+              <span style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>WhatsApp</span>
               {totalUnread > 0 && (
-                <span className="bg-[#00A896] text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                <span style={{ background: '#00A896', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, minWidth: 20, textAlign: 'center' }}>
                   {totalUnread}
                 </span>
               )}
             </div>
             <button
-              className="p-2 rounded-lg hover:bg-[#F1F5F9] text-[#64748B] hover:text-[#1A2B4A] transition-colors"
+              style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00A896', border: 'none', cursor: 'pointer', color: '#fff', transition: 'background 0.15s' }}
               title="Nova conversa"
               onClick={() => setShowNewConvModal(true)}
+              onMouseEnter={e => (e.currentTarget.style.background = '#007A6E')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#00A896')}
             >
-              <Plus className="w-4 h-4" />
+              <Plus style={{ width: 16, height: 16 }} />
             </button>
           </div>
 
           {/* Search */}
-          <div className="px-3 py-2 flex-shrink-0 bg-white border-b border-[#E2E8F0]">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
+          <div style={{ padding: '8px 12px', flexShrink: 0, background: '#FFFFFF', borderBottom: '1px solid #D1FAE5' }}>
+            <div style={{ position: 'relative' }}>
+              <Search style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', width: 15, height: 15, color: '#94A3B8' }} />
               <input
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar nome ou número..."
-                className="w-full pl-9 pr-3 py-2 text-sm bg-[#F1F5F9] rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#00A896] border-0"
+                style={{ width: '100%', paddingLeft: 34, paddingRight: 12, paddingTop: 8, paddingBottom: 8, fontSize: 13, background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 10, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}
+                onFocus={e => (e.currentTarget.style.borderColor = '#00A896')}
+                onBlur={e => (e.currentTarget.style.borderColor = '#D1FAE5')}
               />
             </div>
           </div>
 
           {/* Main view tabs: Conversas | Contatos */}
-          <div className="flex-shrink-0 flex border-b border-[#E2E8F0] bg-white">
+          <div style={{ flexShrink: 0, display: 'flex', background: '#FFFFFF', borderBottom: '1px solid #D1FAE5' }}>
             {([
               { key: 'conversations', label: 'Conversas' },
               { key: 'contacts',      label: 'Contatos'  },
             ] as { key: MainView; label: string }[]).map(t => (
               <button key={t.key} onClick={() => setMainView(t.key)}
-                className={`flex-1 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                  mainView === t.key
-                    ? 'border-[#00A896] text-[#1A2B4A] font-semibold'
-                    : 'border-transparent text-[#64748B] hover:text-[#1A2B4A]'
-                }`}
+                style={{
+                  flex: 1, padding: '10px 0', fontSize: 13, fontWeight: mainView === t.key ? 700 : 500,
+                  color: mainView === t.key ? '#1A2B4A' : '#64748B',
+                  borderBottom: mainView === t.key ? '2px solid #00A896' : '2px solid transparent',
+                  background: 'none', border: 'none',
+                  cursor: 'pointer', transition: 'all 0.15s',
+                }}
               >{t.label}</button>
             ))}
           </div>
 
           {/* Filters — Botconversa style */}
-          <div style={{ borderBottom: '1px solid #E2E8F0' }}>
+          <div style={{ borderBottom: '1px solid #D1FAE5' }}>
             {/* Row 1: Tab tabs with counters */}
             <div style={{ display: 'flex', padding: '0 12px', gap: 0 }}>
               {([
@@ -1690,8 +1715,8 @@ export default function WhatsAppHub() {
                   {tab.label}
                   {tab.count > 0 && (
                     <span style={{
-                      background: tabFilter === tab.key ? '#00A896' : '#E2E8F0',
-                      color: tabFilter === tab.key ? '#fff' : '#64748B',
+                      background: tabFilter === tab.key ? '#00A896' : '#D1FAE5',
+                      color: tabFilter === tab.key ? '#fff' : '#007A6E',
                       borderRadius: 9999, padding: '1px 6px', fontSize: 10, fontWeight: 700,
                     }}>{tab.count}</span>
                   )}
@@ -1699,7 +1724,7 @@ export default function WhatsAppHub() {
               ))}
             </div>
             {/* Row 2: Read + assign sub-filters */}
-            <div style={{ display: 'flex', padding: '8px 12px', gap: 6, alignItems: 'center' }}>
+            <div style={{ display: 'flex', padding: '8px 12px', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               {([
                 { key: 'all',    label: 'Tudo',     count: 0        },
                 { key: 'read',   label: 'Lida',     count: 0        },
@@ -1708,7 +1733,7 @@ export default function WhatsAppHub() {
                 <button key={f.key} onClick={() => setReadFilter(f.key)} style={{
                   padding: '3px 10px', borderRadius: 9999, fontSize: 12, border: 'none',
                   cursor: 'pointer', fontWeight: readFilter === f.key ? 600 : 400,
-                  background: readFilter === f.key ? '#EDE9FE' : '#F1F5F9',
+                  background: readFilter === f.key ? '#EDE9FE' : '#F0FDFB',
                   color: readFilter === f.key ? '#7C3AED' : '#64748B',
                   display: 'flex', alignItems: 'center', gap: 4, transition: 'all 0.15s',
                 }}>
@@ -1718,7 +1743,7 @@ export default function WhatsAppHub() {
                   )}
                 </button>
               ))}
-              <div style={{ width: 1, height: 16, background: '#E2E8F0', margin: '0 2px' }} />
+              <div style={{ width: 1, height: 16, background: '#D1FAE5', margin: '0 2px' }} />
               {([
                 { key: 'all',  label: 'Todos'    },
                 { key: 'mine', label: 'Meus'     },
@@ -1727,7 +1752,7 @@ export default function WhatsAppHub() {
                 <button key={f.key} onClick={() => setAssignFilter(f.key)} style={{
                   padding: '3px 10px', borderRadius: 9999, fontSize: 12, border: 'none',
                   cursor: 'pointer', fontWeight: assignFilter === f.key ? 600 : 400,
-                  background: assignFilter === f.key ? '#1A2B4A' : '#F1F5F9',
+                  background: assignFilter === f.key ? '#1A2B4A' : '#F0FDFB',
                   color: assignFilter === f.key ? '#fff' : '#64748B',
                   transition: 'all 0.15s',
                 }}>
@@ -1738,101 +1763,82 @@ export default function WhatsAppHub() {
           </div>
 
           {/* Conversation list */}
-          <div className="flex-1 overflow-y-auto">
+          <div style={{ flex: 1, overflowY: 'auto' }}>
             {filteredConvs.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-32 text-center px-4">
-                <p className="text-xs text-[#64748B]">Nenhuma conversa encontrada</p>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 120, textAlign: 'center', padding: '0 16px' }}>
+                <p style={{ fontSize: 12, color: '#94A3B8' }}>Nenhuma conversa encontrada</p>
               </div>
             ) : (
               filteredConvs.map(conv => {
                 const isActive = conv.id === activeId
-                const statusDot = safeStatusCfg(conv.status).dot
                 const preview = getLastMsgPreview(conv.lastMessage)
+                // Inline status colors
+                const statusColors: Record<string, { bg: string; dot: string; text: string }> = {
+                  waiting: { bg: '#FEF3C7', dot: '#D97706', text: '#D97706' },
+                  open:    { bg: '#D1FAE5', dot: '#059669', text: '#059669' },
+                  closed:  { bg: '#E2E8F0', dot: '#94A3B8', text: '#64748B' },
+                }
+                const sc = statusColors[conv.status] ?? statusColors['waiting']
                 return (
                   <button
                     key={conv.id}
                     onClick={() => setActiveId(conv.id)}
-                    className={`group relative w-full text-left flex items-center gap-3 transition-all duration-150 border-b border-[#E2E8F0] border-l-[3px] py-3 pr-3 ${
-                      isActive
-                        ? 'bg-[#E6F7F5] border-l-[#00A896] pl-[9px]'
-                        : 'border-l-transparent pl-3 hover:bg-[#F8FAFB]'
-                    }`}
+                    className="group"
+                    style={{
+                      position: 'relative', width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center',
+                      gap: 10, transition: 'background 0.15s', borderBottom: '1px solid #F0FDFB',
+                      borderLeft: isActive ? '3px solid #00A896' : '3px solid transparent',
+                      background: isActive ? '#E6F7F5' : 'transparent',
+                      padding: '10px 12px 10px', cursor: 'pointer', border: 'none',
+                      paddingLeft: isActive ? 9 : 12,
+                    }}
+                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#F8FAFC' }}
+                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                   >
-                    {/* Avatar with profile picture support */}
-                    <div className="relative flex-shrink-0">
-                      <div className={`w-10 h-10 rounded-full ${conv.avatarColor} text-white text-sm font-bold flex items-center justify-center overflow-hidden`}>
+                    {/* Avatar */}
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                      <div className={conv.avatarColor} style={{ width: 42, height: 42, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', fontSize: 15, fontWeight: 700, color: '#fff' }}>
                         {conv.profile_picture_url ? (
-                          <img src={conv.profile_picture_url} alt={conv.name} className="w-full h-full object-cover" />
+                          <img src={conv.profile_picture_url} alt={conv.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         ) : conv.isGroup ? (
-                          <Users className="w-5 h-5 text-white/90" />
+                          <Users style={{ width: 20, height: 20, color: 'rgba(255,255,255,0.9)' }} />
                         ) : (
-                          conv.name.charAt(0).toUpperCase()
+                          getInitials(conv.name)
                         )}
                       </div>
                       {conv.online && (
-                        <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
+                        <div style={{ position: 'absolute', bottom: 0, right: 0, width: 10, height: 10, background: '#22C55E', borderRadius: '50%', border: '2px solid #fff' }} />
                       )}
                       {conv.assigned_user_name && (
-                        <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-[#00A896] text-white rounded-full flex items-center justify-center text-[8px] font-bold border border-white">
+                        <div style={{ position: 'absolute', bottom: -2, right: -2, width: 16, height: 16, background: '#00A896', color: '#fff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, border: '1.5px solid #fff' }}>
                           {getInitials(conv.assigned_user_name)}
                         </div>
                       )}
                     </div>
                     {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <span className="text-sm font-semibold text-[#1A2B4A] truncate">{conv.name}</span>
-                        <span className="text-[11px] text-[#94A3B8] flex-shrink-0 group-hover:hidden">{fmtConvTime(conv.lastTime)}</span>
-                        {/* Hover actions */}
-                        <div className="hidden group-hover:flex items-center gap-1 flex-shrink-0">
-                          {conv.unreadCount > 0 && (
-                            <button
-                              onClick={async e => {
-                                e.stopPropagation()
-                                setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, unreadCount: 0 } : c))
-                                if (user?.institution_id) await DatabaseService.resetConversationUnread(user.institution_id, conv.id).catch(() => {})
-                              }}
-                              title="Marcar como lida"
-                              className="w-6 h-6 flex items-center justify-center rounded-full bg-white border border-[#E2E8F0] hover:border-[#00A896] hover:text-[#00A896] text-[#64748B] transition-colors shadow-sm"
-                            >
-                              <CheckCheck className="w-3 h-3" />
-                            </button>
-                          )}
-                          <button
-                            onClick={async e => {
-                              e.stopPropagation()
-                              if (!user?.institution_id) return
-                              await DatabaseService.closeConversation(user.institution_id, conv.id)
-                              setConversations(prev => prev.map(c => c.id === conv.id
-                                ? { ...c, status: 'closed' as ConvStatus, assigned_user_id: undefined, assigned_user_name: undefined }
-                                : c
-                              ))
-                            }}
-                            title="Concluir conversa"
-                            className="w-6 h-6 flex items-center justify-center rounded-full bg-white border border-[#E2E8F0] hover:border-red-300 hover:text-red-500 text-[#64748B] transition-colors shadow-sm"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, marginBottom: 2 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{conv.name}</span>
+                        <span style={{ fontSize: 11, color: '#94A3B8', flexShrink: 0 }}>{fmtConvTime(conv.lastTime)}</span>
                       </div>
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-[13px] text-[#64748B] truncate flex items-center gap-1">
-                          {preview.icon && <span className="flex-shrink-0 text-[12px]">{preview.icon}</span>}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                        <span style={{ fontSize: 12, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          {preview.icon && <span style={{ flexShrink: 0, fontSize: 12 }}>{preview.icon}</span>}
                           {preview.text}
                         </span>
                         {conv.unreadCount > 0 && (
-                          <span className="flex-shrink-0 bg-[#00A896] text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                          <span style={{ flexShrink: 0, background: '#00A896', color: '#fff', fontSize: 11, fontWeight: 700, width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             {conv.unreadCount}
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1 mt-1 flex-wrap">
-                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium inline-flex items-center gap-1 ${safeStatusCfg(conv.status).badge}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 9999, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4, background: sc.bg, color: sc.text }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: sc.dot, display: 'inline-block' }} />
                           {safeStatusCfg(conv.status).label}
                         </span>
                         {conv.isGroup && (
-                          <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-[#EDE9FE] text-[#7C3AED]">
+                          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 9999, fontWeight: 500, background: '#EDE9FE', color: '#7C3AED' }}>
                             Grupo
                           </span>
                         )}
@@ -1846,12 +1852,12 @@ export default function WhatsAppHub() {
         </div>
 
         {/* ── Col 2: Chat ───────────────────────────────────────────────────────── */}
-        <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#F8FAFB]">
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#FAFFFE' }}>
 
           {/* ── Contacts table view ── */}
           {mainView === 'contacts' && (
-            <div className="flex-1 overflow-y-auto bg-[#F8FAFB] p-6">
-              <h2 className="text-sm font-bold text-[#1A2B4A] mb-4">Contatos</h2>
+            <div style={{ flex: 1, overflowY: 'auto', background: '#F0FDFB', padding: 24 }}>
+              <h2 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 16 }}>Contatos</h2>
 
               {/* Feature 5: Filter bar */}
               <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -1978,88 +1984,105 @@ export default function WhatsAppHub() {
 
           {/* Chat + composer — hidden in contacts view */}
           {mainView !== 'contacts' && activeConv && (
-            <div className="flex-shrink-0 relative bg-white border-b border-[#E2E8F0]" style={{ minHeight: '64px' }}>
+            <div style={{ flexShrink: 0, position: 'relative', background: '#FFFFFF', borderBottom: '1px solid #D1FAE5', minHeight: 64 }}>
               {/* Header row */}
-              <div className="flex items-center gap-3 px-4 py-3 h-16">
-                <div className="relative">
-                  <div className={`w-10 h-10 rounded-full ${activeConv.avatarColor} text-white text-sm font-bold flex items-center justify-center overflow-hidden`}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', height: 64 }}>
+                <div style={{ position: 'relative' }}>
+                  <div className={activeConv.avatarColor} style={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', fontSize: 14, fontWeight: 700, color: '#fff' }}>
                     {activeConv.profile_picture_url ? (
-                      <img src={activeConv.profile_picture_url} alt={activeConv.name} className="w-full h-full object-cover" />
+                      <img src={activeConv.profile_picture_url} alt={activeConv.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : activeConv.isGroup ? (
-                      <Users className="w-5 h-5 text-white/90" />
+                      <Users style={{ width: 20, height: 20, color: 'rgba(255,255,255,0.9)' }} />
                     ) : (
-                      activeConv.name.charAt(0)
+                      getInitials(activeConv.name)
                     )}
                   </div>
                   {activeConv.online && (
-                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
+                    <div style={{ position: 'absolute', bottom: 0, right: 0, width: 10, height: 10, background: '#22C55E', borderRadius: '50%', border: '2px solid #fff' }} />
                   )}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-[#1A2B4A]">{activeConv.name}</p>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-xs text-[#64748B]">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{activeConv.name}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <p style={{ fontSize: 12, color: '#64748B', margin: 0 }}>
                       {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
-                      {activeConv.online && <span className="ml-1.5 text-[#00A896] font-medium">• online</span>}
+                      {activeConv.online && <span style={{ marginLeft: 6, color: '#00A896', fontWeight: 500 }}>• online</span>}
                     </p>
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium inline-flex items-center gap-1 ${safeStatusCfg(activeConv.status).badge}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${safeStatusCfg(activeConv.status).dot}`} />
-                      {safeStatusCfg(activeConv.status).label}
-                    </span>
+                    {(() => {
+                      const statusColors: Record<string, { bg: string; dot: string; text: string }> = {
+                        waiting: { bg: '#FEF3C7', dot: '#D97706', text: '#D97706' },
+                        open:    { bg: '#D1FAE5', dot: '#059669', text: '#059669' },
+                        closed:  { bg: '#E2E8F0', dot: '#94A3B8', text: '#64748B' },
+                      }
+                      const sc = statusColors[activeConv.status] ?? statusColors['waiting']
+                      return (
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 9999, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4, background: sc.bg, color: sc.text }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: sc.dot, display: 'inline-block' }} />
+                          {safeStatusCfg(activeConv.status).label}
+                        </span>
+                      )
+                    })()}
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => { setShowMsgSearch(v => !v); if (showMsgSearch) setMsgSearchText('') }}
-                    title="Buscar mensagens"
-                    className={`p-2 rounded-lg transition-colors ${showMsgSearch ? 'bg-[#E6F7F5] text-[#00A896]' : 'hover:bg-[#F1F5F9] text-[#64748B] hover:text-[#1A2B4A]'}`}
-                  >
-                    <Search className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setShowContactInfo(v => !v)}
-                    title="Informações do contato"
-                    className={`p-2 rounded-lg transition-colors ${showContactInfo ? 'bg-[#E6F7F5] text-[#00A896]' : 'hover:bg-[#F1F5F9] text-[#64748B] hover:text-[#1A2B4A]'}`}
-                  >
-                    <Info className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setShowMoreMenu(v => !v)}
-                    title="Mais opções"
-                    className="p-2 rounded-lg hover:bg-[#F1F5F9] text-[#64748B] hover:text-[#1A2B4A] transition-colors"
-                  >
-                    <MoreVertical className="w-4 h-4" />
-                  </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {[
+                    { icon: Search, key: 'search', active: showMsgSearch, onClick: () => { setShowMsgSearch(v => !v); if (showMsgSearch) setMsgSearchText('') }, title: 'Buscar mensagens' },
+                    { icon: Info,   key: 'info',   active: showContactInfo, onClick: () => setShowContactInfo(v => !v), title: 'Informações do contato' },
+                    { icon: MoreVertical, key: 'more', active: showMoreMenu, onClick: () => setShowMoreMenu(v => !v), title: 'Mais opções' },
+                  ].map(btn => {
+                    const IconComp = btn.icon
+                    return (
+                      <button key={btn.key} onClick={btn.onClick} title={btn.title}
+                        style={{
+                          width: 36, height: 36, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: btn.active ? '#E6F7F5' : '#F0FDFB', color: btn.active ? '#00A896' : '#64748B',
+                          border: 'none', cursor: 'pointer', transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={e => { if (!btn.active) e.currentTarget.style.background = '#D1FAE5' }}
+                        onMouseLeave={e => { if (!btn.active) e.currentTarget.style.background = '#F0FDFB' }}
+                      >
+                        <IconComp style={{ width: 16, height: 16 }} />
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
               {/* Message search bar */}
               {showMsgSearch && (
-                <div className="flex-shrink-0 px-4 py-2 bg-white border-t border-[#E2E8F0] flex items-center gap-2">
-                  <Search className="w-3.5 h-3.5 text-[#94A3B8] flex-shrink-0" />
+                <div style={{ flexShrink: 0, padding: '8px 16px', background: '#FFFFFF', borderTop: '1px solid #D1FAE5', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Search style={{ width: 14, height: 14, color: '#94A3B8', flexShrink: 0 }} />
                   <input autoFocus value={msgSearchText} onChange={e => setMsgSearchText(e.target.value)}
                     placeholder="Buscar nas mensagens..."
-                    className="flex-1 text-sm bg-transparent outline-none text-[#1A2B4A] placeholder-[#94A3B8]"
+                    style={{ flex: 1, fontSize: 13, background: 'transparent', outline: 'none', border: 'none', color: '#1A2B4A' }}
                   />
                   <button onClick={() => { setShowMsgSearch(false); setMsgSearchText('') }}
-                    className="text-[#64748B] hover:text-[#1A2B4A]"><X className="w-3.5 h-3.5" /></button>
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
+                    <X style={{ width: 14, height: 14 }} />
+                  </button>
                 </div>
               )}
 
               {/* More menu dropdown */}
               {showMoreMenu && (
-                <div ref={moreMenuRef} className="absolute right-4 top-14 z-30 bg-white rounded-xl shadow-lg border border-[#E2E8F0] py-1 min-w-[160px]">
+                <div ref={moreMenuRef} style={{ position: 'absolute', right: 16, top: 56, zIndex: 30, background: '#FFFFFF', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', border: '1px solid #D1FAE5', paddingTop: 4, paddingBottom: 4, minWidth: 160 }}>
                   <button onClick={() => { setConversations(prev => prev.map(c => c.id === activeId ? {...c, messages: []} : c)); setShowMoreMenu(false) }}
-                    className="w-full text-left px-4 py-2.5 text-sm text-[#1A2B4A] hover:bg-[#F8FAFB] transition-colors">
+                    style={{ width: '100%', textAlign: 'left', padding: '10px 16px', fontSize: 13, color: '#1A2B4A', background: 'none', border: 'none', cursor: 'pointer' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFC')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                     Limpar conversa
                   </button>
                   <button onClick={() => { setShowMoreMenu(false) }}
-                    className="w-full text-left px-4 py-2.5 text-sm text-[#1A2B4A] hover:bg-[#F8FAFB] transition-colors">
+                    style={{ width: '100%', textAlign: 'left', padding: '10px 16px', fontSize: 13, color: '#1A2B4A', background: 'none', border: 'none', cursor: 'pointer' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFC')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                     Bloquear contato
                   </button>
                   {activeConv?.lead_id && (
                     <button onClick={() => { navigate(`/leads?highlight=${activeConv.lead_id}`); setShowMoreMenu(false) }}
-                      className="w-full text-left px-4 py-2.5 text-sm text-[#1A2B4A] hover:bg-[#F8FAFB] transition-colors">
+                      style={{ width: '100%', textAlign: 'left', padding: '10px 16px', fontSize: 13, color: '#1A2B4A', background: 'none', border: 'none', cursor: 'pointer' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFC')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                       Ver perfil no CRM
                     </button>
                   )}
@@ -2070,28 +2093,31 @@ export default function WhatsAppHub() {
 
           {/* Messages area + Composer — hidden in contacts view */}
           {mainView !== 'contacts' && <>
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-0.5">
+          <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 2 }}>
             {!activeConv && conversations.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-center">
-                <div className="w-16 h-16 bg-white border border-[#E2E8F0] rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
-                  <MessageCircle className="w-8 h-8 text-[#94A3B8] animate-pulse" />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
+                <div style={{ width: 72, height: 72, background: '#E6F7F5', border: '2px solid #B2E8E2', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                  <MessageCircle style={{ width: 36, height: 36, color: '#00A896' }} />
                 </div>
-                <p className="text-sm font-semibold text-[#1A2B4A] mb-1">Aguardando mensagens</p>
-                <p className="text-sm text-[#64748B] leading-relaxed max-w-xs">
+                <p style={{ fontSize: 15, fontWeight: 600, color: '#1A2B4A', margin: '0 0 6px' }}>Aguardando mensagens</p>
+                <p style={{ fontSize: 13, color: '#94A3B8', maxWidth: 280, lineHeight: 1.6, margin: 0 }}>
                   Seu WhatsApp está conectado. As conversas aparecerão aqui assim que chegarem novas mensagens.
                 </p>
               </div>
             )}
             {!activeConv && conversations.length > 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-center">
-                <MessageCircle className="w-10 h-10 text-[#94A3B8] mb-3" />
-                <p className="text-sm text-[#64748B]">Selecione uma conversa</p>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
+                <div style={{ width: 64, height: 64, background: '#E6F7F5', border: '2px solid #B2E8E2', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                  <MessageCircle style={{ width: 30, height: 30, color: '#00A896' }} />
+                </div>
+                <p style={{ fontSize: 15, fontWeight: 600, color: '#1A2B4A', margin: '0 0 4px' }}>Selecione uma conversa</p>
+                <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>Escolha uma conversa para começar</p>
               </div>
             )}
             {msgGroups.map((group, gi) => (
               <div key={gi}>
-                <div className="flex items-center justify-center my-4">
-                  <span className="text-xs text-[#64748B] bg-[#E2E8F0] px-3 py-1 rounded-full shadow-sm">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '12px 0' }}>
+                  <span style={{ fontSize: 11, color: '#007A6E', background: '#E6F7F5', border: '1px solid #B2E8E2', padding: '3px 12px', borderRadius: 9999 }}>
                     {group.label}
                   </span>
                 </div>
@@ -2101,22 +2127,24 @@ export default function WhatsAppHub() {
               </div>
             ))}
             {activeConv?.messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-center py-16">
-                <MessageCircle className="w-10 h-10 text-[#94A3B8] mb-3" />
-                <p className="text-sm text-[#64748B]">Nenhuma mensagem ainda</p>
-                <p className="text-xs text-[#94A3B8] mt-1">Envie a primeira mensagem abaixo</p>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', padding: '64px 0' }}>
+                <div style={{ width: 56, height: 56, background: '#E6F7F5', border: '2px solid #B2E8E2', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
+                  <MessageCircle style={{ width: 26, height: 26, color: '#00A896' }} />
+                </div>
+                <p style={{ fontSize: 14, color: '#1A2B4A', margin: '0 0 4px', fontWeight: 500 }}>Nenhuma mensagem ainda</p>
+                <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Envie a primeira mensagem abaixo</p>
               </div>
             )}
             {/* Typing indicator */}
             {activeId && typingConvIds.has(activeId) && (
-              <div className="flex justify-start mb-1">
-                <div className="bg-white border border-[#E2E8F0] rounded-xl rounded-tl-none px-3 py-2.5 shadow-sm">
-                  <div className="flex items-center gap-1">
+              <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 4 }}>
+                <div style={{ background: '#FFFFFF', border: '1px solid #D1FAE5', borderRadius: '2px 14px 14px 14px', padding: '10px 14px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     {[0, 1, 2].map(i => (
                       <div
                         key={i}
-                        className="w-2 h-2 bg-[#94A3B8] rounded-full animate-bounce"
-                        style={{ animationDelay: `${i * 0.15}s` }}
+                        className="animate-bounce"
+                        style={{ width: 8, height: 8, background: '#94A3B8', borderRadius: '50%', animationDelay: `${i * 0.15}s` }}
                       />
                     ))}
                   </div>
@@ -2127,26 +2155,28 @@ export default function WhatsAppHub() {
           </div>
 
           {/* Composer */}
-          <div className="flex-shrink-0 bg-white border-t border-[#E2E8F0] px-4 py-3">
+          <div style={{ flexShrink: 0, background: '#FFFFFF', borderTop: '1px solid #D1FAE5', padding: '12px 16px' }}>
 
             {/* Quick replies panel */}
             {showQuickReplies && (
-              <div className="mb-2 bg-[#F8FAFB] rounded-xl border border-[#E2E8F0] p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-[#64748B]">Respostas rápidas</span>
-                  <button onClick={() => setShowQuickReplies(false)} className="p-0.5 text-[#64748B] hover:text-[#1A2B4A]">
-                    <X className="w-3.5 h-3.5" />
+              <div style={{ marginBottom: 8, background: '#F0FDFB', borderRadius: 12, border: '1px solid #D1FAE5', padding: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#64748B' }}>Respostas rápidas</span>
+                  <button onClick={() => setShowQuickReplies(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: 2 }}>
+                    <X style={{ width: 14, height: 14 }} />
                   </button>
                 </div>
-                <div className="grid grid-cols-2 gap-1.5">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                   {QUICK_REPLIES.map(qr => (
                     <button
                       key={qr.id}
                       onClick={() => { setInputText(qr.text); setShowQuickReplies(false) }}
-                      className="text-left px-3 py-2 bg-white border border-[#E2E8F0] rounded-lg hover:border-[#00A896] hover:bg-[#E6F7F5] transition-all"
+                      style={{ textAlign: 'left', padding: '8px 12px', background: '#FFFFFF', border: '1px solid #D1FAE5', borderRadius: 8, cursor: 'pointer' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#E6F7F5' }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#FFFFFF' }}
                     >
-                      <p className="text-xs font-semibold text-[#1A2B4A]">{qr.label}</p>
-                      <p className="text-xs text-[#64748B] truncate mt-0.5">{qr.text}</p>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: '#1A2B4A', margin: 0 }}>{qr.label}</p>
+                      <p style={{ fontSize: 11, color: '#64748B', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{qr.text}</p>
                     </button>
                   ))}
                 </div>
@@ -2155,50 +2185,53 @@ export default function WhatsAppHub() {
 
             {/* Attachment menu */}
             {showAttach && (
-              <div className="mb-2 flex gap-2 flex-wrap">
+              <div style={{ marginBottom: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {[
-                  { icon: Image,    label: 'Imagem',    color: 'bg-[#EDE9FE] text-[#7C3AED]' },
-                  { icon: Video,    label: 'Vídeo',     color: 'bg-[#DBEAFE] text-[#2563EB]' },
-                  { icon: FileText, label: 'Documento', color: 'bg-[#FEF3C7] text-[#D97706]' },
-                  { icon: Mic,      label: 'Áudio',     color: 'bg-[#D1FAE5] text-[#059669]' },
-                ].map(item => (
-                  <button
-                    key={item.label}
-                    onClick={() => { fileInputRef.current?.click(); setShowAttach(false) }}
-                    className={`flex flex-col items-center gap-1 px-3 py-2 rounded-lg ${item.color} text-xs font-medium hover:opacity-80 transition-opacity`}
-                  >
-                    <item.icon className="w-4 h-4" />
-                    {item.label}
-                  </button>
-                ))}
+                  { icon: Image,    label: 'Imagem',    bg: '#EDE9FE', color: '#7C3AED' },
+                  { icon: Video,    label: 'Vídeo',     bg: '#DBEAFE', color: '#2563EB' },
+                  { icon: FileText, label: 'Documento', bg: '#FEF3C7', color: '#D97706' },
+                  { icon: Mic,      label: 'Áudio',     bg: '#D1FAE5', color: '#059669' },
+                ].map(item => {
+                  const IconComp = item.icon
+                  return (
+                    <button
+                      key={item.label}
+                      onClick={() => { fileInputRef.current?.click(); setShowAttach(false) }}
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '8px 12px', borderRadius: 8, background: item.bg, color: item.color, fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer' }}
+                    >
+                      <IconComp style={{ width: 16, height: 16 }} />
+                      {item.label}
+                    </button>
+                  )
+                })}
               </div>
             )}
 
             {/* File preview area */}
             {pendingFile && (
-              <div className="mb-2 bg-[#F8FAFB] rounded-xl border border-[#E2E8F0] p-2 flex items-center gap-2">
+              <div style={{ marginBottom: 8, background: '#F0FDFB', borderRadius: 12, border: '1px solid #D1FAE5', padding: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                 {pendingFile.type.startsWith('image/') ? (
-                  <img src={pendingFilePreview || ''} alt="preview" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                  <img src={pendingFilePreview || ''} alt="preview" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
                 ) : (
-                  <div className="w-12 h-12 rounded-lg bg-[#F1F5F9] flex items-center justify-center flex-shrink-0">
-                    <FileText className="w-5 h-5 text-[#64748B]" />
+                  <div style={{ width: 48, height: 48, borderRadius: 8, background: '#E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <FileText style={{ width: 20, height: 20, color: '#64748B' }} />
                   </div>
                 )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-[#1A2B4A] truncate">{pendingFile.name}</p>
-                  <p className="text-xs text-[#64748B]">{(pendingFile.size / 1024).toFixed(1)} KB</p>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 12, fontWeight: 500, color: '#1A2B4A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pendingFile.name}</p>
+                  <p style={{ fontSize: 12, color: '#64748B', margin: 0 }}>{(pendingFile.size / 1024).toFixed(1)} KB</p>
                   {uploadProgress > 0 && (
-                    <div className="mt-1 h-1 bg-[#E2E8F0] rounded-full overflow-hidden">
-                      <div className="h-full bg-[#00A896] transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                    <div style={{ marginTop: 4, height: 4, background: '#D1FAE5', borderRadius: 9999, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', background: '#00A896', transition: 'width 0.3s', width: `${uploadProgress}%` }} />
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={sendPendingFile} className="p-1.5 bg-[#00A896] text-white rounded-lg hover:bg-[#008f81]">
-                    <Send className="w-3.5 h-3.5" />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <button onClick={sendPendingFile} style={{ padding: 6, background: '#00A896', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                    <Send style={{ width: 14, height: 14 }} />
                   </button>
-                  <button onClick={() => { setPendingFile(null); setPendingFilePreview(null) }} className="p-1.5 text-[#64748B] hover:text-[#1A2B4A]">
-                    <X className="w-3.5 h-3.5" />
+                  <button onClick={() => { setPendingFile(null); setPendingFilePreview(null) }} style={{ padding: 6, background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
+                    <X style={{ width: 14, height: 14 }} />
                   </button>
                 </div>
               </div>
@@ -2206,11 +2239,13 @@ export default function WhatsAppHub() {
 
             {/* Emoji picker */}
             {showEmojiPicker && (
-              <div className="mb-2 bg-white rounded-xl border border-[#E2E8F0] p-2 shadow-lg">
-                <div className="grid grid-cols-10 gap-1">
+              <div style={{ marginBottom: 8, background: '#FFFFFF', borderRadius: 12, border: '1px solid #D1FAE5', padding: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 4 }}>
                   {COMMON_EMOJIS.map(e => (
                     <button key={e} onClick={() => { setInputText(t => t + e); setShowEmojiPicker(false) }}
-                      className="w-7 h-7 text-base hover:bg-[#F1F5F9] rounded flex items-center justify-center transition-colors">
+                      style={{ width: 28, height: 28, fontSize: 16, background: 'none', border: 'none', borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      onMouseEnter={ev => (ev.currentTarget.style.background = '#F0FDFB')}
+                      onMouseLeave={ev => (ev.currentTarget.style.background = 'none')}>
                       {e}
                     </button>
                   ))}
@@ -2219,41 +2254,52 @@ export default function WhatsAppHub() {
             )}
 
             {/* Input row */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => { setShowAttach(v => !v); setShowQuickReplies(false) }}
-                className={`p-2 rounded-lg transition-colors flex-shrink-0 ${showAttach ? 'bg-[#E6F7F5] text-[#00A896]' : 'text-[#64748B] hover:text-[#00A896] hover:bg-[#F1F5F9]'}`}
-              >
-                <Paperclip className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => { setShowQuickReplies(v => !v); setShowAttach(false) }}
-                className={`p-2 rounded-lg transition-colors flex-shrink-0 ${showQuickReplies ? 'bg-[#E6F7F5] text-[#00A896]' : 'text-[#64748B] hover:text-[#00A896] hover:bg-[#F1F5F9]'}`}
-                title="Respostas rápidas"
-              >
-                <Zap className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => { setShowEmojiPicker(v => !v); setShowAttach(false); setShowQuickReplies(false) }}
-                className={`p-2 rounded-lg transition-colors flex-shrink-0 ${showEmojiPicker ? 'bg-[#E6F7F5] text-[#00A896]' : 'text-[#64748B] hover:text-[#00A896] hover:bg-[#F1F5F9]'}`}
-              >
-                <Smile className="w-5 h-5" />
-              </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {[
+                { icon: Paperclip, active: showAttach, onClick: () => { setShowAttach(v => !v); setShowQuickReplies(false) }, title: 'Anexar arquivo' },
+                { icon: Zap,       active: showQuickReplies, onClick: () => { setShowQuickReplies(v => !v); setShowAttach(false) }, title: 'Respostas rápidas' },
+                { icon: Smile,     active: showEmojiPicker,  onClick: () => { setShowEmojiPicker(v => !v); setShowAttach(false); setShowQuickReplies(false) }, title: 'Emojis' },
+              ].map(btn => {
+                const IconComp = btn.icon
+                return (
+                  <button key={btn.title} onClick={btn.onClick} title={btn.title}
+                    style={{
+                      padding: 8, borderRadius: 8, flexShrink: 0, background: btn.active ? '#E6F7F5' : 'none',
+                      color: btn.active ? '#00A896' : '#64748B', border: 'none', cursor: 'pointer', transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => { if (!btn.active) e.currentTarget.style.background = '#F0FDFB' }}
+                    onMouseLeave={e => { if (!btn.active) e.currentTarget.style.background = 'none' }}
+                  >
+                    <IconComp style={{ width: 20, height: 20 }} />
+                  </button>
+                )
+              })}
               <textarea
                 value={inputText}
                 onChange={e => setInputText(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
                 placeholder="Digite uma mensagem..."
                 rows={1}
-                className="flex-1 px-4 py-2.5 text-sm bg-[#F1F5F9] rounded-3xl text-[#1A2B4A] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#00A896] resize-none transition-all"
-                style={{ minHeight: '40px', maxHeight: '96px' }}
+                style={{
+                  flex: 1, padding: '10px 16px', fontSize: 13, background: '#F0FDFB', border: '1px solid #D1FAE5',
+                  borderRadius: 24, color: '#1A2B4A', outline: 'none', resize: 'none', minHeight: 40, maxHeight: 96,
+                  fontFamily: 'inherit', transition: 'border-color 0.15s',
+                }}
+                onFocus={e => (e.currentTarget.style.borderColor = '#00A896')}
+                onBlur={e => (e.currentTarget.style.borderColor = '#D1FAE5')}
               />
               {inputText.trim() ? (
                 <button
                   onClick={handleSend}
-                  className="w-10 h-10 rounded-full bg-[#00A896] text-white hover:bg-[#008f81] transition-colors flex-shrink-0 flex items-center justify-center"
+                  style={{
+                    width: 44, height: 44, borderRadius: '50%', background: '#00A896', color: '#fff',
+                    border: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'background 0.15s, transform 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#007A6E'; e.currentTarget.style.transform = 'scale(1.08)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#00A896'; e.currentTarget.style.transform = 'scale(1)' }}
                 >
-                  <Send className="w-4 h-4" />
+                  <Send style={{ width: 18, height: 18 }} />
                 </button>
               ) : (
                 <button
@@ -2261,10 +2307,15 @@ export default function WhatsAppHub() {
                   onMouseUp={stopRecording}
                   onTouchStart={startRecording}
                   onTouchEnd={stopRecording}
-                  className={`w-10 h-10 rounded-full transition-colors flex-shrink-0 flex items-center justify-center ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-[#00A896] text-white hover:bg-[#008f81]'}`}
+                  style={{
+                    width: 44, height: 44, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: isRecording ? '#EF4444' : '#00A896', color: '#fff', border: 'none', cursor: 'pointer',
+                    transition: 'background 0.15s',
+                  }}
+                  className={isRecording ? 'animate-pulse' : ''}
                   title="Segurar para gravar áudio"
                 >
-                  <Mic className="w-4 h-4" />
+                  <Mic style={{ width: 18, height: 18 }} />
                 </button>
               )}
             </div>
@@ -2274,11 +2325,11 @@ export default function WhatsAppHub() {
 
         {/* ── Col 3: Contact Panel ──────────────────────────────────────────────── */}
         {showContactInfo && (
-          <div className="w-[280px] flex-shrink-0 bg-white border-l border-[#E2E8F0] flex flex-col overflow-hidden">
+          <div style={{ width: 280, flexShrink: 0, background: '#FFFFFF', borderLeft: '1px solid #D1FAE5', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {activeConv ? (
             <>
             {/* Tab bar */}
-            <div className="flex-shrink-0 flex bg-white border-b border-[#E2E8F0]">
+            <div style={{ flexShrink: 0, display: 'flex', background: '#FFFFFF', borderBottom: '1px solid #D1FAE5' }}>
               {([
                 { key: 'details', label: 'Detalhes' },
                 { key: 'history', label: 'Histórico' },
@@ -2286,11 +2337,13 @@ export default function WhatsAppHub() {
                 <button
                   key={tab.key}
                   onClick={() => setRightPanelTab(tab.key)}
-                  className={`flex-1 py-3 text-xs font-semibold border-b-2 -mb-px transition-colors ${
-                    rightPanelTab === tab.key
-                      ? 'border-[#00A896] text-[#1A2B4A]'
-                      : 'border-transparent text-[#64748B] hover:text-[#1A2B4A]'
-                  }`}
+                  style={{
+                    flex: 1, padding: '12px 0', fontSize: 12, fontWeight: rightPanelTab === tab.key ? 700 : 500,
+                    color: rightPanelTab === tab.key ? '#1A2B4A' : '#64748B',
+                    borderBottom: rightPanelTab === tab.key ? '2px solid #00A896' : '2px solid transparent',
+                    background: 'none', border: 'none',
+                    cursor: 'pointer', transition: 'all 0.15s',
+                  }}
                 >
                   {tab.label}
                 </button>
@@ -2299,18 +2352,22 @@ export default function WhatsAppHub() {
 
             {/* ── Detalhes tab ── */}
             {rightPanelTab === 'details' && (
-              <div className="flex-1 overflow-y-auto">
+              <div style={{ flex: 1, overflowY: 'auto' }}>
 
                 {/* Concluir / Sair buttons */}
                 {activeConv.status !== 'closed' && (
-                  <div className="px-4 py-3 border-b border-[#E2E8F0] bg-[#F8FAFB] flex flex-col gap-2">
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #D1FAE5', background: '#F0FDFB', display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <button onClick={handleCloseConversation}
-                      className="w-full py-2 text-xs font-semibold text-white bg-[#00A896] hover:bg-[#008f81] rounded-lg transition-colors">
+                      style={{ width: '100%', padding: '9px 0', fontSize: 12, fontWeight: 600, color: '#fff', background: '#00A896', border: 'none', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'background 0.15s' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#007A6E')}
+                      onMouseLeave={e => (e.currentTarget.style.background = '#00A896')}>
                       ✅ Concluir Atendimento
                     </button>
                     {activeConv.assigned_user_id && (
                       <button onClick={handleLeaveConversation}
-                        className="w-full py-2 text-xs font-medium text-[#64748B] bg-white hover:bg-[#F8FAFB] rounded-lg border border-[#E2E8F0] transition-colors">
+                        style={{ width: '100%', padding: '9px 0', fontSize: 12, fontWeight: 500, color: '#D97706', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, cursor: 'pointer', transition: 'background 0.15s' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#FDE68A')}
+                        onMouseLeave={e => (e.currentTarget.style.background = '#FEF3C7')}>
                         🚪 Sair do Atendimento
                       </button>
                     )}
@@ -2318,34 +2375,31 @@ export default function WhatsAppHub() {
                 )}
 
                 {/* Contact header */}
-                <div className="flex flex-col items-center px-4 pt-5 pb-4 border-b border-[#E2E8F0] bg-white">
-                  <div className={`w-[72px] h-[72px] rounded-full ${activeConv.avatarColor} text-white text-2xl font-bold flex items-center justify-center mb-3 overflow-hidden`}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 16px 16px', borderBottom: '1px solid #D1FAE5', background: '#FFFFFF' }}>
+                  <div className={activeConv.avatarColor} style={{ width: 60, height: 60, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, overflow: 'hidden', fontSize: 22, fontWeight: 700, color: '#fff' }}>
                     {activeConv.profile_picture_url ? (
-                      <img src={activeConv.profile_picture_url} alt={activeConv.name} className="w-full h-full object-cover" />
+                      <img src={activeConv.profile_picture_url} alt={activeConv.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : activeConv.isGroup ? (
-                      <Users className="w-8 h-8 text-white/90" />
+                      <Users style={{ width: 28, height: 28, color: 'rgba(255,255,255,0.9)' }} />
                     ) : (
                       getInitials(activeConv.name)
                     )}
                   </div>
-                  <p className="text-[18px] font-bold text-[#1A2B4A] text-center">{activeConv.name}</p>
-                  <p className="text-[13px] text-[#64748B] mt-0.5 text-center">
+                  <p style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', textAlign: 'center', margin: 0 }}>{activeConv.name}</p>
+                  <p style={{ fontSize: 12, color: '#64748B', marginTop: 2, textAlign: 'center' }}>
                     {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
                   </p>
                   {activeConv.contact_type && activeConv.contact_type !== 'unknown' && (
-                    <span className={`mt-2 text-xs px-3 py-1 rounded-full font-medium ${
-                      activeConv.contact_type === 'lead'     ? 'bg-[#E6F7F5] text-[#00A896]' :
-                      activeConv.contact_type === 'client'   ? 'bg-[#D1FAE5] text-[#059669]' :
-                      activeConv.contact_type === 'supplier' ? 'bg-[#EDE9FE] text-[#7C3AED]' :
-                      'bg-[#F1F5F9] text-[#64748B]'
-                    }`}>
-                      {activeConv.contact_type === 'lead' ? 'Lead' :
-                       activeConv.contact_type === 'client' ? 'Cliente' :
-                       activeConv.contact_type === 'supplier' ? 'Fornecedor' : activeConv.contact_type}
+                    <span style={{
+                      marginTop: 8, fontSize: 11, padding: '3px 12px', borderRadius: 9999, fontWeight: 500,
+                      background: activeConv.contact_type === 'lead' ? '#E6F7F5' : activeConv.contact_type === 'client' ? '#D1FAE5' : activeConv.contact_type === 'supplier' ? '#EDE9FE' : '#F1F5F9',
+                      color: activeConv.contact_type === 'lead' ? '#00A896' : activeConv.contact_type === 'client' ? '#059669' : activeConv.contact_type === 'supplier' ? '#7C3AED' : '#64748B',
+                    }}>
+                      {activeConv.contact_type === 'lead' ? 'Lead' : activeConv.contact_type === 'client' ? 'Cliente' : activeConv.contact_type === 'supplier' ? 'Fornecedor' : activeConv.contact_type}
                     </span>
                   )}
                   {activeConv.isGroup && (
-                    <span className="mt-2 text-xs px-3 py-1 rounded-full font-medium bg-[#EDE9FE] text-[#7C3AED]">Grupo</span>
+                    <span style={{ marginTop: 8, fontSize: 11, padding: '3px 12px', borderRadius: 9999, fontWeight: 500, background: '#EDE9FE', color: '#7C3AED' }}>Grupo</span>
                   )}
                   {activeConv.labels.map(lb => (
                     <span key={lb.text} className={`mt-1.5 text-xs px-2 py-0.5 rounded-full font-medium ${lb.color}`}>
@@ -2355,7 +2409,9 @@ export default function WhatsAppHub() {
                   {!activeConv.isGroup && (
                     <button
                       onClick={() => { setShowDrawer(true) }}
-                      className="mt-2 text-xs border border-[#00A896] text-[#00A896] hover:bg-[#E6F7F5] px-3 py-1 rounded-lg flex items-center gap-1 font-medium transition-colors"
+                      style={{ marginTop: 8, fontSize: 12, border: '1px solid #00A896', color: '#00A896', background: 'transparent', padding: '5px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 500, cursor: 'pointer', transition: 'background 0.15s' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#E6F7F5')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
                       ✏️ Editar
                     </button>
@@ -2364,17 +2420,17 @@ export default function WhatsAppHub() {
 
                 {/* Inline edit form */}
                 {editingContact && (
-                  <div className="px-4 py-3 border-b border-[#E2E8F0] bg-[#F8FAFB]">
-                    <div className="space-y-2">
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #D1FAE5', background: '#F0FDFB' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <div>
-                        <label className="block text-xs font-medium text-[#64748B] mb-1">Nome</label>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 4 }}>Nome</label>
                         <input value={editForm.name} onChange={e => setEditForm(f => ({...f, name: e.target.value}))}
-                          className="w-full px-3 py-2 text-xs bg-white border border-[#E2E8F0] rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none" />
+                          style={{ width: '100%', padding: '8px 10px', fontSize: 12, background: '#FFFFFF', border: '1px solid #D1FAE5', borderRadius: 8, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-[#64748B] mb-1">Tipo</label>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 4 }}>Tipo</label>
                         <select value={editForm.contact_type} onChange={e => setEditForm(f => ({...f, contact_type: e.target.value}))}
-                          className="w-full px-3 py-2 text-xs bg-white border border-[#E2E8F0] rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
+                          style={{ width: '100%', padding: '8px 10px', fontSize: 12, background: '#FFFFFF', border: '1px solid #D1FAE5', borderRadius: 8, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}>
                           <option value="">Desconhecido</option>
                           <option value="lead">Lead</option>
                           <option value="client">Cliente</option>
@@ -2383,7 +2439,7 @@ export default function WhatsAppHub() {
                         </select>
                       </div>
                     </div>
-                    <div className="flex gap-1.5 mt-3">
+                    <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
                       <button onClick={async () => {
                         if (!activeId || !user?.institution_id) return
                         if (editForm.name && editForm.name !== activeConv.name) {
@@ -2397,11 +2453,11 @@ export default function WhatsAppHub() {
                         }
                         setEditingContact(false)
                       }}
-                        className="flex-1 py-1.5 text-xs font-semibold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] transition-colors">
+                        style={{ flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600, color: '#fff', background: '#00A896', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
                         Salvar
                       </button>
                       <button onClick={() => setEditingContact(false)}
-                        className="px-3 py-1.5 text-xs text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-white">
+                        style={{ padding: '6px 12px', fontSize: 12, color: '#64748B', border: '1px solid #D1FAE5', borderRadius: 8, background: '#fff', cursor: 'pointer' }}>
                         Cancelar
                       </button>
                     </div>
@@ -2410,47 +2466,36 @@ export default function WhatsAppHub() {
 
                 {/* Who is this contact? — only for unknown non-group, non-linked contacts */}
                 {!activeConv.isGroup && (!activeConv.contact_type || activeConv.contact_type === 'unknown') && !activeConv.lead_id && (
-                  <div className="px-4 py-3 border-b border-[#E2E8F0] bg-[#FFFBEB]">
-                    <p className="text-xs font-semibold text-[#D97706] mb-2">Quem é esse contato?</p>
-                    <div className="flex flex-col gap-1.5">
-                      <button onClick={() => {
-                        setLeadForm(prev => ({
-                          ...prev,
-                          responsible_name: activeConv.name !== formatPhone(activeConv.id) ? activeConv.name : '',
-                          phone: activeConv.phone,
-                        }))
-                        setShowLeadModal(true)
-                      }}
-                        className="w-full text-left px-3 py-2 text-xs font-semibold bg-[#00A896] text-white rounded-lg hover:bg-[#008f81] transition-colors">
-                        🎓 Nova Família (Lead)
-                      </button>
-                      <button onClick={() => setShowClientModal(true)}
-                        className="w-full text-left px-3 py-2 text-xs font-medium bg-white text-[#1A2B4A] rounded-lg hover:bg-[#F8FAFB] transition-colors border border-[#E2E8F0]">
-                        ✅ Família da Casa (Cliente)
-                      </button>
-                      <div className="flex gap-1.5">
-                        <button onClick={() => handleContactType('supplier')}
-                          className="flex-1 text-xs px-2 py-1.5 bg-white border border-[#E2E8F0] rounded-lg text-[#64748B] hover:bg-[#F8FAFB] transition-colors">
-                          🏢 Fornecedor
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #D1FAE5', background: '#FFFBEB' }}>
+                    <p style={{ fontSize: 12, fontWeight: 600, color: '#D97706', margin: '0 0 8px' }}>Quem é esse contato?</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      {[
+                        { key: 'lead',     label: '🎓 Nova Família',      bg: '#00A896', color: '#fff',    border: 'none',        onClick: () => { setLeadForm(prev => ({ ...prev, responsible_name: activeConv.name !== formatPhone(activeConv.id) ? activeConv.name : '', phone: activeConv.phone })); setShowLeadModal(true) } },
+                        { key: 'client',   label: '✅ Família da Casa',    bg: '#D1FAE5', color: '#059669', border: 'none',        onClick: () => setShowClientModal(true) },
+                        { key: 'supplier', label: '🏢 Fornecedor',         bg: '#EDE9FE', color: '#7C3AED', border: 'none',        onClick: () => handleContactType('supplier') },
+                        { key: 'other',    label: 'Outro',                 bg: '#F1F5F9', color: '#64748B', border: 'none',        onClick: () => handleContactType('other') },
+                      ].map(opt => (
+                        <button key={opt.key} onClick={opt.onClick}
+                          style={{ padding: '8px 6px', fontSize: 12, fontWeight: activeConv.contact_type === opt.key ? 700 : 500, background: activeConv.contact_type === opt.key ? opt.bg : '#FFFFFF', color: activeConv.contact_type === opt.key ? opt.color : '#64748B', border: `1px solid ${activeConv.contact_type === opt.key ? opt.bg : '#D1FAE5'}`, borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s', textAlign: 'center' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = opt.bg; e.currentTarget.style.color = opt.color; e.currentTarget.style.borderColor = opt.bg }}
+                          onMouseLeave={e => { if (activeConv.contact_type !== opt.key) { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.color = '#64748B'; e.currentTarget.style.borderColor = '#D1FAE5' } }}
+                        >
+                          {opt.label}
                         </button>
-                        <button onClick={() => handleContactType('other')}
-                          className="flex-1 text-xs px-2 py-1.5 bg-white border border-[#E2E8F0] rounded-lg text-[#64748B] hover:bg-[#F8FAFB] transition-colors">
-                          Outro
-                        </button>
-                      </div>
+                      ))}
                     </div>
                   </div>
                 )}
 
                 {/* Status select */}
-                <div className="px-4 py-3 border-b border-[#E2E8F0]">
-                  <label className="block text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-1.5">
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #D1FAE5' }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
                     Status do atendimento
                   </label>
                   <select
                     value={activeConv.status}
                     onChange={e => handleStatusChange(e.target.value as ConvStatus)}
-                    className="w-full px-3 py-2 text-xs bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none"
+                    style={{ width: '100%', padding: '8px 10px', fontSize: 12, background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 8, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}
                   >
                     <option value="waiting">Aguardando</option>
                     <option value="open">Em Atendimento</option>
@@ -2459,63 +2504,72 @@ export default function WhatsAppHub() {
                 </div>
 
                 {/* Attendant section */}
-                <div className="px-4 py-3 border-b border-[#E2E8F0]">
-                  <label className="block text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-1.5">
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #D1FAE5' }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
                     Atendente
                   </label>
                   {transferring ? (
-                    <div className="space-y-2">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <select value={transferTarget} onChange={e => setTransferTarget(e.target.value)}
-                        className="w-full px-3 py-2 text-xs bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 12, background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 8, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}>
                         <option value="">Selecionar atendente...</option>
                         {users.filter(u => u.id !== activeConv.assigned_user_id).map(u => (
                           <option key={u.id} value={u.id}>{u.full_name}</option>
                         ))}
                       </select>
-                      <div className="flex gap-1.5">
+                      <div style={{ display: 'flex', gap: 6 }}>
                         <button
                           onClick={activeConv.status === 'closed' ? handleAssignFromClosed : handleTransfer}
                           disabled={!transferTarget}
-                          className="flex-1 px-2.5 py-1.5 bg-[#00A896] text-white text-xs font-semibold rounded-lg disabled:opacity-40 hover:bg-[#008f81] transition-colors">
+                          style={{ flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, color: '#fff', background: '#00A896', border: 'none', borderRadius: 8, cursor: 'pointer', opacity: !transferTarget ? 0.4 : 1, transition: 'background 0.15s' }}>
                           {activeConv.status === 'closed' ? 'Atribuir' : 'Transferir'}
                         </button>
                         <button onClick={() => { setTransferring(false); setTransferTarget('') }}
-                          className="px-2.5 py-1.5 text-xs text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
+                          style={{ padding: '7px 12px', fontSize: 12, color: '#64748B', border: '1px solid #D1FAE5', borderRadius: 8, background: '#fff', cursor: 'pointer' }}>
                           Cancelar
                         </button>
                       </div>
                     </div>
                   ) : activeConv.status === 'closed' ? (
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-[#94A3B8]">—</span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 12, color: '#94A3B8' }}>—</span>
                       <button onClick={() => setTransferring(true)}
-                        className="text-xs border border-[#00A896] text-[#00A896] hover:bg-[#E6F7F5] px-2 py-0.5 rounded-lg font-medium transition-colors">
+                        style={{ fontSize: 12, border: '1px solid #00A896', color: '#00A896', background: 'transparent', padding: '3px 10px', borderRadius: 8, fontWeight: 500, cursor: 'pointer', transition: 'background 0.15s' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#E6F7F5')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                         Atribuir
                       </button>
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-[#1A2B4A] font-medium">
-                        {activeConv.assigned_user_name || <span className="text-[#94A3B8] italic font-normal">Sem atendente</span>}
-                      </span>
+                  ) : activeConv.assigned_user_id ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 12, color: '#1A2B4A', fontWeight: 500 }}>{activeConv.assigned_user_name}</span>
                       <button onClick={() => setTransferring(true)}
-                        className="text-xs text-[#00A896] hover:text-[#008f81] font-medium transition-colors">
+                        style={{ fontSize: 12, color: '#00A896', background: 'none', border: 'none', fontWeight: 500, cursor: 'pointer', transition: 'color 0.15s' }}
+                        onMouseEnter={e => (e.currentTarget.style.color = '#007A6E')}
+                        onMouseLeave={e => (e.currentTarget.style.color = '#00A896')}>
                         Transferir
                       </button>
                     </div>
+                  ) : (
+                    <button onClick={() => setTransferring(true)}
+                      style={{ width: '100%', padding: '8px 0', fontSize: 12, color: '#64748B', background: 'transparent', border: '1px dashed #D1FAE5', borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.color = '#00A896'; e.currentTarget.style.background = '#E6F7F5' }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.color = '#64748B'; e.currentTarget.style.background = 'transparent' }}>
+                      + Atribuir atendente
+                    </button>
                   )}
                 </div>
 
                 {/* Etiquetas */}
-                <div className="px-4 py-3 border-b border-[#E2E8F0]">
-                  <label className="block text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-2">
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #D1FAE5' }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
                     Etiquetas
                   </label>
-                  <div className="flex flex-wrap gap-1">
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {(activeConv.tags || []).map(tag => (
-                      <span key={tag} className={`inline-flex items-center gap-0.5 text-xs px-2 py-0.5 rounded-full font-medium text-white ${tagColor(tag)}`}>
+                      <span key={tag} className={tagColor(tag)} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 11, padding: '3px 8px', borderRadius: 9999, fontWeight: 500, color: '#fff' }}>
                         {tag}
-                        <button onClick={() => handleRemoveTag(tag)} className="hover:opacity-70 ml-0.5">×</button>
+                        <button onClick={() => handleRemoveTag(tag)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)', padding: '0 0 0 2px', lineHeight: 1 }}>×</button>
                       </span>
                     ))}
                     {addingTag ? (
@@ -2526,12 +2580,14 @@ export default function WhatsAppHub() {
                         onKeyDown={e => { if (e.key === 'Enter') handleAddTag(newTag); if (e.key === 'Escape') { setAddingTag(false); setNewTag('') } }}
                         onBlur={() => { if (newTag.trim()) handleAddTag(newTag); else { setAddingTag(false); setNewTag('') } }}
                         placeholder="Nova etiqueta..."
-                        className="text-xs px-2 py-0.5 rounded-full border border-dashed border-[#E2E8F0] bg-transparent text-[#1A2B4A] outline-none focus:border-[#00A896] w-28"
+                        style={{ fontSize: 11, padding: '3px 8px', borderRadius: 9999, border: '1px dashed #D1FAE5', background: 'transparent', color: '#1A2B4A', outline: 'none', width: 110 }}
                         maxLength={20}
                       />
                     ) : (
                       <button onClick={() => setAddingTag(true)}
-                        className="text-xs px-2 py-0.5 rounded-full border border-dashed border-[#E2E8F0] text-[#00A896] hover:border-[#00A896] hover:bg-[#E6F7F5] transition-colors">
+                        style={{ fontSize: 11, padding: '3px 10px', borderRadius: 9999, border: '1px dashed #D1FAE5', color: '#00A896', background: 'transparent', cursor: 'pointer', transition: 'all 0.15s' }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#E6F7F5' }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = 'transparent' }}>
                         + Etiqueta
                       </button>
                     )}
@@ -2540,67 +2596,82 @@ export default function WhatsAppHub() {
 
                 {/* Lead linking — only for individual contacts */}
                 {!activeConv.isGroup && (
-                  <div className="px-4 py-3 border-b border-[#E2E8F0]">
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #D1FAE5' }}>
                     {activeConv.lead_id ? (
                       <button
                         onClick={() => navigate(`/leads?highlight=${activeConv.lead_id}`)}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#00A896] text-white text-xs font-semibold rounded-lg hover:bg-[#008f81] transition-colors"
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 10, cursor: 'pointer', fontSize: 13, color: '#1A2B4A', fontWeight: 500, transition: 'all 0.15s' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#E6F7F5'; e.currentTarget.style.borderColor = '#00A896' }}
+                        onMouseLeave={e => { e.currentTarget.style.background = '#F0FDFB'; e.currentTarget.style.borderColor = '#D1FAE5' }}
                       >
-                        <User className="w-3.5 h-3.5" />
-                        Ver Lead no CRM
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <User style={{ width: 14, height: 14, color: '#00A896' }} />
+                          <span>Vincular a um Lead</span>
+                        </div>
+                        <ChevronRight style={{ width: 14, height: 14, color: '#94A3B8' }} />
                       </button>
                     ) : linkingLead ? (
-                      <div className="space-y-2">
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <input
                           autoFocus
                           value={leadSearch}
                           onChange={e => searchLeads(e.target.value)}
                           placeholder="Buscar lead por nome ou tel..."
-                          className="w-full px-3 py-2 text-xs bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none"
+                          style={{ width: '100%', padding: '8px 10px', fontSize: 12, background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 8, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}
                         />
                         {leadResults.map(l => (
                           <button key={l.id} onClick={() => handleLinkLead(l.id)}
-                            className="w-full text-left px-2.5 py-2 text-xs bg-[#F8FAFB] hover:bg-[#E6F7F5] border border-[#E2E8F0] rounded-lg transition-colors">
-                            <p className="font-semibold text-[#1A2B4A]">{l.responsible_name}</p>
-                            <p className="text-[#64748B]">{l.student_name} · {l.grade_interest}</p>
+                            style={{ width: '100%', textAlign: 'left', padding: '8px 10px', fontSize: 12, background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 8, cursor: 'pointer', transition: 'background 0.15s' }}
+                            onMouseEnter={e => (e.currentTarget.style.background = '#E6F7F5')}
+                            onMouseLeave={e => (e.currentTarget.style.background = '#F0FDFB')}>
+                            <p style={{ fontWeight: 600, color: '#1A2B4A', margin: 0 }}>{l.responsible_name}</p>
+                            <p style={{ color: '#64748B', margin: 0 }}>{l.student_name} · {l.grade_interest}</p>
                           </button>
                         ))}
                         <button onClick={() => { setLinkingLead(false); setLeadSearch(''); setLeadResults([]) }}
-                          className="w-full text-xs text-[#64748B] hover:text-[#1A2B4A] py-1">
+                          style={{ fontSize: 12, color: '#64748B', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
                           Cancelar
                         </button>
                       </div>
                     ) : (
                       <button onClick={() => setLinkingLead(true)}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-[#E2E8F0] text-[#64748B] text-xs font-medium rounded-lg hover:border-[#00A896] hover:text-[#00A896] hover:bg-[#E6F7F5] transition-colors">
-                        <User className="w-3.5 h-3.5" />
-                        Vincular a um Lead
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 10, cursor: 'pointer', fontSize: 13, color: '#1A2B4A', fontWeight: 500, transition: 'all 0.15s' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#E6F7F5'; e.currentTarget.style.borderColor = '#00A896' }}
+                        onMouseLeave={e => { e.currentTarget.style.background = '#F0FDFB'; e.currentTarget.style.borderColor = '#D1FAE5' }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <User style={{ width: 14, height: 14, color: '#00A896' }} />
+                          <span>Vincular a um Lead</span>
+                        </div>
+                        <ChevronRight style={{ width: 14, height: 14, color: '#94A3B8' }} />
                       </button>
                     )}
                   </div>
                 )}
 
                 {/* Histórico CRM — colapsável */}
-                <div className="px-4 py-3">
+                <div style={{ padding: '12px 16px' }}>
                   <button
                     onClick={() => setCollapseHistory(v => !v)}
-                    className="w-full flex items-center justify-between text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide hover:text-[#64748B] transition-colors"
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.15s' }}
                   >
                     <span>Histórico CRM</span>
-                    {collapseHistory ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    {collapseHistory ? <ChevronRight style={{ width: 14, height: 14 }} /> : <ChevronDown style={{ width: 14, height: 14 }} />}
                   </button>
                   {!collapseHistory && (
-                    <div className="mt-2 space-y-2">
+                    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {[
-                        { action: 'Lead criado',      time: '2 dias atrás', color: 'bg-blue-400'  },
-                        { action: 'Contato realizado', time: '1 dia atrás',  color: 'bg-teal-400'  },
-                        { action: 'Visita agendada',   time: 'Hoje',         color: 'bg-amber-400' },
+                        { action: 'Lead criado',      time: '2 dias atrás', color: '#60A5FA' },
+                        { action: 'Contato realizado', time: '1 dia atrás',  color: '#2DD4BF' },
+                        { action: 'Visita agendada',   time: 'Hoje',         color: '#FBBF24' },
                       ].map((ev, i) => (
-                        <div key={i} className="flex items-start gap-2 p-2 rounded-lg hover:bg-[#F8FAFB] transition-colors cursor-pointer">
-                          <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${ev.color}`} />
+                        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px', borderRadius: 8, cursor: 'pointer' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = '#F0FDFB')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                          <div style={{ width: 6, height: 6, borderRadius: '50%', background: ev.color, marginTop: 5, flexShrink: 0 }} />
                           <div>
-                            <p className="text-xs font-medium text-[#1A2B4A]">{ev.action}</p>
-                            <p className="text-xs text-[#64748B]">{ev.time}</p>
+                            <p style={{ fontSize: 12, fontWeight: 500, color: '#1A2B4A', margin: 0 }}>{ev.action}</p>
+                            <p style={{ fontSize: 11, color: '#64748B', margin: 0 }}>{ev.time}</p>
                           </div>
                         </div>
                       ))}
@@ -2612,25 +2683,27 @@ export default function WhatsAppHub() {
 
             {/* ── Histórico tab ── */}
             {rightPanelTab === 'history' && (
-              <div className="flex-1 overflow-y-auto px-4 py-3 bg-white">
-                <p className="text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-3">Histórico de eventos</p>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', background: '#FFFFFF' }}>
+                <p style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Histórico de eventos</p>
                 {historyLoading ? (
-                  <div className="flex items-center justify-center py-8">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 0' }}>
                     <div className="animate-spin rounded-full h-5 w-5 border-2 border-[#00A896] border-t-transparent" />
                   </div>
                 ) : convHistory.length === 0 ? (
-                  <p className="text-xs text-[#64748B] text-center py-8">Nenhum evento registrado</p>
+                  <p style={{ fontSize: 12, color: '#64748B', textAlign: 'center', padding: '32px 0' }}>Nenhum evento registrado</p>
                 ) : (
-                  <div className="space-y-3">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {convHistory.map(ev => (
-                      <div key={ev.id} className="flex items-start gap-2 p-2 rounded-lg hover:bg-[#F8FAFB] transition-colors">
-                        <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${eventDotColor(ev.event_type)}`} />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-[#1A2B4A] leading-snug">{ev.description || ev.event_type}</p>
+                      <div key={ev.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px', borderRadius: 8, transition: 'background 0.15s' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#F0FDFB')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                        <div className={eventDotColor(ev.event_type)} style={{ width: 8, height: 8, borderRadius: '50%', marginTop: 4, flexShrink: 0 }} />
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <p style={{ fontSize: 12, fontWeight: 500, color: '#1A2B4A', margin: 0, lineHeight: 1.4 }}>{ev.description || ev.event_type}</p>
                           {ev.user_name && (
-                            <p className="text-xs text-[#64748B] mt-0.5">{ev.user_name}</p>
+                            <p style={{ fontSize: 11, color: '#64748B', margin: '2px 0 0' }}>{ev.user_name}</p>
                           )}
-                          <p className="text-xs text-[#94A3B8] mt-0.5">
+                          <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0' }}>
                             {new Date(ev.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
@@ -2642,10 +2715,13 @@ export default function WhatsAppHub() {
             )}
             </>
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center p-8">
-                <div style={{ fontSize: 40 }}>💬</div>
-                <p style={{ color: '#64748B', marginTop: 12, fontSize: 14 }}>
-                  Selecione uma conversa para ver os detalhes do contato
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', padding: 32 }}>
+                <div style={{ width: 56, height: 56, background: '#E6F7F5', border: '2px solid #B2E8E2', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, fontSize: 28 }}>
+                  💬
+                </div>
+                <p style={{ color: '#1A2B4A', fontSize: 13, fontWeight: 500, margin: '0 0 4px' }}>Selecione uma conversa</p>
+                <p style={{ color: '#94A3B8', fontSize: 12, margin: 0 }}>
+                  para ver os detalhes do contato
                 </p>
               </div>
             )}
@@ -2654,13 +2730,13 @@ export default function WhatsAppHub() {
 
         {/* Send error toast */}
         {sendError && (
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-            <div className="bg-white border border-red-200 text-red-600 text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg">
+          <div style={{ position: 'absolute', bottom: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 50, pointerEvents: 'none' }}>
+            <div style={{ background: '#FFFFFF', border: '1px solid #FCA5A5', color: '#DC2626', fontSize: 12, fontWeight: 600, padding: '10px 16px', borderRadius: 12, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
               {sendError}
             </div>
           </div>
         )}
-        </div>{/* end flex flex-1 overflow-hidden (3-column row) */}
+        </div>{/* end flex 3-column row */}
       </div>{/* end main outer container */}
 
       {/* Feature 4: ContactDrawer */}
