@@ -6,7 +6,7 @@ import {
   getInstanceForInstitution,
   APP_URL,
   errorResponse,
-} from '../_config'
+} from './_config'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const institutionId = (req.query.institutionId || req.body?.institutionId) as string | undefined
