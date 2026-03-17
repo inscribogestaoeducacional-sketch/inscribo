@@ -11,13 +11,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing required fields' })
   }
 
-  const response = await fetch(`${EVOLUTION_URL}/message/sendMedia/${instanceName}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_KEY },
-    body: JSON.stringify({ number: remoteJid, mediatype, mimetype, media, fileName, caption: caption || '' })
-  })
+  try {
+    // Audio PTT → use sendWhatsAppAudio for native voice message format
+    if (mediatype === 'audio') {
+      const response = await fetch(`${EVOLUTION_URL}/message/sendWhatsAppAudio/${instanceName}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_KEY },
+        body: JSON.stringify({ number: remoteJid, audio: media, encoding: true, ...(mimetype ? { mimetype } : {}) })
+      })
+      const data = await response.json()
+      console.log('[send-audio] response:', JSON.stringify(data).slice(0, 300))
+      return res.status(response.ok ? 200 : response.status).json(data)
+    }
 
-  const data = await response.json()
-  console.log('[send-media] response:', JSON.stringify(data).slice(0, 300))
-  return res.status(response.ok ? 200 : response.status).json(data)
+    // All other media types
+    const response = await fetch(`${EVOLUTION_URL}/message/sendMedia/${instanceName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_KEY },
+      body: JSON.stringify({ number: remoteJid, mediatype, mimetype, media, fileName, caption: caption || '' })
+    })
+    const data = await response.json()
+    console.log('[send-media] response:', JSON.stringify(data).slice(0, 300))
+    return res.status(response.ok ? 200 : response.status).json(data)
+  } catch (err) {
+    console.error('[send-media] error:', err)
+    return res.status(500).json({ error: (err as Error).message })
+  }
 }

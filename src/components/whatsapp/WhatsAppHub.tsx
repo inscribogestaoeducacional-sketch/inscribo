@@ -251,7 +251,7 @@ function getProxiedUrl(url?: string | null): string | undefined {
 async function compressImage(file: File, maxMB = 4): Promise<File> {
   if (file.size < maxMB * 1024 * 1024) return file
   return new Promise(resolve => {
-    const img = new Image()
+    const img = document.createElement('img')
     const objUrl = URL.createObjectURL(file)
     img.onload = () => {
       const maxDim = 1280
@@ -562,13 +562,14 @@ export default function WhatsAppHub() {
         reader.onloadend = async () => {
           const base64 = (reader.result as string).split(',')[1]
           try {
-            const res = await fetch('/api/evolution/send-audio', {
+            const res = await fetch('/api/evolution/send-media', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 instanceName: instance,
                 remoteJid: activeId,
-                audio: base64,
+                mediatype: 'audio',
+                media: base64,
                 mimetype: mimeType,
               })
             })
