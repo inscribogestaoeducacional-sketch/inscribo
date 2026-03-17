@@ -81,6 +81,14 @@ const FILTERS = [
   { key: 'closed',  label: 'Concluídas'     },
 ]
 
+const FILTER_ACTIVE: Record<string, string> = {
+  all:     'bg-[#1A2B4A] text-white',
+  unread:  'bg-[#EDE9FE] text-[#7C3AED]',
+  waiting: 'bg-[#FEF3C7] text-[#D97706]',
+  open:    'bg-[#D1FAE5] text-[#059669]',
+  closed:  'bg-[#E2E8F0] text-[#64748B]',
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function safeStatusCfg(status: string) {
   return STATUS_CFG[status as ConvStatus] ?? STATUS_CFG['waiting']
@@ -223,65 +231,86 @@ function groupByDate(msgs: Message[]): { label: string; msgs: Message[] }[] {
   return Array.from(map.entries()).map(([, ms]) => ({ label: fmtDateSep(ms[0].ts), msgs: ms }))
 }
 
+function getLastMsgPreview(lastMessage: string): { icon?: string; text: string } {
+  if (lastMessage === '[Imagem]')    return { icon: '🖼️', text: 'Imagem' }
+  if (lastMessage === '[Áudio]')     return { icon: '🎵', text: 'Áudio' }
+  if (lastMessage === '[Vídeo]')     return { icon: '🎬', text: 'Vídeo' }
+  if (lastMessage === '[Documento]') return { icon: '📄', text: 'Documento' }
+  if (lastMessage === '[Figurinha]') return { icon: '🎭', text: 'Figurinha' }
+  return { text: lastMessage }
+}
+
 // ─── AudioPlayer ──────────────────────────────────────────────────────────────
 function AudioPlayer({ duration = 15, mediaUrl, isDark = true }: { duration?: number; from?: 'me' | 'them'; mediaUrl?: string; isDark?: boolean }) {
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [speed, setSpeed] = useState(1)
   const itvRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => () => { if (itvRef.current) clearInterval(itvRef.current) }, [])
 
-  if (mediaUrl) {
-    return (
-      <audio
-        ref={audioRef}
-        src={mediaUrl}
-        controls
-        className="max-w-[240px]"
-        style={{ height: '36px' }}
-      />
-    )
-  }
-
-  const toggle = () => {
-    if (playing) {
-      clearInterval(itvRef.current!)
-      setPlaying(false)
-    } else {
-      setPlaying(true)
-      itvRef.current = setInterval(() => {
-        setProgress(p => {
-          if (p >= 100) { clearInterval(itvRef.current!); setPlaying(false); return 0 }
-          return p + (100 / (duration * 10))
-        })
-      }, 100)
-    }
-  }
-
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`
   const elapsed = Math.round((progress / 100) * duration)
 
+  const cycleSpeed = () => {
+    const next = speed === 1 ? 1.5 : speed === 1.5 ? 2 : 1
+    setSpeed(next)
+    if (audioRef.current) audioRef.current.playbackRate = next
+  }
+
+  const handleToggle = () => {
+    if (mediaUrl && audioRef.current) {
+      if (playing) { audioRef.current.pause(); setPlaying(false) }
+      else { audioRef.current.playbackRate = speed; audioRef.current.play().catch(() => {}); setPlaying(true) }
+    } else {
+      if (playing) { clearInterval(itvRef.current!); setPlaying(false) }
+      else {
+        setPlaying(true)
+        itvRef.current = setInterval(() => {
+          setProgress(p => {
+            if (p >= 100) { clearInterval(itvRef.current!); setPlaying(false); return 0 }
+            return p + (100 / (duration * 10))
+          })
+        }, 100)
+      }
+    }
+  }
+
+  const btnCls = `w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
+    isDark ? 'bg-white/20 hover:bg-white/30' : 'bg-[#00A896] hover:bg-[#008f81]'
+  }`
+  const trackCls = `h-[3px] rounded-full overflow-hidden ${isDark ? 'bg-white/30' : 'bg-[#E2E8F0]'}`
+  const fillCls  = `h-full rounded-full transition-all duration-100 ${isDark ? 'bg-white' : 'bg-[#00A896]'}`
+  const timeCls  = `text-xs ${isDark ? 'text-white/60' : 'text-[#64748B]'}`
+  const speedCls = `text-[10px] font-bold px-1.5 py-0.5 rounded transition-colors ${isDark ? 'text-white/70 hover:text-white' : 'text-[#64748B] hover:text-[#1A2B4A]'}`
+
   return (
-    <div className="flex items-center gap-2 min-w-[200px]">
-      <button
-        onClick={toggle}
-        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${isDark ? 'bg-white/20 hover:bg-white/30' : 'bg-[#F1F5F9] hover:bg-[#E2E8F0]'}`}
-      >
+    <div className="flex items-center gap-2 min-w-[210px]">
+      {mediaUrl && (
+        <audio
+          ref={audioRef}
+          src={mediaUrl}
+          style={{ display: 'none' }}
+          onEnded={() => { setPlaying(false); setProgress(0) }}
+          onTimeUpdate={() => {
+            if (audioRef.current) setProgress((audioRef.current.currentTime / (audioRef.current.duration || 1)) * 100)
+          }}
+        />
+      )}
+      <button onClick={handleToggle} className={btnCls}>
         {playing
-          ? <Pause className={`w-3.5 h-3.5 ${isDark ? 'text-white' : 'text-[#1A2B4A]'}`} />
-          : <Play  className={`w-3.5 h-3.5 ${isDark ? 'text-white' : 'text-[#1A2B4A]'}`} />}
+          ? <Pause className="w-3.5 h-3.5 text-white" />
+          : <Play  className="w-3.5 h-3.5 text-white" />}
       </button>
       <div className="flex-1 flex flex-col gap-1.5">
-        <div className={`h-1 rounded-full overflow-hidden ${isDark ? 'bg-white/30' : 'bg-[#E2E8F0]'}`}>
-          <div
-            className={`h-full rounded-full transition-all duration-100 ${isDark ? 'bg-white' : 'bg-[#00A896]'}`}
-            style={{ width: `${progress}%` }}
-          />
+        <div className={trackCls}>
+          <div className={fillCls} style={{ width: `${progress}%` }} />
         </div>
-        <span className={`text-xs ${isDark ? 'text-white/60' : 'text-[#64748B]'}`}>
-          {playing ? fmt(elapsed) : fmt(duration)}
-        </span>
+        <div className="flex items-center justify-between">
+          <span className={timeCls}>{playing ? fmt(elapsed) : fmt(duration)}</span>
+          <button onClick={cycleSpeed} className={speedCls}>{speed}x</button>
+        </div>
       </div>
     </div>
   )
@@ -461,6 +490,9 @@ export default function WhatsAppHub() {
   // Feature 4: ContactDrawer
   const [showDrawer, setShowDrawer] = useState(false)
 
+  // Typing indicator
+  const [typingConvIds, setTypingConvIds] = useState<Set<string>>(new Set())
+
   // Feature 5: Contacts filters
   const [contactSearch, setContactSearch] = useState('')
   const [contactTypeFilter, setContactTypeFilter] = useState('')
@@ -551,6 +583,13 @@ export default function WhatsAppHub() {
   }
 
   const addMessageToConversations = (newMsg: WhatsappMessage) => {
+    // Briefly show typing indicator for incoming messages
+    if (!newMsg.from_me) {
+      setTypingConvIds(prev => new Set(prev).add(newMsg.remote_jid))
+      setTimeout(() => setTypingConvIds(prev => {
+        const next = new Set(prev); next.delete(newMsg.remote_jid); return next
+      }), 1200)
+    }
     const isGroup = newMsg.remote_jid.endsWith('@g.us')
     const msg: Message = {
       id: newMsg.id,
@@ -1460,7 +1499,7 @@ export default function WhatsAppHub() {
             ].map(o => (
               <button key={o.key} onClick={() => setConvOwnerFilter(o.key as ConvOwnerFilter)}
                 className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  convOwnerFilter === o.key ? 'bg-[#00A896] text-white' : 'bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]'
+                  convOwnerFilter === o.key ? 'bg-[#1A2B4A] text-white' : 'bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]'
                 }`}>{o.label}</button>
             ))}
           </div>
@@ -1473,7 +1512,7 @@ export default function WhatsAppHub() {
                 onClick={() => setFilter(f.key as ConvFilter)}
                 className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                   filter === f.key
-                    ? 'bg-[#00A896] text-white'
+                    ? FILTER_ACTIVE[f.key] || 'bg-[#1A2B4A] text-white'
                     : 'bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]'
                 }`}
               >
@@ -1492,11 +1531,12 @@ export default function WhatsAppHub() {
               filteredConvs.map(conv => {
                 const isActive = conv.id === activeId
                 const statusDot = safeStatusCfg(conv.status).dot
+                const preview = getLastMsgPreview(conv.lastMessage)
                 return (
                   <button
                     key={conv.id}
                     onClick={() => setActiveId(conv.id)}
-                    className={`w-full text-left flex items-center gap-3 transition-all duration-150 border-b border-[#E2E8F0] border-l-[3px] py-3 pr-3 ${
+                    className={`group relative w-full text-left flex items-center gap-3 transition-all duration-150 border-b border-[#E2E8F0] border-l-[3px] py-3 pr-3 ${
                       isActive
                         ? 'bg-[#E6F7F5] border-l-[#00A896] pl-[9px]'
                         : 'border-l-transparent pl-3 hover:bg-[#F8FAFB]'
@@ -1526,10 +1566,44 @@ export default function WhatsAppHub() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1 mb-0.5">
                         <span className="text-sm font-semibold text-[#1A2B4A] truncate">{conv.name}</span>
-                        <span className="text-[11px] text-[#94A3B8] flex-shrink-0">{fmtConvTime(conv.lastTime)}</span>
+                        <span className="text-[11px] text-[#94A3B8] flex-shrink-0 group-hover:hidden">{fmtConvTime(conv.lastTime)}</span>
+                        {/* Hover actions */}
+                        <div className="hidden group-hover:flex items-center gap-1 flex-shrink-0">
+                          {conv.unreadCount > 0 && (
+                            <button
+                              onClick={async e => {
+                                e.stopPropagation()
+                                setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, unreadCount: 0 } : c))
+                                if (user?.institution_id) await DatabaseService.resetConversationUnread(user.institution_id, conv.id).catch(() => {})
+                              }}
+                              title="Marcar como lida"
+                              className="w-6 h-6 flex items-center justify-center rounded-full bg-white border border-[#E2E8F0] hover:border-[#00A896] hover:text-[#00A896] text-[#64748B] transition-colors shadow-sm"
+                            >
+                              <CheckCheck className="w-3 h-3" />
+                            </button>
+                          )}
+                          <button
+                            onClick={async e => {
+                              e.stopPropagation()
+                              if (!user?.institution_id) return
+                              await DatabaseService.closeConversation(user.institution_id, conv.id)
+                              setConversations(prev => prev.map(c => c.id === conv.id
+                                ? { ...c, status: 'closed' as ConvStatus, assigned_user_id: undefined, assigned_user_name: undefined }
+                                : c
+                              ))
+                            }}
+                            title="Concluir conversa"
+                            className="w-6 h-6 flex items-center justify-center rounded-full bg-white border border-[#E2E8F0] hover:border-red-300 hover:text-red-500 text-[#64748B] transition-colors shadow-sm"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
                       <div className="flex items-center justify-between gap-1">
-                        <span className="text-[13px] text-[#64748B] truncate">{conv.lastMessage}</span>
+                        <span className="text-[13px] text-[#64748B] truncate flex items-center gap-1">
+                          {preview.icon && <span className="flex-shrink-0 text-[12px]">{preview.icon}</span>}
+                          {preview.text}
+                        </span>
                         {conv.unreadCount > 0 && (
                           <span className="flex-shrink-0 bg-[#00A896] text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
                             {conv.unreadCount}
@@ -1707,10 +1781,16 @@ export default function WhatsAppHub() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-[#1A2B4A]">{activeConv.name}</p>
-                  <p className="text-xs text-[#64748B]">
-                    {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
-                    {activeConv.online && <span className="ml-1.5 text-[#00A896] font-medium">• online</span>}
-                  </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-xs text-[#64748B]">
+                      {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
+                      {activeConv.online && <span className="ml-1.5 text-[#00A896] font-medium">• online</span>}
+                    </p>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium inline-flex items-center gap-1 ${safeStatusCfg(activeConv.status).badge}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${safeStatusCfg(activeConv.status).dot}`} />
+                      {safeStatusCfg(activeConv.status).label}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex items-center gap-1">
                   <button
@@ -1809,6 +1889,22 @@ export default function WhatsAppHub() {
                 <MessageCircle className="w-10 h-10 text-[#94A3B8] mb-3" />
                 <p className="text-sm text-[#64748B]">Nenhuma mensagem ainda</p>
                 <p className="text-xs text-[#94A3B8] mt-1">Envie a primeira mensagem abaixo</p>
+              </div>
+            )}
+            {/* Typing indicator */}
+            {activeId && typingConvIds.has(activeId) && (
+              <div className="flex justify-start mb-1">
+                <div className="bg-white border border-[#E2E8F0] rounded-xl rounded-tl-none px-3 py-2.5 shadow-sm">
+                  <div className="flex items-center gap-1">
+                    {[0, 1, 2].map(i => (
+                      <div
+                        key={i}
+                        className="w-2 h-2 bg-[#94A3B8] rounded-full animate-bounce"
+                        style={{ animationDelay: `${i * 0.15}s` }}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
             <div ref={messagesEndRef} />
