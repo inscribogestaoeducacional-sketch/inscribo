@@ -1,22 +1,33 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-
-const EVOLUTION_URL = process.env.EVOLUTION_URL || process.env.VITE_EVOLUTION_URL || 'https://evolution-api-production-a00c.up.railway.app'
-const EVOLUTION_KEY = process.env.EVOLUTION_KEY || process.env.VITE_EVOLUTION_KEY || '08234626b6cf2b4a47e750a38f98d53a36846971a58bb4290c78eb67c5003da5'
+import { EVOLUTION_URL, evolutionHeaders, getInstanceForInstitution } from '../_config'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Accept instanceName from query (GET) or body (POST)
-  const instanceName = (req.query.instanceName as string) || req.body?.instanceName
-  if (!instanceName) return res.status(400).json({ error: 'instanceName required' })
+  // Accept instanceName directly OR look up by institutionId
+  let instanceName = (req.query.instanceName as string) || req.body?.instanceName
+
+  if (!instanceName) {
+    const institutionId = (req.query.institutionId as string) || req.body?.institutionId
+    if (institutionId) {
+      instanceName = (await getInstanceForInstitution(institutionId)) ?? undefined
+    }
+  }
+
+  if (!instanceName) {
+    return res.status(400).json({ error: 'instanceName or institutionId required' })
+  }
 
   try {
     const response = await fetch(`${EVOLUTION_URL}/instance/connectionState/${instanceName}`, {
-      headers: { apikey: EVOLUTION_KEY }
+      headers: evolutionHeaders(),
+      signal: AbortSignal.timeout(8000),
     })
     const data = await response.json()
     console.log('[connection-state] raw response:', JSON.stringify(data))
     return res.json(data)
   } catch (err) {
     console.error('[connection-state] fetch error:', err)
-    return res.status(500).json({ error: 'Failed to fetch connection state' })
+    // Return a safe "disconnected" shape instead of an HTTP error
+    // so the frontend can always parse the response
+    return res.json({ instance: { state: 'close' }, instanceName })
   }
 }

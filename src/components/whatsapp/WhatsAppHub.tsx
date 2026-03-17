@@ -345,7 +345,7 @@ function AudioPlayer({ duration = 15, mediaUrl, isDark = true }: { duration?: nu
 }
 
 // ─── getMediaUrl ──────────────────────────────────────────────────────────────
-function getMediaUrl(message: any): string | null {
+function getMediaUrl(message: any, instanceName?: string): string | null {
   const raw =
     message.media_url ||
     message.mediaUrl ||
@@ -358,13 +358,14 @@ function getMediaUrl(message: any): string | null {
     null
   if (!raw) return null
   if (raw.startsWith('data:') || raw.startsWith('/api/')) return raw
-  const msgId = message.key?.id || message.id || ''
+  const msgId = message.key?.id || message.message_id || message.id || ''
   const idParam = msgId ? `&messageId=${encodeURIComponent(msgId)}` : ''
-  return `/api/evolution/media-proxy?url=${encodeURIComponent(raw)}${idParam}`
+  const instParam = instanceName ? `&instanceName=${encodeURIComponent(instanceName)}` : ''
+  return `/api/evolution/media-proxy?url=${encodeURIComponent(raw)}${idParam}${instParam}`
 }
 
 // ─── RenderMessageContent ─────────────────────────────────────────────────────
-function RenderMessageContent({ message, fromMe }: { message: any; fromMe: boolean }) {
+function RenderMessageContent({ message, fromMe, instanceName }: { message: any; fromMe: boolean; instanceName?: string }) {
   const msgType = (
     message.type ||
     message.messageType ||
@@ -376,7 +377,7 @@ function RenderMessageContent({ message, fromMe }: { message: any; fromMe: boole
     'text'
   ).toLowerCase().replace('message', '')
 
-  const mediaUrl = getMediaUrl(message)
+  const mediaUrl = getMediaUrl(message, instanceName)
   const caption  = message.caption || message.message?.imageMessage?.caption || ''
   const body     = message.body || message.content || message.conversation ||
                    message.message?.conversation || ''
@@ -463,7 +464,7 @@ function RenderMessageContent({ message, fromMe }: { message: any; fromMe: boole
 }
 
 // ─── MessageBubble ────────────────────────────────────────────────────────────
-function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (url: string) => void }) {
+function MessageBubble({ msg, onImageClick, instanceName }: { msg: Message; onImageClick?: (url: string) => void; instanceName?: string }) {
   const isMe = msg.from === 'me'
 
   return (
@@ -488,7 +489,7 @@ function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (ur
           : '0 1px 4px rgba(0,168,150,0.08)',
         position: 'relative',
       }}>
-        <RenderMessageContent message={msg} fromMe={isMe} />
+        <RenderMessageContent message={msg} fromMe={isMe} instanceName={instanceName} />
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -835,7 +836,9 @@ export default function WhatsAppHub() {
     const CONNECTED_STATES = ['open', 'connected', 'CONNECTED', 'OPEN']
     const checkStatus = async () => {
       try {
-        const res = await fetch(`/api/evolution/connection-state?instanceName=${encodeURIComponent(instance)}`)
+        const res = await fetch(`/api/evolution/connection-state?instanceName=${encodeURIComponent(instance)}`, {
+          signal: AbortSignal.timeout(8000),
+        })
         if (!res.ok) {
           // Don't flip to disconnected on transient HTTP errors — keep previous state
           console.warn('[connection-state] HTTP', res.status)
@@ -847,7 +850,7 @@ export default function WhatsAppHub() {
         const isConn = CONNECTED_STATES.includes(state)
         setConnectionStatus(isConn ? 'connected' : state ? 'disconnected' : 'unknown')
       } catch (err) {
-        // Network error — keep previous state, don't flash banner
+        // Network error or timeout — keep previous state, don't flash banner
         console.warn('[connection-state] fetch failed:', err)
       }
     }
@@ -2209,7 +2212,7 @@ export default function WhatsAppHub() {
                   <div style={{ flex: 1, height: 1, background: 'linear-gradient(to left, transparent, #D1FAE5, transparent)' }} />
                 </div>
                 {group.msgs.map(msg => (
-                  <MessageBubble key={msg.id} msg={msg} onImageClick={url => setLightboxUrl(url)} />
+                  <MessageBubble key={msg.id} msg={msg} onImageClick={url => setLightboxUrl(url)} instanceName={instance} />
                 ))}
               </div>
             ))}
