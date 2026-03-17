@@ -243,33 +243,38 @@ function getLastMsgPreview(lastMessage: string): { icon?: string; text: string }
 // BUG 2: Proxy external media URLs through our backend to bypass CSP
 function getProxiedUrl(url?: string | null): string | undefined {
   if (!url) return undefined
-  if (url.startsWith('data:') || url.startsWith('/') || url.startsWith('blob:')) return url
+  if (url.startsWith('data:') || url.startsWith('/')) return url
+  if (url.startsWith('blob:')) { console.warn('[getProxiedUrl] blob: URL ignorada — CSP'); return undefined }
   return `/api/evolution/media-proxy?url=${encodeURIComponent(url)}`
 }
 
-// BUG 4: Compress images larger than 4MB before sending
+// Compress images larger than 4MB before sending (uses FileReader data: URL — no blob: CSP issue)
 async function compressImage(file: File, maxMB = 4): Promise<File> {
   if (file.size < maxMB * 1024 * 1024) return file
   return new Promise(resolve => {
-    const img = document.createElement('img')
-    const objUrl = URL.createObjectURL(file)
-    img.onload = () => {
-      const maxDim = 1280
-      let { width, height } = img
-      if (width > maxDim || height > maxDim) {
-        if (width > height) { height = Math.round(height * maxDim / width); width = maxDim }
-        else { width = Math.round(width * maxDim / height); height = maxDim }
+    const reader = new FileReader()
+    reader.onload = ev => {
+      const dataUrl = ev.target?.result as string
+      const img = document.createElement('img')
+      img.onload = () => {
+        const maxDim = 1280
+        let { width, height } = img
+        if (width > maxDim || height > maxDim) {
+          if (width > height) { height = Math.round(height * maxDim / width); width = maxDim }
+          else { width = Math.round(width * maxDim / height); height = maxDim }
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width; canvas.height = height
+        canvas.getContext('2d')!.drawImage(img, 0, 0, width, height)
+        canvas.toBlob(blob => {
+          resolve(blob ? new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' }) : file)
+        }, 'image/jpeg', 0.85)
       }
-      const canvas = document.createElement('canvas')
-      canvas.width = width; canvas.height = height
-      canvas.getContext('2d')!.drawImage(img, 0, 0, width, height)
-      canvas.toBlob(blob => {
-        URL.revokeObjectURL(objUrl)
-        resolve(blob ? new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' }) : file)
-      }, 'image/jpeg', 0.85)
+      img.onerror = () => resolve(file)
+      img.src = dataUrl
     }
-    img.onerror = () => { URL.revokeObjectURL(objUrl); resolve(file) }
-    img.src = objUrl
+    reader.onerror = () => resolve(file)
+    reader.readAsDataURL(file)
   })
 }
 
@@ -582,6 +587,7 @@ export default function WhatsAppHub() {
   const [showClientModal, setShowClientModal] = useState(false)
   const [leadForm, setLeadForm] = useState({ responsible_name: '', student_name: '', phone: '', email: '', grade_interest: '', source: 'WhatsApp' })
   const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [pendingFilePreview, setPendingFilePreview] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [addingTag, setAddingTag] = useState(false)
   const [newTag, setNewTag] = useState('')
@@ -1136,6 +1142,14 @@ export default function WhatsAppHub() {
     const file = e.target.files?.[0]
     if (!file || !activeId) return
     setPendingFile(file)
+    // Generate data: URL for thumbnail preview (avoids blob: CSP violation)
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader()
+      reader.onload = ev => setPendingFilePreview(ev.target?.result as string)
+      reader.readAsDataURL(file)
+    } else {
+      setPendingFilePreview(null)
+    }
     if (fileInputRef.current) fileInputRef.current.value = ''
     setShowAttach(false)
   }
@@ -1191,7 +1205,7 @@ export default function WhatsAppHub() {
       setConversations(prev => prev.map(c =>
         c.id === activeId ? { ...c, messages: c.messages.map(m => m.id === tempId ? { ...m, status: 'delivered' as const } : m) } : c
       ))
-      setTimeout(() => { setPendingFile(null); setUploadProgress(0) }, 800)
+      setTimeout(() => { setPendingFile(null); setPendingFilePreview(null); setUploadProgress(0) }, 800)
     } catch (err) {
       console.error('[sendPendingFile] error:', err)
       setSendError('Erro ao enviar arquivo.')
@@ -1199,7 +1213,7 @@ export default function WhatsAppHub() {
       setConversations(prev => prev.map(c =>
         c.id === activeId ? { ...c, messages: c.messages.filter(m => m.id !== tempId) } : c
       ))
-      setPendingFile(null)
+      setPendingFile(null); setPendingFilePreview(null)
       setUploadProgress(0)
     }
   }
@@ -2195,7 +2209,7 @@ export default function WhatsAppHub() {
             {pendingFile && (
               <div className="mb-2 bg-[#F8FAFB] rounded-xl border border-[#E2E8F0] p-2 flex items-center gap-2">
                 {pendingFile.type.startsWith('image/') ? (
-                  <img src={URL.createObjectURL(pendingFile)} alt="preview" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                  <img src={pendingFilePreview || ''} alt="preview" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
                 ) : (
                   <div className="w-12 h-12 rounded-lg bg-[#F1F5F9] flex items-center justify-center flex-shrink-0">
                     <FileText className="w-5 h-5 text-[#64748B]" />
@@ -2214,7 +2228,7 @@ export default function WhatsAppHub() {
                   <button onClick={sendPendingFile} className="p-1.5 bg-[#00A896] text-white rounded-lg hover:bg-[#008f81]">
                     <Send className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => setPendingFile(null)} className="p-1.5 text-[#64748B] hover:text-[#1A2B4A]">
+                  <button onClick={() => { setPendingFile(null); setPendingFilePreview(null) }} className="p-1.5 text-[#64748B] hover:text-[#1A2B4A]">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
