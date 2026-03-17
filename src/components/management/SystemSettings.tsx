@@ -234,8 +234,8 @@ function WhatsAppTab() {
 
   const checkState = async (): Promise<{ exists: boolean; connected: boolean; phone?: string }> => {
     try {
-      console.log('[WA] checkState:', instance)
-      const res = await fetch(`/api/evolution/connection-state?instanceName=${instance}`)
+      console.log('[WA] checkState for institution:', user?.institution_id)
+      const res = await fetch(`/api/evolution/connection-state?institutionId=${user?.institution_id}`)
       console.log('[WA] connectionState HTTP', res.status)
       if (!res.ok) return { exists: false, connected: false }
       const data = await res.json()
@@ -257,11 +257,16 @@ function WhatsAppTab() {
 
   const fetchQrCode = async (): Promise<string | null> => {
     try {
-      console.log('[WA] fetchQrCode for:', instance)
-      const res = await fetch(`/api/evolution/get-qrcode?instanceName=${instance}`)
+      console.log('[WA] fetchQrCode for institution:', user?.institution_id)
+      const res = await fetch('/api/evolution/get-qrcode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ institutionId: user?.institution_id }),
+      })
       console.log('[WA] getQrcode HTTP', res.status)
       const data = await res.json()
       console.log('[WA] getQrcode data:', JSON.stringify(data))
+      if (data?.connected) return null // already connected
       return data?.qrcode?.base64 || data?.base64 || null
     } catch (e) {
       console.error('[WA] fetchQrCode error:', e)
