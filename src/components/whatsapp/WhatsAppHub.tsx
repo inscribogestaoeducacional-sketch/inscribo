@@ -58,9 +58,9 @@ interface Conversation {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STATUS_CFG: Record<ConvStatus, { label: string; badge: string; dot: string }> = {
-  waiting: { label: 'Aguardando',     badge: 'bg-amber-900/40 text-amber-400',  dot: 'bg-amber-400' },
-  open:    { label: 'Em Atendimento', badge: 'bg-blue-900/40 text-blue-400',    dot: 'bg-blue-400'  },
-  closed:  { label: 'Concluído',      badge: 'bg-gray-700 text-[#8696a0]',      dot: 'bg-gray-500'  },
+  waiting: { label: 'Aguardando',     badge: 'bg-[#FEF3C7] text-[#D97706]',   dot: 'bg-[#D97706]' },
+  open:    { label: 'Em Atendimento', badge: 'bg-[#D1FAE5] text-[#059669]',   dot: 'bg-[#059669]' },
+  closed:  { label: 'Concluído',      badge: 'bg-[#E2E8F0] text-[#64748B]',   dot: 'bg-[#94A3B8]' },
 }
 
 const QUICK_REPLIES = [
@@ -223,7 +223,7 @@ function groupByDate(msgs: Message[]): { label: string; msgs: Message[] }[] {
 }
 
 // ─── AudioPlayer ──────────────────────────────────────────────────────────────
-function AudioPlayer({ duration = 15, mediaUrl }: { duration?: number; from?: 'me' | 'them'; mediaUrl?: string }) {
+function AudioPlayer({ duration = 15, mediaUrl, isDark = true }: { duration?: number; from?: 'me' | 'them'; mediaUrl?: string; isDark?: boolean }) {
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
   const itvRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -265,20 +265,20 @@ function AudioPlayer({ duration = 15, mediaUrl }: { duration?: number; from?: 'm
     <div className="flex items-center gap-2 min-w-[200px]">
       <button
         onClick={toggle}
-        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-white/20 hover:bg-white/30 transition-colors"
+        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${isDark ? 'bg-white/20 hover:bg-white/30' : 'bg-[#F1F5F9] hover:bg-[#E2E8F0]'}`}
       >
         {playing
-          ? <Pause className="w-3.5 h-3.5 text-white" />
-          : <Play  className="w-3.5 h-3.5 text-white" />}
+          ? <Pause className={`w-3.5 h-3.5 ${isDark ? 'text-white' : 'text-[#1A2B4A]'}`} />
+          : <Play  className={`w-3.5 h-3.5 ${isDark ? 'text-white' : 'text-[#1A2B4A]'}`} />}
       </button>
       <div className="flex-1 flex flex-col gap-1.5">
-        <div className="h-1 rounded-full overflow-hidden bg-white/30">
+        <div className={`h-1 rounded-full overflow-hidden ${isDark ? 'bg-white/30' : 'bg-[#E2E8F0]'}`}>
           <div
-            className="h-full rounded-full transition-all duration-100 bg-white"
+            className={`h-full rounded-full transition-all duration-100 ${isDark ? 'bg-white' : 'bg-[#00A896]'}`}
             style={{ width: `${progress}%` }}
           />
         </div>
-        <span className="text-xs text-[#8696a0]">
+        <span className={`text-xs ${isDark ? 'text-white/60' : 'text-[#64748B]'}`}>
           {playing ? fmt(elapsed) : fmt(duration)}
         </span>
       </div>
@@ -291,8 +291,8 @@ function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (ur
   const isMe = msg.from === 'me'
 
   const bubbleBase = isMe
-    ? 'bg-[#005c4b] text-white rounded-2xl rounded-tr-sm'
-    : 'bg-[#202c33] text-white rounded-2xl rounded-tl-sm shadow-sm'
+    ? 'bg-[#1A2B4A] text-white rounded-xl rounded-tr-none'
+    : 'bg-white border border-[#E2E8F0] text-[#1A2B4A] rounded-xl rounded-tl-none shadow-sm'
 
   // Fallback: detect type from content string for legacy messages saved as text
   const effectiveType: MsgType =
@@ -306,7 +306,7 @@ function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (ur
   const renderContent = () => {
     switch (effectiveType) {
       case 'audio':
-        return <AudioPlayer duration={msg.duration} from={msg.from} mediaUrl={msg.media_url} />
+        return <AudioPlayer duration={msg.duration} from={msg.from} mediaUrl={msg.media_url} isDark={isMe} />
       case 'image':
         return msg.media_url ? (
           <img
@@ -316,20 +316,20 @@ function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (ur
             onClick={() => onImageClick ? onImageClick(msg.media_url!) : window.open(msg.media_url, '_blank')}
           />
         ) : (
-          <div className="w-48 h-32 rounded-xl overflow-hidden bg-[#2a3942] flex flex-col items-center justify-center gap-1">
-            <Image className="w-8 h-8 text-[#8696a0]" />
-            <span className="text-xs text-[#8696a0]">Imagem</span>
+          <div className={`w-48 h-32 rounded-xl overflow-hidden flex flex-col items-center justify-center gap-1 ${isMe ? 'bg-white/10' : 'bg-[#F1F5F9]'}`}>
+            <Image className={`w-8 h-8 ${isMe ? 'text-white/60' : 'text-[#94A3B8]'}`} />
+            <span className={`text-xs ${isMe ? 'text-white/60' : 'text-[#94A3B8]'}`}>Imagem</span>
           </div>
         )
       case 'video':
         return msg.media_url ? (
           <video src={msg.media_url} controls className="max-w-[240px] rounded-xl" />
         ) : (
-          <div className="w-48 h-32 rounded-xl overflow-hidden bg-gray-800 flex items-center justify-center relative">
-            <Video className="w-6 h-6 text-white/50" />
+          <div className={`w-48 h-32 rounded-xl overflow-hidden flex items-center justify-center relative ${isMe ? 'bg-white/10' : 'bg-[#F1F5F9]'}`}>
+            <Video className={`w-6 h-6 ${isMe ? 'text-white/50' : 'text-[#94A3B8]'}`} />
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                <Play className="w-5 h-5 text-white" />
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isMe ? 'bg-white/20' : 'bg-[#E2E8F0]'}`}>
+                <Play className={`w-5 h-5 ${isMe ? 'text-white' : 'text-[#64748B]'}`} />
               </div>
             </div>
           </div>
@@ -337,20 +337,20 @@ function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (ur
       case 'document':
         return (
           <div className="flex items-center gap-2 min-w-[180px] px-1 py-0.5">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-white/20">
-              <FileText className="w-5 h-5 text-white" />
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${isMe ? 'bg-white/20' : 'bg-[#F1F5F9]'}`}>
+              <FileText className={`w-5 h-5 ${isMe ? 'text-white' : 'text-[#64748B]'}`} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium truncate text-white">
+              <p className={`text-xs font-medium truncate ${isMe ? 'text-white' : 'text-[#1A2B4A]'}`}>
                 {msg.fileName || msg.content}
               </p>
               {msg.fileSize && (
-                <p className="text-xs text-[#8696a0]">{msg.fileSize}</p>
+                <p className={`text-xs ${isMe ? 'text-white/60' : 'text-[#64748B]'}`}>{msg.fileSize}</p>
               )}
             </div>
             {msg.media_url && (
               <a href={msg.media_url} download target="_blank" rel="noreferrer"
-                className="p-1 rounded-lg flex-shrink-0 text-white/70 hover:text-white transition-colors">
+                className={`p-1 rounded-lg flex-shrink-0 transition-colors ${isMe ? 'text-white/70 hover:text-white' : 'text-[#64748B] hover:text-[#1A2B4A]'}`}>
                 <Download className="w-4 h-4" />
               </a>
             )}
@@ -372,11 +372,11 @@ function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (ur
       <div className={`max-w-[72%] px-3 py-2 ${bubbleBase}`}>
         {renderContent()}
         <div className={`flex items-center gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
-          <span className="text-[10px] text-[#8696a0]">{fmtTime(msg.ts)}</span>
+          <span className={`text-[10px] ${isMe ? 'text-white/60' : 'text-[#94A3B8]'}`}>{fmtTime(msg.ts)}</span>
           {isMe && (
-            msg.status === 'read'      ? <CheckCheck className="w-3 h-3 text-[#53bdeb]" /> :
-            msg.status === 'delivered' ? <CheckCheck className="w-3 h-3 text-[#8696a0]" /> :
-            <Check className="w-3 h-3 text-[#8696a0]" />
+            msg.status === 'read'      ? <CheckCheck className="w-3 h-3 text-[#00A896]" /> :
+            msg.status === 'delivered' ? <CheckCheck className="w-3 h-3 text-white/60" /> :
+            <Check className="w-3 h-3 text-white/60" />
           )}
         </div>
       </div>
@@ -1045,8 +1045,8 @@ export default function WhatsAppHub() {
   // ── Loading ──
   if (loading) {
     return (
-      <div className="flex items-center justify-center bg-[#0b141a]" style={{ height: 'calc(100vh - 56px)' }}>
-        <div className="animate-spin rounded-full h-8 w-8 border-4 border-[#00a884] border-t-transparent" />
+      <div className="flex items-center justify-center bg-[#F8FAFB]" style={{ height: 'calc(100vh - 56px)' }}>
+        <div className="animate-spin rounded-full h-8 w-8 border-4 border-[#00A896] border-t-transparent" />
       </div>
     )
   }
@@ -1054,18 +1054,18 @@ export default function WhatsAppHub() {
   // ── Not connected ──
   if (!isConnected) {
     return (
-      <div className="flex items-center justify-center bg-[#0b141a]" style={{ height: 'calc(100vh - 56px)' }}>
+      <div className="flex items-center justify-center bg-[#F8FAFB]" style={{ height: 'calc(100vh - 56px)' }}>
         <div className="text-center max-w-sm">
-          <div className="w-20 h-20 bg-[#202c33] rounded-full flex items-center justify-center mx-auto mb-4">
-            <MessageCircle className="w-10 h-10 text-[#2a3942]" />
+          <div className="w-20 h-20 bg-white border border-[#E2E8F0] rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+            <MessageCircle className="w-10 h-10 text-[#94A3B8]" />
           </div>
-          <h2 className="text-base font-bold text-white mb-2">WhatsApp não conectado</h2>
-          <p className="text-sm text-[#8696a0] mb-6 leading-relaxed">
+          <h2 className="text-base font-bold text-[#1A2B4A] mb-2">WhatsApp não conectado</h2>
+          <p className="text-sm text-[#64748B] mb-6 leading-relaxed">
             Conecte seu WhatsApp nas Configurações para começar a atender.
           </p>
           <button
             onClick={() => navigate('/settings')}
-            className="flex items-center gap-2 px-5 py-2.5 bg-[#00a884] text-white text-sm font-semibold rounded-xl hover:bg-[#06cf9c] transition-all mx-auto"
+            className="flex items-center gap-2 px-5 py-2.5 bg-[#00A896] text-white text-sm font-semibold rounded-lg hover:bg-[#008f81] transition-all mx-auto"
           >
             <Settings className="w-4 h-4" />
             Ir para Configurações
@@ -1089,9 +1089,9 @@ export default function WhatsAppHub() {
 
       {/* New Conversation Modal */}
       {showNewConvModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#233138] rounded-2xl p-6 w-80 shadow-2xl border border-[#2a3942]">
-            <h3 className="text-sm font-bold text-white mb-4">Nova Conversa</h3>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-80 shadow-2xl border border-[#E2E8F0]">
+            <h3 className="text-sm font-bold text-[#1A2B4A] mb-4">Nova Conversa</h3>
             <input
               autoFocus
               type="tel"
@@ -1099,15 +1099,15 @@ export default function WhatsAppHub() {
               onChange={e => setNewConvPhone(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleNewConv() }}
               placeholder="+55 (00) 00000-0000"
-              className="w-full px-3 py-2.5 text-sm bg-[#2a3942] border border-[#2a3942] rounded-xl text-white placeholder-[#8696a0] focus:ring-2 focus:ring-[#00a884] outline-none mb-4"
+              className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none mb-4"
             />
             <div className="flex gap-2">
               <button onClick={() => { setShowNewConvModal(false); setNewConvPhone('') }}
-                className="flex-1 py-2.5 text-xs font-medium text-[#8696a0] border border-[#2a3942] rounded-xl hover:bg-[#2a3942]">
+                className="flex-1 py-2.5 text-xs font-medium text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
                 Cancelar
               </button>
               <button onClick={handleNewConv} disabled={!newConvPhone.trim()}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00a884] rounded-xl hover:bg-[#06cf9c] disabled:opacity-40">
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
                 Iniciar
               </button>
             </div>
@@ -1117,43 +1117,43 @@ export default function WhatsAppHub() {
 
       {/* Lead Modal */}
       {showLeadModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#233138] rounded-2xl p-6 w-96 shadow-2xl border border-[#2a3942] max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-96 shadow-2xl border border-[#E2E8F0] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-white">Criar Lead</h3>
-              <button onClick={() => setShowLeadModal(false)} className="p-1 text-[#8696a0] hover:text-white">
+              <h3 className="text-sm font-bold text-[#1A2B4A]">Criar Lead</h3>
+              <button onClick={() => setShowLeadModal(false)} className="p-1 text-[#64748B] hover:text-[#1A2B4A]">
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-[#8696a0] mb-1">Nome do Responsável *</label>
+                <label className="block text-xs font-medium text-[#64748B] mb-1">Nome do Responsável *</label>
                 <input value={leadForm.responsible_name} onChange={e => setLeadForm(f => ({...f, responsible_name: e.target.value}))}
                   placeholder="Nome completo"
-                  className="w-full px-3 py-2 text-sm bg-[#2a3942] border border-[#2a3942] rounded-xl text-white placeholder-[#8696a0] focus:ring-1 focus:ring-[#00a884] outline-none" />
+                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#8696a0] mb-1">Nome do Aluno</label>
+                <label className="block text-xs font-medium text-[#64748B] mb-1">Nome do Aluno</label>
                 <input value={leadForm.student_name} onChange={e => setLeadForm(f => ({...f, student_name: e.target.value}))}
                   placeholder="Nome do aluno"
-                  className="w-full px-3 py-2 text-sm bg-[#2a3942] border border-[#2a3942] rounded-xl text-white placeholder-[#8696a0] focus:ring-1 focus:ring-[#00a884] outline-none" />
+                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#8696a0] mb-1">Telefone</label>
+                <label className="block text-xs font-medium text-[#64748B] mb-1">Telefone</label>
                 <input value={leadForm.phone} onChange={e => setLeadForm(f => ({...f, phone: e.target.value}))}
                   placeholder="+55 00 00000-0000"
-                  className="w-full px-3 py-2 text-sm bg-[#2a3942] border border-[#2a3942] rounded-xl text-white placeholder-[#8696a0] focus:ring-1 focus:ring-[#00a884] outline-none" />
+                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#8696a0] mb-1">E-mail</label>
+                <label className="block text-xs font-medium text-[#64748B] mb-1">E-mail</label>
                 <input type="email" value={leadForm.email} onChange={e => setLeadForm(f => ({...f, email: e.target.value}))}
                   placeholder="email@exemplo.com"
-                  className="w-full px-3 py-2 text-sm bg-[#2a3942] border border-[#2a3942] rounded-xl text-white placeholder-[#8696a0] focus:ring-1 focus:ring-[#00a884] outline-none" />
+                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#8696a0] mb-1">Série de Interesse</label>
+                <label className="block text-xs font-medium text-[#64748B] mb-1">Série de Interesse</label>
                 <select value={leadForm.grade_interest} onChange={e => setLeadForm(f => ({...f, grade_interest: e.target.value}))}
-                  className="w-full px-3 py-2 text-sm bg-[#2a3942] border border-[#2a3942] rounded-xl text-white placeholder-[#8696a0] focus:ring-1 focus:ring-[#00a884] outline-none">
+                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
                   <option value="">Selecionar...</option>
                   {['Educação Infantil','1º Ano','2º Ano','3º Ano','4º Ano','5º Ano','6º Ano','7º Ano','8º Ano','9º Ano','1º EM','2º EM','3º EM'].map(g => (
                     <option key={g} value={g}>{g}</option>
@@ -1163,11 +1163,11 @@ export default function WhatsAppHub() {
             </div>
             <div className="flex gap-2 mt-4">
               <button onClick={() => setShowLeadModal(false)}
-                className="flex-1 py-2.5 text-xs font-medium text-[#8696a0] border border-[#2a3942] rounded-xl hover:bg-[#2a3942]">
+                className="flex-1 py-2.5 text-xs font-medium text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
                 Cancelar
               </button>
               <button onClick={handleCreateLead} disabled={!leadForm.responsible_name.trim()}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00a884] rounded-xl hover:bg-[#06cf9c] disabled:opacity-40">
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
                 Criar Lead
               </button>
             </div>
@@ -1177,20 +1177,20 @@ export default function WhatsAppHub() {
 
       {/* Client Modal (placeholder) */}
       {showClientModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#233138] rounded-2xl p-6 w-80 shadow-2xl border border-[#2a3942]">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-80 shadow-2xl border border-[#E2E8F0]">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-white">Marcar como Cliente</h3>
-              <button onClick={() => setShowClientModal(false)} className="p-1 text-[#8696a0] hover:text-white">
+              <h3 className="text-sm font-bold text-[#1A2B4A]">Marcar como Cliente</h3>
+              <button onClick={() => setShowClientModal(false)} className="p-1 text-[#64748B] hover:text-[#1A2B4A]">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <p className="text-xs text-[#8696a0] mb-4">
+            <p className="text-xs text-[#64748B] mb-4">
               Este contato será marcado como cliente existente.
             </p>
             <div className="flex gap-2">
               <button onClick={() => setShowClientModal(false)}
-                className="flex-1 py-2.5 text-xs font-medium text-[#8696a0] border border-[#2a3942] rounded-xl hover:bg-[#2a3942]">
+                className="flex-1 py-2.5 text-xs font-medium text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
                 Cancelar
               </button>
               <button onClick={async () => {
@@ -1207,7 +1207,7 @@ export default function WhatsAppHub() {
                 })
                 setShowClientModal(false)
               }}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00a884] rounded-xl hover:bg-[#06cf9c]">
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81]">
                 Confirmar
               </button>
             </div>
@@ -1215,7 +1215,7 @@ export default function WhatsAppHub() {
         </div>
       )}
 
-      <div className="flex overflow-hidden bg-[#111b21]" style={{ height: 'calc(100vh - 56px)' }}>
+      <div className="flex overflow-hidden bg-[#F8FAFB]" style={{ height: 'calc(100vh - 56px)' }}>
 
         {/* Hidden file input for attachments */}
         <input
@@ -1227,21 +1227,21 @@ export default function WhatsAppHub() {
         />
 
         {/* ── Col 1: Conversation List ──────────────────────────────────────────── */}
-        <div className="w-[300px] flex-shrink-0 flex flex-col bg-[#111b21] border-r border-[#2a3942]">
+        <div className="w-[320px] flex-shrink-0 flex flex-col bg-white border-r border-[#E2E8F0]">
 
           {/* Header */}
-          <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 bg-[#202c33]">
+          <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 bg-white border-b border-[#E2E8F0]">
             <div className="flex items-center gap-2">
-              <MessageCircle className="w-5 h-5 text-[#00a884]" />
-              <span className="text-base font-medium text-white">WhatsApp</span>
+              <MessageCircle className="w-5 h-5 text-[#00A896]" />
+              <span className="text-base font-bold text-[#1A2B4A]">WhatsApp</span>
               {totalUnread > 0 && (
-                <span className="bg-[#00a884] text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                <span className="bg-[#00A896] text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
                   {totalUnread}
                 </span>
               )}
             </div>
             <button
-              className="p-2 rounded-full hover:bg-[#2a3942] text-[#aebac1] transition-colors"
+              className="p-2 rounded-lg hover:bg-[#F1F5F9] text-[#64748B] hover:text-[#1A2B4A] transition-colors"
               title="Nova conversa"
               onClick={() => setShowNewConvModal(true)}
             >
@@ -1250,59 +1250,59 @@ export default function WhatsAppHub() {
           </div>
 
           {/* Search */}
-          <div className="px-3 py-2 flex-shrink-0 bg-[#111b21]">
+          <div className="px-3 py-2 flex-shrink-0 bg-white border-b border-[#E2E8F0]">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8696a0]" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
               <input
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar nome ou número..."
-                className="w-full pl-9 pr-3 py-2 text-sm bg-[#2a3942] rounded-full text-white placeholder-[#8696a0] focus:outline-none focus:bg-[#2a3942]"
+                className="w-full pl-9 pr-3 py-2 text-sm bg-[#F1F5F9] rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#00A896] border-0"
               />
             </div>
           </div>
 
           {/* Main view tabs: Conversas | Contatos */}
-          <div className="flex-shrink-0 flex px-3 gap-2 py-1.5 bg-[#111b21]">
+          <div className="flex-shrink-0 flex border-b border-[#E2E8F0] bg-white">
             {([
               { key: 'conversations', label: 'Conversas' },
               { key: 'contacts',      label: 'Contatos'  },
             ] as { key: MainView; label: string }[]).map(t => (
               <button key={t.key} onClick={() => setMainView(t.key)}
-                className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                className={`flex-1 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                   mainView === t.key
-                    ? 'text-white bg-[#00a884]'
-                    : 'text-[#8696a0] bg-[#2a3942] hover:bg-[#374751]'
+                    ? 'border-[#00A896] text-[#1A2B4A] font-semibold'
+                    : 'border-transparent text-[#64748B] hover:text-[#1A2B4A]'
                 }`}
               >{t.label}</button>
             ))}
           </div>
 
           {/* Owner filter pills */}
-          <div className="px-3 py-1.5 flex gap-1 flex-shrink-0 bg-[#111b21]">
+          <div className="px-3 pt-2 pb-1 flex gap-1 flex-shrink-0 bg-white">
             {[
               { key: 'all',        label: 'Todos' },
               { key: 'mine',       label: 'Meus' },
               { key: 'unassigned', label: 'Sem atendente' },
             ].map(o => (
               <button key={o.key} onClick={() => setConvOwnerFilter(o.key as ConvOwnerFilter)}
-                className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
-                  convOwnerFilter === o.key ? 'bg-[#00a884] text-white' : 'bg-[#2a3942] text-[#8696a0] hover:bg-[#374751]'
+                className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  convOwnerFilter === o.key ? 'bg-[#00A896] text-white' : 'bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]'
                 }`}>{o.label}</button>
             ))}
           </div>
 
           {/* Filter pills */}
-          <div className="px-3 py-1.5 flex-shrink-0 flex gap-1 overflow-x-auto scrollbar-hide bg-[#111b21]">
+          <div className="px-3 pb-2 flex-shrink-0 flex gap-1 overflow-x-auto scrollbar-hide bg-white border-b border-[#E2E8F0]">
             {FILTERS.map(f => (
               <button
                 key={f.key}
                 onClick={() => setFilter(f.key as ConvFilter)}
-                className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                   filter === f.key
-                    ? 'bg-[#00a884] text-white'
-                    : 'bg-[#2a3942] text-[#8696a0] hover:bg-[#374751]'
+                    ? 'bg-[#00A896] text-white'
+                    : 'bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]'
                 }`}
               >
                 {f.label}
@@ -1314,7 +1314,7 @@ export default function WhatsAppHub() {
           <div className="flex-1 overflow-y-auto">
             {filteredConvs.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-32 text-center px-4">
-                <p className="text-xs text-[#8696a0]">Nenhuma conversa encontrada</p>
+                <p className="text-xs text-[#64748B]">Nenhuma conversa encontrada</p>
               </div>
             ) : (
               filteredConvs.map(conv => {
@@ -1324,10 +1324,10 @@ export default function WhatsAppHub() {
                   <button
                     key={conv.id}
                     onClick={() => setActiveId(conv.id)}
-                    className={`w-full text-left px-3 py-3 flex items-center gap-3 transition-colors border-b border-[#2a3942]/50 ${
+                    className={`w-full text-left flex items-center gap-3 transition-all duration-150 border-b border-[#E2E8F0] border-l-[3px] py-3 pr-3 ${
                       isActive
-                        ? 'bg-[#2a3942]'
-                        : 'hover:bg-[#2a3942]'
+                        ? 'bg-[#E6F7F5] border-l-[#00A896] pl-[9px]'
+                        : 'border-l-transparent pl-3 hover:bg-[#F8FAFB]'
                     }`}
                   >
                     {/* Avatar with profile picture support */}
@@ -1342,10 +1342,10 @@ export default function WhatsAppHub() {
                         )}
                       </div>
                       {conv.online && (
-                        <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-[#111b21]" />
+                        <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
                       )}
                       {conv.assigned_user_name && (
-                        <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-[#00a884] text-white rounded-full flex items-center justify-center text-[8px] font-bold border border-[#111b21]">
+                        <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-[#00A896] text-white rounded-full flex items-center justify-center text-[8px] font-bold border border-white">
                           {getInitials(conv.assigned_user_name)}
                         </div>
                       )}
@@ -1353,24 +1353,24 @@ export default function WhatsAppHub() {
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <span className="text-sm font-medium text-white truncate">{conv.name}</span>
-                        <span className="text-xs text-[#8696a0] flex-shrink-0">{fmtConvTime(conv.lastTime)}</span>
+                        <span className="text-sm font-semibold text-[#1A2B4A] truncate">{conv.name}</span>
+                        <span className="text-[11px] text-[#94A3B8] flex-shrink-0">{fmtConvTime(conv.lastTime)}</span>
                       </div>
                       <div className="flex items-center justify-between gap-1">
-                        <span className="text-xs text-[#8696a0] truncate">{conv.lastMessage}</span>
+                        <span className="text-[13px] text-[#64748B] truncate">{conv.lastMessage}</span>
                         {conv.unreadCount > 0 && (
-                          <span className="flex-shrink-0 bg-[#00a884] text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                          <span className="flex-shrink-0 bg-[#00A896] text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
                             {conv.unreadCount}
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-1 mt-1 flex-wrap">
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium inline-flex items-center gap-0.5 ${safeStatusCfg(conv.status).badge}`}>
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium inline-flex items-center gap-1 ${safeStatusCfg(conv.status).badge}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
                           {safeStatusCfg(conv.status).label}
                         </span>
                         {conv.isGroup && (
-                          <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-purple-900/40 text-purple-400">
+                          <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-[#EDE9FE] text-[#7C3AED]">
                             Grupo
                           </span>
                         )}
@@ -1384,69 +1384,71 @@ export default function WhatsAppHub() {
         </div>
 
         {/* ── Col 2: Chat ───────────────────────────────────────────────────────── */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-[#0b141a]">
+        <div className="flex-1 flex flex-col overflow-hidden bg-[#F8FAFB]">
 
           {/* ── Contacts table view ── */}
           {mainView === 'contacts' && (
-            <div className="flex-1 overflow-y-auto bg-[#111b21] p-6">
-              <h2 className="text-sm font-bold text-white mb-4">Contatos</h2>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-[#2a3942] text-[#8696a0] uppercase tracking-wide">
-                    <th className="text-left py-2 pr-4 text-xs font-semibold">Nome</th>
-                    <th className="text-left py-2 pr-4 text-xs font-semibold">Telefone</th>
-                    <th className="text-left py-2 pr-4 text-xs font-semibold">Tipo</th>
-                    <th className="text-left py-2 pr-4 text-xs font-semibold">Atendente</th>
-                    <th className="text-left py-2 pr-4 text-xs font-semibold">Etiquetas</th>
-                    <th className="text-left py-2 text-xs font-semibold">Última msg</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {conversations.filter(c => !c.isGroup).map(c => (
-                    <tr key={c.id}
-                      onClick={() => { setMainView('conversations'); setActiveId(c.id) }}
-                      className="border-b border-[#2a3942]/50 hover:bg-[#2a3942] cursor-pointer transition-colors">
-                      <td className="py-2.5 pr-4">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-7 h-7 rounded-full ${c.avatarColor} text-white text-xs font-bold flex items-center justify-center flex-shrink-0 overflow-hidden`}>
-                            {c.profile_picture_url
-                              ? <img src={c.profile_picture_url} alt={c.name} className="w-full h-full object-cover" />
-                              : c.name.charAt(0).toUpperCase()}
-                          </div>
-                          <span className="font-medium text-white truncate max-w-[120px]">{c.name}</span>
-                        </div>
-                      </td>
-                      <td className="py-2.5 pr-4 text-[#8696a0]">{c.phone}</td>
-                      <td className="py-2.5 pr-4">
-                        {c.contact_type
-                          ? <span className="px-1.5 py-0.5 rounded-full bg-blue-900/40 text-blue-400 font-medium">{c.contact_type}</span>
-                          : <span className="text-[#8696a0]">—</span>}
-                      </td>
-                      <td className="py-2.5 pr-4 text-[#8696a0]">{c.assigned_user_name || <span className="text-[#8696a0]">—</span>}</td>
-                      <td className="py-2.5 pr-4">
-                        <div className="flex flex-wrap gap-1">
-                          {(c.tags || []).slice(0, 3).map(tag => (
-                            <span key={tag} className={`px-1.5 py-0.5 rounded-full text-white font-medium ${tagColor(tag)}`}>{tag}</span>
-                          ))}
-                          {(c.tags || []).length > 3 && <span className="text-[#8696a0]">+{(c.tags || []).length - 3}</span>}
-                        </div>
-                      </td>
-                      <td className="py-2.5 text-[#8696a0]">{fmtConvTime(c.lastTime)}</td>
+            <div className="flex-1 overflow-y-auto bg-[#F8FAFB] p-6">
+              <h2 className="text-sm font-bold text-[#1A2B4A] mb-4">Contatos</h2>
+              <div className="bg-white rounded-xl border border-[#E2E8F0] overflow-hidden shadow-sm">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-[#E2E8F0] bg-[#F8FAFB]">
+                      <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide">Nome</th>
+                      <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide">Telefone</th>
+                      <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide">Tipo</th>
+                      <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide">Atendente</th>
+                      <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide">Etiquetas</th>
+                      <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide">Última msg</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              {conversations.filter(c => !c.isGroup).length === 0 && (
-                <p className="text-xs text-[#8696a0] text-center py-12">Nenhum contato encontrado</p>
-              )}
+                  </thead>
+                  <tbody>
+                    {conversations.filter(c => !c.isGroup).map(c => (
+                      <tr key={c.id}
+                        onClick={() => { setMainView('conversations'); setActiveId(c.id) }}
+                        className="border-b border-[#E2E8F0] hover:bg-[#F8FAFB] cursor-pointer transition-colors">
+                        <td className="py-2.5 px-4">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-7 h-7 rounded-full ${c.avatarColor} text-white text-xs font-bold flex items-center justify-center flex-shrink-0 overflow-hidden`}>
+                              {c.profile_picture_url
+                                ? <img src={c.profile_picture_url} alt={c.name} className="w-full h-full object-cover" />
+                                : c.name.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="font-semibold text-[#1A2B4A] truncate max-w-[120px]">{c.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-4 text-[#64748B]">{c.phone}</td>
+                        <td className="py-2.5 px-4">
+                          {c.contact_type
+                            ? <span className="px-2 py-0.5 rounded-full bg-[#E6F7F5] text-[#00A896] font-medium">{c.contact_type}</span>
+                            : <span className="text-[#94A3B8]">—</span>}
+                        </td>
+                        <td className="py-2.5 px-4 text-[#64748B]">{c.assigned_user_name || <span className="text-[#94A3B8]">—</span>}</td>
+                        <td className="py-2.5 px-4">
+                          <div className="flex flex-wrap gap-1">
+                            {(c.tags || []).slice(0, 3).map(tag => (
+                              <span key={tag} className={`px-1.5 py-0.5 rounded-full text-white text-[11px] font-medium ${tagColor(tag)}`}>{tag}</span>
+                            ))}
+                            {(c.tags || []).length > 3 && <span className="text-[#64748B]">+{(c.tags || []).length - 3}</span>}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-4 text-[#64748B]">{fmtConvTime(c.lastTime)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {conversations.filter(c => !c.isGroup).length === 0 && (
+                  <p className="text-xs text-[#64748B] text-center py-12">Nenhum contato encontrado</p>
+                )}
+              </div>
             </div>
           )}
 
           {/* Chat + composer — hidden in contacts view */}
           {mainView !== 'contacts' && activeConv && (
-            <div className="flex-shrink-0 relative bg-[#202c33]">
+            <div className="flex-shrink-0 relative bg-white border-b border-[#E2E8F0]" style={{ minHeight: '64px' }}>
               {/* Header row */}
-              <div className="flex items-center gap-3 px-4 py-2.5">
+              <div className="flex items-center gap-3 px-4 py-3 h-16">
                 <div className="relative">
                   <div className={`w-10 h-10 rounded-full ${activeConv.avatarColor} text-white text-sm font-bold flex items-center justify-center overflow-hidden`}>
                     {activeConv.profile_picture_url ? (
@@ -1458,32 +1460,35 @@ export default function WhatsAppHub() {
                     )}
                   </div>
                   {activeConv.online && (
-                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-[#202c33]" />
+                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white">{activeConv.name}</p>
-                  <p className="text-xs text-[#8696a0]">
+                  <p className="text-sm font-bold text-[#1A2B4A]">{activeConv.name}</p>
+                  <p className="text-xs text-[#64748B]">
                     {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
-                    {activeConv.online && <span className="ml-1.5 text-[#00a884] font-medium">• online</span>}
+                    {activeConv.online && <span className="ml-1.5 text-[#00A896] font-medium">• online</span>}
                   </p>
                 </div>
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => { setShowMsgSearch(v => !v); if (showMsgSearch) setMsgSearchText('') }}
-                    className={`p-2 rounded-full transition-colors ${showMsgSearch ? 'bg-[#2a3942] text-[#00a884]' : 'hover:bg-[#2a3942] text-[#aebac1]'}`}
+                    title="Buscar mensagens"
+                    className={`p-2 rounded-lg transition-colors ${showMsgSearch ? 'bg-[#E6F7F5] text-[#00A896]' : 'hover:bg-[#F1F5F9] text-[#64748B] hover:text-[#1A2B4A]'}`}
                   >
                     <Search className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setShowContactInfo(v => !v)}
-                    className={`p-2 rounded-full transition-colors ${showContactInfo ? 'bg-[#2a3942] text-[#00a884]' : 'hover:bg-[#2a3942] text-[#aebac1]'}`}
+                    title="Informações do contato"
+                    className={`p-2 rounded-lg transition-colors ${showContactInfo ? 'bg-[#E6F7F5] text-[#00A896]' : 'hover:bg-[#F1F5F9] text-[#64748B] hover:text-[#1A2B4A]'}`}
                   >
                     <Info className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setShowMoreMenu(v => !v)}
-                    className="p-2 rounded-full hover:bg-[#2a3942] text-[#aebac1] transition-colors"
+                    title="Mais opções"
+                    className="p-2 rounded-lg hover:bg-[#F1F5F9] text-[#64748B] hover:text-[#1A2B4A] transition-colors"
                   >
                     <MoreVertical className="w-4 h-4" />
                   </button>
@@ -1492,31 +1497,31 @@ export default function WhatsAppHub() {
 
               {/* Message search bar */}
               {showMsgSearch && (
-                <div className="flex-shrink-0 px-4 py-2 bg-[#202c33] border-t border-[#2a3942] flex items-center gap-2">
-                  <Search className="w-3.5 h-3.5 text-[#8696a0] flex-shrink-0" />
+                <div className="flex-shrink-0 px-4 py-2 bg-white border-t border-[#E2E8F0] flex items-center gap-2">
+                  <Search className="w-3.5 h-3.5 text-[#94A3B8] flex-shrink-0" />
                   <input autoFocus value={msgSearchText} onChange={e => setMsgSearchText(e.target.value)}
                     placeholder="Buscar nas mensagens..."
-                    className="flex-1 text-sm bg-transparent outline-none text-white placeholder-[#8696a0]"
+                    className="flex-1 text-sm bg-transparent outline-none text-[#1A2B4A] placeholder-[#94A3B8]"
                   />
                   <button onClick={() => { setShowMsgSearch(false); setMsgSearchText('') }}
-                    className="text-[#8696a0] hover:text-white"><X className="w-3.5 h-3.5" /></button>
+                    className="text-[#64748B] hover:text-[#1A2B4A]"><X className="w-3.5 h-3.5" /></button>
                 </div>
               )}
 
               {/* More menu dropdown */}
               {showMoreMenu && (
-                <div ref={moreMenuRef} className="absolute right-4 top-12 z-30 bg-[#233138] rounded-xl shadow-2xl border border-[#2a3942] py-1 min-w-[160px]">
+                <div ref={moreMenuRef} className="absolute right-4 top-14 z-30 bg-white rounded-xl shadow-lg border border-[#E2E8F0] py-1 min-w-[160px]">
                   <button onClick={() => { setConversations(prev => prev.map(c => c.id === activeId ? {...c, messages: []} : c)); setShowMoreMenu(false) }}
-                    className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-[#2a3942] transition-colors">
+                    className="w-full text-left px-4 py-2.5 text-sm text-[#1A2B4A] hover:bg-[#F8FAFB] transition-colors">
                     Limpar conversa
                   </button>
                   <button onClick={() => { setShowMoreMenu(false) }}
-                    className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-[#2a3942] transition-colors">
+                    className="w-full text-left px-4 py-2.5 text-sm text-[#1A2B4A] hover:bg-[#F8FAFB] transition-colors">
                     Bloquear contato
                   </button>
                   {activeConv?.lead_id && (
                     <button onClick={() => { navigate(`/leads?highlight=${activeConv.lead_id}`); setShowMoreMenu(false) }}
-                      className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-[#2a3942] transition-colors">
+                      className="w-full text-left px-4 py-2.5 text-sm text-[#1A2B4A] hover:bg-[#F8FAFB] transition-colors">
                       Ver perfil no CRM
                     </button>
                   )}
@@ -1530,25 +1535,25 @@ export default function WhatsAppHub() {
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-0.5">
             {!activeConv && conversations.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-center">
-                <div className="w-16 h-16 bg-[#202c33] rounded-full flex items-center justify-center mx-auto mb-4">
-                  <MessageCircle className="w-8 h-8 text-[#8696a0] animate-pulse" />
+                <div className="w-16 h-16 bg-white border border-[#E2E8F0] rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                  <MessageCircle className="w-8 h-8 text-[#94A3B8] animate-pulse" />
                 </div>
-                <p className="text-sm font-semibold text-white mb-1">Aguardando mensagens</p>
-                <p className="text-sm text-[#8696a0] leading-relaxed max-w-xs">
+                <p className="text-sm font-semibold text-[#1A2B4A] mb-1">Aguardando mensagens</p>
+                <p className="text-sm text-[#64748B] leading-relaxed max-w-xs">
                   Seu WhatsApp está conectado. As conversas aparecerão aqui assim que chegarem novas mensagens.
                 </p>
               </div>
             )}
             {!activeConv && conversations.length > 0 && (
               <div className="flex flex-col items-center justify-center h-full text-center">
-                <MessageCircle className="w-10 h-10 text-[#2a3942] mb-3" />
-                <p className="text-sm text-[#8696a0]">Selecione uma conversa</p>
+                <MessageCircle className="w-10 h-10 text-[#94A3B8] mb-3" />
+                <p className="text-sm text-[#64748B]">Selecione uma conversa</p>
               </div>
             )}
             {msgGroups.map((group, gi) => (
               <div key={gi}>
                 <div className="flex items-center justify-center my-4">
-                  <span className="text-xs text-[#8696a0] bg-[#202c33] px-3 py-1 rounded-full shadow-sm">
+                  <span className="text-xs text-[#64748B] bg-[#E2E8F0] px-3 py-1 rounded-full shadow-sm">
                     {group.label}
                   </span>
                 </div>
@@ -1559,23 +1564,23 @@ export default function WhatsAppHub() {
             ))}
             {activeConv?.messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-center py-16">
-                <MessageCircle className="w-10 h-10 text-[#2a3942] mb-3" />
-                <p className="text-sm text-[#8696a0]">Nenhuma mensagem ainda</p>
-                <p className="text-xs text-[#8696a0] mt-1">Envie a primeira mensagem abaixo</p>
+                <MessageCircle className="w-10 h-10 text-[#94A3B8] mb-3" />
+                <p className="text-sm text-[#64748B]">Nenhuma mensagem ainda</p>
+                <p className="text-xs text-[#94A3B8] mt-1">Envie a primeira mensagem abaixo</p>
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
           {/* Composer */}
-          <div className="flex-shrink-0 bg-[#202c33] px-4 py-3">
+          <div className="flex-shrink-0 bg-white border-t border-[#E2E8F0] px-4 py-3">
 
             {/* Quick replies panel */}
             {showQuickReplies && (
-              <div className="mb-2 bg-[#111b21] rounded-2xl border border-[#2a3942] p-3">
+              <div className="mb-2 bg-[#F8FAFB] rounded-xl border border-[#E2E8F0] p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-[#8696a0]">Respostas rápidas</span>
-                  <button onClick={() => setShowQuickReplies(false)} className="p-0.5 text-[#8696a0] hover:text-white">
+                  <span className="text-xs font-semibold text-[#64748B]">Respostas rápidas</span>
+                  <button onClick={() => setShowQuickReplies(false)} className="p-0.5 text-[#64748B] hover:text-[#1A2B4A]">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -1584,10 +1589,10 @@ export default function WhatsAppHub() {
                     <button
                       key={qr.id}
                       onClick={() => { setInputText(qr.text); setShowQuickReplies(false) }}
-                      className="text-left px-3 py-2 bg-[#2a3942] border border-[#2a3942] rounded-xl hover:border-[#00a884] hover:bg-[#2a3942]/80 transition-all"
+                      className="text-left px-3 py-2 bg-white border border-[#E2E8F0] rounded-lg hover:border-[#00A896] hover:bg-[#E6F7F5] transition-all"
                     >
-                      <p className="text-xs font-semibold text-white">{qr.label}</p>
-                      <p className="text-xs text-[#8696a0] truncate mt-0.5">{qr.text}</p>
+                      <p className="text-xs font-semibold text-[#1A2B4A]">{qr.label}</p>
+                      <p className="text-xs text-[#64748B] truncate mt-0.5">{qr.text}</p>
                     </button>
                   ))}
                 </div>
@@ -1598,15 +1603,15 @@ export default function WhatsAppHub() {
             {showAttach && (
               <div className="mb-2 flex gap-2 flex-wrap">
                 {[
-                  { icon: Image,    label: 'Imagem',    color: 'bg-purple-900/40 text-purple-400' },
-                  { icon: Video,    label: 'Vídeo',     color: 'bg-blue-900/40 text-blue-400'   },
-                  { icon: FileText, label: 'Documento', color: 'bg-orange-900/40 text-orange-400' },
-                  { icon: Mic,      label: 'Áudio',     color: 'bg-green-900/40 text-green-400' },
+                  { icon: Image,    label: 'Imagem',    color: 'bg-[#EDE9FE] text-[#7C3AED]' },
+                  { icon: Video,    label: 'Vídeo',     color: 'bg-[#DBEAFE] text-[#2563EB]' },
+                  { icon: FileText, label: 'Documento', color: 'bg-[#FEF3C7] text-[#D97706]' },
+                  { icon: Mic,      label: 'Áudio',     color: 'bg-[#D1FAE5] text-[#059669]' },
                 ].map(item => (
                   <button
                     key={item.label}
                     onClick={() => { fileInputRef.current?.click(); setShowAttach(false) }}
-                    className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl ${item.color} text-xs font-medium hover:opacity-80 transition-opacity`}
+                    className={`flex flex-col items-center gap-1 px-3 py-2 rounded-lg ${item.color} text-xs font-medium hover:opacity-80 transition-opacity`}
                   >
                     <item.icon className="w-4 h-4" />
                     {item.label}
@@ -1617,28 +1622,28 @@ export default function WhatsAppHub() {
 
             {/* File preview area */}
             {pendingFile && (
-              <div className="mb-2 bg-[#111b21] rounded-xl border border-[#2a3942] p-2 flex items-center gap-2">
+              <div className="mb-2 bg-[#F8FAFB] rounded-xl border border-[#E2E8F0] p-2 flex items-center gap-2">
                 {pendingFile.type.startsWith('image/') ? (
                   <img src={URL.createObjectURL(pendingFile)} alt="preview" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
                 ) : (
-                  <div className="w-12 h-12 rounded-lg bg-[#2a3942] flex items-center justify-center flex-shrink-0">
-                    <FileText className="w-5 h-5 text-[#8696a0]" />
+                  <div className="w-12 h-12 rounded-lg bg-[#F1F5F9] flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-5 h-5 text-[#64748B]" />
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-white truncate">{pendingFile.name}</p>
-                  <p className="text-xs text-[#8696a0]">{(pendingFile.size / 1024).toFixed(1)} KB</p>
+                  <p className="text-xs font-medium text-[#1A2B4A] truncate">{pendingFile.name}</p>
+                  <p className="text-xs text-[#64748B]">{(pendingFile.size / 1024).toFixed(1)} KB</p>
                   {uploadProgress > 0 && (
-                    <div className="mt-1 h-1 bg-[#2a3942] rounded-full overflow-hidden">
-                      <div className="h-full bg-[#00a884] transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                    <div className="mt-1 h-1 bg-[#E2E8F0] rounded-full overflow-hidden">
+                      <div className="h-full bg-[#00A896] transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
                     </div>
                   )}
                 </div>
                 <div className="flex items-center gap-1">
-                  <button onClick={sendPendingFile} className="p-1.5 bg-[#00a884] text-white rounded-lg hover:bg-[#06cf9c]">
+                  <button onClick={sendPendingFile} className="p-1.5 bg-[#00A896] text-white rounded-lg hover:bg-[#008f81]">
                     <Send className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => setPendingFile(null)} className="p-1.5 text-[#8696a0] hover:text-white">
+                  <button onClick={() => setPendingFile(null)} className="p-1.5 text-[#64748B] hover:text-[#1A2B4A]">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -1647,11 +1652,11 @@ export default function WhatsAppHub() {
 
             {/* Emoji picker */}
             {showEmojiPicker && (
-              <div className="mb-2 bg-[#233138] rounded-xl border border-[#2a3942] p-2 shadow-xl">
+              <div className="mb-2 bg-white rounded-xl border border-[#E2E8F0] p-2 shadow-lg">
                 <div className="grid grid-cols-10 gap-1">
                   {COMMON_EMOJIS.map(e => (
                     <button key={e} onClick={() => { setInputText(t => t + e); setShowEmojiPicker(false) }}
-                      className="w-7 h-7 text-base hover:bg-[#2a3942] rounded flex items-center justify-center transition-colors">
+                      className="w-7 h-7 text-base hover:bg-[#F1F5F9] rounded flex items-center justify-center transition-colors">
                       {e}
                     </button>
                   ))}
@@ -1663,22 +1668,22 @@ export default function WhatsAppHub() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => { setShowAttach(v => !v); setShowQuickReplies(false) }}
-                className={`p-2 rounded-full transition-colors flex-shrink-0 ${showAttach ? 'bg-[#2a3942] text-[#00a884]' : 'hover:bg-[#2a3942] text-[#aebac1]'}`}
+                className={`p-2 rounded-lg transition-colors flex-shrink-0 ${showAttach ? 'bg-[#E6F7F5] text-[#00A896]' : 'text-[#64748B] hover:text-[#00A896] hover:bg-[#F1F5F9]'}`}
               >
-                <Paperclip className="w-4 h-4" />
+                <Paperclip className="w-5 h-5" />
               </button>
               <button
                 onClick={() => { setShowQuickReplies(v => !v); setShowAttach(false) }}
-                className={`p-2 rounded-full transition-colors flex-shrink-0 ${showQuickReplies ? 'bg-[#2a3942] text-[#00a884]' : 'hover:bg-[#2a3942] text-[#aebac1]'}`}
+                className={`p-2 rounded-lg transition-colors flex-shrink-0 ${showQuickReplies ? 'bg-[#E6F7F5] text-[#00A896]' : 'text-[#64748B] hover:text-[#00A896] hover:bg-[#F1F5F9]'}`}
                 title="Respostas rápidas"
               >
-                <Zap className="w-4 h-4" />
+                <Zap className="w-5 h-5" />
               </button>
               <button
                 onClick={() => { setShowEmojiPicker(v => !v); setShowAttach(false); setShowQuickReplies(false) }}
-                className={`p-2 rounded-full transition-colors flex-shrink-0 ${showEmojiPicker ? 'bg-[#2a3942] text-[#00a884]' : 'hover:bg-[#2a3942] text-[#aebac1]'}`}
+                className={`p-2 rounded-lg transition-colors flex-shrink-0 ${showEmojiPicker ? 'bg-[#E6F7F5] text-[#00A896]' : 'text-[#64748B] hover:text-[#00A896] hover:bg-[#F1F5F9]'}`}
               >
-                <Smile className="w-4 h-4" />
+                <Smile className="w-5 h-5" />
               </button>
               <textarea
                 value={inputText}
@@ -1686,13 +1691,13 @@ export default function WhatsAppHub() {
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
                 placeholder="Digite uma mensagem..."
                 rows={1}
-                className="flex-1 px-4 py-2.5 text-sm bg-[#2a3942] rounded-full text-white placeholder-[#8696a0] focus:outline-none resize-none"
+                className="flex-1 px-4 py-2.5 text-sm bg-[#F1F5F9] rounded-3xl text-[#1A2B4A] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#00A896] resize-none transition-all"
                 style={{ minHeight: '40px', maxHeight: '96px' }}
               />
               {inputText.trim() ? (
                 <button
                   onClick={handleSend}
-                  className="p-2.5 rounded-full bg-[#00a884] text-white hover:bg-[#06cf9c] transition-colors flex-shrink-0"
+                  className="w-10 h-10 rounded-full bg-[#00A896] text-white hover:bg-[#008f81] transition-colors flex-shrink-0 flex items-center justify-center"
                 >
                   <Send className="w-4 h-4" />
                 </button>
@@ -1702,7 +1707,7 @@ export default function WhatsAppHub() {
                   onMouseUp={stopRecording}
                   onTouchStart={startRecording}
                   onTouchEnd={stopRecording}
-                  className={`p-2.5 rounded-full transition-colors flex-shrink-0 ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-[#00a884] text-white'}`}
+                  className={`w-10 h-10 rounded-full transition-colors flex-shrink-0 flex items-center justify-center ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-[#00A896] text-white hover:bg-[#008f81]'}`}
                   title="Segurar para gravar áudio"
                 >
                   <Mic className="w-4 h-4" />
@@ -1715,10 +1720,10 @@ export default function WhatsAppHub() {
 
         {/* ── Col 3: Contact Panel ──────────────────────────────────────────────── */}
         {showContactInfo && activeConv && (
-          <div className="w-[280px] flex-shrink-0 bg-[#111b21] border-l border-[#2a3942] flex flex-col overflow-hidden">
+          <div className="w-[280px] flex-shrink-0 bg-white border-l border-[#E2E8F0] flex flex-col overflow-hidden">
 
             {/* Tab bar */}
-            <div className="flex-shrink-0 flex bg-[#202c33] border-b border-[#2a3942]">
+            <div className="flex-shrink-0 flex bg-white border-b border-[#E2E8F0]">
               {([
                 { key: 'details', label: 'Detalhes' },
                 { key: 'history', label: 'Histórico' },
@@ -1728,8 +1733,8 @@ export default function WhatsAppHub() {
                   onClick={() => setRightPanelTab(tab.key)}
                   className={`flex-1 py-3 text-xs font-semibold border-b-2 -mb-px transition-colors ${
                     rightPanelTab === tab.key
-                      ? 'border-[#00a884] text-[#00a884]'
-                      : 'border-transparent text-[#8696a0] hover:text-white'
+                      ? 'border-[#00A896] text-[#1A2B4A]'
+                      : 'border-transparent text-[#64748B] hover:text-[#1A2B4A]'
                   }`}
                 >
                   {tab.label}
@@ -1743,14 +1748,14 @@ export default function WhatsAppHub() {
 
                 {/* Concluir / Sair buttons */}
                 {activeConv.status !== 'closed' && (
-                  <div className="px-4 py-3 border-b border-[#2a3942] bg-[#0d1f27] flex flex-col gap-2">
+                  <div className="px-4 py-3 border-b border-[#E2E8F0] bg-[#F8FAFB] flex flex-col gap-2">
                     <button onClick={handleCloseConversation}
-                      className="w-full py-2 text-xs font-semibold text-white bg-[#00a884] hover:bg-[#06cf9c] rounded-xl transition-colors">
+                      className="w-full py-2 text-xs font-semibold text-white bg-[#00A896] hover:bg-[#008f81] rounded-lg transition-colors">
                       ✅ Concluir Atendimento
                     </button>
                     {activeConv.assigned_user_id && (
                       <button onClick={handleLeaveConversation}
-                        className="w-full py-2 text-xs font-medium text-[#8696a0] bg-[#2a3942] hover:bg-[#374751] rounded-xl border border-[#2a3942] transition-colors">
+                        className="w-full py-2 text-xs font-medium text-[#64748B] bg-white hover:bg-[#F8FAFB] rounded-lg border border-[#E2E8F0] transition-colors">
                         🚪 Sair do Atendimento
                       </button>
                     )}
@@ -1758,26 +1763,26 @@ export default function WhatsAppHub() {
                 )}
 
                 {/* Contact header */}
-                <div className="flex flex-col items-center px-4 pt-5 pb-4 border-b border-[#2a3942] bg-[#111b21]">
-                  <div className={`w-16 h-16 rounded-full ${activeConv.avatarColor} text-white text-2xl font-bold flex items-center justify-center mb-3 overflow-hidden`}>
+                <div className="flex flex-col items-center px-4 pt-5 pb-4 border-b border-[#E2E8F0] bg-white">
+                  <div className={`w-[72px] h-[72px] rounded-full ${activeConv.avatarColor} text-white text-2xl font-bold flex items-center justify-center mb-3 overflow-hidden`}>
                     {activeConv.profile_picture_url ? (
                       <img src={activeConv.profile_picture_url} alt={activeConv.name} className="w-full h-full object-cover" />
                     ) : activeConv.isGroup ? (
                       <Users className="w-8 h-8 text-white/90" />
                     ) : (
-                      activeConv.name.charAt(0)
+                      getInitials(activeConv.name)
                     )}
                   </div>
-                  <p className="text-sm font-bold text-white text-center">{activeConv.name}</p>
-                  <p className="text-xs text-[#8696a0] mt-0.5">
+                  <p className="text-[18px] font-bold text-[#1A2B4A] text-center">{activeConv.name}</p>
+                  <p className="text-[13px] text-[#64748B] mt-0.5 text-center">
                     {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
                   </p>
                   {activeConv.contact_type && activeConv.contact_type !== 'unknown' && (
-                    <span className={`mt-1 text-xs px-2 py-0.5 rounded-full font-medium ${
-                      activeConv.contact_type === 'lead'     ? 'bg-blue-900/40 text-blue-400' :
-                      activeConv.contact_type === 'client'   ? 'bg-green-900/40 text-green-400' :
-                      activeConv.contact_type === 'supplier' ? 'bg-purple-900/40 text-purple-400' :
-                      'bg-[#2a3942] text-[#8696a0]'
+                    <span className={`mt-2 text-xs px-3 py-1 rounded-full font-medium ${
+                      activeConv.contact_type === 'lead'     ? 'bg-[#E6F7F5] text-[#00A896]' :
+                      activeConv.contact_type === 'client'   ? 'bg-[#D1FAE5] text-[#059669]' :
+                      activeConv.contact_type === 'supplier' ? 'bg-[#EDE9FE] text-[#7C3AED]' :
+                      'bg-[#F1F5F9] text-[#64748B]'
                     }`}>
                       {activeConv.contact_type === 'lead' ? 'Lead' :
                        activeConv.contact_type === 'client' ? 'Cliente' :
@@ -1785,7 +1790,7 @@ export default function WhatsAppHub() {
                     </span>
                   )}
                   {activeConv.isGroup && (
-                    <span className="mt-1.5 text-xs px-2 py-0.5 rounded-full font-medium bg-purple-900/40 text-purple-400">Grupo</span>
+                    <span className="mt-2 text-xs px-3 py-1 rounded-full font-medium bg-[#EDE9FE] text-[#7C3AED]">Grupo</span>
                   )}
                   {activeConv.labels.map(lb => (
                     <span key={lb.text} className={`mt-1.5 text-xs px-2 py-0.5 rounded-full font-medium ${lb.color}`}>
@@ -1798,7 +1803,7 @@ export default function WhatsAppHub() {
                         setEditForm({ name: activeConv.name, contact_type: activeConv.contact_type || '', notes: '' })
                         setEditingContact(true)
                       }}
-                      className="mt-2 text-xs text-[#00a884] hover:text-[#06cf9c] flex items-center gap-1 font-medium"
+                      className="mt-2 text-xs border border-[#00A896] text-[#00A896] hover:bg-[#E6F7F5] px-3 py-1 rounded-lg flex items-center gap-1 font-medium transition-colors"
                     >
                       ✏️ Editar
                     </button>
@@ -1807,17 +1812,17 @@ export default function WhatsAppHub() {
 
                 {/* Inline edit form */}
                 {editingContact && (
-                  <div className="px-4 py-3 border-b border-[#2a3942] bg-[#0d1f27]">
+                  <div className="px-4 py-3 border-b border-[#E2E8F0] bg-[#F8FAFB]">
                     <div className="space-y-2">
                       <div>
-                        <label className="block text-xs font-medium text-[#8696a0] mb-1">Nome</label>
+                        <label className="block text-xs font-medium text-[#64748B] mb-1">Nome</label>
                         <input value={editForm.name} onChange={e => setEditForm(f => ({...f, name: e.target.value}))}
-                          className="w-full px-3 py-2 text-xs bg-[#2a3942] border border-[#2a3942] rounded-xl text-white placeholder-[#8696a0] focus:ring-1 focus:ring-[#00a884] outline-none" />
+                          className="w-full px-3 py-2 text-xs bg-white border border-[#E2E8F0] rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none" />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-[#8696a0] mb-1">Tipo</label>
+                        <label className="block text-xs font-medium text-[#64748B] mb-1">Tipo</label>
                         <select value={editForm.contact_type} onChange={e => setEditForm(f => ({...f, contact_type: e.target.value}))}
-                          className="w-full px-3 py-2 text-xs bg-[#2a3942] border border-[#2a3942] rounded-xl text-white placeholder-[#8696a0] focus:ring-1 focus:ring-[#00a884] outline-none">
+                          className="w-full px-3 py-2 text-xs bg-white border border-[#E2E8F0] rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
                           <option value="">Desconhecido</option>
                           <option value="lead">Lead</option>
                           <option value="client">Cliente</option>
@@ -1840,11 +1845,11 @@ export default function WhatsAppHub() {
                         }
                         setEditingContact(false)
                       }}
-                        className="flex-1 py-1.5 text-xs font-semibold text-white bg-[#00a884] rounded-xl hover:bg-[#06cf9c] transition-colors">
+                        className="flex-1 py-1.5 text-xs font-semibold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] transition-colors">
                         Salvar
                       </button>
                       <button onClick={() => setEditingContact(false)}
-                        className="px-3 py-1.5 text-xs text-[#8696a0] border border-[#2a3942] rounded-xl hover:bg-[#2a3942]">
+                        className="px-3 py-1.5 text-xs text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-white">
                         Cancelar
                       </button>
                     </div>
@@ -1853,8 +1858,8 @@ export default function WhatsAppHub() {
 
                 {/* Who is this contact? — only for unknown non-group, non-linked contacts */}
                 {!activeConv.isGroup && (!activeConv.contact_type || activeConv.contact_type === 'unknown') && !activeConv.lead_id && (
-                  <div className="px-4 py-3 border-b border-[#2a3942] bg-[#0d1f27]">
-                    <p className="text-xs font-semibold text-amber-400 mb-2">Quem é esse contato?</p>
+                  <div className="px-4 py-3 border-b border-[#E2E8F0] bg-[#FFFBEB]">
+                    <p className="text-xs font-semibold text-[#D97706] mb-2">Quem é esse contato?</p>
                     <div className="flex flex-col gap-1.5">
                       <button onClick={() => {
                         setLeadForm(prev => ({
@@ -1864,20 +1869,20 @@ export default function WhatsAppHub() {
                         }))
                         setShowLeadModal(true)
                       }}
-                        className="w-full text-left px-3 py-2 text-xs font-semibold bg-[#00a884] text-white rounded-xl hover:bg-[#06cf9c] transition-colors">
+                        className="w-full text-left px-3 py-2 text-xs font-semibold bg-[#00A896] text-white rounded-lg hover:bg-[#008f81] transition-colors">
                         🎓 Nova Família (Lead)
                       </button>
                       <button onClick={() => setShowClientModal(true)}
-                        className="w-full text-left px-3 py-2 text-xs font-medium bg-[#2a3942] text-white rounded-xl hover:bg-[#374751] transition-colors border border-[#374751]">
+                        className="w-full text-left px-3 py-2 text-xs font-medium bg-white text-[#1A2B4A] rounded-lg hover:bg-[#F8FAFB] transition-colors border border-[#E2E8F0]">
                         ✅ Família da Casa (Cliente)
                       </button>
                       <div className="flex gap-1.5">
                         <button onClick={() => handleContactType('supplier')}
-                          className="flex-1 text-xs px-2 py-1.5 bg-[#2a3942] border border-[#2a3942] rounded-xl text-[#8696a0] hover:bg-[#374751] transition-colors">
+                          className="flex-1 text-xs px-2 py-1.5 bg-white border border-[#E2E8F0] rounded-lg text-[#64748B] hover:bg-[#F8FAFB] transition-colors">
                           🏢 Fornecedor
                         </button>
                         <button onClick={() => handleContactType('other')}
-                          className="flex-1 text-xs px-2 py-1.5 bg-[#2a3942] border border-[#2a3942] rounded-xl text-[#8696a0] hover:bg-[#374751] transition-colors">
+                          className="flex-1 text-xs px-2 py-1.5 bg-white border border-[#E2E8F0] rounded-lg text-[#64748B] hover:bg-[#F8FAFB] transition-colors">
                           Outro
                         </button>
                       </div>
@@ -1886,14 +1891,14 @@ export default function WhatsAppHub() {
                 )}
 
                 {/* Status select */}
-                <div className="px-4 py-3 border-b border-[#2a3942]">
-                  <label className="block text-xs font-semibold text-[#8696a0] uppercase tracking-wide mb-1.5">
+                <div className="px-4 py-3 border-b border-[#E2E8F0]">
+                  <label className="block text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-1.5">
                     Status do atendimento
                   </label>
                   <select
                     value={activeConv.status}
                     onChange={e => handleStatusChange(e.target.value as ConvStatus)}
-                    className="w-full px-3 py-2 text-xs bg-[#2a3942] border border-[#2a3942] rounded-xl text-white focus:ring-1 focus:ring-[#00a884] outline-none"
+                    className="w-full px-3 py-2 text-xs bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none"
                   >
                     <option value="waiting">Aguardando</option>
                     <option value="open">Em Atendimento</option>
@@ -1902,8 +1907,8 @@ export default function WhatsAppHub() {
                 </div>
 
                 {/* Attendant section */}
-                <div className="px-4 py-3 border-b border-[#2a3942]">
-                  <label className="block text-xs font-semibold text-[#8696a0] uppercase tracking-wide mb-1.5">
+                <div className="px-4 py-3 border-b border-[#E2E8F0]">
+                  <label className="block text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-1.5">
                     Atendente
                   </label>
                   {transferring ? (
@@ -1911,7 +1916,7 @@ export default function WhatsAppHub() {
                       <select
                         value={transferTarget}
                         onChange={e => setTransferTarget(e.target.value)}
-                        className="w-full px-3 py-2 text-xs bg-[#2a3942] border border-[#2a3942] rounded-xl text-white focus:ring-1 focus:ring-[#00a884] outline-none"
+                        className="w-full px-3 py-2 text-xs bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none"
                       >
                         <option value="">Selecionar atendente...</option>
                         {users.filter(u => u.id !== activeConv.assigned_user_id).map(u => (
@@ -1920,22 +1925,22 @@ export default function WhatsAppHub() {
                       </select>
                       <div className="flex gap-1.5">
                         <button onClick={handleTransfer} disabled={!transferTarget}
-                          className="flex-1 px-2.5 py-1.5 bg-[#00a884] text-white text-xs font-semibold rounded-xl disabled:opacity-40 hover:bg-[#06cf9c] transition-colors">
+                          className="flex-1 px-2.5 py-1.5 bg-[#00A896] text-white text-xs font-semibold rounded-lg disabled:opacity-40 hover:bg-[#008f81] transition-colors">
                           Transferir
                         </button>
                         <button onClick={() => { setTransferring(false); setTransferTarget('') }}
-                          className="px-2.5 py-1.5 text-xs text-[#8696a0] border border-[#2a3942] rounded-xl hover:bg-[#2a3942]">
+                          className="px-2.5 py-1.5 text-xs text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
                           Cancelar
                         </button>
                       </div>
                     </div>
                   ) : (
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-white">
-                        {activeConv.assigned_user_name || <span className="text-[#8696a0] italic">Sem atendente</span>}
+                      <span className="text-xs text-[#1A2B4A] font-medium">
+                        {activeConv.assigned_user_name || <span className="text-[#94A3B8] italic font-normal">Sem atendente</span>}
                       </span>
                       <button onClick={() => setTransferring(true)}
-                        className="text-xs text-[#00a884] hover:text-[#06cf9c] font-medium transition-colors">
+                        className="text-xs text-[#00A896] hover:text-[#008f81] font-medium transition-colors">
                         Transferir
                       </button>
                     </div>
@@ -1943,8 +1948,8 @@ export default function WhatsAppHub() {
                 </div>
 
                 {/* Etiquetas */}
-                <div className="px-4 py-3 border-b border-[#2a3942]">
-                  <label className="block text-xs font-semibold text-[#8696a0] uppercase tracking-wide mb-2">
+                <div className="px-4 py-3 border-b border-[#E2E8F0]">
+                  <label className="block text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-2">
                     Etiquetas
                   </label>
                   <div className="flex flex-wrap gap-1">
@@ -1962,12 +1967,12 @@ export default function WhatsAppHub() {
                         onKeyDown={e => { if (e.key === 'Enter') handleAddTag(newTag); if (e.key === 'Escape') { setAddingTag(false); setNewTag('') } }}
                         onBlur={() => { if (newTag.trim()) handleAddTag(newTag); else { setAddingTag(false); setNewTag('') } }}
                         placeholder="Nova etiqueta..."
-                        className="text-xs px-2 py-0.5 rounded-full border border-dashed border-[#2a3942] bg-transparent text-white outline-none focus:border-[#00a884] w-28"
+                        className="text-xs px-2 py-0.5 rounded-full border border-dashed border-[#E2E8F0] bg-transparent text-[#1A2B4A] outline-none focus:border-[#00A896] w-28"
                         maxLength={20}
                       />
                     ) : (
                       <button onClick={() => setAddingTag(true)}
-                        className="text-xs px-2 py-0.5 rounded-full border border-dashed border-[#2a3942] text-[#8696a0] hover:border-[#00a884] hover:text-[#00a884] transition-colors">
+                        className="text-xs px-2 py-0.5 rounded-full border border-dashed border-[#E2E8F0] text-[#00A896] hover:border-[#00A896] hover:bg-[#E6F7F5] transition-colors">
                         + Etiqueta
                       </button>
                     )}
@@ -1976,11 +1981,11 @@ export default function WhatsAppHub() {
 
                 {/* Lead linking — only for individual contacts */}
                 {!activeConv.isGroup && (
-                  <div className="px-4 py-3 border-b border-[#2a3942]">
+                  <div className="px-4 py-3 border-b border-[#E2E8F0]">
                     {activeConv.lead_id ? (
                       <button
                         onClick={() => navigate(`/leads?highlight=${activeConv.lead_id}`)}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#00a884] text-white text-xs font-semibold rounded-xl hover:bg-[#06cf9c] transition-colors"
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[#00A896] text-white text-xs font-semibold rounded-lg hover:bg-[#008f81] transition-colors"
                       >
                         <User className="w-3.5 h-3.5" />
                         Ver Lead no CRM
@@ -1992,23 +1997,23 @@ export default function WhatsAppHub() {
                           value={leadSearch}
                           onChange={e => searchLeads(e.target.value)}
                           placeholder="Buscar lead por nome ou tel..."
-                          className="w-full px-3 py-2 text-xs bg-[#2a3942] border border-[#2a3942] rounded-xl text-white placeholder-[#8696a0] focus:ring-1 focus:ring-[#00a884] outline-none"
+                          className="w-full px-3 py-2 text-xs bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none"
                         />
                         {leadResults.map(l => (
                           <button key={l.id} onClick={() => handleLinkLead(l.id)}
-                            className="w-full text-left px-2.5 py-2 text-xs bg-[#2a3942] hover:bg-[#374751] rounded-xl transition-colors">
-                            <p className="font-semibold text-white">{l.responsible_name}</p>
-                            <p className="text-[#8696a0]">{l.student_name} · {l.grade_interest}</p>
+                            className="w-full text-left px-2.5 py-2 text-xs bg-[#F8FAFB] hover:bg-[#E6F7F5] border border-[#E2E8F0] rounded-lg transition-colors">
+                            <p className="font-semibold text-[#1A2B4A]">{l.responsible_name}</p>
+                            <p className="text-[#64748B]">{l.student_name} · {l.grade_interest}</p>
                           </button>
                         ))}
                         <button onClick={() => { setLinkingLead(false); setLeadSearch(''); setLeadResults([]) }}
-                          className="w-full text-xs text-[#8696a0] hover:text-white py-1">
+                          className="w-full text-xs text-[#64748B] hover:text-[#1A2B4A] py-1">
                           Cancelar
                         </button>
                       </div>
                     ) : (
                       <button onClick={() => setLinkingLead(true)}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-[#2a3942] text-[#8696a0] text-xs font-medium rounded-xl hover:border-[#00a884] hover:text-[#00a884] transition-colors">
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-[#E2E8F0] text-[#64748B] text-xs font-medium rounded-lg hover:border-[#00A896] hover:text-[#00A896] hover:bg-[#E6F7F5] transition-colors">
                         <User className="w-3.5 h-3.5" />
                         Vincular a um Lead
                       </button>
@@ -2020,7 +2025,7 @@ export default function WhatsAppHub() {
                 <div className="px-4 py-3">
                   <button
                     onClick={() => setCollapseHistory(v => !v)}
-                    className="w-full flex items-center justify-between text-xs font-semibold text-[#8696a0] uppercase tracking-wide"
+                    className="w-full flex items-center justify-between text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide hover:text-[#64748B] transition-colors"
                   >
                     <span>Histórico CRM</span>
                     {collapseHistory ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -2032,11 +2037,11 @@ export default function WhatsAppHub() {
                         { action: 'Contato realizado', time: '1 dia atrás',  color: 'bg-teal-400'  },
                         { action: 'Visita agendada',   time: 'Hoje',         color: 'bg-amber-400' },
                       ].map((ev, i) => (
-                        <div key={i} className="flex items-start gap-2">
+                        <div key={i} className="flex items-start gap-2 p-2 rounded-lg hover:bg-[#F8FAFB] transition-colors cursor-pointer">
                           <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${ev.color}`} />
                           <div>
-                            <p className="text-xs font-medium text-white">{ev.action}</p>
-                            <p className="text-xs text-[#8696a0]">{ev.time}</p>
+                            <p className="text-xs font-medium text-[#1A2B4A]">{ev.action}</p>
+                            <p className="text-xs text-[#64748B]">{ev.time}</p>
                           </div>
                         </div>
                       ))}
@@ -2048,25 +2053,25 @@ export default function WhatsAppHub() {
 
             {/* ── Histórico tab ── */}
             {rightPanelTab === 'history' && (
-              <div className="flex-1 overflow-y-auto px-4 py-3 bg-[#111b21]">
-                <p className="text-xs font-semibold text-[#8696a0] uppercase tracking-wide mb-3">Histórico de eventos</p>
+              <div className="flex-1 overflow-y-auto px-4 py-3 bg-white">
+                <p className="text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-3">Histórico de eventos</p>
                 {historyLoading ? (
                   <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-[#00a884] border-t-transparent" />
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-[#00A896] border-t-transparent" />
                   </div>
                 ) : convHistory.length === 0 ? (
-                  <p className="text-xs text-[#8696a0] text-center py-8">Nenhum evento registrado</p>
+                  <p className="text-xs text-[#64748B] text-center py-8">Nenhum evento registrado</p>
                 ) : (
                   <div className="space-y-3">
                     {convHistory.map(ev => (
-                      <div key={ev.id} className="flex items-start gap-2">
+                      <div key={ev.id} className="flex items-start gap-2 p-2 rounded-lg hover:bg-[#F8FAFB] transition-colors">
                         <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${eventDotColor(ev.event_type)}`} />
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-white leading-snug">{ev.description || ev.event_type}</p>
+                          <p className="text-xs font-medium text-[#1A2B4A] leading-snug">{ev.description || ev.event_type}</p>
                           {ev.user_name && (
-                            <p className="text-xs text-[#8696a0] mt-0.5">{ev.user_name}</p>
+                            <p className="text-xs text-[#64748B] mt-0.5">{ev.user_name}</p>
                           )}
-                          <p className="text-xs text-[#8696a0]/60 mt-0.5">
+                          <p className="text-xs text-[#94A3B8] mt-0.5">
                             {new Date(ev.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
@@ -2082,7 +2087,7 @@ export default function WhatsAppHub() {
         {/* Send error toast */}
         {sendError && (
           <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-            <div className="bg-[#202c33] border border-red-500/50 text-red-400 text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg">
+            <div className="bg-white border border-red-200 text-red-600 text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg">
               {sendError}
             </div>
           </div>
