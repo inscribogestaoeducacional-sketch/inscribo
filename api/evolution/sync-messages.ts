@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { EVOLUTION_URL, evolutionHeaders, getSupabaseAdmin, getInstanceForInstitution } from './_config'
+import { EVOLUTION_URL, evolutionHeaders, getSupabaseAdmin, getInstanceForInstitution } from './_config.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })

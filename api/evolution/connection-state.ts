@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { EVOLUTION_URL, evolutionHeaders, getInstanceForInstitution } from './_config'
+import { EVOLUTION_URL, evolutionHeaders, getInstanceForInstitution } from './_config.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Accept instanceName directly OR look up by institutionId

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { EVOLUTION_URL, evolutionHeaders, getSupabaseAdmin } from './_config'
+import { EVOLUTION_URL, evolutionHeaders, getSupabaseAdmin } from './_config.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { url, instanceName, messageId } = req.query
