@@ -113,6 +113,22 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
+const AVATAR_BG_COLORS = [
+  'linear-gradient(135deg, #00A896, #0DD3BF)',
+  'linear-gradient(135deg, #667eea, #764ba2)',
+  'linear-gradient(135deg, #f093fb, #f5576c)',
+  'linear-gradient(135deg, #4facfe, #00f2fe)',
+  'linear-gradient(135deg, #43e97b, #38f9d7)',
+  'linear-gradient(135deg, #fa709a, #fee140)',
+  'linear-gradient(135deg, #fd7b42, #fd5c63)',
+  'linear-gradient(135deg, #1A2B4A, #2D4A7A)',
+]
+function getAvatarBgColor(name: string): string {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  return AVATAR_BG_COLORS[Math.abs(hash) % AVATAR_BG_COLORS.length]
+}
+
 function toBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -451,34 +467,50 @@ function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (ur
   const isMe = msg.from === 'me'
 
   return (
-    <div style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', marginBottom: 4 }}>
+    <div style={{
+      display: 'flex',
+      justifyContent: isMe ? 'flex-end' : 'flex-start',
+      marginBottom: 3,
+      paddingLeft: isMe ? '15%' : 0,
+      paddingRight: isMe ? 0 : '15%',
+    }}>
       <div style={{
-        maxWidth: '72%', padding: '8px 12px',
-        background: isMe ? '#1A2B4A' : '#FFFFFF',
+        maxWidth: '100%',
+        padding: '9px 13px',
+        background: isMe
+          ? 'linear-gradient(135deg, #1A2B4A 0%, #243B60 100%)'
+          : '#FFFFFF',
         color: isMe ? '#fff' : '#1A2B4A',
-        borderRadius: isMe ? '14px 2px 14px 14px' : '2px 14px 14px 14px',
-        border: isMe ? 'none' : '1px solid #D1FAE5',
-        boxShadow: isMe ? 'none' : '0 1px 3px rgba(0,0,0,0.05)',
+        borderRadius: isMe ? '18px 4px 18px 18px' : '4px 18px 18px 18px',
+        border: isMe ? 'none' : '1px solid #E6F7F5',
+        boxShadow: isMe
+          ? '0 2px 8px rgba(26,43,74,0.25)'
+          : '0 1px 4px rgba(0,168,150,0.08)',
+        position: 'relative',
       }}>
         <RenderMessageContent message={msg} fromMe={isMe} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
-          <span style={{ fontSize: 10, color: isMe ? 'rgba(255,255,255,0.5)' : '#94A3B8' }}>{fmtTime(msg.ts)}</span>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          marginTop: 5,
+          justifyContent: 'flex-end',
+        }}>
+          <span style={{
+            fontSize: 10,
+            color: isMe ? 'rgba(255,255,255,0.5)' : '#94A3B8',
+          }}>
+            {fmtTime(msg.ts)}
+          </span>
           {isMe && (
-            msg.status === 'read' ? (
-              <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
-                <path d="M1 5L4 8L9 2" stroke="#0DD3BF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M5 5L8 8L13 2" stroke="#0DD3BF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            ) : msg.status === 'delivered' ? (
-              <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
-                <path d="M1 5L4 8L9 2" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M5 5L8 8L13 2" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            ) : (
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path d="M1 5L4 8L9 2" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            )
+            <svg width="16" height="11" viewBox="0 0 16 11" fill="none">
+              <path d="M1 5.5L5 9.5L15 1.5"
+                stroke={msg.status === 'read' ? '#0DD3BF' : 'rgba(255,255,255,0.4)'}
+                strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M5 5.5L9 9.5"
+                stroke={msg.status === 'read' ? '#0DD3BF' : 'rgba(255,255,255,0.4)'}
+                strokeWidth="1.8" strokeLinecap="round"/>
+            </svg>
           )}
         </div>
       </div>
@@ -1780,71 +1812,119 @@ export default function WhatsAppHub() {
                 }
                 const sc = statusColors[conv.status] ?? statusColors['waiting']
                 return (
-                  <button
+                  <div
                     key={conv.id}
                     onClick={() => setActiveId(conv.id)}
-                    className="group"
                     style={{
-                      position: 'relative', width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center',
-                      gap: 10, transition: 'background 0.15s', borderBottom: '1px solid #F0FDFB',
+                      position: 'relative',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 10,
+                      padding: '11px 14px',
+                      cursor: 'pointer',
                       borderLeft: isActive ? '3px solid #00A896' : '3px solid transparent',
-                      background: isActive ? '#E6F7F5' : 'transparent',
-                      padding: '10px 12px 10px', cursor: 'pointer', border: 'none',
-                      paddingLeft: isActive ? 9 : 12,
+                      borderBottom: '1px solid #F0FDFB',
+                      background: isActive ? 'linear-gradient(135deg, #E6F7F5 0%, #F0FDFB 100%)' : 'transparent',
+                      transition: 'all 0.15s',
                     }}
                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#F8FAFC' }}
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                   >
-                    {/* Avatar */}
+                    {/* Avatar com ring colorido quando ativo */}
                     <div style={{ position: 'relative', flexShrink: 0 }}>
-                      <div className={conv.avatarColor} style={{ width: 42, height: 42, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', fontSize: 15, fontWeight: 700, color: '#fff' }}>
-                        {conv.profile_picture_url ? (
-                          <img src={conv.profile_picture_url} alt={conv.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : conv.isGroup ? (
-                          <Users style={{ width: 20, height: 20, color: 'rgba(255,255,255,0.9)' }} />
-                        ) : (
-                          getInitials(conv.name)
-                        )}
+                      <div style={{
+                        width: 44, height: 44, borderRadius: '50%',
+                        background: isActive
+                          ? 'linear-gradient(135deg, #00A896, #0DD3BF)'
+                          : getAvatarBgColor(conv.name),
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 16, fontWeight: 700, color: 'white',
+                        border: isActive ? '2px solid #00A896' : '2px solid transparent',
+                        boxShadow: isActive ? '0 0 0 3px rgba(0,168,150,0.15)' : 'none',
+                        transition: 'all 0.2s',
+                        overflow: 'hidden',
+                      }}>
+                        {conv.profile_picture_url
+                          ? <img src={conv.profile_picture_url} alt={conv.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                          : conv.isGroup
+                          ? <Users style={{ width: 20, height: 20, color: 'rgba(255,255,255,0.9)' }} />
+                          : getInitials(conv.name)
+                        }
                       </div>
-                      {conv.online && (
-                        <div style={{ position: 'absolute', bottom: 0, right: 0, width: 10, height: 10, background: '#22C55E', borderRadius: '50%', border: '2px solid #fff' }} />
-                      )}
+                      {/* Badge do atendente */}
                       {conv.assigned_user_name && (
-                        <div style={{ position: 'absolute', bottom: -2, right: -2, width: 16, height: 16, background: '#00A896', color: '#fff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, border: '1.5px solid #fff' }}>
-                          {getInitials(conv.assigned_user_name)}
+                        <div style={{
+                          position: 'absolute', bottom: -1, right: -1,
+                          width: 16, height: 16, borderRadius: '50%',
+                          background: '#1A2B4A', border: '2px solid white',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 7, fontWeight: 700, color: 'white',
+                        }}>
+                          {getInitials(conv.assigned_user_name).slice(0, 1)}
                         </div>
                       )}
                     </div>
-                    {/* Info */}
+
+                    {/* Conteúdo */}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, marginBottom: 2 }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{conv.name}</span>
-                        <span style={{ fontSize: 11, color: '#94A3B8', flexShrink: 0 }}>{fmtConvTime(conv.lastTime)}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-                        <span style={{ fontSize: 12, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          {preview.icon && <span style={{ flexShrink: 0, fontSize: 12 }}>{preview.icon}</span>}
-                          {preview.text}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                        <span style={{
+                          fontSize: 13, fontWeight: 700,
+                          color: isActive ? '#007A6E' : '#1A2B4A',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          maxWidth: 160,
+                        }}>
+                          {conv.name}
                         </span>
-                        {conv.unreadCount > 0 && (
-                          <span style={{ flexShrink: 0, background: '#00A896', color: '#fff', fontSize: 11, fontWeight: 700, width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {conv.unreadCount}
-                          </span>
-                        )}
+                        <span style={{ fontSize: 10, color: '#94A3B8', flexShrink: 0 }}>
+                          {fmtConvTime(conv.lastTime)}
+                        </span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 9999, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4, background: sc.bg, color: sc.text }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: sc.dot, display: 'inline-block' }} />
+
+                      <p style={{
+                        fontSize: 12, color: '#64748B', margin: '0 0 5px',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {preview.icon ? (
+                          <span style={{ color: '#00A896', fontStyle: 'italic' }}>
+                            {preview.icon} {preview.text}
+                          </span>
+                        ) : preview.text}
+                      </p>
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        {/* Badge de status */}
+                        <span style={{
+                          fontSize: 10, fontWeight: 600,
+                          padding: '2px 8px', borderRadius: 999,
+                          background: sc.bg,
+                          color: sc.text,
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                        }}>
+                          <span style={{
+                            width: 5, height: 5, borderRadius: '50%', display: 'inline-block',
+                            background: sc.dot,
+                          }} />
                           {safeStatusCfg(conv.status).label}
                         </span>
-                        {conv.isGroup && (
-                          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 9999, fontWeight: 500, background: '#EDE9FE', color: '#7C3AED' }}>
-                            Grupo
+
+                        {/* Unread badge */}
+                        {conv.unreadCount > 0 && (
+                          <span style={{
+                            background: '#00A896', color: 'white',
+                            fontSize: 10, fontWeight: 700,
+                            minWidth: 20, height: 20, borderRadius: 999,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            padding: '0 5px',
+                            boxShadow: '0 2px 6px rgba(0,168,150,0.4)',
+                            animation: 'pulse 2s infinite',
+                          }}>
+                            {conv.unreadCount > 99 ? '99+' : conv.unreadCount}
                           </span>
                         )}
                       </div>
                     </div>
-                  </button>
+                  </div>
                 )
               })
             )}
@@ -1984,7 +2064,7 @@ export default function WhatsAppHub() {
 
           {/* Chat + composer — hidden in contacts view */}
           {mainView !== 'contacts' && activeConv && (
-            <div style={{ flexShrink: 0, position: 'relative', background: '#FFFFFF', borderBottom: '1px solid #D1FAE5', minHeight: 64 }}>
+            <div style={{ flexShrink: 0, position: 'relative', background: 'linear-gradient(135deg, #FFFFFF 0%, #F0FDFB 100%)', borderBottom: '1px solid #D1FAE5', minHeight: 64, boxShadow: '0 2px 8px rgba(0,168,150,0.06)' }}>
               {/* Header row */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', height: 64 }}>
                 <div style={{ position: 'relative' }}>
@@ -2093,7 +2173,7 @@ export default function WhatsAppHub() {
 
           {/* Messages area + Composer — hidden in contacts view */}
           {mainView !== 'contacts' && <>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 2, backgroundImage: 'radial-gradient(circle at 1px 1px, #D1FAE5 1px, transparent 0)', backgroundSize: '24px 24px', backgroundColor: '#FAFFFE' }}>
             {!activeConv && conversations.length === 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
                 <div style={{ width: 72, height: 72, background: '#E6F7F5', border: '2px solid #B2E8E2', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
@@ -2116,10 +2196,17 @@ export default function WhatsAppHub() {
             )}
             {msgGroups.map((group, gi) => (
               <div key={gi}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '12px 0' }}>
-                  <span style={{ fontSize: 11, color: '#007A6E', background: '#E6F7F5', border: '1px solid #B2E8E2', padding: '3px 12px', borderRadius: 9999 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0 10px' }}>
+                  <div style={{ flex: 1, height: 1, background: 'linear-gradient(to right, transparent, #D1FAE5, transparent)' }} />
+                  <span style={{
+                    fontSize: 11, fontWeight: 600, color: '#007A6E',
+                    background: '#E6F7F5', border: '1px solid #B2E8E2',
+                    padding: '4px 14px', borderRadius: 999,
+                    boxShadow: '0 1px 4px rgba(0,168,150,0.12)',
+                  }}>
                     {group.label}
                   </span>
+                  <div style={{ flex: 1, height: 1, background: 'linear-gradient(to left, transparent, #D1FAE5, transparent)' }} />
                 </div>
                 {group.msgs.map(msg => (
                   <MessageBubble key={msg.id} msg={msg} onImageClick={url => setLightboxUrl(url)} />
@@ -2155,7 +2242,7 @@ export default function WhatsAppHub() {
           </div>
 
           {/* Composer */}
-          <div style={{ flexShrink: 0, background: '#FFFFFF', borderTop: '1px solid #D1FAE5', padding: '12px 16px' }}>
+          <div style={{ flexShrink: 0, background: 'linear-gradient(to top, #FFFFFF 0%, #F8FFFE 100%)', borderTop: '1px solid #D1FAE5', padding: '10px 16px 14px', boxShadow: '0 -2px 12px rgba(0,168,150,0.06)' }}>
 
             {/* Quick replies panel */}
             {showQuickReplies && (
@@ -2281,12 +2368,24 @@ export default function WhatsAppHub() {
                 placeholder="Digite uma mensagem..."
                 rows={1}
                 style={{
-                  flex: 1, padding: '10px 16px', fontSize: 13, background: '#F0FDFB', border: '1px solid #D1FAE5',
-                  borderRadius: 24, color: '#1A2B4A', outline: 'none', resize: 'none', minHeight: 40, maxHeight: 96,
-                  fontFamily: 'inherit', transition: 'border-color 0.15s',
+                  flex: 1,
+                  padding: '10px 18px',
+                  fontSize: 14,
+                  background: '#F0FDFB',
+                  border: '1.5px solid #D1FAE5',
+                  borderRadius: 28,
+                  color: '#1A2B4A',
+                  outline: 'none',
+                  resize: 'none',
+                  minHeight: 42,
+                  maxHeight: 100,
+                  fontFamily: 'inherit',
+                  lineHeight: 1.5,
+                  transition: 'all 0.2s',
+                  boxShadow: '0 1px 4px rgba(0,168,150,0.08) inset',
                 }}
-                onFocus={e => (e.currentTarget.style.borderColor = '#00A896')}
-                onBlur={e => (e.currentTarget.style.borderColor = '#D1FAE5')}
+                onFocus={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#FFFFFF' }}
+                onBlur={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#F0FDFB' }}
               />
               {inputText.trim() ? (
                 <button
@@ -2358,16 +2457,16 @@ export default function WhatsAppHub() {
                 {activeConv.status !== 'closed' && (
                   <div style={{ padding: '12px 16px', borderBottom: '1px solid #D1FAE5', background: '#F0FDFB', display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <button onClick={handleCloseConversation}
-                      style={{ width: '100%', padding: '9px 0', fontSize: 12, fontWeight: 600, color: '#fff', background: '#00A896', border: 'none', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'background 0.15s' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#007A6E')}
-                      onMouseLeave={e => (e.currentTarget.style.background = '#00A896')}>
+                      style={{ width: '100%', padding: '11px 0', fontSize: 13, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #00A896 0%, #0DD3BF 100%)', border: 'none', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 14px rgba(0,168,150,0.35)', transition: 'all 0.2s' }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(0,168,150,0.45)' }}
+                      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,168,150,0.35)' }}>
                       ✅ Concluir Atendimento
                     </button>
                     {activeConv.assigned_user_id && (
                       <button onClick={handleLeaveConversation}
-                        style={{ width: '100%', padding: '9px 0', fontSize: 12, fontWeight: 500, color: '#D97706', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, cursor: 'pointer', transition: 'background 0.15s' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = '#FDE68A')}
-                        onMouseLeave={e => (e.currentTarget.style.background = '#FEF3C7')}>
+                        style={{ width: '100%', padding: '9px 0', fontSize: 12, fontWeight: 600, color: '#92400E', background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)', border: '1px solid #FCD34D', borderRadius: 12, cursor: 'pointer', transition: 'all 0.2s' }}
+                        onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
+                        onMouseLeave={e => (e.currentTarget.style.opacity = '1')}>
                         🚪 Sair do Atendimento
                       </button>
                     )}
@@ -2375,8 +2474,8 @@ export default function WhatsAppHub() {
                 )}
 
                 {/* Contact header */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 16px 16px', borderBottom: '1px solid #D1FAE5', background: '#FFFFFF' }}>
-                  <div className={activeConv.avatarColor} style={{ width: 60, height: 60, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, overflow: 'hidden', fontSize: 22, fontWeight: 700, color: '#fff' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 16px 20px', borderBottom: '1px solid #E6F7F5', background: 'linear-gradient(180deg, #F0FDFB 0%, #FFFFFF 100%)' }}>
+                  <div style={{ width: 68, height: 68, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, overflow: 'hidden', fontSize: 26, fontWeight: 700, color: '#fff', background: activeConv.profile_picture_url ? 'transparent' : getAvatarBgColor(activeConv.name), boxShadow: '0 4px 16px rgba(0,168,150,0.35)', border: '3px solid white' }}>
                     {activeConv.profile_picture_url ? (
                       <img src={activeConv.profile_picture_url} alt={activeConv.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : activeConv.isGroup ? (
