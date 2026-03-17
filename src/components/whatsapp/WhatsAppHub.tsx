@@ -385,6 +385,124 @@ function ImagePreview({ src, isMe, onImageClick }: { src: string; isMe: boolean;
   )
 }
 
+// ─── getMediaUrl ──────────────────────────────────────────────────────────────
+function getMediaUrl(message: any): string | null {
+  const raw =
+    message.media_url ||
+    message.mediaUrl ||
+    message.url ||
+    message.message?.imageMessage?.url ||
+    message.message?.videoMessage?.url ||
+    message.message?.audioMessage?.url ||
+    message.message?.documentMessage?.url ||
+    message.message?.stickerMessage?.url ||
+    null
+  if (!raw) return null
+  if (raw.startsWith('data:') || raw.startsWith('/api/')) return raw
+  const msgId = message.key?.id || message.id || ''
+  const idParam = msgId ? `&messageId=${encodeURIComponent(msgId)}` : ''
+  return `/api/evolution/media-proxy?url=${encodeURIComponent(raw)}${idParam}`
+}
+
+// ─── RenderMessageContent ─────────────────────────────────────────────────────
+function RenderMessageContent({ message, fromMe }: { message: any; fromMe: boolean }) {
+  const msgType = (
+    message.type ||
+    message.messageType ||
+    (message.message?.imageMessage    ? 'image'    : '') ||
+    (message.message?.videoMessage    ? 'video'    : '') ||
+    (message.message?.audioMessage    ? 'audio'    : '') ||
+    (message.message?.ptvMessage      ? 'audio'    : '') ||
+    (message.message?.documentMessage ? 'document' : '') ||
+    'text'
+  ).toLowerCase().replace('message', '')
+
+  const mediaUrl = getMediaUrl(message)
+  const caption  = message.caption || message.message?.imageMessage?.caption || ''
+  const body     = message.body || message.content || message.conversation ||
+                   message.message?.conversation || ''
+
+  if (msgType === 'image' && mediaUrl) {
+    return (
+      <div>
+        <img
+          src={mediaUrl}
+          alt="imagem"
+          style={{ maxWidth: 260, maxHeight: 320, width: '100%', borderRadius: 10, display: 'block', cursor: 'pointer', objectFit: 'cover' }}
+          onClick={() => window.open(mediaUrl, '_blank')}
+          onError={(e) => {
+            const t = e.currentTarget
+            t.style.display = 'none'
+            const fb = document.createElement('div')
+            fb.style.cssText = 'padding:10px 14px;background:#F1F5F9;border-radius:10px;cursor:pointer;color:#64748B;font-size:13px;display:flex;gap:8px;align-items:center'
+            fb.innerHTML = '🖼️ Imagem (clique para abrir)'
+            fb.onclick = () => window.open(mediaUrl, '_blank')
+            t.parentElement?.appendChild(fb)
+          }}
+        />
+        {caption && <p style={{ fontSize: 13, color: fromMe ? 'rgba(255,255,255,0.85)' : '#64748B', marginTop: 6 }}>{caption}</p>}
+      </div>
+    )
+  }
+
+  if (msgType === 'video' && mediaUrl) {
+    return (
+      <div style={{ maxWidth: 260, borderRadius: 10, overflow: 'hidden' }}>
+        <video
+          controls preload="metadata"
+          style={{ width: '100%', maxHeight: 200, display: 'block', background: '#000', borderRadius: 10 }}
+          onError={(e) => {
+            const t = e.currentTarget
+            t.style.display = 'none'
+            const fb = document.createElement('div')
+            fb.style.cssText = 'padding:10px 14px;background:#F1F5F9;border-radius:10px;cursor:pointer;color:#64748B;font-size:13px;display:flex;gap:8px;align-items:center'
+            fb.innerHTML = '🎬 Vídeo (clique para abrir)'
+            fb.onclick = () => window.open(mediaUrl, '_blank')
+            t.parentElement?.appendChild(fb)
+          }}
+        >
+          <source src={mediaUrl} type="video/mp4" />
+          <source src={mediaUrl} type="video/webm" />
+        </video>
+      </div>
+    )
+  }
+
+  if ((msgType === 'audio' || msgType === 'ptt') && mediaUrl) {
+    return (
+      <AudioPlayer duration={message.duration} from={fromMe ? 'me' : 'them'} mediaUrl={mediaUrl} isDark={fromMe} />
+    )
+  }
+
+  if (msgType === 'document' && mediaUrl) {
+    const filename = message.fileName || message.message?.documentMessage?.fileName || 'Documento'
+    return (
+      <div
+        onClick={() => window.open(mediaUrl, '_blank')}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+          borderRadius: 10, cursor: 'pointer',
+          background: fromMe ? 'rgba(255,255,255,0.1)' : '#F8FAFB',
+          border: '1px solid ' + (fromMe ? 'rgba(255,255,255,0.15)' : '#E2E8F0'),
+        }}
+      >
+        <span style={{ fontSize: 22 }}>📄</span>
+        <span style={{ fontSize: 13, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: fromMe ? '#fff' : '#1A2B4A' }}>{filename}</span>
+        <span style={{ fontSize: 18, color: '#00A896' }}>↓</span>
+      </div>
+    )
+  }
+
+  if (msgType === 'sticker' && mediaUrl) {
+    return <img src={mediaUrl} alt="sticker" style={{ width: 100, height: 100, objectFit: 'contain' }} />
+  }
+
+  if (!body && !mediaUrl) {
+    return <span style={{ color: fromMe ? 'rgba(255,255,255,0.5)' : '#94A3B8', fontStyle: 'italic', fontSize: 13 }}>...</span>
+  }
+  return <span style={{ fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{body}</span>
+}
+
 // ─── MessageBubble ────────────────────────────────────────────────────────────
 function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (url: string) => void }) {
   const isMe = msg.from === 'me'
@@ -393,105 +511,10 @@ function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (ur
     ? 'bg-[#1A2B4A] text-white rounded-xl rounded-tr-none'
     : 'bg-white border border-[#E2E8F0] text-[#1A2B4A] rounded-xl rounded-tl-none shadow-sm'
 
-  // Fallback: detect type from content string for legacy messages saved as text
-  const effectiveType: MsgType =
-    msg.type !== 'text' ? msg.type :
-    msg.content === '[Imagem]'    ? 'image'   :
-    msg.content === '[Áudio]'     ? 'audio'   :
-    msg.content === '[Vídeo]'     ? 'video'   :
-    msg.content === '[Figurinha]' ? 'sticker' :
-    'text'
-
-  const renderContent = () => {
-    switch (effectiveType) {
-      case 'audio':
-        return <AudioPlayer duration={msg.duration} from={msg.from} mediaUrl={getProxiedUrl(msg.media_url)} isDark={isMe} />
-      case 'image': {
-        const imgSrc = getProxiedUrl(msg.media_url)
-        return imgSrc
-          ? <ImagePreview src={imgSrc} isMe={isMe} onImageClick={onImageClick} />
-          : (
-            <div className={`w-48 h-32 rounded-xl overflow-hidden flex flex-col items-center justify-center gap-1 ${isMe ? 'bg-white/10' : 'bg-[#F1F5F9]'}`}>
-              <Image className={`w-8 h-8 ${isMe ? 'text-white/60' : 'text-[#94A3B8]'}`} />
-              <span className={`text-xs ${isMe ? 'text-white/60' : 'text-[#94A3B8]'}`}>Imagem</span>
-            </div>
-          )
-      }
-      case 'video': {
-        const videoSrc = getProxiedUrl(msg.media_url)
-        return videoSrc ? (
-          <div className="relative">
-            <video
-              controls
-              className="max-w-[240px] rounded-xl"
-              style={{ background: '#000', display: 'block' }}
-              onError={e => {
-                const wrap = (e.currentTarget as HTMLVideoElement).parentElement
-                if (wrap) {
-                  wrap.innerHTML = `<a href="${videoSrc}" target="_blank" rel="noreferrer" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;background:${isMe ? 'rgba(255,255,255,0.15)' : '#F1F5F9'};color:${isMe ? '#fff' : '#1A2B4A'};font-size:13px;text-decoration:none;">🎬 Abrir vídeo</a>`
-                }
-              }}
-            >
-              <source src={videoSrc} type="video/mp4" />
-              <source src={videoSrc} type="video/webm" />
-              <source src={videoSrc} type="video/ogg" />
-            </video>
-          </div>
-        ) : (
-          <div className={`w-48 h-32 rounded-xl overflow-hidden flex items-center justify-center relative ${isMe ? 'bg-white/10' : 'bg-[#F1F5F9]'}`}>
-            <Video className={`w-6 h-6 ${isMe ? 'text-white/50' : 'text-[#94A3B8]'}`} />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isMe ? 'bg-white/20' : 'bg-[#E2E8F0]'}`}>
-                <Play className={`w-5 h-5 ${isMe ? 'text-white' : 'text-[#64748B]'}`} />
-              </div>
-            </div>
-          </div>
-        )
-      }
-      case 'document':
-        return (
-          <div className="flex items-center gap-2 min-w-[180px] px-1 py-0.5">
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${isMe ? 'bg-white/20' : 'bg-[#F1F5F9]'}`}>
-              <FileText className={`w-5 h-5 ${isMe ? 'text-white' : 'text-[#64748B]'}`} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className={`text-xs font-medium truncate ${isMe ? 'text-white' : 'text-[#1A2B4A]'}`}>
-                {msg.fileName || msg.content}
-              </p>
-              {msg.fileSize && (
-                <p className={`text-xs ${isMe ? 'text-white/60' : 'text-[#64748B]'}`}>{msg.fileSize}</p>
-              )}
-            </div>
-            {msg.media_url && (
-              <a href={getProxiedUrl(msg.media_url)} download target="_blank" rel="noreferrer"
-                className={`p-1 rounded-lg flex-shrink-0 transition-colors ${isMe ? 'text-white/70 hover:text-white' : 'text-[#64748B] hover:text-[#1A2B4A]'}`}>
-                <Download className="w-4 h-4" />
-              </a>
-            )}
-          </div>
-        )
-      case 'sticker':
-        return (
-          <div className="flex items-center justify-center w-16 h-16">
-            <span className="text-4xl" role="img" aria-label="Figurinha">🎭</span>
-          </div>
-        )
-      default:
-        return (
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">
-            {msg.content
-              ? msg.content
-              : <span className={`italic text-xs ${isMe ? 'text-white/40' : 'text-[#94A3B8]'}`}>...</span>
-            }
-          </p>
-        )
-    }
-  }
-
   return (
     <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-1`}>
       <div className={`max-w-[72%] px-3 py-2 ${bubbleBase}`}>
-        {renderContent()}
+        <RenderMessageContent message={msg} fromMe={isMe} />
         <div className={`flex items-center gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
           <span className={`text-[10px] ${isMe ? 'text-white/60' : 'text-[#94A3B8]'}`}>{fmtTime(msg.ts)}</span>
           {isMe && (
@@ -531,9 +554,9 @@ export default function WhatsAppHub() {
   const [loading, setLoading] = useState(true)
   const [isConnected, setIsConnected] = useState<boolean | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [filter, setFilter] = useState<ConvFilter>('all')
-  // convTypeFilter removed — superseded by mainView tabs
-  const [convOwnerFilter, setConvOwnerFilter] = useState<ConvOwnerFilter>('all')
+  const [tabFilter, setTabFilter] = useState<'iniciada' | 'encerrada' | 'automatico'>('iniciada')
+  const [readFilter, setReadFilter] = useState<'all' | 'read' | 'unread'>('all')
+  const [assignFilter, setAssignFilter] = useState<'all' | 'mine' | 'none'>('all')
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('details')
   const [convHistory, setConvHistory] = useState<WhatsappConversationEvent[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -993,44 +1016,26 @@ export default function WhatsAppHub() {
   const activeConv = conversations.find(c => c.id === activeId) ?? null
   const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0)
 
-  const filteredConvs = conversations.filter(c => {
-    const matchMainView = !c.isGroup  // always filter out groups
-    const matchOwner =
-      convOwnerFilter === 'all'        ? true :
-      convOwnerFilter === 'mine'       ? c.assigned_user_id === user?.id :
-      !c.assigned_user_id
-    const matchSearch = !search ||
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.phone.includes(search)
-    const matchFilter =
-      filter === 'all'      ? true :
-      filter === 'unread'   ? c.unreadCount > 0 :
-      filter === 'open'     ? c.status === 'open' :
-      filter === 'waiting'  ? c.status === 'waiting' :
-      c.status === 'closed'
-    return matchMainView && matchOwner && matchSearch && matchFilter
-  })
+  const iniciadas  = conversations.filter(c => !c.isGroup && c.status !== 'closed').length
+  const encerradas = conversations.filter(c => !c.isGroup && c.status === 'closed').length
+  const naoLidas   = conversations.filter(c => !c.isGroup && (c.unreadCount || 0) > 0).length
 
-  const nonGroupConvs = conversations.filter(c => !c.isGroup)
-  const ownerCounts = {
-    all:        nonGroupConvs.length,
-    mine:       nonGroupConvs.filter(c => c.assigned_user_id === user?.id).length,
-    unassigned: nonGroupConvs.filter(c => !c.assigned_user_id).length,
-  }
-  const filterCounts = {
-    all:     nonGroupConvs.length,
-    unread:  nonGroupConvs.filter(c => c.unreadCount > 0).length,
-    waiting: nonGroupConvs.filter(c => c.status === 'waiting').length,
-    open:    nonGroupConvs.filter(c => c.status === 'open').length,
-    closed:  nonGroupConvs.filter(c => c.status === 'closed').length,
-  }
-  const ACTIVE_FILTER_STYLES: Record<string, { background: string; color: string }> = {
-    all:     { background: '#1A2B4A', color: '#fff' },
-    unread:  { background: '#EDE9FE', color: '#7C3AED' },
-    waiting: { background: '#FEF3C7', color: '#D97706' },
-    open:    { background: '#D1FAE5', color: '#059669' },
-    closed:  { background: '#E2E8F0', color: '#64748B' },
-  }
+  const filteredConvs = conversations.filter(c => {
+    if (c.isGroup) return false
+    if (!search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search)) {
+      // tab filter
+      if (tabFilter === 'iniciada'  && c.status === 'closed') return false
+      if (tabFilter === 'encerrada' && c.status !== 'closed') return false
+      // read filter
+      if (readFilter === 'read'   && (c.unreadCount || 0) > 0) return false
+      if (readFilter === 'unread' && (c.unreadCount || 0) === 0) return false
+      // assign filter
+      if (assignFilter === 'mine' && c.assigned_user_id !== user?.id) return false
+      if (assignFilter === 'none' && c.assigned_user_id != null) return false
+      return true
+    }
+    return false
+  })
 
   const handleSend = async () => {
     if (!inputText.trim() || !activeId) return
@@ -1682,36 +1687,71 @@ export default function WhatsAppHub() {
             ))}
           </div>
 
-          {/* Owner + status filter pills */}
-          <div style={{ padding: '8px 12px 4px', display: 'flex', gap: 5, flexWrap: 'wrap', background: '#fff' }}>
-            {([
-              { key: 'all',        label: 'Todos',       count: ownerCounts.all        },
-              { key: 'mine',       label: 'Meus',        count: ownerCounts.mine       },
-              { key: 'unassigned', label: 'Sem dono',    count: ownerCounts.unassigned },
-            ] as { key: ConvOwnerFilter; label: string; count: number }[]).map(o => {
-              const isOA = convOwnerFilter === o.key
-              return (
-                <button key={o.key} onClick={() => setConvOwnerFilter(o.key)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer', background: isOA ? '#1A2B4A' : '#F1F5F9', color: isOA ? '#fff' : '#64748B' }}>
-                  {o.label}
-                  {o.count > 0 && <span style={{ background: isOA ? 'rgba(255,255,255,0.2)' : '#E2E8F0', color: isOA ? '#fff' : '#64748B', borderRadius: 999, padding: '0 5px', fontSize: 10, fontWeight: 600 }}>{o.count}</span>}
+          {/* Filters — Botconversa style */}
+          <div style={{ borderBottom: '1px solid #E2E8F0' }}>
+            {/* Row 1: Tab tabs with counters */}
+            <div style={{ display: 'flex', padding: '0 12px', gap: 0 }}>
+              {([
+                { key: 'iniciada',   label: 'Iniciada',   count: iniciadas  },
+                { key: 'encerrada',  label: 'Encerrada',  count: encerradas },
+                { key: 'automatico', label: 'Automático', count: 0          },
+              ] as { key: typeof tabFilter; label: string; count: number }[]).map(tab => (
+                <button key={tab.key} onClick={() => setTabFilter(tab.key)} style={{
+                  flex: 1, padding: '10px 4px', border: 'none', background: 'transparent',
+                  cursor: 'pointer', fontSize: 13, fontWeight: tabFilter === tab.key ? 700 : 500,
+                  color: tabFilter === tab.key ? '#1A2B4A' : '#94A3B8',
+                  borderBottom: tabFilter === tab.key ? '2px solid #00A896' : '2px solid transparent',
+                  transition: 'all 0.15s', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', gap: 6,
+                }}>
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span style={{
+                      background: tabFilter === tab.key ? '#00A896' : '#E2E8F0',
+                      color: tabFilter === tab.key ? '#fff' : '#64748B',
+                      borderRadius: 9999, padding: '1px 6px', fontSize: 10, fontWeight: 700,
+                    }}>{tab.count}</span>
+                  )}
                 </button>
-              )
-            })}
-          </div>
-          <div style={{ padding: '4px 12px 8px', display: 'flex', gap: 5, flexWrap: 'wrap', borderBottom: '1px solid var(--color-border)', background: '#fff' }}>
-            {FILTERS.map(f => {
-              const isFA = filter === f.key
-              const as = ACTIVE_FILTER_STYLES[f.key] || { background: '#1A2B4A', color: '#fff' }
-              const cnt = filterCounts[f.key as keyof typeof filterCounts] ?? 0
-              return (
-                <button key={f.key} onClick={() => setFilter(f.key as ConvFilter)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer', background: isFA ? as.background : '#F1F5F9', color: isFA ? as.color : '#64748B' }}>
+              ))}
+            </div>
+            {/* Row 2: Read + assign sub-filters */}
+            <div style={{ display: 'flex', padding: '8px 12px', gap: 6, alignItems: 'center' }}>
+              {([
+                { key: 'all',    label: 'Tudo',     count: 0        },
+                { key: 'read',   label: 'Lida',     count: 0        },
+                { key: 'unread', label: 'Não lida', count: naoLidas },
+              ] as { key: typeof readFilter; label: string; count: number }[]).map(f => (
+                <button key={f.key} onClick={() => setReadFilter(f.key)} style={{
+                  padding: '3px 10px', borderRadius: 9999, fontSize: 12, border: 'none',
+                  cursor: 'pointer', fontWeight: readFilter === f.key ? 600 : 400,
+                  background: readFilter === f.key ? '#EDE9FE' : '#F1F5F9',
+                  color: readFilter === f.key ? '#7C3AED' : '#64748B',
+                  display: 'flex', alignItems: 'center', gap: 4, transition: 'all 0.15s',
+                }}>
                   {f.label}
-                  {cnt > 0 && <span style={{ background: isFA ? 'rgba(0,0,0,0.12)' : '#E2E8F0', color: isFA ? as.color : '#64748B', borderRadius: 999, padding: '0 5px', fontSize: 10, fontWeight: 600 }}>{cnt}</span>}
+                  {f.count > 0 && (
+                    <span style={{ background: '#7C3AED', color: '#fff', borderRadius: 9999, padding: '0px 5px', fontSize: 10, fontWeight: 700 }}>{f.count}</span>
+                  )}
                 </button>
-              )
-            })}
+              ))}
+              <div style={{ width: 1, height: 16, background: '#E2E8F0', margin: '0 2px' }} />
+              {([
+                { key: 'all',  label: 'Todos'    },
+                { key: 'mine', label: 'Meus'     },
+                { key: 'none', label: 'Sem dono' },
+              ] as { key: typeof assignFilter; label: string }[]).map(f => (
+                <button key={f.key} onClick={() => setAssignFilter(f.key)} style={{
+                  padding: '3px 10px', borderRadius: 9999, fontSize: 12, border: 'none',
+                  cursor: 'pointer', fontWeight: assignFilter === f.key ? 600 : 400,
+                  background: assignFilter === f.key ? '#1A2B4A' : '#F1F5F9',
+                  color: assignFilter === f.key ? '#fff' : '#64748B',
+                  transition: 'all 0.15s',
+                }}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Conversation list */}
