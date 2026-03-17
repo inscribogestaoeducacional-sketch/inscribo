@@ -417,9 +417,26 @@ function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (ur
             </div>
           )
       }
-      case 'video':
-        return msg.media_url ? (
-          <video src={getProxiedUrl(msg.media_url)} controls className="max-w-[240px] rounded-xl" />
+      case 'video': {
+        const videoSrc = getProxiedUrl(msg.media_url)
+        return videoSrc ? (
+          <div className="relative">
+            <video
+              controls
+              className="max-w-[240px] rounded-xl"
+              style={{ background: '#000', display: 'block' }}
+              onError={e => {
+                const wrap = (e.currentTarget as HTMLVideoElement).parentElement
+                if (wrap) {
+                  wrap.innerHTML = `<a href="${videoSrc}" target="_blank" rel="noreferrer" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;background:${isMe ? 'rgba(255,255,255,0.15)' : '#F1F5F9'};color:${isMe ? '#fff' : '#1A2B4A'};font-size:13px;text-decoration:none;">🎬 Abrir vídeo</a>`
+                }
+              }}
+            >
+              <source src={videoSrc} type="video/mp4" />
+              <source src={videoSrc} type="video/webm" />
+              <source src={videoSrc} type="video/ogg" />
+            </video>
+          </div>
         ) : (
           <div className={`w-48 h-32 rounded-xl overflow-hidden flex items-center justify-center relative ${isMe ? 'bg-white/10' : 'bg-[#F1F5F9]'}`}>
             <Video className={`w-6 h-6 ${isMe ? 'text-white/50' : 'text-[#94A3B8]'}`} />
@@ -430,6 +447,7 @@ function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (ur
             </div>
           </div>
         )
+      }
       case 'document':
         return (
           <div className="flex items-center gap-2 min-w-[180px] px-1 py-0.5">
@@ -993,6 +1011,27 @@ export default function WhatsAppHub() {
     return matchMainView && matchOwner && matchSearch && matchFilter
   })
 
+  const nonGroupConvs = conversations.filter(c => !c.isGroup)
+  const ownerCounts = {
+    all:        nonGroupConvs.length,
+    mine:       nonGroupConvs.filter(c => c.assigned_user_id === user?.id).length,
+    unassigned: nonGroupConvs.filter(c => !c.assigned_user_id).length,
+  }
+  const filterCounts = {
+    all:     nonGroupConvs.length,
+    unread:  nonGroupConvs.filter(c => c.unreadCount > 0).length,
+    waiting: nonGroupConvs.filter(c => c.status === 'waiting').length,
+    open:    nonGroupConvs.filter(c => c.status === 'open').length,
+    closed:  nonGroupConvs.filter(c => c.status === 'closed').length,
+  }
+  const ACTIVE_FILTER_STYLES: Record<string, { background: string; color: string }> = {
+    all:     { background: '#1A2B4A', color: '#fff' },
+    unread:  { background: '#EDE9FE', color: '#7C3AED' },
+    waiting: { background: '#FEF3C7', color: '#D97706' },
+    open:    { background: '#D1FAE5', color: '#059669' },
+    closed:  { background: '#E2E8F0', color: '#64748B' },
+  }
+
   const handleSend = async () => {
     if (!inputText.trim() || !activeId) return
     const text = inputText.trim()
@@ -1105,8 +1144,12 @@ export default function WhatsAppHub() {
       : pendingFile.type.startsWith('audio/') ? 'audio'
       : 'document'
 
-    // BUG 4: Optimistic update — show immediately with local URL
-    const localUrl = URL.createObjectURL(pendingFile)
+    // Compute base64 first so we can use data: URL for preview (avoids CSP blob: violation)
+    const fileToSend = mediatype === 'image' ? await compressImage(pendingFile) : pendingFile
+    const base64 = await toBase64(fileToSend)
+    setUploadProgress(30)
+
+    const localUrl = `data:${fileToSend.type};base64,${base64}`
     const tempId = `temp-file-${Date.now()}`
     const tempMsg: Message = {
       id: tempId,
@@ -1124,11 +1167,6 @@ export default function WhatsAppHub() {
     ))
 
     try {
-      // Compress images before upload
-      const fileToSend = mediatype === 'image' ? await compressImage(pendingFile) : pendingFile
-      const base64 = await toBase64(fileToSend)
-      setUploadProgress(60)
-
       const res = await fetch('/api/evolution/send-media', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1148,7 +1186,7 @@ export default function WhatsAppHub() {
       setConversations(prev => prev.map(c =>
         c.id === activeId ? { ...c, messages: c.messages.map(m => m.id === tempId ? { ...m, status: 'delivered' as const } : m) } : c
       ))
-      setTimeout(() => { setPendingFile(null); setUploadProgress(0); URL.revokeObjectURL(localUrl) }, 800)
+      setTimeout(() => { setPendingFile(null); setUploadProgress(0) }, 800)
     } catch (err) {
       console.error('[sendPendingFile] error:', err)
       setSendError('Erro ao enviar arquivo.')
@@ -1156,7 +1194,6 @@ export default function WhatsAppHub() {
       setConversations(prev => prev.map(c =>
         c.id === activeId ? { ...c, messages: c.messages.filter(m => m.id !== tempId) } : c
       ))
-      URL.revokeObjectURL(localUrl)
       setPendingFile(null)
       setUploadProgress(0)
     }
@@ -1645,35 +1682,36 @@ export default function WhatsAppHub() {
             ))}
           </div>
 
-          {/* Owner filter pills */}
-          <div className="px-3 pt-2 pb-1 flex gap-1 flex-shrink-0 bg-white">
-            {[
-              { key: 'all',        label: 'Todos' },
-              { key: 'mine',       label: 'Meus' },
-              { key: 'unassigned', label: 'Sem atendente' },
-            ].map(o => (
-              <button key={o.key} onClick={() => setConvOwnerFilter(o.key as ConvOwnerFilter)}
-                className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  convOwnerFilter === o.key ? 'bg-[#1A2B4A] text-white' : 'bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]'
-                }`}>{o.label}</button>
-            ))}
+          {/* Owner + status filter pills */}
+          <div style={{ padding: '8px 12px 4px', display: 'flex', gap: 5, flexWrap: 'wrap', background: '#fff' }}>
+            {([
+              { key: 'all',        label: 'Todos',       count: ownerCounts.all        },
+              { key: 'mine',       label: 'Meus',        count: ownerCounts.mine       },
+              { key: 'unassigned', label: 'Sem dono',    count: ownerCounts.unassigned },
+            ] as { key: ConvOwnerFilter; label: string; count: number }[]).map(o => {
+              const isOA = convOwnerFilter === o.key
+              return (
+                <button key={o.key} onClick={() => setConvOwnerFilter(o.key)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer', background: isOA ? '#1A2B4A' : '#F1F5F9', color: isOA ? '#fff' : '#64748B' }}>
+                  {o.label}
+                  {o.count > 0 && <span style={{ background: isOA ? 'rgba(255,255,255,0.2)' : '#E2E8F0', color: isOA ? '#fff' : '#64748B', borderRadius: 999, padding: '0 5px', fontSize: 10, fontWeight: 600 }}>{o.count}</span>}
+                </button>
+              )
+            })}
           </div>
-
-          {/* Filter pills */}
-          <div className="px-3 pb-2 flex-shrink-0 flex flex-wrap gap-1 bg-white border-b border-[#E2E8F0]">
-            {FILTERS.map(f => (
-              <button
-                key={f.key}
-                onClick={() => setFilter(f.key as ConvFilter)}
-                className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  filter === f.key
-                    ? FILTER_ACTIVE[f.key] || 'bg-[#1A2B4A] text-white'
-                    : 'bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
+          <div style={{ padding: '4px 12px 8px', display: 'flex', gap: 5, flexWrap: 'wrap', borderBottom: '1px solid var(--color-border)', background: '#fff' }}>
+            {FILTERS.map(f => {
+              const isFA = filter === f.key
+              const as = ACTIVE_FILTER_STYLES[f.key] || { background: '#1A2B4A', color: '#fff' }
+              const cnt = filterCounts[f.key as keyof typeof filterCounts] ?? 0
+              return (
+                <button key={f.key} onClick={() => setFilter(f.key as ConvFilter)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer', background: isFA ? as.background : '#F1F5F9', color: isFA ? as.color : '#64748B' }}>
+                  {f.label}
+                  {cnt > 0 && <span style={{ background: isFA ? 'rgba(0,0,0,0.12)' : '#E2E8F0', color: isFA ? as.color : '#64748B', borderRadius: 999, padding: '0 5px', fontSize: 10, fontWeight: 600 }}>{cnt}</span>}
+                </button>
+              )
+            })}
           </div>
 
           {/* Conversation list */}

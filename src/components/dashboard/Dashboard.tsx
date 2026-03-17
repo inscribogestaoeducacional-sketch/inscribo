@@ -232,7 +232,7 @@ export default function Dashboard() {
   // ── Loading state ───────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="p-4 sm:p-6 md:p-8 bg-gray-50 min-h-screen">
+      <div className="p-4 sm:p-6 md:p-8" style={{ background: 'var(--color-bg)', minHeight: '100%' }}>
         <div className="animate-pulse space-y-6">
           <div className="h-10 bg-gray-200 rounded-xl w-64 mb-2" />
           <div className="h-5 bg-gray-100 rounded w-48" />
@@ -249,7 +249,7 @@ export default function Dashboard() {
   // ── Error state ──────────────────────────────────────────────────────────────
   if (error) {
     return (
-      <div className="p-4 sm:p-6 md:p-8 bg-gray-50 min-h-screen flex items-center justify-center">
+      <div className="p-4 sm:p-6 md:p-8 flex items-center justify-center" style={{ background: 'var(--color-bg)', minHeight: '100%' }}>
         <div className="bg-white rounded-2xl p-8 shadow-sm border border-red-200 text-center max-w-md">
           <h2 className="text-xl font-bold text-gray-900 mb-3">Erro no Dashboard</h2>
           <p className="text-gray-600 mb-6">{error}</p>
@@ -335,7 +335,7 @@ export default function Dashboard() {
   ]
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 bg-gray-50 min-h-screen">
+    <div className="p-4 sm:p-6 md:p-8" style={{ background: 'var(--color-bg)', minHeight: '100%' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
