@@ -394,7 +394,7 @@ export default function EnrollmentManager() {
   }
 
   return (
-    <div className="p-8 bg-gradient-to-br from-purple-50 via-white to-blue-50 min-h-screen">
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: 'var(--bg-page)' }}>
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-6">

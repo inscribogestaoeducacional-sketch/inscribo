@@ -2,121 +2,121 @@ import React, { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import {
-  LayoutDashboard,
-  Users,
-  Calendar,
-  GraduationCap,
-  MessageCircle,
-  BarChart3,
-  UserCog,
-  Settings,
-  Menu,
-  X
+  LayoutDashboard, Users, Calendar, GraduationCap,
+  MessageCircle, BarChart3, UserCog, Settings
 } from 'lucide-react'
 
-const Sidebar = () => {
-  const location = useLocation()
-  const { user } = useAuth()
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-
-  const getMenuItemsByRole = (role: string) => {
-    const baseItems = [
-      { icon: LayoutDashboard, label: 'Dashboard',    path: '/dashboard'   },
-      { icon: Users,           label: 'Leads',        path: '/leads'       },
-      { icon: Calendar,        label: 'Visitas',      path: '/visits'      },
-      { icon: GraduationCap,   label: 'Matrículas',   path: '/enrollments' },
-      { icon: MessageCircle,   label: 'WhatsApp',     path: '/whatsapp'    },
-    ]
-    const managerItems = [
-      { icon: BarChart3, label: 'Relatórios', path: '/reports' },
-    ]
-    const adminItems = [
-      { icon: UserCog,  label: 'Usuários',      path: '/users'    },
-      { icon: Settings, label: 'Configurações', path: '/settings' },
-    ]
-    switch (role) {
-      case 'admin':   return [...baseItems, ...managerItems, ...adminItems]
-      case 'manager': return [...baseItems, ...managerItems]
-      default:        return baseItems
-    }
-  }
-
-  const menuItems = getMenuItemsByRole(user?.role || 'user')
-  const isActive = (path: string) => location.pathname === path
-
+function Tooltip({ text, children }: { text: string; children: React.ReactNode }) {
+  const [show, setShow] = useState(false)
   return (
-    <>
-      {/* Mobile top bar */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 h-14"
-        style={{ background: 'linear-gradient(90deg,#1A2B4A,#0F1E35)', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
-        <img src="/Inscribologo.png" alt="Inscribo" className="h-8 w-auto" />
-        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="p-2 rounded-lg hover:bg-white/10 transition-colors text-white">
-          {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
-      </div>
-
-      {/* Overlay */}
-      {isMobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 bg-black/50 z-40"
-          onClick={() => setIsMobileMenuOpen(false)} />
+    <div style={{ position: 'relative' }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}>
+      {children}
+      {show && (
+        <div style={{
+          position: 'absolute', left: 52, top: '50%', transform: 'translateY(-50%)',
+          background: '#1A2B4A', color: 'white', fontSize: 12, fontWeight: 500,
+          padding: '5px 10px', borderRadius: 8, whiteSpace: 'nowrap',
+          zIndex: 9999, pointerEvents: 'none',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        }}>
+          {text}
+          <div style={{
+            position: 'absolute', right: '100%', top: '50%', transform: 'translateY(-50%)',
+            borderWidth: '4px', borderStyle: 'solid',
+            borderColor: 'transparent #1A2B4A transparent transparent',
+          }} />
+        </div>
       )}
-
-      {/* Sidebar panel */}
-      <div className={`
-        fixed left-0 top-0 h-full w-[220px] z-50 flex flex-col
-        transition-transform duration-300 ease-in-out
-        lg:translate-x-0
-        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}
-        style={{ background: 'linear-gradient(180deg,#1A2B4A 0%,#0F1E35 100%)', boxShadow: '2px 0 12px rgba(0,0,0,0.18)' }}>
-
-        {/* Logo */}
-        <div className="flex items-center justify-between px-5 py-5"
-          style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          <img src="/Inscribologo.png" alt="Inscribo" className="h-8 w-auto" />
-          <button onClick={() => setIsMobileMenuOpen(false)}
-            className="lg:hidden p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 mt-2 overflow-y-auto px-2 py-1">
-          {menuItems.map((item) => {
-            const Icon = item.icon
-            const active = isActive(item.path)
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="flex items-center gap-2.5 px-3 py-2.5 my-0.5 rounded-lg text-[13.5px] font-medium transition-all duration-200 no-underline"
-                style={{
-                  color: active ? '#fff' : 'rgba(255,255,255,0.62)',
-                  background: active ? 'rgba(0,168,150,0.22)' : 'transparent',
-                  borderLeft: active ? '3px solid #00A896' : '3px solid transparent',
-                  paddingLeft: active ? '9px' : '12px',
-                  fontWeight: active ? 600 : 500,
-                }}
-              >
-                <Icon className="w-4 h-4 flex-shrink-0"
-                  style={{ color: active ? '#00A896' : 'rgba(255,255,255,0.55)' }} />
-                {item.label}
-              </Link>
-            )
-          })}
-        </nav>
-
-        {/* Footer */}
-        <div className="px-5 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-          <p className="text-[11px] text-center" style={{ color: 'rgba(255,255,255,0.28)' }}>
-            © 2025 Inscribo
-          </p>
-        </div>
-      </div>
-    </>
+    </div>
   )
 }
 
-export default Sidebar
+const NAV_CFG = [
+  { path: '/dashboard',   label: 'Dashboard',  iconBg: '#E6F7F5', iconColor: '#00A896', Icon: LayoutDashboard, roles: ['admin','manager','user'] },
+  { path: '/leads',       label: 'Leads',      iconBg: '#EDE9FE', iconColor: '#8B5CF6', Icon: Users,           roles: ['admin','manager','user'] },
+  { path: '/visits',      label: 'Visitas',    iconBg: '#FEF3C7', iconColor: '#F59E0B', Icon: Calendar,        roles: ['admin','manager','user'] },
+  { path: '/enrollments', label: 'Matrículas', iconBg: '#FFE4E6', iconColor: '#F43F5E', Icon: GraduationCap,   roles: ['admin','manager','user'] },
+  { path: '/whatsapp',    label: 'WhatsApp',   iconBg: '#D1FAE5', iconColor: '#10B981', Icon: MessageCircle,   roles: ['admin','manager','user'] },
+  { path: '/reports',     label: 'Relatórios', iconBg: '#DBEAFE', iconColor: '#3B82F6', Icon: BarChart3,       roles: ['admin','manager'] },
+  { path: '/users',       label: 'Usuários',   iconBg: '#F1F5F9', iconColor: '#64748B', Icon: UserCog,         roles: ['admin'] },
+  { path: '/settings',    label: 'Config.',    iconBg: '#F1F5F9', iconColor: '#64748B', Icon: Settings,        roles: ['admin'] },
+]
+
+export default function Sidebar() {
+  const location = useLocation()
+  const { user } = useAuth()
+
+  const navItems = NAV_CFG.filter(item => item.roles.includes(user?.role || 'user'))
+  const initials = (user?.full_name || 'U').split(' ').map((n: string) => n[0]).slice(0, 2).join('')
+
+  return (
+    <aside style={{
+      width: 64, minWidth: 64, height: '100vh',
+      background: '#FFFFFF',
+      borderRight: '0.5px solid #D1FAE5',
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      padding: '12px 0', gap: 4, overflow: 'hidden', flexShrink: 0,
+    }}>
+      {/* Logo mark */}
+      <div style={{
+        width: 38, height: 38, borderRadius: 12,
+        background: 'var(--color-primary)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        marginBottom: 12, flexShrink: 0,
+      }}>
+        <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'white', border: '2px solid rgba(255,255,255,0.4)' }} />
+      </div>
+
+      {/* Nav items */}
+      {navItems.map(item => {
+        const active = location.pathname === item.path
+        const Icon = item.Icon
+        return (
+          <Tooltip key={item.path} text={item.label}>
+            <Link to={item.path} style={{
+              position: 'relative', textDecoration: 'none',
+              width: 44, height: 44, borderRadius: 14,
+              background: active ? item.iconBg : 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: active ? `1.5px solid ${item.iconColor}30` : '1.5px solid transparent',
+              transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)',
+            }}
+            onMouseEnter={e => {
+              if (!active) {
+                (e.currentTarget as HTMLElement).style.background = item.iconBg
+                ;(e.currentTarget as HTMLElement).style.opacity = '0.75'
+              }
+            }}
+            onMouseLeave={e => {
+              if (!active) {
+                (e.currentTarget as HTMLElement).style.background = 'transparent'
+                ;(e.currentTarget as HTMLElement).style.opacity = '1'
+              }
+            }}
+            >
+              <Icon size={18} color={active ? item.iconColor : '#94A3B8'} strokeWidth={active ? 2.2 : 1.8} />
+            </Link>
+          </Tooltip>
+        )
+      })}
+
+      {/* Avatar at bottom */}
+      <div style={{ marginTop: 'auto', paddingBottom: 4 }}>
+        <Tooltip text={user?.full_name || 'Perfil'}>
+          <Link to="/profile" style={{ textDecoration: 'none' }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: '50%',
+              background: 'linear-gradient(135deg, #00A896, #0DD3BF)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 13, fontWeight: 700, color: 'white', cursor: 'pointer',
+            }}>
+              {initials}
+            </div>
+          </Link>
+        </Tooltip>
+      </div>
+    </aside>
+  )
+}

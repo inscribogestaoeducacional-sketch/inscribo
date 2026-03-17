@@ -185,14 +185,13 @@ function AppContent() {
 
   // REGULAR USER ROUTES
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--color-bg)' }}>
+    <div style={{ display: 'flex', width: '100vw', height: '100vh', overflow: 'hidden', background: 'var(--bg-page)' }}>
       <Sidebar />
 
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden lg:ml-[220px]">
-        <div className="lg:hidden h-14 flex-shrink-0"></div>
+      <div style={{ flex: 1, minWidth: 0, height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <TopBar />
 
-        <main className="flex-1 min-h-0 overflow-y-auto">
+        <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--bg-page)' }}>
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />

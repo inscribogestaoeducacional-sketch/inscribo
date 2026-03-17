@@ -1087,7 +1087,7 @@ export default function LeadKanban() {
   }
 
   return (
-    <div className="p-4 sm:p-6 md:p-8" style={{ background: 'var(--color-bg)', minHeight: '100%' }}>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16, height: '100%', background: 'var(--bg-page)' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">

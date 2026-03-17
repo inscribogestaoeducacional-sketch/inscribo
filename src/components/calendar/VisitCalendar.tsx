@@ -334,7 +334,7 @@ export default function VisitCalendar() {
   const weekLabels = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
 
   return (
-    <div className="flex overflow-hidden bg-gray-50" style={{ height: 'calc(100vh - 56px)' }}>
+    <div style={{ display: 'flex', overflow: 'hidden', background: 'var(--bg-page)', height: '100%' }}>
 
       {/* ── Left column ──────────────────────────────────────────────────────── */}
       <div className="w-80 flex-shrink-0 border-r border-gray-200 flex flex-col overflow-y-auto bg-gray-50">

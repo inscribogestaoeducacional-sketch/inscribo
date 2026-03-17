@@ -671,7 +671,7 @@ export default function UserManagement() {
   }
 
   return (
-    <div className="p-8 bg-gradient-to-br from-blue-50 via-white to-indigo-50 min-h-screen">
+    <div style={{ padding: 24, minHeight: '100%', background: 'var(--bg-page)' }}>
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-6">

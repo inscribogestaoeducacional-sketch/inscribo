@@ -6,8 +6,6 @@ import {
   TrendingUp,
   RefreshCw,
   DollarSign,
-  ArrowUpRight,
-  ArrowDownRight,
   BarChart3,
   Target,
   Eye,
@@ -24,37 +22,37 @@ interface KPICardProps {
   value: string | number
   change?: number
   icon: React.ReactNode
-  iconBg: string
+  iconBg?: string
+  heroColor?: string
   onClick?: () => void
 }
 
-function KPICard({ title, value, change, icon, iconBg, onClick }: KPICardProps) {
-  const isPositive = change !== undefined ? change >= 0 : true
-
+function KPICard({ title, value, change, icon, heroColor, onClick }: KPICardProps) {
+  if (heroColor) {
+    return (
+      <div className="card-hero" style={{ background: heroColor, cursor: onClick ? 'pointer' : undefined }} onClick={onClick}>
+        <div className="kpi-label">{title}</div>
+        <div className="kpi-value">{value}</div>
+        <div className="kpi-bar"><div className="kpi-bar-fill" style={{ width: '65%' }} /></div>
+        {change !== undefined && (
+          <div className="kpi-trend">{change >= 0 ? '↑' : '↓'} {Math.abs(change)}% vs. mês anterior</div>
+        )}
+      </div>
+    )
+  }
   return (
-    <div
-      className={`bg-white rounded-xl border-t-2 border-t-teal-500 border border-gray-200 shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md ${onClick ? 'cursor-pointer' : ''}`}
-      onClick={onClick}
-    >
-      <div className="p-4">
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">{title}</p>
-            <p className="text-2xl font-bold text-[#1e2d6b] leading-none mb-2">{value}</p>
-            {change !== undefined && (
-              <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${isPositive ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                {isPositive
-                  ? <ArrowUpRight className="h-3 w-3" />
-                  : <ArrowDownRight className="h-3 w-3" />
-                }
-                {isPositive ? '+' : ''}{change}% vs. mês anterior
-              </div>
-            )}
-          </div>
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
-            {icon}
-          </div>
+    <div className="card" style={{ padding: 18, cursor: onClick ? 'pointer' : undefined }} onClick={onClick}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>{title}</div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>{value}</div>
+          {change !== undefined && (
+            <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: change >= 0 ? 'var(--color-green-bg)' : 'var(--color-red-bg)', color: change >= 0 ? 'var(--color-green-dk)' : 'var(--color-red-dk)' }}>
+              {change >= 0 ? '↑' : '↓'} {Math.abs(change)}%
+            </div>
+          )}
         </div>
+        <div style={{ flexShrink: 0 }}>{icon}</div>
       </div>
     </div>
   )
@@ -270,16 +268,18 @@ export default function Dashboard() {
       title: 'Total de Leads',
       value: kpis.totalLeads,
       change: calculateChange(kpis.leadsNovos, previousMonthKpis.totalLeads),
-      icon: <Users className="h-5 w-5 text-blue-600" />,
+      icon: <Users className="h-5 w-5 text-white opacity-75" />,
       iconBg: 'bg-blue-50',
+      heroColor: 'var(--color-primary)',
       onClick: () => navigate('/leads')
     },
     {
       title: 'Visitas Hoje',
       value: kpis.visitasHoje,
       change: undefined,
-      icon: <Calendar className="h-5 w-5 text-[#14b8a6]" />,
-      iconBg: 'bg-[#14b8a6]/10',
+      icon: <Calendar className="h-5 w-5 text-white opacity-75" />,
+      iconBg: 'bg-purple-50',
+      heroColor: 'var(--color-purple)',
       onClick: () => navigate('/visits')
     },
     {
@@ -335,7 +335,7 @@ export default function Dashboard() {
   ]
 
   return (
-    <div className="p-4 sm:p-6 md:p-8" style={{ background: 'var(--color-bg)', minHeight: '100%' }}>
+    <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: 'var(--bg-page)' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">

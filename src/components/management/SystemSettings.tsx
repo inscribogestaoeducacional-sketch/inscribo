@@ -532,7 +532,7 @@ export default function SystemSettings() {
   const [activeTab, setActiveTab] = useState('geral')
 
   return (
-    <div className="p-6" style={{ background: 'var(--color-bg)', minHeight: '100%' }}>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: 'var(--bg-page)' }}>
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[#1e2d6b]">Configurações do Sistema</h1>
         <p className="text-sm text-gray-500 mt-0.5">Gerencie as configurações da instituição</p>

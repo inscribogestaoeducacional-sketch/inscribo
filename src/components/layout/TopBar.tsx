@@ -1,153 +1,92 @@
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import {
-  Bell, User, Settings, LogOut, ChevronDown,
-  Search, Shield, Building2
-} from 'lucide-react'
+import { LogOut, Settings, User } from 'lucide-react'
 
 export default function TopBar() {
   const { user, signOut } = useAuth()
-  const [showUserMenu, setShowUserMenu] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [showMenu, setShowMenu] = useState(false)
+  const [search, setSearch] = useState('')
 
-  const handleSignOut = async () => {
-    try { await signOut() } catch (e) { console.error(e) }
-  }
-
-  const getRoleInfo = (role: string) => {
-    switch (role) {
-      case 'admin':   return { label: 'Administrador', color: '#dc2626', bg: '#FEF2F2', icon: Shield }
-      case 'manager': return { label: 'Gestor',        color: '#2563eb', bg: '#EFF6FF', icon: User   }
-      default:        return { label: 'Consultor',     color: '#64748B', bg: '#F8FAFC', icon: User   }
-    }
-  }
-
-  const roleInfo = getRoleInfo(user?.role || 'user')
-  const RoleIcon = roleInfo.icon
-  const initials = user?.full_name?.charAt(0).toUpperCase() || 'U'
+  const initials = (user?.full_name || 'U').split(' ').map((n: string) => n[0]).slice(0, 2).join('')
+  const roleLabel = user?.role === 'admin' ? 'Administrador' : user?.role === 'manager' ? 'Gestor' : 'Consultor'
 
   return (
-    <header className="flex-shrink-0 flex items-center justify-between px-6 h-14 bg-white"
-      style={{ borderBottom: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)' }}>
-
+    <header style={{
+      height: 58, background: '#FFFFFF',
+      borderBottom: '0.5px solid #D1FAE5',
+      display: 'flex', alignItems: 'center',
+      padding: '0 24px', gap: 16, flexShrink: 0,
+    }}>
       {/* Search */}
-      <div className="flex-1 max-w-md">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--color-faint)' }} />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Buscar leads, visitas, matrículas..."
-            className="w-full h-9 pl-9 pr-4 text-sm transition-all outline-none"
-            style={{
-              background: 'var(--color-bg)',
-              border: '1.5px solid transparent',
-              borderRadius: 'var(--radius-full)',
-              color: 'var(--color-text)',
-            }}
-            onFocus={e => {
-              e.target.style.background = '#fff'
-              e.target.style.borderColor = 'var(--color-primary)'
-              e.target.style.boxShadow = '0 0 0 3px rgba(0,168,150,0.12)'
-            }}
-            onBlur={e => {
-              e.target.style.background = 'var(--color-bg)'
-              e.target.style.borderColor = 'transparent'
-              e.target.style.boxShadow = 'none'
-            }}
-          />
-        </div>
+      <div style={{ flex: 1, maxWidth: 440, position: 'relative' }}>
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar leads, visitas, matrículas..."
+          style={{
+            width: '100%', height: 38, paddingLeft: 38, paddingRight: 14,
+            background: '#F0FDFB', border: '1.5px solid #D1FAE5',
+            borderRadius: 9999, fontSize: 13, color: '#1A2B4A',
+            outline: 'none', transition: 'all 0.18s ease',
+          }}
+          onFocus={e => { e.target.style.background = '#fff'; e.target.style.borderColor = '#00A896'; e.target.style.boxShadow = '0 0 0 3px rgba(0,168,150,0.10)' }}
+          onBlur={e => { e.target.style.background = '#F0FDFB'; e.target.style.borderColor = '#D1FAE5'; e.target.style.boxShadow = 'none' }}
+        />
+        <svg style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 15, height: 15, color: '#94A3B8', pointerEvents: 'none' }}
+          fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+        </svg>
       </div>
 
-      {/* Right side */}
-      <div className="flex items-center gap-3 ml-4">
-        {/* Notifications */}
-        <button className="relative p-2 rounded-lg transition-colors hover:bg-gray-50"
-          style={{ color: 'var(--color-muted)' }}>
-          <Bell className="w-4.5 h-4.5 w-[18px] h-[18px]" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-        </button>
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Bell */}
+        <div style={{ width: 38, height: 38, borderRadius: 12, background: '#F0FDFB', border: '0.5px solid #D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}>
+          <svg width="16" height="16" fill="none" stroke="#64748B" strokeWidth="1.8" viewBox="0 0 24 24">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+          <div style={{ position: 'absolute', top: 7, right: 7, width: 8, height: 8, borderRadius: '50%', background: '#F43F5E', border: '1.5px solid white' }} />
+        </div>
 
-        {/* User menu */}
-        <div className="relative">
-          <button
-            onClick={() => setShowUserMenu(v => !v)}
-            className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg transition-all hover:bg-gray-50"
-          >
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg,#00A896,#1A2B4A)' }}>
+        {/* User pill */}
+        <div style={{ position: 'relative' }}>
+          <div
+            onClick={() => setShowMenu(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px 5px 6px', borderRadius: 12, background: '#F0FDFB', border: '0.5px solid #D1FAE5', cursor: 'pointer' }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg,#00A896,#0DD3BF)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white' }}>
               {initials}
             </div>
-            <div className="hidden md:block text-left">
-              <p className="text-[13px] font-semibold leading-tight" style={{ color: 'var(--color-navy)' }}>
-                {user?.full_name || 'Usuário'}
-              </p>
-              <p className="text-[11px] leading-tight" style={{ color: 'var(--color-muted)' }}>{roleInfo.label}</p>
+            <div style={{ lineHeight: 1.25 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A' }}>{user?.full_name}</div>
+              <div style={{ fontSize: 10, color: '#94A3B8' }}>{roleLabel}</div>
             </div>
-            <ChevronDown className="w-3.5 h-3.5" style={{ color: 'var(--color-faint)' }} />
-          </button>
+            <svg width="12" height="12" fill="none" stroke="#94A3B8" strokeWidth="2" viewBox="0 0 24 24" style={{ marginLeft: 2 }}><polyline points="6 9 12 15 18 9" /></svg>
+          </div>
 
-          {showUserMenu && (
+          {showMenu && (
             <>
-              {/* Backdrop */}
-              <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
-              {/* Dropdown */}
-              <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl z-50 overflow-hidden"
-                style={{ border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-lg)' }}>
-
-                {/* Profile header */}
-                <div className="p-4" style={{ borderBottom: '1px solid var(--color-border)', background: '#F8FAFB' }}>
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-11 h-11 rounded-full flex items-center justify-center text-white text-base font-bold flex-shrink-0"
-                      style={{ background: 'linear-gradient(135deg,#00A896,#1A2B4A)' }}>
-                      {initials}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold truncate" style={{ color: 'var(--color-navy)' }}>{user?.full_name}</p>
-                      <p className="text-xs truncate" style={{ color: 'var(--color-muted)' }}>{user?.email}</p>
-                    </div>
-                  </div>
-                  <div className="rounded-lg px-3 py-2.5" style={{ background: roleInfo.bg, border: '1px solid var(--color-border)' }}>
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <RoleIcon className="w-3.5 h-3.5" style={{ color: roleInfo.color }} />
-                      <span className="text-xs font-bold" style={{ color: roleInfo.color }}>{roleInfo.label}</span>
-                      {user?.is_super_admin && (
-                        <span className="ml-auto text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded-full font-bold">SUPER</span>
-                      )}
-                    </div>
-                    {user?.institution_name && (
-                      <div className="flex items-center gap-1.5 mt-1.5 pt-1.5" style={{ borderTop: '1px solid var(--color-border)' }}>
-                        <Building2 className="w-3 h-3" style={{ color: 'var(--color-faint)' }} />
-                        <span className="text-[11px] font-medium truncate" style={{ color: 'var(--color-muted)' }}>
-                          {user.institution_name}
-                        </span>
-                      </div>
-                    )}
-                  </div>
+              <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setShowMenu(false)} />
+              <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', background: '#fff', borderRadius: 14, border: '0.5px solid #D1FAE5', boxShadow: '0 8px 32px rgba(0,168,150,0.12)', zIndex: 50, minWidth: 200, overflow: 'hidden' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '0.5px solid #E2E8F0', background: '#F0FDFB' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{user?.full_name}</div>
+                  <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>{user?.email}</div>
                 </div>
-
-                {/* Menu items */}
-                <div className="py-1">
-                  <Link to="/profile" onClick={() => setShowUserMenu(false)}
-                    className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-gray-50 no-underline"
-                    style={{ color: 'var(--color-text)' }}>
-                    <User className="w-4 h-4" style={{ color: 'var(--color-muted)' }} />
-                    Meu Perfil
+                <div style={{ padding: '4px 0' }}>
+                  <Link to="/profile" onClick={() => setShowMenu(false)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', fontSize: 13, color: '#1A2B4A', textDecoration: 'none', transition: 'background 0.15s' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#F0FDFB'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
+                    <User size={14} color="#64748B" /> Meu Perfil
                   </Link>
-                  <Link to="/settings" onClick={() => setShowUserMenu(false)}
-                    className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-gray-50 no-underline"
-                    style={{ color: 'var(--color-text)' }}>
-                    <Settings className="w-4 h-4" style={{ color: 'var(--color-muted)' }} />
-                    Configurações
+                  <Link to="/settings" onClick={() => setShowMenu(false)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', fontSize: 13, color: '#1A2B4A', textDecoration: 'none' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#F0FDFB'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
+                    <Settings size={14} color="#64748B" /> Configurações
                   </Link>
-                  <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
-                  <button onClick={handleSignOut}
-                    className="flex items-center gap-3 w-full px-4 py-2.5 text-sm transition-colors hover:bg-red-50 text-left"
-                    style={{ color: '#dc2626' }}>
-                    <LogOut className="w-4 h-4" />
-                    Sair da Conta
+                  <div style={{ borderTop: '0.5px solid #E2E8F0', margin: '4px 0' }} />
+                  <button onClick={async () => { try { await signOut() } catch {} }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', fontSize: 13, color: '#F43F5E', background: 'transparent', border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#FFE4E6'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
+                    <LogOut size={14} /> Sair da Conta
                   </button>
                 </div>
               </div>
