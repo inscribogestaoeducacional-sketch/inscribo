@@ -185,14 +185,14 @@ function AppContent() {
 
   // REGULAR USER ROUTES
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--color-bg)' }}>
       <Sidebar />
-      
-      <div className="lg:ml-[220px]">
-        <div className="lg:hidden h-16"></div>
+
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden lg:ml-[220px]">
+        <div className="lg:hidden h-14 flex-shrink-0"></div>
         <TopBar />
-        
-        <main className="min-h-screen">
+
+        <main className="flex-1 min-h-0 overflow-y-auto">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
@@ -232,6 +232,7 @@ function AppContent() {
 }
 
 // Main App Component
+
 function App() {
   return (
     <Router>

@@ -21,125 +21,98 @@ const Sidebar = () => {
 
   const getMenuItemsByRole = (role: string) => {
     const baseItems = [
-      { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-      { icon: Users,           label: 'Leads',     path: '/leads'     },
-      { icon: Calendar,        label: 'Visitas',   path: '/visits'    },
-      { icon: GraduationCap,   label: 'Matrículas',path: '/enrollments'},
-      { icon: MessageCircle,   label: 'WhatsApp',  path: '/whatsapp'  },
+      { icon: LayoutDashboard, label: 'Dashboard',    path: '/dashboard'   },
+      { icon: Users,           label: 'Leads',        path: '/leads'       },
+      { icon: Calendar,        label: 'Visitas',      path: '/visits'      },
+      { icon: GraduationCap,   label: 'Matrículas',   path: '/enrollments' },
+      { icon: MessageCircle,   label: 'WhatsApp',     path: '/whatsapp'    },
     ]
     const managerItems = [
       { icon: BarChart3, label: 'Relatórios', path: '/reports' },
     ]
     const adminItems = [
-      { icon: UserCog,  label: 'Usuários',       path: '/users'    },
-      { icon: Settings, label: 'Configurações',  path: '/settings' },
+      { icon: UserCog,  label: 'Usuários',      path: '/users'    },
+      { icon: Settings, label: 'Configurações', path: '/settings' },
     ]
     switch (role) {
-      case 'admin':
-        return [...baseItems, ...managerItems, ...adminItems]
-      case 'manager':
-        return [...baseItems, ...managerItems]
-      case 'user':
-      default:
-        return baseItems
+      case 'admin':   return [...baseItems, ...managerItems, ...adminItems]
+      case 'manager': return [...baseItems, ...managerItems]
+      default:        return baseItems
     }
   }
 
   const menuItems = getMenuItemsByRole(user?.role || 'user')
   const isActive = (path: string) => location.pathname === path
 
-  const handleLinkClick = () => {
-    setIsMobileMenuOpen(false)
-  }
-
   return (
     <>
-      {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 bg-[#1e2d6b] border-b border-[#151b4e] z-50">
-        <div className="flex items-center justify-between px-4 py-3">
-          <img src="/Inscribologo.png" alt="Inscribo" className="h-8 w-auto" />
-          <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-          >
-            {isMobileMenuOpen ? (
-              <X className="h-5 w-5 text-white" />
-            ) : (
-              <Menu className="h-5 w-5 text-white" />
-            )}
-          </button>
-        </div>
+      {/* Mobile top bar */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 h-14"
+        style={{ background: 'linear-gradient(90deg,#1A2B4A,#0F1E35)', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
+        <img src="/Inscribologo.png" alt="Inscribo" className="h-8 w-auto" />
+        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="p-2 rounded-lg hover:bg-white/10 transition-colors text-white">
+          {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </button>
       </div>
 
       {/* Overlay */}
       {isMobileMenuOpen && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
+        <div className="lg:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={() => setIsMobileMenuOpen(false)} />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar panel */}
       <div className={`
-        bg-[#1e2d6b] shadow-lg h-full w-[220px] fixed left-0 top-0 z-50 flex flex-col
+        fixed left-0 top-0 h-full w-[220px] z-50 flex flex-col
         transition-transform duration-300 ease-in-out
         lg:translate-x-0
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}>
-        {/* Logo - Desktop */}
-        <div className="hidden lg:block p-4 border-b border-[#151b4e]">
-          <div className="flex items-center justify-center">
-            <img
-              src="/Inscribologo.png"
-              alt="Inscribo"
-              className="h-8 w-auto transition-transform duration-300 hover:scale-105"
-            />
-          </div>
+      `}
+        style={{ background: 'linear-gradient(180deg,#1A2B4A 0%,#0F1E35 100%)', boxShadow: '2px 0 12px rgba(0,0,0,0.18)' }}>
+
+        {/* Logo */}
+        <div className="flex items-center justify-between px-5 py-5"
+          style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <img src="/Inscribologo.png" alt="Inscribo" className="h-8 w-auto" />
+          <button onClick={() => setIsMobileMenuOpen(false)}
+            className="lg:hidden p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white">
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Logo - Mobile (drawer) */}
-        <div className="lg:hidden p-4 border-b border-[#151b4e]">
-          <div className="flex items-center justify-between">
-            <img src="/Inscribologo.png" alt="Inscribo" className="h-8 w-auto" />
-            <button
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-            >
-              <X className="h-5 w-5 text-white" />
-            </button>
-          </div>
-        </div>
-
-        {/* Navigation Menu */}
-        <nav className="flex-1 mt-3 overflow-y-auto">
-          <ul className="space-y-0.5 px-2">
-            {menuItems.map((item) => {
-              const Icon = item.icon
-              return (
-                <li key={item.path}>
-                  <Link
-                    to={item.path}
-                    onClick={handleLinkClick}
-                    className={`flex items-center px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-                      isActive(item.path)
-                        ? 'border-l-4 border-[#14b8a6] bg-white/10 text-white'
-                        : 'text-white/70 hover:bg-white/10 hover:text-white'
-                    }`}
-                  >
-                    <Icon className={`mr-3 w-4 h-4 ${isActive(item.path) ? 'text-[#14b8a6]' : 'text-white/70'}`} />
-                    {item.label}
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
+        {/* Navigation */}
+        <nav className="flex-1 mt-2 overflow-y-auto px-2 py-1">
+          {menuItems.map((item) => {
+            const Icon = item.icon
+            const active = isActive(item.path)
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="flex items-center gap-2.5 px-3 py-2.5 my-0.5 rounded-lg text-[13.5px] font-medium transition-all duration-200 no-underline"
+                style={{
+                  color: active ? '#fff' : 'rgba(255,255,255,0.62)',
+                  background: active ? 'rgba(0,168,150,0.22)' : 'transparent',
+                  borderLeft: active ? '3px solid #00A896' : '3px solid transparent',
+                  paddingLeft: active ? '9px' : '12px',
+                  fontWeight: active ? 600 : 500,
+                }}
+              >
+                <Icon className="w-4 h-4 flex-shrink-0"
+                  style={{ color: active ? '#00A896' : 'rgba(255,255,255,0.55)' }} />
+                {item.label}
+              </Link>
+            )
+          })}
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-[#151b4e]">
-          <div className="text-center text-xs text-white/40">
-            © 2024 Inscribo
-          </div>
+        <div className="px-5 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+          <p className="text-[11px] text-center" style={{ color: 'rgba(255,255,255,0.28)' }}>
+            © 2025 Inscribo
+          </p>
         </div>
       </div>
     </>

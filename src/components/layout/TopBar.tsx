@@ -1,206 +1,160 @@
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { 
-  Bell, 
-  User, 
-  Settings, 
-  LogOut, 
-  ChevronDown,
-  Menu,
-  Search,
-  Shield,
-  Building2
+import {
+  Bell, User, Settings, LogOut, ChevronDown,
+  Search, Shield, Building2
 } from 'lucide-react'
 
 export default function TopBar() {
   const { user, signOut } = useAuth()
   const [showUserMenu, setShowUserMenu] = useState(false)
-  const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
   const handleSignOut = async () => {
-    try {
-      console.log('Signing out...')
-      await signOut()
-      console.log('Sign out successful')
-    } catch (error) {
-      console.error('Error signing out:', error)
-    }
+    try { await signOut() } catch (e) { console.error(e) }
   }
 
   const getRoleInfo = (role: string) => {
     switch (role) {
-      case 'admin':
-        return { label: 'Administrador', color: 'text-red-600', bg: 'bg-red-50', icon: Shield }
-      case 'manager':
-        return { label: 'Gestor', color: 'text-blue-600', bg: 'bg-blue-50', icon: User }
-      case 'user':
-      default:
-        return { label: 'Consultor', color: 'text-gray-600', bg: 'bg-gray-50', icon: User }
+      case 'admin':   return { label: 'Administrador', color: '#dc2626', bg: '#FEF2F2', icon: Shield }
+      case 'manager': return { label: 'Gestor',        color: '#2563eb', bg: '#EFF6FF', icon: User   }
+      default:        return { label: 'Consultor',     color: '#64748B', bg: '#F8FAFC', icon: User   }
     }
   }
 
   const roleInfo = getRoleInfo(user?.role || 'user')
   const RoleIcon = roleInfo.icon
+  const initials = user?.full_name?.charAt(0).toUpperCase() || 'U'
 
   return (
-    <header className="h-14 bg-white shadow-sm border-b border-gray-200 flex flex-col justify-center">
-      <div className="flex items-center justify-between px-4 py-3">
-        {/* Mobile menu button */}
-        <button
-          onClick={() => setShowMobileMenu(!showMobileMenu)}
-          className="lg:hidden p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-        >
-          <Menu className="w-5 h-5" />
+    <header className="flex-shrink-0 flex items-center justify-between px-6 h-14 bg-white"
+      style={{ borderBottom: '1px solid var(--color-border)', boxShadow: 'var(--shadow-sm)' }}>
+
+      {/* Search */}
+      <div className="flex-1 max-w-md">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--color-faint)' }} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Buscar leads, visitas, matrículas..."
+            className="w-full h-9 pl-9 pr-4 text-sm transition-all outline-none"
+            style={{
+              background: 'var(--color-bg)',
+              border: '1.5px solid transparent',
+              borderRadius: 'var(--radius-full)',
+              color: 'var(--color-text)',
+            }}
+            onFocus={e => {
+              e.target.style.background = '#fff'
+              e.target.style.borderColor = 'var(--color-primary)'
+              e.target.style.boxShadow = '0 0 0 3px rgba(0,168,150,0.12)'
+            }}
+            onBlur={e => {
+              e.target.style.background = 'var(--color-bg)'
+              e.target.style.borderColor = 'transparent'
+              e.target.style.boxShadow = 'none'
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Right side */}
+      <div className="flex items-center gap-3 ml-4">
+        {/* Notifications */}
+        <button className="relative p-2 rounded-lg transition-colors hover:bg-gray-50"
+          style={{ color: 'var(--color-muted)' }}>
+          <Bell className="w-4.5 h-4.5 w-[18px] h-[18px]" />
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
         </button>
 
-        {/* Search Bar - Novo */}
-        <div className="flex-1 max-w-2xl mx-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar leads, visitas, matrículas..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00D4C4] focus:border-transparent transition-all"
-            />
-          </div>
-        </div>
-
-        {/* Right side - Notifications and User Menu */}
-        <div className="flex items-center space-x-4">
-          {/* Notifications */}
-          <button className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 relative">
-            <Bell className="w-5 h-5" />
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
+        {/* User menu */}
+        <div className="relative">
+          <button
+            onClick={() => setShowUserMenu(v => !v)}
+            className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg transition-all hover:bg-gray-50"
+          >
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+              style={{ background: 'linear-gradient(135deg,#00A896,#1A2B4A)' }}>
+              {initials}
+            </div>
+            <div className="hidden md:block text-left">
+              <p className="text-[13px] font-semibold leading-tight" style={{ color: 'var(--color-navy)' }}>
+                {user?.full_name || 'Usuário'}
+              </p>
+              <p className="text-[11px] leading-tight" style={{ color: 'var(--color-muted)' }}>{roleInfo.label}</p>
+            </div>
+            <ChevronDown className="w-3.5 h-3.5" style={{ color: 'var(--color-faint)' }} />
           </button>
 
-          {/* User Menu - Expandido com informações do perfil */}
-          <div className="relative">
-            <button
-              onClick={() => setShowUserMenu(!showUserMenu)}
-              className="flex items-center space-x-3 p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-all"
-            >
-              <div className="w-9 h-9 bg-gradient-to-br from-[#00D4C4] to-[#2D3E9E] rounded-full flex items-center justify-center shadow-sm">
-                <span className="text-white text-sm font-bold">
-                  {user?.full_name?.charAt(0).toUpperCase() || 'U'}
-                </span>
-              </div>
-              <div className="hidden md:block text-left">
-                <p className="text-sm font-semibold text-gray-900">
-                  {user?.full_name || 'Usuário'}
-                </p>
-                <p className="text-xs text-gray-500">{roleInfo.label}</p>
-              </div>
-              <ChevronDown className="w-4 h-4" />
-            </button>
+          {showUserMenu && (
+            <>
+              {/* Backdrop */}
+              <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
+              {/* Dropdown */}
+              <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl z-50 overflow-hidden"
+                style={{ border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-lg)' }}>
 
-            {/* User Dropdown Menu - Expandido */}
-            {showUserMenu && (
-              <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 z-50">
-                <div className="p-4 border-b border-gray-100 bg-gradient-to-br from-gray-50 to-white">
-                  <div className="flex items-center space-x-3 mb-3">
-                    <div className="w-12 h-12 bg-gradient-to-br from-[#00D4C4] to-[#2D3E9E] rounded-full flex items-center justify-center shadow-md">
-                      <span className="text-white text-lg font-bold">
-                        {user?.full_name?.charAt(0).toUpperCase() || 'U'}
-                      </span>
+                {/* Profile header */}
+                <div className="p-4" style={{ borderBottom: '1px solid var(--color-border)', background: '#F8FAFB' }}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-11 h-11 rounded-full flex items-center justify-center text-white text-base font-bold flex-shrink-0"
+                      style={{ background: 'linear-gradient(135deg,#00A896,#1A2B4A)' }}>
+                      {initials}
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-bold text-gray-900">
-                        {user?.full_name}
-                      </p>
-                      <p className="text-xs text-gray-500">{user?.email}</p>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold truncate" style={{ color: 'var(--color-navy)' }}>{user?.full_name}</p>
+                      <p className="text-xs truncate" style={{ color: 'var(--color-muted)' }}>{user?.email}</p>
                     </div>
                   </div>
-
-                  {/* Informações do Perfil - Movidas para cá */}
-                  <div className={`${roleInfo.bg} rounded-lg p-3 border border-gray-200`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center space-x-2">
-                        <RoleIcon className={`w-4 h-4 ${roleInfo.color}`} />
-                        <span className={`text-sm font-bold ${roleInfo.color}`}>
-                          {roleInfo.label}
-                        </span>
-                      </div>
+                  <div className="rounded-lg px-3 py-2.5" style={{ background: roleInfo.bg, border: '1px solid var(--color-border)' }}>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <RoleIcon className="w-3.5 h-3.5" style={{ color: roleInfo.color }} />
+                      <span className="text-xs font-bold" style={{ color: roleInfo.color }}>{roleInfo.label}</span>
                       {user?.is_super_admin && (
-                        <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full font-bold">
-                          SUPER
-                        </span>
+                        <span className="ml-auto text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded-full font-bold">SUPER</span>
                       )}
                     </div>
-                    
-                    <p className="text-xs text-gray-600 mb-2">
-                      {user?.role === 'admin' && 'Acesso completo à instituição'}
-                      {user?.role === 'manager' && 'Gestão e relatórios'}
-                      {user?.role === 'user' && 'Leads, visitas e matrículas'}
-                    </p>
-
                     {user?.institution_name && (
-                      <div className="pt-2 border-t border-gray-200">
-                        <div className="flex items-center space-x-2">
-                          <Building2 className="w-3 h-3 text-gray-500" />
-                          <span className="text-xs text-gray-600">Instituição:</span>
-                        </div>
-                        <p className="text-xs font-semibold text-gray-900 mt-1 bg-white px-2 py-1 rounded">
+                      <div className="flex items-center gap-1.5 mt-1.5 pt-1.5" style={{ borderTop: '1px solid var(--color-border)' }}>
+                        <Building2 className="w-3 h-3" style={{ color: 'var(--color-faint)' }} />
+                        <span className="text-[11px] font-medium truncate" style={{ color: 'var(--color-muted)' }}>
                           {user.institution_name}
-                        </p>
+                        </span>
                       </div>
                     )}
                   </div>
                 </div>
-                
-                <div className="py-2">
-                  <Link
-                    to="/profile"
-                    className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                    onClick={() => setShowUserMenu(false)}
-                  >
-                    <User className="w-4 h-4 mr-3 text-gray-500" />
+
+                {/* Menu items */}
+                <div className="py-1">
+                  <Link to="/profile" onClick={() => setShowUserMenu(false)}
+                    className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-gray-50 no-underline"
+                    style={{ color: 'var(--color-text)' }}>
+                    <User className="w-4 h-4" style={{ color: 'var(--color-muted)' }} />
                     Meu Perfil
                   </Link>
-                  
-                  <Link
-                    to="/settings"
-                    className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                    onClick={() => setShowUserMenu(false)}
-                  >
-                    <Settings className="w-4 h-4 mr-3 text-gray-500" />
+                  <Link to="/settings" onClick={() => setShowUserMenu(false)}
+                    className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-gray-50 no-underline"
+                    style={{ color: 'var(--color-text)' }}>
+                    <Settings className="w-4 h-4" style={{ color: 'var(--color-muted)' }} />
                     Configurações
                   </Link>
-                  
-                  <div className="border-t border-gray-100 my-2"></div>
-                  
-                  <button
-                    onClick={handleSignOut}
-                    className="flex items-center w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                  >
-                    <LogOut className="w-4 h-4 mr-3" />
+                  <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+                  <button onClick={handleSignOut}
+                    className="flex items-center gap-3 w-full px-4 py-2.5 text-sm transition-colors hover:bg-red-50 text-left"
+                    style={{ color: '#dc2626' }}>
+                    <LogOut className="w-4 h-4" />
                     Sair da Conta
                   </button>
                 </div>
               </div>
-            )}
-          </div>
+            </>
+          )}
         </div>
       </div>
-
-      {/* Mobile Menu Overlay */}
-      {showMobileMenu && (
-        <div className="lg:hidden fixed inset-0 z-40 bg-black bg-opacity-50">
-          <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-lg">
-            <div className="p-4">
-              <button
-                onClick={() => setShowMobileMenu(false)}
-                className="mb-4 p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              >
-                ✕ Fechar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </header>
   )
 }

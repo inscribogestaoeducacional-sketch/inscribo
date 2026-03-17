@@ -349,6 +349,42 @@ function AudioPlayer({ duration = 15, mediaUrl, isDark = true }: { duration?: nu
   )
 }
 
+// ─── ImagePreview (with loading + error states) ────────────────────────────────
+function ImagePreview({ src, isMe, onImageClick }: { src: string; isMe: boolean; onImageClick?: (url: string) => void }) {
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState(false)
+
+  if (error) {
+    return (
+      <div
+        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-opacity hover:opacity-80 ${isMe ? 'bg-white/10' : 'bg-[#F1F5F9]'}`}
+        onClick={() => window.open(src, '_blank')}
+      >
+        <span className="text-lg">🖼️</span>
+        <span className={`text-xs ${isMe ? 'text-white/70' : 'text-[#64748B]'}`}>Imagem (clique para abrir)</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative max-w-[240px]">
+      {!loaded && (
+        <div className={`w-[240px] h-[160px] rounded-xl flex items-center justify-center ${isMe ? 'bg-white/10' : 'bg-[#E2E8F0]'}`}>
+          <div className="w-5 h-5 border-2 border-[#00A896] border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+      <img
+        src={src}
+        alt="Imagem"
+        className={`max-w-[240px] rounded-xl cursor-pointer ${loaded ? 'block' : 'hidden'}`}
+        onLoad={() => setLoaded(true)}
+        onError={() => setError(true)}
+        onClick={() => onImageClick ? onImageClick(src) : window.open(src, '_blank')}
+      />
+    </div>
+  )
+}
+
 // ─── MessageBubble ────────────────────────────────────────────────────────────
 function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (url: string) => void }) {
   const isMe = msg.from === 'me'
@@ -372,19 +408,14 @@ function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (ur
         return <AudioPlayer duration={msg.duration} from={msg.from} mediaUrl={getProxiedUrl(msg.media_url)} isDark={isMe} />
       case 'image': {
         const imgSrc = getProxiedUrl(msg.media_url)
-        return imgSrc ? (
-          <img
-            src={imgSrc}
-            alt="Imagem"
-            className="max-w-[240px] rounded-xl cursor-pointer"
-            onClick={() => onImageClick ? onImageClick(imgSrc) : window.open(imgSrc, '_blank')}
-          />
-        ) : (
-          <div className={`w-48 h-32 rounded-xl overflow-hidden flex flex-col items-center justify-center gap-1 ${isMe ? 'bg-white/10' : 'bg-[#F1F5F9]'}`}>
-            <Image className={`w-8 h-8 ${isMe ? 'text-white/60' : 'text-[#94A3B8]'}`} />
-            <span className={`text-xs ${isMe ? 'text-white/60' : 'text-[#94A3B8]'}`}>Imagem</span>
-          </div>
-        )
+        return imgSrc
+          ? <ImagePreview src={imgSrc} isMe={isMe} onImageClick={onImageClick} />
+          : (
+            <div className={`w-48 h-32 rounded-xl overflow-hidden flex flex-col items-center justify-center gap-1 ${isMe ? 'bg-white/10' : 'bg-[#F1F5F9]'}`}>
+              <Image className={`w-8 h-8 ${isMe ? 'text-white/60' : 'text-[#94A3B8]'}`} />
+              <span className={`text-xs ${isMe ? 'text-white/60' : 'text-[#94A3B8]'}`}>Imagem</span>
+            </div>
+          )
       }
       case 'video':
         return msg.media_url ? (
@@ -428,7 +459,14 @@ function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (ur
           </div>
         )
       default:
-        return <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+        return (
+          <p className="text-sm leading-relaxed whitespace-pre-wrap">
+            {msg.content
+              ? msg.content
+              : <span className={`italic text-xs ${isMe ? 'text-white/40' : 'text-[#94A3B8]'}`}>...</span>
+            }
+          </p>
+        )
     }
   }
 
@@ -547,11 +585,25 @@ export default function WhatsAppHub() {
 
   const startRecording = async () => {
     if (!activeId) return
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setSendError('Seu browser não suporta gravação de áudio.')
+      return
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // Check for audio input device first
+      const devices = await navigator.mediaDevices.enumerateDevices().catch(() => [] as MediaDeviceInfo[])
+      const hasAudio = devices.some(d => d.kind === 'audioinput')
+      if (devices.length > 0 && !hasAudio) {
+        setSendError('Nenhum microfone encontrado neste dispositivo.')
+        return
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg'
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
       const recorder = new MediaRecorder(stream, { mimeType })
       audioChunksRef.current = []
       recorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
@@ -587,9 +639,13 @@ export default function WhatsAppHub() {
       setIsRecording(true)
     } catch (err: any) {
       if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
-        setSendError('Permissão de microfone negada. Clique no ícone 🔒 na barra de endereço e permita o microfone.')
+        setSendError('Permissão negada. Clique no 🔒 na barra de endereço e permita o microfone.')
+      } else if (err?.name === 'NotFoundError' || err?.name === 'DevicesNotFoundError') {
+        setSendError('Microfone não encontrado. Verifique se há um microfone conectado.')
+      } else if (err?.name === 'NotReadableError' || err?.name === 'TrackStartError') {
+        setSendError('Microfone em uso por outro aplicativo. Feche-o e tente novamente.')
       } else {
-        setSendError('Erro ao acessar microfone: ' + (err?.message || 'desconhecido'))
+        setSendError('Erro ao gravar: ' + (err?.message || 'desconhecido'))
       }
     }
   }
@@ -889,9 +945,13 @@ export default function WhatsAppHub() {
     }
   }, [phoneParam, nameParam])
 
+  const activeConvMsgCount = conversations.find(c => c.id === activeId)?.messages.length ?? 0
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [activeId, conversations])
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [activeId, activeConvMsgCount])
 
   // Auto-hide send error
   useEffect(() => {
@@ -1338,7 +1398,7 @@ export default function WhatsAppHub() {
   // ── Loading ──
   if (loading) {
     return (
-      <div className="flex items-center justify-center bg-[#F8FAFB]" style={{ height: 'calc(100vh - 56px)' }}>
+      <div className="flex items-center justify-center h-full bg-[#F8FAFB]">
         <div className="animate-spin rounded-full h-8 w-8 border-4 border-[#00A896] border-t-transparent" />
       </div>
     )
@@ -1347,7 +1407,7 @@ export default function WhatsAppHub() {
   // ── Not connected ──
   if (!isConnected) {
     return (
-      <div className="flex items-center justify-center bg-[#F8FAFB]" style={{ height: 'calc(100vh - 56px)' }}>
+      <div className="flex items-center justify-center h-full bg-[#F8FAFB]">
         <div className="text-center max-w-sm">
           <div className="w-20 h-20 bg-white border border-[#E2E8F0] rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
             <MessageCircle className="w-10 h-10 text-[#94A3B8]" />
@@ -1508,7 +1568,7 @@ export default function WhatsAppHub() {
         </div>
       )}
 
-      <div className="flex flex-col overflow-hidden bg-[#F8FAFB]" style={{ height: 'calc(100vh - 56px)' }}>
+      <div className="flex flex-col overflow-hidden bg-[#F8FAFB] h-full">
 
         {/* Feature 1: Connection warning banner */}
         {connectionStatus === 'disconnected' && (
@@ -1600,7 +1660,7 @@ export default function WhatsAppHub() {
           </div>
 
           {/* Filter pills */}
-          <div className="px-3 pb-2 flex-shrink-0 flex gap-1 overflow-x-auto scrollbar-hide bg-white border-b border-[#E2E8F0]">
+          <div className="px-3 pb-2 flex-shrink-0 flex flex-wrap gap-1 bg-white border-b border-[#E2E8F0]">
             {FILTERS.map(f => (
               <button
                 key={f.key}
