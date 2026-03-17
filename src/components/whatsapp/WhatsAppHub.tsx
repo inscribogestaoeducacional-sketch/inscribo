@@ -832,11 +832,11 @@ export default function WhatsAppHub() {
 
   // Feature 1: Connection status polling
   useEffect(() => {
-    if (!instance || !isConnected) return
+    if (!user?.institution_id) return
     const CONNECTED_STATES = ['open', 'connected', 'CONNECTED', 'OPEN']
     const checkStatus = async () => {
       try {
-        const res = await fetch(`/api/evolution/connection-state?instanceName=${encodeURIComponent(instance)}`, {
+        const res = await fetch(`/api/evolution/connection-state?institutionId=${user.institution_id}`, {
           signal: AbortSignal.timeout(8000),
         })
         if (!res.ok) {
@@ -857,7 +857,7 @@ export default function WhatsAppHub() {
     checkStatus()
     const iv = setInterval(checkStatus, 30000)
     return () => clearInterval(iv)
-  }, [instance, isConnected])
+  }, [user?.institution_id])
 
   // Sync 48h messages from Evolution API
   const syncMessages = async () => {

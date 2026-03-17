@@ -13,7 +13,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (!instanceName) {
-    return res.status(400).json({ error: 'instanceName or institutionId required' })
+    // No instance configured yet — return safe disconnected shape instead of 400
+    return res.json({ instance: { state: 'close' } })
   }
 
   try {
