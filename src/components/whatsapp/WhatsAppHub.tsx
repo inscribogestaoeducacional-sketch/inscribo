@@ -240,6 +240,39 @@ function getLastMsgPreview(lastMessage: string): { icon?: string; text: string }
   return { text: lastMessage }
 }
 
+// BUG 2: Proxy external media URLs through our backend to bypass CSP
+function getProxiedUrl(url?: string | null): string | undefined {
+  if (!url) return undefined
+  if (url.startsWith('data:') || url.startsWith('/') || url.startsWith('blob:')) return url
+  return `/api/evolution/media-proxy?url=${encodeURIComponent(url)}`
+}
+
+// BUG 4: Compress images larger than 4MB before sending
+async function compressImage(file: File, maxMB = 4): Promise<File> {
+  if (file.size < maxMB * 1024 * 1024) return file
+  return new Promise(resolve => {
+    const img = new Image()
+    const objUrl = URL.createObjectURL(file)
+    img.onload = () => {
+      const maxDim = 1280
+      let { width, height } = img
+      if (width > maxDim || height > maxDim) {
+        if (width > height) { height = Math.round(height * maxDim / width); width = maxDim }
+        else { width = Math.round(width * maxDim / height); height = maxDim }
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = width; canvas.height = height
+      canvas.getContext('2d')!.drawImage(img, 0, 0, width, height)
+      canvas.toBlob(blob => {
+        URL.revokeObjectURL(objUrl)
+        resolve(blob ? new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' }) : file)
+      }, 'image/jpeg', 0.85)
+    }
+    img.onerror = () => { URL.revokeObjectURL(objUrl); resolve(file) }
+    img.src = objUrl
+  })
+}
+
 // ─── AudioPlayer ──────────────────────────────────────────────────────────────
 function AudioPlayer({ duration = 15, mediaUrl, isDark = true }: { duration?: number; from?: 'me' | 'them'; mediaUrl?: string; isDark?: boolean }) {
   const [playing, setPlaying] = useState(false)
@@ -336,14 +369,15 @@ function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (ur
   const renderContent = () => {
     switch (effectiveType) {
       case 'audio':
-        return <AudioPlayer duration={msg.duration} from={msg.from} mediaUrl={msg.media_url} isDark={isMe} />
-      case 'image':
-        return msg.media_url ? (
+        return <AudioPlayer duration={msg.duration} from={msg.from} mediaUrl={getProxiedUrl(msg.media_url)} isDark={isMe} />
+      case 'image': {
+        const imgSrc = getProxiedUrl(msg.media_url)
+        return imgSrc ? (
           <img
-            src={msg.media_url}
+            src={imgSrc}
             alt="Imagem"
             className="max-w-[240px] rounded-xl cursor-pointer"
-            onClick={() => onImageClick ? onImageClick(msg.media_url!) : window.open(msg.media_url, '_blank')}
+            onClick={() => onImageClick ? onImageClick(imgSrc) : window.open(imgSrc, '_blank')}
           />
         ) : (
           <div className={`w-48 h-32 rounded-xl overflow-hidden flex flex-col items-center justify-center gap-1 ${isMe ? 'bg-white/10' : 'bg-[#F1F5F9]'}`}>
@@ -351,9 +385,10 @@ function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (ur
             <span className={`text-xs ${isMe ? 'text-white/60' : 'text-[#94A3B8]'}`}>Imagem</span>
           </div>
         )
+      }
       case 'video':
         return msg.media_url ? (
-          <video src={msg.media_url} controls className="max-w-[240px] rounded-xl" />
+          <video src={getProxiedUrl(msg.media_url)} controls className="max-w-[240px] rounded-xl" />
         ) : (
           <div className={`w-48 h-32 rounded-xl overflow-hidden flex items-center justify-center relative ${isMe ? 'bg-white/10' : 'bg-[#F1F5F9]'}`}>
             <Video className={`w-6 h-6 ${isMe ? 'text-white/50' : 'text-[#94A3B8]'}`} />
@@ -379,7 +414,7 @@ function MessageBubble({ msg, onImageClick }: { msg: Message; onImageClick?: (ur
               )}
             </div>
             {msg.media_url && (
-              <a href={msg.media_url} download target="_blank" rel="noreferrer"
+              <a href={getProxiedUrl(msg.media_url)} download target="_blank" rel="noreferrer"
                 className={`p-1 rounded-lg flex-shrink-0 transition-colors ${isMe ? 'text-white/70 hover:text-white' : 'text-[#64748B] hover:text-[#1A2B4A]'}`}>
                 <Download className="w-4 h-4" />
               </a>
@@ -514,37 +549,47 @@ export default function WhatsAppHub() {
     if (!activeId) return
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg'
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg'
       const recorder = new MediaRecorder(stream, { mimeType })
       audioChunksRef.current = []
       recorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
       recorder.onstop = async () => {
         const blob = new Blob(audioChunksRef.current, { type: mimeType })
+        stream.getTracks().forEach(t => t.stop())
         const reader = new FileReader()
         reader.onloadend = async () => {
           const base64 = (reader.result as string).split(',')[1]
           try {
-            await fetch('/api/evolution/send-media', {
+            const res = await fetch('/api/evolution/send-audio', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 instanceName: instance,
                 remoteJid: activeId,
-                mediatype: 'audio',
+                audio: base64,
                 mimetype: mimeType,
-                media: base64,
               })
             })
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}))
+              console.error('[send-audio] error:', err)
+              setSendError('Erro ao enviar áudio.')
+            }
           } catch { setSendError('Erro ao enviar áudio.') }
         }
         reader.readAsDataURL(blob)
-        stream.getTracks().forEach(t => t.stop())
       }
       recorder.start(200)
       mediaRecorderRef.current = recorder
       setIsRecording(true)
-    } catch {
-      setSendError('Permissão de microfone negada.')
+    } catch (err: any) {
+      if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+        setSendError('Permissão de microfone negada. Clique no ícone 🔒 na barra de endereço e permita o microfone.')
+      } else {
+        setSendError('Erro ao acessar microfone: ' + (err?.message || 'desconhecido'))
+      }
     }
   }
 
@@ -690,28 +735,44 @@ export default function WhatsAppHub() {
     }
   }, [user?.institution_id])
 
+  const prevConnectionStatusRef = useRef<string>('unknown')
+
   // Feature 1: Connection status polling
   useEffect(() => {
     if (!instance || !isConnected) return
+    const CONNECTED_STATES = ['open', 'connected', 'CONNECTED', 'OPEN']
     const checkStatus = async () => {
       try {
-        const res = await fetch('/api/evolution/connection-state', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instanceName: instance })
-        })
-        if (!res.ok) { setConnectionStatus('disconnected'); return }
+        const res = await fetch(`/api/evolution/connection-state?instanceName=${encodeURIComponent(instance)}`)
+        if (!res.ok) {
+          // Don't flip to disconnected on transient HTTP errors — keep previous state
+          console.warn('[connection-state] HTTP', res.status)
+          return
+        }
         const data = await res.json()
-        const state = data?.instance?.state || data?.state
-        setConnectionStatus(state === 'open' || state === 'connected' ? 'connected' : 'disconnected')
-      } catch {
-        setConnectionStatus('disconnected')
+        console.log('[connection-state] data:', data)
+        const state = data?.instance?.state ?? data?.state ?? data?.status
+        const isConn = CONNECTED_STATES.includes(state)
+        setConnectionStatus(isConn ? 'connected' : state ? 'disconnected' : 'unknown')
+      } catch (err) {
+        // Network error — keep previous state, don't flash banner
+        console.warn('[connection-state] fetch failed:', err)
       }
     }
     checkStatus()
     const iv = setInterval(checkStatus, 30000)
     return () => clearInterval(iv)
   }, [instance, isConnected])
+
+  // Melhoria: sync recent messages when connection becomes active
+  useEffect(() => {
+    const prev = prevConnectionStatusRef.current
+    prevConnectionStatusRef.current = connectionStatus
+    if (connectionStatus === 'connected' && prev !== 'connected' && prev !== 'unknown') {
+      // Just reconnected — reload messages to catch up
+      loadMessages().catch(() => {})
+    }
+  }, [connectionStatus])
 
   // Reset unread, auto-assign, auto-link lead, auto-transition waiting→open when opening conversation
   useEffect(() => {
@@ -977,13 +1038,36 @@ export default function WhatsAppHub() {
   const sendPendingFile = async () => {
     if (!pendingFile || !activeId) return
     setUploadProgress(10)
+
+    const mediatype = pendingFile.type.startsWith('image/') ? 'image'
+      : pendingFile.type.startsWith('video/') ? 'video'
+      : pendingFile.type.startsWith('audio/') ? 'audio'
+      : 'document'
+
+    // BUG 4: Optimistic update — show immediately with local URL
+    const localUrl = URL.createObjectURL(pendingFile)
+    const tempId = `temp-file-${Date.now()}`
+    const tempMsg: Message = {
+      id: tempId,
+      type: mediatype as MsgType,
+      content: pendingFile.name,
+      from: 'me',
+      ts: new Date(),
+      status: 'sent',
+      media_url: localUrl,
+      fileName: pendingFile.name,
+      fileSize: `${(pendingFile.size / 1024).toFixed(1)} KB`,
+    }
+    setConversations(prev => prev.map(c =>
+      c.id === activeId ? { ...c, messages: [...c.messages, tempMsg], lastMessage: `[${mediatype === 'image' ? 'Imagem' : mediatype === 'video' ? 'Vídeo' : mediatype === 'audio' ? 'Áudio' : 'Documento'}]`, lastTime: tempMsg.ts } : c
+    ))
+
     try {
-      const base64 = await toBase64(pendingFile)
+      // Compress images before upload
+      const fileToSend = mediatype === 'image' ? await compressImage(pendingFile) : pendingFile
+      const base64 = await toBase64(fileToSend)
       setUploadProgress(60)
-      const mediatype = pendingFile.type.startsWith('image/') ? 'image'
-        : pendingFile.type.startsWith('video/') ? 'video'
-        : pendingFile.type.startsWith('audio/') ? 'audio'
-        : 'document'
+
       const res = await fetch('/api/evolution/send-media', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -991,17 +1075,27 @@ export default function WhatsAppHub() {
           instanceName: instance,
           remoteJid: activeId,
           mediatype,
-          mimetype: pendingFile.type,
+          mimetype: fileToSend.type || pendingFile.type,
           media: base64,
           fileName: pendingFile.name,
           caption: '',
         })
       })
       setUploadProgress(100)
-      if (!res.ok) throw new Error()
-      setTimeout(() => { setPendingFile(null); setUploadProgress(0) }, 800)
-    } catch {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      // Update status to delivered
+      setConversations(prev => prev.map(c =>
+        c.id === activeId ? { ...c, messages: c.messages.map(m => m.id === tempId ? { ...m, status: 'delivered' as const } : m) } : c
+      ))
+      setTimeout(() => { setPendingFile(null); setUploadProgress(0); URL.revokeObjectURL(localUrl) }, 800)
+    } catch (err) {
+      console.error('[sendPendingFile] error:', err)
       setSendError('Erro ao enviar arquivo.')
+      // Remove optimistic message on error
+      setConversations(prev => prev.map(c =>
+        c.id === activeId ? { ...c, messages: c.messages.filter(m => m.id !== tempId) } : c
+      ))
+      URL.revokeObjectURL(localUrl)
       setPendingFile(null)
       setUploadProgress(0)
     }
@@ -1630,7 +1724,7 @@ export default function WhatsAppHub() {
         </div>
 
         {/* ── Col 2: Chat ───────────────────────────────────────────────────────── */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-[#F8FAFB]">
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#F8FAFB]">
 
           {/* ── Contacts table view ── */}
           {mainView === 'contacts' && (
