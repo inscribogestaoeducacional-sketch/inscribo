@@ -1,6 +1,14 @@
 import { supabase } from '../lib/supabase'
 
 export async function checkWeeklyAlerts(institutionId: string) {
+  try {
+    await _checkWeeklyAlerts(institutionId)
+  } catch (err) {
+    console.warn('checkWeeklyAlerts indisponível (tabela não existe?):', err)
+  }
+}
+
+async function _checkWeeklyAlerts(institutionId: string) {
   const { data: cycle } = await supabase
     .from('campaign_cycles')
     .select('*')
@@ -67,20 +75,25 @@ async function createNotificationIfNew(
   type: string,
   data: { title: string; message: string; severity: string; action_url?: string }
 ) {
-  const today = new Date().toISOString().split('T')[0]
-  const { data: existing } = await supabase
-    .from('system_notifications')
-    .select('id')
-    .eq('institution_id', institutionId)
-    .eq('title', data.title)
-    .gte('created_at', `${today}T00:00:00`)
-    .limit(1)
+  try {
+    const today = new Date().toISOString().split('T')[0]
+    const { data: existing, error } = await supabase
+      .from('system_notifications')
+      .select('id')
+      .eq('institution_id', institutionId)
+      .eq('title', data.title)
+      .gte('created_at', `${today}T00:00:00`)
+      .limit(1)
 
-  if (existing && existing.length > 0) return
+    if (error && (error as { code?: string }).code === '42P01') return
+    if (existing && existing.length > 0) return
 
-  await supabase.from('system_notifications').insert({
-    institution_id: institutionId,
-    type,
-    ...data
-  })
+    await supabase.from('system_notifications').insert({
+      institution_id: institutionId,
+      type,
+      ...data
+    })
+  } catch (err) {
+    console.warn('Não foi possível criar notificação (tabela não existe?):', err)
+  }
 }

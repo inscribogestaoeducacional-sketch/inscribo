@@ -84,6 +84,18 @@ interface MonthlyTarget {
   cpa_target: number
 }
 
+interface PreCampaign {
+  period: string
+  months_count: number
+  focus_areas: string[]
+  key_actions: string[]
+  reenrollment_projection: {
+    target: number
+    current_rate: number
+    actions_needed: string
+  }
+}
+
 interface GeneratedPlan {
   summary: {
     total_new_students_target: number
@@ -94,6 +106,7 @@ interface GeneratedPlan {
     realism_score: 'conservative' | 'realistic' | 'aggressive'
     reasoning: string
   }
+  pre_campaign?: PreCampaign
   monthly_targets: MonthlyTarget[]
   funnel_rates: { registration_to_schedule: number; schedule_to_visit: number; visit_to_enrollment: number }
   total_investment_suggested: number
@@ -113,8 +126,16 @@ const GRADE_OPTIONS = [
   '1º ao 5º EF', '6º ao 9º EF', 'Ensino Médio'
 ]
 
-// ─── Helper: tempo relativo ──────────────────────────────────────
-const CAMPAIGN_YEAR = new Date().getFullYear()
+// ─── Calcular ano/mês de início da campanha ──────────────────────
+function calcCampaignStart() {
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  const currentMonth = now.getMonth() // 0-11
+  const campaignStartYear = currentMonth >= 7 ? currentYear + 1 : currentYear
+  const monthsUntil = Math.max(0, (campaignStartYear - currentYear) * 12 + (7 - currentMonth))
+  const campaignStartMonth = `Agosto/${campaignStartYear}`
+  return { campaignStartYear, campaignStartMonth, monthsUntil }
+}
 
 // ─── Componente principal ────────────────────────────────────────
 export default function CampaignGeneratorModal({
@@ -134,6 +155,7 @@ export default function CampaignGeneratorModal({
   const [generatedPlan, setGeneratedPlan] = useState<GeneratedPlan | null>(null)
   const [adjustedPlan, setAdjustedPlan] = useState<GeneratedPlan | null>(null)
   const [generationMode, setGenerationMode] = useState<string>('benchmark')
+  const { campaignStartYear, campaignStartMonth, monthsUntil } = calcCampaignStart()
 
   // Loading states
   const [loadingMarket, setLoadingMarket] = useState(false)
@@ -256,7 +278,10 @@ export default function CampaignGeneratorModal({
             historicalData,
             marketData,
             growthTarget: target,
-            campaignYear: CAMPAIGN_YEAR
+            campaignYear: campaignStartYear,
+            current_date: new Date().toLocaleDateString('pt-BR'),
+            campaign_start_month: campaignStartMonth,
+            months_until_campaign: monthsUntil
           }
         })
       })
@@ -334,10 +359,10 @@ export default function CampaignGeneratorModal({
     try {
       const cycleData: CycleData = {
         institution_id: institutionId,
-        year: CAMPAIGN_YEAR,
-        label: `Campanha ${CAMPAIGN_YEAR}`,
-        start_date: `${CAMPAIGN_YEAR}-09-01`,
-        end_date: `${CAMPAIGN_YEAR + 1}-02-28`,
+        year: campaignStartYear,
+        label: `Campanha ${campaignStartYear}`,
+        start_date: `${campaignStartYear}-09-01`,
+        end_date: `${campaignStartYear + 1}-02-28`,
         target_new_students: adjustedPlan.summary.total_new_students_target,
         target_reenrollment_rate: adjustedPlan.summary.reenrollment_rate_target,
         base_students: schoolData.current_students,
@@ -378,7 +403,7 @@ export default function CampaignGeneratorModal({
         institution_id: institutionId,
         type: 'milestone',
         severity: 'success',
-        title: `Campanha ${CAMPAIGN_YEAR} configurada!`,
+        title: `Campanha ${campaignStartYear} configurada!`,
         message: `Suas metas estão ativas. O sistema agora acompanha ${adjustedPlan.summary.total_new_students_target} matrículas novas e ${(adjustedPlan.summary.reenrollment_rate_target * 100).toFixed(0)}% de rematrículas como objetivo.`
       })
 
@@ -505,6 +530,8 @@ export default function CampaignGeneratorModal({
               plan={adjustedPlan}
               ambitiousLevel={ambitiousLevel}
               regenLoading={regenLoading}
+              monthsUntilCampaign={monthsUntil}
+              campaignStartMonth={campaignStartMonth}
               onAmbitiousChange={handleAmbitiousChange}
               onUpdateCell={updateMonthlyCell}
             />
@@ -935,10 +962,12 @@ function StepFour({ loading, msgIdx, msgs, progress, error, onRetry }: {
 }
 
 // ─── Passo 5 — Revisão ───────────────────────────────────────────
-function StepFive({ plan, ambitiousLevel, regenLoading, onAmbitiousChange, onUpdateCell }: {
+function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, campaignStartMonth, onAmbitiousChange, onUpdateCell }: {
   plan: GeneratedPlan
   ambitiousLevel: number
   regenLoading: boolean
+  monthsUntilCampaign: number
+  campaignStartMonth: string
   onAmbitiousChange: (level: number) => void
   onUpdateCell: (idx: number, field: keyof MonthlyTarget, value: number) => void
 }) {
@@ -1016,6 +1045,30 @@ function StepFive({ plan, ambitiousLevel, regenLoading, onAmbitiousChange, onUpd
 
           {/* Coluna direita */}
           <div style={{ flex: 1, minWidth: 0 }}>
+            {plan.pre_campaign && monthsUntilCampaign > 0 && (
+              <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#92400E', marginBottom: 4 }}>
+                  Antes da campanha — {plan.pre_campaign.period}
+                </div>
+                <div style={{ fontSize: 12, color: '#78350F', marginBottom: 10, lineHeight: 1.5 }}>
+                  O que fazer nos próximos {plan.pre_campaign.months_count} meses para chegar preparado em {campaignStartMonth}:
+                </div>
+                <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {plan.pre_campaign.key_actions.map((action, i) => (
+                    <li key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: '#78350F' }}>
+                      <span style={{ color: '#D97706', fontWeight: 700, flexShrink: 0 }}>✓</span>
+                      {action}
+                    </li>
+                  ))}
+                </ul>
+                {plan.pre_campaign.reenrollment_projection?.actions_needed && (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #FDE68A', fontSize: 12, color: '#92400E' }}>
+                    <strong>Rematrículas:</strong> {plan.pre_campaign.reenrollment_projection.actions_needed}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 12 }}>Metas mensais da campanha</div>
 
             <div style={{ overflowX: 'auto', marginBottom: 16 }}>

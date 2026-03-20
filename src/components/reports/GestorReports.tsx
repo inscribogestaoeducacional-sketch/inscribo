@@ -157,23 +157,66 @@ export default function GestorReports() {
     if (!institutionId) return
     setLoading(true)
     try {
-      const [f, m, r, cy, tr, imp] = await Promise.all([
+      const [f, m, r] = await Promise.all([
         supabase.from('funnel_metrics').select('*').eq('institution_id', institutionId).order('created_at', { ascending: true }),
         supabase.from('marketing_campaigns').select('*').eq('institution_id', institutionId).order('created_at', { ascending: true }),
         supabase.from('re_enrollments').select('*').eq('institution_id', institutionId).order('created_at', { ascending: true }),
-        supabase.from('campaign_cycles').select('*').eq('institution_id', institutionId).eq('year', new Date().getFullYear()).maybeSingle(),
-        supabase.from('student_transfers').select('*').eq('institution_id', institutionId).order('created_at', { ascending: false }),
-        supabase.from('erp_imports').select('*').eq('institution_id', institutionId).order('created_at', { ascending: false })
       ])
       setFunnelData(f.data || [])
       setMarketingData(m.data || [])
       setReEnrollData(r.data || [])
-      setCycle(cy.data || null)
-      setTransfers(tr.data || [])
-      setErpImports(imp.data || [])
-    } finally {
-      setLoading(false)
+    } catch (err) {
+      console.error('Erro ao carregar dados principais:', err)
     }
+
+    // Tabelas que podem não existir ainda (migration pendente)
+    try {
+      const { data, error } = await supabase
+        .from('campaign_cycles')
+        .select('*')
+        .eq('institution_id', institutionId)
+        .eq('year', new Date().getFullYear())
+        .maybeSingle()
+      if (error && (error as { code?: string }).code === '42P01') {
+        console.warn('Tabela campaign_cycles não encontrada. Execute as migrations.')
+      } else {
+        setCycle(data || null)
+      }
+    } catch (err) {
+      console.warn('campaign_cycles indisponível:', err)
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('student_transfers')
+        .select('*')
+        .eq('institution_id', institutionId)
+        .order('created_at', { ascending: false })
+      if (error && (error as { code?: string }).code === '42P01') {
+        console.warn('Tabela student_transfers não encontrada. Execute as migrations.')
+      } else {
+        setTransfers(data || [])
+      }
+    } catch (err) {
+      console.warn('student_transfers indisponível:', err)
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('erp_imports')
+        .select('*')
+        .eq('institution_id', institutionId)
+        .order('created_at', { ascending: false })
+      if (error && (error as { code?: string }).code === '42P01') {
+        console.warn('Tabela erp_imports não encontrada. Execute as migrations.')
+      } else {
+        setErpImports(data || [])
+      }
+    } catch (err) {
+      console.warn('erp_imports indisponível:', err)
+    }
+
+    setLoading(false)
   }, [institutionId])
 
   useEffect(() => { loadAll() }, [loadAll])

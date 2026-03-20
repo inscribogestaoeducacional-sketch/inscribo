@@ -48,16 +48,24 @@ export function useNotifications(institutionId: string | null) {
 
   async function fetchNotifications() {
     if (!institutionId) return
-    const { data } = await supabase
-      .from('system_notifications')
-      .select('*')
-      .eq('institution_id', institutionId)
-      .order('created_at', { ascending: false })
-      .limit(20)
+    try {
+      const { data, error } = await supabase
+        .from('system_notifications')
+        .select('*')
+        .eq('institution_id', institutionId)
+        .order('created_at', { ascending: false })
+        .limit(20)
 
-    if (data) {
-      setNotifications(data as Notification[])
-      setUnreadCount(data.filter(n => !n.read_at).length)
+      if (error && (error as { code?: string }).code === '42P01') {
+        console.warn('Tabela system_notifications não encontrada. Execute as migrations.')
+        return
+      }
+      if (data) {
+        setNotifications(data as Notification[])
+        setUnreadCount(data.filter(n => !n.read_at).length)
+      }
+    } catch (err) {
+      console.warn('system_notifications indisponível:', err)
     }
   }
 

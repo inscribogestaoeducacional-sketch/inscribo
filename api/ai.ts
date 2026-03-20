@@ -222,18 +222,23 @@ Retorne SOMENTE o JSON válido.`
     // GERADOR DE CAMPANHA DE MATRÍCULAS
     // ─────────────────────────────────────────────
     if (action === 'generate_campaign') {
-      const { schoolData, historicalData, marketData, growthTarget, campaignYear } = payload as {
+      const { schoolData, historicalData, marketData, growthTarget, campaignYear, current_date, campaign_start_month, months_until_campaign } = payload as {
         schoolData: { name: string; city: string; state: string; grades: string[]; avg_monthly_fee: number; current_students: number }
         historicalData: { year: number; total_students: number; new_enrollments: number; reenrollments: number; transfers: number }[]
         marketData: { school_age_population?: number; private_school_rate?: number; sector_growth_rate?: number }
         growthTarget: { type: 'percentage' | 'absolute' | 'students'; value: number }
         campaignYear: number
+        current_date?: string
+        campaign_start_month?: string
+        months_until_campaign?: number
       }
 
       const hasHistory = historicalData && historicalData.length > 0
       const mode = hasHistory
         ? (historicalData.length >= 2 ? 'historical' : 'hybrid')
         : 'benchmark'
+
+      const hasPrecampaign = months_until_campaign && months_until_campaign > 0
 
       const prompt = `Você é um especialista em campanhas de matrículas de escolas privadas brasileiras com 15 anos de experiência.
 
@@ -243,7 +248,9 @@ DADOS DA ESCOLA:
 - Séries: ${schoolData.grades?.join(', ')}
 - Mensalidade média: R$ ${schoolData.avg_monthly_fee}
 - Alunos atuais: ${schoolData.current_students}
-- Ano da campanha: ${campaignYear}
+- Data atual: ${current_date || 'não informada'}
+- Início da campanha: ${campaign_start_month || `Agosto/${campaignYear}`}
+- Meses até a campanha: ${months_until_campaign ?? 0}
 
 DADOS DE MERCADO:
 - População escolar (4-17 anos): ${marketData.school_age_population?.toLocaleString('pt-BR') ?? 'N/D'}
@@ -262,6 +269,7 @@ ${growthTarget.type === 'absolute' ? `Adicionar ${growthTarget.value} alunos nov
 ${growthTarget.type === 'students' ? `Atingir ${growthTarget.value} alunos total` : ''}
 
 SAZONALIDADE TÍPICA DO MERCADO EDUCACIONAL BRASILEIRO:
+- Ago: abertura da campanha, primeiros cadastros
 - Set: 11-12% dos cadastros | Out: 28-30% | Nov: 23-25%
 - Dez: 20-22% | Jan: 7-8% | Fev: 4-5%
 - Conversões típicas: Cadastro→Agenda 75-80%, Agenda→Visita 63-65%, Visita→Matrícula 38-42%
@@ -276,10 +284,25 @@ Gere o plano completo em JSON:
     "growth_rate": 0.0,
     "realism_score": "conservative|realistic|aggressive",
     "reasoning": "3-4 linhas em português explicando como chegou nos números"
-  },
+  },${hasPrecampaign ? `
+  "pre_campaign": {
+    "period": "período de preparação antes de ${campaign_start_month}",
+    "months_count": ${months_until_campaign},
+    "focus_areas": ["rematrículas", "captação orgânica", "treinamento do time"],
+    "key_actions": [
+      "ação concreta 1 para fazer agora",
+      "ação concreta 2",
+      "ação concreta 3"
+    ],
+    "reenrollment_projection": {
+      "target": 0,
+      "current_rate": 0.0,
+      "actions_needed": "o que fazer para atingir a meta de rematrícula"
+    }
+  },` : ''}
   "monthly_targets": [
     {
-      "month": "Set", "year": ${campaignYear},
+      "month": "Ago", "year": ${campaignYear},
       "registrations": 0, "schedules": 0,
       "visits": 0, "enrollments": 0,
       "investment_suggested": 0, "leads_target": 0, "cpa_target": 0.0
@@ -298,10 +321,10 @@ Gere o plano completo em JSON:
   "recalibration_note": "quando recalibrar após ter dados reais"
 }
 
-Inclua monthly_targets para: Set, Out, Nov, Dez, Jan, Fev.
+Inclua monthly_targets para: Ago, Set, Out, Nov, Dez, Jan, Fev.${hasPrecampaign ? ' Preencha pre_campaign com ações práticas e realistas para os meses de preparação.' : ''}
 Retorne SOMENTE o JSON válido.`
 
-      const result = await callClaude(prompt, 2000)
+      const result = await callClaude(prompt, 2200)
       const jsonMatch = result.match(/\{[\s\S]*\}/)
       const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : result)
       return res.json({ result: parsed, mode })
