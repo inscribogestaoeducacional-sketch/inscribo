@@ -5,7 +5,7 @@ import type { VercelResponse } from '@vercel/node'
 export const EVOLUTION_URL =
   process.env.EVOLUTION_URL ||
   process.env.VITE_EVOLUTION_URL ||
-  'https://evolution-api-production-a00c.up.railway.app'
+  'http://192.145.37.67:8080'
 
 export const EVOLUTION_KEY =
   process.env.EVOLUTION_KEY ||
