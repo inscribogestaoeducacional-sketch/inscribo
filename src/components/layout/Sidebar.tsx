@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { useNotifications } from '../../hooks/useNotifications'
 import {
   LayoutDashboard, Users, Calendar, GraduationCap,
   MessageCircle, BarChart3, UserCog, Settings
@@ -47,6 +48,7 @@ function Tooltip({ text, children }: { text: string; children: React.ReactNode }
 export default function Sidebar() {
   const location = useLocation()
   const { user } = useAuth()
+  const { unreadCount } = useNotifications(user?.institution_id || null)
 
   const [expanded, setExpanded] = useState(() => {
     return localStorage.getItem('sidebar-expanded') === 'true'
@@ -127,6 +129,9 @@ export default function Sidebar() {
         const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/')
         const Icon = item.Icon
 
+        const isReports = item.path === '/reports'
+        const showBadge = isReports && unreadCount > 0
+
         if (!expanded) {
           return (
             <Tooltip key={item.path} text={item.label}>
@@ -135,7 +140,7 @@ export default function Sidebar() {
                 background: active ? item.iconBg : 'transparent',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 border: active ? `1.5px solid ${item.iconColor}30` : '1.5px solid transparent',
-                textDecoration: 'none',
+                textDecoration: 'none', position: 'relative',
                 transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)',
                 flexShrink: 0,
               }}
@@ -152,6 +157,11 @@ export default function Sidebar() {
                 }
               }}>
                 <Icon size={18} color={active ? item.iconColor : '#94A3B8'} strokeWidth={active ? 2.2 : 1.8} />
+                {showBadge && (
+                  <div style={{ position: 'absolute', top: 6, right: 6, minWidth: 14, height: 14, borderRadius: 999, background: '#F43F5E', border: '1.5px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: 'white', padding: '0 2px' }}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </div>
+                )}
               </Link>
             </Tooltip>
           )
@@ -176,6 +186,7 @@ export default function Sidebar() {
               flexShrink: 0,
               cursor: 'pointer',
               boxSizing: 'border-box',
+              position: 'relative',
             }}
             onMouseEnter={e => {
               if (!active) {
@@ -203,10 +214,15 @@ export default function Sidebar() {
             <span style={{
               fontSize: 13, fontWeight: active ? 700 : 500,
               color: active ? item.iconColor : '#64748B',
-              whiteSpace: 'nowrap', overflow: 'hidden',
+              whiteSpace: 'nowrap', overflow: 'hidden', flex: 1,
             }}>
               {item.label}
             </span>
+            {showBadge && (
+              <div style={{ minWidth: 16, height: 16, borderRadius: 999, background: '#F43F5E', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: 'white', padding: '0 4px' }}>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </div>
+            )}
           </Link>
         )
       })}

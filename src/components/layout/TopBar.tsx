@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { LogOut, Settings, User } from 'lucide-react'
+import NotificationBell from './NotificationBell'
 
 export default function TopBar() {
   const { user, signOut } = useAuth()
@@ -41,12 +42,7 @@ export default function TopBar() {
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
         {/* Bell */}
-        <div style={{ width: 38, height: 38, borderRadius: 12, background: '#F0FDFB', border: '0.5px solid #D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}>
-          <svg width="16" height="16" fill="none" stroke="#64748B" strokeWidth="1.8" viewBox="0 0 24 24">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
-          </svg>
-          <div style={{ position: 'absolute', top: 7, right: 7, width: 8, height: 8, borderRadius: '50%', background: '#F43F5E', border: '1.5px solid white' }} />
-        </div>
+        <NotificationBell institutionId={user?.institution_id || null} />
 
         {/* User pill */}
         <div style={{ position: 'relative' }}>

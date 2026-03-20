@@ -6,11 +6,14 @@ import {
 import {
   TrendingUp, Target, RefreshCw, Upload, Settings, ChevronDown,
   ChevronUp, Plus, Edit2, Check, X, Copy, Trash2, AlertTriangle,
-  FileText, Download, Loader2
+  FileText, Download, Loader2, Sparkles
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import type { FunnelMetrics, MarketingCampaign, ReEnrollment } from '../../lib/supabase'
+import CampaignGeneratorModal from './CampaignGeneratorModal'
+import { checkWeeklyAlerts } from '../../services/notificationService'
+import { checkRecalibration } from '../../services/recalibrationService'
 
 // ─── tipos locais ────────────────────────────────────────────
 interface CampaignCycle {
@@ -130,6 +133,7 @@ export default function GestorReports() {
   const [activeTab, setActiveTab] = useState('overview')
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [showCampaignModal, setShowCampaignModal] = useState(false)
 
   // dados
   const [funnelData, setFunnelData] = useState<FunnelMetrics[]>([])
@@ -173,6 +177,14 @@ export default function GestorReports() {
   }, [institutionId])
 
   useEffect(() => { loadAll() }, [loadAll])
+
+  // ─── alertas e recalibração ───────────────────────────────
+  useEffect(() => {
+    if (!loading && institutionId) {
+      checkWeeklyAlerts(institutionId).catch(console.error)
+      checkRecalibration(institutionId).catch(console.error)
+    }
+  }, [loading, institutionId])
 
   // ─── insight IA ──────────────────────────────────────────
   const fetchInsight = useCallback(async () => {
@@ -220,6 +232,9 @@ export default function GestorReports() {
     { id: 'import', label: 'Importar Dados', icon: Upload },
   ]
 
+  const activeCycle = (cycle as (CampaignCycle & { applied_at?: string }) | null)
+  const cycleIsActive = !!activeCycle?.applied_at
+
   return (
     <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: '#f8f9fb' }}>
       {/* header */}
@@ -228,12 +243,36 @@ export default function GestorReports() {
           <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Relatórios & Inteligência</h1>
           <p style={{ fontSize: 12, color: '#94a3b8', margin: '2px 0 0' }}>Análise de campanha de matrículas</p>
         </div>
-        {cycle && (
-          <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, border: '1px solid #bfdbfe' }}>
-            {cycle.label} · Meta: {cycle.target_new_students} alunos
-          </span>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {cycleIsActive && (
+            <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, border: '1px solid #bfdbfe' }}>
+              {cycle!.label} · Meta: {cycle!.target_new_students} alunos
+            </span>
+          )}
+          <button
+            onClick={() => setShowCampaignModal(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: cycleIsActive ? '#f0fdf4' : '#00A896', color: cycleIsActive ? '#065f46' : '#fff', border: cycleIsActive ? '1px solid #bbf7d0' : 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            <Sparkles style={{ width: 13, height: 13 }} />
+            {cycleIsActive ? 'Regerar campanha' : 'Configurar campanha'}
+          </button>
+        </div>
       </div>
+
+      {/* banner — campanha não configurada */}
+      {!loading && !cycleIsActive && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
+          <AlertTriangle style={{ width: 18, height: 18, color: '#d97706', flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>Sua campanha ainda não foi configurada. </span>
+            <span style={{ fontSize: 13, color: '#92400e' }}>As metas exibidas são estimativas genéricas.</span>
+          </div>
+          <button
+            onClick={() => setShowCampaignModal(true)}
+            style={{ padding: '7px 16px', borderRadius: 9, background: '#d97706', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            Configurar agora
+          </button>
+        </div>
+      )}
 
       {/* tabs */}
       <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
@@ -281,6 +320,15 @@ export default function GestorReports() {
       </div>
 
       {toast && <Toast message={toast.message} type={toast.type} />}
+
+      <CampaignGeneratorModal
+        isOpen={showCampaignModal}
+        onClose={() => setShowCampaignModal(false)}
+        onApply={() => { loadAll(); showToast('Campanha aplicada com sucesso!') }}
+        existingCycle={activeCycle as Parameters<typeof CampaignGeneratorModal>[0]['existingCycle']}
+        institutionId={institutionId}
+        institutionName={user?.institution_name || 'Escola'}
+      />
     </div>
   )
 }
@@ -708,7 +756,7 @@ function TabMarketing({ marketingData, institutionId, onRefresh, showToast }: {
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} />
               <YAxis tickFormatter={v => `R$${v}`} tick={{ fontSize: 11, fill: '#94a3b8' }} />
-              <Tooltip formatter={(v: number, n: string) => [fmtCurrency(v), n === 'cpa_real' ? 'CPA Real' : 'CPA Alvo']} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
+              <Tooltip formatter={(v: unknown, n: string) => [fmtCurrency(Number(v)), n === 'cpa_real' ? 'CPA Real' : 'CPA Alvo']} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
               <Legend wrapperStyle={{ fontSize: 12 }} formatter={v => v === 'cpa_real' ? 'CPA Real' : 'CPA Alvo'} />
               <Line type="monotone" dataKey="cpa_real" stroke="#f97316" strokeWidth={2} dot={{ r: 4 }} />
               <Line type="monotone" dataKey="cpa_alvo" stroke="#94a3b8" strokeWidth={2} strokeDasharray="6 3" dot={{ r: 3 }} />
@@ -882,7 +930,7 @@ function TabReenrollments({ reEnrollData, institutionId, onRefresh, showToast }:
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="period" tick={{ fontSize: 11, fill: '#94a3b8' }} />
               <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 11, fill: '#94a3b8' }} />
-              <Tooltip formatter={(v: number, n: string) => [`${v}%`, n === 'pct_real' ? '% Rematric.' : 'Meta']} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
+              <Tooltip formatter={(v: unknown, n: string) => [`${Number(v)}%`, n === 'pct_real' ? '% Rematric.' : 'Meta']} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
               <Legend wrapperStyle={{ fontSize: 12 }} formatter={v => v === 'pct_real' ? '% Rematric.' : 'Meta'} />
               <Bar dataKey="pct_real" radius={[4, 4, 0, 0]}>
                 {chartData.map((entry, i) => (
@@ -1069,7 +1117,7 @@ function TabTransfers({ transfers, institutionId, onRefresh, showToast }: {
           <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
             <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 12px' }}>Por Motivo</h3>
             <PieChart width={260} height={200}>
-              <Pie data={pieData} cx={130} cy={90} innerRadius={50} outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} ${Math.round(percent * 100)}%`} labelLine={false} fontSize={10}>
+              <Pie data={pieData} cx={130} cy={90} innerRadius={50} outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} ${Math.round((percent ?? 0) * 100)}%`} labelLine={false} fontSize={10}>
                 {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
               </Pie>
               <Tooltip />
@@ -1464,7 +1512,7 @@ function TabImport({ erpImports, institutionId, cycle, onRefresh, showToast }: {
           </div>
         )}
 
-        {fileState === 'review' && extractedData && (
+        {(fileState === 'review' || fileState === 'confirming') && extractedData && (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
               <span style={{ background: '#f0fdf4', color: '#16a34a', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
@@ -1599,7 +1647,7 @@ function TabImport({ erpImports, institutionId, cycle, onRefresh, showToast }: {
               <input
                 type={type}
                 value={cycleForm[field]}
-                onChange={e => setCycleForm({ ...cycleForm, [field]: type === 'number' && field !== 'projected_cpa' && field !== 'label' ? parseFloat(e.target.value) || 0 : e.target.value })}
+                onChange={e => setCycleForm({ ...cycleForm, [field]: type === 'number' && field !== 'projected_cpa' ? parseFloat(e.target.value) || 0 : e.target.value })}
                 style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }}
               />
             </div>
