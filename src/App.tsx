@@ -32,6 +32,11 @@ import SuperAdminInstitutions from './components/superadmin/SuperAdminInstitutio
 import InstitutionDetails from './components/superadmin/InstitutionDetails'
 import SuperAdminsPage from './components/superadmin/SuperAdminsPage'
 import NotificationsPage from './components/superadmin/NotificationsPage'
+import ConsultantDashboard from './components/superadmin/ConsultantDashboard'
+import ConsultantPipeline from './components/superadmin/ConsultantPipeline'
+import ConsultantSchools from './components/superadmin/ConsultantSchools'
+import FinancialDashboard from './components/superadmin/FinancialDashboard'
+import ConsultantsOverview from './components/superadmin/ConsultantsOverview'
 
 // Protected Route Component
 function ProtectedRoute({ 
@@ -175,10 +180,13 @@ function AppContent() {
     )
   }
 
-  // SUPER ADMIN ROUTES
-  if (user.is_super_admin) {
+  // SUPER ADMIN / CONSULTANT / ADMIN GERAL ROUTES
+  const isConsultantArea = user.is_super_admin || user.user_type === 'consultant' || user.user_type === 'admin_geral'
+  const defaultPath = user.user_type === 'consultant' ? '/super-admin/consultant' : '/super-admin'
+  if (isConsultantArea) {
     return (
       <Routes>
+        {/* Super Admin + Admin Geral */}
         <Route path="/super-admin" element={<SuperAdminDashboard />} />
         <Route path="/super-admin/institutions" element={<SuperAdminInstitutions />} />
         <Route path="/super-admin/institutions/:id" element={<InstitutionDetails />} />
@@ -188,8 +196,14 @@ function AppContent() {
         <Route path="/super-admin/analytics" element={<AnalyticsPage />} />
         <Route path="/super-admin/settings" element={<SettingsPage />} />
         <Route path="/super-admin/profile" element={<ProfilePage />} />
+        <Route path="/super-admin/financial" element={<FinancialDashboard />} />
+        <Route path="/super-admin/consultants" element={<ConsultantsOverview />} />
+        {/* Consultor */}
+        <Route path="/super-admin/consultant" element={<ConsultantDashboard />} />
+        <Route path="/super-admin/consultant/pipeline" element={<ConsultantPipeline />} />
+        <Route path="/super-admin/consultant/schools" element={<ConsultantSchools />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
-        <Route path="/" element={<Navigate to="/super-admin" replace />} />
+        <Route path="/" element={<Navigate to={defaultPath} replace />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     )

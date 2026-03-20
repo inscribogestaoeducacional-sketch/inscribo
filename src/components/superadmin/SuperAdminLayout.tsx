@@ -15,7 +15,10 @@ import {
   Home,
   UserCog,
   BarChart3,
-  MessageSquare
+  MessageSquare,
+  KanbanSquare,
+  DollarSign,
+  UserCheck
 } from 'lucide-react'
 
 interface SuperAdminLayoutProps {
@@ -27,6 +30,8 @@ interface User {
   email: string
   full_name: string
   role: string
+  is_super_admin?: boolean
+  user_type?: 'school_user' | 'consultant' | 'admin_geral'
 }
 
 interface Notification {
@@ -110,15 +115,29 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
     }
   }
 
-  const menuItems = [
+  const isConsultant = user?.user_type === 'consultant'
+  const isAdminGeral = user?.is_super_admin || user?.user_type === 'admin_geral'
+
+  const consultantMenuItems = [
+    { path: '/super-admin/consultant', icon: Home, label: 'Dashboard', exact: true },
+    { path: '/super-admin/consultant/pipeline', icon: KanbanSquare, label: 'Meu Pipeline' },
+    { path: '/super-admin/consultant/schools', icon: Building2, label: 'Minhas Escolas' },
+    { path: '/super-admin/profile', icon: UserCog, label: 'Perfil' },
+  ]
+
+  const adminMenuItems = [
     { path: '/super-admin', icon: Home, label: 'Dashboard', exact: true },
     { path: '/super-admin/institutions', icon: Building2, label: 'Instituições' },
+    { path: '/super-admin/financial', icon: DollarSign, label: 'Financeiro' },
+    { path: '/super-admin/consultants', icon: UserCheck, label: 'Consultores' },
     { path: '/super-admin/super-admins', icon: Shield, label: 'Super Admins' },
     { path: '/super-admin/users', icon: Users, label: 'Todos Usuários' },
     { path: '/super-admin/analytics', icon: BarChart3, label: 'Analytics' },
     { path: '/super-admin/notifications', icon: MessageSquare, label: 'Notificações' },
     { path: '/super-admin/settings', icon: Settings, label: 'Configurações' },
   ]
+
+  const menuItems = isConsultant ? consultantMenuItems : adminMenuItems
 
   const isActive = (path: string, exact?: boolean) => {
     if (exact) {
@@ -299,7 +318,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                     <p className="font-bold text-gray-900">{user?.full_name}</p>
                     <p className="text-sm text-gray-500">{user?.email}</p>
                     <span className="inline-block mt-2 px-3 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full">
-                      Super Admin
+                      {isConsultant ? 'Consultor' : isAdminGeral ? 'Admin Geral' : 'Super Admin'}
                     </span>
                   </div>
                   <div className="p-2">

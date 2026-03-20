@@ -12,6 +12,7 @@ interface AppUser {
   active: boolean
   institution_name?: string
   is_super_admin?: boolean
+  user_type?: 'school_user' | 'consultant' | 'admin_geral'
 }
 
 interface AuthContextType {
