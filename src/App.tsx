@@ -8,6 +8,9 @@ import LoginForm from './components/auth/LoginForm'
 import InitialSetup from './components/auth/InitialSetup'
 import LandingPage from './components/landing/LandingPage'
 
+// Public Pages
+import TransferSurveyPage from './pages/survey/TransferSurveyPage'
+
 // Regular User Components
 import Dashboard from './components/dashboard/Dashboard'
 import LeadKanban from './components/leads/LeadKanban'
@@ -148,6 +151,15 @@ function AppContent() {
           <p className="text-sm sm:text-base text-gray-600">Carregando...</p>
         </div>
       </div>
+    )
+  }
+
+  // Rotas públicas — sem necessidade de autenticação
+  if (window.location.pathname.startsWith('/survey/')) {
+    return (
+      <Routes>
+        <Route path="/survey/:token" element={<TransferSurveyPage />} />
+      </Routes>
     )
   }
 
