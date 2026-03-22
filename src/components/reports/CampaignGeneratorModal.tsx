@@ -170,8 +170,18 @@ export default function CampaignGeneratorModal({
   const [ambitiousLevel, setAmbitiousLevel] = useState(1) // 0=conservador,1=realista,2=agressivo
   const [regenDebounce, setRegenDebounce] = useState<ReturnType<typeof setTimeout> | null>(null)
   const [regenLoading, setRegenLoading] = useState(false)
+  const [draftSaved, setDraftSaved] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const DRAFT_KEY = `inscribo_campaign_draft_${institutionId}`
+
+  const saveDraft = () => {
+    const draft = { step, schoolData, growthTarget, historicalData, historyOption, marketData, generatedPlan, adjustedPlan, generationMode, savedAt: new Date().toISOString() }
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+    setDraftSaved(true)
+    setTimeout(() => setDraftSaved(false), 2500)
+  }
 
   const MARKET_MSGS = [
     `Consultando dados demográficos de ${schoolData.city || '...'}...`,
@@ -235,6 +245,27 @@ export default function CampaignGeneratorModal({
       setGenProgress(0)
     }
   }, [isOpen])
+
+  // Carregar rascunho ao abrir
+  useEffect(() => {
+    if (!isOpen || !institutionId) return
+    const raw = localStorage.getItem(`inscribo_campaign_draft_${institutionId}`)
+    if (!raw) return
+    try {
+      const draft = JSON.parse(raw)
+      if (draft.schoolData) setSchoolData(s => ({ ...s, ...draft.schoolData }))
+      if (draft.growthTarget) setGrowthTarget(draft.growthTarget)
+      if (draft.historicalData?.length) setHistoricalData(draft.historicalData)
+      if (draft.historyOption) setHistoryOption(draft.historyOption)
+      if (draft.marketData && Object.keys(draft.marketData).length) setMarketData(draft.marketData)
+      if (draft.generatedPlan) {
+        setGeneratedPlan(draft.generatedPlan)
+        setAdjustedPlan(JSON.parse(JSON.stringify(draft.generatedPlan)))
+        setGenerationMode(draft.generationMode || 'benchmark')
+      }
+      if (draft.step && draft.step > 1) setStep(draft.step)
+    } catch { /* rascunho corrompido, ignorar */ }
+  }, [isOpen, institutionId])
 
   // ── Buscar mercado ────────────────────────────────────────────
   const fetchMarket = useCallback(async () => {
@@ -407,6 +438,7 @@ export default function CampaignGeneratorModal({
         message: `Suas metas estão ativas. O sistema agora acompanha ${adjustedPlan.summary.total_new_students_target} matrículas novas e ${(adjustedPlan.summary.reenrollment_rate_target * 100).toFixed(0)}% de rematrículas como objetivo.`
       })
 
+      localStorage.removeItem(`inscribo_campaign_draft_${institutionId}`)
       onApply(cycleData)
       onClose()
     } catch (e) {
@@ -562,9 +594,10 @@ export default function CampaignGeneratorModal({
           <div style={{ display: 'flex', gap: 8 }}>
             {step === 5 && (
               <button
-                onClick={onClose}
-                style={{ padding: '9px 16px', borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, color: '#64748B', cursor: 'pointer' }}>
-                Salvar rascunho
+                onClick={saveDraft}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, border: `1px solid ${draftSaved ? '#bbf7d0' : '#E2E8F0'}`, background: draftSaved ? '#f0fdf4' : '#fff', fontSize: 13, color: draftSaved ? '#16a34a' : '#64748B', cursor: 'pointer', transition: 'all 0.2s' }}>
+                {draftSaved ? <Check size={13} /> : null}
+                {draftSaved ? 'Rascunho salvo!' : 'Salvar rascunho'}
               </button>
             )}
 
