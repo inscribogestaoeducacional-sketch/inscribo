@@ -11,10 +11,24 @@ import {
 
 // ─── router ──────────────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const routeArr = Array.isArray(req.query.route)
+  let routeArr = Array.isArray(req.query.route)
     ? req.query.route
     : [req.query.route].filter(Boolean) as string[]
+
+  // Fallback: se req.query.route não foi populado pelo rewrite do Vercel,
+  // extrair a rota a partir de req.url diretamente
+  if (routeArr.length === 0 && req.url) {
+    const urlPath = req.url.split('?')[0]
+    const marker = '/api/evolution/'
+    const idx = urlPath.indexOf(marker)
+    if (idx !== -1) {
+      const after = urlPath.slice(idx + marker.length)
+      routeArr = after.split('/').filter(Boolean)
+    }
+  }
+
   const route = routeArr.join('/')
+  console.log('[evolution router] route:', route, '| url:', req.url)
 
   switch (route) {
     case 'get-qrcode':       return handleGetQrcode(req, res)
@@ -780,10 +794,15 @@ async function handleSetWebhook(req: VercelRequest, res: VercelResponse) {
   console.log('[set-webhook] instanceName:', instanceName)
   console.log('[set-webhook] webhookUrl:', webhookUrl)
 
+  // v2.3.x requer wrapper "webhook:" no body
   const body = {
-    url: webhookUrl,
-    enabled: true,
-    events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE'],
+    webhook: {
+      url: webhookUrl,
+      enabled: true,
+      webhookByEvents: false,
+      webhookBase64: false,
+      events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE'],
+    },
   }
 
   console.log('[set-webhook] body:', JSON.stringify(body))
