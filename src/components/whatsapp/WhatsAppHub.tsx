@@ -593,6 +593,10 @@ export default function WhatsAppHub() {
   // Feature 1: Connection status
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'disconnected'>('unknown')
 
+  // Meta API state
+  const [useMetaApi, setUseMetaApi] = useState(false)
+  const [metaConfig, setMetaConfig] = useState<{ phone_id: string; token: string } | null>(null)
+
   // Sync state
   const [syncing, setSyncing] = useState(false)
 
@@ -797,7 +801,21 @@ export default function WhatsAppHub() {
 
     const init = async () => {
       const inst = await DatabaseService.getInstitution(user.institution_id!)
-      setIsConnected(!!inst?.evolution_instance)
+
+      // Detectar qual API usar: Meta tem precedência se whatsapp_connected === true
+      const isMeta = !!(inst as any)?.whatsapp_connected && !!(inst as any)?.whatsapp_phone_id
+      setUseMetaApi(isMeta)
+      if (isMeta) {
+        setMetaConfig({
+          phone_id: (inst as any).whatsapp_phone_id,
+          token: (inst as any).whatsapp_token,
+        })
+        setConnectionStatus('connected')
+        setIsConnected(true)
+      } else {
+        setIsConnected(!!inst?.evolution_instance)
+      }
+
       await loadMessages()
       DatabaseService.getUsers(user.institution_id!).then(setUsers).catch(() => {})
       setLoading(false)
@@ -830,9 +848,9 @@ export default function WhatsAppHub() {
 
   const prevConnectionStatusRef = useRef<string>('unknown')
 
-  // Feature 1: Connection status polling
+  // Feature 1: Connection status polling (só Evolution — Meta API não precisa de polling)
   useEffect(() => {
-    if (!user?.institution_id) return
+    if (!user?.institution_id || useMetaApi) return
     const CONNECTED_STATES = ['open', 'connected', 'CONNECTED', 'OPEN']
     const checkStatus = async () => {
       try {
@@ -840,28 +858,25 @@ export default function WhatsAppHub() {
           signal: AbortSignal.timeout(8000),
         })
         if (!res.ok) {
-          // Don't flip to disconnected on transient HTTP errors — keep previous state
           console.warn('[connection-state] HTTP', res.status)
           return
         }
         const data = await res.json()
-        console.log('[connection-state] data:', data)
         const state = data?.instance?.state ?? data?.state ?? data?.status
         const isConn = CONNECTED_STATES.includes(state)
         setConnectionStatus(isConn ? 'connected' : state ? 'disconnected' : 'unknown')
       } catch (err) {
-        // Network error or timeout — keep previous state, don't flash banner
         console.warn('[connection-state] fetch failed:', err)
       }
     }
     checkStatus()
     const iv = setInterval(checkStatus, 30000)
     return () => clearInterval(iv)
-  }, [user?.institution_id])
+  }, [user?.institution_id, useMetaApi])
 
-  // Sync 48h messages from Evolution API
+  // Sync 48h messages from Evolution API (não aplicável à Meta API — mensagens chegam via webhook)
   const syncMessages = async () => {
-    if (!user?.institution_id || !instance || syncing) return
+    if (!user?.institution_id || !instance || syncing || useMetaApi) return
     try {
       setSyncing(true)
       const res = await fetch('/api/evolution/sync-messages', {
@@ -1068,17 +1083,60 @@ export default function WhatsAppHub() {
     setInputText('')
     setShowQuickReplies(false)
     try {
-      const res = await fetch('/api/evolution/send-message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceName: instance, remoteJid: activeId, message: text, institutionId: user?.institution_id }),
-      })
-      if (!res.ok) throw new Error()
-      setConversations(prev => prev.map(c =>
-        c.id === activeId
-          ? { ...c, messages: c.messages.map(m => m.id === tempId ? { ...m, status: 'delivered' as const } : m) }
-          : c
-      ))
+      if (useMetaApi && metaConfig) {
+        // ── Meta Cloud API ────────────────────────────────────────
+        const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/\D/g, '')
+        const res = await fetch(
+          `https://graph.facebook.com/v18.0/${metaConfig.phone_id}/messages`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${metaConfig.token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              messaging_product: 'whatsapp',
+              to,
+              type: 'text',
+              text: { body: text },
+            }),
+          }
+        )
+        const data = await res.json()
+        if (!res.ok) throw new Error((data as any)?.error?.message || 'Erro Meta API')
+        const sentMsgId = (data as any).messages?.[0]?.id || `sent-${Date.now()}`
+        // Salvar no Supabase para aparecer no hub
+        await supabase.from('whatsapp_messages').insert({
+          institution_id: user?.institution_id,
+          remote_jid: activeId,
+          phone_number: to,
+          from_me: true,
+          direction: 'outbound',
+          message_type: 'text',
+          content: text,
+          status: 'sent',
+          message_id: sentMsgId,
+          timestamp: new Date().toISOString(),
+        }).catch(() => {})
+        setConversations(prev => prev.map(c =>
+          c.id === activeId
+            ? { ...c, messages: c.messages.map(m => m.id === tempId ? { ...m, id: sentMsgId, status: 'sent' as const } : m) }
+            : c
+        ))
+      } else {
+        // ── Evolution API (fallback) ──────────────────────────────
+        const res = await fetch('/api/evolution/send-message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instanceName: instance, remoteJid: activeId, message: text, institutionId: user?.institution_id }),
+        })
+        if (!res.ok) throw new Error()
+        setConversations(prev => prev.map(c =>
+          c.id === activeId
+            ? { ...c, messages: c.messages.map(m => m.id === tempId ? { ...m, status: 'delivered' as const } : m) }
+            : c
+        ))
+      }
     } catch {
       setConversations(prev => prev.map(c =>
         c.id === activeId ? { ...c, messages: c.messages.filter(m => m.id !== tempId) } : c
