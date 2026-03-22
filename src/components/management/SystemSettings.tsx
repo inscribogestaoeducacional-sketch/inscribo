@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Save, Upload, Building, Mail, Phone, Globe, Palette,
-  MessageCircle, Wifi, WifiOff, RefreshCw, QrCode, Settings
+  MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
+  Bot, X, Plus, Check, AlertCircle
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import { supabase } from '../../lib/supabase'
 
 // ─── Shared input style ───────────────────────────────────────────────────────
 const inputCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none transition-all'
@@ -176,352 +178,443 @@ function GeralTab() {
   )
 }
 
-// ─── Tab: WhatsApp ────────────────────────────────────────────────────────────
-const QR_TTL = 60
+// ─── Tab: WhatsApp (Meta Cloud API) ──────────────────────────────────────────
 
-type ConnStatus = 'checking' | 'disconnected' | 'connecting' | 'waiting_qr' | 'connected'
+interface MetaConfig {
+  whatsapp_phone_id: string
+  whatsapp_token: string
+  whatsapp_phone_number: string
+  whatsapp_display_name: string
+  whatsapp_connected: boolean
+}
 
+interface BotConfig {
+  bot_enabled: boolean
+  school_name: string
+  welcome_message: string
+  bot_tone: 'friendly' | 'formal' | 'casual'
+  grades_offered: string[]
+  monthly_fee_info: string
+  handoff_keywords: string[]
+  faq_data: Record<string, string>
+}
+
+const GRADE_OPTS = ['Infantil I','Infantil II','Infantil III','Infantil IV','Infantil V',
+  '1º ao 5º EF','6º ao 9º EF','Ensino Médio']
+
+// ── Bot Config Modal ─────────────────────────────────────────────────────────
+function BotConfigModal({ institutionId, onClose }: { institutionId: string; onClose: () => void }) {
+  const [cfg, setCfg] = useState<BotConfig>({
+    bot_enabled: true, school_name: '', welcome_message: 'Olá! Seja bem-vindo! 😊 Como posso te ajudar?',
+    bot_tone: 'friendly', grades_offered: [], monthly_fee_info: '',
+    handoff_keywords: ['atendente','humano','falar com pessoa'], faq_data: {}
+  })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [newKeyword, setNewKeyword] = useState('')
+  const [newFaqQ, setNewFaqQ] = useState('')
+  const [newFaqA, setNewFaqA] = useState('')
+
+  useEffect(() => {
+    supabase.from('whatsapp_bot_config').select('*').eq('institution_id', institutionId).single()
+      .then(({ data }) => {
+        if (data) setCfg(data as unknown as BotConfig)
+        setLoading(false)
+      }).catch(() => setLoading(false))
+  }, [institutionId])
+
+  const save = async () => {
+    setSaving(true)
+    await supabase.from('whatsapp_bot_config').upsert({ ...cfg, institution_id: institutionId }, { onConflict: 'institution_id' })
+    setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000)
+  }
+
+  const toggleGrade = (g: string) => {
+    setCfg(c => ({ ...c, grades_offered: c.grades_offered.includes(g) ? c.grades_offered.filter(x => x !== g) : [...c.grades_offered, g] }))
+  }
+
+  if (loading) return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: 20, padding: 48 }}>
+        <div style={{ width: 32, height: 32, border: '3px solid #14b8a6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto' }} />
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 640, maxHeight: '90vh', overflow: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Bot style={{ width: 20, height: 20, color: '#14b8a6' }} />
+            <span style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A' }}>Configurar Bot</span>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><X style={{ width: 20, height: 20 }} /></button>
+        </div>
+
+        <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: '#F8FAFC', borderRadius: 12, border: '1px solid #E2E8F0' }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#1A2B4A' }}>Bot ativo</div>
+              <div style={{ fontSize: 12, color: '#64748B' }}>Quando ativo, responde automaticamente as primeiras mensagens</div>
+            </div>
+            <button onClick={() => setCfg(c => ({ ...c, bot_enabled: !c.bot_enabled }))}
+              style={{ width: 44, height: 24, borderRadius: 999, background: cfg.bot_enabled ? '#14b8a6' : '#CBD5E1', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s' }}>
+              <span style={{ position: 'absolute', top: 3, left: cfg.bot_enabled ? 22 : 3, width: 18, height: 18, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
+            </button>
+          </div>
+
+          {/* Nome da escola */}
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Nome da escola (como o bot se apresenta)</label>
+            <input value={cfg.school_name} onChange={e => setCfg(c => ({ ...c, school_name: e.target.value }))}
+              className={inputCls} placeholder="Ex: Colégio São João" />
+          </div>
+
+          {/* Tom */}
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Tom do bot</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {(['friendly','formal','casual'] as const).map(t => (
+                <button key={t} onClick={() => setCfg(c => ({ ...c, bot_tone: t }))}
+                  style={{ flex: 1, padding: '8px 4px', borderRadius: 10, fontSize: 12, fontWeight: 600, border: `2px solid ${cfg.bot_tone === t ? '#14b8a6' : '#E2E8F0'}`, background: cfg.bot_tone === t ? '#F0FDFA' : '#fff', color: cfg.bot_tone === t ? '#0d9488' : '#64748B', cursor: 'pointer' }}>
+                  {t === 'friendly' ? '😊 Amigável' : t === 'formal' ? '👔 Formal' : '😎 Descontraído'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Mensagem de boas-vindas */}
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Mensagem de boas-vindas</label>
+            <textarea value={cfg.welcome_message} onChange={e => setCfg(c => ({ ...c, welcome_message: e.target.value }))}
+              rows={3} className={inputCls} style={{ resize: 'vertical' }} />
+          </div>
+
+          {/* Séries */}
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Séries oferecidas</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {GRADE_OPTS.map(g => (
+                <button key={g} onClick={() => toggleGrade(g)}
+                  style={{ padding: '5px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, border: `2px solid ${cfg.grades_offered.includes(g) ? '#14b8a6' : '#E2E8F0'}`, background: cfg.grades_offered.includes(g) ? '#F0FDFA' : '#fff', color: cfg.grades_offered.includes(g) ? '#0d9488' : '#64748B', cursor: 'pointer' }}>
+                  {cfg.grades_offered.includes(g) && '✓ '}{g}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Mensalidade */}
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Informações de mensalidade</label>
+            <textarea value={cfg.monthly_fee_info} onChange={e => setCfg(c => ({ ...c, monthly_fee_info: e.target.value }))}
+              rows={2} className={inputCls} placeholder="Ex: A mensalidade varia de R$ 800 a R$ 1.200 conforme a série." style={{ resize: 'vertical' }} />
+          </div>
+
+          {/* Palavras de handoff */}
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Palavras para transferir para humano</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+              {cfg.handoff_keywords.map(kw => (
+                <span key={kw} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 999, fontSize: 12, color: '#92400E' }}>
+                  {kw}
+                  <button onClick={() => setCfg(c => ({ ...c, handoff_keywords: c.handoff_keywords.filter(k => k !== kw) }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D97706', lineHeight: 1, padding: 0 }}>×</button>
+                </span>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input value={newKeyword} onChange={e => setNewKeyword(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && newKeyword.trim()) { setCfg(c => ({ ...c, handoff_keywords: [...c.handoff_keywords, newKeyword.trim()] })); setNewKeyword('') }}}
+                className={inputCls} placeholder="Adicionar palavra..." style={{ flex: 1 }} />
+              <button onClick={() => { if (newKeyword.trim()) { setCfg(c => ({ ...c, handoff_keywords: [...c.handoff_keywords, newKeyword.trim()] })); setNewKeyword('') }}}
+                style={{ padding: '8px 14px', background: '#14b8a6', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+                <Plus style={{ width: 14, height: 14 }} />
+              </button>
+            </div>
+          </div>
+
+          {/* FAQ */}
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>Perguntas frequentes (FAQ)</label>
+            {Object.entries(cfg.faq_data).map(([q, a]) => (
+              <div key={q} style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 12, marginBottom: 6, fontSize: 12 }}>
+                <div style={{ fontWeight: 600, color: '#374151', marginBottom: 2 }}>P: {q}</div>
+                <div style={{ color: '#64748B' }}>R: {a}</div>
+                <button onClick={() => { const f = { ...cfg.faq_data }; delete f[q]; setCfg(c => ({ ...c, faq_data: f })) }}
+                  style={{ fontSize: 11, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', marginTop: 4, padding: 0 }}>Remover</button>
+              </div>
+            ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 12, background: '#F8FAFC', borderRadius: 10, border: '1px dashed #CBD5E1' }}>
+              <input value={newFaqQ} onChange={e => setNewFaqQ(e.target.value)} className={inputCls} placeholder="Pergunta..." />
+              <input value={newFaqA} onChange={e => setNewFaqA(e.target.value)} className={inputCls} placeholder="Resposta..." />
+              <button onClick={() => { if (newFaqQ.trim() && newFaqA.trim()) { setCfg(c => ({ ...c, faq_data: { ...c.faq_data, [newFaqQ.trim()]: newFaqA.trim() } })); setNewFaqQ(''); setNewFaqA('') }}}
+                style={{ padding: '8px', background: '#14b8a6', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+                + Adicionar pergunta
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: '16px 24px', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button onClick={onClose} style={{ padding: '10px 20px', borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            Cancelar
+          </button>
+          <button onClick={save} disabled={saving}
+            style={{ padding: '10px 24px', borderRadius: 10, border: 'none', background: saved ? '#10B981' : '#14b8a6', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: saving ? 0.7 : 1 }}>
+            {saved ? <><Check style={{ width: 14, height: 14 }} /> Salvo!</> : saving ? 'Salvando...' : 'Salvar configurações'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── WhatsApp Tab ─────────────────────────────────────────────────────────────
 function WhatsAppTab() {
   const { user } = useAuth()
-  const instance = user?.institution_id ? `inst-${user.institution_id.slice(0, 8)}` : ''
+  const institutionId = user?.institution_id
 
-  const [status, setStatus] = useState<ConnStatus>('checking')
-  const [qrCode, setQrCode] = useState<string | null>(null)
-  const [countdown, setCountdown] = useState(QR_TTL)
-  const [connectedPhone, setConnectedPhone] = useState<string | null>(null)
-  const [connectedAt, setConnectedAt] = useState<Date | null>(null)
+  const [metaConfig, setMetaConfig] = useState<MetaConfig | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [showBotConfig, setShowBotConfig] = useState(false)
+  const [usage, setUsage] = useState({ count: 0, limit: 1000 })
+
+  // Form de setup
+  const [form, setForm] = useState({ phone_id: '', token: '', phone_number: '', display_name: '' })
+  const [connecting, setConnecting] = useState(false)
+  const [connectError, setConnectError] = useState<string | null>(null)
   const [disconnecting, setDisconnecting] = useState(false)
-  const [justConnected, setJustConnected] = useState(false)
-  const [configuringWebhook, setConfiguringWebhook] = useState(false)
 
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  const stopPolling = () => {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
-  }
-  const stopCountdown = () => {
-    if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null }
-  }
-
-  const configureWebhook = async () => {
-    setConfiguringWebhook(true)
-    try {
-      await fetch('/api/evolution/set-webhook', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          instanceName: instance,
-          webhookUrl: `https://www.meuinscribo.com.br/api/evolution/webhook?institution_id=${user?.institution_id}`,
-        })
-      })
-    } catch { /* ignore */ } finally {
-      setConfiguringWebhook(false)
-    }
-  }
-
-  const onConnected = (phone?: string) => {
-    stopPolling()
-    stopCountdown()
-    setQrCode(null)
-    setConnectedPhone(phone ?? null)
-    setConnectedAt(new Date())
-    setJustConnected(true)
-    setStatus('connected')
-    setTimeout(() => setJustConnected(false), 3000)
-    configureWebhook()
-  }
-
-  const checkState = async (): Promise<{ exists: boolean; connected: boolean; phone?: string }> => {
-    try {
-      console.log('[WA] checkState for institution:', user?.institution_id)
-      const res = await fetch(`/api/evolution/connection-state?institutionId=${user?.institution_id}`)
-      console.log('[WA] connectionState HTTP', res.status)
-      if (!res.ok) return { exists: false, connected: false }
-      const data = await res.json()
-      console.log('[WA] connectionState data:', JSON.stringify(data))
-      const state = data?.instance?.state || data?.state
-      const phone = data?.instance?.profileName || data?.instance?.wuid?.replace('@s.whatsapp.net', '') || undefined
-      if (state === 'open') {
-        onConnected(phone)
-        return { exists: true, connected: true, phone }
-      }
-      // 404 / instance not found responses vary — treat missing state as non-existent
-      const notFound = data?.error || data?.message?.toLowerCase?.().includes('not found') || data?.statusCode === 404
-      return { exists: !notFound, connected: false }
-    } catch (e) {
-      console.error('[WA] checkState error:', e)
-      return { exists: false, connected: false }
-    }
-  }
-
-  const fetchQrCode = async (): Promise<string | null> => {
-    try {
-      console.log('[WA] fetchQrCode for institution:', user?.institution_id)
-      const res = await fetch('/api/evolution/get-qrcode', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ institutionId: user?.institution_id }),
-      })
-      console.log('[WA] getQrcode HTTP', res.status)
-      const data = await res.json()
-      console.log('[WA] getQrcode data:', JSON.stringify(data))
-      if (data?.connected) return null // already connected
-      return data?.qrcode?.base64 || data?.base64 || null
-    } catch (e) {
-      console.error('[WA] fetchQrCode error:', e)
-      return null
-    }
-  }
-
-  const startPolling = () => {
-    stopPolling()
-    pollRef.current = setInterval(checkState, 3000)
-  }
-
-  const startCountdown = () => {
-    stopCountdown()
-    setCountdown(QR_TTL)
-    countdownRef.current = setInterval(() => {
-      setCountdown(c => {
-        if (c <= 1) {
-          stopCountdown()
-          stopPolling()
-          setQrCode(null)
-          setStatus('disconnected')
-          return QR_TTL
-        }
-        return c - 1
-      })
-    }, 1000)
-  }
-
-  // Check state on mount
   useEffect(() => {
-    if (!instance) return
-    checkState().then(({ connected }) => {
-      if (!connected) setStatus(s => s === 'checking' ? 'disconnected' : s)
-    })
-    return () => { stopPolling(); stopCountdown() }
-  }, [instance])
+    if (!institutionId) return
+    loadConfig()
+  }, [institutionId])
 
-  const handleConnect = async () => {
-    if (!instance) return
-    setStatus('connecting')
-    setQrCode(null)
-    stopPolling()
+  async function loadConfig() {
+    setLoading(true)
+    const { data } = await supabase
+      .from('institutions')
+      .select('whatsapp_phone_id,whatsapp_token,whatsapp_phone_number,whatsapp_display_name,whatsapp_connected')
+      .eq('id', institutionId)
+      .single()
+      .catch(() => ({ data: null }))
 
+    if (data?.whatsapp_phone_id) {
+      setMetaConfig(data as unknown as MetaConfig)
+      // Buscar uso mensal
+      const monthYear = new Date().toISOString().slice(0, 7)
+      const { data: usageData } = await supabase
+        .from('whatsapp_usage')
+        .select('conversation_count, monthly_limit')
+        .eq('institution_id', institutionId)
+        .eq('month_year', monthYear)
+        .single()
+        .catch(() => ({ data: null }))
+      if (usageData) setUsage({ count: (usageData as any).conversation_count || 0, limit: (usageData as any).monthly_limit || 1000 })
+    }
+    setLoading(false)
+  }
+
+  async function handleConnect() {
+    if (!form.phone_id || !form.token) {
+      setConnectError('Phone ID e Token são obrigatórios.')
+      return
+    }
+    setConnecting(true)
+    setConnectError(null)
+
+    // Testar token chamando a API da Meta
     try {
-      // Step 1: check if instance already exists
-      console.log('[WA] handleConnect — step 1: check existing state')
-      const { exists, connected } = await checkState()
-      if (connected) return // onConnected already called inside checkState
-
-      if (exists) {
-        // Step 2a: instance exists but disconnected — fetch QR directly
-        console.log('[WA] instance exists, fetching QR')
-        const qr = await fetchQrCode()
-        if (qr) {
-          setQrCode(qr)
-          setStatus('waiting_qr')
-          startPolling()
-          startCountdown()
-          return
-        }
-        // QR not available yet — fall through to create
-        console.log('[WA] no QR from existing instance, recreating')
-      }
-
-      // Step 2b: instance doesn't exist (or QR unavailable) — create it
-      console.log('[WA] creating instance')
-      const res = await fetch('/api/evolution/create-instance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceName: instance, institutionId: user?.institution_id })
+      const testRes = await fetch(`https://graph.facebook.com/v18.0/${form.phone_id}?fields=display_phone_number,verified_name`, {
+        headers: { Authorization: `Bearer ${form.token}` }
       })
-      const data = await res.json()
-      console.log('[WA] create-instance response:', JSON.stringify(data))
-
-      const base64 = data?.qrcode?.base64 || data?.instance?.qrcode?.base64 || null
-      if (data?.instance?.state === 'open') {
-        onConnected()
-      } else if (base64) {
-        setQrCode(base64)
-        setStatus('waiting_qr')
-        startPolling()
-        startCountdown()
-      } else {
-        // Last resort: try fetching QR from connect endpoint
-        console.log('[WA] no QR in create response, trying get-qrcode')
-        const qr = await fetchQrCode()
-        if (qr) {
-          setQrCode(qr)
-          setStatus('waiting_qr')
-          startPolling()
-          startCountdown()
-        } else {
-          setStatus('disconnected')
-        }
+      if (!testRes.ok) {
+        const err = await testRes.json().catch(() => ({}))
+        throw new Error((err as any)?.error?.message || 'Token ou Phone ID inválido')
       }
+      const testData = await testRes.json()
+      const verifiedName = (testData as any).verified_name || form.display_name
+
+      // Salvar na instituição
+      await supabase.from('institutions').update({
+        whatsapp_phone_id:    form.phone_id,
+        whatsapp_token:       form.token,
+        whatsapp_phone_number: form.phone_number || (testData as any).display_phone_number || '',
+        whatsapp_display_name: verifiedName,
+        whatsapp_connected:   true,
+      }).eq('id', institutionId)
+
+      await loadConfig()
     } catch (e) {
-      console.error('[WA] handleConnect error:', e)
-      setStatus('disconnected')
-    }
-  }
-
-  const handleDisconnect = async () => {
-    if (!confirm('Desconectar o WhatsApp desta escola?')) return
-    setDisconnecting(true)
-    stopPolling()
-    stopCountdown()
-    try {
-      await fetch('/api/evolution/delete-instance', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceName: instance })
-      })
-      setStatus('disconnected')
-      setQrCode(null)
-      setConnectedPhone(null)
-      setConnectedAt(null)
-    } catch {
-      /* ignore */
+      setConnectError((e as Error).message)
     } finally {
-      setDisconnecting(false)
+      setConnecting(false)
     }
   }
 
-  // ── Loading ──
-  if (status === 'checking') {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <div className="animate-spin rounded-full h-8 w-8 border-4 border-[#14b8a6] border-t-transparent" />
-      </div>
-    )
+  async function handleDisconnect() {
+    if (!confirm('Desconectar o WhatsApp desta escola? O bot deixará de funcionar.')) return
+    setDisconnecting(true)
+    await supabase.from('institutions').update({
+      whatsapp_phone_id: null, whatsapp_token: null,
+      whatsapp_phone_number: null, whatsapp_display_name: null,
+      whatsapp_connected: false,
+    }).eq('id', institutionId).catch(() => {})
+    setMetaConfig(null)
+    setForm({ phone_id: '', token: '', phone_number: '', display_name: '' })
+    setDisconnecting(false)
   }
 
-  // ── Connected ──
-  if (status === 'connected') {
+  const usagePct = Math.min(100, Math.round((usage.count / usage.limit) * 100))
+  const usageColor = usagePct >= 90 ? '#EF4444' : usagePct >= 70 ? '#F59E0B' : '#10B981'
+
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0' }}>
+      <div style={{ width: 32, height: 32, border: '3px solid #14b8a6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+    </div>
+  )
+
+  // ── MODO 2: Conectado ─────────────────────────────────────────
+  if (metaConfig?.whatsapp_phone_id) {
     return (
-      <div className="max-w-md mx-auto">
-        <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
-          {justConnected ? (
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
-              <svg className="h-10 w-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-          ) : (
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Wifi className="h-10 w-10 text-green-600" />
-            </div>
-          )}
+      <>
+        {showBotConfig && institutionId && (
+          <BotConfigModal institutionId={institutionId} onClose={() => setShowBotConfig(false)} />
+        )}
 
-          <h2 className="text-lg font-bold text-gray-900 mb-1">WhatsApp Conectado!</h2>
-
-          {connectedPhone && (
-            <p className="text-sm font-semibold text-[#14b8a6] mb-1">{connectedPhone}</p>
-          )}
-
-          {connectedAt && (
-            <p className="text-xs text-gray-400 mb-6">
-              Conectado em {connectedAt.toLocaleDateString('pt-BR')} às {connectedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-            </p>
-          )}
-
-          <div className="flex items-center gap-2 justify-center px-4 py-2.5 bg-green-50 border border-green-200 rounded-xl mb-6">
-            <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
-            <span className="text-sm font-semibold text-green-700">Online e recebendo mensagens</span>
-          </div>
-
-          <button onClick={configureWebhook} disabled={configuringWebhook}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-600 text-sm font-semibold rounded-xl transition-colors disabled:opacity-60 mb-3">
-            <RefreshCw className={`h-4 w-4 ${configuringWebhook ? 'animate-spin' : ''}`} />
-            {configuringWebhook ? 'Configurando...' : 'Reconfigurar Webhook'}
-          </button>
-
-          <button onClick={handleDisconnect} disabled={disconnecting}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-semibold rounded-xl transition-colors disabled:opacity-60">
-            <WifiOff className="h-4 w-4" />
-            {disconnecting ? 'Desconectando...' : 'Desconectar WhatsApp'}
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // ── Waiting QR ──
-  if (status === 'waiting_qr' && qrCode) {
-    return (
-      <div className="max-w-md mx-auto">
-        <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
-          <h2 className="text-base font-bold text-gray-900 mb-1">Escaneie o QR Code</h2>
-          <p className="text-xs text-gray-500 mb-5">
-            Abra o WhatsApp → <strong>Dispositivos Vinculados</strong> → <strong>Vincular dispositivo</strong> → Escaneie o QR Code
-          </p>
-
-          <div className="inline-block mb-3">
-            <img
-              src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`}
-              alt="QR Code WhatsApp"
-              className="h-56 w-56 object-contain rounded-xl border-2 border-gray-100"
-            />
-          </div>
-
-          <p className={`text-2xl font-bold tabular-nums mb-1 ${countdown <= 10 ? 'text-red-500' : 'text-amber-500'}`}>
-            {countdown}s
-          </p>
-          <p className="text-xs text-gray-500 mb-3">QR Code expira em {countdown} segundos</p>
-
-          <div className="flex items-center justify-center gap-2 text-xs text-amber-600">
-            <RefreshCw className="h-3 w-3 animate-spin" />
-            Verificando conexão automaticamente...
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // ── Disconnected / Connecting ──
-  return (
-    <div className="max-w-md mx-auto">
-      <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
-        {/* Phone illustration */}
-        <div className="flex justify-center mb-6">
-          <div className="relative">
-            <div className="w-24 h-24 bg-gradient-to-br from-[#14b8a6]/10 to-[#1e2d6b]/10 rounded-full flex items-center justify-center">
-              <div className="w-14 h-14 bg-gradient-to-br from-[#14b8a6] to-[#1e2d6b] rounded-2xl flex items-center justify-center shadow-lg">
-                <MessageCircle className="h-7 w-7 text-white" />
+        <div style={{ maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Status card */}
+          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <div style={{ width: 48, height: 48, background: '#ECFDF5', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Wifi style={{ width: 22, height: 22, color: '#10B981' }} />
               </div>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A' }}>WhatsApp conectado</div>
+                <div style={{ fontSize: 13, color: '#64748B' }}>{metaConfig.whatsapp_display_name}</div>
+              </div>
+              <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: '#ECFDF5', borderRadius: 999, fontSize: 12, fontWeight: 600, color: '#059669' }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', animation: 'pulse 2s infinite' }} />
+                Online
+              </span>
             </div>
-            <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-white border-2 border-gray-100 rounded-full flex items-center justify-center shadow-sm">
-              <QrCode className="h-4 w-4 text-gray-400" />
+
+            <div style={{ padding: '10px 14px', background: '#F8FAFC', borderRadius: 10, fontSize: 13, color: '#475569', marginBottom: 16 }}>
+              Número: <strong>{metaConfig.whatsapp_phone_number || '—'}</strong><br />
+              Webhook: <code style={{ fontSize: 11 }}>https://meuinscribo.com.br/api/whatsapp/webhook</code>
+            </div>
+
+            {/* Uso mensal */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Conversas este mês</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: usageColor }}>{usage.count} / {usage.limit.toLocaleString('pt-BR')}</span>
+              </div>
+              <div style={{ height: 8, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${usagePct}%`, background: usageColor, borderRadius: 999, transition: 'width 0.4s' }} />
+              </div>
+              {usagePct >= 90 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: '#DC2626' }}>
+                  <AlertCircle style={{ width: 14, height: 14 }} />
+                  Limite quase atingido. Entre em contato para aumentar.
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShowBotConfig(true)}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#0d9488', cursor: 'pointer' }}>
+                <Bot style={{ width: 15, height: 15 }} /> Configurar Bot
+              </button>
+              <button onClick={handleDisconnect} disabled={disconnecting}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', background: '#FFF1F2', border: '1px solid #FECDD3', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#E11D48', cursor: 'pointer', opacity: disconnecting ? 0.6 : 1 }}>
+                <WifiOff style={{ width: 15, height: 15 }} /> {disconnecting ? 'Desconectando...' : 'Desconectar'}
+              </button>
+            </div>
+          </div>
+
+          {/* Instruções webhook */}
+          <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#92400E', marginBottom: 6 }}>⚠️ Configure o webhook no Meta</div>
+            <div style={{ fontSize: 12, color: '#78350F', lineHeight: 1.6 }}>
+              Em <strong>developers.facebook.com</strong> → seu app → WhatsApp → Configuração:<br />
+              URL do webhook: <code style={{ background: '#FEF3C7', padding: '2px 6px', borderRadius: 4 }}>https://meuinscribo.com.br/api/whatsapp/webhook</code><br />
+              Token de verificação: <code style={{ background: '#FEF3C7', padding: '2px 6px', borderRadius: 4 }}>inscribo_webhook_2026</code><br />
+              Assinar os campos: <strong>messages</strong>
             </div>
           </div>
         </div>
+      </>
+    )
+  }
 
-        <h2 className="text-lg font-bold text-gray-900 mb-2">Conecte seu WhatsApp</h2>
-        <p className="text-sm text-gray-500 mb-8 leading-relaxed">
-          Vincule o número da escola para começar a atender os pais e responsáveis diretamente pelo Inscribo.
-        </p>
+  // ── MODO 1: Não configurado ──────────────────────────────────
+  return (
+    <div style={{ maxWidth: 560 }}>
+      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ padding: '24px 24px 0', textAlign: 'center' }}>
+          <div style={{ width: 64, height: 64, background: 'linear-gradient(135deg, #14b8a6, #1e2d6b)', borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <MessageCircle style={{ width: 30, height: 30, color: '#fff' }} />
+          </div>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1A2B4A', margin: '0 0 8px' }}>Conectar WhatsApp Business API</h2>
+          <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 24px', lineHeight: 1.6 }}>
+            Use a API Oficial da Meta para atender pais com bot IA e enviar mensagens diretamente pelo Inscribo.
+          </p>
+        </div>
 
-        <button
-          onClick={handleConnect}
-          disabled={status === 'connecting'}
-          className="w-full flex items-center justify-center gap-2.5 px-5 py-3.5 bg-gradient-to-r from-[#14b8a6] to-[#0d9488] hover:from-[#0d9488] hover:to-[#0f766e] disabled:opacity-60 text-white text-sm font-bold rounded-xl shadow-md hover:shadow-lg transition-all"
-        >
-          {status === 'connecting' ? (
-            <>
-              <RefreshCw className="h-4 w-4 animate-spin" />
-              Gerando QR Code...
-            </>
-          ) : (
-            <>
-              <span className="text-base">📱</span>
-              Conectar WhatsApp
-            </>
+        {/* Passos */}
+        <div style={{ display: 'flex', gap: 0, borderTop: '1px solid #F1F5F9', borderBottom: '1px solid #F1F5F9' }}>
+          {[
+            { n: 1, label: 'Criar app no Meta', desc: 'developers.facebook.com → Criar app → WhatsApp' },
+            { n: 2, label: 'Colar credenciais', desc: 'Phone ID e token de acesso' },
+            { n: 3, label: 'Pronto!', desc: 'WhatsApp conectado ao Inscribo' },
+          ].map((s, i) => (
+            <div key={s.n} style={{ flex: 1, padding: '14px 12px', textAlign: 'center', borderRight: i < 2 ? '1px solid #F1F5F9' : 'none', background: '#FAFAFA' }}>
+              <div style={{ width: 28, height: 28, background: '#14b8a6', borderRadius: '50%', color: '#fff', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}>{s.n}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 3 }}>{s.label}</div>
+              <div style={{ fontSize: 11, color: '#94A3B8', lineHeight: 1.4 }}>{s.desc}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Formulário */}
+        <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Phone ID <span style={{ color: '#EF4444' }}>*</span></label>
+            <input value={form.phone_id} onChange={e => setForm(f => ({ ...f, phone_id: e.target.value }))}
+              className={inputCls} placeholder="Ex: 1007880222413531" />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Token de acesso permanente <span style={{ color: '#EF4444' }}>*</span></label>
+            <input value={form.token} onChange={e => setForm(f => ({ ...f, token: e.target.value }))}
+              className={inputCls} placeholder="EAAOSNzt..." type="password" />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Número de telefone</label>
+            <input value={form.phone_number} onChange={e => setForm(f => ({ ...f, phone_number: e.target.value }))}
+              className={inputCls} placeholder="Ex: +55 83 99999-9999" />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Nome de exibição da escola</label>
+            <input value={form.display_name} onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))}
+              className={inputCls} placeholder="Ex: Colégio São João" />
+          </div>
+
+          {connectError && (
+            <div style={{ display: 'flex', gap: 8, padding: '10px 14px', background: '#FFF1F2', border: '1px solid #FECDD3', borderRadius: 10, fontSize: 13, color: '#BE123C' }}>
+              <AlertCircle style={{ width: 16, height: 16, flexShrink: 0, marginTop: 1 }} />
+              {connectError}
+            </div>
           )}
-        </button>
+
+          <button onClick={handleConnect} disabled={connecting || !form.phone_id || !form.token}
+            style={{ padding: '13px', background: 'linear-gradient(135deg, #14b8a6, #0d9488)', color: '#fff', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: (connecting || !form.phone_id || !form.token) ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            {connecting ? <><RefreshCw style={{ width: 16, height: 16, animation: 'spin 0.8s linear infinite' }} /> Verificando credenciais...</> : <><Check style={{ width: 16, height: 16 }} /> Conectar WhatsApp</>}
+          </button>
+        </div>
       </div>
     </div>
   )
