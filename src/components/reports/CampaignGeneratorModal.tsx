@@ -203,10 +203,34 @@ export default function CampaignGeneratorModal({
   const [regenDebounce, setRegenDebounce] = useState<ReturnType<typeof setTimeout> | null>(null)
   const [regenLoading, setRegenLoading] = useState(false)
   const [draftSaved, setDraftSaved] = useState(false)
+  const [institutionPrefill, setInstitutionPrefill] = useState<{ city: string; state: string } | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isMounted = useRef(true)
   useEffect(() => { isMounted.current = true; return () => { isMounted.current = false } }, [])
+
+  // Buscar cidade/estado da instituição para pré-preencher o Passo 1
+  useEffect(() => {
+    if (!isOpen || !institutionId) return
+    ;(async () => {
+      const { data: institution } = await supabase
+        .from('institutions')
+        .select('city, state')
+        .eq('id', institutionId)
+        .single()
+      if (!institution) return
+      const city = (institution.city as string) || ''
+      const state = (institution.state as string) || ''
+      if (city || state) {
+        setInstitutionPrefill({ city, state })
+        setSchoolData(s => ({
+          ...s,
+          city: s.city || city,
+          state: s.state || state,
+        }))
+      }
+    })()
+  }, [isOpen, institutionId])
 
   const DRAFT_KEY = `inscribo_campaign_draft_${institutionId}`
 
@@ -699,6 +723,7 @@ export default function CampaignGeneratorModal({
               setCampaignStartMonthNum={setCampaignStartMonthNum}
               campaignStartYearNum={campaignStartYearNum}
               setCampaignStartYearNum={setCampaignStartYearNum}
+              institutionPrefill={institutionPrefill}
             />
           )}
 
@@ -799,6 +824,11 @@ export default function CampaignGeneratorModal({
                     if (!schoolData.city || !schoolData.state) return
                     setStep(2)
                   } else if (step === 2) {
+                    if (!schoolData.city || !schoolData.state) {
+                      setError('Preencha a cidade e estado antes de continuar.')
+                      setStep(1)
+                      return
+                    }
                     setStep(3)
                     fetchMarket()
                   }
@@ -869,7 +899,7 @@ export default function CampaignGeneratorModal({
 }
 
 // ─── Passo 1 — Dados da escola ───────────────────────────────────
-function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget, campaignStartMonthNum, setCampaignStartMonthNum, campaignStartYearNum, setCampaignStartYearNum }: {
+function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget, campaignStartMonthNum, setCampaignStartMonthNum, campaignStartYearNum, setCampaignStartYearNum, institutionPrefill }: {
   schoolData: SchoolData
   setSchoolData: React.Dispatch<React.SetStateAction<SchoolData>>
   growthTarget: GrowthTarget
@@ -878,17 +908,38 @@ function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget, cam
   setCampaignStartMonthNum: (v: number) => void
   campaignStartYearNum: number
   setCampaignStartYearNum: (v: number) => void
+  institutionPrefill: { city: string; state: string } | null
 }) {
   const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
   const thisYear = new Date().getFullYear()
+
+  const PrefillBadge = () => (
+    <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 500, color: '#0369a1', background: '#e0f2fe', borderRadius: 99, padding: '2px 7px' }}>
+      Preenchido automaticamente do cadastro
+    </span>
+  )
+
   return (
     <div style={{ paddingBottom: 24 }}>
       <h2 style={{ fontSize: 22, fontWeight: 800, color: '#1A2B4A', marginBottom: 6 }}>Vamos montar sua campanha de matrículas</h2>
       <p style={{ fontSize: 14, color: '#64748B', marginBottom: 24 }}>Responda algumas perguntas. Leva menos de 3 minutos.</p>
 
+      {/* Nome da escola — readonly */}
+      <div style={{ marginBottom: 14 }}>
+        <label style={labelStyle}>Nome da escola</label>
+        <input
+          style={{ ...inputStyle, background: '#f8fafc', color: '#94a3b8', cursor: 'not-allowed' }}
+          value={schoolData.name}
+          readOnly
+        />
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
         <div>
-          <label style={labelStyle}>Cidade <span style={{ color: '#F43F5E' }}>*</span></label>
+          <label style={labelStyle}>
+            Cidade <span style={{ color: '#F43F5E' }}>*</span>
+            {institutionPrefill?.city && <PrefillBadge />}
+          </label>
           <input
             style={inputStyle}
             placeholder="Ex: São Paulo"
@@ -897,7 +948,10 @@ function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget, cam
           />
         </div>
         <div>
-          <label style={labelStyle}>Estado <span style={{ color: '#F43F5E' }}>*</span></label>
+          <label style={labelStyle}>
+            Estado <span style={{ color: '#F43F5E' }}>*</span>
+            {institutionPrefill?.state && <PrefillBadge />}
+          </label>
           <select
             style={inputStyle}
             value={schoolData.state}
@@ -929,7 +983,7 @@ function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget, cam
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
         <div>
           <label style={labelStyle}>Mensalidade média</label>
           <div style={{ position: 'relative' }}>

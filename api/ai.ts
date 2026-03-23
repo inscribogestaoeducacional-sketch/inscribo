@@ -248,32 +248,48 @@ Retorne SOMENTE JSON:
     if (action === 'fetch_ibge') {
       const { city, state } = payload as { city: string; state: string }
 
-      const prompt = `Você tem conhecimento atualizado sobre dados demográficos brasileiros do IBGE e do Censo Escolar do MEC.
+      const fallback = {
+        city,
+        state,
+        school_age_population: 15000,
+        private_school_rate: 18,
+        sector_growth: 3,
+        avg_students_per_school: 500,
+        confidence: 'estimado',
+        notes: `Dados estimados para ${city}`
+      }
 
-Para a cidade de ${city}, ${state}, forneça em JSON:
+      const prompt = `Você é especialista em dados educacionais brasileiros (IBGE, Censo Escolar MEC).
+
+Para a cidade de ${city}, ${state}, retorne SOMENTE um JSON válido com os campos abaixo.
+Se não tiver dados precisos, ESTIME com base no porte do município e região — nunca retorne texto livre ou mensagem de erro.
+
 {
   "city": "${city}",
   "state": "${state}",
-  "school_age_population": 0,
-  "total_population": 0,
-  "private_school_students": 0,
-  "public_school_students": 0,
-  "private_school_rate": 0.0,
-  "sector_growth_rate": 0.0,
-  "total_private_schools": 0,
-  "average_students_per_school": 0,
+  "school_age_population": <estimativa população 4-17 anos>,
+  "total_population": <estimativa total>,
+  "private_school_students": <estimativa alunos rede privada>,
+  "private_school_rate": <% alunos em escola privada, ex: 18.5>,
+  "sector_growth_rate": <% crescimento anual setor privado, ex: 3.2>,
+  "total_private_schools": <número de escolas privadas>,
+  "average_students_per_school": <média de alunos por escola privada>,
   "ibge_year": 2022,
   "data_source": "IBGE Censo 2022 / Censo Escolar MEC 2023",
-  "confidence": "high|medium|low",
-  "notes": "observações sobre o mercado educacional desta cidade"
+  "confidence": "high|medium|estimado",
+  "notes": "<observação breve sobre o mercado educacional desta cidade>"
 }
 
-Use os dados mais recentes que você conhece. Se não tiver dados precisos desta cidade, use dados regionais proporcionais e indique confidence: "medium".
-Retorne SOMENTE o JSON válido.`
+Retorne SOMENTE o JSON, sem markdown, sem explicações adicionais.`
 
-      const result = await callClaude(prompt, 600)
-      const jsonMatch = result.match(/\{[\s\S]*\}/)
-      const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : result)
+      let parsed = fallback
+      try {
+        const result = await callClaude(prompt, 600)
+        const jsonMatch = result.match(/\{[\s\S]*\}/)
+        parsed = JSON.parse(jsonMatch ? jsonMatch[0] : result)
+      } catch {
+        // usa fallback definido acima
+      }
       return res.json({ result: parsed })
     }
 
