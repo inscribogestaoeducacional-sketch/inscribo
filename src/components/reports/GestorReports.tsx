@@ -6,7 +6,7 @@ import {
 import {
   TrendingUp, Target, RefreshCw, Upload, Settings, ChevronDown,
   ChevronUp, Plus, Edit2, Check, X, Copy, Trash2, AlertTriangle,
-  FileText, Download, Loader2, Sparkles
+  FileText, Download, Loader2, Sparkles, BarChart3
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -180,6 +180,7 @@ export default function GestorReports() {
   const [marketingData, setMarketingData] = useState<MarketingCampaign[]>([])
   const [reEnrollData, setReEnrollData] = useState<ReEnrollment[]>([])
   const [cycle, setCycle] = useState<CampaignCycle | null>(null)
+  const [allCycles, setAllCycles] = useState<CampaignCycle[]>([])
   const [transfers, setTransfers] = useState<StudentTransfer[]>([])
   const [erpImports, setErpImports] = useState<ErpImport[]>([])
   const [hasCycles, setHasCycles] = useState<boolean | null>(null)
@@ -218,29 +219,25 @@ export default function GestorReports() {
 
     // Tabelas que podem não existir ainda (migration pendente)
     try {
-      const { data, error } = await supabase
+      const { data: cyclesData, error } = await supabase
         .from('campaign_cycles')
         .select('*')
         .eq('institution_id', institutionId)
-        .eq('year', new Date().getFullYear())
-        .maybeSingle()
+        .order('created_at', { ascending: false })
       if (error && (error as { code?: string }).code === '42P01') {
         console.warn('Tabela campaign_cycles não encontrada. Execute as migrations.')
       } else {
-        setCycle(data || null)
+        const cycles = cyclesData || []
+        setAllCycles(cycles as CampaignCycle[])
+        // active = status:'active' or applied_at set; fallback to most recent
+        const active = cycles.find((c: CampaignCycle) => c.status === 'active' || !!(c as CampaignCycle & { applied_at?: string }).applied_at)
+        setCycle((active || cycles[0] || null) as CampaignCycle | null)
+        setHasCycles(cycles.length > 0)
       }
     } catch (err) {
       console.warn('campaign_cycles indisponível:', err)
+      setHasCycles(false)
     }
-
-    try {
-      const { data: anyData } = await supabase
-        .from('campaign_cycles')
-        .select('id')
-        .eq('institution_id', institutionId)
-        .limit(1)
-      setHasCycles((anyData?.length ?? 0) > 0)
-    } catch { setHasCycles(false) }
 
     try {
       const { data: wData } = await supabase
@@ -334,6 +331,7 @@ export default function GestorReports() {
   const TABS = [
     { id: 'overview', label: 'Visão Geral', icon: TrendingUp },
     { id: 'funnel', label: 'Funil', icon: Target },
+    { id: 'comparativo', label: 'Comparativo', icon: BarChart3 },
     { id: 'marketing', label: 'Marketing & CPA', icon: TrendingUp },
     { id: 'reenrollments', label: 'Rematrículas', icon: RefreshCw },
     { id: 'transfers', label: 'Transferências', icon: AlertTriangle },
@@ -341,12 +339,13 @@ export default function GestorReports() {
   ]
 
   const activeCycle = (cycle as (CampaignCycle & { applied_at?: string }) | null)
-  const cycleIsActive = !!activeCycle?.applied_at
+  const cycleIsActive = activeCycle?.status === 'active' || !!activeCycle?.applied_at
   const { monthsUntil, campaignStartMonth, preCampaignProgress, campaignYear } = calcCampaignTiming(activeCycle?.campaign_start_month ?? 8)
 
   // Action statuses for pre-campaign card
   const hasHistoricalImport = !!((activeCycle?.erp_files as unknown[])?.length)
   const hasBudget = marketingData.some(m => (m.investment || 0) > 0)
+  const funnelHasData = funnelData.some(f => (f.registrations || 0) > 0 || (f.enrollments || 0) > 0)
 
   return (
     <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: '#f8f9fb' }}>
@@ -371,19 +370,23 @@ export default function GestorReports() {
         </div>
       </div>
 
-      {/* banner — campanha não configurada */}
+      {/* banner/info — depende do estado da campanha */}
       {!loading && !cycleIsActive && (
+        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" strokeWidth="2" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <div style={{ flex: 1 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>Fase pré-campanha — </span>
+            <span style={{ fontSize: 13, color: '#1e40af' }}>os relatórios abaixo mostram o histórico da escola. A campanha de matrículas para {campaignYear} será configurada pelo seu administrador.</span>
+          </div>
+        </div>
+      )}
+      {!loading && cycleIsActive && !funnelHasData && (
         <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
           <AlertTriangle style={{ width: 18, height: 18, color: '#d97706', flexShrink: 0 }} />
           <div style={{ flex: 1 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>Sua campanha ainda não foi configurada. </span>
-            <span style={{ fontSize: 13, color: '#92400e' }}>As metas exibidas são estimativas genéricas.</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>Campanha configurada, mas ainda sem dados de funil. </span>
+            <span style={{ fontSize: 13, color: '#92400e' }}>Registre os cadastros e visitas semanalmente para acompanhar o desempenho.</span>
           </div>
-          <button
-            onClick={() => setShowCampaignModal(true)}
-            style={{ padding: '7px 16px', borderRadius: 9, background: '#d97706', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            Configurar agora
-          </button>
         </div>
       )}
 
@@ -421,8 +424,9 @@ export default function GestorReports() {
             </div>
           ) : (
             <>
-              {activeTab === 'overview' && <TabOverview funnelData={funnelData} marketingData={marketingData} reEnrollData={reEnrollData} cycle={cycle} insight={insight} insightLoading={insightLoading} onRefreshInsight={fetchInsight} monthsUntil={monthsUntil} campaignStartMonth={campaignStartMonth} preCampaignProgress={preCampaignProgress} campaignYear={campaignYear} hasHistoricalImport={hasHistoricalImport} hasWhatsApp={hasWhatsApp} hasBudget={hasBudget} onOpenCampaignModal={() => setShowCampaignModal(true)} />}
+              {activeTab === 'overview' && <TabOverview funnelData={funnelData} marketingData={marketingData} reEnrollData={reEnrollData} cycle={cycle} insight={insight} insightLoading={insightLoading} onRefreshInsight={fetchInsight} monthsUntil={monthsUntil} campaignStartMonth={campaignStartMonth} preCampaignProgress={preCampaignProgress} campaignYear={campaignYear} hasHistoricalImport={hasHistoricalImport} hasWhatsApp={hasWhatsApp} hasBudget={hasBudget} onOpenCampaignModal={() => setShowCampaignModal(true)} cycleIsActive={cycleIsActive} onEditCampaign={() => { setModalPreload({ openAtStep: 5 }); setShowCampaignModal(true) }} />}
               {activeTab === 'funnel' && <TabFunnel funnelData={funnelData} cycle={cycle} onGoToImport={() => setActiveTab('import')} />}
+              {activeTab === 'comparativo' && <TabComparativo allCycles={allCycles} />}
               {activeTab === 'marketing' && <TabMarketing marketingData={marketingData} institutionId={institutionId} onRefresh={loadAll} showToast={showToast} />}
               {activeTab === 'reenrollments' && <TabReenrollments reEnrollData={reEnrollData} institutionId={institutionId} onRefresh={loadAll} showToast={showToast} />}
               {activeTab === 'transfers' && <TabTransfers transfers={transfers} institutionId={institutionId} onRefresh={loadAll} showToast={showToast} />}
@@ -452,7 +456,7 @@ export default function GestorReports() {
 // ═══════════════════════════════════════════════════════════
 //  TAB 1 — VISÃO GERAL
 // ═══════════════════════════════════════════════════════════
-function TabOverview({ funnelData, marketingData, reEnrollData, cycle, insight, insightLoading, onRefreshInsight, monthsUntil, campaignStartMonth, preCampaignProgress, campaignYear, hasHistoricalImport, hasWhatsApp, hasBudget, onOpenCampaignModal }: {
+function TabOverview({ funnelData, marketingData, reEnrollData, cycle, insight, insightLoading, onRefreshInsight, monthsUntil, campaignStartMonth, preCampaignProgress, campaignYear, hasHistoricalImport, hasWhatsApp, hasBudget, onOpenCampaignModal, cycleIsActive, onEditCampaign }: {
   funnelData: FunnelMetrics[]
   marketingData: MarketingCampaign[]
   reEnrollData: ReEnrollment[]
@@ -468,6 +472,8 @@ function TabOverview({ funnelData, marketingData, reEnrollData, cycle, insight, 
   hasWhatsApp: boolean
   hasBudget: boolean
   onOpenCampaignModal: () => void
+  cycleIsActive: boolean
+  onEditCampaign: () => void
 }) {
   const latest = funnelData[funnelData.length - 1]
   const prev = funnelData.length > 1 ? funnelData[funnelData.length - 2] : null
@@ -558,6 +564,17 @@ function TabOverview({ funnelData, marketingData, reEnrollData, cycle, insight, 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+      {/* Editar campanha */}
+      {cycleIsActive && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={onEditCampaign}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            <Edit2 style={{ width: 12, height: 12 }} /> Editar campanha
+          </button>
+        </div>
+      )}
 
       {/* 1. CARD PRÉ-CAMPANHA */}
       {monthsUntil > 0 && (
@@ -926,6 +943,116 @@ function TabFunnel({ funnelData, onGoToImport }: { funnelData: FunnelMetrics[]; 
           </>
         )
       })()}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TAB COMPARATIVO — HISTÓRICO ANUAL
+// ═══════════════════════════════════════════════════════════
+interface HistEntry {
+  detected_year?: number; year?: number
+  total_students?: number; total?: number
+  new_students?: number; novatos?: number
+  returning_students?: number; veterans?: number
+}
+
+function TabComparativo({ allCycles }: { allCycles: CampaignCycle[] }) {
+  // collect all historical entries across all cycles
+  const allEntries: HistEntry[] = []
+  const seen = new Set<number>()
+  for (const c of allCycles) {
+    const hist = (c.historical_data as HistEntry[] | null | undefined) ?? (c.erp_files as HistEntry[] | null | undefined) ?? []
+    for (const e of hist) {
+      const yr = e.detected_year ?? (e as HistEntry & { year?: number }).year ?? 0
+      if (yr > 0 && !seen.has(yr)) { seen.add(yr); allEntries.push(e) }
+    }
+  }
+  allEntries.sort((a, b) => (a.detected_year ?? a.year ?? 0) - (b.detected_year ?? b.year ?? 0))
+
+  const getNew = (e: HistEntry) => e.new_students ?? e.novatos ?? 0
+  const getRet = (e: HistEntry) => e.returning_students ?? e.veterans ?? 0
+  const getYear = (e: HistEntry) => String(e.detected_year ?? e.year ?? '?')
+
+  const barData = allEntries.map(e => ({ ano: getYear(e), Novatos: getNew(e), Veteranos: getRet(e) }))
+
+  // best cycle
+  const best = allEntries.length > 0
+    ? allEntries.reduce((prev, cur) => getNew(cur) > getNew(prev) ? cur : prev)
+    : null
+  const last = allEntries[allEntries.length - 1] ?? null
+  const prev2 = allEntries[allEntries.length - 2] ?? null
+
+  const COLORS = ['#94a3b8', '#6366f1', '#0d9488', '#f59e0b', '#f43f5e', '#8B5CF6']
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {allEntries.length < 2 ? (
+        <div style={{ textAlign: 'center', padding: '48px 0', color: '#94a3b8' }}>
+          <BarChart3 style={{ width: 40, height: 40, margin: '0 auto 12px', opacity: 0.4 }} />
+          <p style={{ margin: 0, fontSize: 14 }}>Importe mais histórico para ver o comparativo anual</p>
+          <p style={{ margin: '6px 0 0', fontSize: 12 }}>São necessários dados de pelo menos 2 anos</p>
+        </div>
+      ) : (
+        <>
+          {/* Insight card */}
+          {best && last && (
+            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 14, padding: 18, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" strokeWidth="2" style={{ flexShrink: 0, marginTop: 2 }}><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+              <p style={{ margin: 0, fontSize: 14, color: '#1e3a8a', lineHeight: 1.6 }}>
+                Seu melhor ciclo foi <strong>{getYear(best)}</strong> com <strong>{fmt(getNew(best))}</strong> novatos.
+                {prev2 && (
+                  <> No último ciclo ({getYear(last)}) você teve <strong>{fmt(getNew(last))}</strong> — variação de{' '}
+                    <strong style={{ color: getNew(last) >= getNew(prev2) ? '#16a34a' : '#dc2626' }}>
+                      {getNew(prev2) > 0 ? (((getNew(last) - getNew(prev2)) / getNew(prev2)) * 100).toFixed(1) : '—'}%
+                    </strong> em relação ao ciclo anterior.
+                  </>
+                )}
+              </p>
+            </div>
+          )}
+
+          {/* Grouped bar chart */}
+          <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>
+              Novatos vs Veteranos — por ano letivo
+            </h3>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={barData} barGap={4}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="ano" tick={{ fontSize: 12, fill: '#64748b' }} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={40} />
+                <Tooltip formatter={(val) => fmt(Number(val))} contentStyle={{ borderRadius: 8, fontSize: 12, border: '1px solid #e2e8f0' }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="Novatos" fill="#8B5CF6" radius={[4, 4, 0, 0]} barSize={20} />
+                <Bar dataKey="Veteranos" fill="#00A896" radius={[4, 4, 0, 0]} barSize={20} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Line chart: total per year */}
+          <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>
+              Evolução do total de alunos
+            </h3>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={barData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="ano" tick={{ fontSize: 12, fill: '#64748b' }} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={40} />
+                <Tooltip
+                  formatter={(val, name) => [fmt(Number(val)), name]}
+                  contentStyle={{ borderRadius: 8, fontSize: 12, border: '1px solid #e2e8f0' }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                {(['Novatos', 'Veteranos'] as const).map((key, i) => (
+                  <Line key={key} type="monotone" dataKey={key} stroke={COLORS[i + 1]} strokeWidth={2} dot={{ r: 4 }} />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      )}
     </div>
   )
 }
