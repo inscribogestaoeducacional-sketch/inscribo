@@ -14,6 +14,7 @@ import TransferSurveyPage from './pages/survey/TransferSurveyPage'
 // Regular User Components
 import Dashboard from './components/dashboard/Dashboard'
 import GestorHome from './pages/gestor/GestorHome'
+import GestorTransfers from './pages/gestor/GestorTransfers'
 import LeadKanban from './components/leads/LeadKanban'
 import VisitCalendar from './components/calendar/VisitCalendar'
 import EnrollmentManager from './components/enrollments/EnrollmentManager'
@@ -227,6 +228,8 @@ function AppContent() {
             <Route path="/visits" element={<VisitCalendar />} />
             <Route path="/enrollments" element={<EnrollmentManager />} />
             <Route path="/whatsapp" element={<WhatsAppHub />} />
+
+            <Route path="/transferencias" element={<GestorTransfers />} />
 
             <Route path="/reports" element={
               <ProtectedRoute allowedRoles={['manager', 'admin']}>
