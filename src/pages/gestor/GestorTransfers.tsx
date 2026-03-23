@@ -611,22 +611,43 @@ function DiagnosisView({ transfer, onUpdateStatus, onGenerateDiagnosis, isGenera
   console.log('[Diagnóstico] transfer selecionado:', transfer)
   console.log('[Diagnóstico] ai_diagnosis:', transfer.ai_diagnosis)
 
-  const diag = parseDiagnosis(transfer.ai_diagnosis)
+  const rawDiag = transfer.ai_diagnosis
+  const diag = parseDiagnosis(rawDiag)
+  // plain text stored instead of JSON (legacy or fallback)
+  const isPlainText = !!rawDiag && !diag
 
   if (!diag) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '24px 0', textAlign: 'center' }}>
         <Sparkles size={32} color="#8B5CF6" strokeWidth={1.5} />
-        <div>
-          <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#1e2d6b' }}>Diagnóstico não gerado ainda</p>
-          <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>{transfer.survey_responses ? 'Pesquisa respondida — clique para gerar o diagnóstico.' : 'Aguardando a família responder a pesquisa.'}</p>
-        </div>
-        {transfer.survey_responses && isAdmin && (
-          <button onClick={() => onGenerateDiagnosis(transfer)} disabled={isGenerating}
-            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 22px', borderRadius: 10, border: 'none', background: '#8B5CF6', color: 'white', fontSize: 13, fontWeight: 600, cursor: isGenerating ? 'not-allowed' : 'pointer', opacity: isGenerating ? 0.7 : 1 }}>
-            {isGenerating ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={14} />}
-            {isGenerating ? 'Gerando diagnóstico...' : 'Gerar diagnóstico agora'}
-          </button>
+        {isPlainText ? (
+          <div style={{ width: '100%', textAlign: 'left' }}>
+            <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600, color: '#64748b' }}>Diagnóstico salvo em formato de texto (não estruturado):</p>
+            <p style={{ margin: '0 0 16px', fontSize: 13, color: '#334155', background: '#f8fafc', padding: '12px 14px', borderRadius: 10, lineHeight: 1.6 }}>{rawDiag as string}</p>
+            {isAdmin && (
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <button onClick={() => onGenerateDiagnosis(transfer)} disabled={isGenerating}
+                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 22px', borderRadius: 10, border: 'none', background: '#8B5CF6', color: 'white', fontSize: 13, fontWeight: 600, cursor: isGenerating ? 'not-allowed' : 'pointer', opacity: isGenerating ? 0.7 : 1 }}>
+                  {isGenerating ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={14} />}
+                  {isGenerating ? 'Gerando...' : 'Regenerar diagnóstico estruturado'}
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            <div>
+              <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#1e2d6b' }}>Diagnóstico não gerado ainda</p>
+              <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>{transfer.survey_responses ? 'Pesquisa respondida — clique para gerar o diagnóstico.' : 'Aguardando a família responder a pesquisa.'}</p>
+            </div>
+            {transfer.survey_responses && isAdmin && (
+              <button onClick={() => onGenerateDiagnosis(transfer)} disabled={isGenerating}
+                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 22px', borderRadius: 10, border: 'none', background: '#8B5CF6', color: 'white', fontSize: 13, fontWeight: 600, cursor: isGenerating ? 'not-allowed' : 'pointer', opacity: isGenerating ? 0.7 : 1 }}>
+                {isGenerating ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={14} />}
+                {isGenerating ? 'Gerando diagnóstico...' : 'Gerar diagnóstico agora'}
+              </button>
+            )}
+          </>
         )}
       </div>
     )

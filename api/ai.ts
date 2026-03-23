@@ -220,25 +220,40 @@ ${fileContent.slice(0, 8000)}`
         grade: string
       }
 
-      const prompt = `Você é especialista em gestão e retenção escolar de escolas privadas brasileiras.
+      const prompt = `Você é um especialista em retenção de alunos em escolas privadas brasileiras.
 
-Aluno da ${grade} (${studentName}) pediu transferência e respondeu:
-${JSON.stringify(responses, null, 2)}
+Analise as respostas da pesquisa de saída e retorne APENAS um JSON válido, sem markdown, sem texto antes ou depois.
 
-Retorne SOMENTE JSON:
+Aluno: ${studentName}
+Série: ${grade}
+Respostas da pesquisa: ${JSON.stringify(responses)}
+
+Retorne exatamente este JSON preenchido:
 {
   "primary_reason": "financial|pedagogical|distance|competition|relocation|other",
-  "confidence": 0.0,
-  "diagnosis": "explicação do motivo real em 2-3 linhas",
-  "risk_factors": ["fator 1", "fator 2"],
-  "school_actions": ["ação que a escola poderia ter tomado"],
+  "confidence": <número de 0 a 100>,
+  "diagnosis": "<análise completa em 2-3 frases>",
+  "risk_factors": ["<fator 1>", "<fator 2>"],
   "retention_opportunity": true,
-  "retention_note": "o que poderia ter sido feito para reter"
+  "retention_note": "<o que poderia ter sido feito para reter em 1 frase>"
 }`
 
       const raw = await callClaude(prompt, 600)
-      const match = raw.match(/\{[\s\S]*\}/)
-      const parsed = JSON.parse(match ? match[0] : raw)
+      let parsed
+      try {
+        const jsonMatch = raw.match(/\{[\s\S]*\}/)
+        if (!jsonMatch) throw new Error('JSON não encontrado')
+        parsed = JSON.parse(jsonMatch[0])
+      } catch {
+        parsed = {
+          primary_reason: 'other',
+          confidence: 30,
+          diagnosis: raw.substring(0, 400),
+          risk_factors: [],
+          retention_opportunity: false,
+          retention_note: 'Análise manual necessária',
+        }
+      }
       return res.json({ result: parsed })
     }
 

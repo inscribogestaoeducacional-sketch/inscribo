@@ -469,52 +469,51 @@ export default function TransferSurveyPage() {
 
         {/* navegação */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24 }}>
-          <button
-            onClick={back}
-            disabled={currentIndex === 0}
-            style={{
-              padding: '12px 20px', borderRadius: 12, border: '2px solid #e2e8f0', background: 'white',
-              cursor: currentIndex === 0 ? 'not-allowed' : 'pointer', color: '#6b7280', fontSize: 14,
-              opacity: currentIndex === 0 ? 0.4 : 1, transition: 'all 0.15s'
-            }}
-          >
-            ← Anterior
-          </button>
+          {currentIndex > 0 ? (
+            <button
+              onClick={back}
+              style={{
+                padding: '12px 20px', borderRadius: 12, border: '2px solid #e2e8f0', background: 'white',
+                cursor: 'pointer', color: '#6b7280', fontSize: 14, transition: 'all 0.15s'
+              }}
+            >
+              ← Anterior
+            </button>
+          ) : <div />}
 
-          {isLast ? (
-            <button
-              onClick={submit}
-              disabled={!canAdvance() || status === 'submitting'}
-              style={{
-                padding: '12px 28px', borderRadius: 12, border: 'none',
-                background: canAdvance() ? brandColor : '#e2e8f0',
-                color: canAdvance() ? 'white' : '#94a3b8',
-                cursor: canAdvance() ? 'pointer' : 'not-allowed',
-                fontSize: 14, fontWeight: 700, transition: 'all 0.15s',
-                display: 'flex', alignItems: 'center', gap: 8
-              }}
-            >
-              {status === 'submitting' ? (
-                <>
-                  <div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                  Enviando...
-                </>
-              ) : 'Enviar pesquisa ✓'}
-            </button>
-          ) : (
-            <button
-              onClick={advance}
-              disabled={!canAdvance()}
-              style={{
-                padding: '12px 28px', borderRadius: 12, border: 'none',
-                background: canAdvance() ? brandColor : '#e2e8f0',
-                color: canAdvance() ? 'white' : '#94a3b8',
-                cursor: canAdvance() ? 'pointer' : 'not-allowed',
-                fontSize: 14, fontWeight: 700, transition: 'all 0.15s'
-              }}
-            >
-              Próxima →
-            </button>
+          {canAdvance() && (
+            isLast ? (
+              <button
+                onClick={submit}
+                disabled={status === 'submitting'}
+                style={{
+                  padding: '12px 28px', borderRadius: 12, border: 'none',
+                  background: brandColor, color: 'white',
+                  cursor: status === 'submitting' ? 'not-allowed' : 'pointer',
+                  fontSize: 14, fontWeight: 700, transition: 'all 0.15s',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  opacity: status === 'submitting' ? 0.8 : 1
+                }}
+              >
+                {status === 'submitting' ? (
+                  <>
+                    <div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                    Enviando...
+                  </>
+                ) : 'Enviar respostas ✓'}
+              </button>
+            ) : (
+              <button
+                onClick={advance}
+                style={{
+                  padding: '12px 28px', borderRadius: 12, border: 'none',
+                  background: brandColor, color: 'white',
+                  cursor: 'pointer', fontSize: 14, fontWeight: 700, transition: 'all 0.15s'
+                }}
+              >
+                Próxima pergunta →
+              </button>
+            )
           )}
         </div>
       </div>
