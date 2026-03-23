@@ -188,6 +188,8 @@ export default function CampaignGeneratorModal({
   const [draftSaved, setDraftSaved] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const isMounted = useRef(true)
+  useEffect(() => { isMounted.current = true; return () => { isMounted.current = false } }, [])
 
   const DRAFT_KEY = `inscribo_campaign_draft_${institutionId}`
 
@@ -461,6 +463,9 @@ export default function CampaignGeneratorModal({
         })
         const data = await res.json()
         const result = data.result
+        // DEBUG: remover após confirmar extração funcionando
+        console.log('[extract_file] arquivo:', file.name)
+        console.log('[extract_file] resposta completa:', JSON.stringify(data))
         if (!result) throw new Error('sem resultado')
 
         const detectedYear = (result.detected_year as number) || parseInt(file.name.match(/\d{4}/)?.[0] || '0')
@@ -469,6 +474,7 @@ export default function CampaignGeneratorModal({
         const veterans = (result.returning_students as number) || 0
         const fee = (result.avg_monthly_fee as number | null) || null
 
+        console.log('[extract_file] campos mapeados →', { detectedYear, total, novatos, veterans, fee })
         newErpFiles.push({ name: file.name, year: detectedYear, total, novatos, veterans, fee: fee || undefined })
 
         if (detectedYear > 2000) {
@@ -569,13 +575,25 @@ export default function CampaignGeneratorModal({
       })
 
       localStorage.removeItem(`inscribo_campaign_draft_${institutionId}`)
+
+      // Tudo concluído — só agora avisa o pai e fecha
       onApply(cycleData)
-      onClose()
+      if (isMounted.current) {
+        setDraftToast('✅ Campanha aplicada com sucesso!')
+        setTimeout(() => {
+          if (isMounted.current) setDraftToast(null)
+          onClose()
+        }, 1500)
+      } else {
+        onClose()
+      }
     } catch (e) {
-      setError((e as Error).message)
+      if (isMounted.current) setError((e as Error).message)
     } finally {
-      setApplying(false)
-      setShowConfirm(false)
+      if (isMounted.current) {
+        setApplying(false)
+        setShowConfirm(false)
+      }
     }
   }
 

@@ -32,19 +32,21 @@ export default function GestorOnboarding({ institutionName, onComplete, onOpenCa
     for (const file of Array.from(files)) {
       setLoadingFiles(prev => [...prev, file.name])
       try {
-        const base64 = await new Promise<string>((res, rej) => {
+        const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf'
+        const fileContent = await new Promise<string>((res, rej) => {
           const reader = new FileReader()
-          reader.onload = () => res((reader.result as string).split(',')[1])
+          reader.onload = ev => res((ev.target?.result as string) || '')
           reader.onerror = rej
-          reader.readAsDataURL(file)
+          if (ext === 'pdf') reader.readAsDataURL(file)
+          else reader.readAsText(file, 'utf-8')
         })
         const resp = await fetch('/api/ai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'extract_file', fileName: file.name, fileBase64: base64 })
+          body: JSON.stringify({ action: 'extract_file', payload: { fileContent, fileType: ext, fileName: file.name } })
         })
         const json = await resp.json()
-        const d = json.data || json
+        const d = json.result || json
 
         if (d.error || !d.detected_year) {
           setErpFiles(prev => [...prev, { name: file.name, year: 0, total: 0, novatos: 0, veterans: 0, error: true }])

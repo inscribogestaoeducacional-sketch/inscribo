@@ -239,7 +239,7 @@ export default function GestorReports() {
 
     try {
       const { data: wData } = await supabase
-        .from('whatsapp_usage')
+        .from('whatsapp_messages')
         .select('id')
         .eq('institution_id', institutionId)
         .limit(1)
