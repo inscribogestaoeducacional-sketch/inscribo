@@ -2,10 +2,12 @@ import React, { useState, useEffect, useRef } from 'react'
 import {
   ArrowRightLeft, Plus, Copy, ExternalLink, Sparkles, Eye,
   AlertTriangle, CheckCircle, Clock, Users, X, ChevronRight,
-  Loader2, Check, MoreHorizontal, Pencil, Trash2
+  Loader2, Check, MoreHorizontal, Pencil, Trash2, History, RotateCcw
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
+import { logAudit } from '../../hooks/useAudit'
+import AuditModal from '../../components/common/AuditModal'
 
 // ─── types ────────────────────────────────────────────────────────────────────
 interface Transfer {
@@ -25,6 +27,8 @@ interface Transfer {
   internal_notes: string | null
   status: string | null
   created_at: string
+  deleted_at: string | null
+  deleted_by: string | null
 }
 
 interface DiagnosisData {
@@ -98,19 +102,24 @@ export default function GestorTransfers() {
   const { user } = useAuth()
   const institutionId = user?.institution_id!
   const isAdmin = user?.role === 'admin' || user?.role === 'manager'
+  const userName = user?.full_name || 'Usuário'
+  const userRole = user?.role || 'user'
 
-  const [transfers, setTransfers]         = useState<Transfer[]>([])
-  const [loading, setLoading]             = useState(true)
-  const [showNewModal, setShowNewModal]   = useState(false)
+  const [transfers, setTransfers]             = useState<Transfer[]>([])
+  const [deletedTransfers, setDeletedTransfers] = useState<Transfer[]>([])
+  const [activeTab, setActiveTab]             = useState<'active' | 'deleted'>('active')
+  const [loading, setLoading]                 = useState(true)
+  const [showNewModal, setShowNewModal]       = useState(false)
   const [editingTransfer, setEditingTransfer] = useState<Transfer | null>(null)
   const [diagnosisTransfer, setDiagnosisTransfer] = useState<Transfer | null>(null)
-  const [deleteId, setDeleteId]           = useState<string | null>(null)
-  const [openDropdown, setOpenDropdown]   = useState<string | null>(null)
-  const [generatingId, setGeneratingId]   = useState<string | null>(null)
-  const [savingForm, setSavingForm]       = useState(false)
-  const [toast, setToast]                 = useState<string | null>(null)
-  const [form, setForm]                   = useState<TransferForm>(EMPTY_FORM)
-  const [formError, setFormError]         = useState<string | null>(null)
+  const [deleteId, setDeleteId]               = useState<string | null>(null)
+  const [openDropdown, setOpenDropdown]       = useState<string | null>(null)
+  const [generatingId, setGeneratingId]       = useState<string | null>(null)
+  const [savingForm, setSavingForm]           = useState(false)
+  const [toast, setToast]                     = useState<string | null>(null)
+  const [form, setForm]                       = useState<TransferForm>(EMPTY_FORM)
+  const [formError, setFormError]             = useState<string | null>(null)
+  const [auditTransferId, setAuditTransferId] = useState<string | null>(null)
 
   useEffect(() => { if (!institutionId) return; load() }, [institutionId])
 
@@ -129,12 +138,12 @@ export default function GestorTransfers() {
   async function load() {
     setLoading(true)
     try {
-      const { data } = await supabase
-        .from('student_transfers')
-        .select('*')
-        .eq('institution_id', institutionId)
-        .order('created_at', { ascending: false })
-      setTransfers((data ?? []) as Transfer[])
+      const [activeRes, deletedRes] = await Promise.all([
+        supabase.from('student_transfers').select('*').eq('institution_id', institutionId).is('deleted_at', null).order('created_at', { ascending: false }),
+        supabase.from('student_transfers').select('*').eq('institution_id', institutionId).not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
+      ])
+      setTransfers((activeRes.data ?? []) as Transfer[])
+      setDeletedTransfers((deletedRes.data ?? []) as Transfer[])
     } finally {
       setLoading(false)
     }
@@ -155,9 +164,16 @@ export default function GestorTransfers() {
           internal_notes: form.internalNotes || null,
         }).eq('id', editingTransfer.id)
         if (error) throw new Error(error.message)
+        await logAudit({
+          institution_id: institutionId, module: 'transfers', record_id: editingTransfer.id,
+          action: 'updated', field_changed: 'dados',
+          old_value: `${editingTransfer.student_name} — ${editingTransfer.course_grade}`,
+          new_value: `${form.studentName.trim()} — ${form.grade}`,
+          user_id: user!.id, user_name: userName, user_role: userRole,
+        })
         showToast('Transferência atualizada.')
       } else {
-        const { error } = await supabase.from('student_transfers').insert({
+        const { data: inserted, error } = await supabase.from('student_transfers').insert({
           institution_id: institutionId,
           student_name:   form.studentName.trim(),
           course_grade:   form.grade,
@@ -165,8 +181,14 @@ export default function GestorTransfers() {
           stated_reason:  form.statedReason || null,
           internal_notes: form.internalNotes || null,
           created_at:     new Date().toISOString(),
-        })
+        }).select('id').single()
         if (error) throw new Error(error.message)
+        await logAudit({
+          institution_id: institutionId, module: 'transfers', record_id: inserted.id,
+          action: 'created',
+          new_value: `${form.studentName.trim()} — ${form.grade}`,
+          user_id: user!.id, user_name: userName, user_role: userRole,
+        })
         showToast('Transferência registrada.')
       }
       closeForm()
@@ -191,13 +213,30 @@ export default function GestorTransfers() {
     setFormError(null)
   }
 
-  // ── delete ──────────────────────────────────────────────────────────────
+  // ── delete (soft) ───────────────────────────────────────────────────────
   async function handleDelete(id: string) {
-    const { error } = await supabase.from('student_transfers').delete().eq('id', id)
+    const t = transfers.find(x => x.id === id)
+    const { error } = await supabase.from('student_transfers').update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: userName,
+    }).eq('id', id)
     if (error) { showToast('Erro ao excluir.'); return }
-    setTransfers(prev => prev.filter(t => t.id !== id))
+    await logAudit({
+      institution_id: institutionId, module: 'transfers', record_id: id,
+      action: 'deleted',
+      old_value: t ? `${t.student_name} — ${t.course_grade}` : undefined,
+      user_id: user!.id, user_name: userName, user_role: userRole,
+    })
     setDeleteId(null)
-    showToast('Transferência excluída.')
+    showToast('Transferência movida para excluídos.')
+    await load()
+  }
+
+  // ── restore ──────────────────────────────────────────────────────────────
+  async function handleRestore(id: string) {
+    await supabase.from('student_transfers').update({ deleted_at: null, deleted_by: null }).eq('id', id)
+    showToast('Transferência restaurada.')
+    await load()
   }
 
   // ── link generation ─────────────────────────────────────────────────────
@@ -297,8 +336,24 @@ export default function GestorTransfers() {
         </button>
       </div>
 
-      {/* ── KPI cards ──────────────────────────────────────────────────────── */}
-      {loading ? (
+      {/* ── Tabs ───────────────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 10, padding: 4, width: 'fit-content' }}>
+        {(['active', 'deleted'] as const).map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)} style={{
+            padding: '6px 18px', borderRadius: 7, border: 'none', fontSize: 13, fontWeight: 600,
+            cursor: 'pointer', transition: 'all 0.15s',
+            background: activeTab === tab ? '#fff' : 'transparent',
+            color: activeTab === tab ? '#1e2d6b' : '#64748b',
+            boxShadow: activeTab === tab ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
+          }}>
+            {tab === 'active' ? `Ativos (${transfers.length})` : `Excluídos (${deletedTransfers.length})`}
+          </button>
+        ))}
+      </div>
+
+      {/* ── KPI cards (aba Ativos) ─────────────────────────────────────────── */}
+      {activeTab === 'active' && (
+      loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
           {[...Array(4)].map((_, i) => <div key={i} style={{ height: 90, borderRadius: 14, background: '#fff', border: '1px solid #e2e8f0' }} className="animate-pulse" />)}
         </div>
@@ -309,10 +364,11 @@ export default function GestorTransfers() {
           <KpiCard label="Aguardando pesquisa"  value={fmt(pending)}       icon={<AlertTriangle size={18} color="#64748B" />}  bg="#F1F5F9" />
           <KpiCard label="Com diagnóstico IA"   value={fmt(withDiagnosis)} icon={<Sparkles size={18} color="#8B5CF6" />}       bg="#EDE9FE" />
         </div>
+      )
       )}
 
-      {/* ── Tabela ─────────────────────────────────────────────────────────── */}
-      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+      {/* ── Tabela Ativos ──────────────────────────────────────────────────── */}
+      {activeTab === 'active' && <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Registros de transferência</h3>
         </div>
@@ -429,6 +485,7 @@ export default function GestorTransfers() {
                           onToggle={e => { e.stopPropagation(); setOpenDropdown(openDropdown === t.id ? null : t.id) }}
                           items={[
                             { icon: <Pencil size={13} />, label: 'Editar', onClick: () => openEdit(t) },
+                            { icon: <History size={13} />, label: 'Ver histórico', onClick: () => setAuditTransferId(t.id) },
                             ...(isAdmin ? [{ icon: <Trash2 size={13} />, label: 'Excluir', onClick: () => setDeleteId(t.id), danger: true }] : []),
                           ]}
                         />
@@ -440,7 +497,60 @@ export default function GestorTransfers() {
             </table>
           </div>
         )}
-      </div>
+      </div>}
+
+      {/* ── Aba Excluídos ──────────────────────────────────────────────────── */}
+      {activeTab === 'deleted' && (
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Transferências excluídas</h3>
+          </div>
+          {deletedTransfers.length === 0 ? (
+            <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+              <p style={{ margin: 0, fontSize: 14, color: '#94a3b8' }}>Nenhuma transferência excluída.</p>
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc' }}>
+                    {['Nome do aluno', 'Série', 'Data', 'Excluído por', ''].map(col => (
+                      <th key={col} style={{ padding: '10px 16px', fontSize: 11, fontWeight: 600, color: '#94a3b8', textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{col}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {deletedTransfers.map((t, idx) => (
+                    <tr key={t.id} style={{ borderTop: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#fff' : '#fafafa', opacity: 0.75 }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>{t.student_name}</div>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: 13, color: '#475569' }}>{t.course_grade}</td>
+                      <td style={{ padding: '12px 16px', fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                        {new Date(t.transfer_date).toLocaleDateString('pt-BR')}
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.4 }}>
+                          {t.deleted_by && <span style={{ fontWeight: 600 }}>{t.deleted_by}</span>}
+                          {t.deleted_at && <span style={{ color: '#94a3b8' }}> em {new Date(t.deleted_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>}
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px 8px' }}>
+                        {isAdmin && (
+                          <button onClick={() => handleRestore(t.id)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 12, fontWeight: 600, color: '#0f766e', cursor: 'pointer' }}>
+                            <RotateCcw size={12} /> Restaurar
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Modal: Nova / Editar transferência ───────────────────────────── */}
       {showNewModal && (
@@ -511,6 +621,16 @@ export default function GestorTransfers() {
             isAdmin={isAdmin}
           />
         </Modal>
+      )}
+
+      {/* ── Modal: Histórico de alterações ───────────────────────────────── */}
+      {auditTransferId && (
+        <AuditModal
+          recordId={auditTransferId}
+          moduleName="transfers"
+          isOpen={!!auditTransferId}
+          onClose={() => setAuditTransferId(null)}
+        />
       )}
 
       <style>{`

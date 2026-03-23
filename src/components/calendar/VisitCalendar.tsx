@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
   ChevronLeft, ChevronRight, Plus, X, Search, Check, Trash2,
-  Calendar, Clock, TrendingUp
+  Calendar, Clock, TrendingUp, History
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, Visit, Lead } from '../../lib/supabase'
+import { logAudit } from '../../hooks/useAudit'
+import AuditModal from '../common/AuditModal'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const visitStatus = {
@@ -195,6 +197,8 @@ export default function VisitCalendar() {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [showModal, setShowModal] = useState(false)
 
+  const [auditVisitId, setAuditVisitId] = useState<string | null>(null)
+
   // Inline completion
   const [completingId, setCompletingId] = useState<string | null>(null)
   const [completionNotes, setCompletionNotes] = useState('')
@@ -281,7 +285,7 @@ export default function VisitCalendar() {
     const [year, month, day] = data.date.split('-')
     const [hours, minutes] = data.time.split(':')
     const visitDate = new Date(+year, +month - 1, +day, +hours, +minutes, 0)
-    await DatabaseService.createVisit({
+    const newVisit = await DatabaseService.createVisit({
       institution_id: user!.institution_id,
       lead_id: data.lead_id,
       student_name: data.student_name,
@@ -290,6 +294,9 @@ export default function VisitCalendar() {
       status: 'scheduled',
     })
     await DatabaseService.updateLead(data.lead_id, { status: 'scheduled' })
+    if (newVisit?.id) {
+      await logAudit({ institution_id: user!.institution_id, module: 'visits', record_id: newVisit.id, action: 'created', new_value: `${data.student_name} — ${data.date}`, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
+    }
     await loadData()
   }
 
@@ -302,6 +309,7 @@ export default function VisitCalendar() {
       })
       const visit = visits.find(v => v.id === visitId)
       if (visit?.lead_id) await DatabaseService.updateLead(visit.lead_id, { status: 'visit' })
+      await logAudit({ institution_id: user!.institution_id, module: 'visits', record_id: visitId, action: 'status_changed', old_value: 'scheduled', new_value: 'completed', user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
       setCompletingId(null)
       setCompletionNotes('')
       await loadData()
@@ -312,12 +320,14 @@ export default function VisitCalendar() {
 
   const handleMarkNoShow = async (visitId: string) => {
     await DatabaseService.updateVisit(visitId, { status: 'no_show' })
+    await logAudit({ institution_id: user!.institution_id, module: 'visits', record_id: visitId, action: 'status_changed', old_value: 'scheduled', new_value: 'no_show', user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
     await loadData()
   }
 
   const handleCancel = async (visitId: string) => {
     if (!confirm('Cancelar esta visita?')) return
     await DatabaseService.updateVisit(visitId, { status: 'cancelled' })
+    await logAudit({ institution_id: user!.institution_id, module: 'visits', record_id: visitId, action: 'deleted', old_value: 'scheduled', new_value: 'cancelled', user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
     await loadData()
   }
 
@@ -525,6 +535,14 @@ export default function VisitCalendar() {
                             Ver Lead
                           </button>
                         )}
+                        <button
+                          onClick={() => setAuditVisitId(visit.id)}
+                          className="flex-shrink-0 text-xs px-2 py-1 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 font-medium transition-colors flex items-center gap-1 whitespace-nowrap"
+                          title="Ver histórico"
+                        >
+                          <History className="w-3 h-3" />
+                          Histórico
+                        </button>
                       </div>
 
                       {/* Inline completion notes */}
@@ -643,6 +661,16 @@ export default function VisitCalendar() {
         defaultDate={selectedStr}
         leads={leads}
       />
+
+      {/* Audit modal */}
+      {auditVisitId && (
+        <AuditModal
+          recordId={auditVisitId}
+          moduleName="visits"
+          isOpen={!!auditVisitId}
+          onClose={() => setAuditVisitId(null)}
+        />
+      )}
     </div>
   )
 }

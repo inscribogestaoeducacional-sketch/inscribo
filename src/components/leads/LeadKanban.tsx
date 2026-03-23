@@ -4,6 +4,8 @@ import {
   Clock, Users, Send, CheckCircle, Save,
   MessageCircle
 } from 'lucide-react'
+import { logAudit } from '../../hooks/useAudit'
+import AuditModal from '../common/AuditModal'
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors, useDroppable,
   type DragStartEvent, type DragEndEvent, type DragOverEvent
@@ -586,13 +588,14 @@ interface CardContentProps {
   overlay?: boolean
   onSchedule: (lead: Lead) => void
   onHistory: (lead: Lead) => void
+  onAudit: (id: string) => void
   onEdit: (lead: Lead) => void
   onDelete: (id: string) => void
   onStatusChange: (id: string, status: Lead['status']) => void
   onWhatsApp: (lead: Lead) => void
 }
 
-function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory, onEdit, onDelete, onWhatsApp }: CardContentProps) {
+function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory, onAudit, onEdit, onDelete, onWhatsApp }: CardContentProps) {
   return (
     <div
       className={`group relative rounded-xl border transition-all duration-150 overflow-hidden ${
@@ -696,7 +699,7 @@ function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory,
           <button
             title="Histórico"
             onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); onHistory(lead) }}
+            onClick={(e) => { e.stopPropagation(); onAudit(lead.id) }}
             className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
           >
             <Clock className="w-3 h-3" />
@@ -765,6 +768,7 @@ export default function LeadKanban() {
   const [filterEndDate] = useState('')
   const [showHistory, setShowHistory] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
+  const [auditLeadId, setAuditLeadId] = useState<string | null>(null)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [leadHistory, setLeadHistory] = useState<ActivityLog[]>([])
   const [newAction, setNewAction] = useState('')
@@ -843,9 +847,11 @@ export default function LeadKanban() {
       if (Object.keys(changes).length > 0) {
         await DatabaseService.logActivity({ user_id: user!.id, action: 'Lead editado', entity_type: 'lead', entity_id: editingLead.id, details: { changes, previous: previousData, student_name: data.student_name || editingLead.student_name, responsible_name: data.responsible_name || editingLead.responsible_name }, institution_id: user!.institution_id })
       }
+      await logAudit({ institution_id: user!.institution_id, module: 'leads', record_id: editingLead.id, action: 'updated', field_changed: 'dados', old_value: editingLead.student_name, new_value: data.student_name || editingLead.student_name, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
     } else {
       const newLead = await DatabaseService.createLead(leadData)
       await DatabaseService.logActivity({ user_id: user!.id, action: 'Lead criado', entity_type: 'lead', entity_id: newLead.id, details: { student_name: newLead.student_name, responsible_name: newLead.responsible_name, source: newLead.source, grade_interest: newLead.grade_interest, phone: newLead.phone || '', email: newLead.email || '', address: newLead.address || '', budget_range: newLead.budget_range || '', notes: newLead.notes || '' }, institution_id: user!.institution_id })
+      await logAudit({ institution_id: user!.institution_id, module: 'leads', record_id: newLead.id, action: 'created', new_value: `${newLead.student_name} — ${newLead.grade_interest}`, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
     }
     await loadData()
     setEditingLead(null)
@@ -858,6 +864,7 @@ export default function LeadKanban() {
       await DatabaseService.updateLead(leadId, { status: newStatus })
       if (currentLead && previousStatus !== newStatus) {
         await DatabaseService.logActivity({ user_id: user!.id, action: 'Status alterado', entity_type: 'lead', entity_id: leadId, details: { previous_status: previousStatus, new_status: newStatus, student_name: currentLead.student_name, responsible_name: currentLead.responsible_name }, institution_id: user!.institution_id })
+        await logAudit({ institution_id: user!.institution_id, module: 'leads', record_id: leadId, action: 'status_changed', old_value: previousStatus, new_value: newStatus, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
       }
       await loadData()
     } catch (err) {
@@ -871,7 +878,10 @@ export default function LeadKanban() {
     const lead = leads.find(l => l.id === leadId)
     if (!lead || !confirm(`Tem certeza que deseja excluir o lead "${lead.student_name}"?\n\nEsta ação não pode ser desfeita.`)) return
     try {
-      await DatabaseService.deleteLead(leadId); await loadData()
+      const { supabase: db } = await import('../../lib/supabase')
+      await db.from('leads').update({ deleted_at: new Date().toISOString(), deleted_by: user!.full_name }).eq('id', leadId)
+      await logAudit({ institution_id: user!.institution_id, module: 'leads', record_id: leadId, action: 'deleted', old_value: lead.student_name, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
+      await loadData()
     } catch (err) {
       console.error('Erro ao excluir lead:', err); setError('Erro ao excluir lead: ' + (err as Error).message)
     }
@@ -1085,6 +1095,7 @@ export default function LeadKanban() {
       setContactForm({ tipo: 'Ligação', descricao: '', data: new Date().toISOString().split('T')[0] })
       loadLeadHistory(lead.id)
     },
+    onAudit: (id: string) => setAuditLeadId(id),
     onEdit: (lead: Lead) => { setEditingLead(lead); setShowNewLeadModal(true) },
     onDelete: handleDelete,
     onStatusChange: handleStatusChange,
@@ -1223,6 +1234,7 @@ export default function LeadKanban() {
                 overlay
                 onSchedule={() => {}}
                 onHistory={() => {}}
+                onAudit={() => {}}
                 onEdit={() => {}}
                 onDelete={() => {}}
                 onStatusChange={() => {}}
@@ -1273,6 +1285,16 @@ export default function LeadKanban() {
         savingContact={savingContact}
         onSaveContact={handleSaveContact}
       />
+
+      {/* ── Audit Modal ─────────────────────────────────────────────────────── */}
+      {auditLeadId && (
+        <AuditModal
+          recordId={auditLeadId}
+          moduleName="leads"
+          isOpen={!!auditLeadId}
+          onClose={() => setAuditLeadId(null)}
+        />
+      )}
 
       {/* ── Toast ──────────────────────────────────────────────────────────── */}
       {toast && (
