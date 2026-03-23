@@ -146,6 +146,15 @@ function AppContent() {
     initSupabase()
   }, [])
 
+  // Rotas públicas — sem necessidade de autenticação (antes de qualquer check de auth)
+  if (window.location.pathname.startsWith('/survey/')) {
+    return (
+      <Routes>
+        <Route path="/survey/:token" element={<TransferSurveyPage />} />
+      </Routes>
+    )
+  }
+
   // Loading state
   if (initializing || !supabaseInitialized) {
     return (
@@ -158,15 +167,6 @@ function AppContent() {
           <p className="text-sm sm:text-base text-gray-600">Carregando...</p>
         </div>
       </div>
-    )
-  }
-
-  // Rotas públicas — sem necessidade de autenticação
-  if (window.location.pathname.startsWith('/survey/')) {
-    return (
-      <Routes>
-        <Route path="/survey/:token" element={<TransferSurveyPage />} />
-      </Routes>
     )
   }
 

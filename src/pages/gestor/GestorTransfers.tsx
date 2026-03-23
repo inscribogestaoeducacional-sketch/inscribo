@@ -97,6 +97,7 @@ const EMPTY_FORM: TransferForm = { studentName: '', grade: '', statedReason: '',
 export default function GestorTransfers() {
   const { user } = useAuth()
   const institutionId = user?.institution_id!
+  const isAdmin = user?.role === 'admin' || user?.role === 'manager'
 
   const [transfers, setTransfers]         = useState<Transfer[]>([])
   const [loading, setLoading]             = useState(true)
@@ -410,7 +411,7 @@ export default function GestorTransfers() {
                                 </a>
                               </>
                             )}
-                            {t.survey_responses && !t.ai_diagnosis && (
+                            {t.survey_responses && !t.ai_diagnosis && isAdmin && (
                               <button onClick={() => handleGenerateDiagnosis(t)} disabled={isGenerating}
                                 style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 7, background: '#EDE9FE', color: '#7C3AED', border: 'none', fontSize: 11, fontWeight: 600, cursor: isGenerating ? 'not-allowed' : 'pointer', opacity: isGenerating ? 0.7 : 1 }}>
                                 {isGenerating ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={12} />}
@@ -436,7 +437,7 @@ export default function GestorTransfers() {
                           items={[
                             { icon: <Pencil size={13} />, label: 'Editar', onClick: () => openEdit(t) },
                             ...(!isCancelled ? [{ icon: <Ban size={13} />, label: 'Cancelar transferência', onClick: () => handleCancel(t.id), danger: false, muted: true }] : []),
-                            { icon: <Trash2 size={13} />, label: 'Excluir', onClick: () => setDeleteId(t.id), danger: true },
+                            ...(isAdmin ? [{ icon: <Trash2 size={13} />, label: 'Excluir', onClick: () => setDeleteId(t.id), danger: true }] : []),
                           ]}
                         />
                       </td>
@@ -515,6 +516,7 @@ export default function GestorTransfers() {
             onUpdateStatus={handleUpdateStatus}
             onGenerateDiagnosis={handleGenerateDiagnosis}
             isGenerating={generatingId === diagnosisTransfer.id}
+            isAdmin={isAdmin}
           />
         </Modal>
       )}
@@ -599,11 +601,12 @@ function Modal({ children, onClose, title, wide }: { children: React.ReactNode; 
   )
 }
 
-function DiagnosisView({ transfer, onUpdateStatus, onGenerateDiagnosis, isGenerating }: {
+function DiagnosisView({ transfer, onUpdateStatus, onGenerateDiagnosis, isGenerating, isAdmin }: {
   transfer: Transfer
   onUpdateStatus: (id: string, status: string) => void
   onGenerateDiagnosis: (t: Transfer) => void
   isGenerating: boolean
+  isAdmin: boolean
 }) {
   console.log('[Diagnóstico] transfer selecionado:', transfer)
   console.log('[Diagnóstico] ai_diagnosis:', transfer.ai_diagnosis)
@@ -618,7 +621,7 @@ function DiagnosisView({ transfer, onUpdateStatus, onGenerateDiagnosis, isGenera
           <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#1e2d6b' }}>Diagnóstico não gerado ainda</p>
           <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>{transfer.survey_responses ? 'Pesquisa respondida — clique para gerar o diagnóstico.' : 'Aguardando a família responder a pesquisa.'}</p>
         </div>
-        {transfer.survey_responses && (
+        {transfer.survey_responses && isAdmin && (
           <button onClick={() => onGenerateDiagnosis(transfer)} disabled={isGenerating}
             style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 22px', borderRadius: 10, border: 'none', background: '#8B5CF6', color: 'white', fontSize: 13, fontWeight: 600, cursor: isGenerating ? 'not-allowed' : 'pointer', opacity: isGenerating ? 0.7 : 1 }}>
             {isGenerating ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={14} />}
