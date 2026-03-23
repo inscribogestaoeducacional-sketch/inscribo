@@ -52,16 +52,15 @@ const inputStyle: React.CSSProperties = {
 }
 
 // ─── componente ─────────────────────────────────────────────────
+// Passos: 0 = boas-vindas, 1 = dados, 2 = histórico, 3 = pronto
 export default function SchoolSetupModal({ institutionId, initialStep, editMode, onComplete }: Props) {
-  const [step, setStep] = useState(initialStep ?? 1)
+  const [step, setStep] = useState(initialStep ?? (editMode ? 1 : 0))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [schoolData, setSchoolData] = useState<SchoolData>({
     name: '', city: '', state: '', grades: [], avgFee: 0, currentStudents: 0
   })
-  const [originalCity, setOriginalCity] = useState('')
-  const [originalState, setOriginalState] = useState('')
 
   const [processedFiles, setProcessedFiles] = useState<ProcessedFile[]>([])
   const [loadingFiles, setLoadingFiles] = useState(false)
@@ -71,28 +70,25 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
   // Buscar dados da instituição ao montar
   useEffect(() => {
     const fetchInstitution = async () => {
-      const { data, error } = await supabase
+      const { data, error: fetchErr } = await supabase
         .from('institutions')
         .select('name, city, state')
         .eq('id', institutionId)
         .single()
-      console.log('[SchoolSetupModal] institution:', data, error)
+      console.log('[SchoolSetupModal] institution:', data, fetchErr)
       if (!data) return
-      const city = (data.city as string) ?? ''
-      const state = (data.state as string) ?? ''
-      setOriginalCity(city)
-      setOriginalState(state)
       setSchoolData(prev => ({
         ...prev,
         name: (data.name as string) ?? prev.name,
-        city: city || prev.city,
-        state: state || prev.state,
+        city: (data.city as string) || prev.city,
+        state: (data.state as string) || prev.state,
       }))
     }
     fetchInstitution()
   }, [institutionId])
 
-  const progressPct = (step / 3) * 100
+  // Progresso da barra: passo 0 não conta, passos 1-3 = 33%/67%/100%
+  const progressPct = step === 0 ? 0 : (step / 3) * 100
 
   // ── upload de arquivos ─────────────────────────────────────────
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -121,21 +117,13 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'extract_file',
-            payload: {
-              fileContent,
-              fileType: ext,
-              fileName: file.name,
-              ...(isPdf ? { isPdfImage: true } : {})
-            }
+            payload: { fileContent, fileType: ext, fileName: file.name, ...(isPdf ? { isPdfImage: true } : {}) }
           })
         })
         const json = await res.json()
         const r = json.result
         if (!r) throw new Error('Sem resultado')
-
-        const detectedYear = (r.detected_year as number) ||
-          parseInt(file.name.match(/\d{4}/)?.[0] || '0')
-
+        const detectedYear = (r.detected_year as number) || parseInt(file.name.match(/\d{4}/)?.[0] || '0')
         results.push({
           name: file.name,
           detected_year: detectedYear,
@@ -146,14 +134,9 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
         })
       } catch (err) {
         results.push({
-          name: file.name,
-          detected_year: 0,
-          total_students: 0,
-          new_students: 0,
-          returning_students: 0,
-          avg_monthly_fee: null,
-          error: true,
-          errorMsg: (err as Error).message,
+          name: file.name, detected_year: 0, total_students: 0, new_students: 0,
+          returning_students: 0, avg_monthly_fee: null,
+          error: true, errorMsg: (err as Error).message,
         })
       }
     }
@@ -175,6 +158,12 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
       const successFiles = processedFiles.filter(f => !f.error)
       console.log('[SchoolSetupModal] salvando:', { institutionId, schoolData, successFiles })
 
+      const executionYear = new Date().getFullYear()
+      const campaignYear = executionYear + 1
+      const startMonth = 8
+      const startDate = `${executionYear}-0${startMonth}-01`
+      const endDate = `${campaignYear}-02-28`
+
       const schoolDataPayload = {
         name: schoolData.name,
         city: schoolData.city,
@@ -191,12 +180,13 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
         avg_monthly_fee: f.avg_monthly_fee ?? null,
       }))
 
-      // Verifica se já existe ciclo de setup
+      // Verifica se já existe ciclo de setup (busca por institution_id + year para evitar
+      // conflito com a constraint UNIQUE (institution_id, year))
       const { data: existing } = await supabase
         .from('campaign_cycles')
         .select('id')
         .eq('institution_id', institutionId)
-        .eq('status', 'setup')
+        .eq('year', campaignYear)
         .maybeSingle()
 
       console.log('[SchoolSetupModal] existing cycle:', existing)
@@ -206,6 +196,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
         const { error } = await supabase
           .from('campaign_cycles')
           .update({
+            status: 'setup',
             school_data: schoolDataPayload,
             historical_data: historicalPayload,
             erp_files: successFiles,
@@ -218,9 +209,12 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
           .from('campaign_cycles')
           .insert({
             institution_id: institutionId,
-            year: new Date().getFullYear() + 1, // ano letivo alvo
+            year: campaignYear,
+            label: `Campanha ${campaignYear}`,
+            start_date: startDate,
+            end_date: endDate,
             status: 'setup',
-            campaign_start_month: 8,
+            campaign_start_month: startMonth,
             school_data: schoolDataPayload,
             historical_data: historicalPayload,
             erp_files: successFiles,
@@ -231,7 +225,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
       console.log('[SchoolSetupModal] cycle error:', cycleError)
       if (cycleError) throw new Error(cycleError.message)
 
-      // Atualiza city/state na tabela institutions (colunas adicionadas via migration)
+      // Atualiza city/state na tabela institutions
       const { error: instError } = await supabase
         .from('institutions')
         .update({ city: schoolData.city, state: schoolData.state })
@@ -249,7 +243,6 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
   const successFiles = processedFiles.filter(f => !f.error)
   const sortedSuccess = [...successFiles].sort((a, b) => b.detected_year - a.detected_year)
   const latestFile = sortedSuccess[0] ?? null
-
   const canAdvanceStep1 = !!schoolData.city && !!schoolData.state
 
   return (
@@ -273,17 +266,61 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
               <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Inscribo</span>
               <span style={{ fontSize: 12, color: '#94A3B8', marginLeft: 4 }}>· Configuração inicial</span>
             </div>
-            <span style={{ fontSize: 12, color: '#94A3B8' }}>Passo {step} de 3</span>
+            {step > 0 && (
+              <span style={{ fontSize: 12, color: '#94A3B8' }}>Passo {step} de 3</span>
+            )}
           </div>
 
-          {/* Barra de progresso */}
-          <div style={{ height: 4, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden', marginBottom: 20 }}>
+          {/* Barra de progresso — oculta no passo 0 */}
+          <div style={{ height: 4, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden', marginBottom: step === 0 ? 4 : 20 }}>
             <div style={{ height: '100%', width: `${progressPct}%`, background: 'linear-gradient(90deg, #00A896, #0DD3BF)', borderRadius: 999, transition: 'width 0.4s ease' }} />
           </div>
         </div>
 
         {/* Conteúdo */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 28px' }}>
+
+          {/* ── Passo 0 — Boas-vindas ───────────────────────── */}
+          {step === 0 && (
+            <div style={{ paddingBottom: 24, paddingTop: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+              {/* Ícone */}
+              <div style={{
+                width: 72, height: 72, borderRadius: 22, background: '#00A896',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 24, boxShadow: '0 8px 32px rgba(0,168,150,0.25)'
+              }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'white', border: '3px solid rgba(255,255,255,0.5)' }} />
+              </div>
+
+              <h2 style={{ fontSize: 22, fontWeight: 800, color: '#1A2B4A', marginBottom: 10, lineHeight: 1.3 }}>
+                Bem-vindo ao Inscribo{schoolData.name ? `, ${schoolData.name}` : ''}!
+              </h2>
+              <p style={{ fontSize: 14, color: '#64748B', marginBottom: 32, lineHeight: 1.6, maxWidth: 460 }}>
+                Vamos configurar sua escola em poucos minutos para que você tenha acesso a análises completas e esteja pronto para a próxima campanha de matrículas.
+              </p>
+
+              {/* 3 etapas */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 400, marginBottom: 32 }}>
+                {[
+                  { num: '①', label: 'Dados da escola', desc: '1 minuto', color: '#E6F7F5', numColor: '#00A896' },
+                  { num: '②', label: 'Histórico de matrículas', desc: '2 minutos', color: '#EDE9FE', numColor: '#8B5CF6' },
+                  { num: '③', label: 'Análise pronta', desc: 'Automático', color: '#FEF3C7', numColor: '#F59E0B' },
+                ].map(item => (
+                  <div key={item.num} style={{
+                    display: 'flex', alignItems: 'center', gap: 14,
+                    padding: '12px 16px', borderRadius: 12,
+                    background: item.color, textAlign: 'left',
+                  }}>
+                    <span style={{ fontSize: 20, color: item.numColor, fontWeight: 700, width: 28, flexShrink: 0 }}>{item.num}</span>
+                    <div>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{item.label}</p>
+                      <p style={{ margin: 0, fontSize: 11, color: '#64748b' }}>{item.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ── Passo 1 — Dados da escola ────────────────────── */}
           {step === 1 && (
@@ -307,14 +344,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
                 <div>
-                  <label style={labelStyle}>
-                    Cidade <span style={{ color: '#F43F5E' }}>*</span>
-                    {originalCity && (
-                      <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 500, color: '#0369a1', background: '#e0f2fe', borderRadius: 99, padding: '2px 7px' }}>
-                        Do cadastro
-                      </span>
-                    )}
-                  </label>
+                  <label style={labelStyle}>Cidade <span style={{ color: '#F43F5E' }}>*</span></label>
                   <input
                     style={inputStyle}
                     placeholder="Ex: São Paulo"
@@ -323,14 +353,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
                   />
                 </div>
                 <div>
-                  <label style={labelStyle}>
-                    Estado <span style={{ color: '#F43F5E' }}>*</span>
-                    {originalState && (
-                      <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 500, color: '#0369a1', background: '#e0f2fe', borderRadius: 99, padding: '2px 7px' }}>
-                        Do cadastro
-                      </span>
-                    )}
-                  </label>
+                  <label style={labelStyle}>Estado <span style={{ color: '#F43F5E' }}>*</span></label>
                   <select
                     style={inputStyle}
                     value={schoolData.state}
@@ -406,22 +429,14 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
                 Exporte o Relatório de Matrículas Efetivadas do seu sistema (SIGA, Totvs ou similar) dos últimos anos e importe aqui. Isso permite análises mais precisas da sua escola.
               </p>
 
-              {/* Área de upload */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept=".pdf,.xls,.xlsx,.csv"
-                style={{ display: 'none' }}
-                onChange={handleFileChange}
-              />
+              <input ref={fileInputRef} type="file" multiple accept=".pdf,.xls,.xlsx,.csv"
+                style={{ display: 'none' }} onChange={handleFileChange} />
               <div
                 onClick={() => !loadingFiles && fileInputRef.current?.click()}
                 style={{
                   border: '2px dashed #CBD5E1', borderRadius: 14, padding: '28px 20px',
                   textAlign: 'center', cursor: loadingFiles ? 'default' : 'pointer',
-                  background: '#FAFAFA', marginBottom: 16,
-                  transition: 'border-color 0.2s',
+                  background: '#FAFAFA', marginBottom: 16, transition: 'border-color 0.2s',
                 }}
                 onMouseEnter={e => { if (!loadingFiles) (e.currentTarget as HTMLElement).style.borderColor = '#00A896' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#CBD5E1' }}
@@ -434,52 +449,34 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
                 ) : (
                   <>
                     <Upload size={32} color="#94A3B8" style={{ marginBottom: 10 }} />
-                    <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 600, color: '#475569' }}>
-                      Clique para selecionar arquivos
-                    </p>
-                    <p style={{ margin: 0, fontSize: 12, color: '#94A3B8' }}>
-                      PDF, XLS, XLSX ou CSV · até 5 arquivos
-                    </p>
+                    <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 600, color: '#475569' }}>Clique para selecionar arquivos</p>
+                    <p style={{ margin: 0, fontSize: 12, color: '#94A3B8' }}>PDF, XLS, XLSX ou CSV · até 5 arquivos</p>
                   </>
                 )}
               </div>
 
-              {/* Cards dos arquivos processados */}
               {processedFiles.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                   {processedFiles.map((f, i) => (
                     <div key={i} style={{
-                      display: 'flex', alignItems: 'center', gap: 12,
-                      padding: '12px 14px', borderRadius: 12,
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12,
                       background: f.error ? '#FFF5F5' : '#F0FDF9',
                       border: `1px solid ${f.error ? '#FECACA' : '#BBF7D0'}`,
                     }}>
-                      <div style={{
-                        width: 34, height: 34, borderRadius: 9, flexShrink: 0,
-                        background: f.error ? '#FFE4E6' : '#D1FAE5',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        {f.error
-                          ? <AlertTriangle size={16} color="#F43F5E" />
-                          : <FileText size={16} color="#00A896" />
-                        }
+                      <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, background: f.error ? '#FFE4E6' : '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {f.error ? <AlertTriangle size={16} color="#F43F5E" /> : <FileText size={16} color="#00A896" />}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {f.name}
-                        </p>
+                        <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</p>
                         {f.error ? (
-                          <p style={{ margin: '2px 0 0', fontSize: 11, color: '#DC2626' }}>
-                            Erro ao processar — {f.errorMsg || 'tente outro formato'}
-                          </p>
+                          <p style={{ margin: '2px 0 0', fontSize: 11, color: '#DC2626' }}>Erro ao processar — {f.errorMsg || 'tente outro formato'}</p>
                         ) : (
                           <p style={{ margin: '2px 0 0', fontSize: 11, color: '#047857' }}>
                             {f.detected_year > 0 ? `Ano ${f.detected_year} · ` : ''}{f.total_students} alunos ({f.new_students} novatos, {f.returning_students} veteranos)
                           </p>
                         )}
                       </div>
-                      <button
-                        onClick={() => setProcessedFiles(prev => prev.filter((_, j) => j !== i))}
+                      <button onClick={() => setProcessedFiles(prev => prev.filter((_, j) => j !== i))}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#94A3B8', flexShrink: 0 }}>
                         <X size={14} />
                       </button>
@@ -488,14 +485,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
                 </div>
               )}
 
-              {/* Botão pular */}
-              <button
-                onClick={() => setStep(3)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  fontSize: 13, color: '#94A3B8', padding: '6px 0',
-                }}>
+              <button onClick={() => setStep(3)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#94A3B8', padding: '6px 0' }}>
                 <SkipForward size={14} /> Não tenho esses arquivos agora
               </button>
             </div>
@@ -504,11 +494,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
           {/* ── Passo 3 — Tudo pronto ────────────────────────── */}
           {step === 3 && (
             <div style={{ paddingBottom: 24, textAlign: 'center' }}>
-              <div style={{
-                width: 64, height: 64, borderRadius: 20, background: '#D1FAE5',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                margin: '8px auto 20px',
-              }}>
+              <div style={{ width: 64, height: 64, borderRadius: 20, background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '8px auto 20px' }}>
                 <Check size={32} color="#00A896" strokeWidth={2.5} />
               </div>
               <h2 style={{ fontSize: 22, fontWeight: 800, color: '#1A2B4A', marginBottom: 8 }}>
@@ -522,9 +508,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
                 <div style={{ background: '#F0FDF9', border: '1px solid #BBF7D0', borderRadius: 14, padding: '20px 24px', textAlign: 'left', marginBottom: 20 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                     <Sparkles size={16} color="#00A896" style={{ marginTop: 2 }} />
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#065f46' }}>
-                      A IA já analisou o padrão da sua escola
-                    </span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#065f46' }}>A IA já analisou o padrão da sua escola</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <p style={{ margin: 0, fontSize: 13, color: '#047857' }}>
@@ -548,23 +532,17 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
                 </div>
               )}
 
-              {error && (
-                <p style={{ fontSize: 13, color: '#DC2626', marginBottom: 12 }}>{error}</p>
-              )}
+              {error && <p style={{ fontSize: 13, color: '#DC2626', marginBottom: 12 }}>{error}</p>}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div style={{
-          padding: '16px 28px 24px', flexShrink: 0,
-          borderTop: '1px solid #F1F5F9',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
+        <div style={{ padding: '16px 28px 24px', flexShrink: 0, borderTop: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            {step > 1 && step < 3 && (
-              <button
-                onClick={() => setStep(s => s - 1)}
+            {/* Voltar só no passo 2 */}
+            {step === 2 && (
+              <button onClick={() => setStep(1)}
                 style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '8px 16px', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, color: '#64748B', cursor: 'pointer', fontWeight: 500 }}>
                 <ChevronLeft size={14} /> Voltar
               </button>
@@ -572,31 +550,31 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
           </div>
 
           <div>
+            {step === 0 && (
+              <button onClick={() => setStep(1)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '11px 26px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                Começar configuração <ChevronRight size={15} />
+              </button>
+            )}
+
             {step === 1 && (
-              <button
-                onClick={() => {
-                  if (!canAdvanceStep1) { setError('Preencha cidade e estado para continuar.'); return }
-                  setError(null)
-                  setStep(2)
-                }}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 22px', borderRadius: 10, background: canAdvanceStep1 ? '#00A896' : '#CBD5E1', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: canAdvanceStep1 ? 'pointer' : 'not-allowed' }}>
+              <button onClick={() => {
+                if (!canAdvanceStep1) { setError('Preencha cidade e estado para continuar.'); return }
+                setError(null); setStep(2)
+              }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 22px', borderRadius: 10, background: canAdvanceStep1 ? '#00A896' : '#CBD5E1', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: canAdvanceStep1 ? 'pointer' : 'not-allowed' }}>
                 Continuar <ChevronRight size={14} />
               </button>
             )}
 
             {step === 2 && (
-              <button
-                onClick={() => setStep(3)}
-                disabled={loadingFiles}
+              <button onClick={() => setStep(3)} disabled={loadingFiles}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 22px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: loadingFiles ? 'not-allowed' : 'pointer', opacity: loadingFiles ? 0.6 : 1 }}>
                 {successFiles.length > 0 ? 'Continuar' : 'Pular por enquanto'} <ChevronRight size={14} />
               </button>
             )}
 
             {step === 3 && (
-              <button
-                onClick={handleFinish}
-                disabled={saving}
+              <button onClick={handleFinish} disabled={saving}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 22px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
                 {saving
                   ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Salvando...</>
