@@ -5,7 +5,8 @@ import {
 } from 'recharts'
 import {
   Users, TrendingUp, RefreshCw, AlertTriangle, BarChart3,
-  Target, Sparkles, ArrowRight, Upload, MessageCircle, Info, Lock
+  Target, Sparkles, ArrowRight, Upload, MessageCircle, Info, Lock,
+  MapPin, Activity, Settings
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -43,6 +44,7 @@ interface CampaignCycle {
   campaign_start_month?: number | null
   erp_files?: HistoricalEntry[] | null
   historical_data?: HistoricalEntry[] | null
+  school_data?: { city?: string; state?: string; name?: string; [key: string]: unknown } | null
   status?: string | null
   applied_at?: string | null
 }
@@ -53,6 +55,19 @@ interface StudentTransfer {
   course_grade: string
   transfer_date: string
   reason_category: string | null
+}
+
+interface MarketData {
+  city?: string
+  state?: string
+  school_age_population?: number
+  private_school_rate?: number
+  sector_growth?: number
+  avg_students_per_school?: number
+  confidence?: string
+  notes?: string
+  novatos_rate?: number
+  [key: string]: unknown
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -112,6 +127,13 @@ export default function GestorHome() {
   const [showSetup, setShowSetup] = useState(false)
   const [setupInitialStep, setSetupInitialStep] = useState(1)
 
+  // ── new state ──
+  const [leads, setLeads] = useState<{ id: string; status: string; created_at: string }[]>([])
+  const [visits, setVisits] = useState<{ id: string; status: string; created_at: string }[]>([])
+  const [waMessages, setWaMessages] = useState<{ id: string; created_at: string; direction: string }[]>([])
+  const [marketData, setMarketData] = useState<MarketData | null>(null)
+  const [marketLoading, setMarketLoading] = useState(false)
+
   useEffect(() => {
     if (!institutionId) return
     load()
@@ -120,7 +142,8 @@ export default function GestorHome() {
   async function load() {
     setLoading(true)
     try {
-      const [cyclesRes, funnelRes, transferRes] = await Promise.all([
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+      const [cyclesRes, funnelRes, transferRes, leadsRes, visitsRes, waRes] = await Promise.all([
         supabase
           .from('campaign_cycles')
           .select('*')
@@ -137,23 +160,66 @@ export default function GestorHome() {
           .eq('institution_id', institutionId)
           .order('transfer_date', { ascending: false })
           .limit(5),
+        supabase
+          .from('leads')
+          .select('id, status, created_at')
+          .eq('institution_id', institutionId),
+        supabase
+          .from('visits')
+          .select('id, status, created_at')
+          .eq('institution_id', institutionId),
+        supabase
+          .from('whatsapp_messages')
+          .select('id, created_at, direction')
+          .eq('institution_id', institutionId)
+          .gte('created_at', thirtyDaysAgo),
       ])
+
       const loadedCycles = (cyclesRes.data ?? []) as CampaignCycle[]
       setCycles(loadedCycles)
       setFunnelData(funnelRes.data ?? [])
       setTransfers((transferRes.data ?? []) as StudentTransfer[])
+      setLeads((leadsRes.data ?? []) as { id: string; status: string; created_at: string }[])
+      setVisits((visitsRes.data ?? []) as { id: string; status: string; created_at: string }[])
+      setWaMessages((waRes.data ?? []) as { id: string; created_at: string; direction: string }[])
+
       const alreadySetup = loadedCycles.some(c =>
         ['setup','draft','active','completed'].includes(c.status ?? '')
       )
       if (!alreadySetup) setShowSetup(true)
+
+      // fetch market data if we have city+state from setup cycle
+      const cycleWithLocation = loadedCycles.find(c => c.school_data?.city && c.school_data?.state)
+      if (cycleWithLocation?.school_data?.city && cycleWithLocation?.school_data?.state) {
+        fetchMarketData(cycleWithLocation.school_data.city as string, cycleWithLocation.school_data.state as string)
+      }
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function fetchMarketData(city: string, state: string) {
+    if (!city || !state) return
+    setMarketLoading(true)
+    try {
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'fetch_ibge', payload: { city, state } }),
+      })
+      const json = await res.json()
+      setMarketData(json.result ?? null)
+    } catch {
+      // ignore — market data is non-critical
+    } finally {
+      setMarketLoading(false)
     }
   }
 
   // ─── derived data ─────────────────────────────────────────────────────────
   const activeCycle = cycles.find(c => c.status === 'active' || !!c.applied_at) ?? null
   const anyCycle = cycles[0] ?? null
+  const setupCycle = cycles.find(c => c.school_data?.city) ?? null
 
   // cascade: prefer historical_data (normalized), fallback to erp_files
   const cycleWithHistory = cycles.find(c =>
@@ -199,6 +265,25 @@ export default function GestorHome() {
   // funnel for "Campanha em andamento" section
   const latestFunnel = funnelData[funnelData.length - 1] ?? null
   const funnelHasData = funnelData.some(f => (f.registrations || 0) > 0)
+
+  // leads / visits / wa metrics
+  const totalLeads = leads.length
+  const totalVisitsCount = visits.length
+  const totalEnrolled = leads.filter(l => l.status === 'matriculado' || l.status === 'enrolled').length
+  const conversionRate = totalLeads > 0 ? ((totalEnrolled / totalLeads) * 100).toFixed(1) : '0'
+
+  const totalMessages = waMessages.length
+  const waSent = waMessages.filter(m => m.direction === 'outbound' || m.direction === 'sent').length
+  const waReceived = waMessages.filter(m => m.direction === 'inbound' || m.direction === 'received').length
+
+  // market comparison
+  const marketCity = setupCycle?.school_data?.city ?? ''
+  const schoolNovatosRate = totalStudents > 0 ? +((newStudents / totalStudents) * 100).toFixed(1) : null
+  const marketNovatosRate = marketData?.novatos_rate ?? (marketData?.private_school_rate ? +(Number(marketData.private_school_rate) * 0.25).toFixed(1) : null)
+  const aboveAverage = schoolNovatosRate !== null && marketNovatosRate !== null && schoolNovatosRate >= marketNovatosRate
+  const privateSchoolsCount = marketData?.avg_students_per_school && marketData?.school_age_population
+    ? Math.round(Number(marketData.school_age_population) * (Number(marketData.private_school_rate ?? 18) / 100) / Number(marketData.avg_students_per_school))
+    : null
 
   // ─── render ───────────────────────────────────────────────────────────────
   return (
@@ -448,6 +533,212 @@ export default function GestorHome() {
               )
             })}
           </div>
+        </div>
+      )}
+
+      {/* ── SEÇÃO 1+2: Funil de leads | WhatsApp ────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+
+        {/* Funil de leads atual */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 10, background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Activity size={16} color="#8B5CF6" />
+              </div>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Funil atual</h3>
+            </div>
+            <button
+              onClick={() => navigate('/leads')}
+              style={{ fontSize: 11, color: '#8B5CF6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+              Ver leads →
+            </button>
+          </div>
+
+          {loading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[...Array(3)].map((_, i) => (
+                <div key={i} style={{ height: 36, borderRadius: 8, background: '#f1f5f9' }} className="animate-pulse" />
+              ))}
+            </div>
+          ) : totalLeads === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '16px 0', textAlign: 'center' }}>
+              <Users size={28} color="#cbd5e1" strokeWidth={1.5} />
+              <p style={{ margin: 0, fontSize: 13, color: '#94a3b8', lineHeight: 1.5 }}>
+                Nenhum lead cadastrado ainda.<br />Comece captando interessados.
+              </p>
+              <button
+                onClick={() => navigate('/leads')}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, background: '#EDE9FE', color: '#8B5CF6', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                Ir para Leads <ArrowRight size={12} />
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Funil visual — barras proporcionais */}
+              {[
+                { label: 'Leads cadastrados', value: totalLeads, max: totalLeads },
+                { label: 'Visitas agendadas', value: totalVisitsCount, max: totalLeads },
+                { label: 'Matriculados', value: totalEnrolled, max: totalLeads },
+              ].map(({ label, value, max }) => {
+                const pct = max > 0 ? Math.max(4, Math.round((value / max) * 100)) : 4
+                return (
+                  <div key={label}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, color: '#475569' }}>{label}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b' }}>{fmt(value)}</span>
+                    </div>
+                    <div style={{ height: 8, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg, #00A896, #0DD3BF)', borderRadius: 99, transition: 'width 0.4s ease' }} />
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* Taxa de conversão */}
+              <div style={{ background: '#f0fdf9', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>Taxa lead → matrícula</span>
+                <span style={{ fontSize: 16, fontWeight: 700, color: '#00A896' }}>{conversionRate}%</span>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* WhatsApp — últimos 30 dias */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 10, background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <MessageCircle size={16} color="#10B981" />
+              </div>
+              <div>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>WhatsApp</h3>
+                <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Últimos 30 dias</p>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate('/whatsapp')}
+              style={{ fontSize: 11, color: '#10B981', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+              Ver central →
+            </button>
+          </div>
+
+          {loading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[...Array(3)].map((_, i) => (
+                <div key={i} style={{ height: 48, borderRadius: 10, background: '#f1f5f9' }} className="animate-pulse" />
+              ))}
+            </div>
+          ) : totalMessages === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '16px 0', textAlign: 'center' }}>
+              <MessageCircle size={28} color="#cbd5e1" strokeWidth={1.5} />
+              <p style={{ margin: 0, fontSize: 13, color: '#94a3b8', lineHeight: 1.5 }}>
+                WhatsApp não configurado ainda.
+              </p>
+              <button
+                onClick={() => navigate('/settings')}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, background: '#D1FAE5', color: '#065f46', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                <Settings size={12} /> Configurar agora
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+              {[
+                { label: 'Total', value: totalMessages, color: '#1e2d6b', bg: '#f8fafc' },
+                { label: 'Enviadas', value: waSent, color: '#10B981', bg: '#f0fdf4' },
+                { label: 'Recebidas', value: waReceived, color: '#3B82F6', bg: '#eff6ff' },
+              ].map(({ label, value, color, bg }) => (
+                <div key={label} style={{ background: bg, borderRadius: 12, padding: '12px', textAlign: 'center' }}>
+                  <p style={{ margin: '0 0 4px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
+                  <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color }}>{fmt(value)}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── SEÇÃO 3: Comparativo com mercado local ───────────────────────────── */}
+      {(marketLoading || marketData || marketCity) && (
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 10, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <MapPin size={16} color="#F59E0B" />
+              </div>
+              <div>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>
+                  Mercado local{marketCity ? ` — ${marketCity}` : ''}
+                </h3>
+                <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Dados estimados com base no Censo Escolar IBGE</p>
+              </div>
+            </div>
+          </div>
+
+          {marketLoading ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+              {[...Array(4)].map((_, i) => (
+                <div key={i} style={{ height: 72, borderRadius: 12, background: '#f1f5f9' }} className="animate-pulse" />
+              ))}
+            </div>
+          ) : marketData ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Comparativo principal */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div style={{ background: '#f8fafc', borderRadius: 12, padding: '14px 16px' }}>
+                  <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Média do setor</p>
+                  <p style={{ margin: '0 0 2px', fontSize: 24, fontWeight: 700, color: '#1e2d6b' }}>
+                    {marketNovatosRate !== null ? `${marketNovatosRate}%` : '—'} <span style={{ fontSize: 13, fontWeight: 400, color: '#94a3b8' }}>novatos</span>
+                  </p>
+                </div>
+                <div style={{ background: schoolNovatosRate !== null && marketNovatosRate !== null && aboveAverage ? '#f0fdf4' : '#fef2f2', borderRadius: 12, padding: '14px 16px', position: 'relative' }}>
+                  <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Sua escola</p>
+                  <p style={{ margin: '0 0 2px', fontSize: 24, fontWeight: 700, color: '#1e2d6b' }}>
+                    {schoolNovatosRate !== null ? `${schoolNovatosRate}%` : '—'} <span style={{ fontSize: 13, fontWeight: 400, color: '#94a3b8' }}>novatos</span>
+                  </p>
+                  {schoolNovatosRate !== null && marketNovatosRate !== null && (
+                    <span style={{
+                      position: 'absolute', top: 12, right: 12,
+                      display: 'inline-flex', alignItems: 'center', gap: 3,
+                      padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700,
+                      background: aboveAverage ? '#dcfce7' : '#fee2e2',
+                      color: aboveAverage ? '#16a34a' : '#dc2626',
+                    }}>
+                      {aboveAverage ? '↑ Acima da média' : '↓ Abaixo da média'}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Dados do mercado */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px' }}>
+                  <p style={{ margin: '0 0 3px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Pop. escolar estimada</p>
+                  <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e2d6b' }}>
+                    {marketData.school_age_population ? fmt(Number(marketData.school_age_population)) : '—'}
+                  </p>
+                </div>
+                <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px' }}>
+                  <p style={{ margin: '0 0 3px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Escolas particulares</p>
+                  <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e2d6b' }}>
+                    ~{privateSchoolsCount !== null ? fmt(privateSchoolsCount) : '—'}
+                  </p>
+                </div>
+                <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px' }}>
+                  <p style={{ margin: '0 0 3px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Crescimento do setor</p>
+                  <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e2d6b' }}>
+                    {marketData.sector_growth != null ? `${marketData.sector_growth}%/ano` : '—'}
+                  </p>
+                </div>
+              </div>
+
+              {marketData.notes && (
+                <p style={{ margin: 0, fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Info size={12} /> {String(marketData.notes)}
+                </p>
+              )}
+            </div>
+          ) : null}
         </div>
       )}
 
