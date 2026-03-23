@@ -12,6 +12,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import type { FunnelMetrics, MarketingCampaign, ReEnrollment } from '../../lib/supabase'
 import CampaignGeneratorModal from './CampaignGeneratorModal'
+import GestorOnboarding from './GestorOnboarding'
 import { checkWeeklyAlerts } from '../../services/notificationService'
 import { checkRecalibration } from '../../services/recalibrationService'
 
@@ -28,6 +29,9 @@ interface CampaignCycle {
   base_students: number
   projected_cpa: number | null
   created_at: string
+  campaign_start_month?: number | null
+  erp_files?: unknown[] | null
+  status?: string | null
 }
 
 interface StudentTransfer {
@@ -85,14 +89,16 @@ function fmtCurrency(n: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n)
 }
 
-function calcCampaignTiming() {
+const MONTH_NAMES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+
+function calcCampaignTiming(startMonth = 8) {
   const now = new Date()
   const currentMonth = now.getMonth() // 0-11
   const currentYear = now.getFullYear()
-  const campaignStartYear = currentMonth >= 7 ? currentYear + 1 : currentYear
-  const monthsUntil = Math.max(0, (campaignStartYear - currentYear) * 12 + (7 - currentMonth))
-  const campaignStartMonth = `Agosto/${campaignStartYear}`
-  // Pre-campaign = 8 months window before August
+  const startMonthIdx = startMonth - 1 // 0-indexed
+  const campaignStartYear = currentMonth >= startMonthIdx ? currentYear + 1 : currentYear
+  const monthsUntil = Math.max(0, (campaignStartYear - currentYear) * 12 + (startMonthIdx - currentMonth))
+  const campaignStartMonth = `${MONTH_NAMES_PT[startMonthIdx]}/${campaignStartYear}`
   const preCampaignProgress = monthsUntil > 0
     ? Math.max(0, Math.round(((8 - monthsUntil) / 8) * 100))
     : 100
@@ -170,6 +176,9 @@ export default function GestorReports() {
   const [cycle, setCycle] = useState<CampaignCycle | null>(null)
   const [transfers, setTransfers] = useState<StudentTransfer[]>([])
   const [erpImports, setErpImports] = useState<ErpImport[]>([])
+  const [hasCycles, setHasCycles] = useState<boolean | null>(null)
+  const [hasWhatsApp, setHasWhatsApp] = useState(false)
+  const [onboardingDone, setOnboardingDone] = useState(false)
 
   // IA insight
   const [insight, setInsight] = useState('')
@@ -213,6 +222,24 @@ export default function GestorReports() {
     } catch (err) {
       console.warn('campaign_cycles indisponível:', err)
     }
+
+    try {
+      const { data: anyData } = await supabase
+        .from('campaign_cycles')
+        .select('id')
+        .eq('institution_id', institutionId)
+        .limit(1)
+      setHasCycles((anyData?.length ?? 0) > 0)
+    } catch { setHasCycles(false) }
+
+    try {
+      const { data: wData } = await supabase
+        .from('whatsapp_usage')
+        .select('id')
+        .eq('institution_id', institutionId)
+        .limit(1)
+      setHasWhatsApp((wData?.length ?? 0) > 0)
+    } catch { setHasWhatsApp(false) }
 
     try {
       const { data, error } = await supabase
@@ -305,7 +332,35 @@ export default function GestorReports() {
 
   const activeCycle = (cycle as (CampaignCycle & { applied_at?: string }) | null)
   const cycleIsActive = !!activeCycle?.applied_at
-  const { monthsUntil, campaignStartMonth, preCampaignProgress } = calcCampaignTiming()
+  const { monthsUntil, campaignStartMonth, preCampaignProgress } = calcCampaignTiming(activeCycle?.campaign_start_month ?? 8)
+
+  // Action statuses for pre-campaign card
+  const hasHistoricalImport = !!((activeCycle?.erp_files as unknown[])?.length)
+  const hasBudget = marketingData.some(m => (m.investment || 0) > 0)
+
+  // Show onboarding for brand-new schools
+  const showOnboarding = !loading && hasCycles === false && !onboardingDone
+
+  if (showOnboarding) {
+    return (
+      <>
+        <GestorOnboarding
+          institutionId={institutionId}
+          institutionName={user?.institution_name || 'Escola'}
+          onComplete={() => setOnboardingDone(true)}
+          onOpenCampaignModal={() => { setOnboardingDone(true); setShowCampaignModal(true) }}
+        />
+        <CampaignGeneratorModal
+          isOpen={showCampaignModal}
+          onClose={() => setShowCampaignModal(false)}
+          onApply={() => { loadAll(); showToast('Campanha aplicada com sucesso!') }}
+          existingCycle={activeCycle as Parameters<typeof CampaignGeneratorModal>[0]['existingCycle']}
+          institutionId={institutionId}
+          institutionName={user?.institution_name || 'Escola'}
+        />
+      </>
+    )
+  }
 
   return (
     <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: '#f8f9fb' }}>
@@ -380,7 +435,7 @@ export default function GestorReports() {
             </div>
           ) : (
             <>
-              {activeTab === 'overview' && <TabOverview funnelData={funnelData} marketingData={marketingData} reEnrollData={reEnrollData} cycle={cycle} insight={insight} insightLoading={insightLoading} onRefreshInsight={fetchInsight} monthsUntil={monthsUntil} campaignStartMonth={campaignStartMonth} preCampaignProgress={preCampaignProgress} onOpenCampaignModal={() => setShowCampaignModal(true)} />}
+              {activeTab === 'overview' && <TabOverview funnelData={funnelData} marketingData={marketingData} reEnrollData={reEnrollData} cycle={cycle} insight={insight} insightLoading={insightLoading} onRefreshInsight={fetchInsight} monthsUntil={monthsUntil} campaignStartMonth={campaignStartMonth} preCampaignProgress={preCampaignProgress} hasHistoricalImport={hasHistoricalImport} hasWhatsApp={hasWhatsApp} hasBudget={hasBudget} onOpenCampaignModal={() => setShowCampaignModal(true)} />}
               {activeTab === 'funnel' && <TabFunnel funnelData={funnelData} cycle={cycle} onGoToImport={() => setActiveTab('import')} />}
               {activeTab === 'marketing' && <TabMarketing marketingData={marketingData} institutionId={institutionId} onRefresh={loadAll} showToast={showToast} />}
               {activeTab === 'reenrollments' && <TabReenrollments reEnrollData={reEnrollData} institutionId={institutionId} onRefresh={loadAll} showToast={showToast} />}
@@ -408,7 +463,7 @@ export default function GestorReports() {
 // ═══════════════════════════════════════════════════════════
 //  TAB 1 — VISÃO GERAL
 // ═══════════════════════════════════════════════════════════
-function TabOverview({ funnelData, marketingData, reEnrollData, cycle, insight, insightLoading, onRefreshInsight, monthsUntil, campaignStartMonth, preCampaignProgress, onOpenCampaignModal }: {
+function TabOverview({ funnelData, marketingData, reEnrollData, cycle, insight, insightLoading, onRefreshInsight, monthsUntil, campaignStartMonth, preCampaignProgress, hasHistoricalImport, hasWhatsApp, hasBudget, onOpenCampaignModal }: {
   funnelData: FunnelMetrics[]
   marketingData: MarketingCampaign[]
   reEnrollData: ReEnrollment[]
@@ -419,6 +474,9 @@ function TabOverview({ funnelData, marketingData, reEnrollData, cycle, insight, 
   monthsUntil: number
   campaignStartMonth: string
   preCampaignProgress: number
+  hasHistoricalImport: boolean
+  hasWhatsApp: boolean
+  hasBudget: boolean
   onOpenCampaignModal: () => void
 }) {
   const latest = funnelData[funnelData.length - 1]
@@ -527,14 +585,14 @@ function TabOverview({ funnelData, marketingData, reEnrollData, cycle, insight, 
             <div style={{ height: '100%', width: `${preCampaignProgress}%`, background: 'white', borderRadius: 999 }} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
-            {[
-              { num: '①', text: 'Organize sua base de leads e atualize os contatos' },
-              { num: '②', text: 'Defina seu orçamento mensal de marketing' },
-              { num: '③', text: 'Configure seu WhatsApp Business e bot de atendimento' },
-            ].map(a => (
-              <div key={a.num} style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 10, padding: '10px 12px', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <span style={{ fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{a.num}</span>
-                <span style={{ fontSize: 12, lineHeight: 1.45 }}>{a.text}</span>
+            {([
+              { done: hasHistoricalImport, text: 'Importe o histórico dos últimos anos no Gerador de Campanha', action: onOpenCampaignModal },
+              { done: hasWhatsApp, text: 'Configure o WhatsApp Business da escola', action: undefined },
+              { done: hasBudget, text: 'Defina o orçamento mensal de captação no módulo Marketing', action: undefined },
+            ] as { done: boolean; text: string; action?: () => void }[]).map((a, i) => (
+              <div key={i} onClick={a.action} style={{ background: a.done ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.12)', borderRadius: 10, padding: '10px 12px', display: 'flex', gap: 8, alignItems: 'flex-start', cursor: a.action ? 'pointer' : 'default', border: a.done ? '1px solid rgba(255,255,255,0.4)' : '1px solid transparent' }}>
+                <span style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}>{a.done ? '✅' : '⬜'}</span>
+                <span style={{ fontSize: 12, lineHeight: 1.45, textDecoration: a.done ? 'line-through' : 'none', opacity: a.done ? 0.75 : 1 }}>{a.text}</span>
               </div>
             ))}
           </div>

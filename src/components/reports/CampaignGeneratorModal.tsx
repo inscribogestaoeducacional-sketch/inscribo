@@ -126,16 +126,6 @@ const GRADE_OPTIONS = [
   '1º ao 5º EF', '6º ao 9º EF', 'Ensino Médio'
 ]
 
-// ─── Calcular ano/mês de início da campanha ──────────────────────
-function calcCampaignStart() {
-  const now = new Date()
-  const currentYear = now.getFullYear()
-  const currentMonth = now.getMonth() // 0-11
-  const campaignStartYear = currentMonth >= 7 ? currentYear + 1 : currentYear
-  const monthsUntil = Math.max(0, (campaignStartYear - currentYear) * 12 + (7 - currentMonth))
-  const campaignStartMonth = `Agosto/${campaignStartYear}`
-  return { campaignStartYear, campaignStartMonth, monthsUntil }
-}
 
 // ─── Componente principal ────────────────────────────────────────
 export default function CampaignGeneratorModal({
@@ -155,7 +145,23 @@ export default function CampaignGeneratorModal({
   const [generatedPlan, setGeneratedPlan] = useState<GeneratedPlan | null>(null)
   const [adjustedPlan, setAdjustedPlan] = useState<GeneratedPlan | null>(null)
   const [generationMode, setGenerationMode] = useState<string>('benchmark')
-  const { campaignStartYear, campaignStartMonth, monthsUntil } = calcCampaignStart()
+  const [campaignStartMonthNum, setCampaignStartMonthNum] = useState<number>(8)
+  const [campaignStartYearNum, setCampaignStartYearNum] = useState<number>(() => {
+    const now = new Date()
+    return now.getMonth() >= 7 ? now.getFullYear() + 1 : now.getFullYear()
+  })
+  const [erpFiles, setErpFiles] = useState<{ name: string; year: number; total: number; novatos: number; veterans: number; fee?: number; error?: boolean }[]>([])
+  const [draftToast, setDraftToast] = useState<string | null>(null)
+  const [multiFileProgress, setMultiFileProgress] = useState<string | null>(null)
+
+  // Timing calculado a partir dos valores selecionados pelo gestor
+  const campaignStartYear = campaignStartYearNum
+  const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+  const campaignStartMonth = `${MONTH_NAMES[campaignStartMonthNum - 1]}/${campaignStartYearNum}`
+  const monthsUntil = (() => {
+    const now = new Date()
+    return Math.max(0, (campaignStartYearNum - now.getFullYear()) * 12 + ((campaignStartMonthNum - 1) - now.getMonth()))
+  })()
 
   // Loading states
   const [loadingMarket, setLoadingMarket] = useState(false)
@@ -176,9 +182,28 @@ export default function CampaignGeneratorModal({
 
   const DRAFT_KEY = `inscribo_campaign_draft_${institutionId}`
 
-  const saveDraft = () => {
-    const draft = { step, schoolData, growthTarget, historicalData, historyOption, marketData, generatedPlan, adjustedPlan, generationMode, savedAt: new Date().toISOString() }
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+  const saveDraft = async () => {
+    try {
+      await supabase.from('campaign_cycles').upsert({
+        institution_id: institutionId,
+        year: campaignStartYearNum,
+        label: `Campanha ${campaignStartYearNum}`,
+        start_date: `${campaignStartYearNum}-${String(campaignStartMonthNum).padStart(2, '0')}-01`,
+        end_date: `${campaignStartYearNum + 1}-02-28`,
+        target_new_students: adjustedPlan?.summary.total_new_students_target || 0,
+        target_reenrollment_rate: adjustedPlan?.summary.reenrollment_rate_target || 85,
+        base_students: schoolData.current_students || 0,
+        status: 'draft',
+        wizard_step: step,
+        campaign_start_month: campaignStartMonthNum,
+        school_data: schoolData,
+        historical_data: historicalData,
+        market_data: marketData,
+        erp_files: erpFiles,
+      }, { onConflict: 'institution_id,year' })
+    } catch {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ step, schoolData, growthTarget, historicalData, historyOption, marketData, generatedPlan, adjustedPlan, generationMode }))
+    }
     setDraftSaved(true)
     setTimeout(() => setDraftSaved(false), 2500)
   }
@@ -246,25 +271,46 @@ export default function CampaignGeneratorModal({
     }
   }, [isOpen])
 
-  // Carregar rascunho ao abrir
+  // Carregar rascunho ao abrir (Supabase primeiro, depois localStorage)
   useEffect(() => {
     if (!isOpen || !institutionId) return
-    const raw = localStorage.getItem(`inscribo_campaign_draft_${institutionId}`)
-    if (!raw) return
-    try {
-      const draft = JSON.parse(raw)
-      if (draft.schoolData) setSchoolData(s => ({ ...s, ...draft.schoolData }))
-      if (draft.growthTarget) setGrowthTarget(draft.growthTarget)
-      if (draft.historicalData?.length) setHistoricalData(draft.historicalData)
-      if (draft.historyOption) setHistoryOption(draft.historyOption)
-      if (draft.marketData && Object.keys(draft.marketData).length) setMarketData(draft.marketData)
-      if (draft.generatedPlan) {
-        setGeneratedPlan(draft.generatedPlan)
-        setAdjustedPlan(JSON.parse(JSON.stringify(draft.generatedPlan)))
-        setGenerationMode(draft.generationMode || 'benchmark')
-      }
-      if (draft.step && draft.step > 1) setStep(draft.step)
-    } catch { /* rascunho corrompido, ignorar */ }
+    ;(async () => {
+      try {
+        const { data } = await supabase.from('campaign_cycles')
+          .select('*')
+          .eq('institution_id', institutionId)
+          .eq('status', 'draft')
+          .maybeSingle()
+
+        if (!data) {
+          const raw = localStorage.getItem(DRAFT_KEY)
+          if (!raw) return
+          try {
+            const draft = JSON.parse(raw)
+            if (draft.schoolData) setSchoolData(s => ({ ...s, ...draft.schoolData }))
+            if (draft.growthTarget) setGrowthTarget(draft.growthTarget)
+            if (draft.historicalData?.length) setHistoricalData(draft.historicalData)
+            if (draft.historyOption) setHistoryOption(draft.historyOption)
+            if (draft.marketData && Object.keys(draft.marketData).length) setMarketData(draft.marketData)
+            if (draft.generatedPlan) {
+              setGeneratedPlan(draft.generatedPlan)
+              setAdjustedPlan(JSON.parse(JSON.stringify(draft.generatedPlan)))
+              setGenerationMode(draft.generationMode || 'benchmark')
+            }
+            if (draft.step && draft.step > 1) setStep(draft.step)
+          } catch {}
+          return
+        }
+        if (data.school_data && Object.keys(data.school_data as object).length) setSchoolData(s => ({ ...s, ...(data.school_data as SchoolData) }))
+        if ((data.historical_data as HistoricalYear[])?.length) { setHistoricalData(data.historical_data as HistoricalYear[]); setHistoryOption('upload') }
+        if (data.market_data && Object.keys(data.market_data as object).length) setMarketData(data.market_data as MarketData)
+        if ((data.erp_files as unknown[])?.length) setErpFiles(data.erp_files as typeof erpFiles)
+        if (data.campaign_start_month) setCampaignStartMonthNum(data.campaign_start_month as number)
+        if (data.wizard_step && (data.wizard_step as number) > 1) setStep(Math.min(data.wizard_step as number, 3))
+        setDraftToast('Rascunho encontrado — continuando de onde você parou')
+        setTimeout(() => setDraftToast(null), 4000)
+      } catch {}
+    })()
   }, [isOpen, institutionId])
 
   // ── Buscar mercado ────────────────────────────────────────────
@@ -347,40 +393,78 @@ export default function CampaignGeneratorModal({
     setRegenDebounce(t)
   }
 
-  // ── Upload arquivo histórico ───────────────────────────────────
+  // ── Upload múltiplo de arquivos históricos ────────────────────
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
     setLoadingFile(true)
-    const ext = file.name.split('.').pop()?.toLowerCase() as 'csv' | 'xlsx' | 'pdf'
-    const reader = new FileReader()
-    reader.onload = async (ev) => {
-      const content = (ev.target?.result as string) || ''
+    const newErpFiles: typeof erpFiles = []
+    const newHistoricalData: HistoricalYear[] = []
+    let extractedFee: number | null = null
+
+    for (let fi = 0; fi < files.length; fi++) {
+      const file = files[fi]
+      setMultiFileProgress(`Processando arquivo ${fi + 1} de ${files.length}: ${file.name}...`)
+      const ext = file.name.split('.').pop()?.toLowerCase() as 'csv' | 'xlsx' | 'pdf'
       try {
+        const content = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = ev => resolve((ev.target?.result as string) || '')
+          reader.onerror = reject
+          if (ext === 'pdf') reader.readAsDataURL(file)
+          else reader.readAsText(file, 'utf-8')
+        })
         const res = await fetch('/api/ai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'extract_file',
-            payload: { fileContent: content, fileType: ext, fileName: file.name }
-          })
+          body: JSON.stringify({ action: 'extract_file', payload: { fileContent: content, fileType: ext, fileName: file.name } })
         })
         const data = await res.json()
-        if (data.result?.historical_funnel?.length) {
-          const rows: HistoricalYear[] = data.result.historical_funnel.map((r: { period: string; registrations: number; schedules: number; visits: number; enrollments: number }) => ({
-            year: parseInt(r.period?.split('/')[1] || '0'),
-            total_students: 0,
-            new_enrollments: r.enrollments || 0,
-            reenrollments: 0,
-            transfers: 0
-          })).filter((r: HistoricalYear) => r.year > 2000)
-          setHistoricalData(rows)
+        const result = data.result
+        if (!result) throw new Error('sem resultado')
+
+        const detectedYear = (result.detected_year as number) || parseInt(file.name.match(/\d{4}/)?.[0] || '0')
+        const total = (result.total_students as number) || 0
+        const novatos = (result.new_students as number) || 0
+        const veterans = (result.returning_students as number) || 0
+        const fee = (result.avg_monthly_fee as number | null) || null
+
+        newErpFiles.push({ name: file.name, year: detectedYear, total, novatos, veterans, fee: fee || undefined })
+
+        if (detectedYear > 2000) {
+          newHistoricalData.push({
+            year: detectedYear,
+            total_students: total || 0,
+            new_enrollments: novatos || (result.historical_funnel as { enrollments: number }[])?.reduce((s, r) => s + (r.enrollments || 0), 0) || 0,
+            reenrollments: (result.reenrollments as number) || 0,
+            transfers: (result.transfers as number) || 0,
+          })
         }
-      } catch {}
-      setLoadingFile(false)
+        if (fee && !extractedFee) extractedFee = fee
+      } catch {
+        newErpFiles.push({ name: file.name, year: 0, total: 0, novatos: 0, veterans: 0, error: true })
+      }
     }
-    if (ext === 'pdf') reader.readAsDataURL(file)
-    else reader.readAsText(file, 'utf-8')
+
+    setErpFiles(prev => {
+      const combined = [...prev, ...newErpFiles]
+      return combined.filter((f, i) => combined.findIndex(x => x.name === f.name) === i)
+    })
+    if (newHistoricalData.length) {
+      setHistoricalData(prev => {
+        const combined = [...prev, ...newHistoricalData]
+        const unique = combined.reduce<HistoricalYear[]>((acc, row) => {
+          if (!acc.find(r => r.year === row.year)) acc.push(row)
+          return acc
+        }, [])
+        return unique.sort((a, b) => a.year - b.year)
+      })
+      setHistoryOption('upload')
+    }
+    if (extractedFee) setSchoolData(s => ({ ...s, avg_monthly_fee: extractedFee! }))
+    setMultiFileProgress(null)
+    setLoadingFile(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   // ── Aplicar campanha ──────────────────────────────────────────
@@ -392,7 +476,7 @@ export default function CampaignGeneratorModal({
         institution_id: institutionId,
         year: campaignStartYear,
         label: `Campanha ${campaignStartYear}`,
-        start_date: `${campaignStartYear}-09-01`,
+        start_date: `${campaignStartYear}-${String(campaignStartMonthNum).padStart(2,'0')}-01`,
         end_date: `${campaignStartYear + 1}-02-28`,
         target_new_students: adjustedPlan.summary.total_new_students_target,
         target_reenrollment_rate: adjustedPlan.summary.reenrollment_rate_target,
@@ -407,7 +491,13 @@ export default function CampaignGeneratorModal({
         applied_at: new Date().toISOString()
       }
 
-      await supabase.from('campaign_cycles').upsert(cycleData, { onConflict: 'institution_id,year' })
+      await supabase.from('campaign_cycles').upsert({
+        ...cycleData,
+        status: 'active',
+        campaign_start_month: campaignStartMonthNum,
+        school_data: schoolData,
+        erp_files: erpFiles,
+      }, { onConflict: 'institution_id,year' })
 
       for (const month of adjustedPlan.monthly_targets) {
         const period = `${month.month}/${month.year}`
@@ -508,6 +598,13 @@ export default function CampaignGeneratorModal({
         {/* Conteúdo scrollável */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 28px' }}>
 
+          {/* Toast rascunho */}
+          {draftToast && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 16px', marginBottom: 12, fontSize: 13, color: '#166534', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Check size={14} color="#16a34a" /> {draftToast}
+            </div>
+          )}
+
           {/* ── PASSO 1 ─────────────────────────────────────── */}
           {step === 1 && (
             <StepOne
@@ -515,6 +612,10 @@ export default function CampaignGeneratorModal({
               setSchoolData={setSchoolData}
               growthTarget={growthTarget}
               setGrowthTarget={setGrowthTarget}
+              campaignStartMonthNum={campaignStartMonthNum}
+              setCampaignStartMonthNum={setCampaignStartMonthNum}
+              campaignStartYearNum={campaignStartYearNum}
+              setCampaignStartYearNum={setCampaignStartYearNum}
             />
           )}
 
@@ -526,6 +627,9 @@ export default function CampaignGeneratorModal({
               historicalData={historicalData}
               setHistoricalData={setHistoricalData}
               loadingFile={loadingFile}
+              multiFileProgress={multiFileProgress}
+              erpFiles={erpFiles}
+              setErpFiles={setErpFiles}
               fileInputRef={fileInputRef}
               onFileChange={handleFileChange}
             />
@@ -564,6 +668,7 @@ export default function CampaignGeneratorModal({
               regenLoading={regenLoading}
               monthsUntilCampaign={monthsUntil}
               campaignStartMonth={campaignStartMonth}
+              erpFiles={erpFiles}
               onAmbitiousChange={handleAmbitiousChange}
               onUpdateCell={updateMonthlyCell}
             />
@@ -671,12 +776,18 @@ export default function CampaignGeneratorModal({
 }
 
 // ─── Passo 1 — Dados da escola ───────────────────────────────────
-function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget }: {
+function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget, campaignStartMonthNum, setCampaignStartMonthNum, campaignStartYearNum, setCampaignStartYearNum }: {
   schoolData: SchoolData
   setSchoolData: React.Dispatch<React.SetStateAction<SchoolData>>
   growthTarget: GrowthTarget
   setGrowthTarget: React.Dispatch<React.SetStateAction<GrowthTarget>>
+  campaignStartMonthNum: number
+  setCampaignStartMonthNum: (v: number) => void
+  campaignStartYearNum: number
+  setCampaignStartYearNum: (v: number) => void
 }) {
+  const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+  const thisYear = new Date().getFullYear()
   return (
     <div style={{ paddingBottom: 24 }}>
       <h2 style={{ fontSize: 22, fontWeight: 800, color: '#1A2B4A', marginBottom: 6 }}>Vamos montar sua campanha de matrículas</h2>
@@ -751,6 +862,21 @@ function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget }: {
         </div>
       </div>
 
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
+        <div>
+          <label style={labelStyle}>Mês de início da campanha</label>
+          <select style={inputStyle} value={campaignStartMonthNum} onChange={e => setCampaignStartMonthNum(parseInt(e.target.value))}>
+            {MONTHS.map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={labelStyle}>Ano da campanha</label>
+          <select style={inputStyle} value={campaignStartYearNum} onChange={e => setCampaignStartYearNum(parseInt(e.target.value))}>
+            {[thisYear, thisYear + 1, thisYear + 2].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+      </div>
+
       <div>
         <label style={labelStyle}>Objetivo de crescimento</label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 8 }}>
@@ -783,12 +909,15 @@ function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget }: {
 }
 
 // ─── Passo 2 — Histórico ─────────────────────────────────────────
-function StepTwo({ historyOption, setHistoryOption, historicalData, setHistoricalData, loadingFile, fileInputRef, onFileChange }: {
+function StepTwo({ historyOption, setHistoryOption, historicalData, setHistoricalData, loadingFile, multiFileProgress, erpFiles, setErpFiles, fileInputRef, onFileChange }: {
   historyOption: 'upload' | 'partial' | 'none' | null
   setHistoryOption: (v: 'upload' | 'partial' | 'none') => void
   historicalData: HistoricalYear[]
   setHistoricalData: React.Dispatch<React.SetStateAction<HistoricalYear[]>>
   loadingFile: boolean
+  multiFileProgress: string | null
+  erpFiles: { name: string; year: number; total: number; novatos: number; veterans: number; fee?: number; error?: boolean }[]
+  setErpFiles: React.Dispatch<React.SetStateAction<typeof erpFiles>>
   fileInputRef: React.RefObject<HTMLInputElement>
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void
 }) {
@@ -831,23 +960,54 @@ function StepTwo({ historyOption, setHistoryOption, historicalData, setHistorica
       {(historyOption === 'upload' || historyOption === 'partial') && (
         <>
           {historyOption === 'upload' && (
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              style={{ border: '2px dashed #CBD5E1', borderRadius: 12, padding: 28, textAlign: 'center', cursor: 'pointer', marginBottom: 16, background: '#F8FAFC' }}
-              onDragOver={e => e.preventDefault()}>
-              {loadingFile ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-                  <Loader2 size={24} color="#00A896" className="animate-spin" />
-                  <span style={{ fontSize: 13, color: '#64748B' }}>Lendo seu arquivo...</span>
+            <div style={{ marginBottom: 16 }}>
+              {/* Arquivos já processados */}
+              {erpFiles.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                  {erpFiles.map((f, i) => (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                      borderRadius: 10, background: f.error ? '#fef2f2' : '#f0fdf4',
+                      border: `1px solid ${f.error ? '#fca5a5' : '#bbf7d0'}`
+                    }}>
+                      <span style={{ fontSize: 16 }}>{f.error ? '⚠️' : '✅'}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: f.error ? '#991b1b' : '#166534', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+                        {!f.error && f.year > 0 && (
+                          <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
+                            {f.year} · {f.total > 0 ? `${f.total} alunos` : ''}{f.novatos > 0 ? ` · ${f.novatos} novatos` : ''}{f.fee ? ` · R$${f.fee.toLocaleString('pt-BR')}/mês` : ''}
+                          </div>
+                        )}
+                        {f.error && <div style={{ fontSize: 11, color: '#991b1b', marginTop: 2 }}>Não foi possível ler — verifique se é um relatório do ERP</div>}
+                      </div>
+                      <button onClick={() => setErpFiles(prev => prev.filter((_, fi) => fi !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}>✕</button>
+                    </div>
+                  ))}
                 </div>
-              ) : (
-                <>
-                  <Upload size={24} color="#94A3B8" style={{ margin: '0 auto 8px' }} />
-                  <p style={{ fontSize: 14, color: '#475569', fontWeight: 500 }}>Arraste o arquivo ou clique para selecionar</p>
-                  <p style={{ fontSize: 12, color: '#94A3B8', marginTop: 4 }}>CSV, Excel ou PDF</p>
-                </>
               )}
-              <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls,.pdf" style={{ display: 'none' }} onChange={onFileChange} />
+
+              {/* Área de upload */}
+              <div
+                onClick={() => !loadingFile && fileInputRef.current?.click()}
+                style={{ border: '2px dashed #CBD5E1', borderRadius: 12, padding: 24, textAlign: 'center', cursor: loadingFile ? 'default' : 'pointer', background: '#F8FAFC' }}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); if (!loadingFile) { const dt = new DataTransfer(); Array.from(e.dataTransfer.files).forEach(f => dt.items.add(f)); if (fileInputRef.current) { fileInputRef.current.files = dt.files; onFileChange({ target: fileInputRef.current } as React.ChangeEvent<HTMLInputElement>) } } }}>
+                {loadingFile ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                    <Loader2 size={24} color="#00A896" className="animate-spin" />
+                    <span style={{ fontSize: 13, color: '#64748B' }}>{multiFileProgress || 'Processando...'}</span>
+                  </div>
+                ) : (
+                  <>
+                    <Upload size={22} color="#94A3B8" style={{ margin: '0 auto 8px' }} />
+                    <p style={{ fontSize: 14, color: '#475569', fontWeight: 500, margin: '0 0 4px' }}>
+                      {erpFiles.length > 0 ? 'Adicionar mais arquivos' : 'Arraste ou clique para selecionar'}
+                    </p>
+                    <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Até 5 arquivos — CSV, Excel ou PDF · Aceita relatórios SIGA, Totvs e outros ERPs</p>
+                  </>
+                )}
+              </div>
+              <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls,.pdf" multiple style={{ display: 'none' }} onChange={onFileChange} />
             </div>
           )}
 
@@ -995,12 +1155,13 @@ function StepFour({ loading, msgIdx, msgs, progress, error, onRetry }: {
 }
 
 // ─── Passo 5 — Revisão ───────────────────────────────────────────
-function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, campaignStartMonth, onAmbitiousChange, onUpdateCell }: {
+function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, campaignStartMonth, erpFiles, onAmbitiousChange, onUpdateCell }: {
   plan: GeneratedPlan
   ambitiousLevel: number
   regenLoading: boolean
   monthsUntilCampaign: number
   campaignStartMonth: string
+  erpFiles: { name: string; year: number; total: number; novatos: number; veterans: number; fee?: number; error?: boolean }[]
   onAmbitiousChange: (level: number) => void
   onUpdateCell: (idx: number, field: keyof MonthlyTarget, value: number) => void
 }) {
@@ -1046,6 +1207,35 @@ function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, cam
               </div>
               <p style={{ fontSize: 12, color: '#1E40AF', lineHeight: 1.65 }}>{plan.summary.reasoning}</p>
             </div>
+
+            {erpFiles.filter(f => !f.error && f.year > 0).length >= 2 && (() => {
+              const valid = erpFiles.filter(f => !f.error && f.year > 0).sort((a, b) => a.year - b.year)
+              const last = valid[valid.length - 1]
+              const prev = valid[valid.length - 2]
+              const novDiff = prev.novatos > 0 ? Math.round((last.novatos - prev.novatos) / prev.novatos * 100) : 0
+              return (
+                <div style={{ background: '#F5F3FF', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#5B21B6', marginBottom: 8 }}>Histórico importado</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {valid.map((f, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#4C1D95' }}>
+                        <span style={{ fontWeight: 600 }}>{f.year}</span>
+                        <span>{f.total > 0 ? `${f.total} alunos` : '—'} · {f.novatos > 0 ? `${f.novatos} novatos` : '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {novDiff !== 0 && (
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #DDD6FE', fontSize: 11, color: novDiff < -20 ? '#7C3AED' : '#6D28D9', fontStyle: 'italic' }}>
+                      {novDiff < -20
+                        ? `⚠ Novatos caíram ${Math.abs(novDiff)}% de ${prev.year} para ${last.year} — campanha focada em captação`
+                        : novDiff > 10
+                        ? `✓ Novatos cresceram ${novDiff}% de ${prev.year} para ${last.year}`
+                        : `Novatos estáveis entre ${prev.year} e ${last.year}`}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
             {plan.key_risks?.length > 0 && (
               <div style={{ marginBottom: 12 }}>

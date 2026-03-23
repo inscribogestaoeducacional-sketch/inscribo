@@ -90,14 +90,33 @@ Máximo 4 linhas. Sem subtítulos. Sem markdown. Seja objetivo e prático.`
         fileName: string
       }
 
-      const prompt = fileType === 'pdf'
-        ? `Você está analisando um arquivo exportado de um sistema ERP de escola privada brasileira.
+      const prompt = `Você está analisando um arquivo exportado de um sistema ERP de escola privada brasileira.
 Arquivo: ${fileName}
+Tipo: ${fileType}
 
-Extraia os dados e retorne SOMENTE um JSON válido, sem texto adicional:
+INSTRUÇÕES IMPORTANTES:
+1. Inferir o ano do arquivo pelo nome do arquivo (ex: "2024" no nome) ou pelas datas encontradas no conteúdo
+2. Inferir period_start e period_end pelas datas mais antigas e mais recentes encontradas
+3. Para PDFs no formato SIGA (tabela com colunas Novatos/Veteranos/Total por data de matrícula): somar todas as colunas Novatos para new_students, todas as colunas Veteranos para returning_students
+4. Retornar null nos campos que não conseguir extrair — NUNCA inventar valores
+5. Se o arquivo for claramente um relatório de matrículas, preencher os campos de novatos/veteranos
+6. detected_year deve ser um número inteiro (ex: 2024), não uma string
+
+Retorne SOMENTE um JSON válido sem texto adicional:
 {
   "file_type_detected": "enrollments|active_students|historical|unknown",
   "confidence": 0.0,
+  "detected_year": null,
+  "period_start": null,
+  "period_end": null,
+  "total_students": null,
+  "new_students": null,
+  "returning_students": null,
+  "new_students_pct": null,
+  "returning_students_pct": null,
+  "avg_monthly_fee": null,
+  "reenrollments": null,
+  "transfers": null,
   "enrollments": [
     { "student_name": "", "course_grade": "", "enrollment_date": "YYYY-MM-DD", "enrollment_value": 0 }
   ],
@@ -110,33 +129,8 @@ Extraia os dados e retorne SOMENTE um JSON válido, sem texto adicional:
   "summary": { "total_records": 0, "date_range": "", "notes": "" }
 }
 
-Conteúdo:
+Conteúdo do arquivo:
 ${fileContent.slice(0, 8000)}`
-        : `Você está analisando dados de planilha (CSV/Excel) de escola privada brasileira.
-Arquivo: ${fileName}
-
-Dados:
-${fileContent.slice(0, 8000)}
-
-Identifique o tipo e retorne SOMENTE JSON válido:
-{
-  "file_type_detected": "enrollments|active_students|historical|unknown",
-  "confidence": 0.0,
-  "column_mapping": {},
-  "enrollments": [
-    { "student_name": "", "course_grade": "", "enrollment_date": "YYYY-MM-DD", "enrollment_value": 0 }
-  ],
-  "active_students": [
-    { "student_name": "", "course_grade": "", "enrollment_year": 0 }
-  ],
-  "historical_funnel": [
-    { "period": "MMM/YYYY", "registrations": 0, "schedules": 0, "visits": 0, "enrollments": 0 }
-  ],
-  "summary": { "total_records": 0, "date_range": "", "notes": "" }
-}
-
-Normalize séries para: Infantil I, Infantil II, Infantil III, Infantil IV, Infantil V, 1º EF até 9º EF, 1ª EM, 2ª EM, 3ª EM.
-Arrays vazios [] se o tipo não existir no arquivo.`
 
       const raw = await callClaude(prompt, 4000)
 
