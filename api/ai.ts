@@ -26,6 +26,44 @@ async function callClaude(prompt: string, maxTokens = 1024): Promise<string> {
   return data.content[0].text
 }
 
+async function callClaudeWithDocument(pdfBase64: string, textPrompt: string, maxTokens = 1500): Promise<string> {
+  const response = await fetch(ANTHROPIC_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY!,
+      'anthropic-version': '2023-06-01',
+      'anthropic-beta': 'pdfs-2024-09-25'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: maxTokens,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'document',
+            source: {
+              type: 'base64',
+              media_type: 'application/pdf',
+              data: pdfBase64
+            }
+          },
+          { type: 'text', text: textPrompt }
+        ]
+      }]
+    })
+  })
+
+  if (!response.ok) {
+    const err = await response.text()
+    throw new Error(`Anthropic API error ${response.status}: ${err}`)
+  }
+
+  const data = await response.json() as { content: { text: string }[] }
+  return data.content[0].text
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -84,13 +122,45 @@ Máximo 4 linhas. Sem subtítulos. Sem markdown. Seja objetivo e prático.`
     // EXTRAÇÃO DE ARQUIVO ERP
     // ─────────────────────────────────────────────
     if (action === 'extract_file') {
-      const { fileContent, fileType, fileName } = payload as {
+      const { fileContent, fileType, fileName, isPdfImage } = payload as {
         fileContent: string
         fileType: 'csv' | 'xlsx' | 'pdf'
         fileName: string
+        isPdfImage?: boolean
       }
 
-      const prompt = `Você está analisando um arquivo exportado de um sistema ERP de escola privada brasileira.
+      console.log('[extract_file] modo:', isPdfImage ? 'PDF visão' : 'texto')
+
+      let raw: string
+
+      if (isPdfImage) {
+        // PDF baseado em imagem (ex: SIGA escaneado) — usa document vision
+        const visionPrompt = `Você está analisando um Relatório de Matrículas Efetivadas de uma escola brasileira gerado pelo sistema SIGA (Activesoft).
+
+O relatório tem uma tabela com as colunas: Data de matrícula | Novatos (Quantidade, %) | Veteranos (Quantidade, %) | Total (Quantidade, %).
+
+REGRA DE ANO LETIVO: matrículas feitas entre set/YYYY e fev/YYYY+1 são para o ano letivo YYYY+1.
+Exemplo: matrículas de set/2024 a fev/2025 → detected_year = 2025.
+
+Extraia todos os dados e retorne APENAS um JSON válido sem markdown:
+{
+  "detected_year": <número inteiro do ano letivo alvo>,
+  "period_start": "<YYYY-MM da data mais antiga>",
+  "period_end": "<YYYY-MM da data mais recente>",
+  "total_students": <número total — última linha "Total de alunos">,
+  "new_students": <total da coluna Novatos>,
+  "returning_students": <total da coluna Veteranos>,
+  "new_students_pct": <percentual de novatos como número>,
+  "returning_students_pct": <percentual de veteranos como número>,
+  "avg_monthly_fee": null,
+  "reenrollments": null,
+  "transfers": null,
+  "historical_funnel": [],
+  "summary": "<resumo em uma linha>"
+}`
+        raw = await callClaudeWithDocument(fileContent, visionPrompt, 1500)
+      } else {
+        const prompt = `Você está analisando um arquivo exportado de um sistema ERP de escola privada brasileira.
 Arquivo: ${fileName}
 Tipo: ${fileType}
 
@@ -100,10 +170,9 @@ INSTRUÇÕES IMPORTANTES:
    Exemplo: matrículas de set/2024 a fev/2025 → detected_year = 2025.
    Se o arquivo tiver matrículas de ago/2025 a fev/2026 → detected_year = 2026.
 2. Inferir period_start e period_end pelas datas mais antigas e mais recentes encontradas no conteúdo.
-3. Para PDFs no formato SIGA (tabela com colunas Novatos/Veteranos/Total por data de matrícula): somar todas as colunas Novatos para new_students, todas as colunas Veteranos para returning_students.
-4. Retornar null nos campos que não conseguir extrair — NUNCA inventar valores.
-5. Se o arquivo for claramente um relatório de matrículas, preencher os campos de novatos/veteranos.
-6. detected_year deve ser um número inteiro (ex: 2025), não uma string.
+3. Retornar null nos campos que não conseguir extrair — NUNCA inventar valores.
+4. Se o arquivo for claramente um relatório de matrículas, preencher os campos de novatos/veteranos.
+5. detected_year deve ser um número inteiro (ex: 2025), não uma string.
 
 Retorne SOMENTE um JSON válido sem texto adicional:
 {
@@ -120,22 +189,14 @@ Retorne SOMENTE um JSON válido sem texto adicional:
   "avg_monthly_fee": null,
   "reenrollments": null,
   "transfers": null,
-  "enrollments": [
-    { "student_name": "", "course_grade": "", "enrollment_date": "YYYY-MM-DD", "enrollment_value": 0 }
-  ],
-  "active_students": [
-    { "student_name": "", "course_grade": "", "enrollment_year": 0 }
-  ],
-  "historical_funnel": [
-    { "period": "MMM/YYYY", "registrations": 0, "schedules": 0, "visits": 0, "enrollments": 0 }
-  ],
+  "historical_funnel": [],
   "summary": { "total_records": 0, "date_range": "", "notes": "" }
 }
 
 Conteúdo do arquivo:
 ${fileContent.slice(0, 8000)}`
-
-      const raw = await callClaude(prompt, 4000)
+        raw = await callClaude(prompt, 4000)
+      }
 
       let parsed: unknown
       try {
@@ -145,6 +206,7 @@ ${fileContent.slice(0, 8000)}`
         return res.status(422).json({ error: 'Não foi possível extrair dados estruturados do arquivo', raw })
       }
 
+      console.log('[extract_file] resultado:', JSON.stringify(parsed).slice(0, 300))
       return res.json({ result: parsed })
     }
 

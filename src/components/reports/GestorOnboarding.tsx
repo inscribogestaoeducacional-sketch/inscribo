@@ -33,17 +33,19 @@ export default function GestorOnboarding({ institutionName, onComplete, onOpenCa
       setLoadingFiles(prev => [...prev, file.name])
       try {
         const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf'
-        const fileContent = await new Promise<string>((res, rej) => {
+        const isPdf = ext === 'pdf'
+        const raw = await new Promise<string>((res, rej) => {
           const reader = new FileReader()
           reader.onload = ev => res((ev.target?.result as string) || '')
           reader.onerror = rej
-          if (ext === 'pdf') reader.readAsDataURL(file)
+          if (isPdf) reader.readAsDataURL(file)
           else reader.readAsText(file, 'utf-8')
         })
+        const fileContent = isPdf ? raw.split(',')[1] : raw
         const resp = await fetch('/api/ai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'extract_file', payload: { fileContent, fileType: ext, fileName: file.name } })
+          body: JSON.stringify({ action: 'extract_file', payload: { fileContent, fileType: ext, fileName: file.name, ...(isPdf ? { isPdfImage: true } : {}) } })
         })
         const json = await resp.json()
         const d = json.result || json

@@ -466,18 +466,20 @@ export default function CampaignGeneratorModal({
       const file = files[fi]
       setMultiFileProgress(`Processando arquivo ${fi + 1} de ${files.length}: ${file.name}...`)
       const ext = file.name.split('.').pop()?.toLowerCase() as 'csv' | 'xlsx' | 'pdf'
+      const isPdf = ext === 'pdf'
       try {
         const content = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader()
           reader.onload = ev => resolve((ev.target?.result as string) || '')
           reader.onerror = reject
-          if (ext === 'pdf') reader.readAsDataURL(file)
+          if (isPdf) reader.readAsDataURL(file)
           else reader.readAsText(file, 'utf-8')
         })
+        const fileContent = isPdf ? content.split(',')[1] : content
         const res = await fetch('/api/ai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'extract_file', payload: { fileContent: content, fileType: ext, fileName: file.name } })
+          body: JSON.stringify({ action: 'extract_file', payload: { fileContent, fileType: ext, fileName: file.name, ...(isPdf ? { isPdfImage: true } : {}) } })
         })
         const data = await res.json()
         const result = data.result
