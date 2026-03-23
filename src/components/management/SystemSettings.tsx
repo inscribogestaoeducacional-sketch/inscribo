@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react'
 import {
   Save, Upload, Building, Mail, Phone, Globe, Palette,
   MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
-  Bot, X, Plus, Check, AlertCircle
+  Bot, X, Plus, Check, AlertCircle, GraduationCap
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
+import SchoolSetupModal from '../onboarding/SchoolSetupModal'
 
 // ─── Shared input style ───────────────────────────────────────────────────────
 const inputCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none transition-all'
@@ -623,11 +624,14 @@ function WhatsAppTab() {
 // ─── SystemSettings ───────────────────────────────────────────────────────────
 const TABS = [
   { id: 'geral', label: 'Geral', icon: Building },
+  { id: 'escola', label: 'Escola', icon: GraduationCap },
   { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
 ]
 
 export default function SystemSettings() {
+  const { user } = useAuth()
   const [activeTab, setActiveTab] = useState('geral')
+  const [showSchoolSetup, setShowSchoolSetup] = useState(false)
 
   return (
     <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: 'var(--bg-page)' }}>
@@ -669,6 +673,33 @@ export default function SystemSettings() {
 
       {activeTab === 'geral' && <GeralTab />}
       {activeTab === 'whatsapp' && <WhatsAppTab />}
+      {activeTab === 'escola' && (
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 28, maxWidth: 500 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', marginBottom: 6 }}>Configurações da Escola</h3>
+          <p style={{ fontSize: 13, color: '#64748B', marginBottom: 20, lineHeight: 1.6 }}>
+            Atualize as informações da sua escola, séries oferecidas e mensalidade média.
+          </p>
+          <button
+            onClick={() => setShowSchoolSetup(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '10px 20px', borderRadius: 10,
+              background: '#00A896', color: '#fff', border: 'none',
+              fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}>
+            <GraduationCap size={15} /> Editar configurações da escola
+          </button>
+        </div>
+      )}
+
+      {showSchoolSetup && user?.institution_id && (
+        <SchoolSetupModal
+          institutionId={user.institution_id}
+          initialStep={1}
+          editMode={true}
+          onComplete={() => setShowSchoolSetup(false)}
+        />
+      )}
     </div>
   )
 }

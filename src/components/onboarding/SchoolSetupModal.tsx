@@ -29,6 +29,7 @@ interface SchoolData {
 interface Props {
   institutionId: string
   initialStep?: number
+  editMode?: boolean
   onComplete: () => void
 }
 
@@ -51,7 +52,7 @@ const inputStyle: React.CSSProperties = {
 }
 
 // ─── componente ─────────────────────────────────────────────────
-export default function SchoolSetupModal({ institutionId, initialStep, onComplete }: Props) {
+export default function SchoolSetupModal({ institutionId, initialStep, editMode, onComplete }: Props) {
   const [step, setStep] = useState(initialStep ?? 1)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -174,36 +175,67 @@ export default function SchoolSetupModal({ institutionId, initialStep, onComplet
       const successFiles = processedFiles.filter(f => !f.error)
       console.log('[SchoolSetupModal] salvando:', { institutionId, schoolData, successFiles })
 
-      const { error: cycleError } = await supabase.from('campaign_cycles').upsert({
-        institution_id: institutionId,
-        status: 'setup',
-        school_data: {
-          name: schoolData.name,
-          city: schoolData.city,
-          state: schoolData.state,
-          grades: schoolData.grades ?? [],
-          avg_monthly_fee: Number(schoolData.avgFee) || 0,
-          current_students: Number(schoolData.currentStudents) || 0,
-        },
-        historical_data: successFiles.map(f => ({
-          detected_year: f.detected_year,
-          total_students: f.total_students ?? 0,
-          new_students: f.new_students ?? 0,
-          returning_students: f.returning_students ?? 0,
-          avg_monthly_fee: f.avg_monthly_fee ?? null,
-        })),
-        erp_files: successFiles,
-        wizard_step: 3,
-        campaign_start_month: 8,
-      }, { onConflict: 'institution_id,status' })
-      console.log('[SchoolSetupModal] cycle error:', cycleError)
+      const schoolDataPayload = {
+        name: schoolData.name,
+        city: schoolData.city,
+        state: schoolData.state,
+        grades: schoolData.grades ?? [],
+        avg_monthly_fee: Number(schoolData.avgFee) || 0,
+        current_students: Number(schoolData.currentStudents) || 0,
+      }
+      const historicalPayload = successFiles.map(f => ({
+        detected_year: f.detected_year,
+        total_students: f.total_students ?? 0,
+        new_students: f.new_students ?? 0,
+        returning_students: f.returning_students ?? 0,
+        avg_monthly_fee: f.avg_monthly_fee ?? null,
+      }))
 
-      const { error: instError } = await supabase.from('institutions')
+      // Verifica se já existe ciclo de setup
+      const { data: existing } = await supabase
+        .from('campaign_cycles')
+        .select('id')
+        .eq('institution_id', institutionId)
+        .eq('status', 'setup')
+        .maybeSingle()
+
+      console.log('[SchoolSetupModal] existing cycle:', existing)
+
+      let cycleError = null
+      if (existing?.id) {
+        const { error } = await supabase
+          .from('campaign_cycles')
+          .update({
+            school_data: schoolDataPayload,
+            historical_data: historicalPayload,
+            erp_files: successFiles,
+            wizard_step: 3,
+          })
+          .eq('id', existing.id)
+        cycleError = error
+      } else {
+        const { error } = await supabase
+          .from('campaign_cycles')
+          .insert({
+            institution_id: institutionId,
+            status: 'setup',
+            campaign_start_month: 8,
+            school_data: schoolDataPayload,
+            historical_data: historicalPayload,
+            erp_files: successFiles,
+            wizard_step: 3,
+          })
+        cycleError = error
+      }
+      console.log('[SchoolSetupModal] cycle error:', cycleError)
+      if (cycleError) throw new Error(cycleError.message)
+
+      // Atualiza city/state na tabela institutions (colunas adicionadas via migration)
+      const { error: instError } = await supabase
+        .from('institutions')
         .update({ city: schoolData.city, state: schoolData.state })
         .eq('id', institutionId)
       console.log('[SchoolSetupModal] institution error:', instError)
-
-      if (cycleError) throw new Error(cycleError.message)
 
       onComplete()
     } catch (e) {
@@ -256,7 +288,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, onComplet
           {step === 1 && (
             <div style={{ paddingBottom: 24 }}>
               <h2 style={{ fontSize: 22, fontWeight: 800, color: '#1A2B4A', marginBottom: 6 }}>
-                Configure sua escola
+                {editMode ? 'Editar configurações da escola' : 'Configure sua escola'}
               </h2>
               <p style={{ fontSize: 14, color: '#64748B', marginBottom: 24 }}>
                 Essas informações nos ajudam a entender melhor o seu contexto.
@@ -479,10 +511,10 @@ export default function SchoolSetupModal({ institutionId, initialStep, onComplet
                 <Check size={32} color="#00A896" strokeWidth={2.5} />
               </div>
               <h2 style={{ fontSize: 22, fontWeight: 800, color: '#1A2B4A', marginBottom: 8 }}>
-                Escola configurada!
+                {editMode ? 'Configurações atualizadas!' : 'Escola configurada!'}
               </h2>
               <p style={{ fontSize: 14, color: '#64748B', marginBottom: 28, lineHeight: 1.6 }}>
-                Seus dados foram salvos. Você já pode começar a usar o Inscribo.
+                {editMode ? 'Suas alterações foram salvas.' : 'Seus dados foram salvos. Você já pode começar a usar o Inscribo.'}
               </p>
 
               {successFiles.length > 0 && latestFile ? (
@@ -567,7 +599,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, onComplet
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 22px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
                 {saving
                   ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Salvando...</>
-                  : <>Ir para o painel <ChevronRight size={14} /></>
+                  : editMode ? <>Salvar alterações <ChevronRight size={14} /></> : <>Ir para o painel <ChevronRight size={14} /></>
                 }
               </button>
             )}
