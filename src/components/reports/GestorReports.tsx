@@ -179,6 +179,11 @@ export default function GestorReports() {
   const [hasCycles, setHasCycles] = useState<boolean | null>(null)
   const [hasWhatsApp, setHasWhatsApp] = useState(false)
   const [onboardingDone, setOnboardingDone] = useState(false)
+  const [modalPreload, setModalPreload] = useState<{
+    historicalData?: { year: number; total_students: number; new_enrollments: number; reenrollments: number; transfers: number }[]
+    erpFiles?: { name: string; year: number; total: number; novatos: number; veterans: number; fee?: number; error?: boolean }[]
+    openAtStep?: number
+  } | null>(null)
 
   // IA insight
   const [insight, setInsight] = useState('')
@@ -348,15 +353,22 @@ export default function GestorReports() {
           institutionId={institutionId}
           institutionName={user?.institution_name || 'Escola'}
           onComplete={() => setOnboardingDone(true)}
-          onOpenCampaignModal={() => { setOnboardingDone(true); setShowCampaignModal(true) }}
+          onOpenCampaignModal={(preload) => {
+            setOnboardingDone(true)
+            if (preload) setModalPreload({ ...preload, openAtStep: 3 })
+            setShowCampaignModal(true)
+          }}
         />
         <CampaignGeneratorModal
           isOpen={showCampaignModal}
-          onClose={() => setShowCampaignModal(false)}
+          onClose={() => { setShowCampaignModal(false); setModalPreload(null) }}
           onApply={() => { loadAll(); showToast('Campanha aplicada com sucesso!') }}
           existingCycle={activeCycle as Parameters<typeof CampaignGeneratorModal>[0]['existingCycle']}
           institutionId={institutionId}
           institutionName={user?.institution_name || 'Escola'}
+          preloadedHistoricalData={modalPreload?.historicalData}
+          preloadedErpFiles={modalPreload?.erpFiles}
+          openAtStep={modalPreload?.openAtStep}
         />
       </>
     )
@@ -450,11 +462,14 @@ export default function GestorReports() {
 
       <CampaignGeneratorModal
         isOpen={showCampaignModal}
-        onClose={() => setShowCampaignModal(false)}
+        onClose={() => { setShowCampaignModal(false); setModalPreload(null) }}
         onApply={() => { loadAll(); showToast('Campanha aplicada com sucesso!') }}
         existingCycle={activeCycle as Parameters<typeof CampaignGeneratorModal>[0]['existingCycle']}
         institutionId={institutionId}
         institutionName={user?.institution_name || 'Escola'}
+        preloadedHistoricalData={modalPreload?.historicalData}
+        preloadedErpFiles={modalPreload?.erpFiles}
+        openAtStep={modalPreload?.openAtStep}
       />
     </div>
   )
@@ -519,9 +534,9 @@ function TabOverview({ funnelData, marketingData, reEnrollData, cycle, insight, 
     if (label === 'Matrículas') return heavy
       ? 'Conversão abaixo do esperado — treine a equipe na abordagem da visita'
       : 'Revise a proposta de valor e considere incentivos para decisão na visita'
-    if (label === 'Rematrículas') return heavy
-      ? 'Taxa crítica — acione o comitê de retenção e ligue para as famílias indecisos'
-      : 'Intensifique contato com famílias ainda sem confirmação para o próximo ano'
+    if (label === 'Visitas') return heavy
+      ? 'Taxa de comparecimento baixa — revise confirmação por WhatsApp e ligue no dia anterior'
+      : 'Envie lembretes por WhatsApp 24h antes das visitas para reduzir no-shows'
     return null
   }
 
@@ -644,10 +659,10 @@ function TabOverview({ funnelData, marketingData, reEnrollData, cycle, insight, 
       {latest ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
           {[
-            { label: 'Cadastros', actual: latest.registrations, target: latest.registrations_target, suffix: '' as const, isCpa: false },
-            { label: 'Matrículas', actual: latest.enrollments, target: latest.enrollments_target, suffix: '' as const, isCpa: false },
-            { label: 'CPA Atual', actual: cpaReal, target: avgCpaTarget || 0, suffix: 'R$' as const, isCpa: true },
-            { label: 'Rematrículas', actual: lastRe ? pct(lastRe.re_enrolled, lastRe.total_base) : 0, target: lastRe?.target_percentage || 85, suffix: '%' as const, isCpa: false },
+            { label: 'Cadastros', actual: latest.registrations, target: latest.registrations_target, suffix: '' as string, isCpa: false },
+            { label: 'Visitas', actual: latest.visits, target: latest.visits_target, suffix: '' as string, isCpa: false },
+            { label: 'Matrículas', actual: latest.enrollments, target: latest.enrollments_target, suffix: '' as string, isCpa: false },
+            { label: 'CPA Atual', actual: cpaReal, target: avgCpaTarget || 0, suffix: 'R$' as string, isCpa: true },
           ].map(({ label, actual, target, suffix, isCpa }) => {
             const noTarget = !target || target === 0
             const badge = noTarget ? null : getDeviationBadge(actual, target, isCpa)
