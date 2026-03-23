@@ -135,6 +135,18 @@ const GRADE_OPTIONS = [
 ]
 
 
+// ─── Helpers de datas de campanha ───────────────────────────────
+function getCampaignMonths(startMonth: number, executionYear: number): { label: string; month: number; year: number }[] {
+  const names = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+  const months = []
+  for (let i = 0; i < 7; i++) {
+    const monthIndex = (startMonth - 1 + i) % 12
+    const year = executionYear + Math.floor((startMonth - 1 + i) / 12)
+    months.push({ label: `${names[monthIndex]}/${year}`, month: monthIndex + 1, year })
+  }
+  return months
+}
+
 // ─── Componente principal ────────────────────────────────────────
 export default function CampaignGeneratorModal({
   isOpen, onClose, onApply, existingCycle, institutionId, institutionName,
@@ -164,12 +176,17 @@ export default function CampaignGeneratorModal({
   const [multiFileProgress, setMultiFileProgress] = useState<string | null>(null)
 
   // Timing calculado a partir dos valores selecionados pelo gestor
-  const campaignStartYear = campaignStartYearNum
+  // executionYear = ano em que a campanha acontece (2026)
+  // campaignYear  = ano letivo alvo = executionYear + 1 (2027)
+  const executionYear = campaignStartYearNum           // ex: 2026
+  const campaignStartYear = executionYear               // alias mantido para compatibilidade
+  const campaignYear = executionYear + 1                // ex: 2027
   const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
-  const campaignStartMonth = `${MONTH_NAMES[campaignStartMonthNum - 1]}/${campaignStartYearNum}`
+  const campaignStartMonth = `${MONTH_NAMES[campaignStartMonthNum - 1]}/${executionYear}`
   const monthsUntil = (() => {
     const now = new Date()
-    return Math.max(0, (campaignStartYearNum - now.getFullYear()) * 12 + ((campaignStartMonthNum - 1) - now.getMonth()))
+    const campaignDate = new Date(executionYear, campaignStartMonthNum - 1, 1)
+    return Math.max(0, (campaignDate.getFullYear() - now.getFullYear()) * 12 + campaignDate.getMonth() - now.getMonth())
   })()
 
   // Loading states
@@ -397,7 +414,8 @@ export default function CampaignGeneratorModal({
             historicalData,
             marketData,
             growthTarget: target,
-            campaignYear: campaignStartYear,
+            executionYear,
+            campaignYear,
             current_date: new Date().toLocaleDateString('pt-BR'),
             campaign_start_month: campaignStartMonth,
             months_until_campaign: monthsUntil
@@ -545,8 +563,13 @@ export default function CampaignGeneratorModal({
         erp_files: erpFiles,
       }, { onConflict: 'institution_id,year' })
 
-      for (const month of adjustedPlan.monthly_targets) {
-        const period = `${month.month}/${month.year}`
+      const campaignMonths = getCampaignMonths(campaignStartMonthNum, executionYear)
+      for (let mi = 0; mi < adjustedPlan.monthly_targets.length; mi++) {
+        const month = adjustedPlan.monthly_targets[mi]
+        const cm = campaignMonths[mi]
+        const period = cm
+          ? `${cm.year}-${String(cm.month).padStart(2, '0')}`
+          : `${month.year}-${String(month.month).padStart(2, '0')}`
         await supabase.from('funnel_metrics').upsert({
           institution_id: institutionId,
           period,
@@ -559,7 +582,7 @@ export default function CampaignGeneratorModal({
 
         await supabase.from('marketing_campaigns').upsert({
           institution_id: institutionId,
-          month_year: `${month.month}-${month.year}`,
+          month_year: cm ? `${cm.month}-${cm.year}` : `${month.month}-${month.year}`,
           cpa_target: month.cpa_target,
           investment: 0,
           leads_generated: 0
@@ -726,6 +749,9 @@ export default function CampaignGeneratorModal({
               regenLoading={regenLoading}
               monthsUntilCampaign={monthsUntil}
               campaignStartMonth={campaignStartMonth}
+              campaignYear={campaignYear}
+              executionYear={executionYear}
+              campaignStartMonthNum={campaignStartMonthNum}
               erpFiles={erpFiles}
               onAmbitiousChange={handleAmbitiousChange}
               onUpdateCell={updateMonthlyCell}
@@ -937,7 +963,9 @@ function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget, cam
         <div>
           <label style={labelStyle}>Ano da campanha</label>
           <select style={inputStyle} value={campaignStartYearNum} onChange={e => setCampaignStartYearNum(parseInt(e.target.value))}>
-            {[thisYear, thisYear + 1, thisYear + 2].map(y => <option key={y} value={y}>{y}</option>)}
+            {[thisYear, thisYear + 1, thisYear + 2].map(y => (
+              <option key={y} value={y}>Ano letivo {y + 1} (campanha em {y})</option>
+            ))}
           </select>
         </div>
       </div>
@@ -1220,12 +1248,15 @@ function StepFour({ loading, msgIdx, msgs, progress, error, onRetry }: {
 }
 
 // ─── Passo 5 — Revisão ───────────────────────────────────────────
-function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, campaignStartMonth, erpFiles, onAmbitiousChange, onUpdateCell }: {
+function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, campaignStartMonth, campaignYear, executionYear, campaignStartMonthNum, erpFiles, onAmbitiousChange, onUpdateCell }: {
   plan: GeneratedPlan
   ambitiousLevel: number
   regenLoading: boolean
   monthsUntilCampaign: number
   campaignStartMonth: string
+  campaignYear: number
+  executionYear: number
+  campaignStartMonthNum: number
   erpFiles: { name: string; year: number; total: number; novatos: number; veterans: number; fee?: number; error?: boolean }[]
   onAmbitiousChange: (level: number) => void
   onUpdateCell: (idx: number, field: keyof MonthlyTarget, value: number) => void
@@ -1357,7 +1388,9 @@ function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, cam
               </div>
             )}
 
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 12 }}>Metas mensais da campanha</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 12 }}>
+              Plano de campanha — Ano letivo {campaignYear}
+            </div>
 
             <div style={{ overflowX: 'auto', marginBottom: 16 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -1369,24 +1402,28 @@ function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, cam
                   </tr>
                 </thead>
                 <tbody>
-                  {plan.monthly_targets.map((m, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                      <td style={{ padding: '7px 10px', fontWeight: 600, color: '#1A2B4A', whiteSpace: 'nowrap' }}>{m.month}/{m.year}</td>
-                      {(['registrations', 'schedules', 'visits', 'enrollments', 'investment_suggested', 'leads_target'] as const).map(field => (
-                        <td key={field} style={{ padding: '4px 6px', textAlign: 'center' }}>
-                          <input
-                            type="number"
-                            style={{ width: 70, padding: '4px 6px', borderRadius: 6, border: '1px solid #E2E8F0', textAlign: 'center', fontSize: 12, outline: 'none', background: '#F8FAFC' }}
-                            value={m[field] || 0}
-                            onChange={e => onUpdateCell(i, field, parseFloat(e.target.value) || 0)}
-                          />
+                  {plan.monthly_targets.map((m, i) => {
+                    const campaignMonths = getCampaignMonths(campaignStartMonthNum, executionYear)
+                    const monthLabel = campaignMonths[i]?.label ?? `${m.month}/${m.year}`
+                    return (
+                      <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                        <td style={{ padding: '7px 10px', fontWeight: 600, color: '#1A2B4A', whiteSpace: 'nowrap' }}>{monthLabel}</td>
+                        {(['registrations', 'schedules', 'visits', 'enrollments', 'investment_suggested', 'leads_target'] as const).map(field => (
+                          <td key={field} style={{ padding: '4px 6px', textAlign: 'center' }}>
+                            <input
+                              type="number"
+                              style={{ width: 70, padding: '4px 6px', borderRadius: 6, border: '1px solid #E2E8F0', textAlign: 'center', fontSize: 12, outline: 'none', background: '#F8FAFC' }}
+                              value={m[field] || 0}
+                              onChange={e => onUpdateCell(i, field, parseFloat(e.target.value) || 0)}
+                            />
+                          </td>
+                        ))}
+                        <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B', fontWeight: 500 }}>
+                          {m.leads_target > 0 ? Math.round((m.investment_suggested || 0) / m.leads_target).toLocaleString('pt-BR') : '—'}
                         </td>
-                      ))}
-                      <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B', fontWeight: 500 }}>
-                        {m.leads_target > 0 ? Math.round((m.investment_suggested || 0) / m.leads_target).toLocaleString('pt-BR') : '—'}
-                      </td>
-                    </tr>
-                  ))}
+                      </tr>
+                    )
+                  })}
                   <tr style={{ background: '#F0FDFB', borderTop: '2px solid #D1FAE5' }}>
                     <td style={{ padding: '8px 10px', fontWeight: 700, color: '#1A2B4A', fontSize: 12 }}>TOTAL</td>
                     <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>{totals.registrations}</td>

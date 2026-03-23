@@ -92,17 +92,24 @@ function fmtCurrency(n: number) {
 const MONTH_NAMES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
 function calcCampaignTiming(startMonth = 8) {
-  const now = new Date()
-  const currentMonth = now.getMonth() // 0-11
-  const currentYear = now.getFullYear()
-  const startMonthIdx = startMonth - 1 // 0-indexed
-  const campaignStartYear = currentMonth >= startMonthIdx ? currentYear + 1 : currentYear
-  const monthsUntil = Math.max(0, (campaignStartYear - currentYear) * 12 + (startMonthIdx - currentMonth))
-  const campaignStartMonth = `${MONTH_NAMES_PT[startMonthIdx]}/${campaignStartYear}`
-  const preCampaignProgress = monthsUntil > 0
-    ? Math.max(0, Math.round(((8 - monthsUntil) / 8) * 100))
+  const today = new Date()
+  const currentYear = today.getFullYear()
+  // A campanha acontece em currentYear (executionYear); o ano letivo é currentYear + 1
+  const executionYear = currentYear
+  const campaignYear = currentYear + 1
+  const campaignDate = new Date(currentYear, startMonth - 1, 1)
+  const monthsUntil = Math.max(0,
+    (campaignDate.getFullYear() - today.getFullYear()) * 12 +
+    campaignDate.getMonth() - today.getMonth()
+  )
+  const campaignStartMonth = `${MONTH_NAMES_PT[startMonth - 1]}/${currentYear}`
+  // Progresso: de janeiro até startMonth dentro do executionYear
+  const totalPrepMonths = startMonth - 1  // Jan=0 a startMonth-1
+  const currentMonthIdx = today.getMonth()
+  const preCampaignProgress = totalPrepMonths > 0
+    ? Math.min(100, Math.max(0, Math.round((currentMonthIdx / totalPrepMonths) * 100)))
     : 100
-  return { monthsUntil, campaignStartMonth, preCampaignProgress }
+  return { monthsUntil, campaignStartMonth, preCampaignProgress, campaignYear, executionYear }
 }
 
 function linearRegression(points: { x: number; y: number }[]) {
@@ -337,7 +344,7 @@ export default function GestorReports() {
 
   const activeCycle = (cycle as (CampaignCycle & { applied_at?: string }) | null)
   const cycleIsActive = !!activeCycle?.applied_at
-  const { monthsUntil, campaignStartMonth, preCampaignProgress } = calcCampaignTiming(activeCycle?.campaign_start_month ?? 8)
+  const { monthsUntil, campaignStartMonth, preCampaignProgress, campaignYear } = calcCampaignTiming(activeCycle?.campaign_start_month ?? 8)
 
   // Action statuses for pre-campaign card
   const hasHistoricalImport = !!((activeCycle?.erp_files as unknown[])?.length)
@@ -447,7 +454,7 @@ export default function GestorReports() {
             </div>
           ) : (
             <>
-              {activeTab === 'overview' && <TabOverview funnelData={funnelData} marketingData={marketingData} reEnrollData={reEnrollData} cycle={cycle} insight={insight} insightLoading={insightLoading} onRefreshInsight={fetchInsight} monthsUntil={monthsUntil} campaignStartMonth={campaignStartMonth} preCampaignProgress={preCampaignProgress} hasHistoricalImport={hasHistoricalImport} hasWhatsApp={hasWhatsApp} hasBudget={hasBudget} onOpenCampaignModal={() => setShowCampaignModal(true)} />}
+              {activeTab === 'overview' && <TabOverview funnelData={funnelData} marketingData={marketingData} reEnrollData={reEnrollData} cycle={cycle} insight={insight} insightLoading={insightLoading} onRefreshInsight={fetchInsight} monthsUntil={monthsUntil} campaignStartMonth={campaignStartMonth} preCampaignProgress={preCampaignProgress} campaignYear={campaignYear} hasHistoricalImport={hasHistoricalImport} hasWhatsApp={hasWhatsApp} hasBudget={hasBudget} onOpenCampaignModal={() => setShowCampaignModal(true)} />}
               {activeTab === 'funnel' && <TabFunnel funnelData={funnelData} cycle={cycle} onGoToImport={() => setActiveTab('import')} />}
               {activeTab === 'marketing' && <TabMarketing marketingData={marketingData} institutionId={institutionId} onRefresh={loadAll} showToast={showToast} />}
               {activeTab === 'reenrollments' && <TabReenrollments reEnrollData={reEnrollData} institutionId={institutionId} onRefresh={loadAll} showToast={showToast} />}
@@ -478,7 +485,7 @@ export default function GestorReports() {
 // ═══════════════════════════════════════════════════════════
 //  TAB 1 — VISÃO GERAL
 // ═══════════════════════════════════════════════════════════
-function TabOverview({ funnelData, marketingData, reEnrollData, cycle, insight, insightLoading, onRefreshInsight, monthsUntil, campaignStartMonth, preCampaignProgress, hasHistoricalImport, hasWhatsApp, hasBudget, onOpenCampaignModal }: {
+function TabOverview({ funnelData, marketingData, reEnrollData, cycle, insight, insightLoading, onRefreshInsight, monthsUntil, campaignStartMonth, preCampaignProgress, campaignYear, hasHistoricalImport, hasWhatsApp, hasBudget, onOpenCampaignModal }: {
   funnelData: FunnelMetrics[]
   marketingData: MarketingCampaign[]
   reEnrollData: ReEnrollment[]
@@ -489,6 +496,7 @@ function TabOverview({ funnelData, marketingData, reEnrollData, cycle, insight, 
   monthsUntil: number
   campaignStartMonth: string
   preCampaignProgress: number
+  campaignYear: number
   hasHistoricalImport: boolean
   hasWhatsApp: boolean
   hasBudget: boolean
@@ -589,8 +597,8 @@ function TabOverview({ funnelData, marketingData, reEnrollData, cycle, insight, 
         <div style={{ background: 'linear-gradient(135deg, #1e40af 0%, #0d9488 100%)', borderRadius: 16, padding: 20, color: 'white' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
             <div>
-              <p style={{ fontSize: 12, opacity: 0.8, margin: '0 0 2px' }}>Fase pré-campanha</p>
-              <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{monthsUntil} {monthsUntil === 1 ? 'mês' : 'meses'} para o início — {campaignStartMonth}</h3>
+              <p style={{ fontSize: 12, opacity: 0.8, margin: '0 0 2px' }}>Fase pré-campanha — {monthsUntil} {monthsUntil === 1 ? 'mês' : 'meses'} para início da campanha {campaignStartMonth}</p>
+              <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Preparando a campanha para o ano letivo {campaignYear}</h3>
             </div>
             <span style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 20, padding: '4px 12px', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>
               {preCampaignProgress}% do período preparatório concluído

@@ -95,12 +95,15 @@ Arquivo: ${fileName}
 Tipo: ${fileType}
 
 INSTRUÇÕES IMPORTANTES:
-1. Inferir o ano do arquivo pelo nome do arquivo (ex: "2024" no nome) ou pelas datas encontradas no conteúdo
-2. Inferir period_start e period_end pelas datas mais antigas e mais recentes encontradas
-3. Para PDFs no formato SIGA (tabela com colunas Novatos/Veteranos/Total por data de matrícula): somar todas as colunas Novatos para new_students, todas as colunas Veteranos para returning_students
-4. Retornar null nos campos que não conseguir extrair — NUNCA inventar valores
-5. Se o arquivo for claramente um relatório de matrículas, preencher os campos de novatos/veteranos
-6. detected_year deve ser um número inteiro (ex: 2024), não uma string
+1. detected_year = ANO LETIVO ao qual esses alunos foram matriculados (NÃO o ano em que as matrículas foram feitas).
+   Regra: matrículas feitas entre set/YYYY e fev/YYYY+1 são para o ano letivo YYYY+1.
+   Exemplo: matrículas de set/2024 a fev/2025 → detected_year = 2025.
+   Se o arquivo tiver matrículas de ago/2025 a fev/2026 → detected_year = 2026.
+2. Inferir period_start e period_end pelas datas mais antigas e mais recentes encontradas no conteúdo.
+3. Para PDFs no formato SIGA (tabela com colunas Novatos/Veteranos/Total por data de matrícula): somar todas as colunas Novatos para new_students, todas as colunas Veteranos para returning_students.
+4. Retornar null nos campos que não conseguir extrair — NUNCA inventar valores.
+5. Se o arquivo for claramente um relatório de matrículas, preencher os campos de novatos/veteranos.
+6. detected_year deve ser um número inteiro (ex: 2025), não uma string.
 
 Retorne SOMENTE um JSON válido sem texto adicional:
 {
@@ -216,16 +219,18 @@ Retorne SOMENTE o JSON válido.`
     // GERADOR DE CAMPANHA DE MATRÍCULAS
     // ─────────────────────────────────────────────
     if (action === 'generate_campaign') {
-      const { schoolData, historicalData, marketData, growthTarget, campaignYear, current_date, campaign_start_month, months_until_campaign } = payload as {
+      const { schoolData, historicalData, marketData, growthTarget, campaignYear, executionYear, current_date, campaign_start_month, months_until_campaign } = payload as {
         schoolData: { name: string; city: string; state: string; grades: string[]; avg_monthly_fee: number; current_students: number }
         historicalData: { year: number; total_students: number; new_enrollments: number; reenrollments: number; transfers: number }[]
         marketData: { school_age_population?: number; private_school_rate?: number; sector_growth_rate?: number }
         growthTarget: { type: 'percentage' | 'absolute' | 'students'; value: number }
         campaignYear: number
+        executionYear?: number
         current_date?: string
         campaign_start_month?: string
         months_until_campaign?: number
       }
+      const execYear = executionYear ?? (campaignYear - 1)
 
       const hasHistory = historicalData && historicalData.length > 0
       const mode = hasHistory
@@ -234,7 +239,17 @@ Retorne SOMENTE o JSON válido.`
 
       const hasPrecampaign = months_until_campaign && months_until_campaign > 0
 
+      const startMonthName = campaign_start_month?.split('/')[0] || 'Agosto'
+
       const prompt = `Você é um especialista em campanhas de matrículas de escolas privadas brasileiras com 15 anos de experiência.
+
+CONTEXTO DE DATAS — LEIA COM ATENÇÃO:
+- Ano letivo alvo: ${campaignYear} (estes são os alunos que vão estudar em ${campaignYear})
+- Ano de execução da campanha: ${execYear} (a campanha acontece em ${execYear}/${execYear + 1})
+- Mês de início: ${startMonthName}/${execYear}
+- Os meses do plano devem ser: ${startMonthName}/${execYear} até Fev/${execYear + 1}
+- O histórico fornecido representa campanhas anteriores (cada uma captou alunos para o ano letivo SEGUINTE)
+- NÃO use datas além de Fev/${execYear + 1} nas metas mensais
 
 DADOS DA ESCOLA:
 - Nome: ${schoolData.name}
@@ -243,7 +258,7 @@ DADOS DA ESCOLA:
 - Mensalidade média: R$ ${schoolData.avg_monthly_fee}
 - Alunos atuais: ${schoolData.current_students}
 - Data atual: ${current_date || 'não informada'}
-- Início da campanha: ${campaign_start_month || `Agosto/${campaignYear}`}
+- Início da campanha: ${startMonthName}/${execYear}
 - Meses até a campanha: ${months_until_campaign ?? 0}
 
 DADOS DE MERCADO:
@@ -296,7 +311,7 @@ Gere o plano completo em JSON:
   },` : ''}
   "monthly_targets": [
     {
-      "month": "Ago", "year": ${campaignYear},
+      "month": "Ago", "year": ${execYear},
       "registrations": 0, "schedules": 0,
       "visits": 0, "enrollments": 0,
       "investment_suggested": 0, "leads_target": 0, "cpa_target": 0.0
@@ -315,7 +330,7 @@ Gere o plano completo em JSON:
   "recalibration_note": "quando recalibrar após ter dados reais"
 }
 
-Inclua monthly_targets para: Ago, Set, Out, Nov, Dez, Jan, Fev.${hasPrecampaign ? ' Preencha pre_campaign com ações práticas e realistas para os meses de preparação.' : ''}
+Inclua monthly_targets para: Ago/${execYear}, Set/${execYear}, Out/${execYear}, Nov/${execYear}, Dez/${execYear}, Jan/${execYear + 1}, Fev/${execYear + 1}.${hasPrecampaign ? ' Preencha pre_campaign com ações práticas e realistas para os meses de preparação.' : ''}
 Retorne SOMENTE o JSON válido.`
 
       const result = await callClaude(prompt, 2200)
