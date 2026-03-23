@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import {
   ArrowRightLeft, Plus, Copy, ExternalLink, Sparkles, Eye,
   AlertTriangle, CheckCircle, Clock, Users, X, ChevronRight,
-  Loader2, Check, MoreHorizontal, Pencil, Ban, Trash2
+  Loader2, Check, MoreHorizontal, Pencil, Trash2
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -189,13 +189,6 @@ export default function GestorTransfers() {
     setEditingTransfer(null)
     setForm(EMPTY_FORM)
     setFormError(null)
-  }
-
-  // ── cancel ──────────────────────────────────────────────────────────────
-  async function handleCancel(id: string) {
-    await supabase.from('student_transfers').update({ status: 'cancelled' }).eq('id', id)
-    setTransfers(prev => prev.map(t => t.id === id ? { ...t, status: 'cancelled' } : t))
-    showToast('Transferência cancelada.')
   }
 
   // ── delete ──────────────────────────────────────────────────────────────
@@ -436,7 +429,6 @@ export default function GestorTransfers() {
                           onToggle={e => { e.stopPropagation(); setOpenDropdown(openDropdown === t.id ? null : t.id) }}
                           items={[
                             { icon: <Pencil size={13} />, label: 'Editar', onClick: () => openEdit(t) },
-                            ...(!isCancelled ? [{ icon: <Ban size={13} />, label: 'Cancelar transferência', onClick: () => handleCancel(t.id), danger: false, muted: true }] : []),
                             ...(isAdmin ? [{ icon: <Trash2 size={13} />, label: 'Excluir', onClick: () => setDeleteId(t.id), danger: true }] : []),
                           ]}
                         />
