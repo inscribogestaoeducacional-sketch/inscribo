@@ -13,6 +13,7 @@ import TransferSurveyPage from './pages/survey/TransferSurveyPage'
 
 // Regular User Components
 import Dashboard from './components/dashboard/Dashboard'
+import GestorHome from './pages/gestor/GestorHome'
 import LeadKanban from './components/leads/LeadKanban'
 import VisitCalendar from './components/calendar/VisitCalendar'
 import EnrollmentManager from './components/enrollments/EnrollmentManager'
@@ -219,7 +220,8 @@ function AppContent() {
 
         <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--bg-page)' }}>
           <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/" element={<Navigate to="/home" replace />} />
+            <Route path="/home" element={<GestorHome />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/leads" element={<LeadKanban />} />
             <Route path="/visits" element={<VisitCalendar />} />
@@ -246,9 +248,9 @@ function AppContent() {
             
             <Route path="/profile" element={<UserProfile />} />
             <Route path="/setup" element={<InitialSetup />} />
-            <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/login" element={<Navigate to="/home" replace />} />
             <Route path="/unauthorized" element={<UnauthorizedPage />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<Navigate to="/home" replace />} />
           </Routes>
         </main>
       </div>

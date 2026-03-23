@@ -12,7 +12,6 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import type { FunnelMetrics, MarketingCampaign, ReEnrollment } from '../../lib/supabase'
 import CampaignGeneratorModal from './CampaignGeneratorModal'
-import GestorOnboarding from './GestorOnboarding'
 import { checkWeeklyAlerts } from '../../services/notificationService'
 import { checkRecalibration } from '../../services/recalibrationService'
 
@@ -185,7 +184,6 @@ export default function GestorReports() {
   const [erpImports, setErpImports] = useState<ErpImport[]>([])
   const [hasCycles, setHasCycles] = useState<boolean | null>(null)
   const [hasWhatsApp, setHasWhatsApp] = useState(false)
-  const [onboardingDone, setOnboardingDone] = useState(false)
   const [modalPreload, setModalPreload] = useState<{
     historicalData?: { year: number; total_students: number; new_enrollments: number; reenrollments: number; transfers: number }[]
     erpFiles?: { name: string; year: number; total: number; novatos: number; veterans: number; fee?: number; error?: boolean }[]
@@ -349,37 +347,6 @@ export default function GestorReports() {
   // Action statuses for pre-campaign card
   const hasHistoricalImport = !!((activeCycle?.erp_files as unknown[])?.length)
   const hasBudget = marketingData.some(m => (m.investment || 0) > 0)
-
-  // Show onboarding for brand-new schools
-  const showOnboarding = !loading && hasCycles === false && !onboardingDone
-
-  if (showOnboarding) {
-    return (
-      <>
-        <GestorOnboarding
-          institutionId={institutionId}
-          institutionName={user?.institution_name || 'Escola'}
-          onComplete={() => setOnboardingDone(true)}
-          onOpenCampaignModal={(preload) => {
-            setOnboardingDone(true)
-            if (preload) setModalPreload({ ...preload, openAtStep: 3 })
-            setShowCampaignModal(true)
-          }}
-        />
-        <CampaignGeneratorModal
-          isOpen={showCampaignModal}
-          onClose={() => { setShowCampaignModal(false); setModalPreload(null) }}
-          onApply={() => { loadAll(); showToast('Campanha aplicada com sucesso!') }}
-          existingCycle={activeCycle as Parameters<typeof CampaignGeneratorModal>[0]['existingCycle']}
-          institutionId={institutionId}
-          institutionName={user?.institution_name || 'Escola'}
-          preloadedHistoricalData={modalPreload?.historicalData}
-          preloadedErpFiles={modalPreload?.erpFiles}
-          openAtStep={modalPreload?.openAtStep}
-        />
-      </>
-    )
-  }
 
   return (
     <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: '#f8f9fb' }}>

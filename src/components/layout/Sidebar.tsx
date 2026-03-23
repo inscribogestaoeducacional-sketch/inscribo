@@ -3,15 +3,14 @@ import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useNotifications } from '../../hooks/useNotifications'
 import {
-  LayoutDashboard, Users, Calendar, GraduationCap,
+  LayoutDashboard, Users, Calendar,
   MessageCircle, BarChart3, UserCog, Settings
 } from 'lucide-react'
 
 const NAV_CFG = [
-  { path: '/dashboard',   label: 'Dashboard',  iconBg: '#E6F7F5', iconColor: '#00A896', Icon: LayoutDashboard, roles: ['admin','manager','user'] },
+  { path: '/home',        label: 'Início',     iconBg: '#E6F7F5', iconColor: '#00A896', Icon: LayoutDashboard, roles: ['admin','manager','user'] },
   { path: '/leads',       label: 'Leads',      iconBg: '#EDE9FE', iconColor: '#8B5CF6', Icon: Users,           roles: ['admin','manager','user'] },
   { path: '/visits',      label: 'Visitas',    iconBg: '#FEF3C7', iconColor: '#F59E0B', Icon: Calendar,        roles: ['admin','manager','user'] },
-  { path: '/enrollments', label: 'Matrículas', iconBg: '#FFE4E6', iconColor: '#F43F5E', Icon: GraduationCap,   roles: ['admin','manager','user'] },
   { path: '/whatsapp',    label: 'WhatsApp',   iconBg: '#D1FAE5', iconColor: '#10B981', Icon: MessageCircle,   roles: ['admin','manager','user'] },
   { path: '/reports',     label: 'Relatórios', iconBg: '#DBEAFE', iconColor: '#3B82F6', Icon: BarChart3,       roles: ['admin','manager'] },
   { path: '/users',       label: 'Usuários',   iconBg: '#F1F5F9', iconColor: '#64748B', Icon: UserCog,         roles: ['admin'] },
