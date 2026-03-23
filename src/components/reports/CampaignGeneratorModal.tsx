@@ -7,6 +7,11 @@ import {
 import { supabase } from '../../lib/supabase'
 
 // ─── Tipos ──────────────────────────────────────────────────────
+interface ErpFileEntry {
+  name: string; year: number; total: number
+  novatos: number; veterans: number; fee?: number; error?: boolean
+}
+
 interface Props {
   isOpen: boolean
   onClose: () => void
@@ -14,6 +19,9 @@ interface Props {
   existingCycle?: CycleData | null
   institutionId: string
   institutionName: string
+  preloadedHistoricalData?: HistoricalYear[]
+  preloadedErpFiles?: ErpFileEntry[]
+  openAtStep?: number
 }
 
 interface CycleData {
@@ -129,7 +137,8 @@ const GRADE_OPTIONS = [
 
 // ─── Componente principal ────────────────────────────────────────
 export default function CampaignGeneratorModal({
-  isOpen, onClose, onApply, existingCycle, institutionId, institutionName
+  isOpen, onClose, onApply, existingCycle, institutionId, institutionName,
+  preloadedHistoricalData, preloadedErpFiles, openAtStep
 }: Props) {
   const [step, setStep] = useState(1)
 
@@ -271,9 +280,40 @@ export default function CampaignGeneratorModal({
     }
   }, [isOpen])
 
+  // Aplicar dados pré-carregados do onboarding (prioridade sobre rascunho)
+  useEffect(() => {
+    if (!isOpen) return
+    if (preloadedHistoricalData?.length) {
+      setHistoricalData(preloadedHistoricalData)
+      setHistoryOption('upload')
+    }
+    if (preloadedErpFiles?.length) {
+      setErpFiles(preloadedErpFiles)
+
+      // Extrair avg_monthly_fee do primeiro arquivo que tiver fee > 0
+      const feeEntry = preloadedErpFiles.find(f => !f.error && (f.fee ?? 0) > 0)
+      const fee = feeEntry?.fee ?? 0
+
+      // Extrair current_students do arquivo com o ano mais recente
+      const validFiles = preloadedErpFiles.filter(f => !f.error && f.year > 2000)
+      const mostRecent = validFiles.sort((a, b) => b.year - a.year)[0]
+      const students = mostRecent?.total ?? 0
+
+      if (fee > 0 || students > 0) {
+        setSchoolData(s => ({
+          ...s,
+          ...(fee > 0 ? { avg_monthly_fee: fee } : {}),
+          ...(students > 0 ? { current_students: students } : {}),
+        }))
+      }
+    }
+    if (openAtStep && openAtStep > 1) setStep(openAtStep)
+  }, [isOpen]) // eslint-disable-line
+
   // Carregar rascunho ao abrir (Supabase primeiro, depois localStorage)
   useEffect(() => {
     if (!isOpen || !institutionId) return
+    if (openAtStep && openAtStep > 1) return // dados pré-carregados têm prioridade
     ;(async () => {
       try {
         const { data } = await supabase.from('campaign_cycles')
@@ -724,7 +764,14 @@ export default function CampaignGeneratorModal({
 
             {step === 3 && !loadingMarket && Object.keys(marketData).length > 0 && (
               <button
-                onClick={() => { setStep(4); generateCampaign() }}
+                onClick={() => {
+                  if (!schoolData.city || !schoolData.state) {
+                    setError('Preencha cidade e estado no Passo 1 antes de gerar o plano.')
+                    setStep(1)
+                    return
+                  }
+                  setStep(4); generateCampaign()
+                }}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                 <Sparkles size={14} /> Gerar minha campanha
               </button>
