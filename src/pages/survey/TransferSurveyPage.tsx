@@ -323,9 +323,10 @@ export default function TransferSurveyPage() {
 
   // ─── formulário ─────────────────────────────────────────
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      {/* header */}
-      <div style={{ width: '100%', background: 'white', borderBottom: '1px solid #e2e8f0', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc' }}>
+
+      {/* Header fixo */}
+      <div style={{ backgroundColor: 'white', borderBottom: '1px solid #e2e8f0', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {institution?.logo_url ? (
           <img src={institution.logo_url} alt={institution.name} style={{ height: 36, objectFit: 'contain' }} />
         ) : (
@@ -333,190 +334,207 @@ export default function TransferSurveyPage() {
         )}
       </div>
 
-      {/* barra de progresso */}
-      <div style={{ width: '100%', height: 4, background: '#e2e8f0' }}>
+      {/* Barra de progresso */}
+      <div style={{ width: '100%', height: 4, background: '#e2e8f0', flexShrink: 0 }}>
         <div style={{ height: '100%', background: brandColor, width: `${progress}%`, transition: 'width 0.4s ease' }} />
       </div>
 
-      <div style={{ width: '100%', maxWidth: 560, padding: '40px 24px', flex: 1 }}>
-        {/* info do aluno */}
-        {transfer && (
-          <div style={{ background: 'white', borderRadius: 12, padding: '12px 16px', marginBottom: 28, border: '1px solid #e2e8f0', display: 'flex', gap: 16 }}>
-            <div>
-              <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', margin: '0 0 2px' }}>Aluno</p>
-              <p style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>{transfer.student_name}</p>
-            </div>
-            <div>
-              <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', margin: '0 0 2px' }}>Série</p>
-              <p style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>{transfer.course_grade}</p>
-            </div>
-          </div>
-        )}
+      {/* Conteúdo rolável */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 16px' }}>
+        <div style={{ maxWidth: 560, margin: '0 auto', width: '100%' }}>
 
-        {/* card da pergunta */}
-        <div style={{
-          background: 'white', borderRadius: 20, padding: '32px 28px',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.06)', border: '1px solid #e2e8f0',
-          opacity: animating ? 0 : 1, transform: animating ? 'translateY(8px)' : 'translateY(0)',
-          transition: 'opacity 0.2s, transform 0.2s'
-        }}>
-          <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', margin: '0 0 12px' }}>
-            Pergunta {currentIndex + 1} de {activeQuestions.length}
-          </p>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1e2d6b', margin: '0 0 24px', lineHeight: 1.4 }}>
-            {current?.text}
-          </h2>
-
-          {/* single */}
-          {current?.type === 'single' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {current.options?.map(opt => {
-                const selected = responses[current.id] === opt.value
-                return (
-                  <button
-                    key={opt.value}
-                    onClick={() => setResponse(opt.value)}
-                    style={{
-                      padding: '14px 18px', borderRadius: 12, border: `2px solid ${selected ? brandColor : '#e2e8f0'}`,
-                      background: selected ? `${brandColor}10` : 'white',
-                      cursor: 'pointer', textAlign: 'left', fontSize: 14, fontWeight: selected ? 600 : 400,
-                      color: selected ? brandColor : '#374151', transition: 'all 0.15s'
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                )
-              })}
+          {/* info do aluno */}
+          {transfer && (
+            <div style={{ background: 'white', borderRadius: 12, padding: '12px 16px', marginBottom: 24, border: '1px solid #e2e8f0', display: 'flex', gap: 16 }}>
+              <div>
+                <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', margin: '0 0 2px' }}>Aluno</p>
+                <p style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>{transfer.student_name}</p>
+              </div>
+              <div>
+                <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', margin: '0 0 2px' }}>Série</p>
+                <p style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>{transfer.course_grade}</p>
+              </div>
             </div>
           )}
 
-          {/* multiple */}
-          {current?.type === 'multiple' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {current.options?.map(opt => {
-                const selected = ((responses[current.id] as string[]) || []).includes(opt.value)
-                return (
-                  <button
-                    key={opt.value}
-                    onClick={() => toggleMultiple(opt.value)}
-                    style={{
-                      padding: '14px 18px', borderRadius: 12, border: `2px solid ${selected ? brandColor : '#e2e8f0'}`,
-                      background: selected ? `${brandColor}10` : 'white',
-                      cursor: 'pointer', textAlign: 'left', fontSize: 14, fontWeight: selected ? 600 : 400,
-                      color: selected ? brandColor : '#374151', transition: 'all 0.15s',
-                      display: 'flex', alignItems: 'center', gap: 10
-                    }}
-                  >
-                    <div style={{ width: 18, height: 18, borderRadius: 4, border: `2px solid ${selected ? brandColor : '#d1d5db'}`, background: selected ? brandColor : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      {selected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>}
-                    </div>
-                    {opt.label}
-                  </button>
-                )
-              })}
-            </div>
-          )}
+          {/* card da pergunta */}
+          <div style={{
+            background: 'white', borderRadius: 20, padding: '28px 24px',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.06)', border: '1px solid #e2e8f0',
+            opacity: animating ? 0 : 1, transform: animating ? 'translateY(8px)' : 'translateY(0)',
+            transition: 'opacity 0.2s, transform 0.2s'
+          }}>
+            <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', margin: '0 0 12px' }}>
+              Pergunta {currentIndex + 1} de {activeQuestions.length}
+            </p>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1e2d6b', margin: '0 0 24px', lineHeight: 1.4 }}>
+              {current?.text}
+            </h2>
 
-          {/* scale */}
-          {current?.type === 'scale' && (
-            <div>
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-                {Array.from({ length: (current.max || 10) - (current.min || 0) + 1 }, (_, i) => i + (current.min || 0)).map(n => {
-                  const selected = responses[current.id] === n
+            {/* single */}
+            {current?.type === 'single' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {current.options?.map(opt => {
+                  const selected = responses[current.id] === opt.value
                   return (
                     <button
-                      key={n}
-                      onClick={() => setResponse(n)}
+                      key={opt.value}
+                      onClick={() => setResponse(opt.value)}
                       style={{
-                        width: 44, height: 44, borderRadius: 12,
-                        border: `2px solid ${selected ? brandColor : '#e2e8f0'}`,
-                        background: selected ? brandColor : 'white',
-                        color: selected ? 'white' : '#374151',
-                        fontWeight: selected ? 700 : 400, fontSize: 15,
-                        cursor: 'pointer', transition: 'all 0.15s'
+                        padding: '14px 18px', borderRadius: 12, border: `2px solid ${selected ? brandColor : '#e2e8f0'}`,
+                        background: selected ? `${brandColor}10` : 'white',
+                        cursor: 'pointer', textAlign: 'left', fontSize: 14, fontWeight: selected ? 600 : 400,
+                        color: selected ? brandColor : '#374151', transition: 'all 0.15s'
                       }}
                     >
-                      {n}
+                      {opt.label}
                     </button>
                   )
                 })}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 11, color: '#94a3b8' }}>Improvável</span>
-                <span style={{ fontSize: 11, color: '#94a3b8' }}>Muito provável</span>
+            )}
+
+            {/* multiple */}
+            {current?.type === 'multiple' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {current.options?.map(opt => {
+                  const selected = ((responses[current.id] as string[]) || []).includes(opt.value)
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => toggleMultiple(opt.value)}
+                      style={{
+                        padding: '14px 18px', borderRadius: 12, border: `2px solid ${selected ? brandColor : '#e2e8f0'}`,
+                        background: selected ? `${brandColor}10` : 'white',
+                        cursor: 'pointer', textAlign: 'left', fontSize: 14, fontWeight: selected ? 600 : 400,
+                        color: selected ? brandColor : '#374151', transition: 'all 0.15s',
+                        display: 'flex', alignItems: 'center', gap: 10
+                      }}
+                    >
+                      <div style={{ width: 18, height: 18, borderRadius: 4, border: `2px solid ${selected ? brandColor : '#d1d5db'}`, background: selected ? brandColor : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        {selected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>}
+                      </div>
+                      {opt.label}
+                    </button>
+                  )
+                })}
               </div>
+            )}
+
+            {/* scale — botões grandes lado a lado, fáceis de tocar no celular */}
+            {current?.type === 'scale' && (
+              <div>
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+                  {Array.from({ length: (current.max || 10) - (current.min || 0) + 1 }, (_, i) => i + (current.min || 0)).map(n => {
+                    const selected = responses[current.id] === n
+                    return (
+                      <button
+                        key={n}
+                        onClick={() => setResponse(n)}
+                        style={{
+                          width: 48, height: 48, borderRadius: 12,
+                          border: `2px solid ${selected ? brandColor : '#e2e8f0'}`,
+                          background: selected ? brandColor : 'white',
+                          color: selected ? 'white' : '#374151',
+                          fontWeight: selected ? 700 : 500, fontSize: 16,
+                          cursor: 'pointer', transition: 'all 0.15s',
+                          touchAction: 'manipulation',
+                        }}
+                      >
+                        {n}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>Improvável</span>
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>Muito provável</span>
+                </div>
+              </div>
+            )}
+
+            {/* text */}
+            {current?.type === 'text' && (
+              <textarea
+                value={(responses[current.id] as string) || ''}
+                onChange={e => setResponse(e.target.value)}
+                placeholder={current.placeholder}
+                rows={3}
+                style={{
+                  width: '100%', padding: '14px 16px', border: '2px solid #e2e8f0', borderRadius: 12,
+                  fontSize: 14, color: '#374151', resize: 'vertical', outline: 'none',
+                  fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box',
+                  transition: 'border-color 0.15s', minHeight: 96,
+                }}
+                onFocus={e => (e.target.style.borderColor = brandColor)}
+                onBlur={e => (e.target.style.borderColor = '#e2e8f0')}
+              />
+            )}
+          </div>
+
+          {/* botão Anterior — dentro do scroll, abaixo do card */}
+          {currentIndex > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <button
+                onClick={back}
+                style={{
+                  padding: '10px 20px', borderRadius: 10, border: '2px solid #e2e8f0', background: 'white',
+                  cursor: 'pointer', color: '#6b7280', fontSize: 14, transition: 'all 0.15s'
+                }}
+              >
+                ← Anterior
+              </button>
             </div>
           )}
 
-          {/* text */}
-          {current?.type === 'text' && (
-            <textarea
-              value={(responses[current.id] as string) || ''}
-              onChange={e => setResponse(e.target.value)}
-              placeholder={current.placeholder}
-              rows={4}
-              style={{
-                width: '100%', padding: '14px 16px', border: '2px solid #e2e8f0', borderRadius: 12,
-                fontSize: 14, color: '#374151', resize: 'vertical', outline: 'none',
-                fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box',
-                transition: 'border-color 0.15s'
-              }}
-              onFocus={e => (e.target.style.borderColor = brandColor)}
-              onBlur={e => (e.target.style.borderColor = '#e2e8f0')}
-            />
-          )}
-        </div>
-
-        {/* navegação */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24 }}>
-          {currentIndex > 0 ? (
-            <button
-              onClick={back}
-              style={{
-                padding: '12px 20px', borderRadius: 12, border: '2px solid #e2e8f0', background: 'white',
-                cursor: 'pointer', color: '#6b7280', fontSize: 14, transition: 'all 0.15s'
-              }}
-            >
-              ← Anterior
-            </button>
-          ) : <div />}
-
-          {canAdvance() && (
-            isLast ? (
-              <button
-                onClick={submit}
-                disabled={status === 'submitting'}
-                style={{
-                  padding: '12px 28px', borderRadius: 12, border: 'none',
-                  background: brandColor, color: 'white',
-                  cursor: status === 'submitting' ? 'not-allowed' : 'pointer',
-                  fontSize: 14, fontWeight: 700, transition: 'all 0.15s',
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  opacity: status === 'submitting' ? 0.8 : 1
-                }}
-              >
-                {status === 'submitting' ? (
-                  <>
-                    <div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                    Enviando...
-                  </>
-                ) : 'Enviar respostas ✓'}
-              </button>
-            ) : (
-              <button
-                onClick={advance}
-                style={{
-                  padding: '12px 28px', borderRadius: 12, border: 'none',
-                  background: brandColor, color: 'white',
-                  cursor: 'pointer', fontSize: 14, fontWeight: 700, transition: 'all 0.15s'
-                }}
-              >
-                Próxima pergunta →
-              </button>
-            )
-          )}
+          {/* espaçamento para não ficar atrás do rodapé sticky */}
+          <div style={{ height: 16 }} />
         </div>
       </div>
+
+      {/* Botão FIXO no rodapé — sempre visível */}
+      {canAdvance() && (
+        <div style={{
+          position: 'sticky', bottom: 0,
+          backgroundColor: 'white', borderTop: '1px solid #e2e8f0',
+          padding: '14px 16px', zIndex: 10, flexShrink: 0,
+        }}>
+          {isLast ? (
+            <button
+              onClick={submit}
+              disabled={status === 'submitting'}
+              style={{
+                width: '100%', maxWidth: 560, margin: '0 auto', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', gap: 8,
+                padding: '14px 24px', backgroundColor: brandColor, color: 'white',
+                borderRadius: 10, fontSize: 16, fontWeight: 700, border: 'none',
+                cursor: status === 'submitting' ? 'not-allowed' : 'pointer',
+                opacity: status === 'submitting' ? 0.8 : 1,
+                touchAction: 'manipulation',
+              }}
+            >
+              {status === 'submitting' ? (
+                <>
+                  <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                  Enviando...
+                </>
+              ) : 'Enviar respostas ✓'}
+            </button>
+          ) : (
+            <button
+              onClick={advance}
+              style={{
+                width: '100%', maxWidth: 560, margin: '0 auto', display: 'block',
+                padding: '14px 24px', backgroundColor: brandColor, color: 'white',
+                borderRadius: 10, fontSize: 16, fontWeight: 700, border: 'none',
+                cursor: 'pointer', touchAction: 'manipulation',
+              }}
+            >
+              Próxima pergunta →
+            </button>
+          )}
+        </div>
+      )}
 
       <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
     </div>
