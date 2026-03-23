@@ -109,9 +109,8 @@ export default function GestorHome() {
   const [showModal, setShowModal] = useState(false)
   const [showModalAtStep, setShowModalAtStep] = useState<number | undefined>(undefined)
   const [btnTooltip, setBtnTooltip] = useState(false)
-  // showSetup começa true até sabermos se a escola já tem setup
   const [showSetup, setShowSetup] = useState(false)
-  const [setupChecked, setSetupChecked] = useState(false)
+  const [setupInitialStep, setSetupInitialStep] = useState(1)
 
   useEffect(() => {
     if (!institutionId) return
@@ -143,13 +142,10 @@ export default function GestorHome() {
       setCycles(loadedCycles)
       setFunnelData(funnelRes.data ?? [])
       setTransfers((transferRes.data ?? []) as StudentTransfer[])
-      if (!setupChecked) {
-        const alreadySetup = loadedCycles.some(c =>
-          ['setup','draft','active','completed'].includes(c.status ?? '')
-        )
-        setShowSetup(!alreadySetup)
-        setSetupChecked(true)
-      }
+      const alreadySetup = loadedCycles.some(c =>
+        ['setup','draft','active','completed'].includes(c.status ?? '')
+      )
+      if (!alreadySetup) setShowSetup(true)
     } finally {
       setLoading(false)
     }
@@ -277,7 +273,7 @@ export default function GestorHome() {
             </p>
           </div>
           <button
-            onClick={() => { setShowModalAtStep(2); setShowModal(true) }}
+            onClick={() => { setSetupInitialStep(2); setShowSetup(true) }}
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
               padding: '10px 22px', borderRadius: 10,
@@ -536,11 +532,16 @@ export default function GestorHome() {
         openAtStep={showModalAtStep}
       />
 
-      {/* Setup modal — abre automaticamente se escola não tem setup */}
-      {showSetup && setupChecked && (
+      {/* Setup modal — abre automaticamente se escola não tem setup, ou manualmente via botão */}
+      {showSetup && (
         <SchoolSetupModal
           institutionId={institutionId}
-          onComplete={() => { setShowSetup(false); load() }}
+          initialStep={setupInitialStep}
+          onComplete={() => {
+            setShowSetup(false)
+            setSetupInitialStep(1)
+            load()
+          }}
         />
       )}
     </div>

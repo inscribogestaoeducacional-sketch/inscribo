@@ -28,6 +28,7 @@ interface SchoolData {
 
 interface Props {
   institutionId: string
+  initialStep?: number
   onComplete: () => void
 }
 
@@ -50,8 +51,8 @@ const inputStyle: React.CSSProperties = {
 }
 
 // ─── componente ─────────────────────────────────────────────────
-export default function SchoolSetupModal({ institutionId, onComplete }: Props) {
-  const [step, setStep] = useState(1)
+export default function SchoolSetupModal({ institutionId, initialStep, onComplete }: Props) {
+  const [step, setStep] = useState(initialStep ?? 1)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -62,31 +63,32 @@ export default function SchoolSetupModal({ institutionId, onComplete }: Props) {
   const [originalState, setOriginalState] = useState('')
 
   const [processedFiles, setProcessedFiles] = useState<ProcessedFile[]>([])
-  const [skippedUpload, setSkippedUpload] = useState(false)
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [fileProgress, setFileProgress] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Buscar dados da instituição ao montar
   useEffect(() => {
-    ;(async () => {
-      const { data } = await supabase
+    const fetchInstitution = async () => {
+      const { data, error } = await supabase
         .from('institutions')
         .select('name, city, state')
         .eq('id', institutionId)
         .single()
+      console.log('[SchoolSetupModal] institution:', data, error)
       if (!data) return
-      const city = (data.city as string) || ''
-      const state = (data.state as string) || ''
+      const city = (data.city as string) ?? ''
+      const state = (data.state as string) ?? ''
       setOriginalCity(city)
       setOriginalState(state)
-      setSchoolData(s => ({
-        ...s,
-        name: (data.name as string) || '',
-        city,
-        state,
+      setSchoolData(prev => ({
+        ...prev,
+        name: (data.name as string) ?? prev.name,
+        city: city || prev.city,
+        state: state || prev.state,
       }))
-    })()
+    }
+    fetchInstitution()
   }, [institutionId])
 
   const progressPct = (step / 3) * 100
@@ -167,45 +169,41 @@ export default function SchoolSetupModal({ institutionId, onComplete }: Props) {
   // ── salvar e fechar ────────────────────────────────────────────
   async function handleFinish() {
     setSaving(true)
+    setError(null)
     try {
       const successFiles = processedFiles.filter(f => !f.error)
-      const cityEdited = schoolData.city !== originalCity
-      const stateEdited = schoolData.state !== originalState
+      console.log('[SchoolSetupModal] salvando:', { institutionId, schoolData, successFiles })
 
-      await supabase.from('campaign_cycles').upsert({
+      const { error: cycleError } = await supabase.from('campaign_cycles').upsert({
         institution_id: institutionId,
-        year: new Date().getFullYear(),
-        label: `Setup ${new Date().getFullYear()}`,
-        start_date: `${new Date().getFullYear()}-01-01`,
-        end_date: `${new Date().getFullYear()}-12-31`,
-        target_new_students: 0,
-        target_reenrollment_rate: 85,
-        base_students: schoolData.currentStudents,
         status: 'setup',
-        wizard_step: 3,
         school_data: {
           name: schoolData.name,
           city: schoolData.city,
           state: schoolData.state,
-          grades: schoolData.grades,
-          avg_monthly_fee: schoolData.avgFee,
-          current_students: schoolData.currentStudents,
+          grades: schoolData.grades ?? [],
+          avg_monthly_fee: Number(schoolData.avgFee) || 0,
+          current_students: Number(schoolData.currentStudents) || 0,
         },
         historical_data: successFiles.map(f => ({
           detected_year: f.detected_year,
-          total_students: f.total_students,
-          new_students: f.new_students,
-          returning_students: f.returning_students,
-          avg_monthly_fee: f.avg_monthly_fee,
+          total_students: f.total_students ?? 0,
+          new_students: f.new_students ?? 0,
+          returning_students: f.returning_students ?? 0,
+          avg_monthly_fee: f.avg_monthly_fee ?? null,
         })),
         erp_files: successFiles,
-      }, { onConflict: 'institution_id,year' })
+        wizard_step: 3,
+        campaign_start_month: 8,
+      }, { onConflict: 'institution_id,status' })
+      console.log('[SchoolSetupModal] cycle error:', cycleError)
 
-      if (cityEdited || stateEdited) {
-        await supabase.from('institutions')
-          .update({ city: schoolData.city, state: schoolData.state })
-          .eq('id', institutionId)
-      }
+      const { error: instError } = await supabase.from('institutions')
+        .update({ city: schoolData.city, state: schoolData.state })
+        .eq('id', institutionId)
+      console.log('[SchoolSetupModal] institution error:', instError)
+
+      if (cycleError) throw new Error(cycleError.message)
 
       onComplete()
     } catch (e) {
@@ -220,7 +218,6 @@ export default function SchoolSetupModal({ institutionId, onComplete }: Props) {
   const latestFile = sortedSuccess[0] ?? null
 
   const canAdvanceStep1 = !!schoolData.city && !!schoolData.state
-  const canAdvanceStep2 = successFiles.length > 0 || skippedUpload
 
   return (
     <div style={{
@@ -460,7 +457,7 @@ export default function SchoolSetupModal({ institutionId, onComplete }: Props) {
 
               {/* Botão pular */}
               <button
-                onClick={() => { setSkippedUpload(true); setStep(3) }}
+                onClick={() => setStep(3)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6,
                   background: 'none', border: 'none', cursor: 'pointer',
@@ -490,7 +487,7 @@ export default function SchoolSetupModal({ institutionId, onComplete }: Props) {
 
               {successFiles.length > 0 && latestFile ? (
                 <div style={{ background: '#F0FDF9', border: '1px solid #BBF7D0', borderRadius: 14, padding: '20px 24px', textAlign: 'left', marginBottom: 20 }}>
-                  <div style={{ display: 'flex', align: 'center', gap: 8, marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                     <Sparkles size={16} color="#00A896" style={{ marginTop: 2 }} />
                     <span style={{ fontSize: 13, fontWeight: 700, color: '#065f46' }}>
                       A IA já analisou o padrão da sua escola
@@ -556,15 +553,7 @@ export default function SchoolSetupModal({ institutionId, onComplete }: Props) {
 
             {step === 2 && (
               <button
-                onClick={() => {
-                  if (successFiles.length > 0) {
-                    setSkippedUpload(false)
-                    setStep(3)
-                  } else {
-                    setSkippedUpload(true)
-                    setStep(3)
-                  }
-                }}
+                onClick={() => setStep(3)}
                 disabled={loadingFiles}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 22px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: loadingFiles ? 'not-allowed' : 'pointer', opacity: loadingFiles ? 0.6 : 1 }}>
                 {successFiles.length > 0 ? 'Continuar' : 'Pular por enquanto'} <ChevronRight size={14} />
