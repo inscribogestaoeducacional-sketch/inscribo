@@ -10,6 +10,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import CampaignGeneratorModal from '../../components/reports/CampaignGeneratorModal'
+import SchoolSetupModal from '../../components/onboarding/SchoolSetupModal'
 import type { FunnelMetrics } from '../../lib/supabase'
 
 // ─── types ────────────────────────────────────────────────────────────────────
@@ -108,6 +109,9 @@ export default function GestorHome() {
   const [showModal, setShowModal] = useState(false)
   const [showModalAtStep, setShowModalAtStep] = useState<number | undefined>(undefined)
   const [btnTooltip, setBtnTooltip] = useState(false)
+  // showSetup começa true até sabermos se a escola já tem setup
+  const [showSetup, setShowSetup] = useState(false)
+  const [setupChecked, setSetupChecked] = useState(false)
 
   useEffect(() => {
     if (!institutionId) return
@@ -135,9 +139,17 @@ export default function GestorHome() {
           .order('transfer_date', { ascending: false })
           .limit(5),
       ])
-      setCycles((cyclesRes.data ?? []) as CampaignCycle[])
+      const loadedCycles = (cyclesRes.data ?? []) as CampaignCycle[]
+      setCycles(loadedCycles)
       setFunnelData(funnelRes.data ?? [])
       setTransfers((transferRes.data ?? []) as StudentTransfer[])
+      if (!setupChecked) {
+        const alreadySetup = loadedCycles.some(c =>
+          ['setup','draft','active','completed'].includes(c.status ?? '')
+        )
+        setShowSetup(!alreadySetup)
+        setSetupChecked(true)
+      }
     } finally {
       setLoading(false)
     }
@@ -523,6 +535,14 @@ export default function GestorHome() {
         institutionName={user?.institution_name || 'Escola'}
         openAtStep={showModalAtStep}
       />
+
+      {/* Setup modal — abre automaticamente se escola não tem setup */}
+      {showSetup && setupChecked && (
+        <SchoolSetupModal
+          institutionId={institutionId}
+          onComplete={() => { setShowSetup(false); load() }}
+        />
+      )}
     </div>
   )
 }

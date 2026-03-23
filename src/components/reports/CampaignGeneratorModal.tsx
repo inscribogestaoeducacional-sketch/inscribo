@@ -390,8 +390,41 @@ export default function CampaignGeneratorModal({
         if ((data.erp_files as unknown[])?.length) setErpFiles(data.erp_files as typeof erpFiles)
         if (data.campaign_start_month) setCampaignStartMonthNum(data.campaign_start_month as number)
         if (data.wizard_step && (data.wizard_step as number) > 1) setStep(Math.min(data.wizard_step as number, 3))
-        setDraftToast('Rascunho encontrado — continuando de onde você parou')
-        setTimeout(() => setDraftToast(null), 4000)
+        if (data.status !== 'setup') {
+          setDraftToast('Rascunho encontrado — continuando de onde você parou')
+          setTimeout(() => setDraftToast(null), 4000)
+        }
+      } catch {}
+
+      // Pré-preencher dados do setup inicial se não há rascunho de campanha
+      try {
+        const { data: setupCycle } = await supabase
+          .from('campaign_cycles')
+          .select('school_data, historical_data, erp_files')
+          .eq('institution_id', institutionId)
+          .eq('status', 'setup')
+          .maybeSingle()
+
+        if (setupCycle) {
+          const sd = setupCycle.school_data as SchoolData | null
+          if (sd) {
+            setSchoolData(prev => ({
+              ...prev,
+              city: sd.city ?? prev.city,
+              state: sd.state ?? prev.state,
+              grades: sd.grades?.length ? sd.grades : prev.grades,
+              avg_monthly_fee: sd.avg_monthly_fee ?? prev.avg_monthly_fee,
+              current_students: sd.current_students ?? prev.current_students,
+            }))
+          }
+          const hd = setupCycle.historical_data as HistoricalYear[] | null
+          if (hd?.length) {
+            setHistoricalData(hd)
+            setHistoryOption('upload')
+          }
+          const ef = setupCycle.erp_files as typeof erpFiles | null
+          if (ef?.length) setErpFiles(ef)
+        }
       } catch {}
     })()
   }, [isOpen, institutionId])
