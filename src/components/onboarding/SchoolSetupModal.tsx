@@ -26,6 +26,15 @@ interface SchoolData {
   currentStudents: number
 }
 
+interface ExistingCycle {
+  id: string
+  school_data?: {
+    city?: string; state?: string; name?: string
+    grades?: string[]; avg_monthly_fee?: number; current_students?: number
+  } | null
+  erp_files?: ProcessedFile[] | null
+}
+
 interface Props {
   institutionId: string
   initialStep?: number
@@ -66,6 +75,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [fileProgress, setFileProgress] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [existingCycle, setExistingCycle] = useState<ExistingCycle | null>(null)
 
   // Buscar dados da instituição ao montar
   useEffect(() => {
@@ -87,8 +97,53 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
     fetchInstitution()
   }, [institutionId])
 
+  // Em editMode, carrega ciclo de setup existente
+  useEffect(() => {
+    if (!editMode) return
+    const fetchCycle = async () => {
+      const executionYear = new Date().getFullYear()
+      const campaignYear = executionYear + 1
+      const { data } = await supabase
+        .from('campaign_cycles')
+        .select('id, school_data, erp_files')
+        .eq('institution_id', institutionId)
+        .eq('year', campaignYear)
+        .maybeSingle()
+      if (data) setExistingCycle(data as ExistingCycle)
+    }
+    fetchCycle()
+  }, [editMode, institutionId])
+
+  // Pré-preenche grades + fee + alunos do ciclo existente
+  useEffect(() => {
+    if (!editMode || !existingCycle?.school_data) return
+    const sd = existingCycle.school_data
+    setSchoolData(prev => ({
+      ...prev,
+      grades: sd.grades?.length ? sd.grades : prev.grades,
+      avgFee: sd.avg_monthly_fee ?? prev.avgFee,
+      currentStudents: sd.current_students ?? prev.currentStudents,
+    }))
+  }, [editMode, existingCycle])
+
+  // Pré-preenche arquivos ERP já processados
+  useEffect(() => {
+    if (!editMode || !existingCycle?.erp_files?.length) return
+    setProcessedFiles(existingCycle.erp_files as ProcessedFile[])
+  }, [editMode, existingCycle])
+
   // Progresso da barra: passo 0 não conta, passos 1-3 = 33%/67%/100%
   const progressPct = step === 0 ? 0 : (step / 3) * 100
+
+  // ── séries ─────────────────────────────────────────────────────
+  const toggleGrade = (grade: string) => {
+    setSchoolData(prev => ({
+      ...prev,
+      grades: prev.grades.includes(grade)
+        ? prev.grades.filter(g => g !== grade)
+        : [...prev.grades, grade],
+    }))
+  }
 
   // ── upload de arquivos ─────────────────────────────────────────
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -156,6 +211,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
     setError(null)
     try {
       const successFiles = processedFiles.filter(f => !f.error)
+      console.log('[Setup] schoolData antes de salvar:', schoolData)
       console.log('[SchoolSetupModal] salvando:', { institutionId, schoolData, successFiles })
 
       const executionYear = new Date().getFullYear()
@@ -370,9 +426,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
                   {GRADE_OPTIONS.map(g => {
                     const active = schoolData.grades.includes(g)
                     return (
-                      <button key={g} onClick={() => setSchoolData(s => ({
-                        ...s, grades: active ? s.grades.filter(x => x !== g) : [...s.grades, g]
-                      }))} style={{
+                      <button key={g} onClick={() => toggleGrade(g)} style={{
                         padding: '7px 8px', borderRadius: 8, fontSize: 11, cursor: 'pointer', textAlign: 'center',
                         border: active ? '1.5px solid #00A896' : '1px solid #E2E8F0',
                         background: active ? '#E6F7F5' : '#F8FAFC',

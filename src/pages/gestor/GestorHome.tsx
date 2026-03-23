@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+  LineChart, Line, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
 import {
   Users, TrendingUp, RefreshCw, AlertTriangle, BarChart3,
@@ -44,7 +45,12 @@ interface CampaignCycle {
   campaign_start_month?: number | null
   erp_files?: HistoricalEntry[] | null
   historical_data?: HistoricalEntry[] | null
-  school_data?: { city?: string; state?: string; name?: string; [key: string]: unknown } | null
+  school_data?: {
+    city?: string; state?: string; name?: string
+    avg_monthly_fee?: number; current_students?: number
+    grades?: string[]
+    [key: string]: unknown
+  } | null
   status?: string | null
   applied_at?: string | null
 }
@@ -63,10 +69,18 @@ interface MarketData {
   school_age_population?: number
   private_school_rate?: number
   sector_growth?: number
+  sector_growth_rate?: number
   avg_students_per_school?: number
+  average_students_per_school?: number
   confidence?: string
   notes?: string
   novatos_rate?: number
+  inep_data?: {
+    school_classification?: string
+    main_competitors?: string[]
+    market_opportunity?: string
+    risk_factors?: string
+  }
   [key: string]: unknown
 }
 
@@ -126,8 +140,6 @@ export default function GestorHome() {
   const [btnTooltip, setBtnTooltip] = useState(false)
   const [showSetup, setShowSetup] = useState(false)
   const [setupInitialStep, setSetupInitialStep] = useState(1)
-
-  // ── new state ──
   const [leads, setLeads] = useState<{ id: string; status: string; created_at: string }[]>([])
   const [visits, setVisits] = useState<{ id: string; status: string; created_at: string }[]>([])
   const [waMessages, setWaMessages] = useState<{ id: string; created_at: string; direction: string }[]>([])
@@ -144,35 +156,12 @@ export default function GestorHome() {
     try {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
       const [cyclesRes, funnelRes, transferRes, leadsRes, visitsRes, waRes] = await Promise.all([
-        supabase
-          .from('campaign_cycles')
-          .select('*')
-          .eq('institution_id', institutionId)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('funnel_metrics')
-          .select('*')
-          .eq('institution_id', institutionId)
-          .order('created_at', { ascending: true }),
-        supabase
-          .from('student_transfers')
-          .select('id, student_name, course_grade, transfer_date, reason_category')
-          .eq('institution_id', institutionId)
-          .order('transfer_date', { ascending: false })
-          .limit(5),
-        supabase
-          .from('leads')
-          .select('id, status, created_at')
-          .eq('institution_id', institutionId),
-        supabase
-          .from('visits')
-          .select('id, status, created_at')
-          .eq('institution_id', institutionId),
-        supabase
-          .from('whatsapp_messages')
-          .select('id, created_at, direction')
-          .eq('institution_id', institutionId)
-          .gte('created_at', thirtyDaysAgo),
+        supabase.from('campaign_cycles').select('*').eq('institution_id', institutionId).order('created_at', { ascending: false }),
+        supabase.from('funnel_metrics').select('*').eq('institution_id', institutionId).order('created_at', { ascending: true }),
+        supabase.from('student_transfers').select('id, student_name, course_grade, transfer_date, reason_category').eq('institution_id', institutionId).order('transfer_date', { ascending: false }).limit(5),
+        supabase.from('leads').select('id, status, created_at').eq('institution_id', institutionId),
+        supabase.from('visits').select('id, status, created_at').eq('institution_id', institutionId),
+        supabase.from('whatsapp_messages').select('id, created_at, direction').eq('institution_id', institutionId).gte('created_at', thirtyDaysAgo),
       ])
 
       const loadedCycles = (cyclesRes.data ?? []) as CampaignCycle[]
@@ -188,7 +177,6 @@ export default function GestorHome() {
       )
       if (!alreadySetup) setShowSetup(true)
 
-      // fetch market data if we have city+state from setup cycle
       const cycleWithLocation = loadedCycles.find(c => c.school_data?.city && c.school_data?.state)
       if (cycleWithLocation?.school_data?.city && cycleWithLocation?.school_data?.state) {
         fetchMarketData(cycleWithLocation.school_data.city as string, cycleWithLocation.school_data.state as string)
@@ -210,7 +198,7 @@ export default function GestorHome() {
       const json = await res.json()
       setMarketData(json.result ?? null)
     } catch {
-      // ignore — market data is non-critical
+      // non-critical
     } finally {
       setMarketLoading(false)
     }
@@ -221,7 +209,6 @@ export default function GestorHome() {
   const anyCycle = cycles[0] ?? null
   const setupCycle = cycles.find(c => c.school_data?.city) ?? null
 
-  // cascade: prefer historical_data (normalized), fallback to erp_files
   const cycleWithHistory = cycles.find(c =>
     c.historical_data && Array.isArray(c.historical_data) && c.historical_data.length > 0
   )
@@ -241,7 +228,15 @@ export default function GestorHome() {
   const totalStudents = latest ? entryTotal(latest) : 0
   const newStudents = latest ? entryNew(latest) : 0
   const returningStudents = latest ? entryReturning(latest) : 0
-  const avgFee = latest?.avg_monthly_fee ?? latest?.fee ?? null
+
+  // BUG 1 FIX — prefer school_data (filled in setup step 1), fallback to historical file data
+  const avgFee: number | null =
+    (setupCycle?.school_data?.avg_monthly_fee as number | null | undefined) ||
+    latest?.avg_monthly_fee ||
+    latest?.fee ||
+    null
+  console.log('[Home] avgFee:', avgFee, setupCycle?.school_data)
+
   const latestYear = latest ? entryYear(latest) : null
 
   const totalVariation = previous && entryTotal(previous) > 0
@@ -262,28 +257,36 @@ export default function GestorHome() {
   const { monthsUntil, campaignStartMonth: campaignStartLabel, preCampaignProgress, campaignYear } =
     calcCampaignTiming(campaignStartMonth)
 
-  // funnel for "Campanha em andamento" section
   const latestFunnel = funnelData[funnelData.length - 1] ?? null
   const funnelHasData = funnelData.some(f => (f.registrations || 0) > 0)
 
-  // leads / visits / wa metrics
+  // leads / wa metrics
   const totalLeads = leads.length
   const totalVisitsCount = visits.length
   const totalEnrolled = leads.filter(l => l.status === 'matriculado' || l.status === 'enrolled').length
   const conversionRate = totalLeads > 0 ? ((totalEnrolled / totalLeads) * 100).toFixed(1) : '0'
-
   const totalMessages = waMessages.length
   const waSent = waMessages.filter(m => m.direction === 'outbound' || m.direction === 'sent').length
   const waReceived = waMessages.filter(m => m.direction === 'inbound' || m.direction === 'received').length
 
+  // pie chart data
+  const pieData = [
+    { name: 'Matriculados', value: totalEnrolled, color: '#0F6E56' },
+    { name: 'Visitaram', value: Math.max(0, totalVisitsCount - totalEnrolled), color: '#1D9E75' },
+    { name: 'Só cadastro', value: Math.max(0, totalLeads - totalVisitsCount), color: '#9FE1CB' },
+  ].filter(d => d.value > 0)
+
   // market comparison
   const marketCity = setupCycle?.school_data?.city ?? ''
   const schoolNovatosRate = totalStudents > 0 ? +((newStudents / totalStudents) * 100).toFixed(1) : null
-  const marketNovatosRate = marketData?.novatos_rate ?? (marketData?.private_school_rate ? +(Number(marketData.private_school_rate) * 0.25).toFixed(1) : null)
+  const marketNovatosRate = marketData?.novatos_rate
+    ?? (marketData?.private_school_rate ? +(Number(marketData.private_school_rate) * 0.25).toFixed(1) : null)
   const aboveAverage = schoolNovatosRate !== null && marketNovatosRate !== null && schoolNovatosRate >= marketNovatosRate
-  const privateSchoolsCount = marketData?.avg_students_per_school && marketData?.school_age_population
-    ? Math.round(Number(marketData.school_age_population) * (Number(marketData.private_school_rate ?? 18) / 100) / Number(marketData.avg_students_per_school))
+  const avgStudentsPerSchool = Number(marketData?.avg_students_per_school ?? marketData?.average_students_per_school ?? 0)
+  const privateSchoolsCount = avgStudentsPerSchool > 0 && marketData?.school_age_population
+    ? Math.round(Number(marketData.school_age_population) * (Number(marketData.private_school_rate ?? 18) / 100) / avgStudentsPerSchool)
     : null
+  const sectorGrowth = marketData?.sector_growth ?? marketData?.sector_growth_rate ?? null
 
   // ─── render ───────────────────────────────────────────────────────────────
   return (
@@ -300,7 +303,6 @@ export default function GestorHome() {
           </p>
         </div>
 
-        {/* Campaign button — disabled until admin unlocks */}
         <div
           style={{ position: 'relative' }}
           onMouseEnter={() => !activeCycle && setBtnTooltip(true)}
@@ -339,7 +341,7 @@ export default function GestorHome() {
         </div>
       </div>
 
-      {/* ── Empty state: sem histórico ──────────────────────────────────────── */}
+      {/* ── Empty state ─────────────────────────────────────────────────────── */}
       {!loading && !hasHistory && (
         <div style={{
           background: '#fff', borderRadius: 16, border: '2px dashed #cbd5e1',
@@ -350,21 +352,14 @@ export default function GestorHome() {
             <Upload size={26} color="#8B5CF6" />
           </div>
           <div>
-            <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#1e2d6b' }}>
-              Bem-vindo ao Inscribo
-            </h3>
+            <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#1e2d6b' }}>Bem-vindo ao Inscribo</h3>
             <p style={{ margin: 0, fontSize: 13, color: '#64748b', maxWidth: 440, lineHeight: 1.6 }}>
               Para começar, importe os relatórios de matrículas dos últimos anos do seu sistema ERP (SIGA, Totvs ou similar). Isso leva menos de 2 minutos e permite que a IA analise o histórico da sua escola.
             </p>
           </div>
           <button
             onClick={() => { setSetupInitialStep(2); setShowSetup(true) }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '10px 22px', borderRadius: 10,
-              background: '#8B5CF6', color: '#fff', border: 'none',
-              fontSize: 13, fontWeight: 700, cursor: 'pointer',
-            }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 22px', borderRadius: 10, background: '#8B5CF6', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
             <Upload size={15} /> Importar histórico agora
           </button>
         </div>
@@ -373,34 +368,10 @@ export default function GestorHome() {
       {/* ── KPI cards ───────────────────────────────────────────────────────── */}
       {!loading && hasHistory && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
-          <KpiCard
-            label={`Alunos ${latestYear ?? ''}`}
-            value={fmt(totalStudents)}
-            icon={<Users size={20} color="#00A896" />}
-            iconBg="#E6F7F5"
-            variation={totalVariation}
-          />
-          <KpiCard
-            label="Novatos"
-            value={fmt(newStudents)}
-            icon={<TrendingUp size={20} color="#8B5CF6" />}
-            iconBg="#EDE9FE"
-            variation={newVariation}
-            sub={totalStudents > 0 ? `${Math.round((newStudents / totalStudents) * 100)}% do total` : undefined}
-          />
-          <KpiCard
-            label="Veteranos"
-            value={fmt(returningStudents)}
-            icon={<RefreshCw size={20} color="#0EA5E9" />}
-            iconBg="#E0F2FE"
-            sub={totalStudents > 0 ? `${Math.round((returningStudents / totalStudents) * 100)}% do total` : undefined}
-          />
-          <KpiCard
-            label="Ticket médio"
-            value={avgFee ? `R$ ${fmt(Math.round(avgFee))}/mês` : 'Não informado'}
-            icon={<Target size={20} color="#F59E0B" />}
-            iconBg="#FEF3C7"
-          />
+          <KpiCard label={`Alunos ${latestYear ?? ''}`} value={fmt(totalStudents)} icon={<Users size={20} color="#00A896" />} iconBg="#E6F7F5" variation={totalVariation} />
+          <KpiCard label="Novatos" value={fmt(newStudents)} icon={<TrendingUp size={20} color="#8B5CF6" />} iconBg="#EDE9FE" variation={newVariation} sub={totalStudents > 0 ? `${Math.round((newStudents / totalStudents) * 100)}% do total` : undefined} />
+          <KpiCard label="Veteranos" value={fmt(returningStudents)} icon={<RefreshCw size={20} color="#0EA5E9" />} iconBg="#E0F2FE" sub={totalStudents > 0 ? `${Math.round((returningStudents / totalStudents) * 100)}% do total` : undefined} />
+          <KpiCard label="Ticket médio" value={avgFee ? `R$ ${fmt(Math.round(avgFee))}/mês` : 'Não informado'} icon={<Target size={20} color="#F59E0B" />} iconBg="#FEF3C7" />
         </div>
       )}
 
@@ -412,36 +383,32 @@ export default function GestorHome() {
         </div>
       )}
 
-      {/* ── Chart + Pre-campaign ────────────────────────────────────────────── */}
+      {/* ── LineChart + Pre-campaign ─────────────────────────────────────────── */}
       {hasHistory && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, alignItems: 'start' }}>
 
-          {/* Histórico anual */}
           <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
             <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>
               Histórico de alunos por ano
             </h3>
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={chartData} barSize={24}>
+              <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="year" tick={{ fontSize: 12, fill: '#64748b' }} />
                 <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={40} />
                 <Tooltip
-                  formatter={(val) => fmt(Number(val))}
+                  formatter={(value, name) => [fmt(Number(value)), name === 'novatos' ? 'Novatos' : 'Veteranos']}
                   contentStyle={{ borderRadius: 10, fontSize: 12, border: '1px solid #e2e8f0' }}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="novatos" name="Novatos" stackId="a" fill="#8B5CF6" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="veteranos" name="Veteranos" stackId="a" fill="#00A896" radius={[4, 4, 0, 0]} />
-              </BarChart>
+                <Line type="monotone" dataKey="veteranos" name="Veteranos" stroke="#00A896" strokeWidth={2} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="novatos" name="Novatos" stroke="#8B5CF6" strokeWidth={2} dot={{ r: 4 }} />
+              </LineChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Fase pré-campanha */}
           <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>
-              Fase pré-campanha
-            </h3>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Fase pré-campanha</h3>
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                 <span style={{ fontSize: 12, color: '#64748b' }}>Progresso de preparação</span>
@@ -451,44 +418,25 @@ export default function GestorHome() {
                 <div style={{ height: '100%', width: `${preCampaignProgress}%`, background: 'linear-gradient(90deg, #00A896, #0DD3BF)', borderRadius: 99 }} />
               </div>
             </div>
-
             <div style={{ background: '#f0fdf9', borderRadius: 10, padding: 14 }}>
               <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#065f46' }}>
-                {monthsUntil === 0
-                  ? `Campanha iniciando em ${campaignStartLabel}`
-                  : `${monthsUntil} ${monthsUntil === 1 ? 'mês' : 'meses'} para a campanha`}
+                {monthsUntil === 0 ? `Campanha iniciando em ${campaignStartLabel}` : `${monthsUntil} ${monthsUntil === 1 ? 'mês' : 'meses'} para a campanha`}
               </p>
-              <p style={{ margin: '4px 0 0', fontSize: 12, color: '#047857' }}>
-                Preparando ano letivo {campaignYear}
-              </p>
+              <p style={{ margin: '4px 0 0', fontSize: 12, color: '#047857' }}>Preparando ano letivo {campaignYear}</p>
             </div>
-
             {!activeCycle && (
               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, display: 'flex', gap: 8 }}>
                 <Info size={14} color="#64748b" style={{ flexShrink: 0, marginTop: 1 }} />
-                <p style={{ margin: 0, fontSize: 12, color: '#475569', lineHeight: 1.5 }}>
-                  O administrador liberará a campanha quando chegar o momento de configurar.
-                </p>
+                <p style={{ margin: 0, fontSize: 12, color: '#475569', lineHeight: 1.5 }}>O administrador liberará a campanha quando chegar o momento de configurar.</p>
               </div>
             )}
-
             {activeCycle && (
               <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: 12 }}>
                 <p style={{ margin: 0, fontSize: 12, color: '#1e40af', fontWeight: 600 }}>{activeCycle.label}</p>
-                <p style={{ margin: '3px 0 0', fontSize: 11, color: '#3b82f6' }}>
-                  Meta: {fmt(activeCycle.target_new_students)} novos alunos
-                </p>
+                <p style={{ margin: '3px 0 0', fontSize: 11, color: '#3b82f6' }}>Meta: {fmt(activeCycle.target_new_students)} novos alunos</p>
               </div>
             )}
-
-            <button
-              onClick={() => navigate('/reports')}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                padding: '8px 0', borderRadius: 8,
-                background: 'none', border: '1px solid #e2e8f0',
-                color: '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-              }}>
+            <button onClick={() => navigate('/reports')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 0', borderRadius: 8, background: 'none', border: '1px solid #e2e8f0', color: '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
               Ver relatórios completos <ArrowRight size={12} />
             </button>
           </div>
@@ -500,16 +448,10 @@ export default function GestorHome() {
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>
-                Campanha em andamento
-              </h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Campanha em andamento</h3>
               <p style={{ margin: '2px 0 0', fontSize: 12, color: '#94a3b8' }}>Período: {latestFunnel.period}</p>
             </div>
-            <button
-              onClick={() => navigate('/reports')}
-              style={{ fontSize: 12, color: '#00A896', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
-              Ver funil completo →
-            </button>
+            <button onClick={() => navigate('/reports')} style={{ fontSize: 12, color: '#00A896', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Ver funil completo →</button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
             {[
@@ -524,11 +466,7 @@ export default function GestorHome() {
                 <div key={label} style={{ background: '#f8fafc', borderRadius: 12, padding: '12px 14px' }}>
                   <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
                   <p style={{ margin: '0 0 2px', fontSize: 22, fontWeight: 700, color: '#1e2d6b' }}>{fmt(val)}</p>
-                  {target > 0 && (
-                    <p style={{ margin: 0, fontSize: 11, color }}>
-                      {pct}% da meta ({fmt(target)})
-                    </p>
-                  )}
+                  {target > 0 && <p style={{ margin: 0, fontSize: 11, color }}>{pct}% da meta ({fmt(target)})</p>}
                 </div>
               )
             })}
@@ -536,10 +474,10 @@ export default function GestorHome() {
         </div>
       )}
 
-      {/* ── SEÇÃO 1+2: Funil de leads | WhatsApp ────────────────────────────── */}
+      {/* ── Funil leads | WhatsApp ───────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 
-        {/* Funil de leads atual */}
+        {/* Funil de leads — PieChart */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -548,18 +486,12 @@ export default function GestorHome() {
               </div>
               <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Funil atual</h3>
             </div>
-            <button
-              onClick={() => navigate('/leads')}
-              style={{ fontSize: 11, color: '#8B5CF6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
-              Ver leads →
-            </button>
+            <button onClick={() => navigate('/leads')} style={{ fontSize: 11, color: '#8B5CF6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Ver leads →</button>
           </div>
 
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[...Array(3)].map((_, i) => (
-                <div key={i} style={{ height: 36, borderRadius: 8, background: '#f1f5f9' }} className="animate-pulse" />
-              ))}
+              {[...Array(3)].map((_, i) => <div key={i} style={{ height: 36, borderRadius: 8, background: '#f1f5f9' }} className="animate-pulse" />)}
             </div>
           ) : totalLeads === 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '16px 0', textAlign: 'center' }}>
@@ -567,40 +499,39 @@ export default function GestorHome() {
               <p style={{ margin: 0, fontSize: 13, color: '#94a3b8', lineHeight: 1.5 }}>
                 Nenhum lead cadastrado ainda.<br />Comece captando interessados.
               </p>
-              <button
-                onClick={() => navigate('/leads')}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, background: '#EDE9FE', color: '#8B5CF6', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <button onClick={() => navigate('/leads')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, background: '#EDE9FE', color: '#8B5CF6', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 Ir para Leads <ArrowRight size={12} />
               </button>
             </div>
           ) : (
-            <>
-              {/* Funil visual — barras proporcionais */}
-              {[
-                { label: 'Leads cadastrados', value: totalLeads, max: totalLeads },
-                { label: 'Visitas agendadas', value: totalVisitsCount, max: totalLeads },
-                { label: 'Matriculados', value: totalEnrolled, max: totalLeads },
-              ].map(({ label, value, max }) => {
-                const pct = max > 0 ? Math.max(4, Math.round((value / max) * 100)) : 4
-                return (
-                  <div key={label}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                      <span style={{ fontSize: 12, color: '#475569' }}>{label}</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b' }}>{fmt(value)}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              {/* Pizza */}
+              <PieChart width={180} height={180}>
+                <Pie data={pieData} cx={90} cy={90} innerRadius={52} outerRadius={80} dataKey="value" paddingAngle={3}>
+                  {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                </Pie>
+                <Tooltip formatter={(value, name) => [fmt(Number(value)), name]} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
+              </PieChart>
+              {/* Legenda */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+                {pieData.map(d => {
+                  const pct = totalLeads > 0 ? Math.round((d.value / totalLeads) * 100) : 0
+                  return (
+                    <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: 3, background: d.color, flexShrink: 0 }} />
+                      <div style={{ flex: 1 }}>
+                        <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#1e293b' }}>{d.name}</p>
+                        <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>{fmt(d.value)} · {pct}%</p>
+                      </div>
                     </div>
-                    <div style={{ height: 8, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg, #00A896, #0DD3BF)', borderRadius: 99, transition: 'width 0.4s ease' }} />
-                    </div>
-                  </div>
-                )
-              })}
-
-              {/* Taxa de conversão */}
-              <div style={{ background: '#f0fdf9', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>Taxa lead → matrícula</span>
-                <span style={{ fontSize: 16, fontWeight: 700, color: '#00A896' }}>{conversionRate}%</span>
+                  )
+                })}
+                <div style={{ marginTop: 4, background: '#f0fdf9', borderRadius: 8, padding: '8px 12px' }}>
+                  <p style={{ margin: 0, fontSize: 11, color: '#065f46' }}>Taxa lead → matrícula</p>
+                  <p style={{ margin: '2px 0 0', fontSize: 18, fontWeight: 700, color: '#00A896' }}>{conversionRate}%</p>
+                </div>
               </div>
-            </>
+            </div>
           )}
         </div>
 
@@ -616,28 +547,18 @@ export default function GestorHome() {
                 <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Últimos 30 dias</p>
               </div>
             </div>
-            <button
-              onClick={() => navigate('/whatsapp')}
-              style={{ fontSize: 11, color: '#10B981', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
-              Ver central →
-            </button>
+            <button onClick={() => navigate('/whatsapp')} style={{ fontSize: 11, color: '#10B981', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Ver central →</button>
           </div>
 
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[...Array(3)].map((_, i) => (
-                <div key={i} style={{ height: 48, borderRadius: 10, background: '#f1f5f9' }} className="animate-pulse" />
-              ))}
+              {[...Array(3)].map((_, i) => <div key={i} style={{ height: 48, borderRadius: 10, background: '#f1f5f9' }} className="animate-pulse" />)}
             </div>
           ) : totalMessages === 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '16px 0', textAlign: 'center' }}>
               <MessageCircle size={28} color="#cbd5e1" strokeWidth={1.5} />
-              <p style={{ margin: 0, fontSize: 13, color: '#94a3b8', lineHeight: 1.5 }}>
-                WhatsApp não configurado ainda.
-              </p>
-              <button
-                onClick={() => navigate('/settings')}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, background: '#D1FAE5', color: '#065f46', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <p style={{ margin: 0, fontSize: 13, color: '#94a3b8', lineHeight: 1.5 }}>WhatsApp não configurado ainda.</p>
+              <button onClick={() => navigate('/settings')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, background: '#D1FAE5', color: '#065f46', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 <Settings size={12} /> Configurar agora
               </button>
             </div>
@@ -648,7 +569,7 @@ export default function GestorHome() {
                 { label: 'Enviadas', value: waSent, color: '#10B981', bg: '#f0fdf4' },
                 { label: 'Recebidas', value: waReceived, color: '#3B82F6', bg: '#eff6ff' },
               ].map(({ label, value, color, bg }) => (
-                <div key={label} style={{ background: bg, borderRadius: 12, padding: '12px', textAlign: 'center' }}>
+                <div key={label} style={{ background: bg, borderRadius: 12, padding: 12, textAlign: 'center' }}>
                   <p style={{ margin: '0 0 4px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
                   <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color }}>{fmt(value)}</p>
                 </div>
@@ -658,7 +579,7 @@ export default function GestorHome() {
         </div>
       </div>
 
-      {/* ── SEÇÃO 3: Comparativo com mercado local ───────────────────────────── */}
+      {/* ── Mercado local ────────────────────────────────────────────────────── */}
       {(marketLoading || marketData || marketCity) && (
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -677,13 +598,11 @@ export default function GestorHome() {
 
           {marketLoading ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-              {[...Array(4)].map((_, i) => (
-                <div key={i} style={{ height: 72, borderRadius: 12, background: '#f1f5f9' }} className="animate-pulse" />
-              ))}
+              {[...Array(4)].map((_, i) => <div key={i} style={{ height: 72, borderRadius: 12, background: '#f1f5f9' }} className="animate-pulse" />)}
             </div>
           ) : marketData ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Comparativo principal */}
+              {/* Comparativo escola vs setor */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div style={{ background: '#f8fafc', borderRadius: 12, padding: '14px 16px' }}>
                   <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Média do setor</p>
@@ -710,27 +629,66 @@ export default function GestorHome() {
                 </div>
               </div>
 
-              {/* Dados do mercado */}
+              {/* Dados numéricos */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                 <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px' }}>
                   <p style={{ margin: '0 0 3px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Pop. escolar estimada</p>
-                  <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e2d6b' }}>
-                    {marketData.school_age_population ? fmt(Number(marketData.school_age_population)) : '—'}
-                  </p>
+                  <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e2d6b' }}>{marketData.school_age_population ? fmt(Number(marketData.school_age_population)) : '—'}</p>
                 </div>
                 <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px' }}>
                   <p style={{ margin: '0 0 3px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Escolas particulares</p>
-                  <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e2d6b' }}>
-                    ~{privateSchoolsCount !== null ? fmt(privateSchoolsCount) : '—'}
-                  </p>
+                  <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e2d6b' }}>~{privateSchoolsCount !== null ? fmt(privateSchoolsCount) : '—'}</p>
                 </div>
                 <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px' }}>
                   <p style={{ margin: '0 0 3px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Crescimento do setor</p>
-                  <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e2d6b' }}>
-                    {marketData.sector_growth != null ? `${marketData.sector_growth}%/ano` : '—'}
-                  </p>
+                  <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e2d6b' }}>{sectorGrowth != null ? `${sectorGrowth}%/ano` : '—'}</p>
                 </div>
               </div>
+
+              {/* Inteligência competitiva — inep_data */}
+              {marketData.inep_data && (
+                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '14px 16px' }}>
+                  <p style={{ margin: '0 0 12px', fontSize: 12, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Inteligência competitiva
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    {/* Classificação */}
+                    {marketData.inep_data.school_classification && (
+                      <div>
+                        <p style={{ margin: '0 0 4px', fontSize: 11, color: '#78350f', fontWeight: 600 }}>Classificação da escola</p>
+                        <p style={{ margin: 0, fontSize: 13, color: '#1e293b' }}>
+                          Porte {marketData.inep_data.school_classification} — {totalStudents > 0 ? `${fmt(totalStudents)} alunos` : 'cadastrar alunos'}
+                        </p>
+                      </div>
+                    )}
+                    {/* Oportunidade */}
+                    {marketData.inep_data.market_opportunity && (
+                      <div>
+                        <p style={{ margin: '0 0 4px', fontSize: 11, color: '#166534', fontWeight: 600 }}>Oportunidade</p>
+                        <p style={{ margin: 0, fontSize: 13, color: '#166534' }}>{marketData.inep_data.market_opportunity}</p>
+                      </div>
+                    )}
+                    {/* Concorrentes */}
+                    {marketData.inep_data.main_competitors && marketData.inep_data.main_competitors.length > 0 && (
+                      <div>
+                        <p style={{ margin: '0 0 6px', fontSize: 11, color: '#78350f', fontWeight: 600 }}>Principais concorrentes</p>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                          {marketData.inep_data.main_competitors.map((c, i) => (
+                            <span key={i} style={{ padding: '2px 8px', borderRadius: 999, background: '#fef3c7', color: '#92400e', fontSize: 11, fontWeight: 500 }}>{c}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* Risco */}
+                    {marketData.inep_data.risk_factors && (
+                      <div>
+                        <p style={{ margin: '0 0 4px', fontSize: 11, color: '#92400e', fontWeight: 600 }}>Risco competitivo</p>
+                        <p style={{ margin: 0, fontSize: 13, color: '#92400e' }}>{marketData.inep_data.risk_factors}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {marketData.notes && (
                 <p style={{ margin: 0, fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -745,15 +703,10 @@ export default function GestorHome() {
       {/* ── Transfers + Quick access ──────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 
-        {/* Transferências recentes */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Transferências recentes</h3>
-            <button
-              onClick={() => navigate('/reports')}
-              style={{ fontSize: 11, color: '#00A896', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
-              Ver todas →
-            </button>
+            <button onClick={() => navigate('/reports')} style={{ fontSize: 11, color: '#00A896', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Ver todas →</button>
           </div>
           {loading ? (
             <div style={{ color: '#94a3b8', fontSize: 13 }}>Carregando...</div>
@@ -771,20 +724,15 @@ export default function GestorHome() {
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.student_name}</p>
-                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#94a3b8' }}>
-                      {t.course_grade} · {t.reason_category ? REASON_LABELS[t.reason_category] || t.reason_category : 'Sem motivo'}
-                    </p>
+                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#94a3b8' }}>{t.course_grade} · {t.reason_category ? REASON_LABELS[t.reason_category] || t.reason_category : 'Sem motivo'}</p>
                   </div>
-                  <span style={{ fontSize: 10, color: '#94a3b8', flexShrink: 0 }}>
-                    {new Date(t.transfer_date).toLocaleDateString('pt-BR')}
-                  </span>
+                  <span style={{ fontSize: 10, color: '#94a3b8', flexShrink: 0 }}>{new Date(t.transfer_date).toLocaleDateString('pt-BR')}</span>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* Acesso rápido */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 14px' }}>Acesso rápido</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -794,9 +742,7 @@ export default function GestorHome() {
               { label: 'WhatsApp', desc: 'Central de mensagens', icon: <MessageCircle size={18} color="#10B981" />, bg: '#D1FAE5', path: '/whatsapp' },
               { label: 'Relatórios', desc: 'Análise completa', icon: <TrendingUp size={18} color="#3B82F6" />, bg: '#DBEAFE', path: '/reports' },
             ].map(item => (
-              <button
-                key={item.path}
-                onClick={() => navigate(item.path)}
+              <button key={item.path} onClick={() => navigate(item.path)}
                 style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6, padding: '12px 14px', borderRadius: 12, background: item.bg, border: 'none', cursor: 'pointer', textAlign: 'left', transition: 'opacity 0.15s' }}
                 onMouseEnter={e => (e.currentTarget.style.opacity = '0.8')}
                 onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
@@ -812,7 +758,6 @@ export default function GestorHome() {
         </div>
       </div>
 
-      {/* Campaign modal */}
       <CampaignGeneratorModal
         isOpen={showModal}
         onClose={() => { setShowModal(false); setShowModalAtStep(undefined) }}
@@ -823,16 +768,11 @@ export default function GestorHome() {
         openAtStep={showModalAtStep}
       />
 
-      {/* Setup modal — abre automaticamente se escola não tem setup, ou manualmente via botão */}
       {showSetup && (
         <SchoolSetupModal
           institutionId={institutionId}
           initialStep={setupInitialStep}
-          onComplete={() => {
-            setShowSetup(false)
-            setSetupInitialStep(1)
-            load()
-          }}
+          onComplete={() => { setShowSetup(false); setSetupInitialStep(1); load() }}
         />
       )}
     </div>
@@ -841,20 +781,13 @@ export default function GestorHome() {
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 function KpiCard({ label, value, icon, iconBg, variation, sub }: {
-  label: string
-  value: string
-  icon: React.ReactNode
-  iconBg: string
-  variation?: number | null
-  sub?: string
+  label: string; value: string; icon: React.ReactNode; iconBg: string; variation?: number | null; sub?: string
 }) {
   return (
     <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '16px 18px' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
         <span style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
-        <div style={{ width: 34, height: 34, borderRadius: 10, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          {icon}
-        </div>
+        <div style={{ width: 34, height: 34, borderRadius: 10, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</div>
       </div>
       <div style={{ fontSize: 26, fontWeight: 700, color: '#1e2d6b', lineHeight: 1.1 }}>{value}</div>
       {variation !== null && variation !== undefined && (

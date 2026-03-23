@@ -256,7 +256,13 @@ Retorne SOMENTE JSON:
         sector_growth: 3,
         avg_students_per_school: 500,
         confidence: 'estimado',
-        notes: `Dados estimados para ${city}`
+        notes: `Dados estimados para ${city}`,
+        inep_data: {
+          school_classification: 'médio',
+          main_competitors: ['Escolas públicas municipais', 'Redes privadas regionais', 'Escolas confessionais'],
+          market_opportunity: 'Crescimento da classe média local com demanda por ensino privado de qualidade.',
+          risk_factors: 'Expansão de redes nacionais com mensalidades competitivas na região.',
+        },
       }
 
       const prompt = `Você é especialista em dados educacionais brasileiros (IBGE, Censo Escolar MEC).
@@ -277,7 +283,13 @@ Se não tiver dados precisos, ESTIME com base no porte do município e região �
   "ibge_year": 2022,
   "data_source": "IBGE Censo 2022 / Censo Escolar MEC 2023",
   "confidence": "high|medium|estimado",
-  "notes": "<observação breve sobre o mercado educacional desta cidade>"
+  "notes": "<observação breve sobre o mercado educacional desta cidade>",
+  "inep_data": {
+    "school_classification": "<pequeno|médio|grande — baseado no porte típico da cidade>",
+    "main_competitors": ["<tipo ou nome de concorrente 1>", "<tipo 2>", "<tipo 3>"],
+    "market_opportunity": "<oportunidade principal do mercado educacional desta cidade em 1 frase>",
+    "risk_factors": "<principal risco competitivo em 1 frase>"
+  }
 }
 
 Retorne SOMENTE o JSON, sem markdown, sem explicações adicionais.`
