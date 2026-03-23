@@ -218,6 +218,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
           .from('campaign_cycles')
           .insert({
             institution_id: institutionId,
+            year: new Date().getFullYear() + 1, // ano letivo alvo
             status: 'setup',
             campaign_start_month: 8,
             school_data: schoolDataPayload,
