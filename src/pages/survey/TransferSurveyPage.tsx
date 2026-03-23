@@ -243,8 +243,8 @@ export default function TransferSurveyPage() {
       }).then(res => res.json()).then(async data => {
         if (data.result) {
           await supabase.from('student_transfers').update({
-            ai_diagnosis: data.result.diagnosis,
-            ai_risk_factors: data.result.risk_factors,
+            ai_diagnosis: JSON.stringify(data.result),
+            ai_risk_factors: data.result.risk_factors ?? [],
           }).eq('survey_token', token)
         }
       }).catch(() => {/* silencioso */})

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  LineChart, Line, PieChart, Pie, Cell,
+  LineChart, Line, PieChart, Pie,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
 import {
@@ -142,7 +142,7 @@ export default function GestorHome() {
   const [setupInitialStep, setSetupInitialStep] = useState(1)
   const [leads, setLeads] = useState<{ id: string; status: string; created_at: string }[]>([])
   const [visits, setVisits] = useState<{ id: string; status: string; created_at: string }[]>([])
-  const [waMessages, setWaMessages] = useState<{ id: string; created_at: string; direction: string }[]>([])
+  const [waMessages, setWaMessages] = useState<{ id: string; created_at: string; from_me: boolean }[]>([])
   const [marketData, setMarketData] = useState<MarketData | null>(null)
   const [marketLoading, setMarketLoading] = useState(false)
 
@@ -161,7 +161,7 @@ export default function GestorHome() {
         supabase.from('student_transfers').select('id, student_name, course_grade, transfer_date, reason_category').eq('institution_id', institutionId).order('transfer_date', { ascending: false }).limit(5),
         supabase.from('leads').select('id, status, created_at').eq('institution_id', institutionId),
         supabase.from('visits').select('id, status, created_at').eq('institution_id', institutionId),
-        supabase.from('whatsapp_messages').select('id, created_at, direction').eq('institution_id', institutionId).gte('created_at', thirtyDaysAgo),
+        supabase.from('whatsapp_messages').select('id, created_at, from_me').eq('institution_id', institutionId).gte('created_at', thirtyDaysAgo),
       ])
 
       const loadedCycles = (cyclesRes.data ?? []) as CampaignCycle[]
@@ -266,14 +266,14 @@ export default function GestorHome() {
   const totalEnrolled = leads.filter(l => l.status === 'matriculado' || l.status === 'enrolled').length
   const conversionRate = totalLeads > 0 ? ((totalEnrolled / totalLeads) * 100).toFixed(1) : '0'
   const totalMessages = waMessages.length
-  const waSent = waMessages.filter(m => m.direction === 'outbound' || m.direction === 'sent').length
-  const waReceived = waMessages.filter(m => m.direction === 'inbound' || m.direction === 'received').length
+  const waSent     = waMessages.filter(m => m.from_me === true).length
+  const waReceived = waMessages.filter(m => m.from_me === false).length
 
   // pie chart data
   const pieData = [
-    { name: 'Matriculados', value: totalEnrolled, color: '#0F6E56' },
-    { name: 'Visitaram', value: Math.max(0, totalVisitsCount - totalEnrolled), color: '#1D9E75' },
-    { name: 'Só cadastro', value: Math.max(0, totalLeads - totalVisitsCount), color: '#9FE1CB' },
+    { name: 'Matriculados', value: totalEnrolled,                              fill: '#0F6E56' },
+    { name: 'Visitaram',    value: Math.max(0, totalVisitsCount - totalEnrolled), fill: '#1D9E75' },
+    { name: 'Só cadastro',  value: Math.max(0, totalLeads - totalVisitsCount), fill: '#9FE1CB' },
   ].filter(d => d.value > 0)
 
   // market comparison
@@ -507,9 +507,7 @@ export default function GestorHome() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               {/* Pizza */}
               <PieChart width={180} height={180}>
-                <Pie data={pieData} cx={90} cy={90} innerRadius={52} outerRadius={80} dataKey="value" paddingAngle={3}>
-                  {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                </Pie>
+                <Pie data={pieData} cx={90} cy={90} innerRadius={52} outerRadius={80} dataKey="value" paddingAngle={3} />
                 <Tooltip formatter={(value, name) => [fmt(Number(value)), name]} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
               </PieChart>
               {/* Legenda */}
@@ -518,7 +516,7 @@ export default function GestorHome() {
                   const pct = totalLeads > 0 ? Math.round((d.value / totalLeads) * 100) : 0
                   return (
                     <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 3, background: d.color, flexShrink: 0 }} />
+                      <div style={{ width: 10, height: 10, borderRadius: 3, background: d.fill, flexShrink: 0 }} />
                       <div style={{ flex: 1 }}>
                         <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#1e293b' }}>{d.name}</p>
                         <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>{fmt(d.value)} · {pct}%</p>
