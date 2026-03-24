@@ -233,7 +233,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .from('users')
         .select(`
           *,
-          institutions(name)
+          institutions!users_institution_id_fkey(name, city, state)
         `)
         .eq('id', userId)
         .single()

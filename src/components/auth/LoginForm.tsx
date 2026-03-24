@@ -64,12 +64,14 @@ export default function LoginForm() {
 
         <div className="relative z-10 flex flex-col justify-between p-12 text-white w-full">
           {/* Logo */}
-          <div className="animate-fade-in-down">
-            <img
-              src="/Inscribologo.png"
-              alt="Áion Edu"
-              className="h-14 w-auto"
-            />
+          <div className="animate-fade-in-down flex items-center gap-3">
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'white', border: '2.5px solid rgba(255,255,255,0.5)' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: 'white', letterSpacing: '-0.02em' }}>Áion Edu</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 1 }}>Inteligência em matrículas</div>
+            </div>
           </div>
 
           {/* Main Content */}
@@ -140,11 +142,15 @@ export default function LoginForm() {
         <div className="w-full max-w-md">
           {/* Logo - Mobile only */}
           <div className="mb-10 flex justify-center animate-fade-in-down lg:hidden">
-            <img
-              src="/Inscribologo.png"
-              alt="Áion Edu"
-              className="h-16 w-auto"
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: '#00A896', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 14, height: 14, borderRadius: '50%', background: 'white', border: '2px solid rgba(255,255,255,0.5)' }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: '#1e2d6b', letterSpacing: '-0.02em' }}>Áion Edu</div>
+                <div style={{ fontSize: 10, color: '#64748b' }}>Inteligência em matrículas</div>
+              </div>
+            </div>
           </div>
 
           {/* Login Card */}
