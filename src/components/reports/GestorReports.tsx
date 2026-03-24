@@ -678,18 +678,7 @@ function TabFunil({
   activeCycle: CampaignCycle | null
   institutionId: string
 }) {
-  const latest = funnelData[funnelData.length - 1]
-  const reg = latest?.registrations ?? 0
-  const vis = latest?.visits ?? 0
-  const enr = latest?.enrollments ?? 0
-
-  const steps = [
-    { label: 'Cadastros', value: reg, target: latest?.registrations_target ?? 0, color: '#6366f1' },
-    { label: 'Visitas', value: vis, target: latest?.visits_target ?? 0, color: '#0d9488', pct: reg > 0 ? pct(vis, reg) : 0 },
-    { label: 'Matrículas', value: enr, target: latest?.enrollments_target ?? 0, color: '#0F6E56', pct: vis > 0 ? pct(enr, vis) : 0 },
-  ]
-
-  const sortedFunnelData = [...funnelData].sort((a, b) => a.period.localeCompare(b.period))
+  const sortedMetrics = [...funnelData].sort((a, b) => a.period.localeCompare(b.period))
 
   const formatPeriod = (period: string) => {
     const [year, month] = period.split('-')
@@ -697,121 +686,214 @@ function TabFunil({
     return `${monthNames[parseInt(month) - 1]}/${year}`
   }
 
-  const tableData = sortedFunnelData.map(f => {
-    const dReg = (f.registrations_target ?? 0) > 0 ? dev(f.registrations ?? 0, f.registrations_target!) : null
-    const dEnr = (f.enrollments_target ?? 0) > 0 ? dev(f.enrollments ?? 0, f.enrollments_target!) : null
-    return { ...f, dReg, dEnr }
+  // ── Totais acumulados do ciclo ──────────────────────────────
+  const totalRegistrations = funnelData.reduce((s, f) => s + (f.registrations ?? 0), 0)
+  const totalVisits        = funnelData.reduce((s, f) => s + (f.visits ?? 0), 0)
+  const totalEnrollments   = funnelData.reduce((s, f) => s + (f.enrollments ?? 0), 0)
+  const totalRegTarget     = funnelData.reduce((s, f) => s + (f.registrations_target ?? 0), 0)
+  const totalVisTarget     = funnelData.reduce((s, f) => s + (f.visits_target ?? 0), 0)
+  const totalEnrTarget     = funnelData.reduce((s, f) => s + (f.enrollments_target ?? 0), 0)
+
+  const convRegToVis = totalRegistrations > 0
+    ? ((totalVisits / totalRegistrations) * 100).toFixed(1) : '0'
+  const convVisToEnr = totalVisits > 0
+    ? ((totalEnrollments / totalVisits) * 100).toFixed(1) : '0'
+
+  const funnelStages = [
+    { label: 'Cadastros',  real: totalRegistrations, meta: totalRegTarget, color: '#1D9E75' },
+    { label: 'Visitas',    real: totalVisits,         meta: totalVisTarget, color: '#0F6E56', conv: `${convRegToVis}% converteram` },
+    { label: 'Matrículas', real: totalEnrollments,    meta: totalEnrTarget, color: '#085041', conv: `${convVisToEnr}% fecharam` },
+  ]
+
+  // ── Gráfico ─────────────────────────────────────────────────
+  const chartData = sortedMetrics.map(m => ({
+    period:          formatPeriod(m.period),
+    cadastros:       m.registrations ?? 0,
+    meta_cadastros:  m.registrations_target ?? 0,
+    matriculas:      m.enrollments ?? 0,
+    meta_matriculas: m.enrollments_target ?? 0,
+  }))
+
+  // ── Alerta de recálculo ─────────────────────────────────────
+  const monthsOffTrack = sortedMetrics.filter(m => {
+    const d = (m.registrations_target ?? 0) > 0
+      ? (((m.registrations ?? 0) - m.registrations_target!) / m.registrations_target! * 100)
+      : 0
+    return d < -15
   })
 
-  const chartData = sortedFunnelData.map(f => ({
-    period: formatPeriod(f.period),
-    real: f.registrations ?? 0,
-    meta: f.registrations_target ?? 0,
-    matriculas: f.enrollments ?? 0,
-    meta_matriculas: f.enrollments_target ?? 0,
-  }))
+  // ── Estado vazio ────────────────────────────────────────────
+  const hasRealData = funnelData.some(f => (f.registrations ?? 0) > 0)
+
+  // ── Helper de badge de desvio ───────────────────────────────
+  const desvioStyle = (d: number | null): React.CSSProperties => {
+    if (d === null) return { color: '#94a3b8' }
+    return {
+      background: d >= 0 ? '#f0fdf4' : d >= -15 ? '#fffbeb' : '#fef2f2',
+      color:      d >= 0 ? '#16a34a' : d >= -15 ? '#d97706' : '#dc2626',
+      padding: '2px 8px', borderRadius: 8, fontSize: 11, fontWeight: 700,
+      display: 'inline-block',
+    }
+  }
+  const fmtDesvio = (d: number | null) =>
+    d === null ? '—' : `${d >= 0 ? '+' : ''}${d.toFixed(1)}%`
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* Funnel cascade */}
+
+      {/* ── Alerta de recálculo ── */}
+      {monthsOffTrack.length > 0 && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: '14px 18px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <AlertTriangle size={16} color="#dc2626" />
+            <span style={{ color: '#dc2626', fontWeight: 600, fontSize: 13 }}>
+              {monthsOffTrack.length} mês(es) abaixo da meta em mais de 15%
+            </span>
+          </div>
+          <p style={{ fontSize: 12, color: '#b91c1c', margin: 0 }}>
+            Considere revisar sua estratégia. O administrador pode liberar um recálculo de rota pela IA.
+          </p>
+        </div>
+      )}
+
+      {/* ── Funil cascata acumulado ── */}
       <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
-        <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: '0 0 20px' }}>Funil do mês atual</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 480 }}>
-          {steps.map((s, i) => (
-            <div key={s.label}>
-              {i > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px', color: '#94a3b8', fontSize: 12 }}>
-                  <div style={{ width: 1, height: 16, background: '#e2e8f0', marginLeft: 16 }} />
-                  {s.pct}% conversão
-                </div>
-              )}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{
-                  flex: 1, background: s.color + '18', borderRadius: 10, padding: '12px 16px',
-                  border: `1.5px solid ${s.color}30`,
-                  width: `${100 - i * 15}%`
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: s.color }}>{s.label}</span>
-                    <span style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{fmt(s.value)}</span>
-                  </div>
-                  {s.target > 0 && (
-                    <div style={{ marginTop: 6, height: 4, background: '#e2e8f0', borderRadius: 999 }}>
-                      <div style={{ height: '100%', width: `${Math.min(100, pct(s.value, s.target))}%`, background: s.color, borderRadius: 999 }} />
+        <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: '0 0 20px' }}>
+          Funil acumulado do ciclo
+        </h3>
+
+        {!hasRealData ? (
+          <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8' }}>
+            <p style={{ fontWeight: 600, marginBottom: 4 }}>Nenhum dado de funil registrado ainda</p>
+            <p style={{ fontSize: 13, marginBottom: 4 }}>
+              Os dados aparecerão aqui conforme você cadastrar leads e visitas no sistema.
+            </p>
+            <p style={{ fontSize: 13, color: '#0F6E56' }}>
+              As metas já estão configuradas — aguardando dados reais.
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {funnelStages.map((stage, i) => {
+              const progressPct = stage.meta > 0 ? Math.min(100, (stage.real / stage.meta) * 100) : 0
+              const desvioNum = stage.meta > 0
+                ? ((stage.real - stage.meta) / stage.meta * 100)
+                : null
+              const desvioColor = desvioNum === null ? '#94a3b8'
+                : desvioNum >= 0 ? '#0F6E56'
+                : desvioNum >= -15 ? '#BA7517'
+                : '#E24B4A'
+
+              return (
+                <div key={i}>
+                  {i > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 12px', color: '#94a3b8', fontSize: 11 }}>
+                      <div style={{ width: 1, height: 14, background: '#e2e8f0', marginLeft: 12 }} />
+                      {stage.conv}
                     </div>
                   )}
+                  <div style={{ width: `${100 - i * 12}%`, margin: '0 auto' }}>
+                    <div style={{
+                      background: stage.color + '12',
+                      borderLeft: `4px solid ${stage.color}`,
+                      borderRadius: 10, padding: '12px 16px',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <span style={{ fontSize: 20, fontWeight: 800, color: stage.color }}>{fmt(stage.real)}</span>
+                          <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 8 }}>/ meta {fmt(stage.meta)}</span>
+                        </div>
+                        {desvioNum !== null && (
+                          <span style={{ fontSize: 13, fontWeight: 700, color: desvioColor }}>
+                            {desvioNum >= 0 ? '+' : ''}{desvioNum.toFixed(1)}%
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: stage.color, marginTop: 4 }}>{stage.label}</div>
+                      <div style={{ marginTop: 8, height: 6, background: '#e2e8f0', borderRadius: 999 }}>
+                        <div style={{
+                          height: '100%', width: `${progressPct}%`,
+                          background: stage.color, borderRadius: 999, transition: 'width 0.6s ease',
+                        }} />
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                {s.target > 0 && deviationBadge(s.value, s.target)}
-              </div>
-            </div>
-          ))}
-        </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Gráfico real vs meta */}
+      {/* ── Gráfico real vs meta ── */}
       {chartData.length > 0 && (
         <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: '0 0 20px' }}>Cadastros reais vs meta</h3>
-          <ResponsiveContainer width="100%" height={240}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: '0 0 20px' }}>Real vs meta — mensal</h3>
+          <ResponsiveContainer width="100%" height={280}>
             <ComposedChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="period" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
               <Tooltip />
               <Legend />
-              <Bar dataKey="real" fill="#1D9E75" name="Cadastros reais" radius={[4,4,0,0]} />
-              <Line dataKey="meta" stroke="#BA7517" strokeWidth={2} strokeDasharray="4 3" name="Meta cadastros" dot={false} />
+              <Bar dataKey="cadastros"       fill="#1D9E75" name="Cadastros reais"   radius={[4,4,0,0]} />
+              <Line dataKey="meta_cadastros"  stroke="#BA7517" strokeWidth={2} strokeDasharray="5 4" name="Meta cadastros"   dot={{ r: 3 }} />
+              <Bar dataKey="matriculas"      fill="#085041" name="Matrículas reais"  radius={[4,4,0,0]} />
+              <Line dataKey="meta_matriculas" stroke="#E24B4A" strokeWidth={2} strokeDasharray="5 4" name="Meta matrículas"  dot={{ r: 3 }} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}
 
-      {/* MonthlyChart editável */}
+      {/* ── MonthlyChart editável ── */}
       <MonthlyChart institutionId={institutionId} editable={true} />
 
-      {/* Tabela mensal */}
-      {tableData.length > 0 && (
+      {/* ── Tabela mensal detalhada ── */}
+      {sortedMetrics.length > 0 && (
         <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
           <div style={{ padding: '16px 24px', borderBottom: '1px solid #e2e8f0' }}>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Detalhamento mensal</h3>
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                  {['Mês', 'Cadastros', 'Meta', 'Desvio', 'Visitas', 'Matrículas', 'Desvio Matr.'].map(h => (
-                    <th key={h} style={{ padding: '10px 14px', textAlign: 'left', color: '#6b7280', fontWeight: 600, fontSize: 12 }}>{h}</th>
+                  {['Mês','Cadastros','Meta Cad.','Desvio%','Visitas','Meta Vis.','Matrículas','Meta Mat.','Desvio Mat.'].map(h => (
+                    <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {tableData.map(f => (
-                  <tr key={f.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '10px 14px', fontWeight: 600, color: '#374151' }}>{formatPeriod(f.period)}</td>
-                    <td style={{ padding: '10px 14px' }}>{fmt(f.registrations ?? 0)}</td>
-                    <td style={{ padding: '10px 14px', color: '#94a3b8' }}>{f.registrations_target ? fmt(f.registrations_target) : '—'}</td>
-                    <td style={{ padding: '8px 14px' }}>
-                      {f.dReg !== null ? (
-                        <span style={{
-                          background: f.dReg >= 0 ? '#f0fdf4' : f.dReg >= -15 ? '#fffbeb' : '#fef2f2',
-                          color: f.dReg >= 0 ? '#16a34a' : f.dReg >= -15 ? '#d97706' : '#dc2626',
-                          padding: '2px 8px', borderRadius: 8, fontSize: 11, fontWeight: 700
-                        }}>{f.dReg > 0 ? '+' : ''}{f.dReg}%</span>
-                      ) : <span style={{ color: '#94a3b8' }}>—</span>}
-                    </td>
-                    <td style={{ padding: '10px 14px' }}>{fmt(f.visits ?? 0)}</td>
-                    <td style={{ padding: '10px 14px', color: '#0d9488', fontWeight: 600 }}>{fmt(f.enrollments ?? 0)}</td>
-                    <td style={{ padding: '8px 14px' }}>
-                      {f.dEnr !== null ? (
-                        <span style={{
-                          background: f.dEnr >= 0 ? '#f0fdf4' : f.dEnr >= -15 ? '#fffbeb' : '#fef2f2',
-                          color: f.dEnr >= 0 ? '#16a34a' : f.dEnr >= -15 ? '#d97706' : '#dc2626',
-                          padding: '2px 8px', borderRadius: 8, fontSize: 11, fontWeight: 700
-                        }}>{f.dEnr > 0 ? '+' : ''}{f.dEnr}%</span>
-                      ) : <span style={{ color: '#94a3b8' }}>—</span>}
-                    </td>
-                  </tr>
-                ))}
+                {sortedMetrics.map(m => {
+                  const desvioReg = (m.registrations_target ?? 0) > 0
+                    ? (((m.registrations ?? 0) - m.registrations_target!) / m.registrations_target! * 100)
+                    : null
+                  const desvioEnr = (m.enrollments_target ?? 0) > 0
+                    ? (((m.enrollments ?? 0) - m.enrollments_target!) / m.enrollments_target! * 100)
+                    : null
+
+                  return (
+                    <tr key={m.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '10px 12px', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap' }}>{formatPeriod(m.period)}</td>
+                      <td style={{ padding: '10px 12px' }}>{fmt(m.registrations ?? 0)}</td>
+                      <td style={{ padding: '10px 12px', color: '#94a3b8' }}>{m.registrations_target ? fmt(m.registrations_target) : '—'}</td>
+                      <td style={{ padding: '8px 12px' }}>
+                        <span style={desvioReg !== null ? desvioStyle(desvioReg) : { color: '#94a3b8' }}>
+                          {fmtDesvio(desvioReg)}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>{fmt(m.visits ?? 0)}</td>
+                      <td style={{ padding: '10px 12px', color: '#94a3b8' }}>{m.visits_target ? fmt(m.visits_target) : '—'}</td>
+                      <td style={{ padding: '10px 12px', color: '#0F6E56', fontWeight: 600 }}>{fmt(m.enrollments ?? 0)}</td>
+                      <td style={{ padding: '10px 12px', color: '#94a3b8' }}>{m.enrollments_target ? fmt(m.enrollments_target) : '—'}</td>
+                      <td style={{ padding: '8px 12px' }}>
+                        <span style={desvioEnr !== null ? desvioStyle(desvioEnr) : { color: '#94a3b8' }}>
+                          {fmtDesvio(desvioEnr)}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
