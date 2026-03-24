@@ -170,8 +170,9 @@ export default function GestorSurveys() {
     load()
   }
 
-  async function deleteSurvey(id: string) {
-    if (!confirm('Excluir esta pesquisa e todas as respostas?')) return
+  async function deleteSurvey(id: string, responseCount: number) {
+    if (!confirm(`Tem certeza? ${responseCount > 0 ? `${responseCount} resposta(s) será(ão) perdida(s).` : 'Esta ação não pode ser desfeita.'}`)) return
+    await supabase.from('satisfaction_responses').delete().eq('survey_id', id)
     await supabase.from('satisfaction_surveys').delete().eq('id', id)
     showToast('Pesquisa excluída.')
     load()
@@ -646,7 +647,7 @@ export default function GestorSurveys() {
                             { label: 'Ver respostas', icon: <Eye size={13} />, action: () => { setOpenMenu(null); openResponses(s) } },
                             { label: 'Gerar relatório IA', icon: <Brain size={13} />, action: () => { setOpenMenu(null); openResponses(s).then(() => generateReport(s)) } },
                             ...(s.status !== 'closed' ? [{ label: 'Encerrar pesquisa', icon: <X size={13} />, action: () => { setOpenMenu(null); closeSurvey(s.id) } }] : []),
-                            { label: 'Excluir', icon: <X size={13} />, action: () => { setOpenMenu(null); deleteSurvey(s.id) }, danger: true },
+                            { label: 'Excluir', icon: <X size={13} />, action: () => { setOpenMenu(null); deleteSurvey(s.id, s.response_count ?? 0) }, danger: true },
                           ].map((item, i) => (
                             <button
                               key={i}
