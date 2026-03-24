@@ -4,7 +4,9 @@
 
 /* ====== RESET ====== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body, #root { width: 100%; height: 100%; overflow: hidden; }
+html, body { width: 100%; min-height: 100%; }
+/* #root sem overflow:hidden — o layout do app já controla via inline styles */
+#root { width: 100%; min-height: 100%; }
 
 /* ====== VARIÁVEIS ====== */
 :root {

@@ -1,13 +1,47 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight, CheckCircle, ChevronDown, Menu, X, Star,
-  Target, BarChart3, TrendingUp, RefreshCw, MessageCircle,
-  ClipboardList, Upload, Zap, Bell
+  BarChart3, Upload, Zap
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
-// ─── Logo component ────────────────────────────────────────────────────────────
+// ─── Animações globais (injetadas uma vez) ─────────────────────────────────────
+const GLOBAL_CSS = `
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to   { opacity: 1; transform: translateY(0);     }
+}
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-20px); }
+  to   { opacity: 1; transform: translateY(0);      }
+}
+.anim-in { opacity: 0; }
+.anim-in.visible {
+  animation: fadeInUp 0.6s ease forwards;
+}
+.anim-in.visible:nth-child(1) { animation-delay: 0.05s; }
+.anim-in.visible:nth-child(2) { animation-delay: 0.15s; }
+.anim-in.visible:nth-child(3) { animation-delay: 0.25s; }
+.anim-in.visible:nth-child(4) { animation-delay: 0.35s; }
+.anim-in.visible:nth-child(5) { animation-delay: 0.45s; }
+.anim-in.visible:nth-child(6) { animation-delay: 0.55s; }
+`
+
+function useScrollAnimations() {
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      entries => entries.forEach(e => {
+        if (e.isIntersecting) e.target.classList.add('visible')
+      }),
+      { threshold: 0.1 }
+    )
+    document.querySelectorAll('.anim-in').forEach(el => observer.observe(el))
+    return () => observer.disconnect()
+  }, [])
+}
+
+// ─── Logo ──────────────────────────────────────────────────────────────────────
 function LogoMark({ dark = false }: { dark?: boolean }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -40,51 +74,51 @@ function Navbar() {
   const links = [
     { label: 'Funcionalidades', href: '#funcionalidades' },
     { label: 'Como funciona',   href: '#como-funciona'   },
-    { label: 'Depoimentos',     href: '#depoimentos'     },
+    { label: 'Preços',          href: '#precos'           },
+    { label: 'Depoimentos',     href: '#depoimentos'      },
   ]
 
   return (
-    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-white shadow-md' : 'bg-transparent'}`}>
+    <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50, transition: 'all 0.3s', background: scrolled ? 'white' : 'transparent', boxShadow: scrolled ? '0 1px 12px rgba(0,0,0,0.1)' : 'none' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <LogoMark dark={scrolled} />
 
-          {/* Desktop links */}
           <div className="hidden md:flex items-center gap-8">
             {links.map(l => (
-              <a key={l.href} href={l.href} className={`text-sm font-medium transition-colors ${scrolled ? 'text-gray-700 hover:text-[#00523C]' : 'text-white/90 hover:text-white'}`}>
+              <a key={l.href} href={l.href} style={{ fontSize: 14, fontWeight: 500, color: scrolled ? '#374151' : 'rgba(255,255,255,0.9)', textDecoration: 'none', transition: 'color 0.2s' }}>
                 {l.label}
               </a>
             ))}
           </div>
 
           <div className="hidden md:flex items-center gap-3">
-            <Link to="/login" className={`px-4 py-2 text-sm font-semibold rounded-lg border transition-colors ${scrolled ? 'border-[#00523C] text-[#00523C] hover:bg-[#00523C] hover:text-white' : 'border-white text-white hover:bg-white/10'}`}>
+            <Link to="/login" style={{ padding: '8px 16px', fontSize: 14, fontWeight: 600, borderRadius: 8, border: `1.5px solid ${scrolled ? '#00523C' : 'rgba(255,255,255,0.6)'}`, color: scrolled ? '#00523C' : 'white', textDecoration: 'none', transition: 'all 0.2s' }}>
               Entrar
             </Link>
-            <a href="#demo" className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#00A896] text-white hover:bg-[#007A5A] transition-colors shadow-sm">
+            <a href="#demo" style={{ padding: '8px 16px', fontSize: 14, fontWeight: 600, borderRadius: 8, background: '#00A896', color: 'white', textDecoration: 'none', boxShadow: '0 2px 8px rgba(0,168,150,0.4)' }}>
               Demonstração gratuita
             </a>
           </div>
 
-          <button className="md:hidden p-2" onClick={() => setMobileOpen(!mobileOpen)}>
-            {mobileOpen ? <X className={scrolled ? 'text-gray-700' : 'text-white'} /> : <Menu className={scrolled ? 'text-gray-700' : 'text-white'} />}
+          <button className="md:hidden p-2" onClick={() => setMobileOpen(!mobileOpen)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+            {mobileOpen ? <X color={scrolled ? '#374151' : 'white'} /> : <Menu color={scrolled ? '#374151' : 'white'} />}
           </button>
         </div>
       </div>
 
       {mobileOpen && (
-        <div className="md:hidden bg-white border-t border-gray-100 px-4 py-4 space-y-3 shadow-lg">
+        <div style={{ background: 'white', borderTop: '1px solid #f1f5f9', padding: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }}>
           {links.map(l => (
-            <a key={l.href} href={l.href} onClick={() => setMobileOpen(false)} className="block text-sm font-medium text-gray-700 hover:text-[#00523C]">
+            <a key={l.href} href={l.href} onClick={() => setMobileOpen(false)} style={{ display: 'block', padding: '10px 0', fontSize: 14, fontWeight: 500, color: '#374151', textDecoration: 'none' }}>
               {l.label}
             </a>
           ))}
-          <div className="flex gap-3 pt-2">
-            <Link to="/login" className="flex-1 text-center px-4 py-2 text-sm font-semibold rounded-lg border border-[#00523C] text-[#00523C]">
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <Link to="/login" style={{ flex: 1, textAlign: 'center', padding: '10px', fontSize: 14, fontWeight: 600, borderRadius: 8, border: '1.5px solid #00523C', color: '#00523C', textDecoration: 'none' }}>
               Entrar
             </Link>
-            <a href="#demo" className="flex-1 text-center px-4 py-2 text-sm font-semibold rounded-lg bg-[#00A896] text-white">
+            <a href="#demo" style={{ flex: 1, textAlign: 'center', padding: '10px', fontSize: 14, fontWeight: 600, borderRadius: 8, background: '#00A896', color: 'white', textDecoration: 'none' }}>
               Demonstração
             </a>
           </div>
@@ -97,58 +131,47 @@ function Navbar() {
 // ─── Hero ──────────────────────────────────────────────────────────────────────
 function Hero() {
   return (
-    <section className="relative min-h-screen flex items-center overflow-hidden pt-16"
-      style={{ background: 'linear-gradient(135deg, #00523C 0%, #007A5A 55%, #00A896 100%)' }}>
-      {/* Background shapes */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] opacity-10 rounded-full blur-3xl"
-        style={{ background: '#00FFCC', transform: 'translate(30%, -30%)' }} />
-      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] opacity-10 rounded-full blur-3xl"
-        style={{ background: 'white', transform: 'translate(-30%, 30%)' }} />
+    <section style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', background: 'linear-gradient(135deg, #00523C 0%, #007A5A 55%, #00A896 100%)', position: 'relative', overflow: 'hidden', paddingTop: 64 }}>
+      <div style={{ position: 'absolute', top: 0, right: 0, width: 500, height: 500, background: '#00FFCC', opacity: 0.08, borderRadius: '50%', filter: 'blur(80px)', transform: 'translate(30%, -30%)' }} />
+      <div style={{ position: 'absolute', bottom: 0, left: 0, width: 400, height: 400, background: 'white', opacity: 0.05, borderRadius: '50%', filter: 'blur(80px)', transform: 'translate(-30%, 30%)' }} />
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
-        {/* Badge */}
-        <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full text-sm font-medium text-white/90 mb-8"
-          style={{ animation: 'fadeInDown 0.6s ease both' }}>
-          <span className="w-2 h-2 bg-[#00FFC2] rounded-full animate-pulse" />
-          Usado por escolas privadas em todo o Brasil · Dados reais do INEP e Censo Escolar
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center" style={{ position: 'relative', width: '100%' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)', padding: '8px 18px', borderRadius: 999, fontSize: 13, color: 'rgba(255,255,255,0.9)', marginBottom: 32, animation: 'fadeInDown 0.6s ease both' }}>
+          <span style={{ width: 8, height: 8, background: '#A7F3D0', borderRadius: '50%', display: 'inline-block', animation: 'pulse 2s infinite' }} />
+          Usado por escolas privadas no Brasil · Dados reais do INEP e Censo Escolar
         </div>
 
-        {/* Headline */}
-        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6 max-w-4xl mx-auto"
-          style={{ animation: 'fadeInUp 0.7s ease 0.1s both' }}>
+        <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3.75rem)', fontWeight: 800, color: 'white', lineHeight: 1.15, marginBottom: 24, animation: 'fadeInUp 0.7s ease 0.1s both', opacity: 0 }}>
           Sua escola pronta para{' '}
           <span style={{ color: '#A7F3D0' }}>matricular mais</span>{' '}
           em 2027
         </h1>
 
-        {/* Subheadline */}
-        <p className="text-lg sm:text-xl text-white/80 max-w-2xl mx-auto mb-10 leading-relaxed"
-          style={{ animation: 'fadeInUp 0.7s ease 0.2s both' }}>
+        <p style={{ fontSize: 'clamp(1rem, 2vw, 1.25rem)', color: 'rgba(255,255,255,0.82)', maxWidth: 640, margin: '0 auto 40px', lineHeight: 1.7, animation: 'fadeInUp 0.7s ease 0.2s both', opacity: 0 }}>
           A Áion Edu analisa o histórico da sua escola, estuda o mercado local e gera um plano de campanha personalizado com IA — para você chegar em agosto já preparado.
         </p>
 
-        {/* CTAs */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6"
-          style={{ animation: 'fadeInUp 0.7s ease 0.3s both' }}>
-          <a href="#demo"
-            className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-[#00523C] font-bold rounded-xl hover:bg-gray-50 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-0.5 text-base">
+        <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 24, animation: 'fadeInUp 0.7s ease 0.3s both', opacity: 0 }}>
+          <a href="#demo" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '16px 32px', background: 'white', color: '#00523C', fontWeight: 700, borderRadius: 14, fontSize: 16, textDecoration: 'none', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', transition: 'transform 0.2s' }}
+            onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-2px)')}
+            onMouseLeave={e => (e.currentTarget.style.transform = 'none')}>
             Quero uma demonstração gratuita
-            <ArrowRight className="w-5 h-5" />
+            <ArrowRight size={18} />
           </a>
-          <a href="#como-funciona"
-            className="inline-flex items-center justify-center gap-2 px-8 py-4 border-2 border-white/40 text-white font-semibold rounded-xl hover:bg-white/10 transition-all text-base">
+          <a href="#como-funciona" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '16px 32px', border: '2px solid rgba(255,255,255,0.4)', color: 'white', fontWeight: 600, borderRadius: 14, fontSize: 16, textDecoration: 'none', transition: 'background 0.2s' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
             Ver como funciona →
           </a>
         </div>
 
-        <p className="text-white/50 text-sm" style={{ animation: 'fadeInUp 0.7s ease 0.4s both' }}>
+        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', animation: 'fadeInUp 0.7s ease 0.4s both', opacity: 0 }}>
           Sem compromisso · Demonstração em 30 minutos · Suporte em português
         </p>
       </div>
 
       <style>{`
-        @keyframes fadeInDown { from { opacity:0; transform:translateY(-20px) } to { opacity:1; transform:none } }
-        @keyframes fadeInUp   { from { opacity:0; transform:translateY( 20px) } to { opacity:1; transform:none } }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
       `}</style>
     </section>
   )
@@ -157,19 +180,20 @@ function Hero() {
 // ─── Números de impacto ────────────────────────────────────────────────────────
 function Impacto() {
   const metrics = [
-    { value: '+40%',   label: 'de novatos em média após o primeiro ciclo'       },
-    { value: '85%',    label: 'de taxa de rematrícula como meta padrão'          },
-    { value: '3 min',  label: 'para gerar o plano de campanha completo'          },
-    { value: '5.000+', label: 'municípios com dados reais do INEP integrados'    },
+    { value: '956',    label: 'alunos gerenciados no primeiro cliente'       },
+    { value: '−40%',   label: 'de queda de novatos detectada em 1 ciclo'    },
+    { value: '3 min',  label: '4 anos de histórico analisados pela IA'      },
+    { value: 'Patos/PB', label: 'primeira escola atendida em 2026'          },
   ]
+
   return (
-    <section className="py-16" style={{ background: '#00523C' }}>
+    <section style={{ padding: '60px 0', background: '#00523C' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
-          {metrics.map(m => (
-            <div key={m.value} className="text-center">
-              <div className="text-4xl sm:text-5xl font-bold mb-2" style={{ color: '#A7F3D0' }}>{m.value}</div>
-              <p className="text-white/70 text-sm leading-relaxed">{m.label}</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 32 }}>
+          {metrics.map((m, i) => (
+            <div key={i} className="anim-in" style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 'clamp(1.75rem, 4vw, 2.75rem)', fontWeight: 800, color: '#A7F3D0', marginBottom: 6 }}>{m.value}</div>
+              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>{m.label}</p>
             </div>
           ))}
         </div>
@@ -182,48 +206,40 @@ function Impacto() {
 function ComoFunciona() {
   const steps = [
     {
-      n: '①',
-      icon: <Upload className="w-8 h-8" style={{ color: '#00A896' }} />,
+      icon: <Upload size={32} color="#00A896" />,
       title: 'Importe seu histórico',
       desc: 'Suba os relatórios do seu ERP (SIGA, Totvs, etc.). A IA lê e entende o padrão da sua escola em segundos.'
     },
     {
-      n: '②',
-      icon: <Zap className="w-8 h-8" style={{ color: '#00A896' }} />,
+      icon: <Zap size={32} color="#00A896" />,
       title: 'Gere seu plano de campanha',
       desc: 'Com base no histórico + mercado local, a IA cria metas mês a mês, CPA sugerido e calendário de captação.'
     },
     {
-      n: '③',
-      icon: <BarChart3 className="w-8 h-8" style={{ color: '#00A896' }} />,
+      icon: <BarChart3 size={32} color="#00A896" />,
       title: 'Acompanhe e ajuste em tempo real',
       desc: 'Dashboard com desvios visuais, alertas automáticos e recálculo de rota quando necessário.'
     },
   ]
 
   return (
-    <section id="como-funciona" className="py-24 bg-gray-50">
+    <section id="como-funciona" style={{ padding: '96px 0', background: '#f8fafc' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <span className="text-sm font-semibold uppercase tracking-widest" style={{ color: '#00A896' }}>Simples de usar</span>
-          <h2 className="mt-3 text-3xl sm:text-4xl font-bold text-gray-900">Como funciona</h2>
-          <p className="mt-4 text-lg text-gray-600 max-w-2xl mx-auto">Em três passos, sua escola sai do improviso para um plano estruturado com IA.</p>
+        <div style={{ textAlign: 'center', marginBottom: 64 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#00A896', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Simples de usar</span>
+          <h2 style={{ fontSize: 'clamp(1.75rem, 3vw, 2.5rem)', fontWeight: 800, color: '#0f172a', marginTop: 8 }}>Como funciona</h2>
+          <p style={{ fontSize: 16, color: '#64748b', maxWidth: 520, margin: '12px auto 0', lineHeight: 1.7 }}>Em três passos, sua escola sai do improviso para um plano estruturado com IA.</p>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8 relative">
-          <div className="hidden lg:block absolute top-14 left-[calc(33%-40px)] right-[calc(33%-40px)] h-0.5"
-            style={{ background: 'linear-gradient(90deg, #00A89630, #00A896, #00A89630)' }} />
-
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 32 }}>
           {steps.map((s, i) => (
-            <div key={s.n} className="relative text-center bg-white rounded-2xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="relative inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-white border-2 mb-6"
-                style={{ borderColor: '#00A89640' }}>
+            <div key={i} className="anim-in" style={{ background: 'white', borderRadius: 20, padding: 32, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', textAlign: 'center', position: 'relative' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 72, height: 72, borderRadius: 18, background: '#f0fdf4', border: '2px solid #bbf7d0', marginBottom: 20, position: 'relative' }}>
                 {s.icon}
-                <span className="absolute -top-3 -right-3 w-8 h-8 text-white text-sm font-bold rounded-full flex items-center justify-center"
-                  style={{ background: '#00523C' }}>{i + 1}</span>
+                <span style={{ position: 'absolute', top: -10, right: -10, width: 28, height: 28, background: '#00523C', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800 }}>{i + 1}</span>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">{s.title}</h3>
-              <p className="text-gray-600 leading-relaxed">{s.desc}</p>
+              <h3 style={{ fontSize: 17, fontWeight: 700, color: '#0f172a', marginBottom: 10 }}>{s.title}</h3>
+              <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.7 }}>{s.desc}</p>
             </div>
           ))}
         </div>
@@ -235,61 +251,33 @@ function ComoFunciona() {
 // ─── Funcionalidades ──────────────────────────────────────────────────────────
 function Funcionalidades() {
   const features = [
-    {
-      emoji: '🎯',
-      color: 'bg-emerald-50 text-emerald-700',
-      title: 'Gerador de campanha com IA',
-      desc: 'Plano completo com metas mensais, investimento e CPA baseado no seu histórico real.'
-    },
-    {
-      emoji: '📊',
-      color: 'bg-blue-50 text-blue-700',
-      title: 'Relatórios cirúrgicos',
-      desc: 'Funil, rematrícula, marketing e retenção — tudo em um painel com comparativos históricos.'
-    },
-    {
-      emoji: '🏆',
-      color: 'bg-amber-50 text-amber-700',
-      title: 'Benchmark de mercado',
-      desc: 'Compare sua escola com o setor usando dados reais do INEP e Censo Escolar.'
-    },
-    {
-      emoji: '🔄',
-      color: 'bg-rose-50 text-rose-700',
-      title: 'Radar de retenção',
-      desc: 'Cruza pesquisas de satisfação, transferências e rematrícula para identificar risco de evasão.'
-    },
-    {
-      emoji: '📱',
-      color: 'bg-green-50 text-green-700',
-      title: 'WhatsApp integrado',
-      desc: 'Automações, bot de atendimento e disparo de campanhas direto pelo número da escola.'
-    },
-    {
-      emoji: '📋',
-      color: 'bg-purple-50 text-purple-700',
-      title: 'Pesquisa de satisfação',
-      desc: 'Envie links para as famílias, colete respostas e receba análise da IA com ações prioritárias.'
-    },
+    { emoji: '🎯', bg: '#f0fdf4', title: 'Gerador de campanha com IA',    desc: 'Plano completo com metas mensais, investimento e CPA baseado no seu histórico real.' },
+    { emoji: '📊', bg: '#eff6ff', title: 'Relatórios cirúrgicos',          desc: 'Funil, rematrícula, marketing e retenção — tudo em um painel com comparativos históricos.' },
+    { emoji: '🏆', bg: '#fefce8', title: 'Benchmark de mercado',           desc: 'Compare sua escola com o setor usando dados reais do INEP e Censo Escolar.' },
+    { emoji: '🔄', bg: '#fff1f2', title: 'Radar de retenção',              desc: 'Cruza pesquisas de satisfação, transferências e rematrícula para identificar risco de evasão.' },
+    { emoji: '📱', bg: '#f0fdf4', title: 'WhatsApp integrado',             desc: 'Automações, bot de atendimento e disparo de campanhas direto pelo número da escola.' },
+    { emoji: '📋', bg: '#faf5ff', title: 'Pesquisa de satisfação',         desc: 'Envie links para as famílias, colete respostas e receba análise da IA com ações prioritárias.' },
   ]
 
   return (
-    <section id="funcionalidades" className="py-24 bg-white">
+    <section id="funcionalidades" style={{ padding: '96px 0', background: 'white' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <span className="text-sm font-semibold uppercase tracking-widest" style={{ color: '#00A896' }}>Tudo que sua escola precisa</span>
-          <h2 className="mt-3 text-3xl sm:text-4xl font-bold text-gray-900">Funcionalidades principais</h2>
-          <p className="mt-4 text-lg text-gray-600 max-w-2xl mx-auto">Da importação do ERP até o encerramento do ciclo, a Áion Edu acompanha cada decisão.</p>
+        <div style={{ textAlign: 'center', marginBottom: 64 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#00A896', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Tudo que sua escola precisa</span>
+          <h2 style={{ fontSize: 'clamp(1.75rem, 3vw, 2.5rem)', fontWeight: 800, color: '#0f172a', marginTop: 8 }}>Funcionalidades principais</h2>
+          <p style={{ fontSize: 16, color: '#64748b', maxWidth: 520, margin: '12px auto 0', lineHeight: 1.7 }}>Da importação do ERP até o encerramento do ciclo.</p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {features.map(f => (
-            <div key={f.title} className="group p-6 rounded-2xl border border-gray-100 hover:border-emerald-200 hover:shadow-lg transition-all">
-              <div className={`inline-flex items-center justify-center w-12 h-12 rounded-xl mb-4 text-2xl ${f.color}`}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
+          {features.map((f, i) => (
+            <div key={i} className="anim-in" style={{ padding: 24, borderRadius: 16, border: '1px solid #f1f5f9', transition: 'box-shadow 0.2s, border-color 0.2s', cursor: 'default' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 24px rgba(0,82,60,0.1)'; (e.currentTarget as HTMLElement).style.borderColor = '#bbf7d0' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = 'none'; (e.currentTarget as HTMLElement).style.borderColor = '#f1f5f9' }}>
+              <div style={{ width: 48, height: 48, borderRadius: 12, background: f.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, marginBottom: 14 }}>
                 {f.emoji}
               </div>
-              <h3 className="font-bold text-gray-900 mb-2 text-lg">{f.title}</h3>
-              <p className="text-gray-600 leading-relaxed">{f.desc}</p>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>{f.title}</h3>
+              <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.65 }}>{f.desc}</p>
             </div>
           ))}
         </div>
@@ -301,44 +289,28 @@ function Funcionalidades() {
 // ─── Diferenciais ─────────────────────────────────────────────────────────────
 function Diferenciais() {
   const items = [
-    {
-      title: 'Não é só um CRM — é inteligência de matrículas',
-      desc: 'A maioria dos sistemas apenas registra leads. A Áion Edu estuda seus dados e diz o que fazer.'
-    },
-    {
-      title: 'Dados do INEP integrados',
-      desc: 'Sabemos quantas escolas concorrem com você, qual é o market share e onde está a oportunidade.'
-    },
-    {
-      title: 'Calendário de captação personalizado',
-      desc: 'Baseado nos picos históricos da sua escola — não em uma planilha genérica.'
-    },
-    {
-      title: 'IA que aprende com cada ciclo',
-      desc: 'A cada ano, o plano fica mais preciso porque a IA usa seu histórico real, não estimativas.'
-    },
-    {
-      title: 'Tudo em português, para a realidade brasileira',
-      desc: 'Calendário escolar brasileiro, ERPs nacionais, INEP, Censo Escolar — feito para o seu contexto.'
-    },
+    { title: 'Não é só um CRM — é inteligência de matrículas',  desc: 'A maioria dos sistemas apenas registra leads. A Áion Edu estuda seus dados e diz o que fazer.' },
+    { title: 'Dados do INEP integrados',                         desc: 'Sabemos quantas escolas concorrem com você, qual é o market share e onde está a oportunidade.' },
+    { title: 'Calendário de captação personalizado',             desc: 'Baseado nos picos históricos da sua escola — não em uma planilha genérica.' },
+    { title: 'IA que aprende com cada ciclo',                    desc: 'A cada ano, o plano fica mais preciso porque a IA usa seu histórico real, não estimativas.' },
+    { title: 'Tudo em português, para a realidade brasileira',   desc: 'Calendário escolar brasileiro, ERPs nacionais, INEP, Censo Escolar — feito para o seu contexto.' },
   ]
 
   return (
-    <section className="py-24" style={{ background: 'linear-gradient(135deg, #00523C 0%, #007A5A 100%)' }}>
+    <section style={{ padding: '96px 0', background: 'linear-gradient(135deg, #00523C 0%, #007A5A 100%)' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <span className="text-sm font-semibold uppercase tracking-widest" style={{ color: '#A7F3D0' }}>Por que escolher a Áion Edu</span>
-          <h2 className="mt-3 text-3xl sm:text-4xl font-bold text-white">Por que somos diferentes?</h2>
+        <div style={{ textAlign: 'center', marginBottom: 56 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#A7F3D0', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Por que escolher a Áion Edu</span>
+          <h2 style={{ fontSize: 'clamp(1.75rem, 3vw, 2.5rem)', fontWeight: 800, color: 'white', marginTop: 8 }}>Por que somos diferentes?</h2>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
           {items.map((item, i) => (
-            <div key={i} className="flex gap-4 p-6 rounded-2xl"
-              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}>
-              <CheckCircle className="w-6 h-6 flex-shrink-0 mt-0.5" style={{ color: '#A7F3D0' }} />
+            <div key={i} className="anim-in" style={{ display: 'flex', gap: 14, padding: 24, borderRadius: 16, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}>
+              <CheckCircle size={20} color="#A7F3D0" style={{ flexShrink: 0, marginTop: 2 }} />
               <div>
-                <h3 className="font-bold text-white mb-1">{item.title}</h3>
-                <p className="text-white/70 text-sm leading-relaxed">{item.desc}</p>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: 'white', marginBottom: 4 }}>{item.title}</h3>
+                <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.6 }}>{item.desc}</p>
               </div>
             </div>
           ))}
@@ -352,50 +324,58 @@ function Diferenciais() {
 function Depoimentos() {
   const testimonials = [
     {
-      avatar: 'DG',
-      name: 'Diretora Geral',
-      school: 'Escola Particular · Patos, PB',
-      text: 'Antes eu chegava em agosto sem saber quantos alunos ia perder. Agora tenho um plano com metas por semana desde julho.'
+      avatar: 'CA',
+      avatarBg: '#00523C',
+      name: 'Colégio Ágape Patos',
+      location: 'Patos, Paraíba · 956 alunos · primeiro cliente Áion Edu',
+      text: 'A IA identificou que nossa captação de novatos caiu 40% em um ano. Com o plano gerado, chegamos preparados para a campanha de 2027.',
+      highlight: true,
     },
     {
-      avatar: 'GP',
-      name: 'Gestor Pedagógico',
-      school: 'Colégio Privado · Campina Grande, PB',
-      text: 'A IA identificou que nossa taxa de novatos estava caindo há 3 anos. Ninguém tinha percebido isso antes.'
+      avatar: 'GE',
+      avatarBg: '#007A5A',
+      name: 'Gestor Escolar',
+      location: 'Escola Particular, interior do NE',
+      text: 'Antes chegávamos em agosto sem saber quantos alunos íamos perder. Agora temos um plano com metas por semana desde julho.',
+      highlight: false,
     },
     {
       avatar: 'CA',
+      avatarBg: '#00A896',
       name: 'Coordenador Administrativo',
-      school: 'Escola Cristã · João Pessoa, PB',
-      text: 'Em 3 minutos o sistema gerou um plano completo com investimento mês a mês. Inacreditável.'
+      location: 'Escola Cristã, Nordeste do Brasil',
+      text: 'Em 3 minutos o sistema gerou um plano completo com investimento mês a mês. A agilidade é inacreditável.',
+      highlight: false,
     },
   ]
 
   return (
-    <section id="depoimentos" className="py-24 bg-gray-50">
+    <section id="depoimentos" style={{ padding: '96px 0', background: '#f8fafc' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <span className="text-sm font-semibold uppercase tracking-widest" style={{ color: '#00A896' }}>Prova social</span>
-          <h2 className="mt-3 text-3xl sm:text-4xl font-bold text-gray-900">O que dizem os gestores</h2>
+        <div style={{ textAlign: 'center', marginBottom: 56 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#00A896', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Resultados reais</span>
+          <h2 style={{ fontSize: 'clamp(1.75rem, 3vw, 2.5rem)', fontWeight: 800, color: '#0f172a', marginTop: 8 }}>O que dizem os gestores</h2>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
           {testimonials.map((t, i) => (
-            <div key={i} className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-              <div className="flex gap-1 mb-5">
-                {Array.from({ length: 5 }).map((_, j) => (
-                  <Star key={j} className="w-4 h-4 fill-amber-400 text-amber-400" />
-                ))}
+            <div key={i} className="anim-in" style={{ background: 'white', borderRadius: 20, padding: 28, border: t.highlight ? '2px solid #00A896' : '1px solid #e2e8f0', boxShadow: t.highlight ? '0 8px 32px rgba(0,168,150,0.12)' : '0 2px 8px rgba(0,0,0,0.04)', position: 'relative' }}>
+              {t.highlight && (
+                <div style={{ position: 'absolute', top: -12, left: 24, background: '#00A896', color: 'white', fontSize: 11, fontWeight: 700, padding: '3px 12px', borderRadius: 999 }}>
+                  Primeiro cliente
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 2, marginBottom: 16 }}>
+                {Array.from({ length: 5 }).map((_, j) => <Star key={j} size={14} fill="#f59e0b" color="#f59e0b" />)}
               </div>
-              <p className="text-gray-700 leading-relaxed mb-6 text-base">"{t.text}"</p>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-                  style={{ background: '#00523C' }}>
+              <p style={{ fontSize: 15, color: '#374151', lineHeight: 1.7, marginBottom: 20 }}>"{t.text}"</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: t.avatarBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
                   {t.avatar}
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-900 text-sm">{t.name}</p>
-                  <p className="text-gray-500 text-xs">{t.school}</p>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{t.name}</p>
+                  <p style={{ fontSize: 11, color: '#94a3b8' }}>{t.location}</p>
                 </div>
               </div>
             </div>
@@ -406,7 +386,68 @@ function Depoimentos() {
   )
 }
 
-// ─── CTA Demo (formulário) ────────────────────────────────────────────────────
+// ─── Preços ───────────────────────────────────────────────────────────────────
+function Precos() {
+  const features = [
+    'Gerador de campanha com IA',
+    'Relatórios e inteligência completos',
+    'CRM de leads e visitas',
+    'Módulo de transferências com diagnóstico IA',
+    'Pesquisas de satisfação ilimitadas',
+    'Benchmark com dados do INEP',
+    'WhatsApp integrado',
+    'Suporte em português',
+    'Consultor dedicado',
+  ]
+
+  return (
+    <section id="precos" style={{ padding: '96px 0', background: 'white' }}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div style={{ textAlign: 'center', marginBottom: 56 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#00A896', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Preço</span>
+          <h2 style={{ fontSize: 'clamp(1.75rem, 3vw, 2.5rem)', fontWeight: 800, color: '#0f172a', marginTop: 8 }}>Um plano. Tudo incluído.</h2>
+          <p style={{ fontSize: 16, color: '#64748b', marginTop: 8 }}>Sem surpresas. Sem taxas extras.</p>
+        </div>
+
+        <div style={{ maxWidth: 440, margin: '0 auto' }}>
+          <div className="anim-in" style={{ background: 'white', borderRadius: 24, boxShadow: '0 8px 40px rgba(0,168,150,0.15)', padding: 40, border: '2px solid #00A896' }}>
+            <div style={{ textAlign: 'center' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#00A896', background: '#f0fdf4', padding: '4px 14px', borderRadius: 999 }}>Plano Escola</span>
+              <div style={{ marginTop: 20 }}>
+                <span style={{ fontSize: 48, fontWeight: 800, color: '#0f172a' }}>R$ 550</span>
+                <span style={{ fontSize: 16, color: '#94a3b8' }}>/mês</span>
+              </div>
+              <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>por escola · sem limite de usuários</p>
+            </div>
+
+            <ul style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {features.map(f => (
+                <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <CheckCircle size={16} color="#00A896" style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: 14, color: '#374151' }}>{f}</span>
+                </li>
+              ))}
+            </ul>
+
+            <a href="#demo" style={{ display: 'block', textAlign: 'center', marginTop: 32, padding: '14px', background: 'linear-gradient(135deg, #00523C, #007A5A)', color: 'white', borderRadius: 12, fontWeight: 700, fontSize: 15, textDecoration: 'none', transition: 'opacity 0.2s' }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = '0.9')}
+              onMouseLeave={e => (e.currentTarget.style.opacity = '1')}>
+              Quero começar agora →
+            </a>
+
+            <p style={{ textAlign: 'center', fontSize: 11, color: '#94a3b8', marginTop: 12 }}>
+              Primeiro mês grátis · Cancele quando quiser
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ─── CTA Demo ─────────────────────────────────────────────────────────────────
+const WA_NUMBER = '5583999999999' // Substituir pelo número real da Áion Edu
+
 function CTADemo() {
   const [form, setForm] = useState({ name: '', email: '', school: '', city: '' })
   const [sending, setSending] = useState(false)
@@ -418,90 +459,73 @@ function CTADemo() {
     setError('')
     setSending(true)
     try {
-      const { error: dbErr } = await supabase
-        .from('sales_pipeline')
-        .insert({
-          school_name:    form.school,
-          contact_name:   form.name,
-          contact_email:  form.email,
-          city:           form.city.split('/')[0]?.trim(),
-          state:          form.city.split('/')[1]?.trim() ?? '',
-          stage:          'prospecting',
-          notes:          `Lead da landing page. Email: ${form.email}`,
-          next_action:    'Agendar demonstração',
-          next_action_date: new Date(Date.now() + 2 * 86400000).toISOString().substring(0, 10),
-        })
-      if (dbErr) throw dbErr
+      // Salva lead no Supabase
+      await supabase.from('demo_requests').insert({
+        name:        form.name,
+        email:       form.email,
+        school_name: form.school,
+        city:        form.city.split('/')[0]?.trim() || form.city,
+        state:       form.city.split('/')[1]?.trim() || '',
+      })
+
+      // Abre WhatsApp em seguida
+      const msg = encodeURIComponent(
+        `Olá! Tenho interesse em uma demonstração da Áion Edu.\n\n` +
+        `Nome: ${form.name}\n` +
+        `Escola: ${form.school}\n` +
+        `Cidade: ${form.city}\n` +
+        `E-mail: ${form.email}`
+      )
+      window.open(`https://wa.me/${WA_NUMBER}?text=${msg}`, '_blank')
       setSent(true)
     } catch {
-      setError('Erro ao enviar. Tente novamente ou escreva para contato@aionedu.com.br')
+      setError('Erro ao enviar. Escreva para contato@aionedu.com.br ou acesse o WhatsApp diretamente.')
     } finally {
       setSending(false)
     }
   }
 
-  const inputCls = 'w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent text-sm transition-all'
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '12px 16px', borderRadius: 10,
+    border: '1.5px solid #e2e8f0', fontSize: 14, color: '#0f172a',
+    outline: 'none', transition: 'border-color 0.2s', boxSizing: 'border-box',
+  }
 
   return (
-    <section id="demo" className="py-24 bg-white">
+    <section id="demo" style={{ padding: '96px 0', background: '#f8fafc' }}>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <span className="text-sm font-semibold uppercase tracking-widest" style={{ color: '#00A896' }}>Demonstração gratuita</span>
-          <h2 className="mt-3 text-3xl sm:text-4xl font-bold text-gray-900">Comece antes da campanha de agosto</h2>
-          <p className="mt-4 text-lg text-gray-600">
+        <div style={{ textAlign: 'center', marginBottom: 48 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#00A896', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Demonstração gratuita</span>
+          <h2 style={{ fontSize: 'clamp(1.75rem, 3vw, 2.5rem)', fontWeight: 800, color: '#0f172a', marginTop: 8 }}>Comece antes da campanha de agosto</h2>
+          <p style={{ fontSize: 16, color: '#64748b', marginTop: 10, lineHeight: 1.6 }}>
             Escolas que planejam com antecedência matriculam até 40% mais novatos.
           </p>
         </div>
 
         {sent ? (
-          <div className="text-center p-12 rounded-2xl border-2" style={{ borderColor: '#00A896', background: '#f0fdf4' }}>
-            <CheckCircle className="w-14 h-14 mx-auto mb-4" style={{ color: '#00523C' }} />
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Recebemos sua solicitação!</h3>
-            <p className="text-gray-600">Nossa equipe entrará em contato em até 24h para agendar a demonstração.</p>
+          <div style={{ textAlign: 'center', padding: '48px 32px', borderRadius: 20, border: '2px solid #00A896', background: '#f0fdf4' }}>
+            <CheckCircle size={52} color="#00523C" style={{ margin: '0 auto 16px' }} />
+            <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>Abrimos o WhatsApp para você!</h3>
+            <p style={{ fontSize: 14, color: '#64748b' }}>Também registramos seu contato. Nossa equipe entrará em contato em breve.</p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4 bg-gray-50 rounded-2xl p-8 border border-gray-100">
-            <input
-              required
-              placeholder="Nome completo"
-              value={form.name}
-              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              className={inputCls}
-              style={{ '--tw-ring-color': '#00A896' } as React.CSSProperties}
-            />
-            <input
-              required type="email"
-              placeholder="E-mail profissional"
-              value={form.email}
-              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-              className={inputCls}
-            />
-            <input
-              required
-              placeholder="Nome da escola"
-              value={form.school}
-              onChange={e => setForm(f => ({ ...f, school: e.target.value }))}
-              className={inputCls}
-            />
-            <input
-              required
-              placeholder="Cidade / Estado (ex: João Pessoa / PB)"
-              value={form.city}
-              onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
-              className={inputCls}
-            />
+          <form onSubmit={handleSubmit} style={{ background: 'white', borderRadius: 20, padding: 40, border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <input required placeholder="Nome completo" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={inputStyle}
+              onFocus={e => (e.target.style.borderColor = '#00A896')} onBlur={e => (e.target.style.borderColor = '#e2e8f0')} />
+            <input required type="email" placeholder="E-mail profissional" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} style={inputStyle}
+              onFocus={e => (e.target.style.borderColor = '#00A896')} onBlur={e => (e.target.style.borderColor = '#e2e8f0')} />
+            <input required placeholder="Nome da escola" value={form.school} onChange={e => setForm(f => ({ ...f, school: e.target.value }))} style={inputStyle}
+              onFocus={e => (e.target.style.borderColor = '#00A896')} onBlur={e => (e.target.style.borderColor = '#e2e8f0')} />
+            <input required placeholder="Cidade / Estado (ex: Patos / PB)" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} style={inputStyle}
+              onFocus={e => (e.target.style.borderColor = '#00A896')} onBlur={e => (e.target.style.borderColor = '#e2e8f0')} />
 
-            {error && <p className="text-red-600 text-sm">{error}</p>}
+            {error && <p style={{ fontSize: 13, color: '#dc2626' }}>{error}</p>}
 
-            <button
-              type="submit"
-              disabled={sending}
-              className="w-full py-4 rounded-xl text-white font-bold text-base flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-60"
-              style={{ background: 'linear-gradient(135deg, #00523C, #007A5A)' }}>
-              {sending ? 'Enviando...' : <>Quero minha demonstração gratuita <ArrowRight className="w-5 h-5" /></>}
+            <button type="submit" disabled={sending} style={{ padding: '14px', background: 'linear-gradient(135deg, #00523C, #007A5A)', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 15, cursor: sending ? 'not-allowed' : 'pointer', opacity: sending ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'opacity 0.2s' }}>
+              {sending ? 'Enviando...' : <><span>Quero minha demonstração gratuita</span><ArrowRight size={18} /></>}
             </button>
 
-            <p className="text-center text-xs text-gray-400">
+            <p style={{ textAlign: 'center', fontSize: 11, color: '#94a3b8' }}>
               Sem compromisso · Demonstração em 30 minutos · Suporte em português
             </p>
           </form>
@@ -516,52 +540,31 @@ function FAQ() {
   const [open, setOpen] = useState<number | null>(null)
 
   const items = [
-    {
-      q: 'Preciso ter conhecimento técnico para usar?',
-      a: 'Não. A interface foi desenvolvida para gestores e secretarias. O onboarding com IA leva menos de 30 minutos.'
-    },
-    {
-      q: 'Como a IA gera o plano de campanha?',
-      a: 'Você importa o histórico do seu ERP, informa a meta de novatos e a IA analisa os padrões históricos da sua escola, os dados de mercado do INEP e gera metas mensais, CPA sugerido e calendário de captação.'
-    },
-    {
-      q: 'Quais ERPs são compatíveis para importação?',
-      a: 'SIGA, Totvs, Escola Web e qualquer sistema que exporte em Excel/CSV. Nossa IA lê o arquivo e identifica automaticamente as colunas.'
-    },
-    {
-      q: 'Como funciona a integração com WhatsApp?',
-      a: 'Conectamos ao WhatsApp Business via Evolution API. Você centraliza as conversas no painel e configura automações de follow-up e campanhas.'
-    },
-    {
-      q: 'Os dados do INEP são atualizados com que frequência?',
-      a: 'Usamos os microdados mais recentes do Censo Escolar (INEP), atualizados anualmente. Para dados de mercado local, nossa IA usa as últimas edições disponíveis.'
-    },
-    {
-      q: 'E se eu quiser cancelar?',
-      a: 'Sem burocracia. Você cancela quando quiser pelo painel, sem multa e sem necessidade de ligar para ninguém.'
-    },
+    { q: 'Preciso ter conhecimento técnico?',             a: 'Não. A interface foi desenvolvida para gestores e secretarias. O onboarding com IA leva menos de 30 minutos.' },
+    { q: 'Como a IA gera o plano de campanha?',           a: 'Você importa o histórico do seu ERP, informa a meta de novatos e a IA analisa os padrões históricos + dados do INEP para gerar metas mensais, CPA sugerido e calendário.' },
+    { q: 'Quais ERPs são compatíveis?',                   a: 'SIGA, Totvs, Escola Web e qualquer sistema que exporte em Excel/CSV. Nossa IA lê e identifica as colunas automaticamente.' },
+    { q: 'Como funciona a integração com WhatsApp?',      a: 'Conectamos ao WhatsApp Business via Evolution API. Você centraliza as conversas e configura automações de follow-up e campanhas.' },
+    { q: 'Os dados do INEP são atualizados?',             a: 'Usamos os microdados mais recentes do Censo Escolar (INEP), atualizados anualmente.' },
+    { q: 'Posso cancelar quando quiser?',                 a: 'Sim. Sem burocracia, sem multa, sem necessidade de ligar para ninguém.' },
   ]
 
   return (
-    <section className="py-24 bg-gray-50">
+    <section style={{ padding: '96px 0', background: 'white' }}>
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <span className="text-sm font-semibold uppercase tracking-widest" style={{ color: '#00A896' }}>Dúvidas</span>
-          <h2 className="mt-3 text-3xl sm:text-4xl font-bold text-gray-900">Perguntas frequentes</h2>
+        <div style={{ textAlign: 'center', marginBottom: 48 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#00A896', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Dúvidas</span>
+          <h2 style={{ fontSize: 'clamp(1.75rem, 3vw, 2.5rem)', fontWeight: 800, color: '#0f172a', marginTop: 8 }}>Perguntas frequentes</h2>
         </div>
 
-        <div className="space-y-3">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {items.map((item, i) => (
-            <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-              <button
-                onClick={() => setOpen(open === i ? null : i)}
-                className="w-full flex items-center justify-between px-6 py-5 text-left"
-              >
-                <span className="font-semibold text-gray-900 pr-4">{item.q}</span>
-                <ChevronDown className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${open === i ? 'rotate-180' : ''}`} />
+            <div key={i} style={{ background: '#f8fafc', borderRadius: 12, border: '1px solid #f1f5f9', overflow: 'hidden' }}>
+              <button onClick={() => setOpen(open === i ? null : i)} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 24px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', gap: 12 }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{item.q}</span>
+                <ChevronDown size={18} color="#94a3b8" style={{ flexShrink: 0, transform: open === i ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
               </button>
               {open === i && (
-                <div className="px-6 pb-5 text-gray-600 leading-relaxed border-t border-gray-50 pt-4">{item.a}</div>
+                <div style={{ padding: '0 24px 18px', fontSize: 14, color: '#64748b', lineHeight: 1.7 }}>{item.a}</div>
               )}
             </div>
           ))}
@@ -574,60 +577,33 @@ function FAQ() {
 // ─── Footer ────────────────────────────────────────────────────────────────────
 function Footer() {
   const cols = [
-    {
-      title: 'Produto',
-      links: [
-        { label: 'Funcionalidades', href: '#funcionalidades' },
-        { label: 'Como funciona',   href: '#como-funciona'   },
-        { label: 'Preços',          href: '#precos'           },
-        { label: 'Blog',            href: '#'                 },
-      ]
-    },
-    {
-      title: 'Empresa',
-      links: [
-        { label: 'Sobre nós',  href: '#' },
-        { label: 'Parceiros',  href: '#' },
-        { label: 'Contato',    href: 'mailto:contato@aionedu.com.br' },
-      ]
-    },
-    {
-      title: 'Legal',
-      links: [
-        { label: 'Política de Privacidade', href: '#' },
-        { label: 'Termos de Uso',           href: '#' },
-        { label: 'LGPD',                    href: '#' },
-      ]
-    },
+    { title: 'Produto',  links: [{ label: 'Funcionalidades', href: '#funcionalidades' }, { label: 'Como funciona', href: '#como-funciona' }, { label: 'Preços', href: '#precos' }, { label: 'Blog', href: '#' }] },
+    { title: 'Empresa',  links: [{ label: 'Sobre nós', href: '#' }, { label: 'Parceiros', href: '#' }, { label: 'Contato', href: 'mailto:contato@aionedu.com.br' }] },
+    { title: 'Legal',    links: [{ label: 'Política de Privacidade', href: '#' }, { label: 'Termos de Uso', href: '#' }, { label: 'LGPD', href: '#' }] },
   ]
 
   return (
-    <footer className="pt-16 pb-8" style={{ background: '#0A1A14' }}>
+    <footer style={{ background: '#0A1A14', paddingTop: 64, paddingBottom: 32 }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-10 mb-12">
-          {/* Brand */}
-          <div className="lg:col-span-1">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 40, marginBottom: 48 }}>
+          <div>
             <LogoMark />
-            <p className="text-gray-400 text-sm leading-relaxed mt-4 mb-4">
-              Inteligência que transforma histórico escolar em crescimento de matrículas.
-            </p>
-            <div className="space-y-1">
-              <a href="mailto:contato@aionedu.com.br" className="block text-sm text-gray-400 hover:text-white transition-colors">
-                contato@aionedu.com.br
-              </a>
-              <a href="https://www.aionedu.com.br" className="block text-sm text-gray-400 hover:text-white transition-colors">
-                www.aionedu.com.br
-              </a>
-            </div>
+            <p style={{ fontSize: 13, color: '#64748b', marginTop: 16, lineHeight: 1.7, marginBottom: 12 }}>Inteligência que transforma histórico escolar em crescimento de matrículas.</p>
+            <a href="mailto:contato@aionedu.com.br" style={{ display: 'block', fontSize: 13, color: '#64748b', textDecoration: 'none', marginBottom: 4 }}>contato@aionedu.com.br</a>
+            <a href="https://www.aionedu.com.br" style={{ display: 'block', fontSize: 13, color: '#64748b', textDecoration: 'none' }}>www.aionedu.com.br</a>
           </div>
 
           {cols.map(col => (
             <div key={col.title}>
-              <h4 className="font-semibold text-xs uppercase tracking-widest text-gray-500 mb-4">{col.title}</h4>
-              <ul className="space-y-2">
+              <h4 style={{ fontSize: 11, fontWeight: 700, color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 16 }}>{col.title}</h4>
+              <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {col.links.map(l => (
                   <li key={l.label}>
-                    <a href={l.href} className="text-sm text-gray-400 hover:text-white transition-colors">{l.label}</a>
+                    <a href={l.href} style={{ fontSize: 13, color: '#64748b', textDecoration: 'none', transition: 'color 0.2s' }}
+                      onMouseEnter={e => (e.currentTarget.style.color = 'white')}
+                      onMouseLeave={e => (e.currentTarget.style.color = '#64748b')}>
+                      {l.label}
+                    </a>
                   </li>
                 ))}
               </ul>
@@ -635,29 +611,35 @@ function Footer() {
           ))}
         </div>
 
-        <div className="border-t pt-8 flex flex-col sm:flex-row items-center justify-between gap-4" style={{ borderColor: '#1a2e25' }}>
-          <p className="text-gray-500 text-sm">© 2026 Áion Edu. Todos os direitos reservados.</p>
-          <p className="text-gray-600 text-xs">Feito com ♥ para gestores educacionais brasileiros</p>
+        <div style={{ borderTop: '1px solid #1a2e25', paddingTop: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <p style={{ fontSize: 13, color: '#4b5563' }}>© 2026 Áion Edu. Todos os direitos reservados.</p>
+          <p style={{ fontSize: 12, color: '#374151' }}>Feito com ♥ para gestores educacionais brasileiros</p>
         </div>
       </div>
     </footer>
   )
 }
 
-// ─── Export ────────────────────────────────────────────────────────────────────
+// ─── Root ──────────────────────────────────────────────────────────────────────
 export default function LandingPage() {
+  useScrollAnimations()
+
   return (
-    <div className="font-sans">
-      <Navbar />
-      <Hero />
-      <Impacto />
-      <ComoFunciona />
-      <Funcionalidades />
-      <Diferenciais />
-      <Depoimentos />
-      <CTADemo />
-      <FAQ />
-      <Footer />
-    </div>
+    <>
+      <style>{GLOBAL_CSS}</style>
+      <div style={{ fontFamily: 'Inter, system-ui, sans-serif', overflowX: 'hidden' }}>
+        <Navbar />
+        <Hero />
+        <Impacto />
+        <ComoFunciona />
+        <Funcionalidades />
+        <Diferenciais />
+        <Depoimentos />
+        <Precos />
+        <CTADemo />
+        <FAQ />
+        <Footer />
+      </div>
+    </>
   )
 }
