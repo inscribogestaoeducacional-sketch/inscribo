@@ -4,6 +4,7 @@ import {
   AlertTriangle, Sparkles, FileText, SkipForward
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { sendEmail } from '../../lib/email'
 
 // ─── tipos ──────────────────────────────────────────────────────
 interface ProcessedFile {
@@ -287,6 +288,17 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
         .update({ city: schoolData.city, state: schoolData.state })
         .eq('id', institutionId)
       console.log('[SchoolSetupModal] institution error:', instError)
+
+      // Envia e-mail de boas-vindas ao gestor
+      const latestHistorical = historicalPayload.sort((a, b) => b.detected_year - a.detected_year)[0]
+      const gestorEmail = (await supabase.auth.getUser()).data.user?.email
+      if (gestorEmail) {
+        await sendEmail('welcome', gestorEmail, {
+          school_name: schoolData.name,
+          total_students: latestHistorical?.total_students ?? 0,
+          year: campaignYear,
+        })
+      }
 
       onComplete()
     } catch (e) {

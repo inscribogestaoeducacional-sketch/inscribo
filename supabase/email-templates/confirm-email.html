@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><style>
+body{font-family:-apple-system,sans-serif;margin:0;background:#f5f5f5}
+.c{max-width:600px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+.h{background:linear-gradient(135deg,#00523C,#00A896);padding:32px 40px;text-align:center}
+.h h1{color:#fff;margin:0;font-size:22px;font-weight:600}
+.h p{color:rgba(255,255,255,0.8);margin:6px 0 0;font-size:13px}
+.b{padding:40px}
+.btn{display:inline-block;background:#00A896;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:24px 0}
+.f{background:#f9f9f9;padding:24px 40px;text-align:center;border-top:1px solid #eee}
+.f p{color:#999;font-size:12px;margin:4px 0}
+.f a{color:#00A896;text-decoration:none}
+</style></head>
+<body>
+<div class="c">
+  <div class="h"><h1>Áion Edu</h1><p>Inteligência em matrículas</p></div>
+  <div class="b">
+    <h2 style="color:#00523C">Confirme seu e-mail</h2>
+    <p>Olá! Para acessar sua conta na Áion Edu, clique no botão abaixo para confirmar seu endereço de e-mail.</p>
+    <div style="text-align:center">
+      <a href="{{ .ConfirmationURL }}" class="btn">Confirmar meu e-mail →</a>
+    </div>
+    <p style="color:#666;font-size:13px">Se você não solicitou isso, ignore este e-mail.</p>
+    <p style="color:#666;font-size:13px">Ou copie e cole este link no navegador:<br>
+    <a href="{{ .ConfirmationURL }}" style="color:#00A896">{{ .ConfirmationURL }}</a></p>
+  </div>
+  <div class="f">
+    <p>© 2026 Áion Edu · <a href="https://aionedu.com.br">aionedu.com.br</a></p>
+    <p><a href="https://aionedu.com.br/privacidade">Privacidade</a> · <a href="https://aionedu.com.br/termos">Termos</a></p>
+  </div>
+</div>
+</body></html>
