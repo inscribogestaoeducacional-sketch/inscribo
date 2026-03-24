@@ -15,6 +15,7 @@ import SatisfactionPage from './pages/survey/SatisfactionPage'
 // Regular User Components
 import Dashboard from './components/dashboard/Dashboard'
 import GestorHome from './pages/gestor/GestorHome'
+import AttendantHome from './pages/gestor/AttendantHome'
 import GestorTransfers from './pages/gestor/GestorTransfers'
 import GestorSurveys from './pages/gestor/GestorSurveys'
 import LeadKanban from './components/leads/LeadKanban'
@@ -222,6 +223,9 @@ function AppContent() {
   }
 
   // REGULAR USER ROUTES
+  const isAttendant = user.role === 'user' && user.user_type !== 'admin_geral' && user.user_type !== 'consultant'
+  const schoolDefaultPath = isAttendant ? '/atendente' : '/home'
+
   return (
     <div style={{ display: 'flex', width: '100vw', height: '100vh', overflow: 'hidden', background: 'var(--bg-page)' }}>
       <Sidebar />
@@ -231,8 +235,9 @@ function AppContent() {
 
         <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--bg-page)' }}>
           <Routes>
-            <Route path="/" element={<Navigate to="/home" replace />} />
+            <Route path="/" element={<Navigate to={schoolDefaultPath} replace />} />
             <Route path="/home" element={<GestorHome />} />
+            <Route path="/atendente" element={<AttendantHome />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/leads" element={<LeadKanban />} />
             <Route path="/visits" element={<VisitCalendar />} />
@@ -262,9 +267,9 @@ function AppContent() {
             
             <Route path="/profile" element={<UserProfile />} />
             <Route path="/setup" element={<InitialSetup />} />
-            <Route path="/login" element={<Navigate to="/home" replace />} />
+            <Route path="/login" element={<Navigate to={schoolDefaultPath} replace />} />
             <Route path="/unauthorized" element={<UnauthorizedPage />} />
-            <Route path="*" element={<Navigate to="/home" replace />} />
+            <Route path="*" element={<Navigate to={schoolDefaultPath} replace />} />
           </Routes>
         </main>
       </div>
