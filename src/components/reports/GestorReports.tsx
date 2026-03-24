@@ -14,6 +14,7 @@ import type { FunnelMetrics, MarketingCampaign, ReEnrollment } from '../../lib/s
 import CampaignGeneratorModal from './CampaignGeneratorModal'
 import { checkWeeklyAlerts } from '../../services/notificationService'
 import { checkRecalibration } from '../../services/recalibrationService'
+import MonthlyChart from './MonthlyChart'
 
 // ─── tipos locais ────────────────────────────────────────────
 interface CampaignCycle {
@@ -426,7 +427,7 @@ export default function GestorReports() {
             <>
               {activeTab === 'overview' && <TabOverview funnelData={funnelData} marketingData={marketingData} reEnrollData={reEnrollData} cycle={cycle} insight={insight} insightLoading={insightLoading} onRefreshInsight={fetchInsight} monthsUntil={monthsUntil} campaignStartMonth={campaignStartMonth} preCampaignProgress={preCampaignProgress} campaignYear={campaignYear} hasHistoricalImport={hasHistoricalImport} hasWhatsApp={hasWhatsApp} hasBudget={hasBudget} onOpenCampaignModal={() => setShowCampaignModal(true)} cycleIsActive={cycleIsActive} onEditCampaign={() => { setModalPreload({ openAtStep: 5 }); setShowCampaignModal(true) }} />}
               {activeTab === 'funnel' && <TabFunnel funnelData={funnelData} cycle={cycle} onGoToImport={() => setActiveTab('import')} />}
-              {activeTab === 'comparativo' && <TabComparativo allCycles={allCycles} />}
+              {activeTab === 'comparativo' && <TabComparativo allCycles={allCycles} institutionId={institutionId} hasCampaign={cycleIsActive} />}
               {activeTab === 'marketing' && <TabMarketing marketingData={marketingData} institutionId={institutionId} onRefresh={loadAll} showToast={showToast} />}
               {activeTab === 'reenrollments' && <TabReenrollments reEnrollData={reEnrollData} institutionId={institutionId} onRefresh={loadAll} showToast={showToast} />}
               {activeTab === 'transfers' && <TabTransfers transfers={transfers} institutionId={institutionId} onRefresh={loadAll} showToast={showToast} />}
@@ -957,15 +958,32 @@ interface HistEntry {
   returning_students?: number; veterans?: number
 }
 
-function TabComparativo({ allCycles }: { allCycles: CampaignCycle[] }) {
-  // collect all historical entries across all cycles
+function TabComparativo({ allCycles, institutionId, hasCampaign }: { allCycles: CampaignCycle[]; institutionId: string; hasCampaign: boolean }) {
+  // Use setupCycle historical data first, fallback to all cycles
+  const setupCycle = allCycles.find(c => c.status === 'setup')
+  const setupAny = setupCycle as any
+  const historicalSource = setupAny?.historical_data?.length
+    ? setupAny.historical_data
+    : setupAny?.erp_files ?? []
+
   const allEntries: HistEntry[] = []
   const seen = new Set<number>()
-  for (const c of allCycles) {
-    const hist = (c.historical_data as HistEntry[] | null | undefined) ?? (c.erp_files as HistEntry[] | null | undefined) ?? []
-    for (const e of hist) {
-      const yr = e.detected_year ?? (e as HistEntry & { year?: number }).year ?? 0
-      if (yr > 0 && !seen.has(yr)) { seen.add(yr); allEntries.push(e) }
+
+  // First try the setup cycle's data
+  for (const e of (historicalSource as HistEntry[])) {
+    const yr = e.detected_year ?? (e as HistEntry & { year?: number }).year ?? 0
+    if (yr > 0 && !seen.has(yr)) { seen.add(yr); allEntries.push(e) }
+  }
+
+  // If no setup cycle data, collect across all cycles (fallback)
+  if (allEntries.length === 0) {
+    for (const c of allCycles) {
+      const ca = c as any
+      const hist = (ca.historical_data as HistEntry[] | null | undefined) ?? (ca.erp_files as HistEntry[] | null | undefined) ?? []
+      for (const e of hist) {
+        const yr = e.detected_year ?? (e as HistEntry & { year?: number }).year ?? 0
+        if (yr > 0 && !seen.has(yr)) { seen.add(yr); allEntries.push(e) }
+      }
     }
   }
   allEntries.sort((a, b) => (a.detected_year ?? a.year ?? 0) - (b.detected_year ?? b.year ?? 0))
@@ -1053,6 +1071,12 @@ function TabComparativo({ allCycles }: { allCycles: CampaignCycle[] }) {
           </div>
         </>
       )}
+
+      {/* Gráfico mês a mês */}
+      <MonthlyChart
+        institutionId={institutionId}
+        editable={hasCampaign}
+      />
     </div>
   )
 }
@@ -1263,6 +1287,21 @@ function TabReenrollments({ reEnrollData, institutionId, onRefresh, showToast }:
   const [showModal, setShowModal] = useState(false)
   const [formData, setFormData] = useState({ period: '', total_base: '', re_enrolled: '', defaulters: '', transferred: '', target_percentage: '85' })
   const [saving, setSaving] = useState(false)
+  const [exits, setExits] = useState<{ student_count: number; exit_type: string }[]>([])
+
+  useEffect(() => {
+    async function loadExits() {
+      try {
+        const { data } = await supabase
+          .from('student_exits')
+          .select('student_count, exit_type')
+          .eq('institution_id', institutionId)
+          .eq('year', new Date().getFullYear())
+        setExits(data ?? [])
+      } catch { /* ignore */ }
+    }
+    loadExits()
+  }, [institutionId])
 
   const chartData = reEnrollData.map(r => ({
     period: r.period,
@@ -1305,8 +1344,24 @@ function TabReenrollments({ reEnrollData, institutionId, onRefresh, showToast }:
     finally { setSaving(false) }
   }
 
+  const graduations = exits.filter(e => e.exit_type === 'graduation').reduce((sum, e) => sum + e.student_count, 0)
+  const confirmedTransfersCount = exits.filter(e => e.exit_type === 'transfer').reduce((sum, e) => sum + e.student_count, 0)
+  const totalStudents = lastRe?.total_base ?? 0
+  const eligibleForReenrollment = totalStudents - graduations - confirmedTransfersCount
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Base elegível */}
+      {totalStudents > 0 && (graduations > 0 || confirmedTransfersCount > 0) && (
+        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '12px 18px' }}>
+          <p style={{ margin: 0, fontSize: 13, color: '#1e3a8a' }}>
+            <strong>Base elegível para rematrícula: {new Intl.NumberFormat('pt-BR').format(eligibleForReenrollment)} alunos</strong>
+            {' '}(total: {totalStudents}
+            {graduations > 0 ? ` − formandos: ${graduations}` : ''}
+            {confirmedTransfersCount > 0 ? ` − transferências: ${confirmedTransfersCount}` : ''})
+          </p>
+        </div>
+      )}
       {/* cards de resumo */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
         {[

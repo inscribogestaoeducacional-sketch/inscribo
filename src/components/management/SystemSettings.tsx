@@ -810,10 +810,188 @@ function IdentidadeTab() {
   )
 }
 
+// ─── Tab: Séries ──────────────────────────────────────────────────────────────
+function SeriesTab() {
+  const { user } = useAuth()
+  const institutionId = user?.institution_id!
+
+  const [grades, setGrades] = useState<string[]>([])
+  const [exitConfig, setExitConfig] = useState<Record<string, boolean>>({})
+  const [exits, setExits] = useState<{ id: string; year: number; grade: string; student_count: number; exit_type: string }[]>([])
+  const [newExit, setNewExit] = useState({ grade: '', count: '' })
+  const [saving, setSaving] = useState(false)
+  const [registering, setRegistering] = useState(false)
+
+  useEffect(() => { loadData() }, []) // eslint-disable-line
+
+  async function loadData() {
+    // Load grades from campaign_cycles school_data
+    const { data: cycleData } = await supabase
+      .from('campaign_cycles')
+      .select('school_data')
+      .eq('institution_id', institutionId)
+      .eq('status', 'setup')
+      .maybeSingle()
+
+    const schoolGrades: string[] = (cycleData?.school_data as { grades?: string[] } | null)?.grades ?? []
+    setGrades(schoolGrades)
+
+    // Load exit configs
+    const { data: cfgData } = await supabase
+      .from('grade_exit_config')
+      .select('grade, exits_every_year')
+      .eq('institution_id', institutionId)
+    const cfg: Record<string, boolean> = {}
+    for (const row of cfgData ?? []) cfg[row.grade] = row.exits_every_year
+    setExitConfig(cfg)
+
+    // Load exits
+    const { data: exitsData } = await supabase
+      .from('student_exits')
+      .select('id, year, grade, student_count, exit_type')
+      .eq('institution_id', institutionId)
+      .order('year', { ascending: false })
+    setExits(exitsData ?? [])
+  }
+
+  async function toggleGrade(grade: string, checked: boolean) {
+    setSaving(true)
+    await supabase
+      .from('grade_exit_config')
+      .upsert({ institution_id: institutionId, grade, exits_every_year: checked }, { onConflict: 'institution_id,grade' })
+    setExitConfig(prev => ({ ...prev, [grade]: checked }))
+    setSaving(false)
+  }
+
+  async function registerExit() {
+    if (!newExit.grade || !newExit.count) return
+    setRegistering(true)
+    await supabase.from('student_exits').insert({
+      institution_id: institutionId,
+      year: new Date().getFullYear(),
+      grade: newExit.grade,
+      student_count: parseInt(newExit.count) || 0,
+      exit_type: 'graduation',
+    })
+    setNewExit({ grade: '', count: '' })
+    await loadData()
+    setRegistering(false)
+  }
+
+  async function deleteExit(id: string) {
+    await supabase.from('student_exits').delete().eq('id', id)
+    setExits(prev => prev.filter(e => e.id !== id))
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 700 }}>
+      {/* Toggles de saída natural */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: '0 0 4px' }}>Séries com saída natural (formandos)</h3>
+        <p style={{ fontSize: 12, color: '#64748B', margin: '0 0 16px' }}>Marque as séries cujos alunos formam a cada ano.</p>
+        {grades.length === 0 ? (
+          <p style={{ fontSize: 13, color: '#94a3b8' }}>Nenhuma série encontrada. Configure a escola primeiro na aba Escola.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {grades.map(grade => (
+              <label key={grade} style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', padding: '10px 14px', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0' }}>
+                <input
+                  type="checkbox"
+                  checked={exitConfig[grade] ?? false}
+                  onChange={e => toggleGrade(grade, e.target.checked)}
+                  disabled={saving}
+                  style={{ width: 16, height: 16, accentColor: '#0d9488' }}
+                />
+                <span style={{ fontSize: 13, color: '#1A2B4A', fontWeight: 500 }}>{grade}</span>
+                <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 'auto' }}>Tem saída natural todo ano (formandos)</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Registrar saídas do ano atual */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: '0 0 4px' }}>Registrar saídas do ano atual ({new Date().getFullYear()})</h3>
+        <p style={{ fontSize: 12, color: '#64748B', margin: '0 0 16px' }}>Informe quantos alunos saíram por formatura este ano.</p>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Série</label>
+            <select
+              value={newExit.grade}
+              onChange={e => setNewExit(p => ({ ...p, grade: e.target.value }))}
+              className={inputCls}
+            >
+              <option value="">Selecione a série...</option>
+              {grades.map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
+          </div>
+          <div style={{ width: 120 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Quantidade</label>
+            <input
+              type="number"
+              value={newExit.count}
+              onChange={e => setNewExit(p => ({ ...p, count: e.target.value }))}
+              placeholder="0"
+              className={inputCls}
+            />
+          </div>
+          <button
+            onClick={registerExit}
+            disabled={registering || !newExit.grade || !newExit.count}
+            style={{
+              padding: '9px 18px', borderRadius: 8, background: '#0d9488', color: 'white',
+              border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              opacity: (registering || !newExit.grade || !newExit.count) ? 0.5 : 1
+            }}>
+            {registering ? 'Salvando...' : 'Registrar'}
+          </button>
+        </div>
+      </div>
+
+      {/* Lista de saídas registradas */}
+      {exits.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid #e2e8f0' }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Saídas registradas</h3>
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                {['Ano', 'Série', 'Quantidade', 'Tipo', ''].map(h => (
+                  <th key={h} style={{ padding: '10px 16px', textAlign: 'left', color: '#6b7280', fontWeight: 600, fontSize: 12 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {exits.map(e => (
+                <tr key={e.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '10px 16px', color: '#374151' }}>{e.year}</td>
+                  <td style={{ padding: '10px 16px', color: '#374151' }}>{e.grade}</td>
+                  <td style={{ padding: '10px 16px', fontWeight: 600, color: '#1A2B4A' }}>{e.student_count}</td>
+                  <td style={{ padding: '10px 16px' }}>
+                    <span style={{ background: '#f0fdf4', color: '#16a34a', padding: '2px 8px', borderRadius: 8, fontSize: 11, fontWeight: 600 }}>
+                      {e.exit_type === 'graduation' ? 'Formatura' : e.exit_type === 'dropout' ? 'Evasão' : 'Transferência'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px 16px' }}>
+                    <button onClick={() => deleteExit(e.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 12 }}>Remover</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── SystemSettings ───────────────────────────────────────────────────────────
 const TABS = [
   { id: 'geral',      label: 'Geral',      icon: Building },
   { id: 'escola',     label: 'Escola',     icon: GraduationCap },
+  { id: 'series',     label: 'Séries',     icon: GraduationCap },
   { id: 'identidade', label: 'Identidade', icon: Palette },
   { id: 'whatsapp',   label: 'WhatsApp',   icon: MessageCircle },
 ]
@@ -864,6 +1042,7 @@ export default function SystemSettings() {
       {activeTab === 'geral' && <GeralTab />}
       {activeTab === 'identidade' && <IdentidadeTab />}
       {activeTab === 'whatsapp' && <WhatsAppTab />}
+      {activeTab === 'series' && <SeriesTab />}
       {activeTab === 'escola' && (
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 28, maxWidth: 500 }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', marginBottom: 6 }}>Configurações da Escola</h3>
