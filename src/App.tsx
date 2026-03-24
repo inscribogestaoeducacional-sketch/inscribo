@@ -10,11 +10,13 @@ import LandingPage from './components/landing/LandingPage'
 
 // Public Pages
 import TransferSurveyPage from './pages/survey/TransferSurveyPage'
+import SatisfactionPage from './pages/survey/SatisfactionPage'
 
 // Regular User Components
 import Dashboard from './components/dashboard/Dashboard'
 import GestorHome from './pages/gestor/GestorHome'
 import GestorTransfers from './pages/gestor/GestorTransfers'
+import GestorSurveys from './pages/gestor/GestorSurveys'
 import LeadKanban from './components/leads/LeadKanban'
 import VisitCalendar from './components/calendar/VisitCalendar'
 import EnrollmentManager from './components/enrollments/EnrollmentManager'
@@ -155,6 +157,14 @@ function AppContent() {
     )
   }
 
+  if (window.location.pathname.startsWith('/satisfaction/')) {
+    return (
+      <Routes>
+        <Route path="/satisfaction/:token" element={<SatisfactionPage />} />
+      </Routes>
+    )
+  }
+
   // Loading state
   if (initializing || !supabaseInitialized) {
     return (
@@ -230,6 +240,7 @@ function AppContent() {
             <Route path="/whatsapp" element={<WhatsAppHub />} />
 
             <Route path="/transferencias" element={<GestorTransfers />} />
+            <Route path="/pesquisas" element={<GestorSurveys />} />
 
             <Route path="/reports" element={
               <ProtectedRoute allowedRoles={['manager', 'admin']}>

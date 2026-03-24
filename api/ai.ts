@@ -444,6 +444,81 @@ Retorne SOMENTE o JSON válido.`
       return res.json({ result: parsed, mode })
     }
 
+    // ─────────────────────────────────────────────
+    // RELATÓRIO DE PESQUISA DE SATISFAÇÃO
+    // ─────────────────────────────────────────────
+    if (action === 'survey_report') {
+      const { responses, surveyTitle, institutionName } = payload as {
+        responses: { answers: Record<string, unknown> }[]
+        surveyTitle: string
+        institutionName: string
+      }
+
+      function avg(nums: number[]) {
+        const valid = nums.filter(n => typeof n === 'number' && !isNaN(n))
+        return valid.length > 0 ? valid.reduce((a, b) => a + b, 0) / valid.length : 0
+      }
+
+      const avgScores = {
+        general:        avg(responses.map(r => r.answers.general as number)),
+        teaching:       avg(responses.map(r => r.answers.teaching as number)),
+        communication:  avg(responses.map(r => r.answers.communication as number)),
+        infrastructure: avg(responses.map(r => r.answers.infrastructure as number)),
+        cost_benefit:   avg(responses.map(r => r.answers.cost_benefit as number)),
+      }
+
+      const reenrollmentDist = responses.reduce((acc: Record<string, number>, r) => {
+        const key = r.answers.reenrollment as string
+        if (key) acc[key] = (acc[key] ?? 0) + 1
+        return acc
+      }, {})
+
+      const comments = responses
+        .filter(r => r.answers.comment)
+        .map(r => r.answers.comment as string)
+        .slice(0, 10)
+
+      const prompt = `Você é especialista em gestão escolar brasileira.
+
+Analise os resultados da pesquisa de satisfação "${surveyTitle}" do ${institutionName} e retorne APENAS JSON válido, sem markdown, sem texto antes ou depois.
+
+Médias (escala 1-5): ${JSON.stringify(avgScores)}
+Distribuição de rematrícula: ${JSON.stringify(reenrollmentDist)}
+Total de respostas: ${responses.length}
+Comentários: ${JSON.stringify(comments)}
+
+{
+  "overall_score": <nota geral 0-10, converta a média das médias de 1-5 para 0-10>,
+  "summary": "<resumo executivo em 2-3 frases>",
+  "strengths": ["<ponto forte 1>", "<ponto forte 2>", "<ponto forte 3>"],
+  "weaknesses": ["<ponto fraco 1>", "<ponto fraco 2>"],
+  "reenrollment_risk": "<baixo|médio|alto>",
+  "reenrollment_analysis": "<análise da probabilidade de rematrícula em 2 frases>",
+  "priority_actions": ["<ação 1>", "<ação 2>", "<ação 3>"],
+  "retention_opportunities": "<oportunidade principal em 1 frase>"
+}`
+
+      const raw = await callClaude(prompt, 800)
+      let parsed
+      try {
+        const jsonMatch = raw.match(/\{[\s\S]*\}/)
+        if (!jsonMatch) throw new Error('JSON não encontrado')
+        parsed = JSON.parse(jsonMatch[0])
+      } catch {
+        parsed = {
+          overall_score: 0,
+          summary: raw.substring(0, 300),
+          strengths: [],
+          weaknesses: [],
+          reenrollment_risk: 'médio',
+          reenrollment_analysis: 'Análise manual necessária.',
+          priority_actions: [],
+          retention_opportunities: 'Análise manual necessária.',
+        }
+      }
+      return res.json({ result: parsed })
+    }
+
     return res.status(400).json({ error: `Action desconhecida: ${action}` })
 
   } catch (error) {
