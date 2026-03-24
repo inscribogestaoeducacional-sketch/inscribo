@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   LineChart, Line, PieChart, Pie,
@@ -7,7 +7,7 @@ import {
 import {
   Users, TrendingUp, RefreshCw, AlertTriangle, BarChart3,
   Target, Sparkles, ArrowRight, Upload, MessageCircle, Info, Lock,
-  MapPin, Activity, Settings
+  MapPin, Activity, Settings, Calendar
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -88,6 +88,11 @@ interface MarketData {
 const MONTH_NAMES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
+const MONTH_SHORT: Record<number, string> = {
+  1:'Jan',2:'Fev',3:'Mar',4:'Abr',5:'Mai',6:'Jun',
+  7:'Jul',8:'Ago',9:'Set',10:'Out',11:'Nov',12:'Dez'
+}
+
 function calcCampaignTiming(startMonth = 8) {
   const today = new Date()
   const currentYear = today.getFullYear()
@@ -104,6 +109,19 @@ function calcCampaignTiming(startMonth = 8) {
     ? Math.min(100, Math.max(0, Math.round((currentMonthIdx / totalPrepMonths) * 100)))
     : 100
   return { monthsUntil, campaignStartMonth, preCampaignProgress, campaignYear }
+}
+
+function getCampaignMonthsList(startDate?: string, endDate?: string): number[] {
+  if (!startDate || !endDate) return [8, 9, 10, 11, 12, 1, 2]
+  const months: number[] = []
+  const start = new Date(startDate + 'T12:00:00')
+  const end = new Date(endDate + 'T12:00:00')
+  const cur = new Date(start)
+  while (cur <= end && months.length < 12) {
+    months.push(cur.getMonth() + 1)
+    cur.setMonth(cur.getMonth() + 1)
+  }
+  return months.length > 0 ? months : [8, 9, 10, 11, 12, 1, 2]
 }
 
 function fmt(n: number) { return new Intl.NumberFormat('pt-BR').format(n) }
@@ -125,6 +143,37 @@ function entryTotal(e: HistoricalEntry) { return e.total_students ?? e.total ?? 
 function entryNew(e: HistoricalEntry) { return e.new_students ?? e.novatos ?? 0 }
 function entryReturning(e: HistoricalEntry) { return e.returning_students ?? e.veterans ?? 0 }
 
+// ─── score calculator ─────────────────────────────────────────────────────────
+function calculateScore(data: {
+  growthTrend: number
+  reenrollRate: number
+  marketShare: number
+  conversionRate: number
+  hasHistorical: boolean
+}) {
+  let score = 50
+  if (data.growthTrend > 5) score += 15
+  else if (data.growthTrend > 0) score += 8
+  else if (data.growthTrend > -10) score -= 5
+  else score -= 15
+
+  if (data.reenrollRate >= 90) score += 15
+  else if (data.reenrollRate >= 80) score += 8
+  else if (data.reenrollRate >= 70) score += 0
+  else score -= 10
+
+  if (data.marketShare >= 20) score += 10
+  else if (data.marketShare >= 10) score += 5
+  else score -= 5
+
+  if (data.conversionRate >= 25) score += 10
+  else if (data.conversionRate >= 15) score += 5
+
+  if (data.hasHistorical) score += 5
+
+  return Math.min(100, Math.max(0, score))
+}
+
 // ─── component ────────────────────────────────────────────────────────────────
 export default function GestorHome() {
   const { user } = useAuth()
@@ -145,6 +194,9 @@ export default function GestorHome() {
   const [waMessages, setWaMessages] = useState<{ id: string; created_at: string; from_me: boolean }[]>([])
   const [marketData, setMarketData] = useState<MarketData | null>(null)
   const [marketLoading, setMarketLoading] = useState(false)
+  const [aiInsight, setAiInsight] = useState<string | null>(null)
+  const [aiInsightLoading, setAiInsightLoading] = useState(false)
+  const aiInsightFetched = useRef(false)
 
   useEffect(() => {
     if (!institutionId) return
@@ -170,7 +222,7 @@ export default function GestorHome() {
       setTransfers((transferRes.data ?? []) as StudentTransfer[])
       setLeads((leadsRes.data ?? []) as { id: string; status: string; created_at: string }[])
       setVisits((visitsRes.data ?? []) as { id: string; status: string; created_at: string }[])
-      setWaMessages((waRes.data ?? []) as { id: string; created_at: string; direction: string }[])
+      setWaMessages((waRes.data ?? []) as { id: string; created_at: string; from_me: boolean }[])
 
       const alreadySetup = loadedCycles.some(c =>
         ['setup','draft','active','completed'].includes(c.status ?? '')
@@ -204,6 +256,42 @@ export default function GestorHome() {
     }
   }
 
+  async function fetchAiInsight(funnel: FunnelMetrics) {
+    if (aiInsightFetched.current) return
+    aiInsightFetched.current = true
+    setAiInsightLoading(true)
+    try {
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'weekly_insight',
+          payload: {
+            funnel: {
+              registrations: funnel.registrations ?? 0,
+              registrations_target: funnel.registrations_target ?? 0,
+              schedules: funnel.schedules ?? 0,
+              schedules_target: funnel.schedules_target ?? 0,
+              visits: funnel.visits ?? 0,
+              visits_target: funnel.visits_target ?? 0,
+              enrollments: funnel.enrollments ?? 0,
+              enrollments_target: funnel.enrollments_target ?? 0,
+            },
+            previousFunnel: null,
+            reenrollments: null,
+            campaignWeek: funnel.period ?? 'atual',
+          }
+        }),
+      })
+      const json = await res.json()
+      if (json.result) setAiInsight(json.result)
+    } catch {
+      // non-critical
+    } finally {
+      setAiInsightLoading(false)
+    }
+  }
+
   // ─── derived data ─────────────────────────────────────────────────────────
   const activeCycle = cycles.find(c => c.status === 'active' || !!c.applied_at) ?? null
   const anyCycle = cycles[0] ?? null
@@ -229,13 +317,9 @@ export default function GestorHome() {
   const newStudents = latest ? entryNew(latest) : 0
   const returningStudents = latest ? entryReturning(latest) : 0
 
-  // BUG 1 FIX — prefer school_data (filled in setup step 1), fallback to historical file data
   const avgFee: number | null =
     (setupCycle?.school_data?.avg_monthly_fee as number | null | undefined) ||
-    latest?.avg_monthly_fee ||
-    latest?.fee ||
-    null
-  console.log('[Home] avgFee:', avgFee, setupCycle?.school_data)
+    latest?.avg_monthly_fee || latest?.fee || null
 
   const latestYear = latest ? entryYear(latest) : null
 
@@ -257,14 +341,24 @@ export default function GestorHome() {
   const { monthsUntil, campaignStartMonth: campaignStartLabel, preCampaignProgress, campaignYear } =
     calcCampaignTiming(campaignStartMonth)
 
-  const latestFunnel = funnelData[funnelData.length - 1] ?? null
+  const latestFunnel = funnelData.length > 0
+    ? [...funnelData].sort((a, b) => a.period.localeCompare(b.period))[funnelData.length - 1]
+    : null
   const funnelHasData = funnelData.some(f => (f.registrations || 0) > 0)
+
+  // trigger AI insight once funnel data arrives
+  useEffect(() => {
+    if (latestFunnel && (latestFunnel.registrations ?? 0) > 0 && !aiInsightFetched.current) {
+      fetchAiInsight(latestFunnel)
+    }
+  }, [latestFunnel?.period])
 
   // leads / wa metrics
   const totalLeads = leads.length
   const totalVisitsCount = visits.length
   const totalEnrolled = leads.filter(l => l.status === 'matriculado' || l.status === 'enrolled').length
-  const conversionRate = totalLeads > 0 ? ((totalEnrolled / totalLeads) * 100).toFixed(1) : '0'
+  const conversionRateNum = totalLeads > 0 ? +((totalEnrolled / totalLeads) * 100).toFixed(1) : 0
+  const conversionRate = conversionRateNum.toFixed(1)
   const totalMessages = waMessages.length
   const waSent     = waMessages.filter(m => m.from_me === true).length
   const waReceived = waMessages.filter(m => m.from_me === false).length
@@ -276,15 +370,74 @@ export default function GestorHome() {
     { name: 'Só cadastro',  value: Math.max(0, totalLeads - totalVisitsCount), fill: '#9FE1CB' },
   ].filter(d => d.value > 0)
 
-  // market comparison
+  // market share calculations
   const marketCity = setupCycle?.school_data?.city ?? ''
+  const marketState = setupCycle?.school_data?.state ?? ''
+  const totalPrivateStudents = marketData
+    ? (Number(marketData.school_age_population ?? 0)) * ((Number(marketData.private_school_rate ?? 18)) / 100)
+    : 0
+  const marketSharePct = totalPrivateStudents > 0 && totalStudents > 0
+    ? +((totalStudents / totalPrivateStudents) * 100).toFixed(1)
+    : null
+  const avgStudentsPerSchoolVal = Number(
+    marketData?.avg_students_per_school ?? marketData?.average_students_per_school ?? 500
+  )
+  const estimatedSchools = totalPrivateStudents > 0 && avgStudentsPerSchoolVal > 0
+    ? Math.round(totalPrivateStudents / avgStudentsPerSchoolVal)
+    : null
+  const estimatedRank = totalPrivateStudents > 0 && totalStudents > 0 && estimatedSchools
+    ? Math.max(1, Math.round((1 - totalStudents / totalPrivateStudents) * estimatedSchools))
+    : null
+  const marketBadge = marketSharePct !== null
+    ? marketSharePct >= 25 ? { label: 'Líder de mercado', bg: '#dcfce7', color: '#15803d' }
+    : marketSharePct >= 15 ? { label: 'Top 3', bg: '#dbeafe', color: '#1d4ed8' }
+    : marketSharePct >= 5  ? { label: 'Top 10', bg: '#fef3c7', color: '#b45309' }
+    : { label: 'Em crescimento', bg: '#f3f4f6', color: '#6b7280' }
+    : null
+
+  // school score
+  const reenrollRateNum = totalStudents > 0 && newStudents < totalStudents
+    ? +((returningStudents / (totalStudents - newStudents + returningStudents)) * 100).toFixed(1)
+    : 75
+  const score = calculateScore({
+    growthTrend: newVariation ?? 0,
+    reenrollRate: reenrollRateNum,
+    marketShare: marketSharePct ?? 0,
+    conversionRate: conversionRateNum,
+    hasHistorical: hasHistory,
+  })
+  const scoreLabel = score >= 80 ? 'Alto Desempenho'
+    : score >= 60 ? 'Desempenho Regular'
+    : score >= 40 ? 'Atenção Necessária'
+    : 'Situação Crítica'
+  const scoreColor = score >= 80 ? '#0F6E56' : score >= 60 ? '#BA7517' : '#E24B4A'
+  const scoreBg = score >= 80 ? '#f0fdf4' : score >= 60 ? '#fffbeb' : '#fef2f2'
+  const radius = 54
+  const circumference = 2 * Math.PI * radius
+  const offset = circumference - (score / 100) * circumference
+
+  // captação calendar
+  const campaignMonthsList = getCampaignMonthsList(
+    activeCycle?.start_date ?? anyCycle?.start_date,
+    activeCycle?.end_date ?? anyCycle?.end_date
+  )
+  const defaultSeasonality: Record<number, number> = {
+    1: 12, 2: 7, 8: 12, 9: 15, 10: 20, 11: 18, 12: 16
+  }
+  const calendarMax = Math.max(...campaignMonthsList.map(m => defaultSeasonality[m] ?? 10))
+
+  const peakMonth = campaignMonthsList.reduce((best, m) =>
+    (defaultSeasonality[m] ?? 0) > (defaultSeasonality[best] ?? 0) ? m : best,
+    campaignMonthsList[0]
+  )
+
+  // market comparison (legacy)
   const schoolNovatosRate = totalStudents > 0 ? +((newStudents / totalStudents) * 100).toFixed(1) : null
   const marketNovatosRate = marketData?.novatos_rate
     ?? (marketData?.private_school_rate ? +(Number(marketData.private_school_rate) * 0.25).toFixed(1) : null)
   const aboveAverage = schoolNovatosRate !== null && marketNovatosRate !== null && schoolNovatosRate >= marketNovatosRate
-  const avgStudentsPerSchool = Number(marketData?.avg_students_per_school ?? marketData?.average_students_per_school ?? 0)
-  const privateSchoolsCount = avgStudentsPerSchool > 0 && marketData?.school_age_population
-    ? Math.round(Number(marketData.school_age_population) * (Number(marketData.private_school_rate ?? 18) / 100) / avgStudentsPerSchool)
+  const privateSchoolsCount = avgStudentsPerSchoolVal > 0 && marketData?.school_age_population
+    ? Math.round(Number(marketData.school_age_population) * (Number(marketData.private_school_rate ?? 18) / 100) / avgStudentsPerSchoolVal)
     : null
   const sectorGrowth = marketData?.sector_growth ?? marketData?.sector_growth_rate ?? null
 
@@ -303,41 +456,55 @@ export default function GestorHome() {
           </p>
         </div>
 
-        <div
-          style={{ position: 'relative' }}
-          onMouseEnter={() => !activeCycle && setBtnTooltip(true)}
-          onMouseLeave={() => setBtnTooltip(false)}
-        >
-          <button
-            onClick={() => activeCycle && setShowModal(true)}
-            disabled={!activeCycle}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 7,
-              padding: '9px 18px', borderRadius: 10,
-              background: activeCycle ? '#f0fdf4' : '#f1f5f9',
-              color: activeCycle ? '#065f46' : '#94a3b8',
-              border: activeCycle ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
-              fontSize: 13, fontWeight: 600,
-              cursor: activeCycle ? 'pointer' : 'not-allowed',
-            }}>
-            {activeCycle ? <Sparkles size={14} /> : <Lock size={14} />}
-            {activeCycle ? 'Ajustar campanha' : 'Campanha bloqueada'}
-          </button>
-          {btnTooltip && !activeCycle && (
-            <div style={{
-              position: 'absolute', right: 0, top: '110%', zIndex: 999,
-              background: '#1e2d6b', color: 'white', fontSize: 12, lineHeight: 1.4,
-              padding: '8px 12px', borderRadius: 8, whiteSpace: 'nowrap', maxWidth: 260,
-              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-            }}>
-              Seu administrador liberará a configuração<br />da campanha quando chegar o momento certo.
-              <div style={{
-                position: 'absolute', right: 18, bottom: '100%',
-                borderWidth: '5px', borderStyle: 'solid',
-                borderColor: 'transparent transparent #1e2d6b transparent',
-              }} />
-            </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {!activeCycle && (
+            <button
+              onClick={() => setShowModal(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                padding: '9px 18px', borderRadius: 10,
+                background: '#00A896', color: '#fff',
+                border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}>
+              <Sparkles size={14} /> Gerar campanha
+            </button>
           )}
+          <div
+            style={{ position: 'relative' }}
+            onMouseEnter={() => !activeCycle && setBtnTooltip(true)}
+            onMouseLeave={() => setBtnTooltip(false)}
+          >
+            <button
+              onClick={() => activeCycle && setShowModal(true)}
+              disabled={!activeCycle}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                padding: '9px 18px', borderRadius: 10,
+                background: activeCycle ? '#f0fdf4' : '#f1f5f9',
+                color: activeCycle ? '#065f46' : '#94a3b8',
+                border: activeCycle ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                fontSize: 13, fontWeight: 600,
+                cursor: activeCycle ? 'pointer' : 'not-allowed',
+              }}>
+              {activeCycle ? <Sparkles size={14} /> : <Lock size={14} />}
+              {activeCycle ? 'Ajustar campanha' : 'Campanha bloqueada'}
+            </button>
+            {btnTooltip && !activeCycle && (
+              <div style={{
+                position: 'absolute', right: 0, top: '110%', zIndex: 999,
+                background: '#1e2d6b', color: 'white', fontSize: 12, lineHeight: 1.4,
+                padding: '8px 12px', borderRadius: 8, whiteSpace: 'nowrap', maxWidth: 260,
+                boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+              }}>
+                Gere uma campanha para ativar as metas do sistema.
+                <div style={{
+                  position: 'absolute', right: 18, bottom: '100%',
+                  borderWidth: '5px', borderStyle: 'solid',
+                  borderColor: 'transparent transparent #1e2d6b transparent',
+                }} />
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -365,13 +532,74 @@ export default function GestorHome() {
         </div>
       )}
 
-      {/* ── KPI cards ───────────────────────────────────────────────────────── */}
+      {/* ── Score + KPI row ─────────────────────────────────────────────────── */}
       {!loading && hasHistory && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
-          <KpiCard label={`Alunos ${latestYear ?? ''}`} value={fmt(totalStudents)} icon={<Users size={20} color="#00A896" />} iconBg="#E6F7F5" variation={totalVariation} />
-          <KpiCard label="Novatos" value={fmt(newStudents)} icon={<TrendingUp size={20} color="#8B5CF6" />} iconBg="#EDE9FE" variation={newVariation} sub={totalStudents > 0 ? `${Math.round((newStudents / totalStudents) * 100)}% do total` : undefined} />
-          <KpiCard label="Veteranos" value={fmt(returningStudents)} icon={<RefreshCw size={20} color="#0EA5E9" />} iconBg="#E0F2FE" sub={totalStudents > 0 ? `${Math.round((returningStudents / totalStudents) * 100)}% do total` : undefined} />
-          <KpiCard label="Ticket médio" value={avgFee ? `R$ ${fmt(Math.round(avgFee))}/mês` : 'Não informado'} icon={<Target size={20} color="#F59E0B" />} iconBg="#FEF3C7" />
+        <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
+
+          {/* Score gauge card */}
+          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
+            <svg width="140" height="140" viewBox="0 0 140 140">
+              <circle cx="70" cy="70" r={radius} fill="none" stroke="#e5e7eb" strokeWidth="12"/>
+              <circle cx="70" cy="70" r={radius} fill="none"
+                stroke={scoreColor} strokeWidth="12"
+                strokeDasharray={circumference}
+                strokeDashoffset={offset}
+                strokeLinecap="round"
+                transform="rotate(-90 70 70)"
+                style={{ transition: 'stroke-dashoffset 1s ease' }}/>
+              <text x="70" y="64" textAnchor="middle" fontSize="28" fontWeight="700" fill={scoreColor}>{score}</text>
+              <text x="70" y="82" textAnchor="middle" fontSize="10" fill="#6b7280">score</text>
+            </svg>
+            <div style={{ minWidth: 160 }}>
+              <p style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 800, color: '#1e2d6b', lineHeight: 1.2 }}>
+                {user?.institution_name || 'Sua escola'}
+              </p>
+              <span style={{
+                display: 'inline-block', padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700,
+                background: scoreBg, color: scoreColor, marginBottom: 8
+              }}>
+                {scoreLabel}
+              </span>
+              {(marketCity || marketState) && (
+                <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <MapPin size={11} /> {marketCity}{marketCity && marketState ? `, ` : ''}{marketState}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* 4 KPI cards */}
+          <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+            <KpiCard
+              label={`Alunos ${latestYear ?? ''}`}
+              value={fmt(totalStudents)}
+              icon={<Users size={20} color="#00A896" />}
+              iconBg="#E6F7F5"
+              variation={totalVariation}
+            />
+            <KpiCard
+              label="Novatos"
+              value={fmt(newStudents)}
+              icon={<TrendingUp size={20} color="#8B5CF6" />}
+              iconBg="#EDE9FE"
+              variation={newVariation}
+              sub={totalStudents > 0 ? `${Math.round((newStudents / totalStudents) * 100)}% do total` : undefined}
+            />
+            <KpiCard
+              label="Market share"
+              value={marketSharePct !== null ? `${marketSharePct}%` : (marketLoading ? '…' : '—')}
+              icon={<BarChart3 size={20} color="#F59E0B" />}
+              iconBg="#FEF3C7"
+              sub={estimatedSchools ? `~${estimatedSchools} escolas na cidade` : undefined}
+            />
+            <KpiCard
+              label="Próxima campanha"
+              value={monthsUntil > 0 ? `${monthsUntil} ${monthsUntil === 1 ? 'mês' : 'meses'}` : 'Ativa'}
+              icon={<Calendar size={20} color="#3B82F6" />}
+              iconBg="#DBEAFE"
+              sub={`Ano letivo ${campaignYear}`}
+            />
+          </div>
         </div>
       )}
 
@@ -383,7 +611,7 @@ export default function GestorHome() {
         </div>
       )}
 
-      {/* ── LineChart + Pre-campaign ─────────────────────────────────────────── */}
+      {/* ── Historical chart + Market share card ────────────────────────────── */}
       {hasHistory && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, alignItems: 'start' }}>
 
@@ -407,38 +635,168 @@ export default function GestorHome() {
             </ResponsiveContainer>
           </div>
 
+          {/* Market share card */}
           <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Fase pré-campanha</h3>
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontSize: 12, color: '#64748b' }}>Progresso de preparação</span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#00A896' }}>{preCampaignProgress}%</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 10, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <MapPin size={16} color="#F59E0B" />
               </div>
-              <div style={{ height: 8, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${preCampaignProgress}%`, background: 'linear-gradient(90deg, #00A896, #0DD3BF)', borderRadius: 99 }} />
+              <div>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>
+                  Mercado local{marketCity ? ` — ${marketCity}` : ''}
+                </h3>
+                <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>Estimado via Censo Escolar / IBGE</p>
               </div>
             </div>
-            <div style={{ background: '#f0fdf9', borderRadius: 10, padding: 14 }}>
+
+            {marketLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[...Array(3)].map((_, i) => <div key={i} style={{ height: 48, borderRadius: 10, background: '#f1f5f9' }} className="animate-pulse" />)}
+              </div>
+            ) : marketData && marketSharePct !== null ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {/* Market share highlight */}
+                <div style={{ background: '#f0fdf9', borderRadius: 12, padding: '14px 16px' }}>
+                  <p style={{ margin: '0 0 2px', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Market share estimado</p>
+                  <p style={{ margin: '0 0 6px', fontSize: 28, fontWeight: 800, color: '#0F6E56', lineHeight: 1 }}>{marketSharePct}%</p>
+                  <p style={{ margin: 0, fontSize: 11, color: '#047857' }}>da rede privada local</p>
+                </div>
+
+                {marketBadge && (
+                  <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: marketBadge.bg, color: marketBadge.color }}>
+                    {marketBadge.label}
+                  </span>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {estimatedRank && estimatedSchools && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: '#64748b' }}>Ranking estimado</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b' }}>#{estimatedRank} de ~{estimatedSchools}</span>
+                    </div>
+                  )}
+                  {totalPrivateStudents > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: '#64748b' }}>Total rede privada</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b' }}>{fmt(Math.round(totalPrivateStudents))}</span>
+                    </div>
+                  )}
+                  {sectorGrowth != null && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: '#64748b' }}>Crescimento setor</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#0d9488' }}>+{sectorGrowth}%/ano</span>
+                    </div>
+                  )}
+                </div>
+
+                {marketData.notes && (
+                  <p style={{ margin: 0, fontSize: 10, color: '#94a3b8', display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                    <Info size={11} style={{ flexShrink: 0, marginTop: 1 }} /> {String(marketData.notes)}
+                  </p>
+                )}
+              </div>
+            ) : !marketData && !marketLoading ? (
+              <div style={{ textAlign: 'center', padding: '16px 0', color: '#94a3b8' }}>
+                <MapPin size={28} strokeWidth={1.5} />
+                <p style={{ margin: '8px 0 0', fontSize: 12 }}>Dados de mercado não disponíveis.<br />Configure cidade/estado no wizard.</p>
+              </div>
+            ) : null}
+
+            {/* Pre-campaign section */}
+            <div style={{ background: '#f0fdf9', borderRadius: 10, padding: 14, marginTop: 4 }}>
               <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#065f46' }}>
-                {monthsUntil === 0 ? `Campanha iniciando em ${campaignStartLabel}` : `${monthsUntil} ${monthsUntil === 1 ? 'mês' : 'meses'} para a campanha`}
+                {monthsUntil === 0 ? `Campanha ativa — ${campaignStartLabel}` : `${monthsUntil} ${monthsUntil === 1 ? 'mês' : 'meses'} para a campanha`}
               </p>
               <p style={{ margin: '4px 0 0', fontSize: 12, color: '#047857' }}>Preparando ano letivo {campaignYear}</p>
             </div>
-            {!activeCycle && (
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 12, display: 'flex', gap: 8 }}>
-                <Info size={14} color="#64748b" style={{ flexShrink: 0, marginTop: 1 }} />
-                <p style={{ margin: 0, fontSize: 12, color: '#475569', lineHeight: 1.5 }}>O administrador liberará a campanha quando chegar o momento de configurar.</p>
-              </div>
-            )}
-            {activeCycle && (
-              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: 12 }}>
-                <p style={{ margin: 0, fontSize: 12, color: '#1e40af', fontWeight: 600 }}>{activeCycle.label}</p>
-                <p style={{ margin: '3px 0 0', fontSize: 11, color: '#3b82f6' }}>Meta: {fmt(activeCycle.target_new_students)} novos alunos</p>
-              </div>
-            )}
+
             <button onClick={() => navigate('/reports')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 0', borderRadius: 8, background: 'none', border: '1px solid #e2e8f0', color: '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
               Ver relatórios completos <ArrowRight size={12} />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Calendário de captação ───────────────────────────────────────────── */}
+      {(hasHistory || activeCycle) && (
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 10, background: '#E0F2FE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Calendar size={16} color="#0EA5E9" />
+              </div>
+              <div>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Calendário de captação</h3>
+                <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Sazonalidade típica do mercado educacional brasileiro</p>
+              </div>
+            </div>
+            {activeCycle && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '3px 10px', borderRadius: 999 }}>
+                {activeCycle.label}
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 24 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {campaignMonthsList.map(month => {
+                const val = defaultSeasonality[month] ?? 10
+                const pct = calendarMax > 0 ? val / calendarMax : 0
+                const isPeak = pct > 0.7
+                const isWarm = pct > 0.4 && !isPeak
+                const barColor = isPeak ? '#0F6E56' : isWarm ? '#1D9E75' : '#9FE1CB'
+                return (
+                  <div key={month} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ width: 28, fontSize: 12, fontWeight: 600, color: '#64748b', flexShrink: 0 }}>{MONTH_SHORT[month]}</span>
+                    <div style={{ flex: 1, height: 28, borderRadius: 6, overflow: 'hidden', background: '#f3f4f6', position: 'relative' }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${pct * 100}%`,
+                        background: `linear-gradient(to right, ${barColor}, ${barColor}cc)`,
+                        borderRadius: 6,
+                        transition: 'width 0.8s ease',
+                      }} />
+                    </div>
+                    <span style={{ width: 32, fontSize: 11, fontWeight: 700, color: '#374151', textAlign: 'right', flexShrink: 0 }}>
+                      {Math.round(pct * 100)}%
+                    </span>
+                    {isPeak && (
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#0F6E56', background: '#f0fdf4', padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                        Pico
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Strategy cards */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ background: '#f0fdf4', borderRadius: 12, padding: 14, border: '1px solid #bbf7d0' }}>
+                <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 700, color: '#065f46', textTransform: 'uppercase' }}>
+                  {MONTH_SHORT[peakMonth]} — Pico de matrículas
+                </p>
+                <p style={{ margin: 0, fontSize: 12, color: '#047857', lineHeight: 1.5 }}>
+                  Foco total em fechamento. Equipe de vendas em modo de conversão máxima. Reduza fricção no processo.
+                </p>
+              </div>
+              <div style={{ background: '#eff6ff', borderRadius: 12, padding: 14, border: '1px solid #bfdbfe' }}>
+                <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 700, color: '#1e40af', textTransform: 'uppercase' }}>
+                  Aquecimento
+                </p>
+                <p style={{ margin: 0, fontSize: 12, color: '#1d4ed8', lineHeight: 1.5 }}>
+                  Comunicação, eventos de visitação e campanhas de brand awareness para aquecer o mercado.
+                </p>
+              </div>
+              <div style={{ background: '#fffbeb', borderRadius: 12, padding: 14, border: '1px solid #fde68a' }}>
+                <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase' }}>
+                  Retardatários
+                </p>
+                <p style={{ margin: 0, fontSize: 12, color: '#78350f', lineHeight: 1.5 }}>
+                  Ofertas especiais, urgência e follow-up intensivo para indecisos no final do período.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -460,13 +818,13 @@ export default function GestorHome() {
               { label: 'Visitas', val: latestFunnel.visits, target: latestFunnel.visits_target },
               { label: 'Matrículas', val: latestFunnel.enrollments, target: latestFunnel.enrollments_target },
             ].map(({ label, val, target }) => {
-              const pct = target > 0 ? Math.round((val / target) * 100) : null
+              const pct = (target ?? 0) > 0 ? Math.round(((val ?? 0) / target!) * 100) : null
               const color = pct === null ? '#94a3b8' : pct >= 100 ? '#0d9488' : pct >= 75 ? '#f59e0b' : '#dc2626'
               return (
                 <div key={label} style={{ background: '#f8fafc', borderRadius: 12, padding: '12px 14px' }}>
                   <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
-                  <p style={{ margin: '0 0 2px', fontSize: 22, fontWeight: 700, color: '#1e2d6b' }}>{fmt(val)}</p>
-                  {target > 0 && <p style={{ margin: 0, fontSize: 11, color }}>{pct}% da meta ({fmt(target)})</p>}
+                  <p style={{ margin: '0 0 2px', fontSize: 22, fontWeight: 700, color: '#1e2d6b' }}>{fmt(val ?? 0)}</p>
+                  {(target ?? 0) > 0 && <p style={{ margin: 0, fontSize: 11, color }}>{pct}% da meta ({fmt(target!)})</p>}
                 </div>
               )
             })}
@@ -477,7 +835,7 @@ export default function GestorHome() {
       {/* ── Funil leads | WhatsApp ───────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 
-        {/* Funil de leads — PieChart */}
+        {/* Funil de leads */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -505,12 +863,10 @@ export default function GestorHome() {
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              {/* Pizza */}
               <PieChart width={180} height={180}>
                 <Pie data={pieData} cx={90} cy={90} innerRadius={52} outerRadius={80} dataKey="value" paddingAngle={3} />
                 <Tooltip formatter={(value, name) => [fmt(Number(value)), name]} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
               </PieChart>
-              {/* Legenda */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
                 {pieData.map(d => {
                   const pct = totalLeads > 0 ? Math.round((d.value / totalLeads) * 100) : 0
@@ -577,124 +933,25 @@ export default function GestorHome() {
         </div>
       </div>
 
-      {/* ── Mercado local ────────────────────────────────────────────────────── */}
-      {(marketLoading || marketData || marketCity) && (
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 10, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <MapPin size={16} color="#F59E0B" />
-              </div>
-              <div>
-                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>
-                  Mercado local{marketCity ? ` — ${marketCity}` : ''}
-                </h3>
-                <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Dados estimados com base no Censo Escolar IBGE</p>
-              </div>
+      {/* ── AI Insight ───────────────────────────────────────────────────────── */}
+      {(aiInsightLoading || aiInsight) && (
+        <div style={{ background: 'linear-gradient(135deg, #4C1D95, #6D28D9)', borderRadius: 16, padding: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Sparkles size={16} color="#fff" />
+            </div>
+            <div>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#fff', margin: 0 }}>Análise da IA</h3>
+              <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>Baseada nos dados do funil atual</p>
             </div>
           </div>
-
-          {marketLoading ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-              {[...Array(4)].map((_, i) => <div key={i} style={{ height: 72, borderRadius: 12, background: '#f1f5f9' }} className="animate-pulse" />)}
+          {aiInsightLoading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[...Array(3)].map((_, i) => <div key={i} style={{ height: 14, borderRadius: 4, background: 'rgba(255,255,255,0.15)' }} className="animate-pulse" />)}
             </div>
-          ) : marketData ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Comparativo escola vs setor */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div style={{ background: '#f8fafc', borderRadius: 12, padding: '14px 16px' }}>
-                  <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Média do setor</p>
-                  <p style={{ margin: '0 0 2px', fontSize: 24, fontWeight: 700, color: '#1e2d6b' }}>
-                    {marketNovatosRate !== null ? `${marketNovatosRate}%` : '—'} <span style={{ fontSize: 13, fontWeight: 400, color: '#94a3b8' }}>novatos</span>
-                  </p>
-                </div>
-                <div style={{ background: schoolNovatosRate !== null && marketNovatosRate !== null && aboveAverage ? '#f0fdf4' : '#fef2f2', borderRadius: 12, padding: '14px 16px', position: 'relative' }}>
-                  <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Sua escola</p>
-                  <p style={{ margin: '0 0 2px', fontSize: 24, fontWeight: 700, color: '#1e2d6b' }}>
-                    {schoolNovatosRate !== null ? `${schoolNovatosRate}%` : '—'} <span style={{ fontSize: 13, fontWeight: 400, color: '#94a3b8' }}>novatos</span>
-                  </p>
-                  {schoolNovatosRate !== null && marketNovatosRate !== null && (
-                    <span style={{
-                      position: 'absolute', top: 12, right: 12,
-                      display: 'inline-flex', alignItems: 'center', gap: 3,
-                      padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700,
-                      background: aboveAverage ? '#dcfce7' : '#fee2e2',
-                      color: aboveAverage ? '#16a34a' : '#dc2626',
-                    }}>
-                      {aboveAverage ? '↑ Acima da média' : '↓ Abaixo da média'}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Dados numéricos */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-                <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px' }}>
-                  <p style={{ margin: '0 0 3px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Pop. escolar estimada</p>
-                  <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e2d6b' }}>{marketData.school_age_population ? fmt(Number(marketData.school_age_population)) : '—'}</p>
-                </div>
-                <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px' }}>
-                  <p style={{ margin: '0 0 3px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Escolas particulares</p>
-                  <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e2d6b' }}>~{privateSchoolsCount !== null ? fmt(privateSchoolsCount) : '—'}</p>
-                </div>
-                <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px' }}>
-                  <p style={{ margin: '0 0 3px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Crescimento do setor</p>
-                  <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1e2d6b' }}>{sectorGrowth != null ? `${sectorGrowth}%/ano` : '—'}</p>
-                </div>
-              </div>
-
-              {/* Inteligência competitiva — inep_data */}
-              {marketData.inep_data && (
-                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '14px 16px' }}>
-                  <p style={{ margin: '0 0 12px', fontSize: 12, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Inteligência competitiva
-                  </p>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    {/* Classificação */}
-                    {marketData.inep_data.school_classification && (
-                      <div>
-                        <p style={{ margin: '0 0 4px', fontSize: 11, color: '#78350f', fontWeight: 600 }}>Classificação da escola</p>
-                        <p style={{ margin: 0, fontSize: 13, color: '#1e293b' }}>
-                          Porte {marketData.inep_data.school_classification} — {totalStudents > 0 ? `${fmt(totalStudents)} alunos` : 'cadastrar alunos'}
-                        </p>
-                      </div>
-                    )}
-                    {/* Oportunidade */}
-                    {marketData.inep_data.market_opportunity && (
-                      <div>
-                        <p style={{ margin: '0 0 4px', fontSize: 11, color: '#166534', fontWeight: 600 }}>Oportunidade</p>
-                        <p style={{ margin: 0, fontSize: 13, color: '#166534' }}>{marketData.inep_data.market_opportunity}</p>
-                      </div>
-                    )}
-                    {/* Concorrentes */}
-                    {marketData.inep_data.main_competitors && marketData.inep_data.main_competitors.length > 0 && (
-                      <div>
-                        <p style={{ margin: '0 0 6px', fontSize: 11, color: '#78350f', fontWeight: 600 }}>Principais concorrentes</p>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                          {marketData.inep_data.main_competitors.map((c, i) => (
-                            <span key={i} style={{ padding: '2px 8px', borderRadius: 999, background: '#fef3c7', color: '#92400e', fontSize: 11, fontWeight: 500 }}>{c}</span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {/* Risco */}
-                    {marketData.inep_data.risk_factors && (
-                      <div>
-                        <p style={{ margin: '0 0 4px', fontSize: 11, color: '#92400e', fontWeight: 600 }}>Risco competitivo</p>
-                        <p style={{ margin: 0, fontSize: 13, color: '#92400e' }}>{marketData.inep_data.risk_factors}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {marketData.notes && (
-                <p style={{ margin: 0, fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <Info size={12} /> {String(marketData.notes)}
-                </p>
-              )}
-            </div>
-          ) : null}
+          ) : (
+            <p style={{ margin: 0, fontSize: 14, color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>{aiInsight}</p>
+          )}
         </div>
       )}
 
