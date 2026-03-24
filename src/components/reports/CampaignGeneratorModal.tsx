@@ -50,6 +50,7 @@ interface SchoolData {
   grades: string[]
   avg_monthly_fee: number
   current_students: number
+  exits?: Record<string, number>
 }
 
 interface GrowthTarget {
@@ -205,6 +206,8 @@ export default function CampaignGeneratorModal({
   const [draftSaved, setDraftSaved] = useState(false)
   const [institutionPrefill, setInstitutionPrefill] = useState<{ city: string; state: string } | null>(null)
 
+  const totalExits = Object.values(schoolData.exits ?? {}).reduce((sum, v) => sum + (Number(v) || 0), 0)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isMounted = useRef(true)
   useEffect(() => { isMounted.current = true; return () => { isMounted.current = false } }, [])
@@ -248,7 +251,7 @@ export default function CampaignGeneratorModal({
         status: 'draft',
         wizard_step: step,
         campaign_start_month: campaignStartMonthNum,
-        school_data: schoolData,
+        school_data: { ...schoolData, exits: schoolData.exits ?? {}, total_exits: totalExits },
         historical_data: historicalData,
         market_data: marketData,
         erp_files: erpFiles,
@@ -475,7 +478,8 @@ export default function CampaignGeneratorModal({
             campaignYear,
             current_date: new Date().toLocaleDateString('pt-BR'),
             campaign_start_month: campaignStartMonth,
-            months_until_campaign: monthsUntil
+            months_until_campaign: monthsUntil,
+            total_exits: totalExits
           }
         })
       })
@@ -618,7 +622,7 @@ export default function CampaignGeneratorModal({
         ...cycleData,
         status: 'active',
         campaign_start_month: campaignStartMonthNum,
-        school_data: schoolData,
+        school_data: { ...schoolData, exits: schoolData.exits ?? {}, total_exits: totalExits },
         erp_files: erpFiles,
       }, { onConflict: 'institution_id,year' })
 
@@ -757,6 +761,7 @@ export default function CampaignGeneratorModal({
               campaignStartYearNum={campaignStartYearNum}
               setCampaignStartYearNum={setCampaignStartYearNum}
               institutionPrefill={institutionPrefill}
+              totalExits={totalExits}
             />
           )}
 
@@ -813,6 +818,8 @@ export default function CampaignGeneratorModal({
               executionYear={executionYear}
               campaignStartMonthNum={campaignStartMonthNum}
               erpFiles={erpFiles}
+              totalExits={totalExits}
+              currentStudents={schoolData.current_students}
               onAmbitiousChange={handleAmbitiousChange}
               onUpdateCell={updateMonthlyCell}
             />
@@ -932,7 +939,7 @@ export default function CampaignGeneratorModal({
 }
 
 // ─── Passo 1 — Dados da escola ───────────────────────────────────
-function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget, campaignStartMonthNum, setCampaignStartMonthNum, campaignStartYearNum, setCampaignStartYearNum, institutionPrefill }: {
+function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget, campaignStartMonthNum, setCampaignStartMonthNum, campaignStartYearNum, setCampaignStartYearNum, institutionPrefill, totalExits }: {
   schoolData: SchoolData
   setSchoolData: React.Dispatch<React.SetStateAction<SchoolData>>
   growthTarget: GrowthTarget
@@ -942,6 +949,7 @@ function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget, cam
   campaignStartYearNum: number
   setCampaignStartYearNum: (v: number) => void
   institutionPrefill: { city: string; state: string } | null
+  totalExits: number
 }) {
   const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
   const thisYear = new Date().getFullYear()
@@ -1086,6 +1094,40 @@ function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget, cam
           })}
         </div>
       </div>
+
+      {/* Movimentação esperada */}
+      {schoolData.grades.length > 0 && (
+        <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #E2E8F0' }}>
+          <label style={{ ...labelStyle, fontSize: 13, marginBottom: 2 }}>Movimentação esperada este ciclo</label>
+          <p style={{ fontSize: 12, color: '#94A3B8', margin: '0 0 14px' }}>
+            Quantos alunos vão concluir e sair este ano (formandos). Ajuda a IA a calcular a meta real de novatos.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {schoolData.grades.map(grade => (
+              <div key={grade} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 13, color: '#475569', width: 140, flexShrink: 0 }}>{grade}</span>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="0"
+                  value={schoolData.exits?.[grade] ?? ''}
+                  onChange={e => setSchoolData(prev => ({
+                    ...prev,
+                    exits: { ...prev.exits, [grade]: parseInt(e.target.value) || 0 }
+                  }))}
+                  style={{ width: 80, height: 34, padding: '0 8px', borderRadius: 7, border: '1px solid #E2E8F0', fontSize: 13, background: '#F8FAFC', outline: 'none' }}
+                />
+                <span style={{ fontSize: 12, color: '#94A3B8' }}>alunos formandos</span>
+              </div>
+            ))}
+          </div>
+          {totalExits > 0 && (
+            <p style={{ fontSize: 12, color: '#64748B', marginTop: 10 }}>
+              Total de saídas naturais: <strong>{totalExits} alunos</strong>
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -1337,7 +1379,7 @@ function StepFour({ loading, msgIdx, msgs, progress, error, onRetry }: {
 }
 
 // ─── Passo 5 — Revisão ───────────────────────────────────────────
-function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, campaignStartMonth, campaignYear, executionYear, campaignStartMonthNum, erpFiles, onAmbitiousChange, onUpdateCell }: {
+function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, campaignStartMonth, campaignYear, executionYear, campaignStartMonthNum, erpFiles, totalExits, currentStudents, onAmbitiousChange, onUpdateCell }: {
   plan: GeneratedPlan
   ambitiousLevel: number
   regenLoading: boolean
@@ -1347,6 +1389,8 @@ function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, cam
   executionYear: number
   campaignStartMonthNum: number
   erpFiles: { name: string; year: number; total: number; novatos: number; veterans: number; fee?: number; error?: boolean }[]
+  totalExits: number
+  currentStudents: number
   onAmbitiousChange: (level: number) => void
   onUpdateCell: (idx: number, field: keyof MonthlyTarget, value: number) => void
 }) {
@@ -1384,6 +1428,20 @@ function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, cam
               <KpiCard label="Investimento total" value={`R$ ${plan.total_investment_suggested.toLocaleString('pt-BR')}`} unit="" color="#8B5CF6" raw />
               <KpiCard label="CPA médio" value={`R$ ${plan.average_cpa.toLocaleString('pt-BR')}`} unit="" color="#F59E0B" raw />
             </div>
+
+            {totalExits > 0 && (
+              <div style={{ background: '#F0FDF4', borderRadius: 10, padding: '10px 14px', marginBottom: 12, border: '1px solid #BBF7D0' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#065F46', marginBottom: 6 }}>Movimentação do ciclo</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#374151', marginBottom: 4 }}>
+                  <span style={{ color: '#64748B' }}>Saídas naturais (formandos)</span>
+                  <span style={{ fontWeight: 600 }}>{totalExits} alunos</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#374151' }}>
+                  <span style={{ color: '#64748B' }}>Elegíveis para rematrícula</span>
+                  <span style={{ fontWeight: 600 }}>{Math.max(0, currentStudents - totalExits)} alunos</span>
+                </div>
+              </div>
+            )}
 
             <div style={{ background: '#EFF6FF', borderRadius: 12, padding: 14, marginBottom: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>

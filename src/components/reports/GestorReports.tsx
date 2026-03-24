@@ -32,6 +32,7 @@ interface CampaignCycle {
   campaign_start_month?: number | null
   erp_files?: unknown[] | null
   status?: string | null
+  school_data?: { exits?: Record<string, number>; total_exits?: number; current_students?: number } | null
 }
 
 interface StudentTransfer {
@@ -429,7 +430,7 @@ export default function GestorReports() {
               {activeTab === 'funnel' && <TabFunnel funnelData={funnelData} cycle={cycle} onGoToImport={() => setActiveTab('import')} />}
               {activeTab === 'comparativo' && <TabComparativo allCycles={allCycles} institutionId={institutionId} hasCampaign={cycleIsActive} />}
               {activeTab === 'marketing' && <TabMarketing marketingData={marketingData} institutionId={institutionId} onRefresh={loadAll} showToast={showToast} />}
-              {activeTab === 'reenrollments' && <TabReenrollments reEnrollData={reEnrollData} institutionId={institutionId} onRefresh={loadAll} showToast={showToast} />}
+              {activeTab === 'reenrollments' && <TabReenrollments reEnrollData={reEnrollData} institutionId={institutionId} activeCycle={activeCycle} transfers={transfers} onRefresh={loadAll} showToast={showToast} />}
               {activeTab === 'transfers' && <TabTransfers transfers={transfers} institutionId={institutionId} onRefresh={loadAll} showToast={showToast} />}
               {activeTab === 'import' && <TabImport erpImports={erpImports} institutionId={institutionId} cycle={cycle} onRefresh={loadAll} showToast={showToast} />}
             </>
@@ -1278,30 +1279,17 @@ function TabMarketing({ marketingData, institutionId, onRefresh, showToast }: {
 // ═══════════════════════════════════════════════════════════
 //  TAB 4 — REMATRÍCULAS
 // ═══════════════════════════════════════════════════════════
-function TabReenrollments({ reEnrollData, institutionId, onRefresh, showToast }: {
+function TabReenrollments({ reEnrollData, institutionId, activeCycle, transfers, onRefresh, showToast }: {
   reEnrollData: ReEnrollment[]
   institutionId: string
+  activeCycle: CampaignCycle | null
+  transfers: StudentTransfer[]
   onRefresh: () => void
   showToast: (msg: string, type?: 'success' | 'error') => void
 }) {
   const [showModal, setShowModal] = useState(false)
   const [formData, setFormData] = useState({ period: '', total_base: '', re_enrolled: '', defaulters: '', transferred: '', target_percentage: '85' })
   const [saving, setSaving] = useState(false)
-  const [exits, setExits] = useState<{ student_count: number; exit_type: string }[]>([])
-
-  useEffect(() => {
-    async function loadExits() {
-      try {
-        const { data } = await supabase
-          .from('student_exits')
-          .select('student_count, exit_type')
-          .eq('institution_id', institutionId)
-          .eq('year', new Date().getFullYear())
-        setExits(data ?? [])
-      } catch { /* ignore */ }
-    }
-    loadExits()
-  }, [institutionId])
 
   const chartData = reEnrollData.map(r => ({
     period: r.period,
@@ -1344,20 +1332,23 @@ function TabReenrollments({ reEnrollData, institutionId, onRefresh, showToast }:
     finally { setSaving(false) }
   }
 
-  const graduations = exits.filter(e => e.exit_type === 'graduation').reduce((sum, e) => sum + e.student_count, 0)
-  const confirmedTransfersCount = exits.filter(e => e.exit_type === 'transfer').reduce((sum, e) => sum + e.student_count, 0)
-  const totalStudents = lastRe?.total_base ?? 0
-  const eligibleForReenrollment = totalStudents - graduations - confirmedTransfersCount
+  const totalExits = activeCycle?.school_data?.total_exits ?? 0
+  const confirmedTransfersCount = transfers.filter(t =>
+    (t as StudentTransfer & { status?: string; deleted_at?: string }).status === 'confirmed' &&
+    !(t as StudentTransfer & { deleted_at?: string }).deleted_at
+  ).length
+  const currentStudents = activeCycle?.school_data?.current_students ?? lastRe?.total_base ?? 0
+  const eligibleForReenrollment = currentStudents - totalExits - confirmedTransfersCount
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* Base elegível */}
-      {totalStudents > 0 && (graduations > 0 || confirmedTransfersCount > 0) && (
+      {currentStudents > 0 && (totalExits > 0 || confirmedTransfersCount > 0) && (
         <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '12px 18px' }}>
           <p style={{ margin: 0, fontSize: 13, color: '#1e3a8a' }}>
-            <strong>Base elegível para rematrícula: {new Intl.NumberFormat('pt-BR').format(eligibleForReenrollment)} alunos</strong>
-            {' '}(total: {totalStudents}
-            {graduations > 0 ? ` − formandos: ${graduations}` : ''}
+            <strong>Base elegível para rematrícula: {new Intl.NumberFormat('pt-BR').format(Math.max(0, eligibleForReenrollment))} alunos</strong>
+            {' '}(total: {currentStudents}
+            {totalExits > 0 ? ` − formandos: ${totalExits}` : ''}
             {confirmedTransfersCount > 0 ? ` − transferências: ${confirmedTransfersCount}` : ''})
           </p>
         </div>

@@ -324,7 +324,7 @@ Retorne SOMENTE o JSON, sem markdown, sem explicações adicionais.`
     // GERADOR DE CAMPANHA DE MATRÍCULAS
     // ─────────────────────────────────────────────
     if (action === 'generate_campaign') {
-      const { schoolData, historicalData, marketData, growthTarget, campaignYear, executionYear, current_date, campaign_start_month, months_until_campaign } = payload as {
+      const { schoolData, historicalData, marketData, growthTarget, campaignYear, executionYear, current_date, campaign_start_month, months_until_campaign, total_exits } = payload as {
         schoolData: { name: string; city: string; state: string; grades: string[]; avg_monthly_fee: number; current_students: number }
         historicalData: { year: number; total_students: number; new_enrollments: number; reenrollments: number; transfers: number }[]
         marketData: { school_age_population?: number; private_school_rate?: number; sector_growth_rate?: number }
@@ -334,6 +334,7 @@ Retorne SOMENTE o JSON, sem markdown, sem explicações adicionais.`
         current_date?: string
         campaign_start_month?: string
         months_until_campaign?: number
+        total_exits?: number
       }
       const execYear = executionYear ?? (campaignYear - 1)
 
@@ -376,6 +377,13 @@ ${hasHistory
     `- ${d.year}: ${d.total_students} alunos, ${d.new_enrollments} novas matrículas, ${d.reenrollments} rematrículas, ${d.transfers} transferências`
   ).join('\n')}`
   : 'HISTÓRICO: Primeiro ano no sistema. Use benchmarks do setor educacional privado brasileiro.'}
+
+${(total_exits ?? 0) > 0 ? `MOVIMENTAÇÃO ESPERADA:
+- Alunos atuais: ${schoolData.current_students}
+- Formandos (saída natural): ${total_exits}
+- Elegíveis para rematrícula: ${schoolData.current_students - (total_exits ?? 0)}
+- Novatos mínimos para repor formandos: ${total_exits}
+- META TOTAL DE NOVATOS = formandos a repor + crescimento desejado` : ''}
 
 OBJETIVO:
 ${growthTarget.type === 'percentage' ? `Crescer ${growthTarget.value}%` : ''}
