@@ -172,8 +172,8 @@ export default function GestorSurveys() {
 
   async function deleteSurvey(id: string, responseCount: number) {
     if (!confirm(`Tem certeza? ${responseCount > 0 ? `${responseCount} resposta(s) será(ão) perdida(s).` : 'Esta ação não pode ser desfeita.'}`)) return
-    await supabase.from('satisfaction_responses').delete().eq('survey_id', id)
-    await supabase.from('satisfaction_surveys').delete().eq('id', id)
+    const { error } = await supabase.rpc('delete_survey_cascade', { survey_uuid: id })
+    if (error) { console.error('Erro ao excluir:', error); showToast('Erro ao excluir pesquisa.'); return }
     showToast('Pesquisa excluída.')
     load()
   }
