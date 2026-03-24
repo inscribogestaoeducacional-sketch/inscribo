@@ -689,11 +689,27 @@ function TabFunil({
     { label: 'Matrículas', value: enr, target: latest?.enrollments_target ?? 0, color: '#0F6E56', pct: vis > 0 ? pct(enr, vis) : 0 },
   ]
 
-  const tableData = funnelData.map(f => {
+  const sortedFunnelData = [...funnelData].sort((a, b) => a.period.localeCompare(b.period))
+
+  const formatPeriod = (period: string) => {
+    const [year, month] = period.split('-')
+    const monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+    return `${monthNames[parseInt(month) - 1]}/${year}`
+  }
+
+  const tableData = sortedFunnelData.map(f => {
     const dReg = (f.registrations_target ?? 0) > 0 ? dev(f.registrations ?? 0, f.registrations_target!) : null
     const dEnr = (f.enrollments_target ?? 0) > 0 ? dev(f.enrollments ?? 0, f.enrollments_target!) : null
     return { ...f, dReg, dEnr }
   })
+
+  const chartData = sortedFunnelData.map(f => ({
+    period: formatPeriod(f.period),
+    real: f.registrations ?? 0,
+    meta: f.registrations_target ?? 0,
+    matriculas: f.enrollments ?? 0,
+    meta_matriculas: f.enrollments_target ?? 0,
+  }))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -732,6 +748,24 @@ function TabFunil({
         </div>
       </div>
 
+      {/* Gráfico real vs meta */}
+      {chartData.length > 0 && (
+        <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: '0 0 20px' }}>Cadastros reais vs meta</h3>
+          <ResponsiveContainer width="100%" height={240}>
+            <ComposedChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="period" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="real" fill="#1D9E75" name="Cadastros reais" radius={[4,4,0,0]} />
+              <Line dataKey="meta" stroke="#BA7517" strokeWidth={2} strokeDasharray="4 3" name="Meta cadastros" dot={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       {/* MonthlyChart editável */}
       <MonthlyChart institutionId={institutionId} editable={true} />
 
@@ -753,7 +787,7 @@ function TabFunil({
               <tbody>
                 {tableData.map(f => (
                   <tr key={f.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '10px 14px', fontWeight: 600, color: '#374151' }}>{f.period}</td>
+                    <td style={{ padding: '10px 14px', fontWeight: 600, color: '#374151' }}>{formatPeriod(f.period)}</td>
                     <td style={{ padding: '10px 14px' }}>{fmt(f.registrations ?? 0)}</td>
                     <td style={{ padding: '10px 14px', color: '#94a3b8' }}>{f.registrations_target ? fmt(f.registrations_target) : '—'}</td>
                     <td style={{ padding: '8px 14px' }}>

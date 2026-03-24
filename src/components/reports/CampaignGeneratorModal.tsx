@@ -51,6 +51,8 @@ interface SchoolData {
   avg_monthly_fee: number
   current_students: number
   exits?: Record<string, number>
+  start_date?: string
+  end_date?: string
 }
 
 interface GrowthTarget {
@@ -137,13 +139,20 @@ const GRADE_OPTIONS = [
 
 
 // ─── Helpers de datas de campanha ───────────────────────────────
-function getCampaignMonths(startMonth: number, executionYear: number): { label: string; month: number; year: number }[] {
-  const names = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
-  const months = []
-  for (let i = 0; i < 7; i++) {
-    const monthIndex = (startMonth - 1 + i) % 12
-    const year = executionYear + Math.floor((startMonth - 1 + i) / 12)
-    months.push({ label: `${names[monthIndex]}/${year}`, month: monthIndex + 1, year })
+function getCampaignMonths(startDate: string, endDate: string): { label: string; month: number; year: number; period: string }[] {
+  const monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+  const months: { label: string; month: number; year: number; period: string }[] = []
+  const start = new Date(startDate + 'T12:00:00')
+  const end = new Date(endDate + 'T12:00:00')
+  const current = new Date(start)
+  while (current <= end) {
+    months.push({
+      label: `${monthNames[current.getMonth()]}/${current.getFullYear()}`,
+      month: current.getMonth() + 1,
+      year: current.getFullYear(),
+      period: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`
+    })
+    current.setMonth(current.getMonth() + 1)
   }
   return months
 }
@@ -158,7 +167,9 @@ export default function CampaignGeneratorModal({
   // Dados coletados
   const [schoolData, setSchoolData] = useState<SchoolData>({
     name: institutionName,
-    city: '', state: '', grades: [], avg_monthly_fee: 0, current_students: 0
+    city: '', state: '', grades: [], avg_monthly_fee: 0, current_students: 0,
+    start_date: `${new Date().getFullYear()}-08-01`,
+    end_date: `${new Date().getFullYear() + 1}-02-28`
   })
   const [growthTarget, setGrowthTarget] = useState<GrowthTarget>({ type: 'percentage', value: 10 })
   const [historicalData, setHistoricalData] = useState<HistoricalYear[]>([])
@@ -167,27 +178,21 @@ export default function CampaignGeneratorModal({
   const [generatedPlan, setGeneratedPlan] = useState<GeneratedPlan | null>(null)
   const [adjustedPlan, setAdjustedPlan] = useState<GeneratedPlan | null>(null)
   const [generationMode, setGenerationMode] = useState<string>('benchmark')
-  const [campaignStartMonthNum, setCampaignStartMonthNum] = useState<number>(8)
-  const [campaignStartYearNum, setCampaignStartYearNum] = useState<number>(() => {
-    const now = new Date()
-    return now.getMonth() >= 7 ? now.getFullYear() + 1 : now.getFullYear()
-  })
   const [erpFiles, setErpFiles] = useState<{ name: string; year: number; total: number; novatos: number; veterans: number; fee?: number; error?: boolean }[]>([])
   const [draftToast, setDraftToast] = useState<string | null>(null)
   const [multiFileProgress, setMultiFileProgress] = useState<string | null>(null)
 
-  // Timing calculado a partir dos valores selecionados pelo gestor
-  // executionYear = ano em que a campanha acontece (2026)
-  // campaignYear  = ano letivo alvo = executionYear + 1 (2027)
-  const executionYear = campaignStartYearNum           // ex: 2026
-  const campaignStartYear = executionYear               // alias mantido para compatibilidade
-  const campaignYear = executionYear + 1                // ex: 2027
+  // Timing calculado a partir das datas de campanha definidas pelo gestor
+  const _startDate = new Date((schoolData.start_date || `${new Date().getFullYear()}-08-01`) + 'T12:00:00')
+  const executionYear = _startDate.getFullYear()         // ex: 2026
+  const campaignStartYear = executionYear                // alias mantido para compatibilidade
+  const campaignYear = executionYear + 1                 // ex: 2027
+  const campaignStartMonthNum = _startDate.getMonth() + 1
   const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
-  const campaignStartMonth = `${MONTH_NAMES[campaignStartMonthNum - 1]}/${executionYear}`
+  const campaignStartMonth = `${MONTH_NAMES[_startDate.getMonth()]}/${executionYear}`
   const monthsUntil = (() => {
     const now = new Date()
-    const campaignDate = new Date(executionYear, campaignStartMonthNum - 1, 1)
-    return Math.max(0, (campaignDate.getFullYear() - now.getFullYear()) * 12 + campaignDate.getMonth() - now.getMonth())
+    return Math.max(0, (executionYear - now.getFullYear()) * 12 + _startDate.getMonth() - now.getMonth())
   })()
 
   // Loading states
@@ -241,10 +246,10 @@ export default function CampaignGeneratorModal({
     try {
       await supabase.from('campaign_cycles').upsert({
         institution_id: institutionId,
-        year: campaignStartYearNum,
-        label: `Campanha ${campaignStartYearNum}`,
-        start_date: `${campaignStartYearNum}-${String(campaignStartMonthNum).padStart(2, '0')}-01`,
-        end_date: `${campaignStartYearNum + 1}-02-28`,
+        year: executionYear,
+        label: `Campanha ${executionYear}`,
+        start_date: schoolData.start_date || `${executionYear}-08-01`,
+        end_date: schoolData.end_date || `${executionYear + 1}-02-28`,
         target_new_students: adjustedPlan?.summary.total_new_students_target || 0,
         target_reenrollment_rate: adjustedPlan?.summary.reenrollment_rate_target || 85,
         base_students: schoolData.current_students || 0,
@@ -391,7 +396,8 @@ export default function CampaignGeneratorModal({
         if ((data.historical_data as HistoricalYear[])?.length) { setHistoricalData(data.historical_data as HistoricalYear[]); setHistoryOption('upload') }
         if (data.market_data && Object.keys(data.market_data as object).length) setMarketData(data.market_data as MarketData)
         if ((data.erp_files as unknown[])?.length) setErpFiles(data.erp_files as typeof erpFiles)
-        if (data.campaign_start_month) setCampaignStartMonthNum(data.campaign_start_month as number)
+        if (data.start_date) setSchoolData(s => ({ ...s, start_date: data.start_date as string }))
+        if (data.end_date) setSchoolData(s => ({ ...s, end_date: data.end_date as string }))
         if (data.wizard_step && (data.wizard_step as number) > 1) setStep(Math.min(data.wizard_step as number, 3))
         if (data.status !== 'setup') {
           setDraftToast('Rascunho encontrado — continuando de onde você parou')
@@ -476,6 +482,8 @@ export default function CampaignGeneratorModal({
             growthTarget: target,
             executionYear,
             campaignYear,
+            start_date: schoolData.start_date,
+            end_date: schoolData.end_date,
             current_date: new Date().toLocaleDateString('pt-BR'),
             campaign_start_month: campaignStartMonth,
             months_until_campaign: monthsUntil,
@@ -599,12 +607,14 @@ export default function CampaignGeneratorModal({
     if (!adjustedPlan) return
     setApplying(true)
     try {
+      const sd = schoolData.start_date || `${executionYear}-08-01`
+      const ed = schoolData.end_date || `${executionYear + 1}-02-28`
       const cycleData: CycleData = {
         institution_id: institutionId,
-        year: campaignStartYear,
-        label: `Campanha ${campaignStartYear}`,
-        start_date: `${campaignStartYear}-${String(campaignStartMonthNum).padStart(2,'0')}-01`,
-        end_date: `${campaignStartYear + 1}-02-28`,
+        year: executionYear,
+        label: `Campanha ${executionYear}`,
+        start_date: sd,
+        end_date: ed,
         target_new_students: adjustedPlan.summary.total_new_students_target,
         target_reenrollment_rate: adjustedPlan.summary.reenrollment_rate_target,
         base_students: schoolData.current_students,
@@ -626,12 +636,12 @@ export default function CampaignGeneratorModal({
         erp_files: erpFiles,
       }, { onConflict: 'institution_id,year' })
 
-      const campaignMonths = getCampaignMonths(campaignStartMonthNum, executionYear)
+      const campaignMonths = getCampaignMonths(sd, ed)
       for (let mi = 0; mi < adjustedPlan.monthly_targets.length; mi++) {
         const month = adjustedPlan.monthly_targets[mi]
         const cm = campaignMonths[mi]
         const period = cm
-          ? `${cm.year}-${String(cm.month).padStart(2, '0')}`
+          ? cm.period
           : `${month.year}-${String(month.month).padStart(2, '0')}`
         await supabase.from('funnel_metrics').upsert({
           institution_id: institutionId,
@@ -656,7 +666,7 @@ export default function CampaignGeneratorModal({
         institution_id: institutionId,
         type: 'milestone',
         severity: 'success',
-        title: `Campanha ${campaignStartYear} configurada!`,
+        title: `Campanha ${executionYear} configurada!`,
         message: `Suas metas estão ativas. O sistema agora acompanha ${adjustedPlan.summary.total_new_students_target} matrículas novas e ${(adjustedPlan.summary.reenrollment_rate_target * 100).toFixed(0)}% de rematrículas como objetivo.`
       })
 
@@ -756,10 +766,6 @@ export default function CampaignGeneratorModal({
               setSchoolData={setSchoolData}
               growthTarget={growthTarget}
               setGrowthTarget={setGrowthTarget}
-              campaignStartMonthNum={campaignStartMonthNum}
-              setCampaignStartMonthNum={setCampaignStartMonthNum}
-              campaignStartYearNum={campaignStartYearNum}
-              setCampaignStartYearNum={setCampaignStartYearNum}
               institutionPrefill={institutionPrefill}
               totalExits={totalExits}
             />
@@ -816,7 +822,8 @@ export default function CampaignGeneratorModal({
               campaignStartMonth={campaignStartMonth}
               campaignYear={campaignYear}
               executionYear={executionYear}
-              campaignStartMonthNum={campaignStartMonthNum}
+              startDate={schoolData.start_date || `${executionYear}-08-01`}
+              endDate={schoolData.end_date || `${executionYear + 1}-02-28`}
               erpFiles={erpFiles}
               totalExits={totalExits}
               currentStudents={schoolData.current_students}
@@ -939,19 +946,14 @@ export default function CampaignGeneratorModal({
 }
 
 // ─── Passo 1 — Dados da escola ───────────────────────────────────
-function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget, campaignStartMonthNum, setCampaignStartMonthNum, campaignStartYearNum, setCampaignStartYearNum, institutionPrefill, totalExits }: {
+function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget, institutionPrefill, totalExits }: {
   schoolData: SchoolData
   setSchoolData: React.Dispatch<React.SetStateAction<SchoolData>>
   growthTarget: GrowthTarget
   setGrowthTarget: React.Dispatch<React.SetStateAction<GrowthTarget>>
-  campaignStartMonthNum: number
-  setCampaignStartMonthNum: (v: number) => void
-  campaignStartYearNum: number
-  setCampaignStartYearNum: (v: number) => void
   institutionPrefill: { city: string; state: string } | null
   totalExits: number
 }) {
-  const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
   const thisYear = new Date().getFullYear()
 
   const PrefillBadge = () => (
@@ -1052,18 +1054,29 @@ function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget, cam
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
         <div>
-          <label style={labelStyle}>Mês de início da campanha</label>
-          <select style={inputStyle} value={campaignStartMonthNum} onChange={e => setCampaignStartMonthNum(parseInt(e.target.value))}>
-            {MONTHS.map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
-          </select>
+          <label style={labelStyle}>Data de início da campanha</label>
+          <input
+            type="date"
+            style={inputStyle}
+            value={schoolData.start_date || ''}
+            min={`${thisYear}-01-01`}
+            onChange={e => setSchoolData(prev => ({ ...prev, start_date: e.target.value }))}
+          />
+          <span style={{ fontSize: 11, color: '#94A3B8', marginTop: 4, display: 'block' }}>
+            Quando começa a captação para o ano letivo {schoolData.start_date ? new Date(schoolData.start_date + 'T12:00:00').getFullYear() + 1 : thisYear + 1}
+          </span>
         </div>
         <div>
-          <label style={labelStyle}>Ano da campanha</label>
-          <select style={inputStyle} value={campaignStartYearNum} onChange={e => setCampaignStartYearNum(parseInt(e.target.value))}>
-            {[thisYear, thisYear + 1, thisYear + 2].map(y => (
-              <option key={y} value={y}>Ano letivo {y + 1} (campanha em {y})</option>
-            ))}
-          </select>
+          <label style={labelStyle}>Data de fim da campanha</label>
+          <input
+            type="date"
+            style={inputStyle}
+            value={schoolData.end_date || ''}
+            onChange={e => setSchoolData(prev => ({ ...prev, end_date: e.target.value }))}
+          />
+          <span style={{ fontSize: 11, color: '#94A3B8', marginTop: 4, display: 'block' }}>
+            Normalmente fevereiro do ano seguinte
+          </span>
         </div>
       </div>
 
@@ -1379,7 +1392,7 @@ function StepFour({ loading, msgIdx, msgs, progress, error, onRetry }: {
 }
 
 // ─── Passo 5 — Revisão ───────────────────────────────────────────
-function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, campaignStartMonth, campaignYear, executionYear, campaignStartMonthNum, erpFiles, totalExits, currentStudents, onAmbitiousChange, onUpdateCell }: {
+function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, campaignStartMonth, campaignYear, executionYear, startDate, endDate, erpFiles, totalExits, currentStudents, onAmbitiousChange, onUpdateCell }: {
   plan: GeneratedPlan
   ambitiousLevel: number
   regenLoading: boolean
@@ -1387,7 +1400,8 @@ function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, cam
   campaignStartMonth: string
   campaignYear: number
   executionYear: number
-  campaignStartMonthNum: number
+  startDate: string
+  endDate: string
   erpFiles: { name: string; year: number; total: number; novatos: number; veterans: number; fee?: number; error?: boolean }[]
   totalExits: number
   currentStudents: number
@@ -1550,7 +1564,7 @@ function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, cam
                 </thead>
                 <tbody>
                   {plan.monthly_targets.map((m, i) => {
-                    const campaignMonths = getCampaignMonths(campaignStartMonthNum, executionYear)
+                    const campaignMonths = getCampaignMonths(startDate, endDate)
                     const monthLabel = campaignMonths[i]?.label ?? `${m.month}/${m.year}`
                     return (
                       <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>

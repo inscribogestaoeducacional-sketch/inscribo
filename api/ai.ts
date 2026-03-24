@@ -324,19 +324,38 @@ Retorne SOMENTE o JSON, sem markdown, sem explicações adicionais.`
     // GERADOR DE CAMPANHA DE MATRÍCULAS
     // ─────────────────────────────────────────────
     if (action === 'generate_campaign') {
-      const { schoolData, historicalData, marketData, growthTarget, campaignYear, executionYear, current_date, campaign_start_month, months_until_campaign, total_exits } = payload as {
+      const { schoolData, historicalData, marketData, growthTarget, campaignYear, executionYear, start_date, end_date, current_date, campaign_start_month, months_until_campaign, total_exits } = payload as {
         schoolData: { name: string; city: string; state: string; grades: string[]; avg_monthly_fee: number; current_students: number }
         historicalData: { year: number; total_students: number; new_enrollments: number; reenrollments: number; transfers: number }[]
         marketData: { school_age_population?: number; private_school_rate?: number; sector_growth_rate?: number }
         growthTarget: { type: 'percentage' | 'absolute' | 'students'; value: number }
         campaignYear: number
         executionYear?: number
+        start_date?: string
+        end_date?: string
         current_date?: string
         campaign_start_month?: string
         months_until_campaign?: number
         total_exits?: number
       }
       const execYear = executionYear ?? (campaignYear - 1)
+
+      // Calcular meses reais a partir das datas
+      const campaignMonthsList = (() => {
+        if (start_date && end_date) {
+          const names = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+          const result: { label: string }[] = []
+          const start = new Date(start_date + 'T12:00:00')
+          const end = new Date(end_date + 'T12:00:00')
+          const cur = new Date(start)
+          while (cur <= end) {
+            result.push({ label: `${names[cur.getMonth()]}/${cur.getFullYear()}` })
+            cur.setMonth(cur.getMonth() + 1)
+          }
+          return result
+        }
+        return null
+      })()
 
       const hasHistory = historicalData && historicalData.length > 0
       const mode = hasHistory
@@ -346,16 +365,22 @@ Retorne SOMENTE o JSON, sem markdown, sem explicações adicionais.`
       const hasPrecampaign = months_until_campaign && months_until_campaign > 0
 
       const startMonthName = campaign_start_month?.split('/')[0] || 'Agosto'
+      const monthsListStr = campaignMonthsList
+        ? campaignMonthsList.map(m => m.label).join(', ')
+        : `Ago/${execYear}, Set/${execYear}, Out/${execYear}, Nov/${execYear}, Dez/${execYear}, Jan/${execYear + 1}, Fev/${execYear + 1}`
+      const totalMonths = campaignMonthsList ? campaignMonthsList.length : 7
+      const lastMonth = campaignMonthsList ? campaignMonthsList[campaignMonthsList.length - 1]?.label : `Fev/${execYear + 1}`
 
       const prompt = `Você é um especialista em campanhas de matrículas de escolas privadas brasileiras com 15 anos de experiência.
 
 CONTEXTO DE DATAS — LEIA COM ATENÇÃO:
 - Ano letivo alvo: ${campaignYear} (estes são os alunos que vão estudar em ${campaignYear})
 - Ano de execução da campanha: ${execYear} (a campanha acontece em ${execYear}/${execYear + 1})
-- Mês de início: ${startMonthName}/${execYear}
-- Os meses do plano devem ser: ${startMonthName}/${execYear} até Fev/${execYear + 1}
+- Período da campanha: ${start_date || `${execYear}-08-01`} até ${end_date || `${execYear + 1}-02-28`}
+- Meses: ${monthsListStr}
+- Total de meses: ${totalMonths}
 - O histórico fornecido representa campanhas anteriores (cada uma captou alunos para o ano letivo SEGUINTE)
-- NÃO use datas além de Fev/${execYear + 1} nas metas mensais
+- NÃO use datas além de ${lastMonth} nas metas mensais
 
 DADOS DA ESCOLA:
 - Nome: ${schoolData.name}
@@ -443,7 +468,7 @@ Gere o plano completo em JSON:
   "recalibration_note": "quando recalibrar após ter dados reais"
 }
 
-Inclua monthly_targets para: Ago/${execYear}, Set/${execYear}, Out/${execYear}, Nov/${execYear}, Dez/${execYear}, Jan/${execYear + 1}, Fev/${execYear + 1}.${hasPrecampaign ? ' Preencha pre_campaign com ações práticas e realistas para os meses de preparação.' : ''}
+Gere exatamente ${totalMonths} registros mensais em monthly_targets, um para cada mês nessa ordem: ${monthsListStr}.${hasPrecampaign ? ' Preencha pre_campaign com ações práticas e realistas para os meses de preparação.' : ''}
 Retorne SOMENTE o JSON válido.`
 
       const result = await callClaude(prompt, 2200)
