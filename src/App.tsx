@@ -43,24 +43,40 @@ import ConsultantSchools from './components/superadmin/ConsultantSchools'
 import FinancialDashboard from './components/superadmin/FinancialDashboard'
 import ConsultantsOverview from './components/superadmin/ConsultantsOverview'
 
-// Protected Route Component
-function ProtectedRoute({ 
-  children, 
-  allowedRoles 
-}: { 
+// Protected Route Component — proteção por role (admin/manager/user)
+function ProtectedRoute({
+  children,
+  allowedRoles
+}: {
   children: React.ReactNode
-  allowedRoles: string[] 
+  allowedRoles: string[]
 }) {
   const { user } = useAuth()
-  
+
   if (!user) {
     return <Navigate to="/login" replace />
   }
-  
+
   if (!allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to="/unauthorized" replace />
   }
-  
+
+  return <>{children}</>
+}
+
+// RequireRole — bloqueia cruzamento de perfil (gestor vs atendente)
+function RequireRole({
+  children,
+  roles,
+}: {
+  children: React.ReactNode
+  roles: string[]
+}) {
+  const { user } = useAuth()
+  const match =
+    roles.includes(user?.role ?? '') ||
+    roles.includes(user?.user_type ?? '')
+  if (!match) return <Navigate to="/unauthorized" replace />
   return <>{children}</>
 }
 
@@ -236,8 +252,16 @@ function AppContent() {
         <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--bg-page)' }}>
           <Routes>
             <Route path="/" element={<Navigate to={schoolDefaultPath} replace />} />
-            <Route path="/home" element={<GestorHome />} />
-            <Route path="/atendente" element={<AttendantHome />} />
+            <Route path="/home" element={
+              <RequireRole roles={['admin', 'manager']}>
+                <GestorHome />
+              </RequireRole>
+            } />
+            <Route path="/atendente" element={
+              <RequireRole roles={['user', 'school_user']}>
+                <AttendantHome />
+              </RequireRole>
+            } />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/leads" element={<LeadKanban />} />
             <Route path="/visits" element={<VisitCalendar />} />
