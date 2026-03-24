@@ -138,12 +138,26 @@ export default function GestorTransfers() {
   async function load() {
     setLoading(true)
     try {
-      const [activeRes, deletedRes] = await Promise.all([
-        supabase.from('student_transfers').select('*').eq('institution_id', institutionId).is('deleted_at', null).order('created_at', { ascending: false }),
-        supabase.from('student_transfers').select('*').eq('institution_id', institutionId).not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
-      ])
-      setTransfers((activeRes.data ?? []) as Transfer[])
-      setDeletedTransfers((deletedRes.data ?? []) as Transfer[])
+      // Tenta buscar com filtro de soft delete
+      const { data: activeData, error: activeErr } = await supabase
+        .from('student_transfers').select('*').eq('institution_id', institutionId)
+        .is('deleted_at', null).order('created_at', { ascending: false })
+
+      const { data: deletedData, error: deletedErr } = await supabase
+        .from('student_transfers').select('*').eq('institution_id', institutionId)
+        .not('deleted_at', 'is', null).order('deleted_at', { ascending: false })
+
+      // Se der erro (coluna não existe ainda), busca sem filtro
+      if (activeErr || deletedErr) {
+        const { data: fallback } = await supabase
+          .from('student_transfers').select('*').eq('institution_id', institutionId)
+          .order('created_at', { ascending: false })
+        setTransfers((fallback ?? []) as Transfer[])
+        setDeletedTransfers([])
+      } else {
+        setTransfers((activeData ?? []) as Transfer[])
+        setDeletedTransfers((deletedData ?? []) as Transfer[])
+      }
     } finally {
       setLoading(false)
     }
