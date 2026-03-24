@@ -125,7 +125,7 @@ export default function GestorOnboarding({ institutionName, onComplete, onOpenCa
               <Sparkles style={{ width: 32, height: 32, color: 'white' }} />
             </div>
             <h1 style={{ fontSize: 24, fontWeight: 800, color: '#1e2d6b', margin: '0 0 12px' }}>
-              Bem-vindo ao Inscribo, {institutionName}!
+              Bem-vindo ao Áion Edu, {institutionName}!
             </h1>
             <p style={{ fontSize: 16, color: '#6b7280', lineHeight: 1.6, marginBottom: 32 }}>
               Vamos preparar sua escola para a campanha de matrículas.<br />

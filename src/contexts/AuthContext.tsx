@@ -211,7 +211,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               institution_id: 'super-admin',
               active: superAdminData.active,
               is_super_admin: true,
-              institution_name: 'Inscribo - Super Admin'
+              institution_name: 'Áion Edu - Super Admin'
             })
             localStorage.setItem('inscribo-user', JSON.stringify({
               id: superAdminData.id,
@@ -221,7 +221,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               institution_id: 'super-admin',
               active: superAdminData.active,
               is_super_admin: true,
-              institution_name: 'Inscribo - Super Admin'
+              institution_name: 'Áion Edu - Super Admin'
             }))
             return
           }
@@ -328,7 +328,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             institution_id: 'super-admin',
             active: true,
             is_super_admin: true,
-            institution_name: 'Inscribo - Super Admin'
+            institution_name: 'Áion Edu - Super Admin'
           }
           setUser(superAdminUser)
           localStorage.setItem('inscribo-user', JSON.stringify(superAdminUser))
@@ -512,7 +512,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           <div className="w-16 h-16 mb-6 mx-auto">
             <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600"></div>
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Inscribo</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Áion Edu</h2>
           <p className="text-gray-600 mb-6">Verificando sua sessão...</p>
           
           <div className="space-y-2 text-sm text-gray-500">

@@ -67,7 +67,7 @@ export default function LoginForm() {
           <div className="animate-fade-in-down">
             <img
               src="/Inscribologo.png"
-              alt="Inscribo"
+              alt="Áion Edu"
               className="h-14 w-auto"
             />
           </div>
@@ -130,7 +130,7 @@ export default function LoginForm() {
 
           {/* Footer */}
           <div className="text-white/60 text-sm animate-fade-in animation-delay-1400">
-            © 2024 Inscribo. Todos os direitos reservados.
+            © 2025 Áion Edu. Todos os direitos reservados.
           </div>
         </div>
       </div>
@@ -142,7 +142,7 @@ export default function LoginForm() {
           <div className="mb-10 flex justify-center animate-fade-in-down lg:hidden">
             <img
               src="/Inscribologo.png"
-              alt="Inscribo"
+              alt="Áion Edu"
               className="h-16 w-auto"
             />
           </div>

@@ -162,7 +162,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                 <Shield className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Inscribo</h1>
+                <h1 className="text-xl font-bold text-gray-900">Áion Edu</h1>
                 <p className="text-xs text-gray-500">Super Admin</p>
               </div>
             </div>

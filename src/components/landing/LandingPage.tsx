@@ -40,7 +40,7 @@ function Navbar() {
     <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-white shadow-md' : 'bg-transparent'}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <img src="/Inscribologo.png" alt="Inscribo" className="h-10 w-auto" />
+          <img src="/Inscribologo.png" alt="Áion Edu" className="h-10 w-auto" />
 
           {/* Desktop links */}
           <div className="hidden md:flex items-center gap-8">
@@ -125,7 +125,7 @@ function Hero() {
         <div className="text-white space-y-8">
           <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full text-sm font-medium text-white/90">
             <span className="w-2 h-2 bg-[#14b8a6] rounded-full animate-pulse" />
-            Mais de 200 escolas já usam o Inscribo
+            Mais de 200 escolas já usam o Áion Edu
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight">
@@ -285,7 +285,7 @@ function Funcionalidades() {
         <div className="text-center mb-16">
           <span className="text-sm font-semibold text-[#14b8a6] uppercase tracking-widest">Tudo que sua escola precisa</span>
           <h2 className="mt-3 text-3xl sm:text-4xl font-bold text-gray-900">Funcionalidades completas</h2>
-          <p className="mt-4 text-lg text-gray-600 max-w-2xl mx-auto">Do primeiro contato até a matrícula assinada, o Inscribo acompanha cada etapa da jornada do aluno.</p>
+          <p className="mt-4 text-lg text-gray-600 max-w-2xl mx-auto">Do primeiro contato até a matrícula assinada, o Áion Edu acompanha cada etapa da jornada do aluno.</p>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -368,7 +368,7 @@ function Resultados() {
       name: 'Ana Paula Rocha',
       role: 'Diretora — Colégio Futuro Brilhante, SP',
       avatar: 'AP',
-      text: 'Antes eu usava 3 planilhas diferentes. Com o Inscribo, em uma semana já vi onde estavam os gargalos e aumentei em 30% as visitas agendadas.'
+      text: 'Antes eu usava 3 planilhas diferentes. Com o Áion Edu, em uma semana já vi onde estavam os gargalos e aumentei em 30% as visitas agendadas.'
     },
     {
       name: 'Marcos Vinicius',
@@ -561,7 +561,7 @@ function FAQ() {
   const items = [
     {
       q: 'Preciso ter conhecimento técnico para usar?',
-      a: 'Não. O Inscribo foi desenvolvido para equipes de secretaria e comercial. A interface é intuitiva e o onboarding leva menos de 30 minutos.'
+      a: 'Não. O Áion Edu foi desenvolvido para equipes de secretaria e comercial. A interface é intuitiva e o onboarding leva menos de 30 minutos.'
     },
     {
       q: 'Posso importar meus leads de uma planilha?',
@@ -569,7 +569,7 @@ function FAQ() {
     },
     {
       q: 'Como funciona a integração com WhatsApp?',
-      a: 'Conectamos ao WhatsApp Business API. Você centraliza as conversas no painel do Inscribo e configura as automações de follow-up.'
+      a: 'Conectamos ao WhatsApp Business API. Você centraliza as conversas no painel do Áion Edu e configura as automações de follow-up.'
     },
     {
       q: 'Quantos usuários posso adicionar?',
@@ -631,7 +631,7 @@ function CTAFinal() {
           Pronto para lotar sua escola<br />neste período de matrículas?
         </h2>
         <p className="text-xl text-white/70 mb-10 max-w-2xl mx-auto">
-          Junte-se a mais de 200 escolas que já usam o Inscribo para captar mais alunos e reter mais famílias.
+          Junte-se a mais de 200 escolas que já usam o Áion Edu para captar mais alunos e reter mais famílias.
         </p>
         <Link
           to="/login"
@@ -672,7 +672,7 @@ function Footer() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
           <div className="lg:col-span-1">
-            <img src="/Inscribologo.png" alt="Inscribo" className="h-10 w-auto mb-4 brightness-0 invert" />
+            <img src="/Inscribologo.png" alt="Áion Edu" className="h-10 w-auto mb-4 brightness-0 invert" />
             <p className="text-gray-400 text-sm leading-relaxed">CRM educacional para gestão inteligente de matrículas escolares.</p>
           </div>
           {cols.map(col => (
@@ -690,7 +690,7 @@ function Footer() {
         </div>
 
         <div className="border-t border-gray-800 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-gray-500 text-sm">© 2025 Inscribo. Todos os direitos reservados.</p>
+          <p className="text-gray-500 text-sm">© 2025 Áion Edu. Todos os direitos reservados.</p>
           <p className="text-gray-600 text-xs">Feito com ♥ para gestores educacionais brasileiros</p>
         </div>
       </div>

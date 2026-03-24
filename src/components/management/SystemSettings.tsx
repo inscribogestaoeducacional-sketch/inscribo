@@ -169,7 +169,7 @@ function GeralTab() {
                 <p className="text-sm font-medium" style={{ color: settings.primary_color }}>
                   {settings.name || 'Nome da Instituição'}
                 </p>
-                <p className="text-xs text-gray-500">Sistema Inscribo</p>
+                <p className="text-xs text-gray-500">Áion Edu</p>
               </div>
             </div>
           </div>
@@ -504,7 +504,7 @@ function WhatsAppTab() {
 
             <div style={{ padding: '10px 14px', background: '#F8FAFC', borderRadius: 10, fontSize: 13, color: '#475569', marginBottom: 16 }}>
               Número: <strong>{metaConfig.whatsapp_phone_number || '—'}</strong><br />
-              Webhook: <code style={{ fontSize: 11 }}>https://meuinscribo.com.br/api/whatsapp/webhook</code>
+              Webhook: <code style={{ fontSize: 11 }}>https://aionedu.com.br/api/whatsapp/webhook</code>
             </div>
 
             {/* Uso mensal */}
@@ -541,8 +541,8 @@ function WhatsAppTab() {
             <div style={{ fontSize: 13, fontWeight: 700, color: '#92400E', marginBottom: 6 }}>⚠️ Configure o webhook no Meta</div>
             <div style={{ fontSize: 12, color: '#78350F', lineHeight: 1.6 }}>
               Em <strong>developers.facebook.com</strong> → seu app → WhatsApp → Configuração:<br />
-              URL do webhook: <code style={{ background: '#FEF3C7', padding: '2px 6px', borderRadius: 4 }}>https://meuinscribo.com.br/api/whatsapp/webhook</code><br />
-              Token de verificação: <code style={{ background: '#FEF3C7', padding: '2px 6px', borderRadius: 4 }}>inscribo_webhook_2026</code><br />
+              URL do webhook: <code style={{ background: '#FEF3C7', padding: '2px 6px', borderRadius: 4 }}>https://aionedu.com.br/api/whatsapp/webhook</code><br />
+              Token de verificação: <code style={{ background: '#FEF3C7', padding: '2px 6px', borderRadius: 4 }}>aionedu_webhook_2026</code><br />
               Assinar os campos: <strong>messages</strong>
             </div>
           </div>
@@ -562,7 +562,7 @@ function WhatsAppTab() {
           </div>
           <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1A2B4A', margin: '0 0 8px' }}>Conectar WhatsApp Business API</h2>
           <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 24px', lineHeight: 1.6 }}>
-            Use a API Oficial da Meta para atender pais com bot IA e enviar mensagens diretamente pelo Inscribo.
+            Use a API Oficial da Meta para atender pais com bot IA e enviar mensagens diretamente pelo Áion Edu.
           </p>
         </div>
 
@@ -571,7 +571,7 @@ function WhatsAppTab() {
           {[
             { n: 1, label: 'Criar app no Meta', desc: 'developers.facebook.com → Criar app → WhatsApp' },
             { n: 2, label: 'Colar credenciais', desc: 'Phone ID e token de acesso' },
-            { n: 3, label: 'Pronto!', desc: 'WhatsApp conectado ao Inscribo' },
+            { n: 3, label: 'Pronto!', desc: 'WhatsApp conectado ao Áion Edu' },
           ].map((s, i) => (
             <div key={s.n} style={{ flex: 1, padding: '14px 12px', textAlign: 'center', borderRight: i < 2 ? '1px solid #F1F5F9' : 'none', background: '#FAFAFA' }}>
               <div style={{ width: 28, height: 28, background: '#14b8a6', borderRadius: '50%', color: '#fff', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}>{s.n}</div>

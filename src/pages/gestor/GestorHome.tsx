@@ -352,7 +352,7 @@ export default function GestorHome() {
             <Upload size={26} color="#8B5CF6" />
           </div>
           <div>
-            <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#1e2d6b' }}>Bem-vindo ao Inscribo</h3>
+            <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#1e2d6b' }}>Bem-vindo ao Áion Edu</h3>
             <p style={{ margin: 0, fontSize: 13, color: '#64748b', maxWidth: 440, lineHeight: 1.6 }}>
               Para começar, importe os relatórios de matrículas dos últimos anos do seu sistema ERP (SIGA, Totvs ou similar). Isso leva menos de 2 minutos e permite que a IA analise o histórico da sua escola.
             </p>

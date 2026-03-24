@@ -732,7 +732,7 @@ export default function CampaignGeneratorModal({
               <div style={{ width: 32, height: 32, borderRadius: 9, background: '#00A896', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ width: 13, height: 13, borderRadius: '50%', background: 'white', border: '2px solid rgba(255,255,255,0.4)' }} />
               </div>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Inscribo</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Áion Edu</span>
               <span style={{ fontSize: 12, color: '#94A3B8', marginLeft: 4 }}>· Gerador de Campanha</span>
             </div>
             <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #E2E8F0', background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>

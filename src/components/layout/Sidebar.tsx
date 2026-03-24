@@ -100,9 +100,14 @@ export default function Sidebar() {
             <div style={{ width: 14, height: 14, borderRadius: '50%', background: 'white', border: '2px solid rgba(255,255,255,0.5)' }} />
           </div>
           {expanded && (
-            <span style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-              Inscribo
-            </span>
+            <div style={{ overflow: 'hidden' }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', whiteSpace: 'nowrap', display: 'block' }}>
+                Áion Edu
+              </span>
+              <span style={{ fontSize: 10, color: '#64748B', whiteSpace: 'nowrap', display: 'block' }}>
+                Inteligência em matrículas
+              </span>
+            </div>
           )}
         </div>
 

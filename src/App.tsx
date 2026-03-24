@@ -173,7 +173,7 @@ function AppContent() {
           <div className="w-12 h-12 sm:w-16 sm:h-16 mb-4 sm:mb-6 mx-auto">
             <div className="animate-spin rounded-full h-12 w-12 sm:h-16 sm:w-16 border-4 border-blue-200 border-t-blue-600"></div>
           </div>
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">Inscribo</h2>
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">Áion Edu</h2>
           <p className="text-sm sm:text-base text-gray-600">Carregando...</p>
         </div>
       </div>

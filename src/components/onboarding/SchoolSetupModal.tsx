@@ -319,7 +319,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
               <div style={{ width: 32, height: 32, borderRadius: 9, background: '#00A896', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ width: 13, height: 13, borderRadius: '50%', background: 'white', border: '2px solid rgba(255,255,255,0.4)' }} />
               </div>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Inscribo</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Áion Edu</span>
               <span style={{ fontSize: 12, color: '#94A3B8', marginLeft: 4 }}>· Configuração inicial</span>
             </div>
             {step > 0 && (
@@ -349,7 +349,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
               </div>
 
               <h2 style={{ fontSize: 22, fontWeight: 800, color: '#1A2B4A', marginBottom: 10, lineHeight: 1.3 }}>
-                Bem-vindo ao Inscribo{schoolData.name ? `, ${schoolData.name}` : ''}!
+                Bem-vindo ao Áion Edu{schoolData.name ? `, ${schoolData.name}` : ''}!
               </h2>
               <p style={{ fontSize: 14, color: '#64748B', marginBottom: 32, lineHeight: 1.6, maxWidth: 460 }}>
                 Vamos configurar sua escola em poucos minutos para que você tenha acesso a análises completas e esteja pronto para a próxima campanha de matrículas.
@@ -555,7 +555,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
                 {editMode ? 'Configurações atualizadas!' : 'Escola configurada!'}
               </h2>
               <p style={{ fontSize: 14, color: '#64748B', marginBottom: 28, lineHeight: 1.6 }}>
-                {editMode ? 'Suas alterações foram salvas.' : 'Seus dados foram salvos. Você já pode começar a usar o Inscribo.'}
+                {editMode ? 'Suas alterações foram salvas.' : 'Seus dados foram salvos. Você já pode começar a usar o Áion Edu.'}
               </p>
 
               {successFiles.length > 0 && latestFile ? (
