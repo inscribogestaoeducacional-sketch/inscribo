@@ -23,6 +23,37 @@ interface Institution {
 
 type Answers = Record<string, number | string>
 
+// ─── componente de header branded ───────────────────────────
+function BrandedHeader({ institution }: { institution: Institution | null }) {
+  const color = institution?.primary_color ?? '#0F6E56'
+  const name  = institution?.name ?? 'Pesquisa de Satisfação'
+  return (
+    <header style={{
+      backgroundColor: color,
+      padding: '16px 24px',
+      display: 'flex', alignItems: 'center', gap: 12,
+      boxShadow: '0 1px 3px rgba(0,0,0,0.1)', flexShrink: 0,
+    }}>
+      {institution?.logo_url ? (
+        <img src={institution.logo_url} alt={name}
+          style={{ height: 36, objectFit: 'contain' }} />
+      ) : (
+        <div style={{
+          width: 36, height: 36, background: 'rgba(255,255,255,0.2)',
+          borderRadius: 8, display: 'flex', alignItems: 'center',
+          justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 16,
+          flexShrink: 0,
+        }}>
+          {name.charAt(0)}
+        </div>
+      )}
+      <span style={{ color: 'white', fontWeight: 600, fontSize: 17, letterSpacing: '-0.3px' }}>
+        {name}
+      </span>
+    </header>
+  )
+}
+
 // ─── perguntas ──────────────────────────────────────────────
 interface Question {
   id: string
@@ -278,13 +309,7 @@ export default function SatisfactionPage() {
         <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
 
         {/* Header */}
-        <div style={{ background: 'white', borderBottom: '1px solid #E2E8F0', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          {institution?.logo_url ? (
-            <img src={institution.logo_url} alt={institution.name} style={{ height: 36, objectFit: 'contain' }} />
-          ) : (
-            <span style={{ fontSize: 16, fontWeight: 700, color: '#1E2D6B' }}>{institution?.name || 'Pesquisa de Satisfação'}</span>
-          )}
-        </div>
+        <BrandedHeader institution={institution} />
 
         {/* Conteúdo */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '32px 16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

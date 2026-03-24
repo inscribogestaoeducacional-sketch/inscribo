@@ -621,11 +621,201 @@ function WhatsAppTab() {
   )
 }
 
+// ─── Tab: Identidade Visual ───────────────────────────────────────────────────
+function IdentidadeTab() {
+  const { user } = useAuth()
+  const institutionId = user?.institution_id!
+
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  const [primaryColor, setPrimaryColor] = useState('#0F6E56')
+  const [secondaryColor, setSecondaryColor] = useState('#1D9E75')
+  const [institutionName, setInstitutionName] = useState('')
+  const [whiteFilter, setWhiteFilter] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => { loadData() }, []) // eslint-disable-line
+
+  async function loadData() {
+    const { data } = await supabase
+      .from('institutions')
+      .select('name, logo_url, primary_color, secondary_color')
+      .eq('id', institutionId)
+      .maybeSingle()
+    if (data) {
+      setInstitutionName(data.name ?? '')
+      setLogoUrl(data.logo_url ?? null)
+      setPrimaryColor(data.primary_color ?? '#0F6E56')
+      setSecondaryColor(data.secondary_color ?? '#1D9E75')
+    }
+  }
+
+  async function handleLogoUpload(file: File) {
+    if (file.size > 2 * 1024 * 1024) { alert('Arquivo muito grande. Máximo 2MB.'); return }
+    const ext = file.name.split('.').pop()
+    const fileName = `${institutionId}.${ext}`
+    setUploading(true)
+    const { error } = await supabase.storage
+      .from('institution-logos')
+      .upload(fileName, file, { upsert: true })
+    if (!error) {
+      const { data: urlData } = supabase.storage
+        .from('institution-logos')
+        .getPublicUrl(fileName)
+      setLogoUrl(urlData.publicUrl + '?t=' + Date.now())
+    } else {
+      alert('Erro ao fazer upload: ' + error.message)
+    }
+    setUploading(false)
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    await supabase
+      .from('institutions')
+      .update({ logo_url: logoUrl, primary_color: primaryColor, secondary_color: secondaryColor })
+      .eq('id', institutionId)
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 3000)
+  }
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, maxWidth: 900, alignItems: 'start' }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+
+      {/* Esquerda: formulário */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+        {/* Logo */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: '0 0 16px' }}>Logo da escola</h3>
+          <div
+            onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={e => {
+              e.preventDefault(); setDragOver(false)
+              const f = e.dataTransfer.files[0]
+              if (f) handleLogoUpload(f)
+            }}
+            onClick={() => document.getElementById('logo-file-input')?.click()}
+            style={{
+              border: `2px dashed ${dragOver ? primaryColor : '#CBD5E1'}`,
+              borderRadius: 12, padding: '28px 16px', textAlign: 'center',
+              cursor: 'pointer', background: dragOver ? `${primaryColor}10` : '#F8FAFC',
+              transition: 'all 0.2s', marginBottom: 14,
+            }}
+          >
+            <input id="logo-file-input" type="file" accept=".png,.jpg,.jpeg,.svg,.webp"
+              style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f) }} />
+            {uploading ? (
+              <div>
+                <div style={{ width: 28, height: 28, border: `3px solid ${primaryColor}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 8px' }} />
+                <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>Fazendo upload...</p>
+              </div>
+            ) : logoUrl ? (
+              <div>
+                <img src={logoUrl} alt="logo" style={{ height: 48, objectFit: 'contain', margin: '0 auto 8px', display: 'block' }} />
+                <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Clique ou arraste para trocar</p>
+              </div>
+            ) : (
+              <div>
+                <Upload size={28} color="#CBD5E1" style={{ margin: '0 auto 8px', display: 'block' }} />
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#64748B', margin: '0 0 4px' }}>Arraste ou clique para selecionar</p>
+                <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>PNG, JPG, SVG — máx 2MB</p>
+              </div>
+            )}
+          </div>
+          {logoUrl && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#374151', cursor: 'pointer', userSelect: 'none' }}>
+              <input type="checkbox" checked={whiteFilter} onChange={e => setWhiteFilter(e.target.checked)} />
+              Tornar logo branca sobre fundo colorido (preview)
+            </label>
+          )}
+        </div>
+
+        {/* Cores */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: '0 0 16px' }}>Cores da marca</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {[
+              { label: 'Cor primária', val: primaryColor, set: setPrimaryColor },
+              { label: 'Cor secundária', val: secondaryColor, set: setSecondaryColor },
+            ].map(({ label, val, set }) => (
+              <div key={label}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8, display: 'block' }}>{label}</label>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <input type="color" value={val} onChange={e => set(e.target.value)}
+                    style={{ width: 44, height: 44, borderRadius: 10, border: '2px solid #E2E8F0', cursor: 'pointer', padding: 3, background: 'white' }} />
+                  <input type="text" value={val} onChange={e => set(e.target.value)} maxLength={7}
+                    style={{ flex: 1, padding: '10px 14px', borderRadius: 10, border: '1.5px solid #E2E8F0', fontSize: 14, color: '#1A2B4A', fontFamily: 'monospace', outline: 'none', boxSizing: 'border-box' }} />
+                  <div style={{ width: 36, height: 36, borderRadius: 8, background: val, border: '1px solid #E2E8F0', flexShrink: 0 }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button onClick={handleSave} disabled={saving}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 12, border: 'none', background: saved ? '#10B981' : '#00A896', color: 'white', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, alignSelf: 'flex-start', transition: 'background 0.2s' }}>
+          {saved ? <><Check size={15} /> Salvo!</> : saving ? 'Salvando...' : <><Save size={15} /> Salvar identidade visual</>}
+        </button>
+      </div>
+
+      {/* Direita: preview */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: '0 0 16px' }}>Preview — páginas públicas</h3>
+        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #E2E8F0' }}>
+          {/* Header branded */}
+          <header style={{ backgroundColor: primaryColor, padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            {logoUrl ? (
+              <img src={logoUrl} alt={institutionName} style={{ height: 36, objectFit: 'contain', filter: whiteFilter ? 'brightness(0) invert(1)' : 'none' }} />
+            ) : (
+              <div style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.2)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 16 }}>
+                {institutionName.charAt(0) || 'E'}
+              </div>
+            )}
+            <span style={{ color: 'white', fontWeight: 600, fontSize: 17, letterSpacing: '-0.3px' }}>
+              {institutionName || 'Nome da Escola'}
+            </span>
+          </header>
+          {/* Barra de progresso mockada */}
+          <div style={{ height: 4, background: '#E2E8F0' }}>
+            <div style={{ height: '100%', background: primaryColor, width: '42%' }} />
+          </div>
+          {/* Conteúdo mockado */}
+          <div style={{ padding: 20, background: '#F8FAFC' }}>
+            <div style={{ background: 'white', borderRadius: 12, padding: 16, border: '1px solid #E2E8F0', marginBottom: 12 }}>
+              <p style={{ fontSize: 11, color: '#94A3B8', margin: '0 0 6px', textTransform: 'uppercase', fontWeight: 600 }}>Pergunta 1 de 7</p>
+              <p style={{ fontSize: 14, fontWeight: 600, color: '#1E2D6B', margin: '0 0 14px' }}>Como você avalia a escola de forma geral?</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
+                {[1, 2, 3, 4, 5].map(n => (
+                  <div key={n} style={{ padding: '8px 0', borderRadius: 8, border: `2px solid ${n === 5 ? primaryColor : '#E2E8F0'}`, background: n === 5 ? primaryColor : 'white', color: n === 5 ? 'white' : '#374151', textAlign: 'center', fontWeight: 700, fontSize: 15 }}>{n}</div>
+                ))}
+              </div>
+            </div>
+            <div style={{ padding: '12px 20px', background: primaryColor, borderRadius: 12, textAlign: 'center', color: 'white', fontWeight: 700, fontSize: 13 }}>
+              Próxima pergunta →
+            </div>
+          </div>
+        </div>
+        <p style={{ fontSize: 11, color: '#94A3B8', margin: '12px 0 0', textAlign: 'center' }}>
+          Aparece assim nas pesquisas de satisfação e de transferência
+        </p>
+      </div>
+    </div>
+  )
+}
+
 // ─── SystemSettings ───────────────────────────────────────────────────────────
 const TABS = [
-  { id: 'geral', label: 'Geral', icon: Building },
-  { id: 'escola', label: 'Escola', icon: GraduationCap },
-  { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
+  { id: 'geral',      label: 'Geral',      icon: Building },
+  { id: 'escola',     label: 'Escola',     icon: GraduationCap },
+  { id: 'identidade', label: 'Identidade', icon: Palette },
+  { id: 'whatsapp',   label: 'WhatsApp',   icon: MessageCircle },
 ]
 
 export default function SystemSettings() {
@@ -672,6 +862,7 @@ export default function SystemSettings() {
       </div>
 
       {activeTab === 'geral' && <GeralTab />}
+      {activeTab === 'identidade' && <IdentidadeTab />}
       {activeTab === 'whatsapp' && <WhatsAppTab />}
       {activeTab === 'escola' && (
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 28, maxWidth: 500 }}>
