@@ -11,6 +11,9 @@ import LandingPage from './components/landing/LandingPage'
 // Public Pages
 import TransferSurveyPage from './pages/survey/TransferSurveyPage'
 import SatisfactionPage from './pages/survey/SatisfactionPage'
+import Landing from './pages/Landing'
+import Privacidade from './pages/Privacidade'
+import Termos from './pages/Termos'
 
 // Regular User Components
 import Dashboard from './components/dashboard/Dashboard'
@@ -210,7 +213,9 @@ function AppContent() {
   if (!user) {
     return (
       <Routes>
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<Landing />} />
+        <Route path="/privacidade" element={<Privacidade />} />
+        <Route path="/termos" element={<Termos />} />
         <Route path="/login" element={<LoginForm />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
