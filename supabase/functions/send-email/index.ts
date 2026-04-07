@@ -1,7 +1,7 @@
+// @ts-nocheck — Deno runtime (não é Node.js; erros de tipo são esperados no editor)
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
-const FROM = 'Áion Edu <noreply@aionedu.com.br>'
+const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY')
 
 const base = (content: string) => `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 body{font-family:-apple-system,sans-serif;margin:0;background:#f5f5f5}
@@ -58,33 +58,46 @@ const templates: Record<string, (d: any) => { subject: string; html: string }> =
 
 }
 
+const CORS = {
+  'Access-Control-Allow-Origin': 'https://aionedu.com.br',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: { 'Access-Control-Allow-Origin': '*' } })
+    return new Response('ok', { headers: CORS })
   }
 
   try {
     const { type, to, data } = await req.json()
     const template = templates[type]
-    if (!template) return new Response('Template não encontrado', { status: 400 })
+    if (!template) return new Response('Template não encontrado', { status: 400, headers: CORS })
 
     const { subject, html } = template(data)
 
-    const res = await fetch('https://api.resend.com/emails', {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
+        'api-key': BREVO_API_KEY!,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ from: FROM, to: [to], subject, html }),
+      body: JSON.stringify({
+        sender: { name: 'Áion Edu', email: 'noreply@aionedu.com.br' },
+        to: [{ email: to }],
+        subject,
+        htmlContent: html,
+      }),
     })
 
     const result = await res.json()
     return new Response(JSON.stringify(result), {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...CORS, 'Content-Type': 'application/json' },
       status: res.ok ? 200 : 400,
     })
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500 })
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500,
+      headers: CORS,
+    })
   }
 })
