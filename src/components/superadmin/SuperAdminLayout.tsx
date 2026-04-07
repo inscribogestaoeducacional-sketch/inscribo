@@ -18,7 +18,8 @@ import {
   MessageSquare,
   KanbanSquare,
   DollarSign,
-  UserCheck
+  UserCheck,
+  FileText
 } from 'lucide-react'
 
 interface SuperAdminLayoutProps {
@@ -122,18 +123,16 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
     { path: '/super-admin/consultant', icon: Home, label: 'Dashboard', exact: true },
     { path: '/super-admin/consultant/pipeline', icon: KanbanSquare, label: 'Meu Pipeline' },
     { path: '/super-admin/consultant/schools', icon: Building2, label: 'Minhas Escolas' },
+    { path: '/super-admin/consultant/contracts', icon: FileText, label: 'Meus Contratos' },
     { path: '/super-admin/profile', icon: UserCog, label: 'Perfil' },
   ]
 
   const adminMenuItems = [
     { path: '/super-admin', icon: Home, label: 'Dashboard', exact: true },
-    { path: '/super-admin/institutions', icon: Building2, label: 'Instituições' },
-    { path: '/super-admin/financial', icon: DollarSign, label: 'Financeiro' },
+    { path: '/super-admin/schools', icon: Building2, label: 'Escolas' },
     { path: '/super-admin/consultants', icon: UserCheck, label: 'Consultores' },
-    { path: '/super-admin/super-admins', icon: Shield, label: 'Super Admins' },
-    { path: '/super-admin/users', icon: Users, label: 'Todos Usuários' },
-    { path: '/super-admin/analytics', icon: BarChart3, label: 'Analytics' },
-    { path: '/super-admin/notifications', icon: MessageSquare, label: 'Notificações' },
+    { path: '/super-admin/financial', icon: DollarSign, label: 'Financeiro' },
+    { path: '/super-admin/contracts', icon: FileText, label: 'Contratos' },
     { path: '/super-admin/settings', icon: Settings, label: 'Configurações' },
   ]
 

@@ -31,17 +31,26 @@ import UserProfile from './components/management/UserProfile'
 import Sidebar from './components/layout/Sidebar'
 import TopBar from './components/layout/TopBar'
 
-// Super Admin Components
+// Super Admin Components — Admin Geral
 import SuperAdminDashboard from './components/superadmin/SuperAdminDashboard'
 import SuperAdminInstitutions from './components/superadmin/SuperAdminInstitutions'
 import InstitutionDetails from './components/superadmin/InstitutionDetails'
 import SuperAdminsPage from './components/superadmin/SuperAdminsPage'
 import NotificationsPage from './components/superadmin/NotificationsPage'
+import FinancialDashboard from './components/superadmin/FinancialDashboard'
+import ConsultantsOverview from './components/superadmin/ConsultantsOverview'
+import AdminHome from './components/superadmin/AdminHome'
+import AdminSchools from './components/superadmin/AdminSchools'
+import AdminConsultants from './components/superadmin/AdminConsultants'
+import AdminFinancial from './components/superadmin/AdminFinancial'
+import AdminContracts from './components/superadmin/AdminContracts'
+import AdminSettings from './components/superadmin/AdminSettings'
+// Super Admin Components — Consultor
+import ConsultantHome from './components/superadmin/ConsultantHome'
 import ConsultantDashboard from './components/superadmin/ConsultantDashboard'
 import ConsultantPipeline from './components/superadmin/ConsultantPipeline'
 import ConsultantSchools from './components/superadmin/ConsultantSchools'
-import FinancialDashboard from './components/superadmin/FinancialDashboard'
-import ConsultantsOverview from './components/superadmin/ConsultantsOverview'
+import ConsultantContracts from './components/superadmin/ConsultantContracts'
 
 // Protected Route Component — proteção por role (admin/manager/user)
 function ProtectedRoute({
@@ -215,22 +224,29 @@ function AppContent() {
   if (isConsultantArea) {
     return (
       <Routes>
-        {/* Super Admin + Admin Geral */}
-        <Route path="/super-admin" element={<SuperAdminDashboard />} />
+        {/* Admin Geral */}
+        <Route path="/super-admin" element={<AdminHome />} />
+        <Route path="/super-admin/schools" element={<AdminSchools />} />
+        <Route path="/super-admin/consultants" element={<AdminConsultants />} />
+        <Route path="/super-admin/financial" element={<AdminFinancial />} />
+        <Route path="/super-admin/contracts" element={<AdminContracts />} />
+        <Route path="/super-admin/settings" element={<AdminSettings />} />
+        {/* Legacy routes — preserved for backwards compatibility */}
+        <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
         <Route path="/super-admin/institutions" element={<SuperAdminInstitutions />} />
         <Route path="/super-admin/institutions/:id" element={<InstitutionDetails />} />
         <Route path="/super-admin/super-admins" element={<SuperAdminsPage />} />
         <Route path="/super-admin/notifications" element={<NotificationsPage />} />
         <Route path="/super-admin/users" element={<AllUsersPage />} />
         <Route path="/super-admin/analytics" element={<AnalyticsPage />} />
-        <Route path="/super-admin/settings" element={<SettingsPage />} />
         <Route path="/super-admin/profile" element={<ProfilePage />} />
-        <Route path="/super-admin/financial" element={<FinancialDashboard />} />
-        <Route path="/super-admin/consultants" element={<ConsultantsOverview />} />
+        <Route path="/super-admin/legacy-financial" element={<FinancialDashboard />} />
+        <Route path="/super-admin/legacy-consultants" element={<ConsultantsOverview />} />
         {/* Consultor */}
-        <Route path="/super-admin/consultant" element={<ConsultantDashboard />} />
+        <Route path="/super-admin/consultant" element={<ConsultantHome />} />
         <Route path="/super-admin/consultant/pipeline" element={<ConsultantPipeline />} />
         <Route path="/super-admin/consultant/schools" element={<ConsultantSchools />} />
+        <Route path="/super-admin/consultant/contracts" element={<ConsultantContracts />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
         <Route path="/" element={<Navigate to={defaultPath} replace />} />
         <Route path="*" element={<NotFoundPage />} />
