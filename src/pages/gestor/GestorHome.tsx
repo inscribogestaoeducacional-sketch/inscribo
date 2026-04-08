@@ -224,8 +224,11 @@ export default function GestorHome() {
       setVisits((visitsRes.data ?? []) as { id: string; status: string; created_at: string }[])
       setWaMessages((waRes.data ?? []) as { id: string; created_at: string; from_me: boolean }[])
 
+      console.log('[Home] allCycles:', loadedCycles)
+      console.log('[Home] campaignUnlocked:', loadedCycles.some(c => c.status === 'released' || c.status === 'active'))
+
       const alreadySetup = loadedCycles.some(c =>
-        ['setup','draft','active','completed'].includes(c.status ?? '')
+        ['setup','draft','active','completed','released'].includes(c.status ?? '')
       )
       if (!alreadySetup) setShowSetup(true)
 

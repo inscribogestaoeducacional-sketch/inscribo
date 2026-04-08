@@ -26,7 +26,7 @@ export default function ConsultantsOverview() {
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Consultant | null>(null)
   const [showAdd, setShowAdd] = useState(false)
-  const [addForm, setAddForm] = useState({ full_name: '', email: '' })
+  const [addForm, setAddForm] = useState({ full_name: '', email: '', password: '', phone: '', region: '' })
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
 
@@ -65,23 +65,41 @@ export default function ConsultantsOverview() {
     setLoading(false)
   }
 
+  const resetAddForm = () => setAddForm({ full_name: '', email: '', password: '', phone: '', region: '' })
+
   const addConsultant = async () => {
-    if (!addForm.full_name || !addForm.email) return
+    if (!addForm.full_name || !addForm.email || !addForm.password) return
     setSaving(true)
-    const { error } = await supabase.from('users').insert({
-      full_name: addForm.full_name,
-      email: addForm.email,
-      role: 'admin',
-      user_type: 'consultant',
-      active: true,
-      institution_id: '00000000-0000-0000-0000-000000000000', // placeholder
-    })
-    setSaving(false)
-    if (!error) {
+    try {
+      // 1. Cria no Supabase Auth
+      const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
+        email: addForm.email,
+        password: addForm.password,
+        email_confirm: true,
+      })
+      if (authErr) throw authErr
+
+      // 2. Cria na tabela users
+      const { error: userErr } = await supabase.from('users').insert({
+        id: authData.user.id,
+        full_name: addForm.full_name,
+        email: addForm.email,
+        phone: addForm.phone || null,
+        role: 'admin',
+        user_type: 'consultant',
+        active: true,
+        region: addForm.region || null,
+      })
+      if (userErr) throw userErr
+
       setShowAdd(false)
-      setAddForm({ full_name: '', email: '' })
-      showToast(`Consultor ${addForm.full_name} adicionado!`)
+      resetAddForm()
+      showToast(`Consultor ${addForm.full_name} criado com sucesso!`)
       loadData()
+    } catch (e: any) {
+      showToast(`Erro: ${e?.message ?? 'Tente novamente.'}`)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -226,26 +244,56 @@ export default function ConsultantsOverview() {
       {/* Add modal */}
       {showAdd && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-gray-900">Adicionar consultor</h2>
-              <button onClick={() => setShowAdd(false)}><X className="w-5 h-5 text-gray-400" /></button>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Novo consultor</h2>
+                <p className="text-sm text-gray-400 mt-0.5">Cria o acesso e o perfil no sistema</p>
+              </div>
+              <button onClick={() => { setShowAdd(false); resetAddForm() }}><X className="w-5 h-5 text-gray-400" /></button>
             </div>
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">Nome completo *</label>
-                <input className={inputCls} value={addForm.full_name} onChange={e => setAddForm(f => ({ ...f, full_name: e.target.value }))} />
+                <input className={inputCls} placeholder="João Silva" value={addForm.full_name}
+                  onChange={e => setAddForm(f => ({ ...f, full_name: e.target.value }))} />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Email *</label>
-                <input type="email" className={inputCls} value={addForm.email} onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))} />
+                <label className="block text-xs font-semibold text-gray-600 mb-1">E-mail *</label>
+                <input type="email" className={inputCls} placeholder="consultor@aionedu.com.br" value={addForm.email}
+                  onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))} />
               </div>
-              <p className="text-xs text-gray-400">O consultor poderá acessar o sistema com email e senha definida pelo próprio.</p>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Senha inicial *</label>
+                <input type="password" className={inputCls} placeholder="Mínimo 8 caracteres" value={addForm.password}
+                  onChange={e => setAddForm(f => ({ ...f, password: e.target.value }))} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Telefone</label>
+                  <input className={inputCls} placeholder="(83) 99999-9999" value={addForm.phone}
+                    onChange={e => setAddForm(f => ({ ...f, phone: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Região de atuação</label>
+                  <input className={inputCls} placeholder="Nordeste" value={addForm.region}
+                    onChange={e => setAddForm(f => ({ ...f, region: e.target.value }))} />
+                </div>
+              </div>
             </div>
             <div className="flex gap-3 mt-6">
-              <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">Cancelar</button>
-              <button onClick={addConsultant} disabled={saving || !addForm.full_name || !addForm.email} className="flex-1 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-50">
-                {saving ? 'Adicionando...' : 'Adicionar'}
+              <button onClick={() => { setShowAdd(false); resetAddForm() }}
+                className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">
+                Cancelar
+              </button>
+              <button onClick={addConsultant}
+                disabled={saving || !addForm.full_name || !addForm.email || !addForm.password}
+                className="flex-1 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                {saving ? (
+                  <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Criando...</>
+                ) : (
+                  <><Plus className="w-4 h-4" /> Criar consultor</>
+                )}
               </button>
             </div>
           </div>

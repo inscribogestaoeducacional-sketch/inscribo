@@ -26,6 +26,12 @@ export default function AdminSchools() {
   const [endDate, setEndDate] = useState('')
   const [releasing, setReleasing] = useState(false)
   const [editModal, setEditModal] = useState<any | null>(null)
+  const [newSchoolModal, setNewSchoolModal] = useState(false)
+  const [newSchoolForm, setNewSchoolForm] = useState({
+    name: '', cnpj: '', city: '', state: '', email: '', password: '',
+    phone: '', plan: 'trial', consultantId: '',
+  })
+  const [savingSchool, setSavingSchool] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
@@ -110,6 +116,67 @@ export default function AdminSchools() {
     }
   }
 
+  const handleCreateSchool = async () => {
+    const f = newSchoolForm
+    if (!f.name || !f.city || !f.state || !f.email || !f.password) return
+    setSavingSchool(true)
+    try {
+      // 1. Cria usuário no Auth
+      const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
+        email: f.email,
+        password: f.password,
+        email_confirm: true,
+      })
+      if (authErr) throw authErr
+
+      // 2. Cria institution
+      const { data: institution, error: instErr } = await supabase
+        .from('institutions')
+        .insert({
+          name: f.name,
+          cnpj: f.cnpj || null,
+          city: f.city,
+          state: f.state,
+          phone: f.phone || null,
+          consultant_id: f.consultantId || null,
+          plan: f.plan,
+          plan_status: 'active',
+          email: f.email,
+        })
+        .select()
+        .single()
+      if (instErr) throw instErr
+
+      // 3. Cria user vinculado
+      await supabase.from('users').insert({
+        id: authData.user.id,
+        email: f.email,
+        full_name: f.name,
+        institution_id: institution.id,
+        role: 'admin',
+        user_type: 'school_user',
+      })
+
+      // 4. E-mail de boas-vindas
+      await supabase.functions.invoke('send-email', {
+        body: {
+          type: 'welcome',
+          to: f.email,
+          data: { school_name: f.name, year: new Date().getFullYear() + 1 },
+        },
+      })
+
+      showToast(`Escola "${f.name}" criada! E-mail enviado para o gestor.`)
+      setNewSchoolModal(false)
+      setNewSchoolForm({ name: '', cnpj: '', city: '', state: '', email: '', password: '', phone: '', plan: 'trial', consultantId: '' })
+      loadData()
+    } catch (e: any) {
+      showToast(`Erro: ${e?.message ?? 'Tente novamente.'}`, false)
+    } finally {
+      setSavingSchool(false)
+    }
+  }
+
   const handleSuspend = async (inst: any) => {
     if (!confirm(`Suspender acesso de ${inst.name}?`)) return
     await supabase.from('institutions').update({ plan_status: 'suspended' }).eq('id', inst.id)
@@ -163,14 +230,22 @@ export default function AdminSchools() {
             <h1 className="text-2xl font-bold text-gray-900">Escolas</h1>
             <p className="text-gray-500 mt-1">{institutions.length} escola{institutions.length !== 1 ? 's' : ''} cadastrada{institutions.length !== 1 ? 's' : ''}</p>
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              className="pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-cyan-500 outline-none w-64"
-              placeholder="Buscar escola ou cidade..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                className="pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-cyan-500 outline-none w-64"
+                placeholder="Buscar escola ou cidade..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <button
+              onClick={() => setNewSchoolModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm hover:from-cyan-600 hover:to-blue-700 shadow-sm whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" /> Nova escola
+            </button>
           </div>
         </div>
 
@@ -420,6 +495,109 @@ export default function AdminSchools() {
                 className="flex-1 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm"
               >
                 Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* New School Modal */}
+      {newSchoolModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Nova escola</h2>
+                <p className="text-sm text-gray-400 mt-0.5">Cria a instituição e o acesso do gestor</p>
+              </div>
+              <button onClick={() => setNewSchoolModal(false)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Nome da escola *</label>
+                <input className={inputCls} placeholder="Ex: Colégio São Francisco" value={newSchoolForm.name}
+                  onChange={e => setNewSchoolForm(f => ({ ...f, name: e.target.value }))} />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">CNPJ</label>
+                <input className={inputCls} placeholder="00.000.000/0001-00" value={newSchoolForm.cnpj}
+                  onChange={e => setNewSchoolForm(f => ({ ...f, cnpj: e.target.value }))} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Cidade *</label>
+                  <input className={inputCls} placeholder="João Pessoa" value={newSchoolForm.city}
+                    onChange={e => setNewSchoolForm(f => ({ ...f, city: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Estado *</label>
+                  <input className={inputCls} placeholder="PB" maxLength={2} value={newSchoolForm.state}
+                    onChange={e => setNewSchoolForm(f => ({ ...f, state: e.target.value.toUpperCase() }))} />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Telefone</label>
+                <input className={inputCls} placeholder="(83) 99999-9999" value={newSchoolForm.phone}
+                  onChange={e => setNewSchoolForm(f => ({ ...f, phone: e.target.value }))} />
+              </div>
+
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Acesso do gestor</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">E-mail do gestor *</label>
+                    <input type="email" className={inputCls} placeholder="gestor@escola.com.br" value={newSchoolForm.email}
+                      onChange={e => setNewSchoolForm(f => ({ ...f, email: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Senha inicial *</label>
+                    <input type="password" className={inputCls} placeholder="Mínimo 8 caracteres" value={newSchoolForm.password}
+                      onChange={e => setNewSchoolForm(f => ({ ...f, password: e.target.value }))} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Plano</label>
+                  <select className={inputCls} value={newSchoolForm.plan}
+                    onChange={e => setNewSchoolForm(f => ({ ...f, plan: e.target.value }))}>
+                    <option value="trial">Trial</option>
+                    <option value="escola">Escola (R$ 550/mês)</option>
+                    <option value="rede">Rede</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Consultor responsável</label>
+                  <select className={inputCls} value={newSchoolForm.consultantId}
+                    onChange={e => setNewSchoolForm(f => ({ ...f, consultantId: e.target.value }))}>
+                    <option value="">Sem consultor</option>
+                    {consultants.map(c => (
+                      <option key={c.id} value={c.id}>{c.full_name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setNewSchoolModal(false)}
+                className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreateSchool}
+                disabled={savingSchool || !newSchoolForm.name || !newSchoolForm.city || !newSchoolForm.state || !newSchoolForm.email || !newSchoolForm.password}
+                className="flex-1 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {savingSchool ? (
+                  <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Criando...</>
+                ) : (
+                  <><Plus className="w-4 h-4" /> Criar escola</>
+                )}
               </button>
             </div>
           </div>

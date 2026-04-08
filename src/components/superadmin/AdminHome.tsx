@@ -7,7 +7,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import {
   DollarSign, Building2, AlertTriangle, TrendingUp,
   Plus, Megaphone, UserPlus, ArrowRight, CheckCircle2, Clock,
-  FileText, Activity
+  FileText, Activity, Bell, X
 } from 'lucide-react'
 
 function Skeleton({ h = 'h-4', w = 'w-full', cls = '' }: { h?: string; w?: string; cls?: string }) {
@@ -25,11 +25,18 @@ function fmtBRL(n: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n)
 }
 
+const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all'
+
 export default function AdminHome() {
   const [institutions, setInstitutions] = useState<any[]>([])
   const [contracts, setContracts] = useState<any[]>([])
   const [payments, setPayments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [toast, setToast] = useState('')
+
+  const [notifModal, setNotifModal] = useState(false)
+  const [notifForm, setNotifForm] = useState({ title: '', message: '', type: 'info', target: 'all', institutionId: '' })
+  const [sendingNotif, setSendingNotif] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
@@ -44,6 +51,39 @@ export default function AdminHome() {
     setContracts(contractRes.data || [])
     setPayments(payRes.data || [])
     setLoading(false)
+  }
+
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3500) }
+
+  const handleSendNotification = async () => {
+    const f = notifForm
+    if (!f.title || !f.message) return
+    setSendingNotif(true)
+    try {
+      if (f.target === 'all') {
+        const records = institutions.map(i => ({
+          institution_id: i.id,
+          title: f.title,
+          message: f.message,
+          type: f.type,
+        }))
+        await supabase.from('system_notifications').insert(records)
+      } else {
+        await supabase.from('system_notifications').insert({
+          institution_id: f.institutionId || null,
+          title: f.title,
+          message: f.message,
+          type: f.type,
+        })
+      }
+      showToast('Notificação enviada com sucesso!')
+      setNotifModal(false)
+      setNotifForm({ title: '', message: '', type: 'info', target: 'all', institutionId: '' })
+    } catch {
+      showToast('Erro ao enviar notificação.')
+    } finally {
+      setSendingNotif(false)
+    }
   }
 
   // ── KPIs ──────────────────────────────────────────────────────
@@ -88,6 +128,12 @@ export default function AdminHome() {
     <SuperAdminLayout>
       <div className="p-8 space-y-8">
 
+        {toast && (
+          <div className="fixed top-6 right-6 z-50 bg-green-600 text-white px-5 py-3 rounded-xl shadow-xl text-sm font-medium animate-fade-in">
+            {toast}
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
@@ -96,6 +142,12 @@ export default function AdminHome() {
               {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
           </div>
+          <button
+            onClick={() => setNotifModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl font-semibold text-sm hover:bg-gray-50 transition-colors"
+          >
+            <Bell className="w-4 h-4" /> Enviar notificação
+          </button>
         </div>
 
         {/* KPIs */}
@@ -288,6 +340,92 @@ export default function AdminHome() {
         </div>
 
       </div>
+
+      {/* Notification Modal */}
+      {notifModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Enviar notificação</h2>
+                <p className="text-sm text-gray-400 mt-0.5">Aparece no sistema para os gestores das escolas</p>
+              </div>
+              <button onClick={() => setNotifModal(false)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Destinatário</label>
+                <select className={inputCls} value={notifForm.target}
+                  onChange={e => setNotifForm(f => ({ ...f, target: e.target.value, institutionId: '' }))}>
+                  <option value="all">Todas as escolas</option>
+                  <option value="specific">Escola específica</option>
+                </select>
+              </div>
+
+              {notifForm.target === 'specific' && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Escola *</label>
+                  <select className={inputCls} value={notifForm.institutionId}
+                    onChange={e => setNotifForm(f => ({ ...f, institutionId: e.target.value }))}>
+                    <option value="">Selecione...</option>
+                    {institutions.map(i => (
+                      <option key={i.id} value={i.id}>{i.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Tipo</label>
+                <div className="flex gap-2">
+                  {[
+                    { value: 'info',    label: 'Informativo', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+                    { value: 'warning', label: 'Alerta',      color: 'bg-amber-100 text-amber-700 border-amber-200' },
+                    { value: 'urgent',  label: 'Urgente',     color: 'bg-red-100 text-red-700 border-red-200' },
+                  ].map(t => (
+                    <button key={t.value} onClick={() => setNotifForm(f => ({ ...f, type: t.value }))}
+                      className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition-all ${notifForm.type === t.value ? t.color : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Título *</label>
+                <input className={inputCls} placeholder="Ex: Manutenção programada" value={notifForm.title}
+                  onChange={e => setNotifForm(f => ({ ...f, title: e.target.value }))} />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Mensagem *</label>
+                <textarea className={inputCls} rows={3} placeholder="Descreva a notificação..."
+                  value={notifForm.message}
+                  onChange={e => setNotifForm(f => ({ ...f, message: e.target.value }))} />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setNotifModal(false)}
+                className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">
+                Cancelar
+              </button>
+              <button
+                onClick={handleSendNotification}
+                disabled={sendingNotif || !notifForm.title || !notifForm.message || (notifForm.target === 'specific' && !notifForm.institutionId)}
+                className="flex-1 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {sendingNotif ? (
+                  <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Enviando...</>
+                ) : (
+                  <><Bell className="w-4 h-4" /> Enviar notificação</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </SuperAdminLayout>
   )
 }
