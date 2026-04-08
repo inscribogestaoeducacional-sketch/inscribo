@@ -174,22 +174,33 @@ export default function AdminSchools() {
 
       if (instErr) throw new Error(instErr.message)
 
-      // 3. Chama a Edge Function para criar o usuário no Auth + perfil
-      const { data: fnData, error: fnErr } = await supabase.functions.invoke('create-user', {
-        body: {
-          email: newForm.email.trim().toLowerCase(),
-          password: newForm.password,
-          full_name: newForm.name.trim(),
-          role: 'admin',
-          user_type: 'school_user',
-          institution_id: institution.id,
-        },
-      })
+      // 3. Chama a Edge Function via fetch com anon key explícito
+      const fnResponse = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            email: newForm.email.trim().toLowerCase(),
+            password: newForm.password,
+            full_name: newForm.name.trim(),
+            role: 'admin',
+            user_type: 'school_user',
+            institution_id: institution.id,
+          }),
+        }
+      )
 
-      if (fnErr || fnData?.error) {
+      const fnData = await fnResponse.json()
+
+      if (!fnResponse.ok || fnData?.error) {
         // Rollback: remove a institution criada
         await supabase.from('institutions').delete().eq('id', institution.id)
-        throw new Error(fnData?.error || fnErr?.message || 'Erro ao criar usuário')
+        throw new Error(fnData?.error || 'Erro ao criar usuário')
       }
 
       showToast(`Escola "${newForm.name}" criada com sucesso! Gestor pode fazer login agora.`)
