@@ -1,350 +1,689 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
-// ─── Global CSS ────────────────────────────────────────────────────────────────
-const GLOBAL_CSS = `
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html { scroll-behavior: smooth; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #111827; }
+// ─── Global CSS ────────────────────────────────────────────────────────────
+const CSS = `
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #111827; overflow-x: hidden; }
 
-  @keyframes fadeInUp {
-    from { opacity: 0; transform: translateY(28px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to   { opacity: 1; }
-  }
-  .anim { opacity: 0; }
-  .anim.visible { animation: fadeInUp 0.6s ease forwards; }
-  .anim.visible:nth-child(1) { animation-delay: 0.05s; }
-  .anim.visible:nth-child(2) { animation-delay: 0.15s; }
-  .anim.visible:nth-child(3) { animation-delay: 0.25s; }
-  .anim.visible:nth-child(4) { animation-delay: 0.35s; }
-  .anim.visible:nth-child(5) { animation-delay: 0.45s; }
-  .anim.visible:nth-child(6) { animation-delay: 0.55s; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(28px); } to { opacity:1; transform:translateY(0); } }
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+@keyframes pulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.03); } }
+@keyframes barFill { from { width:0; } to { width:var(--w); } }
 
-  .nav-link {
-    color: #374151;
-    text-decoration: none;
-    font-size: 14px;
-    font-weight: 500;
-    padding: 6px 4px;
-    border-bottom: 2px solid transparent;
-    transition: color 0.2s, border-color 0.2s;
-  }
-  .nav-link:hover { color: #00523C; border-bottom-color: #00523C; }
+.anim { opacity:0; transform:translateY(24px); transition:opacity .65s ease, transform .65s ease; }
+.anim.visible { opacity:1; transform:none; }
+.anim-d1.visible { transition-delay:.08s; }
+.anim-d2.visible { transition-delay:.16s; }
+.anim-d3.visible { transition-delay:.24s; }
+.anim-d4.visible { transition-delay:.32s; }
+.anim-d5.visible { transition-delay:.40s; }
+.anim-d6.visible { transition-delay:.48s; }
+.anim-d7.visible { transition-delay:.56s; }
+.anim-d8.visible { transition-delay:.64s; }
 
-  .btn-primary {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: #00523C;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 12px 24px;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    text-decoration: none;
-    transition: background 0.2s, transform 0.15s;
-  }
-  .btn-primary:hover { background: #003d2d; transform: translateY(-1px); }
+.nav-link { color:#374151; text-decoration:none; font-size:14px; font-weight:500; transition:color .2s; white-space:nowrap; }
+.nav-link:hover { color:#00523C; }
 
-  .btn-outline {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: transparent;
-    color: #00523C;
-    border: 2px solid #00523C;
-    border-radius: 8px;
-    padding: 10px 22px;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    text-decoration: none;
-    transition: all 0.2s;
-  }
-  .btn-outline:hover { background: #00523C; color: #fff; }
+.btn-primary {
+  display:inline-flex; align-items:center; gap:8px;
+  background:linear-gradient(135deg,#00523C,#00A896);
+  color:#fff; border:none; border-radius:10px;
+  padding:14px 28px; font-size:15px; font-weight:700;
+  cursor:pointer; text-decoration:none;
+  transition:transform .15s, box-shadow .15s;
+  box-shadow:0 4px 16px rgba(0,82,60,.3);
+}
+.btn-primary:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,82,60,.4); }
 
-  .btn-white {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: #fff;
-    color: #00523C;
-    border: none;
-    border-radius: 8px;
-    padding: 14px 28px;
-    font-size: 16px;
-    font-weight: 700;
-    cursor: pointer;
-    text-decoration: none;
-    transition: all 0.2s;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-  }
-  .btn-white:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.18); }
+.btn-secondary {
+  display:inline-flex; align-items:center; gap:8px;
+  background:rgba(255,255,255,.15); color:#fff;
+  border:1.5px solid rgba(255,255,255,.4); border-radius:10px;
+  padding:13px 24px; font-size:14px; font-weight:600;
+  cursor:pointer; text-decoration:none; transition:background .2s;
+}
+.btn-secondary:hover { background:rgba(255,255,255,.25); }
 
-  .card {
-    background: #fff;
-    border-radius: 16px;
-    padding: 28px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
-    border: 1px solid #f0f0f0;
-    transition: box-shadow 0.2s, transform 0.2s;
-  }
-  .card:hover { box-shadow: 0 8px 32px rgba(0,82,60,0.12); transform: translateY(-2px); }
+.module-card { background:#fff; border-radius:16px; padding:28px; border:1.5px solid #E5E7EB; transition:border-color .2s, box-shadow .2s; }
+.module-card:hover { border-color:#00A896; box-shadow:0 8px 32px rgba(0,168,150,.1); }
 
-  .form-input {
-    width: 100%;
-    padding: 12px 16px;
-    border: 1.5px solid #d1d5db;
-    border-radius: 8px;
-    font-size: 15px;
-    outline: none;
-    transition: border-color 0.2s;
-    background: #fff;
-  }
-  .form-input:focus { border-color: #00523C; box-shadow: 0 0 0 3px rgba(0,82,60,0.08); }
+.check-item { display:flex; align-items:flex-start; gap:10px; margin-bottom:10px; }
+.check-icon { width:20px; height:20px; border-radius:50%; background:#D1FAE5; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; font-size:11px; color:#065F46; font-weight:800; }
 
-  .section-alt { background: #f9fafb; }
+.faq-item { border-bottom:1px solid #E5E7EB; }
+.faq-btn { width:100%; text-align:left; background:none; border:none; padding:18px 0; font-size:15px; font-weight:600; color:#111827; cursor:pointer; display:flex; justify-content:space-between; align-items:center; }
 
-  @media (max-width: 768px) {
-    .hide-mobile { display: none !important; }
-    .hero-grid { flex-direction: column !important; }
-    .features-grid { grid-template-columns: 1fr !important; }
-    .stats-grid { grid-template-columns: 1fr 1fr !important; }
-    .footer-grid { grid-template-columns: 1fr 1fr !important; }
-    .steps-grid { flex-direction: column !important; }
-  }
+.input-field { width:100%; padding:11px 14px; border-radius:9px; border:1.5px solid #D1D5DB; font-size:14px; outline:none; transition:border-color .2s; background:#fff; }
+.input-field:focus { border-color:#00A896; box-shadow:0 0 0 3px rgba(0,168,150,.1); }
+
+@media (max-width:1024px) {
+  .hero-inner { flex-direction:column !important; text-align:center; }
+  .hero-ctas { justify-content:center !important; }
+  .hero-mockup { display:none !important; }
+  .modules-grid { grid-template-columns:1fr 1fr !important; }
+  .numeros-grid { grid-template-columns:repeat(2,1fr) !important; }
+  .footer-cols { grid-template-columns:1fr 1fr !important; }
+}
+@media (max-width:768px) {
+  .nav-links { display:none !important; }
+  .nav-mobile-btn { display:flex !important; }
+  .hero-text h1 { font-size:32px !important; }
+  .modules-grid { grid-template-columns:1fr !important; }
+  .numeros-grid { grid-template-columns:1fr 1fr !important; }
+  .dores-grid { grid-template-columns:1fr !important; }
+  .steps-grid { grid-template-columns:1fr !important; }
+  .wa-grid { flex-direction:column !important; }
+  .footer-cols { grid-template-columns:1fr !important; }
+  .preco-features { grid-template-columns:1fr !important; }
+  .form-grid { grid-template-columns:1fr !important; }
+}
 `
 
-// ─── Scroll animation hook ─────────────────────────────────────────────────────
-function useScrollAnimations() {
+// ─── Hook de animação por scroll ───────────────────────────────────────────
+function useAnim() {
+  const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      entries => entries.forEach(e => {
-        if (e.isIntersecting) e.target.classList.add('visible')
-      }),
-      { threshold: 0.08 }
-    )
-    const els = document.querySelectorAll('.anim')
-    els.forEach(el => observer.observe(el))
-    return () => observer.disconnect()
+    const el = ref.current; if (!el) return
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { el.classList.add('visible'); obs.disconnect() } }, { threshold: 0.08 })
+    obs.observe(el)
+    return () => obs.disconnect()
   }, [])
+  return ref
 }
 
-// ─── Header ────────────────────────────────────────────────────────────────────
+// ─── Header fixo ──────────────────────────────────────────────────────────
 function Header() {
   const [scrolled, setScrolled] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-
+  const [mobileOpen, setMobileOpen] = useState(false)
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 20)
-    window.addEventListener('scroll', onScroll)
-    return () => window.removeEventListener('scroll', onScroll)
+    const h = () => setScrolled(window.scrollY > 20)
+    window.addEventListener('scroll', h)
+    return () => window.removeEventListener('scroll', h)
   }, [])
-
-  const navLinks = [
-    { label: 'Funcionalidades', href: '#funcionalidades' },
-    { label: 'Como funciona', href: '#como-funciona' },
-    { label: 'Preços', href: '#precos' },
-    { label: 'Contato', href: '#contato' },
-  ]
-
   return (
-    <header style={{
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
-      background: scrolled ? 'rgba(255,255,255,0.97)' : 'rgba(255,255,255,0.95)',
-      backdropFilter: 'blur(10px)',
-      borderBottom: `1px solid ${scrolled ? '#e5e7eb' : 'transparent'}`,
-      transition: 'all 0.3s',
-      boxShadow: scrolled ? '0 1px 12px rgba(0,0,0,0.06)' : 'none',
-    }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+    <>
+      <nav style={{
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 200,
+        background: scrolled ? 'rgba(255,255,255,0.97)' : 'rgba(255,255,255,0.0)',
+        backdropFilter: scrolled ? 'blur(16px)' : 'none',
+        borderBottom: scrolled ? '1px solid #E5E7EB' : '1px solid transparent',
+        padding: '0 32px', height: 64,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        transition: 'background .3s, border-color .3s, backdrop-filter .3s',
+      }}>
         {/* Logo */}
-        <a href="/" style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column' }}>
-          <span style={{ fontWeight: 800, fontSize: 20, color: '#00523C', letterSpacing: '-0.5px' }}>Áion Edu</span>
-          <span style={{ fontSize: 10, color: '#6b7280', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Inteligência em matrículas</span>
-        </a>
-
-        {/* Desktop nav */}
-        <nav className="hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
-          {navLinks.map(l => (
-            <a key={l.href} href={l.href} className="nav-link">{l.label}</a>
-          ))}
-        </nav>
-
-        {/* Desktop CTAs */}
-        <div className="hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <a href="/login" className="btn-outline" style={{ padding: '8px 18px', fontSize: 14 }}>Entrar</a>
-          <a href="#demo" className="btn-primary" style={{ padding: '8px 18px', fontSize: 14 }}>Agendar demonstração</a>
-        </div>
-
-        {/* Mobile menu toggle */}
-        <button
-          onClick={() => setMenuOpen(!menuOpen)}
-          style={{ display: 'none', background: 'none', border: 'none', cursor: 'pointer', padding: 8 }}
-          className="mobile-menu-btn"
-          aria-label="Menu"
-        >
-          {menuOpen ? (
-            <svg width="24" height="24" fill="none" stroke="#00523C" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          ) : (
-            <svg width="24" height="24" fill="none" stroke="#00523C" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-          )}
-        </button>
-      </div>
-
-      {/* Mobile menu */}
-      {menuOpen && (
-        <div style={{ background: '#fff', borderTop: '1px solid #e5e7eb', padding: '16px 24px 24px' }}>
-          {navLinks.map(l => (
-            <a key={l.href} href={l.href} onClick={() => setMenuOpen(false)}
-              style={{ display: 'block', padding: '12px 0', color: '#374151', textDecoration: 'none', fontSize: 15, fontWeight: 500, borderBottom: '1px solid #f3f4f6' }}>
-              {l.label}
-            </a>
-          ))}
-          <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-            <a href="/login" className="btn-outline" style={{ flex: 1, justifyContent: 'center', fontSize: 14 }}>Entrar</a>
-            <a href="#demo" className="btn-primary" onClick={() => setMenuOpen(false)} style={{ flex: 1, justifyContent: 'center', fontSize: 14 }}>Demo grátis</a>
+        <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 9, background: 'linear-gradient(135deg,#00523C,#00A896)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'white', border: '2px solid rgba(255,255,255,0.5)' }} />
           </div>
+          <span style={{ fontWeight: 900, fontSize: 17, color: scrolled ? '#00523C' : '#fff' }}>Áion Edu</span>
+        </Link>
+        {/* Links desktop */}
+        <div className="nav-links" style={{ display: 'flex', gap: 28, alignItems: 'center' }}>
+          {[['#modulos','Módulos'],['#whatsapp','WhatsApp'],['#relatorios','Relatórios'],['#precos','Preços'],['#demo','Demo']].map(([href, label]) => (
+            <a key={href} href={href} className="nav-link" style={{ color: scrolled ? '#374151' : 'rgba(255,255,255,.85)' }}>{label}</a>
+          ))}
+          <Link to="/blog" className="nav-link" style={{ color: scrolled ? '#374151' : 'rgba(255,255,255,.85)' }}>Blog</Link>
+        </div>
+        {/* CTAs */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <Link to="/login" style={{ padding: '8px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: 'none', color: scrolled ? '#374151' : '#fff', border: `1.5px solid ${scrolled ? '#E5E7EB' : 'rgba(255,255,255,.4)'}`, transition: 'all .2s' }}>
+            Entrar
+          </Link>
+          <a href="#demo" className="btn-primary" style={{ padding: '8px 18px', fontSize: 14, boxShadow: 'none' }}>
+            Agendar Demo →
+          </a>
+          {/* Mobile hamburger */}
+          <button className="nav-mobile-btn" onClick={() => setMobileOpen(!mobileOpen)} style={{ display: 'none', background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexDirection: 'column', gap: 5 }}>
+            {[0,1,2].map(i => <div key={i} style={{ width: 22, height: 2, background: scrolled ? '#374151' : '#fff', borderRadius: 2 }} />)}
+          </button>
+        </div>
+      </nav>
+      {/* Mobile menu */}
+      {mobileOpen && (
+        <div style={{ position: 'fixed', top: 64, left: 0, right: 0, zIndex: 199, background: '#fff', borderBottom: '1px solid #E5E7EB', padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {[['#modulos','Módulos'],['#whatsapp','WhatsApp'],['#relatorios','Relatórios'],['#precos','Preços'],['#demo','Demo']].map(([href, label]) => (
+            <a key={href} href={href} onClick={() => setMobileOpen(false)} style={{ color: '#374151', textDecoration: 'none', fontSize: 15, fontWeight: 500, padding: '8px 0', borderBottom: '1px solid #F3F4F6' }}>{label}</a>
+          ))}
+          <Link to="/login" onClick={() => setMobileOpen(false)} style={{ color: '#374151', textDecoration: 'none', fontSize: 15, fontWeight: 500, padding: '8px 0' }}>Entrar</Link>
         </div>
       )}
-    </header>
+    </>
   )
 }
 
-// ─── Hero ──────────────────────────────────────────────────────────────────────
+// ─── HERO ─────────────────────────────────────────────────────────────────
 function Hero() {
   return (
-    <section style={{
-      background: 'linear-gradient(135deg, #00523C 0%, #007a5e 50%, #00A896 100%)',
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      padding: '100px 24px 80px',
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
-      {/* Background shapes */}
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-        <div style={{ position: 'absolute', top: -100, right: -100, width: 500, height: 500, borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
-        <div style={{ position: 'absolute', bottom: -150, left: -80, width: 400, height: 400, borderRadius: '50%', background: 'rgba(255,255,255,0.03)' }} />
-        <div style={{ position: 'absolute', top: '40%', right: '8%', width: 200, height: 200, borderRadius: '50%', background: 'rgba(0,168,150,0.2)' }} />
-      </div>
-
-      <div style={{ maxWidth: 1200, margin: '0 auto', width: '100%', position: 'relative' }}>
-        <div className="hero-grid" style={{ display: 'flex', alignItems: 'center', gap: 64 }}>
-          {/* Text */}
-          <div style={{ flex: '1 1 540px' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.12)', borderRadius: 100, padding: '6px 16px', marginBottom: 24 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#4ade80', flexShrink: 0 }} />
-              <span style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: 500 }}>Plataforma em operação · Primeiro cliente desde 2026</span>
+    <section style={{ background: 'linear-gradient(135deg,#00523C 0%,#006B50 40%,#00A896 100%)', padding: '130px 32px 90px', minHeight: '92vh', display: 'flex', alignItems: 'center' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
+        <div className="hero-inner" style={{ display: 'flex', alignItems: 'center', gap: 64, width: '100%' }}>
+          {/* Texto */}
+          <div className="hero-text" style={{ flex: 1 }}>
+            {/* Badge */}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.15)', borderRadius: 999, padding: '6px 14px', marginBottom: 28, animation: 'fadeIn .8s ease both' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ADE80', display: 'inline-block' }} />
+              <span style={{ color: 'rgba(255,255,255,.9)', fontSize: 13, fontWeight: 600 }}>CRM + WhatsApp + IA para escolas privadas</span>
             </div>
-
-            <h1 style={{ fontSize: 'clamp(32px, 5vw, 56px)', fontWeight: 800, color: '#fff', lineHeight: 1.1, marginBottom: 20, letterSpacing: '-1px' }}>
-              Chega de perder alunos{' '}
-              <span style={{ color: '#a7f3d0' }}>por falta de processo</span>
+            <h1 style={{ fontSize: 48, fontWeight: 900, color: '#fff', lineHeight: 1.15, marginBottom: 24, animation: 'fadeUp .8s ease .1s both' }}>
+              Sua escola vai matricular mais.<br />
+              <span style={{ color: '#A7F3D0' }}>Com processo, dados e IA.</span>
             </h1>
-
-            <p style={{ fontSize: 'clamp(16px, 2vw, 20px)', color: 'rgba(255,255,255,0.85)', lineHeight: 1.6, marginBottom: 36, maxWidth: 520 }}>
-              A Áion Edu é a plataforma de inteligência em matrículas para escolas privadas brasileiras.
-              CRM, IA, WhatsApp e relatórios em um só lugar.
+            <p style={{ fontSize: 18, color: 'rgba(255,255,255,.85)', lineHeight: 1.7, marginBottom: 36, maxWidth: 560, animation: 'fadeUp .8s ease .2s both' }}>
+              A Áion Edu é a plataforma completa para gestão de matrículas em escolas privadas. Do primeiro contato com a família até o aluno sentado na sala de aula.
             </p>
-
-            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 40 }}>
-              <a href="#demo" className="btn-white">
-                Agendar demonstração gratuita
-                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12l7-7M12 12V5H5"/></svg>
+            <div className="hero-ctas" style={{ display: 'flex', gap: 14, flexWrap: 'wrap', animation: 'fadeUp .8s ease .3s both' }}>
+              <a href="#demo" className="btn-primary" style={{ fontSize: 16, padding: '15px 32px' }}>
+                Quero uma demonstração gratuita →
               </a>
-              <a href="#como-funciona" style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8,
-                color: 'rgba(255,255,255,0.9)', textDecoration: 'none', fontSize: 15, fontWeight: 600,
-                padding: '12px 4px',
-              }}>
-                Ver como funciona
-                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
+              <a href="#como-funciona" className="btn-secondary">
+                Ver como funciona ↓
               </a>
             </div>
+            {/* Prova social */}
+            <div style={{ marginTop: 36, display: 'flex', alignItems: 'center', gap: 12, animation: 'fadeUp .8s ease .4s both' }}>
+              <div style={{ display: 'flex', gap: -4 }}>
+                {[0,1,2,3].map(i => (
+                  <div key={i} style={{ width: 36, height: 36, borderRadius: '50%', background: `hsl(${160+i*20},60%,${40-i*5}%)`, border: '2px solid rgba(255,255,255,.4)', marginLeft: i > 0 ? -10 : 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#fff' }}>
+                    {['A','C','D','E'][i]}
+                  </div>
+                ))}
+              </div>
+              <div>
+                <div style={{ color: '#FCD34D', fontSize: 13, letterSpacing: 1 }}>★★★★★</div>
+                <p style={{ color: 'rgba(255,255,255,.8)', fontSize: 13, marginTop: 2 }}>
+                  "Transformou nossa campanha de matrículas" — <strong style={{ color: '#fff' }}>Colégio Ágape, Patos/PB</strong>
+                </p>
+              </div>
+            </div>
+          </div>
+          {/* Mockup animado */}
+          <div className="hero-mockup" style={{ flex: '0 0 420px', animation: 'fadeIn 1s ease .5s both' }}>
+            <div style={{ background: 'rgba(255,255,255,.1)', borderRadius: 20, padding: 20, backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,.2)' }}>
+              {/* Fake dashboard */}
+              <div style={{ background: 'rgba(255,255,255,.95)', borderRadius: 12, padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Funil · Campanha 2027</span>
+                  <span style={{ background: '#D1FAE5', color: '#065F46', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6 }}>Ao vivo</span>
+                </div>
+                {[
+                  { label: 'Leads captados', val: 184, meta: 200, pct: 92, color: '#00A896' },
+                  { label: 'Visitas realizadas', val: 67, meta: 80, pct: 84, color: '#6366F1' },
+                  { label: 'Matrículas', val: 38, meta: 50, pct: 76, color: '#F59E0B' },
+                ].map(row => (
+                  <div key={row.label} style={{ marginBottom: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                      <span style={{ fontSize: 12, color: '#6B7280' }}>{row.label}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{row.val} <span style={{ color: '#9CA3AF', fontWeight: 400 }}>/ {row.meta}</span></span>
+                    </div>
+                    <div style={{ height: 8, background: '#F3F4F6', borderRadius: 999 }}>
+                      <div style={{ height: '100%', width: `${row.pct}%`, background: row.color, borderRadius: 999, transition: 'width 1.5s ease' }} />
+                    </div>
+                  </div>
+                ))}
+                <div style={{ marginTop: 16, padding: '10px 12px', background: '#FEF3C7', borderRadius: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: 14 }}>⚡</span>
+                  <span style={{ fontSize: 12, color: '#92400E' }}>IA: ritmo 8% abaixo da meta em visitas. Acelere o agendamento.</span>
+                </div>
+              </div>
+              {/* Kanban mini */}
+              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                {[
+                  { label: 'Novos', n: 12, color: '#E0F2FE', dot: '#0284C7' },
+                  { label: 'Contato', n: 8, color: '#EDE9FE', dot: '#7C3AED' },
+                  { label: 'Visita', n: 5, color: '#FEF3C7', dot: '#D97706' },
+                  { label: 'Matr.', n: 3, color: '#D1FAE5', dot: '#059669' },
+                ].map(col => (
+                  <div key={col.label} style={{ background: col.color, borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: col.dot, margin: '0 auto 4px' }} />
+                    <div style={{ fontSize: 11, color: '#374151', fontWeight: 600 }}>{col.n}</div>
+                    <div style={{ fontSize: 10, color: '#6B7280' }}>{col.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
 
-            {/* Social proof */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20 }}>
+// ─── FAIXA DE NÚMEROS ─────────────────────────────────────────────────────
+function Numeros() {
+  const ref = useAnim()
+  const nums = [
+    { val: '+40%', label: 'novatos em média', sub: 'crescimento de captação' },
+    { val: '85%', label: 'rematrícula como meta', sub: 'retenção estruturada' },
+    { val: '3 min', label: 'plano IA completo', sub: 'gerado automaticamente' },
+    { val: '100%', label: 'brasileiro', sub: 'feito para sua realidade' },
+  ]
+  return (
+    <section style={{ background: '#fff', padding: '0 32px', borderBottom: '1px solid #E5E7EB' }}>
+      <div ref={ref} className="anim numeros-grid" style={{ maxWidth: 1100, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderLeft: '1px solid #E5E7EB' }}>
+        {nums.map((n, i) => (
+          <div key={i} className={`anim-d${i + 1}`} style={{ padding: '32px 24px', borderRight: '1px solid #E5E7EB', borderBottom: '1px solid #E5E7EB' }}>
+            <div style={{ fontSize: 36, fontWeight: 900, color: '#00523C', marginBottom: 4 }}>{n.val}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{n.label}</div>
+            <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>{n.sub}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+// ─── PROBLEMA ─────────────────────────────────────────────────────────────
+function Problema() {
+  const ref = useAnim()
+  const dores = [
+    { icon: '😰', title: 'Leads somem sem acompanhamento', desc: 'Sem processo claro, famílias interessadas esfriam e vão para a concorrência. Você nem sabe quantas perdeu.' },
+    { icon: '📋', title: 'Equipe trabalhando no improviso', desc: 'Cada atendente faz do seu jeito. Sem padrão, sem histórico, sem controle de quem fez o quê.' },
+    { icon: '📊', title: 'Campanha começa no escuro todo ano', desc: 'Sem dados do ano anterior organizados, você repete os mesmos erros e não consegue bater a meta.' },
+  ]
+  return (
+    <section style={{ padding: '88px 32px', background: '#F9FAFB' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div ref={ref} className="anim" style={{ textAlign: 'center', marginBottom: 56 }}>
+          <h2 style={{ fontSize: 34, fontWeight: 900, color: '#111827', marginBottom: 12 }}>
+            Você ainda gerencia matrículas<br />no Excel e no WhatsApp pessoal?
+          </h2>
+          <p style={{ fontSize: 16, color: '#6B7280', maxWidth: 520, margin: '0 auto' }}>
+            Essa é a realidade de 9 em cada 10 escolas privadas brasileiras. E ela custa matrículas.
+          </p>
+        </div>
+        <div className="dores-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 24, marginBottom: 48 }}>
+          {dores.map((d, i) => (
+            <div key={i} className={`anim anim-d${i+1}`} ref={useAnim()} style={{ background: '#fff', borderRadius: 16, padding: 28, border: '1.5px solid #E5E7EB' }}>
+              <div style={{ fontSize: 36, marginBottom: 14 }}>{d.icon}</div>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 10 }}>{d.title}</h3>
+              <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.7 }}>{d.desc}</p>
+            </div>
+          ))}
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <a href="#demo" className="btn-primary" style={{ fontSize: 16, padding: '15px 36px' }}>
+            Quero resolver isso →
+          </a>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ─── O QUE É ──────────────────────────────────────────────────────────────
+function OQueE() {
+  const ref = useAnim()
+  return (
+    <section style={{ padding: '88px 32px', background: '#fff' }}>
+      <div ref={ref} className="anim" style={{ maxWidth: 820, margin: '0 auto', textAlign: 'center' }}>
+        <div style={{ display: 'inline-block', background: '#E6F7F5', borderRadius: 999, padding: '6px 16px', marginBottom: 20 }}>
+          <span style={{ color: '#00523C', fontSize: 13, fontWeight: 700 }}>Uma plataforma. Todos os processos.</span>
+        </div>
+        <h2 style={{ fontSize: 34, fontWeight: 900, color: '#111827', marginBottom: 20, lineHeight: 1.3 }}>
+          Uma plataforma. Todos os processos da matrícula.
+        </h2>
+        <p style={{ fontSize: 17, color: '#374151', lineHeight: 1.8, marginBottom: 32 }}>
+          A Áion Edu integra CRM, WhatsApp, IA e relatórios em um único sistema feito para a realidade das escolas privadas brasileiras. Sua equipe trabalha unida, sua campanha tem direção e você toma decisões com dados reais.
+        </p>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {['CRM de Leads','WhatsApp Oficial','IA de Campanha','Relatórios','Rematrículas','Transferências'].map(tag => (
+            <span key={tag} style={{ background: '#F0FDF9', color: '#065F46', border: '1px solid #A7F3D0', borderRadius: 999, padding: '6px 14px', fontSize: 13, fontWeight: 600 }}>{tag}</span>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ─── MÓDULOS ──────────────────────────────────────────────────────────────
+function Modulos() {
+  const modules = [
+    {
+      icon: '🎯', title: 'CRM de Leads e Matrículas', id: 'crm',
+      items: [
+        'Kanban visual: Novo → Contato → Visita → Proposta → Matriculado',
+        'Termômetro Frio / Morno / Quente para priorização',
+        'Score automático — leads mais quentes sobem para o topo',
+        'Motivo de perda estruturado com dashboard de causas',
+        'Histórico completo de interações por lead',
+      ],
+      why: 'Você para de perder leads por falta de acompanhamento e entende exatamente por que está perdendo.'
+    },
+    {
+      icon: '📱', title: 'WhatsApp Integrado', id: 'whatsapp',
+      items: [
+        'Toda a equipe atende pelo número oficial da escola',
+        'Bot de atendimento automático fora do horário',
+        'Fluxos personalizados pela escola',
+        'Disparos de campanha para leads frios',
+        'API Oficial do Meta — sem risco de bloqueio',
+        'Lead que chega pelo WhatsApp entra no funil automaticamente',
+      ],
+      why: 'Sua equipe responde mais rápido e as famílias recebem atenção imediata — sem depender do celular pessoal de ninguém.'
+    },
+    {
+      icon: '🤖', title: 'Gerador de Campanha com IA', id: 'ia',
+      items: [
+        'Plano completo em 3 minutos a partir do histórico do ERP',
+        'Metas mensais + CPA sugerido + calendário de captação',
+        'Slider de ambição: conservador, realista ou agressivo',
+        'Benchmark com dados reais do INEP e Censo Escolar',
+        'Recalcula automaticamente ao ajustar parâmetros',
+      ],
+      why: 'Você chega em agosto com um plano real, não uma planilha genérica. Sua equipe sabe o que fazer cada semana.'
+    },
+    {
+      icon: '📊', title: 'Relatórios e Inteligência', id: 'relatorios',
+      items: [
+        'Funil em tempo real com desvios coloridos (verde, âmbar, vermelho)',
+        'Velocidade semanal: ritmo atual vs meta necessária',
+        'Índice de saúde da campanha: nota 0 a 100 pela IA',
+        'Comparativo histórico mês a mês por ano',
+        'ROI por canal de marketing: Google, Facebook, outdoor',
+      ],
+      why: 'Você para de adivinhar. Quando algo sai do planejado, o sistema avisa antes que seja tarde demais.'
+    },
+    {
+      icon: '🔄', title: 'Módulo de Rematrículas', id: 'rematriculas',
+      items: [
+        'Projeção preditiva: quais alunos têm risco de não renovar',
+        'Base elegível real: desconta formandos e transferências',
+        'Radar de evasão com cruzamento de dados de satisfação',
+        'Ações sugeridas pela IA para recuperação de alunos em risco',
+      ],
+      why: 'Reter um aluno custa menos do que captar um novo. Com a Áion Edu você age antes de perder.'
+    },
+    {
+      icon: '↔', title: 'Transferências e Diagnóstico', id: 'transferencias',
+      items: [
+        'Link de pesquisa personalizado enviado por WhatsApp ou e-mail',
+        'A família responde em 3 minutos',
+        'IA analisa: motivo real + confiança + oportunidade de retenção',
+        'Histórico de saídas por série, mês e motivo',
+      ],
+      why: 'Você deixa de perder alunos sem saber o motivo e começa a corrigir os problemas reais.'
+    },
+    {
+      icon: '⭐', title: 'Pesquisa de Satisfação', id: 'pesquisas',
+      items: [
+        'Crie e envie pesquisas por WhatsApp ou e-mail',
+        'IA analisa respostas e entrega relatório com ações prioritárias',
+        'Cruza automaticamente com o radar de evasão',
+        'Influencia a projeção de rematrícula',
+      ],
+      why: 'Você entende o que as famílias pensam enquanto ainda dá tempo de agir.'
+    },
+    {
+      icon: '🔍', title: 'Auditoria e Controle', id: 'auditoria',
+      items: [
+        'Histórico completo de alterações por registro',
+        'Rastreabilidade: quem criou, editou, o quê mudou e quando',
+        'Perfis por função: gestor, atendente, consultor',
+        'Visibilidade adequada para cada papel',
+      ],
+      why: 'Sua equipe trabalha com responsabilidade e você tem rastreabilidade total do processo.'
+    },
+  ]
+
+  const ref = useAnim()
+  return (
+    <section id="modulos" style={{ padding: '88px 32px', background: '#F9FAFB' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div ref={ref} className="anim" style={{ textAlign: 'center', marginBottom: 56 }}>
+          <div style={{ display: 'inline-block', background: '#E6F7F5', borderRadius: 999, padding: '6px 16px', marginBottom: 16 }}>
+            <span style={{ color: '#00523C', fontSize: 13, fontWeight: 700 }}>Módulos completos</span>
+          </div>
+          <h2 style={{ fontSize: 34, fontWeight: 900, color: '#111827', marginBottom: 12 }}>
+            Tudo que sua escola precisa para uma campanha de matrículas de sucesso
+          </h2>
+          <p style={{ fontSize: 16, color: '#6B7280', maxWidth: 580, margin: '0 auto' }}>
+            Cada módulo foi construído a partir de problemas reais de escolas privadas brasileiras.
+          </p>
+        </div>
+        <div className="modules-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 24 }}>
+          {modules.map((m, i) => {
+            const r = useAnim()
+            return (
+              <div key={m.id} id={m.id} ref={r} className={`module-card anim anim-d${(i % 3) + 1}`}>
+                <div style={{ fontSize: 32, marginBottom: 14 }}>{m.icon}</div>
+                <h3 style={{ fontSize: 17, fontWeight: 800, color: '#111827', marginBottom: 14 }}>{m.title}</h3>
+                <div style={{ marginBottom: 16 }}>
+                  {m.items.map((item, j) => (
+                    <div key={j} className="check-item">
+                      <div className="check-icon">✓</div>
+                      <span style={{ fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{item}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ background: '#F0FDF9', borderRadius: 10, padding: '12px 14px', borderLeft: '3px solid #00A896' }}>
+                  <p style={{ fontSize: 12, color: '#065F46', lineHeight: 1.6 }}><strong>Por que isso importa: </strong>{m.why}</p>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <div style={{ textAlign: 'center', marginTop: 48 }}>
+          <a href="#demo" className="btn-primary" style={{ fontSize: 16, padding: '15px 36px' }}>
+            Ver tudo isso na prática →
+          </a>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ─── COMO FUNCIONA ────────────────────────────────────────────────────────
+function ComoFunciona() {
+  const ref = useAnim()
+  const steps = [
+    {
+      num: '01', icon: '📂',
+      title: 'Configure sua escola (5 minutos)',
+      desc: 'Importe os relatórios do ERP (SIGA, Totvs, outros). A IA lê o histórico e entende o padrão da sua escola automaticamente. Sem planilha. Sem digitação manual.',
+    },
+    {
+      num: '02', icon: '🧠',
+      title: 'Gere seu plano de campanha',
+      desc: 'A IA analisa histórico + mercado local e cria metas mensais, CPA sugerido e calendário de captação. Você revisa, ajusta e aplica com um clique.',
+    },
+    {
+      num: '03', icon: '📈',
+      title: 'Acompanhe e converta em tempo real',
+      desc: 'Dashboard com desvios visuais, alertas automáticos e análise semanal da IA. Sua equipe sabe exatamente o que fazer a cada semana.',
+    },
+  ]
+  return (
+    <section id="como-funciona" style={{ padding: '88px 32px', background: '#fff' }}>
+      <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+        <div ref={ref} className="anim" style={{ textAlign: 'center', marginBottom: 56 }}>
+          <h2 style={{ fontSize: 34, fontWeight: 900, color: '#111827', marginBottom: 12 }}>Como funciona</h2>
+          <p style={{ fontSize: 16, color: '#6B7280' }}>Do zero ao plano de campanha em menos de 10 minutos.</p>
+        </div>
+        <div className="steps-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 32 }}>
+          {steps.map((s, i) => {
+            const r = useAnim()
+            return (
+              <div key={i} ref={r} className={`anim anim-d${i+1}`} style={{ textAlign: 'center' }}>
+                <div style={{ width: 64, height: 64, borderRadius: 20, background: 'linear-gradient(135deg,#00523C,#00A896)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: 28 }}>
+                  {s.icon}
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#00A896', letterSpacing: '0.1em', marginBottom: 8 }}>PASSO {s.num}</div>
+                <h3 style={{ fontSize: 18, fontWeight: 800, color: '#111827', marginBottom: 12, lineHeight: 1.3 }}>{s.title}</h3>
+                <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.7 }}>{s.desc}</p>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ─── DEPOIMENTO ───────────────────────────────────────────────────────────
+function Depoimento() {
+  const ref = useAnim()
+  return (
+    <section style={{ padding: '88px 32px', background: 'linear-gradient(135deg,#00523C,#00A896)' }}>
+      <div ref={ref} className="anim" style={{ maxWidth: 820, margin: '0 auto' }}>
+        <div style={{ background: 'rgba(255,255,255,.12)', borderRadius: 20, padding: '48px 48px', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,.2)', position: 'relative' }}>
+          <div style={{ fontSize: 64, color: 'rgba(255,255,255,.2)', position: 'absolute', top: 20, left: 36, lineHeight: 1, fontFamily: 'Georgia, serif' }}>"</div>
+          <div style={{ color: '#FCD34D', fontSize: 20, letterSpacing: 2, marginBottom: 20, textAlign: 'center' }}>★★★★★</div>
+          <blockquote style={{ fontSize: 22, fontWeight: 700, color: '#fff', lineHeight: 1.6, textAlign: 'center', marginBottom: 28, fontStyle: 'italic' }}>
+            "Pela primeira vez chegamos na campanha de matrículas com um plano real — metas por semana, calendário de captação e visibilidade total do funil. A plataforma identificou tendências que a gente não estava vendo."
+          </blockquote>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(255,255,255,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 20, fontWeight: 800, color: '#fff' }}>A</div>
+            <p style={{ fontWeight: 700, color: '#fff', fontSize: 15 }}>Direção, Colégio Ágape</p>
+            <p style={{ color: 'rgba(255,255,255,.75)', fontSize: 13, marginTop: 4 }}>Escola privada · Patos, Paraíba</p>
+          </div>
+        </div>
+        <div style={{ textAlign: 'center', marginTop: 40 }}>
+          <a href="#demo" className="btn-primary" style={{ background: '#fff', color: '#00523C', boxShadow: '0 4px 16px rgba(0,0,0,.15)' }}>
+            Quero esses resultados →
+          </a>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ─── WHATSAPP ─────────────────────────────────────────────────────────────
+function WhatsApp() {
+  const ref = useAnim()
+  const items = [
+    'Número oficial da escola — não o celular pessoal de alguém',
+    'Toda a equipe atende pelo mesmo número com histórico completo',
+    'Bot que responde fora do horário e qualifica o lead',
+    'Fluxos personalizados com a linguagem da sua escola',
+    'API Oficial Meta — sem bloqueio, sem QR code diário',
+    'Lead que chega pelo WhatsApp entra no funil automaticamente',
+    'Disparos de campanha para listas segmentadas',
+  ]
+  return (
+    <section id="whatsapp" style={{ padding: '88px 32px', background: '#F9FAFB' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div ref={ref} className="anim wa-grid" style={{ display: 'flex', gap: 64, alignItems: 'center' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#DCFCE7', borderRadius: 999, padding: '6px 14px', marginBottom: 20 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#16A34A', display: 'inline-block' }} />
+              <span style={{ color: '#15803D', fontSize: 13, fontWeight: 700 }}>API Oficial Meta WhatsApp Business</span>
+            </div>
+            <h2 style={{ fontSize: 34, fontWeight: 900, color: '#111827', marginBottom: 16, lineHeight: 1.3 }}>
+              WhatsApp do jeito certo:<br />
+              <span style={{ color: '#00523C' }}>API Oficial do Meta</span>
+            </h2>
+            <p style={{ fontSize: 16, color: '#6B7280', lineHeight: 1.7, marginBottom: 28 }}>
+              Sua escola provavelmente já usa WhatsApp para atender famílias. O problema é: está no celular pessoal de alguém, sem histórico, sem padrão e com risco de perder tudo se trocar de atendente.
+            </p>
+            <div style={{ marginBottom: 32 }}>
+              {items.map((item, i) => (
+                <div key={i} className="check-item">
+                  <div className="check-icon">✓</div>
+                  <span style={{ fontSize: 14, color: '#374151', lineHeight: 1.6 }}>{item}</span>
+                </div>
+              ))}
+            </div>
+            <a href="#demo" className="btn-primary">Quero o WhatsApp oficial →</a>
+          </div>
+          {/* Visual */}
+          <div style={{ flex: '0 0 360px' }}>
+            <div style={{ background: '#fff', borderRadius: 20, padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,.12)', border: '1px solid #E5E7EB' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, padding: '0 0 12px', borderBottom: '1px solid #F3F4F6' }}>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📱</div>
+                <div>
+                  <p style={{ fontWeight: 700, fontSize: 14, color: '#111827' }}>Colégio — Matrículas</p>
+                  <p style={{ fontSize: 12, color: '#16A34A' }}>● Número oficial verificado</p>
+                </div>
+              </div>
               {[
-                'Usado por escolas privadas',
-                'Dados reais do INEP e Censo Escolar',
-                'Suporte em português',
-              ].map(text => (
-                <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>
-                  <svg width="14" height="14" fill="none" stroke="#4ade80" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/><polyline points="20 6 9 17 4 12" transform="scale(0.7) translate(3,3)"/></svg>
-                  {text}
+                { from: 'lead', text: 'Olá! Tenho interesse em matricular minha filha. Quais as séries disponíveis?', time: '14:23' },
+                { from: 'bot', text: '👋 Olá! Que ótimo! Atendemos do Infantil I ao 9º ano. Posso agendar uma visita para você conhecer a escola?', time: '14:23', badge: 'Bot' },
+                { from: 'lead', text: 'Sim, pode agendar para sábado!', time: '14:24' },
+                { from: 'atendente', text: '✅ Perfeito! Agendado para sábado às 9h. Vou enviar a confirmação por aqui.', time: '14:25', badge: 'Ana · Atendente' },
+              ].map((msg, i) => (
+                <div key={i} style={{ marginBottom: 10, display: 'flex', justifyContent: msg.from === 'lead' ? 'flex-start' : 'flex-end' }}>
+                  <div style={{ maxWidth: '80%', background: msg.from === 'lead' ? '#F3F4F6' : msg.from === 'bot' ? '#E6F7F5' : '#DCF8C6', borderRadius: msg.from === 'lead' ? '4px 12px 12px 12px' : '12px 4px 12px 12px', padding: '8px 12px' }}>
+                    {msg.badge && <p style={{ fontSize: 10, color: '#6B7280', marginBottom: 3, fontWeight: 600 }}>{msg.badge}</p>}
+                    <p style={{ fontSize: 12, color: '#111827', lineHeight: 1.5 }}>{msg.text}</p>
+                    <p style={{ fontSize: 10, color: '#9CA3AF', marginTop: 3, textAlign: 'right' }}>{msg.time}</p>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
+        </div>
+      </div>
+    </section>
+  )
+}
 
-          {/* Dashboard mockup */}
-          <div className="hide-mobile" style={{ flex: '0 0 480px' }}>
-            <div style={{
-              background: 'rgba(255,255,255,0.08)',
-              borderRadius: 20,
-              border: '1px solid rgba(255,255,255,0.15)',
-              padding: 24,
-              backdropFilter: 'blur(8px)',
-            }}>
-              {/* Fake browser chrome */}
-              <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-                {['#ff5f57','#febc2e','#28c840'].map((c,i) => (
-                  <div key={i} style={{ width: 12, height: 12, borderRadius: '50%', background: c }} />
-                ))}
+// ─── RELATÓRIOS ───────────────────────────────────────────────────────────
+function Relatorios() {
+  const ref = useAnim()
+  return (
+    <section id="relatorios" style={{ padding: '88px 32px', background: '#fff' }}>
+      <div ref={ref} className="anim" style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div style={{ display: 'flex', gap: 64, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Visual */}
+          <div style={{ flex: '0 0 440px' }}>
+            <div style={{ background: '#fff', borderRadius: 20, padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,.1)', border: '1px solid #E5E7EB' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <span style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>Saúde da campanha</span>
+                <div style={{ background: '#D1FAE5', borderRadius: 999, padding: '4px 12px', fontSize: 12, fontWeight: 700, color: '#065F46' }}>82 / 100</div>
               </div>
-
-              {/* KPI row */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
-                {[
-                  { label: 'Leads ativos', value: '147', color: '#4ade80' },
-                  { label: 'Matrículas', value: '89', color: '#60a5fa' },
-                  { label: 'Conversão', value: '61%', color: '#f59e0b' },
-                ].map(kpi => (
-                  <div key={kpi.label} style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 10, padding: '12px 10px', textAlign: 'center' }}>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
-                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>{kpi.label}</div>
+              {[
+                { label: 'Captação de leads', pct: 92, meta: 200, real: 184, color: '#10B981', status: '🟢' },
+                { label: 'Visitas realizadas', pct: 84, meta: 80, real: 67, color: '#F59E0B', status: '🟡' },
+                { label: 'Matrículas efetivadas', pct: 76, meta: 50, real: 38, color: '#EF4444', status: '🔴' },
+                { label: 'Rematrícula', pct: 88, meta: 200, real: 176, color: '#10B981', status: '🟢' },
+              ].map(row => (
+                <div key={row.label} style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ fontSize: 13, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}>{row.status} {row.label}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{row.real}<span style={{ color: '#9CA3AF', fontWeight: 400 }}>/{row.meta}</span></span>
                   </div>
-                ))}
-              </div>
-
-              {/* Kanban columns */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
-                {[
-                  { col: 'Novo', count: 24, color: '#6366f1' },
-                  { col: 'Contato', count: 18, color: '#f59e0b' },
-                  { col: 'Visita', count: 11, color: '#3b82f6' },
-                  { col: 'Matrícula', count: 7, color: '#10b981' },
-                ].map(col => (
-                  <div key={col.col} style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 8, padding: '8px 6px' }}>
-                    <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{col.col}</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {[1,2].map(i => (
-                        <div key={i} style={{ background: 'rgba(255,255,255,0.12)', borderRadius: 4, height: 28, borderLeft: `3px solid ${col.color}` }} />
-                      ))}
-                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', textAlign: 'center' }}>{col.count} leads</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* AI insight */}
-              <div style={{ background: 'rgba(0,168,150,0.2)', borderRadius: 10, padding: '10px 14px', border: '1px solid rgba(0,168,150,0.3)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                <span style={{ fontSize: 16 }}>🤖</span>
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#a7f3d0', marginBottom: 2 }}>Insight da IA</div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)', lineHeight: 1.4 }}>
-                    Meta de agosto atingida em 73%. Reforce contatos da semana passada para alcançar 100%.
+                  <div style={{ height: 8, background: '#F3F4F6', borderRadius: 999 }}>
+                    <div style={{ height: '100%', width: `${row.pct}%`, background: row.color, borderRadius: 999 }} />
                   </div>
                 </div>
+              ))}
+              <div style={{ marginTop: 16, padding: '12px 14px', background: '#FEF3C7', borderRadius: 10 }}>
+                <p style={{ fontSize: 12, color: '#92400E', lineHeight: 1.5 }}>
+                  <strong>⚡ Análise IA:</strong> Ritmo de visitas está 14% abaixo do necessário para bater a meta de matrículas. Recomendação: intensificar o agendamento pós-primeiro contato nas próximas 2 semanas.
+                </p>
               </div>
+            </div>
+          </div>
+          {/* Texto */}
+          <div style={{ flex: 1, minWidth: 280 }}>
+            <div style={{ display: 'inline-block', background: '#E6F7F5', borderRadius: 999, padding: '6px 16px', marginBottom: 20 }}>
+              <span style={{ color: '#00523C', fontSize: 13, fontWeight: 700 }}>Inteligência em tempo real</span>
+            </div>
+            <h2 style={{ fontSize: 34, fontWeight: 900, color: '#111827', marginBottom: 16, lineHeight: 1.3 }}>
+              Visão cirúrgica da sua campanha
+            </h2>
+            <p style={{ fontSize: 16, color: '#6B7280', lineHeight: 1.7, marginBottom: 28 }}>
+              Pare de adivinhar se está no ritmo certo. A Áion Edu te diz em tempo real onde estão os desvios, quais ações tomar e qual é a saúde geral da campanha.
+            </p>
+            {[
+              'Funil em tempo real com desvios coloridos',
+              'Velocidade semanal vs meta necessária',
+              'Índice de saúde 0–100 calculado pela IA',
+              'Comparativo histórico mês a mês por ano',
+              'ROI por canal de marketing',
+              'Alertas automáticos quando algo sai do planejado',
+            ].map((item, i) => (
+              <div key={i} className="check-item">
+                <div className="check-icon">✓</div>
+                <span style={{ fontSize: 14, color: '#374151' }}>{item}</span>
+              </div>
+            ))}
+            <div style={{ marginTop: 32 }}>
+              <a href="#demo" className="btn-primary">Ver os relatórios →</a>
             </div>
           </div>
         </div>
@@ -353,464 +692,181 @@ function Hero() {
   )
 }
 
-// ─── Pain Cards ────────────────────────────────────────────────────────────────
-function PainSection() {
-  const problems = [
-    {
-      emoji: '😰',
-      title: 'Perco leads porque não consigo acompanhar todos',
-      pain: 'Sem um processo claro, leads esfriam e vão para a concorrência.',
-      solution: 'A Áion Edu organiza tudo em um funil visual com alertas automáticos.',
-    },
-    {
-      emoji: '📋',
-      title: 'Minha equipe trabalha no Excel e WhatsApp pessoal',
-      pain: 'Processo manual gera retrabalho, erros e falta de visibilidade.',
-      solution: 'Com a Áion Edu, tudo fica centralizado e rastreável.',
-    },
-    {
-      emoji: '📊',
-      title: 'Não sei quantos alunos vou perder no próximo ciclo',
-      pain: 'Sem dados históricos organizados, a campanha começa no escuro.',
-      solution: 'A Áion Edu analisa seus dados e projeta o que esperar.',
-    },
-  ]
-  return (
-    <section style={{ padding: '80px 24px', background: '#fff' }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 52 }}>
-          <span style={{ display: 'inline-block', background: '#f0fdf4', color: '#00523C', fontSize: 13, fontWeight: 600, padding: '4px 14px', borderRadius: 100, marginBottom: 16, border: '1px solid #bbf7d0' }}>
-            Situações comuns
-          </span>
-          <h2 style={{ fontSize: 'clamp(24px, 3.5vw, 38px)', fontWeight: 800, color: '#111827', letterSpacing: '-0.5px' }}>
-            Você reconhece alguma dessas situações?
-          </h2>
-        </div>
-
-        <div className="features-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
-          {problems.map((p, i) => (
-            <div key={i} className="card anim">
-              <div style={{ fontSize: 40, marginBottom: 16 }}>{p.emoji}</div>
-              <h3 style={{ fontSize: 17, fontWeight: 700, color: '#111827', marginBottom: 12, lineHeight: 1.35 }}>{p.title}</h3>
-              <p style={{ fontSize: 14, color: '#6b7280', marginBottom: 14, lineHeight: 1.6 }}>{p.pain}</p>
-              <div style={{ padding: '12px 14px', background: '#f0fdf4', borderRadius: 8, borderLeft: '3px solid #00523C' }}>
-                <p style={{ fontSize: 13, color: '#065f46', fontWeight: 500, lineHeight: 1.5 }}>{p.solution}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-// ─── What is Áion ──────────────────────────────────────────────────────────────
-function AboutSection() {
-  const stats = [
-    { value: 'R$0', label: 'perdidos em leads não acompanhados com processo correto' },
-    { value: '40%', label: 'de queda de novatos detectada em 1 ciclo no primeiro cliente' },
-    { value: '3 min', label: 'para gerar um plano de campanha completo com IA' },
-    { value: '956', label: 'alunos gerenciados no Colégio Ágape, primeiro cliente' },
-  ]
-  return (
-    <section className="section-alt" style={{ padding: '80px 24px' }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <div style={{ maxWidth: 720, margin: '0 auto', textAlign: 'center', marginBottom: 56 }}>
-          <span style={{ display: 'inline-block', background: '#f0fdf4', color: '#00523C', fontSize: 13, fontWeight: 600, padding: '4px 14px', borderRadius: 100, marginBottom: 16, border: '1px solid #bbf7d0' }}>
-            A plataforma
-          </span>
-          <h2 style={{ fontSize: 'clamp(24px, 3.5vw, 38px)', fontWeight: 800, color: '#111827', marginBottom: 20, letterSpacing: '-0.5px' }}>
-            Uma plataforma feita para a realidade das escolas brasileiras
-          </h2>
-          <p style={{ fontSize: 16, color: '#6b7280', lineHeight: 1.7 }}>
-            A Áion Edu combina CRM educacional, inteligência artificial e dados do INEP para ajudar
-            escolas privadas a planejar, executar e acompanhar a campanha de matrículas — do primeiro
-            lead ao aluno matriculado.
-          </p>
-        </div>
-
-        <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
-          {stats.map((s, i) => (
-            <div key={i} className="anim" style={{
-              textAlign: 'center', padding: '28px 20px',
-              background: '#fff', borderRadius: 16,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)',
-              border: '1px solid #f0f0f0',
-            }}>
-              <div style={{ fontSize: 'clamp(28px, 3vw, 40px)', fontWeight: 800, color: '#00523C', marginBottom: 8 }}>{s.value}</div>
-              <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.5 }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-// ─── Features ─────────────────────────────────────────────────────────────────
-function FeaturesSection() {
+// ─── PREÇOS ───────────────────────────────────────────────────────────────
+function Precos() {
+  const ref = useAnim()
   const features = [
-    {
-      emoji: '🎯',
-      title: 'CRM com Kanban visual',
-      desc: 'Acompanhe cada lead do primeiro contato até a matrícula. Visualize o funil em tempo real e nunca perca um follow-up.',
-    },
-    {
-      emoji: '📱',
-      title: 'WhatsApp integrado nativamente',
-      desc: 'Atenda leads diretamente pelo sistema, crie fluxos automáticos e envie campanhas pelo número oficial da escola.',
-    },
-    {
-      emoji: '🤖',
-      title: 'IA para tomada de decisão',
-      desc: 'Gere planos de campanha, analise transferências e receba insights semanais baseados nos dados reais da sua escola.',
-    },
-    {
-      emoji: '📊',
-      title: 'Relatórios e inteligência',
-      desc: 'Funil, rematrícula, marketing e retenção em painéis visuais com comparativos históricos e benchmark do setor.',
-    },
-    {
-      emoji: '🔄',
-      title: 'Pesquisa de satisfação',
-      desc: 'Entenda por que famílias saem e o que as mantém. A IA cruza pesquisas com dados de rematrícula automaticamente.',
-    },
-    {
-      emoji: '🏆',
-      title: 'Benchmark com dados do INEP',
-      desc: 'Saiba onde sua escola está no mercado local. Market share, ranking estimado e oportunidades de crescimento.',
-    },
-  ]
-
-  return (
-    <section id="funcionalidades" style={{ padding: '80px 24px', background: '#fff' }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 52 }}>
-          <span style={{ display: 'inline-block', background: '#f0fdf4', color: '#00523C', fontSize: 13, fontWeight: 600, padding: '4px 14px', borderRadius: 100, marginBottom: 16, border: '1px solid #bbf7d0' }}>
-            Funcionalidades
-          </span>
-          <h2 style={{ fontSize: 'clamp(24px, 3.5vw, 38px)', fontWeight: 800, color: '#111827', letterSpacing: '-0.5px' }}>
-            Tudo que sua campanha precisa
-          </h2>
-        </div>
-
-        <div className="features-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
-          {features.map((f, i) => (
-            <div key={i} className="card anim" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{
-                width: 52, height: 52, borderRadius: 14,
-                background: '#f0fdf4',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 26,
-              }}>{f.emoji}</div>
-              <h3 style={{ fontSize: 17, fontWeight: 700, color: '#111827', lineHeight: 1.3 }}>{f.title}</h3>
-              <p style={{ fontSize: 14, color: '#6b7280', lineHeight: 1.65, margin: 0 }}>{f.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-// ─── How it works ──────────────────────────────────────────────────────────────
-function HowItWorksSection() {
-  const steps = [
-    {
-      num: '1',
-      title: 'Cadastre sua escola',
-      subtitle: '(5 minutos)',
-      desc: 'Importe os relatórios do seu ERP (SIGA, Totvs ou similar). A IA lê o histórico e entende o padrão da sua escola automaticamente.',
-    },
-    {
-      num: '2',
-      title: 'Gere seu plano de campanha',
-      subtitle: '',
-      desc: 'Com base no histórico + mercado local, a IA cria metas mês a mês, CPA sugerido e calendário de captação personalizado.',
-    },
-    {
-      num: '3',
-      title: 'Acompanhe e converta em tempo real',
-      subtitle: '',
-      desc: 'Dashboard com desvios visuais, alertas automáticos e recálculo de rota quando necessário. Nunca mais fique no escuro.',
-    },
-  ]
-
-  return (
-    <section id="como-funciona" className="section-alt" style={{ padding: '80px 24px' }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 52 }}>
-          <span style={{ display: 'inline-block', background: '#f0fdf4', color: '#00523C', fontSize: 13, fontWeight: 600, padding: '4px 14px', borderRadius: 100, marginBottom: 16, border: '1px solid #bbf7d0' }}>
-            Como funciona
-          </span>
-          <h2 style={{ fontSize: 'clamp(24px, 3.5vw, 38px)', fontWeight: 800, color: '#111827', letterSpacing: '-0.5px' }}>
-            Simples de começar, poderoso na prática
-          </h2>
-        </div>
-
-        <div className="steps-grid" style={{ display: 'flex', gap: 32, alignItems: 'flex-start', position: 'relative' }}>
-          {steps.map((s, i) => (
-            <React.Fragment key={i}>
-              <div className="anim" style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{
-                  width: 64, height: 64, borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #00523C, #00A896)',
-                  color: '#fff', fontSize: 24, fontWeight: 800,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  margin: '0 auto 20px',
-                  boxShadow: '0 4px 16px rgba(0,82,60,0.3)',
-                }}>{s.num}</div>
-                <h3 style={{ fontSize: 18, fontWeight: 700, color: '#111827', marginBottom: 4 }}>
-                  {s.title}
-                </h3>
-                {s.subtitle && <p style={{ fontSize: 13, color: '#9ca3af', marginBottom: 8 }}>{s.subtitle}</p>}
-                <p style={{ fontSize: 14, color: '#6b7280', lineHeight: 1.65, maxWidth: 280, margin: '8px auto 0' }}>{s.desc}</p>
-              </div>
-              {i < steps.length - 1 && (
-                <div className="hide-mobile" style={{ flexShrink: 0, marginTop: 30, color: '#d1d5db' }}>
-                  <svg width="32" height="24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h22M19 5l8 7-8 7"/></svg>
-                </div>
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-// ─── Testimonial ───────────────────────────────────────────────────────────────
-function TestimonialSection() {
-  return (
-    <section style={{ padding: '80px 24px', background: '#fff' }}>
-      <div style={{ maxWidth: 800, margin: '0 auto' }}>
-        <div className="anim" style={{
-          background: 'linear-gradient(135deg, #00523C 0%, #00A896 100%)',
-          borderRadius: 24,
-          padding: '48px 48px',
-          position: 'relative',
-          overflow: 'hidden',
-        }}>
-          <div style={{ position: 'absolute', top: -40, right: -40, width: 200, height: 200, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
-          <div style={{ position: 'absolute', bottom: -60, left: -30, width: 180, height: 180, borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
-
-          <div style={{ fontSize: 56, color: 'rgba(255,255,255,0.2)', lineHeight: 1, marginBottom: 8, fontFamily: 'Georgia, serif' }}>"</div>
-
-          <blockquote style={{ fontSize: 'clamp(17px, 2vw, 21px)', color: '#fff', fontWeight: 500, lineHeight: 1.6, marginBottom: 32, fontStyle: 'italic', position: 'relative' }}>
-            A Áion Edu identificou que nossa captação de novatos caiu 40% em um ano. Com o plano gerado
-            pela IA, chegamos preparados para a campanha de 2027 pela primeira vez.
-          </blockquote>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
-              🏫
-            </div>
-            <div>
-              <div style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>Colégio Ágape Patos</div>
-              <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13 }}>Patos, Paraíba · 956 alunos · primeiro cliente Áion Edu · desde 2026</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-// ─── Pricing ───────────────────────────────────────────────────────────────────
-function PricingSection() {
-  const items = [
-    'CRM completo com Kanban',
-    'WhatsApp integrado',
+    'CRM completo com Kanban de leads',
+    'WhatsApp com API Oficial Meta',
     'Gerador de campanha com IA',
-    'Relatórios e inteligência',
-    'Benchmark INEP',
+    'Relatórios e inteligência completos',
+    'Módulo de rematrículas e retenção',
+    'Transferências com diagnóstico IA',
     'Pesquisas de satisfação ilimitadas',
-    'Módulo de transferências',
+    'Benchmark com dados do INEP',
+    'Auditoria e controle de equipe',
     'Suporte em português',
     'Consultor dedicado',
   ]
-
   return (
-    <section id="precos" className="section-alt" style={{ padding: '80px 24px' }}>
-      <div style={{ maxWidth: 540, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <span style={{ display: 'inline-block', background: '#f0fdf4', color: '#00523C', fontSize: 13, fontWeight: 600, padding: '4px 14px', borderRadius: 100, marginBottom: 16, border: '1px solid #bbf7d0' }}>
-            Preços
-          </span>
-          <h2 style={{ fontSize: 'clamp(24px, 3.5vw, 38px)', fontWeight: 800, color: '#111827', letterSpacing: '-0.5px' }}>
-            Simples e sem surpresas
-          </h2>
+    <section id="precos" style={{ padding: '88px 32px', background: '#F9FAFB' }}>
+      <div ref={ref} className="anim" style={{ maxWidth: 700, margin: '0 auto', textAlign: 'center' }}>
+        <div style={{ display: 'inline-block', background: '#E6F7F5', borderRadius: 999, padding: '6px 16px', marginBottom: 20 }}>
+          <span style={{ color: '#00523C', fontSize: 13, fontWeight: 700 }}>Um plano. Tudo incluído.</span>
         </div>
+        <h2 style={{ fontSize: 34, fontWeight: 900, color: '#111827', marginBottom: 12 }}>Preço simples e transparente</h2>
+        <p style={{ fontSize: 16, color: '#6B7280', marginBottom: 48 }}>Sem surpresas, sem pacotes complicados. Um plano com tudo que sua escola precisa.</p>
 
-        <div className="anim" style={{
-          background: '#fff',
-          borderRadius: 24,
-          padding: '40px 40px',
-          boxShadow: '0 8px 40px rgba(0,82,60,0.12)',
-          border: '2px solid #00523C',
-          position: 'relative',
-          overflow: 'hidden',
-        }}>
-          {/* Badge */}
-          <div style={{
-            position: 'absolute', top: 20, right: -28,
-            background: 'linear-gradient(90deg, #00523C, #00A896)',
-            color: '#fff', fontSize: 12, fontWeight: 700, padding: '6px 36px',
-            transform: 'rotate(45deg)',
-            letterSpacing: '0.5px',
-          }}>POPULAR</div>
-
-          <div style={{ marginBottom: 8 }}>
-            <span style={{ background: '#f0fdf4', color: '#00523C', fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 100, border: '1px solid #bbf7d0' }}>
-              Plano Escola — tudo incluído
-            </span>
+        <div style={{ background: '#fff', borderRadius: 24, padding: '40px 40px', boxShadow: '0 20px 60px rgba(0,0,0,.1)', border: '2px solid #00A896', position: 'relative' }}>
+          <div style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(135deg,#00523C,#00A896)', borderRadius: 999, padding: '5px 18px', fontSize: 12, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap' }}>
+            Primeiro mês grátis
           </div>
-
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 20, marginBottom: 8 }}>
-            <span style={{ fontSize: 18, color: '#6b7280', fontWeight: 500 }}>R$</span>
-            <span style={{ fontSize: 56, fontWeight: 800, color: '#00523C', letterSpacing: '-2px', lineHeight: 1 }}>550</span>
-            <span style={{ fontSize: 16, color: '#6b7280' }}>/mês por escola</span>
+          <div style={{ marginBottom: 6 }}>
+            <span style={{ fontSize: 14, color: '#9CA3AF' }}>por escola</span>
           </div>
-          <p style={{ fontSize: 13, color: '#9ca3af', marginBottom: 28 }}>Sem limite de usuários · Sem taxa de implantação</p>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 4, marginBottom: 4 }}>
+            <span style={{ fontSize: 24, fontWeight: 700, color: '#374151' }}>R$</span>
+            <span style={{ fontSize: 64, fontWeight: 900, color: '#00523C', lineHeight: 1 }}>550</span>
+            <span style={{ fontSize: 18, color: '#9CA3AF' }}>/mês</span>
+          </div>
+          <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 32 }}>Sem fidelidade · Cancele quando quiser</p>
 
-          <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: 24, marginBottom: 28 }}>
-            {items.map(item => (
-              <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#f0fdf4', border: '1px solid #bbf7d0', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <svg width="11" height="11" fill="none" stroke="#00523C" strokeWidth="2.5"><polyline points="1 5 4 8 10 2"/></svg>
-                </div>
-                <span style={{ fontSize: 14, color: '#374151', fontWeight: 500 }}>{item}</span>
+          <div className="preco-features" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, textAlign: 'left', marginBottom: 32 }}>
+            {features.map(f => (
+              <div key={f} className="check-item">
+                <div className="check-icon">✓</div>
+                <span style={{ fontSize: 13, color: '#374151' }}>{f}</span>
               </div>
             ))}
           </div>
 
-          <a href="#demo" className="btn-primary" style={{ width: '100%', justifyContent: 'center', fontSize: 16, padding: '14px' }}>
+          <a href="#demo" className="btn-primary" style={{ width: '100%', justifyContent: 'center', fontSize: 16, padding: '16px 0' }}>
             Quero começar →
           </a>
-
-          <p style={{ textAlign: 'center', fontSize: 12, color: '#9ca3af', marginTop: 14 }}>
-            Primeiro mês grátis · Sem fidelidade · Cancele quando quiser
-          </p>
+          <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 12 }}>Sem compromisso · Resposta em até 2 horas · Suporte em português</p>
         </div>
       </div>
     </section>
   )
 }
 
-// ─── Demo Form ─────────────────────────────────────────────────────────────────
-function DemoSection() {
-  const [form, setForm] = useState({ name: '', email: '', school: '', city: '', phone: '' })
-  const [submitting, setSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
-  const [error, setError] = useState('')
+// ─── FAQ ──────────────────────────────────────────────────────────────────
+function FAQ() {
+  const [open, setOpen] = useState<number | null>(null)
+  const ref = useAnim()
+  const items = [
+    { q: 'Como funciona o primeiro mês grátis?', a: 'Você começa a usar a plataforma sem pagar nada. Só cobramos a partir do segundo mês, quando você já viu o valor na prática.' },
+    { q: 'Preciso de conhecimento técnico para usar?', a: 'Não. A plataforma foi criada para gestores de escolas, não para analistas de TI. O onboarding é guiado e o suporte em português está sempre disponível.' },
+    { q: 'Quanto tempo leva para configurar?', a: 'Em menos de 10 minutos você importa o histórico do ERP, a IA gera o plano inicial e sua equipe já pode começar a usar o CRM.' },
+    { q: 'Posso cancelar quando quiser?', a: 'Sim. Não há fidelidade mínima. Se quiser cancelar, basta avisar com 30 dias de antecedência.' },
+    { q: 'Como funciona a integração com o WhatsApp?', a: 'Usamos a API Oficial do Meta WhatsApp Business. O processo de homologação do número leva de 2 a 5 dias úteis e nossa equipe faz tudo por você.' },
+    { q: 'A plataforma funciona com qualquer ERP escolar?', a: 'Sim. A IA consegue processar relatórios em PDF, XLS e CSV de qualquer ERP: SIGA, Totvs, Escolare, Sistec e outros.' },
+  ]
+  return (
+    <section style={{ padding: '88px 32px', background: '#fff' }}>
+      <div style={{ maxWidth: 720, margin: '0 auto' }}>
+        <div ref={ref} className="anim" style={{ textAlign: 'center', marginBottom: 48 }}>
+          <h2 style={{ fontSize: 34, fontWeight: 900, color: '#111827', marginBottom: 12 }}>Perguntas frequentes</h2>
+        </div>
+        <div>
+          {items.map((item, i) => (
+            <div key={i} className="faq-item">
+              <button className="faq-btn" onClick={() => setOpen(open === i ? null : i)}>
+                <span>{item.q}</span>
+                <span style={{ fontSize: 20, color: '#00A896', transition: 'transform .2s', transform: open === i ? 'rotate(45deg)' : 'none' }}>+</span>
+              </button>
+              {open === i && (
+                <div style={{ paddingBottom: 18, fontSize: 14, color: '#6B7280', lineHeight: 1.7 }}>{item.a}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
 
-  const handleSubmit = async (e: React.FormEvent) => {
+// ─── CTA FINAL + FORMULÁRIO ───────────────────────────────────────────────
+function CTAFinal() {
+  const [form, setForm] = useState({ nome: '', email: '', escola: '', cidade: '', whatsapp: '' })
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const ref = useAnim()
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setSubmitting(true)
-    setError('')
-
+    if (!form.nome || !form.email || !form.escola || !form.whatsapp) { setErr('Preencha todos os campos obrigatórios.'); return }
+    setSending(true); setErr(null)
     try {
       await supabase.from('demo_requests').insert({
-        name: form.name,
+        name: form.nome,
         email: form.email,
-        school_name: form.school,
-        city: form.city,
-        phone: form.phone,
+        school_name: form.escola,
+        city: form.cidade,
+        whatsapp: form.whatsapp,
+        type: 'demo',
       })
-
-      const msg = encodeURIComponent(
-        `Olá! Quero uma demonstração da Áion Edu.\n\nNome: ${form.name}\nEscola: ${form.school}\nCidade: ${form.city}\nE-mail: ${form.email}`
-      )
+      setSent(true)
+      const msg = encodeURIComponent(`Olá! Sou ${form.nome} da escola ${form.escola} (${form.cidade || 'Brasil'}) e quero agendar uma demonstração gratuita da Áion Edu.`)
       window.open(`https://wa.me/5583985556393?text=${msg}`, '_blank')
-      setSubmitted(true)
     } catch {
-      setError('Erro ao enviar. Tente novamente.')
+      setErr('Erro ao enviar. Tente novamente ou fale pelo WhatsApp.')
     } finally {
-      setSubmitting(false)
+      setSending(false)
     }
   }
 
   return (
-    <section id="demo" style={{ padding: '80px 24px', background: 'linear-gradient(135deg, #00523C 0%, #00A896 100%)' }}>
-      <div style={{ maxWidth: 640, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 48 }}>
-          <h2 style={{ fontSize: 'clamp(24px, 3.5vw, 40px)', fontWeight: 800, color: '#fff', marginBottom: 16, letterSpacing: '-0.5px' }}>
+    <section id="demo" style={{ padding: '88px 32px', background: 'linear-gradient(135deg,#00523C,#00A896)' }}>
+      <div style={{ maxWidth: 880, margin: '0 auto' }}>
+        <div ref={ref} className="anim" style={{ textAlign: 'center', marginBottom: 48 }}>
+          <h2 style={{ fontSize: 36, fontWeight: 900, color: '#fff', marginBottom: 14 }}>
             Comece antes da campanha de agosto
           </h2>
-          <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6 }}>
-            Escolas que planejam com antecedência matriculam significativamente mais novatos.
+          <p style={{ fontSize: 17, color: 'rgba(255,255,255,.85)', maxWidth: 540, margin: '0 auto', lineHeight: 1.7 }}>
+            Escolas que planejam com antecedência têm resultados consistentemente melhores na captação de novos alunos.
           </p>
         </div>
 
-        {submitted ? (
-          <div style={{ background: 'rgba(255,255,255,0.12)', borderRadius: 20, padding: '48px 40px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.2)' }}>
-            <div style={{ fontSize: 56, marginBottom: 20 }}>🎉</div>
-            <h3 style={{ fontSize: 24, fontWeight: 700, color: '#fff', marginBottom: 12 }}>Obrigado!</h3>
-            <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 16, lineHeight: 1.6 }}>
-              Redirecionando para o WhatsApp... Em breve nossa equipe entrará em contato.
+        {sent ? (
+          <div style={{ background: '#fff', borderRadius: 20, padding: '48px 40px', textAlign: 'center', maxWidth: 520, margin: '0 auto' }}>
+            <div style={{ fontSize: 52, marginBottom: 16 }}>🎉</div>
+            <h3 style={{ fontSize: 24, fontWeight: 900, color: '#00523C', marginBottom: 12 }}>Recebemos sua solicitação!</h3>
+            <p style={{ color: '#374151', lineHeight: 1.7, fontSize: 15 }}>
+              Nossa equipe vai entrar em contato via WhatsApp em até 2 horas. Enquanto isso, abrimos o WhatsApp para você já adiantar uma mensagem.
             </p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} style={{
-            background: 'rgba(255,255,255,0.97)',
-            borderRadius: 20,
-            padding: '40px',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-          }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
-                  Nome completo *
-                </label>
-                <input className="form-input" type="text" required
-                  value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="Seu nome completo" />
+          <form onSubmit={handleSubmit} style={{ background: '#fff', borderRadius: 20, padding: '40px 40px', maxWidth: 680, margin: '0 auto' }}>
+            <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nome completo *</label>
+                <input className="input-field" value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} placeholder="Seu nome" />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
-                  E-mail *
-                </label>
-                <input className="form-input" type="email" required
-                  value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                  placeholder="seu@email.com.br" />
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>E-mail *</label>
+                <input className="input-field" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="seu@email.com" />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
-                  Telefone/WhatsApp *
-                </label>
-                <input className="form-input" type="tel" required
-                  value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                  placeholder="(XX) 9XXXX-XXXX" />
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nome da escola *</label>
+                <input className="input-field" value={form.escola} onChange={e => setForm(f => ({ ...f, escola: e.target.value }))} placeholder="Colégio..." />
               </div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
-                  Nome da escola *
-                </label>
-                <input className="form-input" type="text" required
-                  value={form.school} onChange={e => setForm(f => ({ ...f, school: e.target.value }))}
-                  placeholder="Nome da sua escola" />
-              </div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
-                  Cidade/Estado *
-                </label>
-                <input className="form-input" type="text" required
-                  value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
-                  placeholder="Ex: Patos - PB" />
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cidade / Estado</label>
+                <input className="input-field" value={form.cidade} onChange={e => setForm(f => ({ ...f, cidade: e.target.value }))} placeholder="Ex: João Pessoa/PB" />
               </div>
             </div>
-
-            {error && (
-              <p style={{ color: '#dc2626', fontSize: 13, marginBottom: 14 }}>{error}</p>
-            )}
-
-            <button type="submit" className="btn-primary" disabled={submitting}
-              style={{ width: '100%', justifyContent: 'center', fontSize: 16, padding: '14px', opacity: submitting ? 0.7 : 1 }}>
-              {submitting ? 'Enviando...' : 'Quero minha demonstração gratuita →'}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>WhatsApp *</label>
+              <input className="input-field" value={form.whatsapp} onChange={e => setForm(f => ({ ...f, whatsapp: e.target.value }))} placeholder="(83) 9xxxx-xxxx" />
+            </div>
+            {err && <p style={{ color: '#DC2626', fontSize: 13, marginBottom: 12 }}>{err}</p>}
+            <button type="submit" disabled={sending} className="btn-primary" style={{ width: '100%', justifyContent: 'center', fontSize: 16, padding: '16px 0', opacity: sending ? 0.7 : 1 }}>
+              {sending ? 'Enviando...' : 'Quero minha demonstração gratuita →'}
             </button>
-
-            <p style={{ textAlign: 'center', fontSize: 12, color: '#9ca3af', marginTop: 14 }}>
-              Sem compromisso · Demonstração em 30 minutos · Suporte em português
+            <p style={{ textAlign: 'center', fontSize: 12, color: '#9CA3AF', marginTop: 12 }}>
+              Sem compromisso · Resposta em até 2 horas · Suporte em português
             </p>
           </form>
         )}
@@ -819,137 +875,90 @@ function DemoSection() {
   )
 }
 
-// ─── Footer ────────────────────────────────────────────────────────────────────
+// ─── RODAPÉ ───────────────────────────────────────────────────────────────
 function Footer() {
   return (
-    <footer id="contato" style={{ background: '#0a1628', color: '#e5e7eb', padding: '64px 24px 32px' }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        {/* Top */}
-        <div className="footer-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 40, marginBottom: 48, paddingBottom: 48, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          {/* Brand */}
+    <footer style={{ background: '#111827', padding: '64px 32px 32px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        {/* Logo + descrição */}
+        <div className="footer-cols" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 48, marginBottom: 48 }}>
           <div>
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 800, fontSize: 22, color: '#fff', letterSpacing: '-0.5px' }}>Áion Edu</div>
-              <div style={{ fontSize: 12, color: '#6b7280', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Inteligência em matrículas</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 9, background: 'linear-gradient(135deg,#00523C,#00A896)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'white' }} />
+              </div>
+              <span style={{ fontWeight: 900, fontSize: 16, color: '#fff' }}>Áion Edu</span>
             </div>
-            <p style={{ fontSize: 13, color: '#9ca3af', lineHeight: 1.6, maxWidth: 280, marginBottom: 20 }}>
-              Plataforma de gestão de matrículas para escolas privadas brasileiras. CRM, IA e WhatsApp em um só lugar.
+            <p style={{ fontSize: 13, color: '#9CA3AF', lineHeight: 1.7, marginBottom: 16 }}>Inteligência em matrículas para escolas privadas brasileiras.</p>
+            <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.7 }}>
+              AION SOLUÇÕES TECNOLÓGICAS LTDA<br />
+              CNPJ: 65.835.064/0001-58<br />
+              R. Francisco Vicente de Araújo, 48 · Bela Vista<br />
+              Patos - PB · CEP 58.704-560<br />
+              (83) 9855-6393 · contato@aionedu.com.br
             </p>
-            <div style={{ display: 'flex', gap: 12 }}>
-              {/* WhatsApp */}
-              <a href="https://wa.me/5583985556393" target="_blank" rel="noopener noreferrer"
-                style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', textDecoration: 'none', transition: 'background 0.2s' }}>
-                <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.5 2C6.253 2 2 6.253 2 11.5c0 1.938.577 3.74 1.568 5.248L2 22l5.379-1.517A9.454 9.454 0 0011.5 21C16.747 21 21 16.747 21 11.5S16.747 2 11.5 2zm0 17.143a7.618 7.618 0 01-3.896-1.071l-.279-.166-2.893.816.824-2.821-.182-.289A7.609 7.609 0 013.857 11.5C3.857 7.274 7.274 3.857 11.5 3.857c4.226 0 7.643 3.417 7.643 7.643 0 4.226-3.417 7.643-7.643 7.643z" fillRule="evenodd"/></svg>
-              </a>
-            </div>
           </div>
-
-          {/* Product */}
           <div>
-            <h4 style={{ fontSize: 13, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 16 }}>Produto</h4>
-            {[
-              { label: 'Funcionalidades', href: '#funcionalidades' },
-              { label: 'Como funciona', href: '#como-funciona' },
-              { label: 'Preços', href: '#precos' },
-              { label: 'Blog', href: '#' },
-            ].map(l => (
-              <a key={l.label} href={l.href} style={{ display: 'block', color: '#9ca3af', textDecoration: 'none', fontSize: 13, marginBottom: 10, transition: 'color 0.2s' }}
+            <h4 style={{ color: '#fff', fontSize: 13, fontWeight: 700, marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Produto</h4>
+            {[['#modulos','Módulos'],['#como-funciona','Como funciona'],['#precos','Preços'],['#demo','Demo']].map(([href, label]) => (
+              <a key={href} href={href} style={{ display: 'block', color: '#9CA3AF', textDecoration: 'none', fontSize: 13, marginBottom: 10, transition: 'color .2s' }}
                 onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
-                onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
-                {l.label}
-              </a>
+                onMouseLeave={e => (e.currentTarget.style.color = '#9CA3AF')}
+              >{label}</a>
             ))}
           </div>
-
-          {/* Company */}
           <div>
-            <h4 style={{ fontSize: 13, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 16 }}>Empresa</h4>
-            {[
-              { label: 'Sobre nós', href: '#' },
-              { label: 'Parceiros', href: '#' },
-              { label: 'Contato', href: '#contato' },
-            ].map(l => (
-              <a key={l.label} href={l.href} style={{ display: 'block', color: '#9ca3af', textDecoration: 'none', fontSize: 13, marginBottom: 10, transition: 'color 0.2s' }}
+            <h4 style={{ color: '#fff', fontSize: 13, fontWeight: 700, marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Empresa</h4>
+            {[['/sobre','Sobre nós'],['/parceiros','Parceiros'],['/blog','Blog']].map(([href, label]) => (
+              <Link key={href} to={href} style={{ display: 'block', color: '#9CA3AF', textDecoration: 'none', fontSize: 13, marginBottom: 10, transition: 'color .2s' }}
                 onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
-                onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
-                {l.label}
-              </a>
+                onMouseLeave={e => (e.currentTarget.style.color = '#9CA3AF')}
+              >{label}</Link>
             ))}
           </div>
-
-          {/* Legal */}
           <div>
-            <h4 style={{ fontSize: 13, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 16 }}>Legal</h4>
-            {[
-              { label: 'Política de Privacidade', href: '/privacidade' },
-              { label: 'Termos de Uso', href: '/termos' },
-              { label: 'LGPD', href: '/privacidade#lgpd' },
-            ].map(l => (
-              <a key={l.label} href={l.href} style={{ display: 'block', color: '#9ca3af', textDecoration: 'none', fontSize: 13, marginBottom: 10, transition: 'color 0.2s' }}
+            <h4 style={{ color: '#fff', fontSize: 13, fontWeight: 700, marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Legal</h4>
+            {[['/privacidade','Política de Privacidade'],['/termos','Termos de Uso'],['/privacidade','LGPD']].map(([href, label]) => (
+              <Link key={label} to={href} style={{ display: 'block', color: '#9CA3AF', textDecoration: 'none', fontSize: 13, marginBottom: 10, transition: 'color .2s' }}
                 onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
-                onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
-                {l.label}
-              </a>
+                onMouseLeave={e => (e.currentTarget.style.color = '#9CA3AF')}
+              >{label}</Link>
             ))}
           </div>
         </div>
-
-        {/* Company info */}
-        <div style={{ marginBottom: 24, padding: '20px', background: 'rgba(255,255,255,0.03)', borderRadius: 12 }}>
-          <p style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.8 }}>
-            <strong style={{ color: '#9ca3af' }}>AION SOLUCOES TECNOLOGICAS LTDA</strong> · CNPJ: 65.835.064/0001-58<br />
-            R. Francisco Vicente de Araújo, 48 · Bela Vista · Patos - PB · CEP 58.704-560<br />
-            (83) 9855-6393 · contato@aionedu.com.br
-          </p>
-        </div>
-
-        {/* Bottom */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
-          <p style={{ fontSize: 12, color: '#6b7280' }}>
-            © 2026 Áion Edu. Todos os direitos reservados.
-          </p>
-          <div style={{ display: 'flex', gap: 20 }}>
-            {[
-              { label: 'Política de Privacidade', href: '/privacidade' },
-              { label: 'Termos de Uso', href: '/termos' },
-            ].map(l => (
-              <a key={l.label} href={l.href} style={{ fontSize: 12, color: '#6b7280', textDecoration: 'none' }}
-                onMouseEnter={e => (e.currentTarget.style.color = '#9ca3af')}
-                onMouseLeave={e => (e.currentTarget.style.color = '#6b7280')}>
-                {l.label}
-              </a>
-            ))}
-          </div>
+        <div style={{ borderTop: '1px solid #1F2937', paddingTop: 24, textAlign: 'center' }}>
+          <p style={{ fontSize: 12, color: '#6B7280' }}>© 2026 Áion Edu. Todos os direitos reservados.</p>
         </div>
       </div>
     </footer>
   )
 }
 
-// ─── Main Landing Page ─────────────────────────────────────────────────────────
+// ─── PÁGINA PRINCIPAL ─────────────────────────────────────────────────────
 export default function Landing() {
-  useScrollAnimations()
+  useEffect(() => {
+    const el = document.createElement('style')
+    el.textContent = CSS
+    document.head.appendChild(el)
+    return () => { document.head.removeChild(el) }
+  }, [])
 
   return (
     <>
-      <style>{GLOBAL_CSS}</style>
-      <style>{`
-        @media (max-width: 768px) {
-          .mobile-menu-btn { display: flex !important; }
-          .stats-grid { grid-template-columns: 1fr 1fr !important; }
-          .footer-grid { grid-template-columns: 1fr 1fr !important; }
-        }
-      `}</style>
       <Header />
-      <main style={{ paddingTop: 0 }}>
+      <main>
         <Hero />
-        <PainSection />
-        <AboutSection />
-        <FeaturesSection />
-        <HowItWorksSection />
-        <TestimonialSection />
-        <PricingSection />
-        <DemoSection />
+        <Numeros />
+        <Problema />
+        <OQueE />
+        <Modulos />
+        <ComoFunciona />
+        <Depoimento />
+        <WhatsApp />
+        <Relatorios />
+        <Precos />
+        <FAQ />
+        <CTAFinal />
       </main>
       <Footer />
     </>

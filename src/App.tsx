@@ -14,6 +14,9 @@ import SatisfactionPage from './pages/survey/SatisfactionPage'
 import Landing from './pages/Landing'
 import Privacidade from './pages/Privacidade'
 import Termos from './pages/Termos'
+import SobreNos from './pages/SobreNos'
+import Parceiros from './pages/Parceiros'
+import Blog, { BlogPost } from './pages/Blog'
 
 // Regular User Components
 import Dashboard from './components/dashboard/Dashboard'
@@ -216,6 +219,10 @@ function AppContent() {
         <Route path="/" element={<Landing />} />
         <Route path="/privacidade" element={<Privacidade />} />
         <Route path="/termos" element={<Termos />} />
+        <Route path="/sobre" element={<SobreNos />} />
+        <Route path="/parceiros" element={<Parceiros />} />
+        <Route path="/blog" element={<Blog />} />
+        <Route path="/blog/:slug" element={<BlogPost />} />
         <Route path="/login" element={<LoginForm />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
