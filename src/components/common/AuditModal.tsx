@@ -2,14 +2,21 @@ import React, { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
-interface AuditLog {
+interface LogEntry {
   id: string
   action: string
-  field_changed: string | null
-  old_value: string | null
-  new_value: string | null
-  user_name: string | null
-  user_role: string | null
+  details?: Record<string, unknown> | null
+  // audit_logs fields
+  field_changed?: string | null
+  old_value?: string | null
+  new_value?: string | null
+  user_name?: string | null
+  user_role?: string | null
+  // activity_logs fields
+  entity_id?: string | null
+  entity_type?: string | null
+  user_id?: string | null
+  institution_id?: string | null
   created_at: string
 }
 
@@ -20,6 +27,13 @@ const ACTION_CONFIG: Record<string, { icon: string; color: string; bg: string; l
   status_changed: { icon: '🔄', color: '#d97706', bg: '#fef3c7', label: 'alterou status' },
 }
 
+function actionIcon(action: string) {
+  if (action === 'created' || action === 'Lead criado') return '➕'
+  if (action === 'deleted') return '🗑️'
+  if (action.toLowerCase().includes('status') || action.toLowerCase().includes('moveu')) return '🔄'
+  return '✏️'
+}
+
 interface Props {
   recordId: string
   moduleName: string
@@ -27,23 +41,36 @@ interface Props {
   onClose: () => void
 }
 
-export default function AuditModal({ recordId, isOpen, onClose }: Props) {
-  const [logs, setLogs] = useState<AuditLog[]>([])
+export default function AuditModal({ recordId, moduleName, isOpen, onClose }: Props) {
+  const [logs, setLogs] = useState<LogEntry[]>([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (!isOpen || !recordId) return
     setLoading(true)
-    supabase
-      .from('audit_logs')
-      .select('*')
-      .eq('record_id', recordId)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        setLogs((data ?? []) as AuditLog[])
-        setLoading(false)
-      })
-  }, [isOpen, recordId])
+
+    const load = async () => {
+      if (moduleName === 'leads') {
+        const { data } = await supabase
+          .from('activity_logs')
+          .select('*')
+          .eq('entity_id', recordId)
+          .eq('entity_type', 'lead')
+          .order('created_at', { ascending: false })
+        setLogs((data ?? []) as LogEntry[])
+      } else {
+        const { data } = await supabase
+          .from('audit_logs')
+          .select('*')
+          .eq('record_id', recordId)
+          .order('created_at', { ascending: false })
+        setLogs((data ?? []) as LogEntry[])
+      }
+      setLoading(false)
+    }
+
+    load()
+  }, [isOpen, recordId, moduleName])
 
   if (!isOpen) return null
 
@@ -93,11 +120,58 @@ export default function AuditModal({ recordId, isOpen, onClose }: Props) {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {logs.map(log => {
-                const cfg = ACTION_CONFIG[log.action] ?? ACTION_CONFIG.updated
                 const date = new Date(log.created_at)
                 const dateStr = date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
                 const timeStr = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
+                // ── activity_logs (leads) ──────────────────────────────────
+                if (moduleName === 'leads') {
+                  const details = log.details
+                    ? (typeof log.details === 'string' ? JSON.parse(log.details) : log.details)
+                    : {}
+                  const icon = actionIcon(log.action)
+                  const isStatusChange = log.action.toLowerCase().includes('status') || log.action.toLowerCase().includes('moveu')
+                  const actor = details?.changed_by ?? details?.responsible_name ?? details?.user_name ?? 'Sistema'
+                  const iconBg = icon === '🔄' ? '#fef3c7' : icon === '➕' ? '#dcfce7' : icon === '🗑️' ? '#fee2e2' : '#dbeafe'
+                  return (
+                    <div key={log.id} style={{
+                      display: 'flex', alignItems: 'flex-start', gap: 10,
+                      padding: '10px 12px', borderRadius: 10,
+                      background: '#f8fafc', border: '1px solid #f1f5f9',
+                    }}>
+                      <span style={{
+                        width: 28, height: 28, borderRadius: 8, background: iconBg,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 13, flexShrink: 0,
+                      }}>
+                        {icon}
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: '0 0 2px', fontSize: 13, color: '#1e293b', lineHeight: 1.4 }}>
+                          <span style={{ fontWeight: 600 }}>{actor}</span>
+                          {' '}
+                          <span style={{ color: isStatusChange ? '#d97706' : '#1d4ed8' }}>
+                            {isStatusChange
+                              ? `moveu para "${details?.new_status ?? ''}"`
+                              : log.action}
+                          </span>
+                          {isStatusChange && details?.previous_status && (
+                            <span style={{ color: '#94a3b8' }}> (de &ldquo;{details.previous_status}&rdquo;)</span>
+                          )}
+                        </p>
+                        {details?.reason && details.reason !== 'Status alterado' && (
+                          <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748b' }}>{details.reason}</p>
+                        )}
+                        <p style={{ margin: '2px 0 0', fontSize: 11, color: '#94a3b8' }}>
+                          {dateStr} {timeStr}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                }
+
+                // ── audit_logs (outros módulos) ────────────────────────────
+                const cfg = ACTION_CONFIG[log.action] ?? ACTION_CONFIG.updated
                 return (
                   <div key={log.id} style={{
                     display: 'flex', alignItems: 'flex-start', gap: 10,
