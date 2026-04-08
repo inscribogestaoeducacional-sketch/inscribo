@@ -253,6 +253,31 @@ export default function GestorTransfers() {
     await load()
   }
 
+  // ── permanent delete ─────────────────────────────────────────────────────
+  async function handlePermanentDelete(id: string) {
+    const confirmed = window.confirm(
+      'Apagar definitivamente? Esta ação não pode ser desfeita e removerá todos os dados desta transferência.'
+    )
+    if (!confirmed) return
+    const { error } = await supabase.from('student_transfers').delete().eq('id', id)
+    if (!error) {
+      showToast('Registro apagado definitivamente.')
+      await load()
+    }
+  }
+
+  async function handlePermanentDeleteAll() {
+    if (deletedTransfers.length === 0) return
+    const confirmed = window.confirm(
+      `Apagar ${deletedTransfers.length} registro(s) definitivamente? Esta ação não pode ser desfeita.`
+    )
+    if (!confirmed) return
+    const ids = deletedTransfers.map(t => t.id)
+    await supabase.from('student_transfers').delete().in('id', ids)
+    showToast('Todos os registros excluídos permanentemente.')
+    await load()
+  }
+
   // ── link generation ─────────────────────────────────────────────────────
   async function handleGenerateLink(t: Transfer) {
     const token = crypto.randomUUID()
@@ -516,8 +541,16 @@ export default function GestorTransfers() {
       {/* ── Aba Excluídos ──────────────────────────────────────────────────── */}
       {activeTab === 'deleted' && (
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Transferências excluídas</h3>
+            {deletedTransfers.length > 0 && isAdmin && (
+              <button
+                onClick={handlePermanentDeleteAll}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 8, border: '1px solid #fecaca', background: '#fff5f5', fontSize: 12, fontWeight: 600, color: '#dc2626', cursor: 'pointer' }}
+              >
+                <Trash2 size={12} /> Apagar todos definitivamente
+              </button>
+            )}
           </div>
           {deletedTransfers.length === 0 ? (
             <div style={{ padding: '48px 24px', textAlign: 'center' }}>
@@ -551,10 +584,16 @@ export default function GestorTransfers() {
                       </td>
                       <td style={{ padding: '12px 8px' }}>
                         {isAdmin && (
-                          <button onClick={() => handleRestore(t.id)}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 12, fontWeight: 600, color: '#0f766e', cursor: 'pointer' }}>
-                            <RotateCcw size={12} /> Restaurar
-                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <button onClick={() => handleRestore(t.id)}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 12, fontWeight: 600, color: '#0f766e', cursor: 'pointer' }}>
+                              <RotateCcw size={12} /> Restaurar
+                            </button>
+                            <button onClick={() => handlePermanentDelete(t.id)}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 8, border: '1px solid #fecaca', background: '#fff5f5', fontSize: 12, fontWeight: 600, color: '#dc2626', cursor: 'pointer' }}>
+                              <Trash2 size={12} /> Apagar definitivamente
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>

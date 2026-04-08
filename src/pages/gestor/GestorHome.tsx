@@ -210,7 +210,7 @@ export default function GestorHome() {
       const [cyclesRes, funnelRes, transferRes, leadsRes, visitsRes, waRes] = await Promise.all([
         supabase.from('campaign_cycles').select('*').eq('institution_id', institutionId).order('created_at', { ascending: false }),
         supabase.from('funnel_metrics').select('*').eq('institution_id', institutionId).order('created_at', { ascending: true }),
-        supabase.from('student_transfers').select('id, student_name, course_grade, transfer_date, reason_category').eq('institution_id', institutionId).order('transfer_date', { ascending: false }).limit(5),
+        supabase.from('student_transfers').select('id, student_name, course_grade, transfer_date, reason_category').eq('institution_id', institutionId).is('deleted_at', null).order('transfer_date', { ascending: false }).limit(5),
         supabase.from('leads').select('id, status, created_at').eq('institution_id', institutionId),
         supabase.from('visits').select('id, status, created_at').eq('institution_id', institutionId),
         supabase.from('whatsapp_messages').select('id, created_at, from_me').eq('institution_id', institutionId).gte('created_at', thirtyDaysAgo),

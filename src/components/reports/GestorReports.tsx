@@ -1429,7 +1429,7 @@ export default function GestorReports() {
     try {
       const { data } = await supabase
         .from('student_transfers').select('*')
-        .eq('institution_id', institutionId).order('created_at', { ascending: false })
+        .eq('institution_id', institutionId).is('deleted_at', null).order('created_at', { ascending: false })
       setTransfers(data || [])
     } catch { /* ignore */ }
 

@@ -390,13 +390,15 @@ interface HistoryModalProps {
   setShowContactForm: (v: boolean) => void
   savingContact: boolean
   onSaveContact: () => void
+  onAudit?: (id: string) => void
 }
 
 function HistoryModal({
   isOpen, onClose, lead, history, loading, newAction, setNewAction, savingAction,
   editingAction, setEditingAction, editingActionText, setEditingActionText,
   onAddAction, onSaveEditAction, onDeleteAction,
-  contactForm, setContactForm, showContactForm, setShowContactForm, savingContact, onSaveContact
+  contactForm, setContactForm, showContactForm, setShowContactForm, savingContact, onSaveContact,
+  onAudit,
 }: HistoryModalProps) {
   if (!isOpen || !lead) return null
 
@@ -570,7 +572,15 @@ function HistoryModal({
           </div>
         )}
 
-        <div className="flex justify-end mt-6 pt-5 border-t border-gray-200">
+        <div className="flex items-center justify-between mt-6 pt-5 border-t border-gray-200">
+          {onAudit && lead ? (
+            <button
+              onClick={() => { onAudit(lead.id); onClose() }}
+              className="flex items-center gap-2 px-4 py-2 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-xl font-semibold transition-all"
+            >
+              <History className="w-4 h-4" /> Ver histórico de alterações
+            </button>
+          ) : <span />}
           <button onClick={onClose} className="px-6 py-2.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-semibold transition-all">
             Fechar
           </button>
@@ -1293,6 +1303,7 @@ export default function LeadKanban() {
         setShowContactForm={setShowContactForm}
         savingContact={savingContact}
         onSaveContact={handleSaveContact}
+        onAudit={(id) => { setShowHistory(false); setSelectedLead(null); setAuditLeadId(id) }}
       />
 
       {/* ── Audit Modal ─────────────────────────────────────────────────────── */}
