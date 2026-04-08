@@ -279,41 +279,69 @@ export default function AdminSchools() {
       )
 
       if (existing) {
-        await supabase.from('campaign_cycles').update(payload).eq('id', existing.id)
+        const { error } = await supabase.from('campaign_cycles').update(payload).eq('id', existing.id)
+        if (error) throw error
       } else {
-        await supabase.from('campaign_cycles').insert(payload)
+        const { error } = await supabase.from('campaign_cycles').insert(payload)
+        if (error) throw error
       }
 
-      // Notifica gestor da escola via system_notifications
+      // Notifica gestor — ignora erro para não bloquear a liberação
       await supabase.from('system_notifications').insert({
         institution_id: releaseModal.id,
         title: `Campanha ${year} liberada!`,
-        message: `Sua campanha de matrículas ${year} foi liberada. Configure seu setup para começar.`,
+        message: `Sua campanha de matrículas ${year} foi liberada. Acesse o sistema para configurar o setup e começar a captar alunos.`,
         type: 'info',
+        read: false,
+      }).then(({ error }) => {
+        if (error) console.warn('Notificação não enviada:', error.message)
       })
 
-      showToast(`Campanha ${year} liberada para ${releaseModal.name}!`)
+      showToast(`Campanha ${year} liberada para ${releaseModal.name}! Gestor notificado.`)
       setReleaseModal(null)
       loadData()
     } catch (e: any) {
-      showToast('Erro ao liberar campanha.', false)
+      showToast(`Erro ao liberar: ${e?.message || 'Tente novamente.'}`, false)
     } finally {
       setReleasing(false)
     }
   }
 
-  // ── Suspend ───────────────────────────────────────────────────
+  // ── Suspend / Reactivate ──────────────────────────────────────
   const handleSuspend = async (inst: any) => {
-    if (!confirm(`Suspender acesso de "${inst.name}"? O gestor não conseguirá mais logar.`)) return
+    if (!confirm(`Suspender acesso de "${inst.name}"?\n\nO gestor não conseguirá mais fazer login até ser reativado.`)) return
     const { error } = await supabase.from('institutions').update({ plan_status: 'suspended' }).eq('id', inst.id)
     if (error) showToast('Erro ao suspender.', false)
-    else { showToast(`${inst.name} suspenso.`); loadData() }
+    else { showToast(`${inst.name} suspenso. Gestor sem acesso.`); loadData() }
   }
 
   const handleReactivate = async (inst: any) => {
+    if (!confirm(`Reativar acesso de "${inst.name}"?`)) return
     const { error } = await supabase.from('institutions').update({ plan_status: 'active' }).eq('id', inst.id)
     if (error) showToast('Erro ao reativar.', false)
-    else { showToast(`${inst.name} reativado!`); loadData() }
+    else { showToast(`${inst.name} reativado! Gestor com acesso liberado.`); loadData() }
+  }
+
+  // ── Delete ────────────────────────────────────────────────────
+  const handleDelete = async (inst: any) => {
+    if (!confirm(`⚠️ EXCLUIR "${inst.name}"?\n\nEsta ação é IRREVERSÍVEL e removerá a instituição e todos os dados relacionados.`)) return
+    const confirmName = window.prompt(`Para confirmar, digite o nome exato da escola:\n"${inst.name}"`)
+    if (confirmName !== inst.name) {
+      showToast('Nome incorreto. Exclusão cancelada.', false)
+      return
+    }
+    try {
+      await supabase.from('campaign_cycles').delete().eq('institution_id', inst.id)
+      await supabase.from('system_notifications').delete().eq('institution_id', inst.id)
+      await supabase.from('school_implementations').delete().eq('institution_id', inst.id)
+      await supabase.from('users').update({ institution_id: null }).eq('institution_id', inst.id)
+      const { error } = await supabase.from('institutions').delete().eq('id', inst.id)
+      if (error) throw error
+      showToast(`"${inst.name}" excluída permanentemente.`)
+      loadData()
+    } catch (e: any) {
+      showToast(`Erro ao excluir: ${e?.message}`, false)
+    }
   }
 
   // ── Stats ─────────────────────────────────────────────────────
@@ -506,6 +534,13 @@ export default function AdminSchools() {
                               <AlertTriangle className="w-3.5 h-3.5" />
                             </button>
                           )}
+                          <button
+                            onClick={() => handleDelete(inst)}
+                            className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Excluir permanentemente"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>
