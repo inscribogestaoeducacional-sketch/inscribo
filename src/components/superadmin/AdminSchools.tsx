@@ -22,6 +22,8 @@ export default function AdminSchools() {
   const [toast, setToast] = useState('')
   const [releaseModal, setReleaseModal] = useState<any | null>(null)
   const [startMonth, setStartMonth] = useState(8)
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const [releasing, setReleasing] = useState(false)
   const [editModal, setEditModal] = useState<any | null>(null)
 
@@ -50,15 +52,29 @@ export default function AdminSchools() {
     setReleasing(true)
     try {
       const year = new Date().getFullYear() + 1
-      await supabase.from('campaign_cycles').upsert({
+      const payload = {
         institution_id: releaseModal.id,
         status: 'released',
         campaign_start_month: startMonth,
         year,
         label: `Campanha ${year}`,
-        start_date: `${new Date().getFullYear()}-${String(startMonth).padStart(2, '0')}-01`,
-        end_date: `${year}-02-28`,
-      })
+        start_date: startDate || `${new Date().getFullYear()}-${String(startMonth).padStart(2, '0')}-01`,
+        end_date: endDate || `${year}-02-28`,
+      }
+
+      // Verifica se já existe ciclo em andamento para essa escola
+      const { data: existing } = await supabase
+        .from('campaign_cycles')
+        .select('id, status')
+        .eq('institution_id', releaseModal.id)
+        .in('status', ['setup', 'draft', 'released'])
+        .maybeSingle()
+
+      if (existing) {
+        await supabase.from('campaign_cycles').update(payload).eq('id', existing.id)
+      } else {
+        await supabase.from('campaign_cycles').insert(payload)
+      }
 
       const { data: gestorUser } = await supabase
         .from('users')
@@ -67,12 +83,19 @@ export default function AdminSchools() {
         .eq('role', 'admin')
         .maybeSingle()
 
-      if (gestorUser) {
+      const startMonthName = months.find(m => m.v === startMonth)?.l ?? ''
+
+      if (gestorUser?.email) {
         await supabase.functions.invoke('send-email', {
           body: {
             type: 'campaign_ready',
             to: gestorUser.email,
-            data: { school_name: releaseModal.name, year },
+            data: {
+              school_name: releaseModal.name,
+              year,
+              start_month: startMonthName,
+              gestor_name: gestorUser.full_name ?? '',
+            },
           },
         })
       }
@@ -80,7 +103,7 @@ export default function AdminSchools() {
       showToast(`Campanha ${year} liberada para ${releaseModal.name}! Gestor notificado.`)
       setReleaseModal(null)
       loadData()
-    } catch (e) {
+    } catch {
       showToast('Erro ao liberar campanha.', false)
     } finally {
       setReleasing(false)
@@ -205,7 +228,13 @@ export default function AdminSchools() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => { setReleaseModal(inst); setStartMonth(8) }}
+                            onClick={() => {
+                              const yr = new Date().getFullYear()
+                              setReleaseModal(inst)
+                              setStartMonth(8)
+                              setStartDate(`${yr}-08-01`)
+                              setEndDate(`${yr + 1}-02-28`)
+                            }}
                             className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100 font-medium transition-colors"
                             title="Liberar campanha"
                           >
@@ -261,7 +290,11 @@ export default function AdminSchools() {
                   {months.map(m => (
                     <button
                       key={m.v}
-                      onClick={() => setStartMonth(m.v)}
+                      onClick={() => {
+                        setStartMonth(m.v)
+                        const yr = new Date().getFullYear()
+                        setStartDate(`${yr}-${String(m.v).padStart(2, '0')}-01`)
+                      }}
                       className={`py-2 rounded-lg text-sm font-medium transition-colors ${
                         startMonth === m.v
                           ? 'bg-cyan-500 text-white'
@@ -272,6 +305,19 @@ export default function AdminSchools() {
                     </button>
                   ))}
                 </div>
+
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Data de início</label>
+                  <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+                    className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Data de fim</label>
+                  <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+                    className={inputCls} />
+                </div>
+              </div>
               </div>
 
               <div className="bg-cyan-50 rounded-xl p-4 text-sm text-cyan-800">

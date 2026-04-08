@@ -287,7 +287,9 @@ export default function CampaignGeneratorModal({
     if (existingCycle) {
       setSchoolData(s => ({
         ...s,
-        current_students: existingCycle.base_students || 0
+        current_students: existingCycle.base_students || 0,
+        ...(existingCycle.start_date ? { start_date: existingCycle.start_date } : {}),
+        ...(existingCycle.end_date   ? { end_date:   existingCycle.end_date   } : {}),
       }))
       if (existingCycle.market_data && Object.keys(existingCycle.market_data).length) {
         setMarketData(existingCycle.market_data)

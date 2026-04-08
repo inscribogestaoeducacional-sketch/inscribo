@@ -1470,13 +1470,17 @@ export default function GestorReports() {
   }, [allCycles])
 
   // Phase logic
-  const setupCycle = allCycles.find(c => c.status === 'setup')
+  const setupCycle = allCycles.find(c => c.status === 'setup' || c.status === 'released') ?? null
+  const releasedCycle = allCycles.find(c => c.status === 'released') ?? null
   const activeCycle = allCycles.find(c => c.status === 'active' || !!(c as CampaignCycle & { applied_at?: string }).applied_at)
   const hasSetup = !!setupCycle
   const hasCampaign = !!activeCycle
 
-  type Phase = 'no_setup' | 'pre_campaign' | 'campaign_active'
-  const phase: Phase = !hasSetup ? 'no_setup' : !hasCampaign ? 'pre_campaign' : 'campaign_active'
+  type Phase = 'no_setup' | 'pre_campaign' | 'campaign_released' | 'campaign_active'
+  const phase: Phase = !hasSetup ? 'no_setup'
+    : hasCampaign ? 'campaign_active'
+    : releasedCycle ? 'campaign_released'
+    : 'pre_campaign'
 
   const PRE_TABS = [
     { id: 'historico', label: 'Histórico', icon: BarChart3 },
@@ -1493,7 +1497,7 @@ export default function GestorReports() {
   ]
 
   const tabs = phase === 'campaign_active' ? ACTIVE_TABS : PRE_TABS
-  const cycleForModal = activeCycle ?? setupCycle ?? null
+  const cycleForModal = activeCycle ?? releasedCycle ?? setupCycle ?? null
 
   // Reset tab when phase changes
   useEffect(() => {
@@ -1513,14 +1517,23 @@ export default function GestorReports() {
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Relatórios & Inteligência</h1>
           <p style={{ fontSize: 12, color: '#94a3b8', margin: '2px 0 0' }}>
-            {phase === 'no_setup' ? 'Configure sua escola para começar' : phase === 'pre_campaign' ? 'Pré-campanha — visualizando histórico' : `Campanha ativa — Ano letivo ${activeCycle?.year ?? ''}`}
+            {phase === 'no_setup' ? 'Configure sua escola para começar'
+              : phase === 'pre_campaign' ? 'Pré-campanha — visualizando histórico'
+              : phase === 'campaign_released' ? `Campanha ${releasedCycle?.year ?? ''} liberada — configure agora`
+              : `Campanha ativa — Ano letivo ${activeCycle?.year ?? ''}`}
           </p>
         </div>
         <button
           onClick={() => setShowCampaignModal(true)}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, background: hasCampaign ? '#f0fdf4' : '#00A896', color: hasCampaign ? '#065f46' : '#fff', border: hasCampaign ? '1px solid #bbf7d0' : 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10,
+            background: hasCampaign ? '#f0fdf4' : phase === 'campaign_released' ? '#16a34a' : '#00A896',
+            color: hasCampaign ? '#065f46' : '#fff',
+            border: hasCampaign ? '1px solid #bbf7d0' : 'none',
+            fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          }}>
           <Settings style={{ width: 13, height: 13 }} />
-          {hasCampaign ? 'Regerar campanha' : 'Configurar campanha'}
+          {hasCampaign ? 'Regerar campanha' : phase === 'campaign_released' ? 'Configurar campanha →' : 'Configurar campanha'}
         </button>
       </div>
 
@@ -1531,6 +1544,23 @@ export default function GestorReports() {
           <p style={{ fontSize: 13, color: '#1e40af', margin: 0 }}>
             <strong>Fase pré-campanha</strong> — visualizando histórico da escola. A campanha {new Date().getFullYear() + 1} será configurada pelo seu administrador.
           </p>
+        </div>
+      )}
+      {phase === 'campaign_released' && (
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '16px 20px' }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: '#15803d', margin: '0 0 4px' }}>
+            🎉 Campanha liberada pelo administrador!
+          </p>
+          <p style={{ fontSize: 13, color: '#166534', margin: '0 0 12px' }}>
+            Configure seu plano de campanha para o ano letivo {releasedCycle?.year}.
+            {releasedCycle?.campaign_start_month ? ` Início previsto: ${fmtMonth(releasedCycle.campaign_start_month)}/${new Date().getFullYear()}.` : ''}
+          </p>
+          <button
+            onClick={() => setShowCampaignModal(true)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 18px', borderRadius: 8, background: '#16a34a', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            <Settings style={{ width: 13, height: 13 }} />
+            Configurar campanha agora →
+          </button>
         </div>
       )}
       {phase === 'campaign_active' && (
@@ -1591,11 +1621,11 @@ export default function GestorReports() {
               </div>
             ) : (
               <>
-                {/* Pre-campaign tabs */}
-                {activeTab === 'historico' && phase === 'pre_campaign' && (
+                {/* Pre-campaign tabs (also shown when campaign_released) */}
+                {activeTab === 'historico' && (phase === 'pre_campaign' || phase === 'campaign_released') && (
                   <TabHistorico setupCycle={setupCycle ?? null} institutionId={institutionId} />
                 )}
-                {activeTab === 'comparativo' && phase === 'pre_campaign' && (
+                {activeTab === 'comparativo' && (phase === 'pre_campaign' || phase === 'campaign_released') && (
                   <TabComparativoPre
                     setupCycle={setupCycle ?? null}
                     institutionId={institutionId}
@@ -1604,7 +1634,7 @@ export default function GestorReports() {
                     onFetchMarket={fetchMarket}
                   />
                 )}
-                {activeTab === 'mercado' && phase === 'pre_campaign' && (
+                {activeTab === 'mercado' && (phase === 'pre_campaign' || phase === 'campaign_released') && (
                   <TabMercado
                     marketData={marketData}
                     loadingMarket={loadingMarket}

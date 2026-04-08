@@ -294,8 +294,10 @@ export default function GestorHome() {
 
   // ─── derived data ─────────────────────────────────────────────────────────
   const activeCycle = cycles.find(c => c.status === 'active' || !!c.applied_at) ?? null
+  const releasedCycle = cycles.find(c => c.status === 'released') ?? null
   const anyCycle = cycles[0] ?? null
   const setupCycle = cycles.find(c => c.school_data?.city) ?? null
+  const campaignUnlocked = !!(activeCycle || releasedCycle)
 
   const cycleWithHistory = cycles.find(c =>
     c.historical_data && Array.isArray(c.historical_data) && c.historical_data.length > 0
@@ -457,7 +459,7 @@ export default function GestorHome() {
         </div>
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          {!activeCycle && (
+          {!activeCycle && !releasedCycle && (
             <button
               onClick={() => setShowModal(true)}
               style={{
@@ -471,32 +473,32 @@ export default function GestorHome() {
           )}
           <div
             style={{ position: 'relative' }}
-            onMouseEnter={() => !activeCycle && setBtnTooltip(true)}
+            onMouseEnter={() => !campaignUnlocked && setBtnTooltip(true)}
             onMouseLeave={() => setBtnTooltip(false)}
           >
             <button
-              onClick={() => activeCycle && setShowModal(true)}
-              disabled={!activeCycle}
+              onClick={() => campaignUnlocked && setShowModal(true)}
+              disabled={!campaignUnlocked}
               style={{
                 display: 'flex', alignItems: 'center', gap: 7,
                 padding: '9px 18px', borderRadius: 10,
-                background: activeCycle ? '#f0fdf4' : '#f1f5f9',
-                color: activeCycle ? '#065f46' : '#94a3b8',
-                border: activeCycle ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                background: activeCycle ? '#f0fdf4' : releasedCycle ? '#16a34a' : '#f1f5f9',
+                color: activeCycle ? '#065f46' : releasedCycle ? '#fff' : '#94a3b8',
+                border: activeCycle ? '1px solid #bbf7d0' : releasedCycle ? 'none' : '1px solid #e2e8f0',
                 fontSize: 13, fontWeight: 600,
-                cursor: activeCycle ? 'pointer' : 'not-allowed',
+                cursor: campaignUnlocked ? 'pointer' : 'not-allowed',
               }}>
-              {activeCycle ? <Sparkles size={14} /> : <Lock size={14} />}
-              {activeCycle ? 'Ajustar campanha' : 'Campanha bloqueada'}
+              {activeCycle ? <Sparkles size={14} /> : releasedCycle ? <Settings size={14} /> : <Lock size={14} />}
+              {activeCycle ? 'Ajustar campanha' : releasedCycle ? 'Configurar campanha' : 'Campanha bloqueada'}
             </button>
-            {btnTooltip && !activeCycle && (
+            {btnTooltip && !campaignUnlocked && (
               <div style={{
                 position: 'absolute', right: 0, top: '110%', zIndex: 999,
                 background: '#1e2d6b', color: 'white', fontSize: 12, lineHeight: 1.4,
                 padding: '8px 12px', borderRadius: 8, whiteSpace: 'nowrap', maxWidth: 260,
                 boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
               }}>
-                Gere uma campanha para ativar as metas do sistema.
+                Aguardando liberação pelo administrador.
                 <div style={{
                   position: 'absolute', right: 18, bottom: '100%',
                   borderWidth: '5px', borderStyle: 'solid',
@@ -1017,7 +1019,7 @@ export default function GestorHome() {
         isOpen={showModal}
         onClose={() => { setShowModal(false); setShowModalAtStep(undefined) }}
         onApply={() => { load(); setShowModal(false) }}
-        existingCycle={activeCycle as Parameters<typeof CampaignGeneratorModal>[0]['existingCycle']}
+        existingCycle={(activeCycle ?? releasedCycle) as Parameters<typeof CampaignGeneratorModal>[0]['existingCycle']}
         institutionId={institutionId}
         institutionName={user?.institution_name || 'Escola'}
         openAtStep={showModalAtStep}
