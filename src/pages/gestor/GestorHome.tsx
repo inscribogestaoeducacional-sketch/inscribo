@@ -28,6 +28,7 @@ interface HistoricalEntry {
   avg_monthly_fee?: number
   fee?: number
   error?: boolean
+  historical_funnel?: Record<string, number> | null
 }
 
 interface CampaignCycle {
@@ -53,6 +54,10 @@ interface CampaignCycle {
   } | null
   status?: string | null
   applied_at?: string | null
+  market_data?: MarketData | null
+  market_data_fetched_at?: string | null
+  score?: number | null
+  score_calculated_at?: string | null
 }
 
 interface StudentTransfer {
@@ -143,6 +148,35 @@ function entryTotal(e: HistoricalEntry) { return e.total_students ?? e.total ?? 
 function entryNew(e: HistoricalEntry) { return e.new_students ?? e.novatos ?? 0 }
 function entryReturning(e: HistoricalEntry) { return e.returning_students ?? e.veterans ?? 0 }
 
+// ─── real seasonality from ERP/historical data ────────────────────────────────
+function calcRealSeasonality(history: HistoricalEntry[]): Record<number, number> | null {
+  const monthSums: Record<number, number> = {}
+  const yearCount: Record<number, number> = {}
+
+  for (const entry of history) {
+    const funnel = entry.historical_funnel
+    if (!funnel || typeof funnel !== 'object') continue
+    const total = Object.values(funnel).reduce((s, v) => s + Number(v), 0)
+    if (total === 0) continue
+    for (const [key, count] of Object.entries(funnel)) {
+      const monthNum = key.includes('-')
+        ? new Date(key + '-01T12:00:00').getMonth() + 1
+        : Number(key)
+      if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) continue
+      const pct = (Number(count) / total) * 100
+      monthSums[monthNum] = (monthSums[monthNum] ?? 0) + pct
+      yearCount[monthNum] = (yearCount[monthNum] ?? 0) + 1
+    }
+  }
+
+  if (Object.keys(monthSums).length === 0) return null
+  const result: Record<number, number> = {}
+  for (const [m, sum] of Object.entries(monthSums)) {
+    result[Number(m)] = +(sum / yearCount[Number(m)]).toFixed(1)
+  }
+  return result
+}
+
 // ─── score calculator ─────────────────────────────────────────────────────────
 function calculateScore(data: {
   growthTrend: number
@@ -194,6 +228,7 @@ export default function GestorHome() {
   const [waMessages, setWaMessages] = useState<{ id: string; created_at: string; from_me: boolean }[]>([])
   const [marketData, setMarketData] = useState<MarketData | null>(null)
   const [marketLoading, setMarketLoading] = useState(false)
+  const [scoreTooltip, setScoreTooltip] = useState(false)
   const [aiInsight, setAiInsight] = useState<string | null>(null)
   const [aiInsightLoading, setAiInsightLoading] = useState(false)
   const aiInsightFetched = useRef(false)
@@ -233,15 +268,27 @@ export default function GestorHome() {
       if (!alreadySetup) setShowSetup(true)
 
       const cycleWithLocation = loadedCycles.find(c => c.school_data?.city && c.school_data?.state)
-      if (cycleWithLocation?.school_data?.city && cycleWithLocation?.school_data?.state) {
-        fetchMarketData(cycleWithLocation.school_data.city as string, cycleWithLocation.school_data.state as string)
+      if (cycleWithLocation) {
+        const thirtyDaysAgoMs = Date.now() - 30 * 24 * 60 * 60 * 1000
+        const fetchedAt = cycleWithLocation.market_data_fetched_at
+          ? new Date(cycleWithLocation.market_data_fetched_at).getTime()
+          : 0
+        if (cycleWithLocation.market_data && fetchedAt > thirtyDaysAgoMs) {
+          setMarketData(cycleWithLocation.market_data)
+        } else {
+          fetchMarketData(
+            cycleWithLocation.school_data!.city as string,
+            cycleWithLocation.school_data!.state as string,
+            cycleWithLocation.id
+          )
+        }
       }
     } finally {
       setLoading(false)
     }
   }
 
-  async function fetchMarketData(city: string, state: string) {
+  async function fetchMarketData(city: string, state: string, cycleId?: string) {
     if (!city || !state) return
     setMarketLoading(true)
     try {
@@ -251,7 +298,14 @@ export default function GestorHome() {
         body: JSON.stringify({ action: 'fetch_ibge', payload: { city, state } }),
       })
       const json = await res.json()
-      setMarketData(json.result ?? null)
+      const result = json.result ?? null
+      setMarketData(result)
+      if (result && cycleId) {
+        await supabase.from('campaign_cycles').update({
+          market_data: result,
+          market_data_fetched_at: new Date().toISOString(),
+        }).eq('id', cycleId)
+      }
     } catch {
       // non-critical
     } finally {
@@ -421,6 +475,22 @@ export default function GestorHome() {
   const circumference = 2 * Math.PI * radius
   const offset = circumference - (score / 100) * circumference
 
+  // save score to DB (max once per 7 days or when historical data changes)
+  useEffect(() => {
+    if (!hasHistory || !cycles.length) return
+    const targetCycle = activeCycle ?? releasedCycle ?? anyCycle
+    if (!targetCycle) return
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+    const lastCalc = targetCycle.score_calculated_at
+      ? new Date(targetCycle.score_calculated_at).getTime()
+      : 0
+    if (targetCycle.score === score && lastCalc > sevenDaysAgo) return
+    supabase.from('campaign_cycles').update({
+      score,
+      score_calculated_at: new Date().toISOString(),
+    }).eq('id', targetCycle.id)
+  }, [score, hasHistory])
+
   // captação calendar
   const campaignMonthsList = getCampaignMonthsList(
     activeCycle?.start_date ?? anyCycle?.start_date,
@@ -429,10 +499,18 @@ export default function GestorHome() {
   const defaultSeasonality: Record<number, number> = {
     1: 12, 2: 7, 8: 12, 9: 15, 10: 20, 11: 18, 12: 16
   }
-  const calendarMax = Math.max(...campaignMonthsList.map(m => defaultSeasonality[m] ?? 10))
+  const realSeasonality = calcRealSeasonality(sorted)
+  const activeSeasonality = realSeasonality ?? defaultSeasonality
+  const calendarIsReal = realSeasonality !== null
+
+  // market comparison line: use market novatos_rate as uniform baseline per campaign month
+  const marketBaselineRate = marketData?.novatos_rate
+    ?? (marketData?.private_school_rate ? +(Number(marketData.private_school_rate) * 0.25).toFixed(1) : null)
+
+  const calendarMax = Math.max(...campaignMonthsList.map(m => activeSeasonality[m] ?? 10))
 
   const peakMonth = campaignMonthsList.reduce((best, m) =>
-    (defaultSeasonality[m] ?? 0) > (defaultSeasonality[best] ?? 0) ? m : best,
+    (activeSeasonality[m] ?? 0) > (activeSeasonality[best] ?? 0) ? m : best,
     campaignMonthsList[0]
   )
 
@@ -462,54 +540,40 @@ export default function GestorHome() {
         </div>
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          {!activeCycle && !releasedCycle && (
-            <button
-              onClick={() => setShowModal(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 7,
-                padding: '9px 18px', borderRadius: 10,
-                background: '#00A896', color: '#fff',
-                border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-              }}>
-              <Sparkles size={14} /> Gerar campanha
-            </button>
-          )}
-          <div
-            style={{ position: 'relative' }}
-            onMouseEnter={() => !campaignUnlocked && setBtnTooltip(true)}
-            onMouseLeave={() => setBtnTooltip(false)}
-          >
-            <button
-              onClick={() => campaignUnlocked && setShowModal(true)}
-              disabled={!campaignUnlocked}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 7,
-                padding: '9px 18px', borderRadius: 10,
-                background: activeCycle ? '#f0fdf4' : releasedCycle ? '#16a34a' : '#f1f5f9',
-                color: activeCycle ? '#065f46' : releasedCycle ? '#fff' : '#94a3b8',
-                border: activeCycle ? '1px solid #bbf7d0' : releasedCycle ? 'none' : '1px solid #e2e8f0',
-                fontSize: 13, fontWeight: 600,
-                cursor: campaignUnlocked ? 'pointer' : 'not-allowed',
-              }}>
-              {activeCycle ? <Sparkles size={14} /> : releasedCycle ? <Settings size={14} /> : <Lock size={14} />}
-              {activeCycle ? 'Ajustar campanha' : releasedCycle ? 'Configurar campanha' : 'Campanha bloqueada'}
-            </button>
-            {btnTooltip && !campaignUnlocked && (
-              <div style={{
-                position: 'absolute', right: 0, top: '110%', zIndex: 999,
-                background: '#1e2d6b', color: 'white', fontSize: 12, lineHeight: 1.4,
-                padding: '8px 12px', borderRadius: 8, whiteSpace: 'nowrap', maxWidth: 260,
-                boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-              }}>
-                Aguardando liberação pelo administrador.
+          {!campaignUnlocked && (
+            <div
+              style={{ position: 'relative' }}
+              onMouseEnter={() => setBtnTooltip(true)}
+              onMouseLeave={() => setBtnTooltip(false)}
+            >
+              <button
+                disabled
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '9px 18px', borderRadius: 10,
+                  background: '#f1f5f9', color: '#94a3b8',
+                  border: '1px solid #e2e8f0',
+                  fontSize: 13, fontWeight: 600, cursor: 'not-allowed',
+                }}>
+                <Lock size={14} /> Campanha bloqueada
+              </button>
+              {btnTooltip && (
                 <div style={{
-                  position: 'absolute', right: 18, bottom: '100%',
-                  borderWidth: '5px', borderStyle: 'solid',
-                  borderColor: 'transparent transparent #1e2d6b transparent',
-                }} />
-              </div>
-            )}
-          </div>
+                  position: 'absolute', right: 0, top: '110%', zIndex: 999,
+                  background: '#1e2d6b', color: 'white', fontSize: 12, lineHeight: 1.4,
+                  padding: '8px 12px', borderRadius: 8, whiteSpace: 'nowrap', maxWidth: 260,
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                }}>
+                  Aguardando liberação pelo administrador.
+                  <div style={{
+                    position: 'absolute', right: 18, bottom: '100%',
+                    borderWidth: '5px', borderStyle: 'solid',
+                    borderColor: 'transparent transparent #1e2d6b transparent',
+                  }} />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -559,12 +623,36 @@ export default function GestorHome() {
               <p style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 800, color: '#1e2d6b', lineHeight: 1.2 }}>
                 {user?.institution_name || 'Sua escola'}
               </p>
-              <span style={{
-                display: 'inline-block', padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-                background: scoreBg, color: scoreColor, marginBottom: 8
-              }}>
-                {scoreLabel}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <span style={{
+                  display: 'inline-block', padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700,
+                  background: scoreBg, color: scoreColor,
+                }}>
+                  {scoreLabel}
+                </span>
+                <div
+                  style={{ position: 'relative', cursor: 'default' }}
+                  onMouseEnter={() => setScoreTooltip(true)}
+                  onMouseLeave={() => setScoreTooltip(false)}
+                >
+                  <Info size={13} color="#94a3b8" />
+                  {scoreTooltip && (
+                    <div style={{
+                      position: 'absolute', left: 0, top: '120%', zIndex: 999,
+                      background: '#1e2d6b', color: '#fff', fontSize: 11, lineHeight: 1.6,
+                      padding: '10px 14px', borderRadius: 10, width: 280,
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.18)',
+                    }}>
+                      O score reflete a saúde geral da escola baseado em crescimento de novatos, taxa de rematrícula, market share e conversão de leads.
+                      <br /><br />
+                      <span style={{ color: '#fca5a5' }}>0–40</span> crítico &nbsp;·&nbsp;
+                      <span style={{ color: '#fcd34d' }}>41–60</span> atenção &nbsp;·&nbsp;
+                      <span style={{ color: '#6ee7b7' }}>61–80</span> regular &nbsp;·&nbsp;
+                      <span style={{ color: '#34d399' }}>81–100</span> alto desempenho
+                    </div>
+                  )}
+                </div>
+              </div>
               {(marketCity || marketState) && (
                 <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
                   <MapPin size={11} /> {marketCity}{marketCity && marketState ? `, ` : ''}{marketState}
@@ -732,7 +820,9 @@ export default function GestorHome() {
               </div>
               <div>
                 <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Calendário de captação</h3>
-                <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Sazonalidade típica do mercado educacional brasileiro</p>
+                <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>
+                  {calendarIsReal ? 'Baseado no histórico real da escola' : 'Sazonalidade típica do mercado educacional brasileiro'}
+                </p>
               </div>
             </div>
             {activeCycle && (
@@ -745,11 +835,17 @@ export default function GestorHome() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 24 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {campaignMonthsList.map(month => {
-                const val = defaultSeasonality[month] ?? 10
+                const val = activeSeasonality[month] ?? 10
                 const pct = calendarMax > 0 ? val / calendarMax : 0
                 const isPeak = pct > 0.7
                 const isWarm = pct > 0.4 && !isPeak
                 const barColor = isPeak ? '#0F6E56' : isWarm ? '#1D9E75' : '#9FE1CB'
+
+                // market comparison: distribute baseline evenly across campaign months
+                const mktPct = marketBaselineRate !== null && calendarMax > 0
+                  ? (marketBaselineRate / campaignMonthsList.length) / (calendarMax / 100) / 100
+                  : null
+
                 return (
                   <div key={month} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <span style={{ width: 28, fontSize: 12, fontWeight: 600, color: '#64748b', flexShrink: 0 }}>{MONTH_SHORT[month]}</span>
@@ -761,6 +857,14 @@ export default function GestorHome() {
                         borderRadius: 6,
                         transition: 'width 0.8s ease',
                       }} />
+                      {/* Market average line */}
+                      {mktPct !== null && (
+                        <div style={{
+                          position: 'absolute', top: 4, bottom: 4,
+                          left: `${Math.min(mktPct * 100, 98)}%`,
+                          width: 2, background: '#F59E0B', borderRadius: 2,
+                        }} title="Média do mercado local" />
+                      )}
                     </div>
                     <span style={{ width: 32, fontSize: 11, fontWeight: 700, color: '#374151', textAlign: 'right', flexShrink: 0 }}>
                       {Math.round(pct * 100)}%
@@ -773,6 +877,12 @@ export default function GestorHome() {
                   </div>
                 )
               })}
+              {marketBaselineRate !== null && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <div style={{ width: 12, height: 2, background: '#F59E0B', borderRadius: 1 }} />
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>Média do mercado local ({marketBaselineRate}% novatos/ano)</span>
+                </div>
+              )}
             </div>
 
             {/* Strategy cards */}
