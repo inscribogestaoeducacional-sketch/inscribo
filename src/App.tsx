@@ -234,6 +234,7 @@ function AppContent() {
   // SUPER ADMIN / CONSULTANT / ADMIN GERAL ROUTES
   const isConsultantArea = user.is_super_admin || user.user_type === 'consultant' || user.user_type === 'admin_geral'
   const defaultPath = user.user_type === 'consultant' ? '/super-admin/consultant' : '/super-admin'
+
   if (isConsultantArea) {
     return (
       <Routes>
@@ -261,6 +262,8 @@ function AppContent() {
         <Route path="/super-admin/consultant/schools" element={<ConsultantSchools />} />
         <Route path="/super-admin/consultant/contracts" element={<ConsultantContracts />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
+        {/* ✅ CORREÇÃO: redireciona /login para o dashboard correto ao invés de 404 */}
+        <Route path="/login" element={<Navigate to={defaultPath} replace />} />
         <Route path="/" element={<Navigate to={defaultPath} replace />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
@@ -337,7 +340,6 @@ function AppContent() {
 }
 
 // Main App Component
-
 function App() {
   return (
     <Router>
