@@ -5,8 +5,9 @@ import SuperAdminLayout from './SuperAdminLayout'
 import {
   UserCheck, X, Plus, TrendingUp, Building2, KanbanSquare,
   Search, Eye, EyeOff, Mail, Phone, MapPin, CheckCircle2,
-  AlertTriangle, Clock, RefreshCw, Shield, Star
+  AlertTriangle, Clock, RefreshCw, Shield, Star, ChevronRight
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 const inputCls = 'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all bg-white'
 const labelCls = 'block text-xs font-semibold text-gray-600 mb-1'
@@ -360,6 +361,13 @@ export default function ConsultantsOverview() {
                           >
                             <Eye className="w-4 h-4" />
                           </button>
+                          <Link
+                            to={`/super-admin/consultants/${c.id}`}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Ver timeline completa"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </Link>
                         </div>
                       </div>
 

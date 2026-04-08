@@ -58,6 +58,7 @@ import ConsultantDashboard from './components/superadmin/ConsultantDashboard'
 import ConsultantPipeline from './components/superadmin/ConsultantPipeline'
 import ConsultantSchools from './components/superadmin/ConsultantSchools'
 import ConsultantContracts from './components/superadmin/ConsultantContracts'
+import ConsultantDetails from './components/superadmin/ConsultantDetails'
 
 // Protected Route Component — proteção por role (admin/manager/user)
 function ProtectedRoute({
@@ -242,6 +243,7 @@ function AppContent() {
         <Route path="/super-admin" element={<AdminHome />} />
         <Route path="/super-admin/schools" element={<AdminSchools />} />
         <Route path="/super-admin/consultants" element={<AdminConsultants />} />
+        <Route path="/super-admin/consultants/:id" element={<ConsultantDetails />} />
         <Route path="/super-admin/financial" element={<AdminFinancial />} />
         <Route path="/super-admin/contracts" element={<AdminContracts />} />
         <Route path="/super-admin/settings" element={<AdminSettings />} />
