@@ -1,20 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
-  BarChart, Bar, LineChart, Line, ComposedChart,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
-} from 'recharts'
-import {
-  TrendingUp, Target, RefreshCw, AlertTriangle,
-  Loader2, Sparkles, BarChart3, Users, MapPin,
-  Check, X, Edit2, Plus, Settings, Lock
+  BarChart3, TrendingUp, Users, Target, DollarSign,
+  RefreshCw, AlertTriangle, CheckCircle, ChevronRight,
+  Sparkles, ArrowUp, ArrowDown, Minus, Save, Loader2,
+  FileText, Clock, Activity, PieChart, ArrowUpRight,
+  ArrowDownRight, Info, X, Edit3
 } from 'lucide-react'
-import { useAuth } from '../../contexts/AuthContext'
+import {
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer, AreaChart, Area,
+  PieChart as RechartsPie, Pie, Cell, Funnel, FunnelChart,
+  LabelList
+} from 'recharts'
 import { supabase } from '../../lib/supabase'
-import type { FunnelMetrics, MarketingCampaign, ReEnrollment } from '../../lib/supabase'
-import CampaignGeneratorModal from './CampaignGeneratorModal'
-import MonthlyChart from './MonthlyChart'
+import { useAuth } from '../../contexts/AuthContext'
 
-// ─── Interfaces ──────────────────────────────────────────────
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 interface CampaignCycle {
   id: string
   institution_id: string
@@ -25,872 +26,456 @@ interface CampaignCycle {
   target_new_students: number
   target_reenrollment_rate: number
   base_students: number
-  projected_cpa: number | null
-  created_at: string
-  campaign_start_month?: number | null
-  erp_files?: unknown[] | null
-  historical_data?: unknown[] | null
-  status?: string | null
-  school_data?: { exits?: Record<string, number>; total_exits?: number; current_students?: number } | null
-  ai_reasoning?: string | null
-  insight_generated_at?: string | null
+  projected_cpa: number
+  status: string
+  monthly_targets: MonthlyTarget[]
+  market_data: Record<string, unknown>
+  school_data: SchoolData
 }
 
-interface StudentTransfer {
+interface SchoolData {
+  current_students: number
+  exits?: Record<string, number>
+}
+
+interface MonthlyTarget {
+  month: string
+  year: number
+  registrations: number
+  schedules: number
+  visits: number
+  enrollments: number
+  enrollments_new?: number
+  enrollments_returning?: number
+  investment_suggested: number
+  cpa_target: number
+}
+
+interface FunnelMetric {
   id: string
+  period: string
+  registrations: number
+  registrations_target: number
+  schedules: number
+  schedules_target: number
+  visits: number
+  visits_target: number
+  enrollments: number
+  enrollments_target: number
+}
+
+interface MonthlyReenrollment {
+  id?: string
   institution_id: string
-  student_name: string
-  course_grade: string
-  transfer_date: string
-  reason_category: string | null
-  reason_detail: string | null
-  survey_token: string
-  survey_completed_at: string | null
-  survey_responses: Record<string, unknown> | null
-  ai_diagnosis: string | null
-  ai_risk_factors: string[] | null
-  created_at: string
-  status?: string
-  deleted_at?: string | null
-}
-
-interface HistEntry {
-  detected_year?: number; year?: number
-  total_students?: number; total?: number
-  new_students?: number; novatos?: number
-  returning_students?: number; veterans?: number
-}
-
-interface MarketData {
-  city?: string; state?: string
-  school_age_population?: number
-  private_school_rate?: number
-  sector_growth_rate?: number
-  average_students_per_school?: number
-  confidence?: string
-  data_source?: string
+  period: string
+  confirmed: number
+  target: number
+  base_total: number
   notes?: string
 }
 
-// ─── Helpers ────────────────────────────────────────────────
-function pct(a: number, b: number) { if (!b) return 0; return Math.round((a / b) * 100) }
-function dev(a: number, b: number) { if (!b) return 0; return Math.round((a / b * 100) - 100) }
-function fmt(n: number) { return new Intl.NumberFormat('pt-BR').format(n) }
-function fmtCurrency(n: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n) }
-function fmtMonth(m?: number | null) {
-  const names = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
-  return m ? names[(m - 1) % 12] : '—'
+interface MarketingEntry {
+  id?: string
+  institution_id: string
+  month_year: string
+  investment: number
+  leads_generated: number
+  cpa_target: number
+  channel?: string
 }
 
-const MONTH_NAMES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
-
-function linearRegression(points: { x: number; y: number }[]) {
-  const n = points.length
-  if (n < 2) return { slope: 0, intercept: points[0]?.y || 0 }
-  const sumX = points.reduce((s, p) => s + p.x, 0)
-  const sumY = points.reduce((s, p) => s + p.y, 0)
-  const sumXY = points.reduce((s, p) => s + p.x * p.y, 0)
-  const sumX2 = points.reduce((s, p) => s + p.x * p.x, 0)
-  const denom = n * sumX2 - sumX * sumX
-  if (denom === 0) return { slope: 0, intercept: sumY / n }
-  const slope = (n * sumXY - sumX * sumY) / denom
-  const intercept = (sumY - slope * sumX) / n
-  return { slope, intercept }
+interface Transfer {
+  id: string
+  student_name: string
+  grade: string
+  reason?: string
+  transfer_date: string
+  destination?: string
 }
 
-function SkeletonCard() {
-  return (
-    <div style={{ background: 'white', borderRadius: 16, padding: 20, border: '1px solid #e2e8f0', height: 100 }}>
-      <div style={{ height: 12, background: '#e2e8f0', borderRadius: 6, width: '40%', marginBottom: 12, animation: 'pulse 1.5s ease-in-out infinite' }} />
-      <div style={{ height: 28, background: '#e2e8f0', borderRadius: 6, width: '60%', marginBottom: 8, animation: 'pulse 1.5s ease-in-out infinite' }} />
-      <div style={{ height: 12, background: '#e2e8f0', borderRadius: 6, width: '70%', animation: 'pulse 1.5s ease-in-out infinite' }} />
-    </div>
-  )
+interface AIReport {
+  id: string
+  period: string
+  content: string
+  created_at: string
 }
 
-function Toast({ message, type }: { message: string; type: 'success' | 'error' }) {
+interface Props {
+  institutionId: string
+  institutionName: string
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const MONTH_NAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+const fmt = (n: number) => new Intl.NumberFormat('pt-BR').format(Math.round(n))
+const fmtBRL = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 })
+const fmtPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`
+
+function periodLabel(period: string): string {
+  if (!period) return ''
+  if (period.includes('/')) return period
+  const [y, m] = period.split('-')
+  return `${MONTH_NAMES[(parseInt(m) - 1)]}/${y}`
+}
+
+function desvioColor(pct: number): string {
+  if (pct >= 0) return '#16a34a'
+  if (pct >= -15) return '#f59e0b'
+  return '#dc2626'
+}
+
+// ─── Componentes auxiliares ───────────────────────────────────────────────────
+function KpiCard({ label, value, sub, icon, color, desvio, loading }: {
+  label: string; value: string; sub?: string; icon: React.ReactNode
+  color: string; desvio?: number; loading?: boolean
+}) {
   return (
     <div style={{
-      position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
-      background: type === 'success' ? '#0d9488' : '#dc2626',
-      color: 'white', padding: '12px 20px', borderRadius: 12,
-      fontSize: 14, fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-      animation: 'slideUp 0.2s ease'
-    }}>{message}</div>
-  )
-}
-
-const PIE_COLORS = ['#0d9488', '#7c3aed', '#f97316', '#0ea5e9', '#84cc16', '#f43f5e']
-
-function deviationBadge(actual: number, target: number) {
-  if (!target) return null
-  const d = dev(actual, target)
-  const color = d >= 0 ? '#16a34a' : d >= -15 ? '#d97706' : '#dc2626'
-  const bg = d >= 0 ? '#f0fdf4' : d >= -15 ? '#fffbeb' : '#fef2f2'
-  return <span style={{ background: bg, color, padding: '2px 8px', borderRadius: 8, fontSize: 11, fontWeight: 700 }}>{d > 0 ? '+' : ''}{d}%</span>
-}
-
-// ═══════════════════════════════════════════════════════════
-//  PRÉ-CAMPANHA: TAB HISTÓRICO
-// ═══════════════════════════════════════════════════════════
-function TabHistorico({ setupCycle, institutionId }: { setupCycle: CampaignCycle | null; institutionId: string }) {
-  const raw = (setupCycle?.historical_data as HistEntry[] | null | undefined)?.length
-    ? (setupCycle!.historical_data as HistEntry[])
-    : ((setupCycle?.erp_files as HistEntry[] | null | undefined) ?? [])
-
-  const sorted = [...raw].sort((a, b) => (a.detected_year ?? a.year ?? 0) - (b.detected_year ?? b.year ?? 0))
-
-  const getNew = (e: HistEntry) => e.new_students ?? e.novatos ?? 0
-  const getRet = (e: HistEntry) => e.returning_students ?? e.veterans ?? 0
-  const getTotal = (e: HistEntry) => e.total_students ?? e.total ?? (getNew(e) + getRet(e))
-  const getYear = (e: HistEntry) => String(e.detected_year ?? e.year ?? '?')
-
-  const latest = sorted[sorted.length - 1]
-  const previous = sorted[sorted.length - 2]
-
-  const deltaNew = previous && getNew(previous) > 0
-    ? ((getNew(latest ?? {}) - getNew(previous)) / getNew(previous) * 100).toFixed(1)
-    : null
-
-  // Trend from regression
-  const regrPoints = sorted.map((e, i) => ({ x: i, y: getNew(e) }))
-  const { slope } = linearRegression(regrPoints)
-  const trendLabel = slope > 5 ? 'crescimento forte' : slope > 0 ? 'crescimento leve' : slope < -5 ? 'queda' : 'estável'
-
-  if (sorted.length === 0) return (
-    <div style={{ textAlign: 'center', padding: '48px 0', color: '#94a3b8' }}>
-      <BarChart3 style={{ width: 48, height: 48, margin: '0 auto 12px', opacity: 0.3 }} />
-      <p style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Nenhum histórico importado</p>
-      <p style={{ fontSize: 13, margin: '6px 0 0' }}>Configure a escola e importe os dados do ERP para ver o histórico.</p>
-    </div>
-  )
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}} @keyframes slideUp{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
-
-      {/* KPI cards */}
-      {latest && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
-          {[
-            { label: 'Total de alunos', value: fmt(getTotal(latest)), delta: previous ? dev(getTotal(latest), getTotal(previous)) : null },
-            { label: 'Alunos novatos', value: fmt(getNew(latest)), delta: previous ? dev(getNew(latest), getNew(previous)) : null },
-            { label: 'Veteranos', value: fmt(getRet(latest)), delta: previous ? dev(getRet(latest), getRet(previous)) : null },
-            { label: '% Novatos', value: `${pct(getNew(latest), getTotal(latest))}%`, delta: previous ? pct(getNew(latest), getTotal(latest)) - pct(getNew(previous), getTotal(previous)) : null, isPoints: true },
-          ].map(({ label, value, delta, isPoints }) => (
-            <div key={label} style={{ background: 'white', borderRadius: 16, padding: '18px 20px', border: '1px solid #e2e8f0' }}>
-              <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', margin: '0 0 8px' }}>{label}</p>
-              <p style={{ fontSize: 26, fontWeight: 700, color: '#1e2d6b', margin: '0 0 4px' }}>{value}</p>
-              {delta !== null && (
-                <p style={{ fontSize: 12, color: delta >= 0 ? '#16a34a' : '#dc2626', margin: 0 }}>
-                  {delta > 0 ? '▲' : delta < 0 ? '▼' : '—'} {Math.abs(delta)}{isPoints ? ' p.p.' : '%'} vs ano anterior
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Insight tendência */}
-      <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '12px 18px' }}>
-        <p style={{ margin: 0, fontSize: 13, color: '#1e3a8a' }}>
-          📊 Tendência dos últimos {sorted.length} anos: <strong>{trendLabel}</strong>
-          {deltaNew !== null && ` — novatos variaram ${Number(deltaNew) > 0 ? '+' : ''}${deltaNew}% no último ciclo`}.
-        </p>
-      </div>
-
-      {/* Tabela histórica */}
-      <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid #e2e8f0' }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Histórico completo</h3>
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                {['Ano', 'Total', 'Novatos', 'Veteranos', '% Novatos', 'Δ Novatos'].map(h => (
-                  <th key={h} style={{ padding: '10px 16px', textAlign: 'left', color: '#6b7280', fontWeight: 600, fontSize: 12 }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((e, i) => {
-                const prev = sorted[i - 1]
-                const dNov = prev && getNew(prev) > 0
-                  ? ((getNew(e) - getNew(prev)) / getNew(prev) * 100)
-                  : null
-                return (
-                  <tr key={getYear(e)} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '12px 16px', fontWeight: 700, color: '#374151' }}>{getYear(e)}</td>
-                    <td style={{ padding: '12px 16px', color: '#374151' }}>{fmt(getTotal(e))}</td>
-                    <td style={{ padding: '12px 16px', color: '#0d9488', fontWeight: 600 }}>{fmt(getNew(e))}</td>
-                    <td style={{ padding: '12px 16px', color: '#6366f1' }}>{fmt(getRet(e))}</td>
-                    <td style={{ padding: '12px 16px', color: '#374151' }}>{pct(getNew(e), getTotal(e))}%</td>
-                    <td style={{ padding: '12px 16px' }}>
-                      {dNov !== null ? (
-                        <span style={{ color: dNov >= 0 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
-                          {dNov > 0 ? '+' : ''}{dNov.toFixed(1)}%
-                        </span>
-                      ) : <span style={{ color: '#94a3b8' }}>—</span>}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+      background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0',
+      padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 8,
+      boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em' }}>{label}</span>
+        <div style={{ width: 32, height: 32, borderRadius: 9, background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {React.cloneElement(icon as React.ReactElement, { size: 15, color })}
         </div>
       </div>
-
-      {/* MonthlyChart */}
-      <MonthlyChart institutionId={institutionId} editable={false} />
-    </div>
-  )
-}
-
-// ═══════════════════════════════════════════════════════════
-//  PRÉ-CAMPANHA: TAB COMPARATIVO
-// ═══════════════════════════════════════════════════════════
-function TabComparativoPre({
-  setupCycle, institutionId, marketData, loadingMarket, onFetchMarket
-}: {
-  setupCycle: CampaignCycle | null
-  institutionId: string
-  marketData: MarketData
-  loadingMarket: boolean
-  onFetchMarket: () => void
-}) {
-  const raw = (setupCycle?.historical_data as HistEntry[] | null | undefined)?.length
-    ? (setupCycle!.historical_data as HistEntry[])
-    : ((setupCycle?.erp_files as HistEntry[] | null | undefined) ?? [])
-
-  const seen = new Set<number>()
-  const allEntries: HistEntry[] = []
-  for (const e of raw) {
-    const yr = (e as HistEntry).detected_year ?? (e as HistEntry).year ?? 0
-    if (yr > 0 && !seen.has(yr)) { seen.add(yr); allEntries.push(e) }
-  }
-  allEntries.sort((a, b) => (a.detected_year ?? a.year ?? 0) - (b.detected_year ?? b.year ?? 0))
-
-  const getNew = (e: HistEntry) => e.new_students ?? e.novatos ?? 0
-  const getRet = (e: HistEntry) => e.returning_students ?? e.veterans ?? 0
-  const getTotal = (e: HistEntry) => e.total_students ?? e.total ?? (getNew(e) + getRet(e))
-  const getYear = (e: HistEntry) => String(e.detected_year ?? e.year ?? '?')
-
-  const barData = allEntries.map(e => ({ ano: getYear(e), Novatos: getNew(e), Veteranos: getRet(e) }))
-
-  // School vs market benchmark
-  const latest = allEntries[allEntries.length - 1]
-  const schoolNewPct = latest ? pct(getNew(latest), getTotal(latest)) : 0
-  const marketNewPct = marketData.private_school_rate ? Math.round(marketData.private_school_rate * 100 * 0.18) : null
-
-  const hasData = Object.keys(marketData).length > 0
-  const sd = setupCycle?.school_data as { city?: string; state?: string } | null
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {allEntries.length < 2 ? (
-        <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8' }}>
-          <BarChart3 style={{ width: 40, height: 40, margin: '0 auto 12px', opacity: 0.4 }} />
-          <p style={{ fontSize: 14, margin: 0 }}>São necessários dados de pelo menos 2 anos para o comparativo.</p>
-        </div>
-      ) : (
-        <>
-          <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Novatos vs Veteranos — por ano letivo</h3>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={barData} barGap={4}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="ano" tick={{ fontSize: 12, fill: '#64748b' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={40} />
-                <Tooltip formatter={(val) => fmt(Number(val))} contentStyle={{ borderRadius: 8, fontSize: 12, border: '1px solid #e2e8f0' }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="Novatos" fill="#8B5CF6" radius={[4, 4, 0, 0]} barSize={20} />
-                <Bar dataKey="Veteranos" fill="#00A896" radius={[4, 4, 0, 0]} barSize={20} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Evolução total de alunos</h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={barData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="ano" tick={{ fontSize: 12, fill: '#64748b' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={40} />
-                <Tooltip formatter={(val, name) => [fmt(Number(val)), name]} contentStyle={{ borderRadius: 8, fontSize: 12, border: '1px solid #e2e8f0' }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="Novatos" stroke="#6366f1" strokeWidth={2} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="Veteranos" stroke="#0d9488" strokeWidth={2} dot={{ r: 4 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </>
-      )}
-
-      {/* Benchmark vs mercado local */}
-      <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Benchmark vs mercado local</h3>
-          {!hasData && (
-            <button
-              onClick={onFetchMarket}
-              disabled={loadingMarket}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, background: '#0d9488', color: 'white', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-              {loadingMarket ? <Loader2 style={{ width: 13, height: 13, animation: 'spin 1s linear infinite' }} /> : <MapPin style={{ width: 13, height: 13 }} />}
-              {loadingMarket ? 'Buscando...' : `Buscar dados de ${sd?.city || 'sua cidade'}`}
-            </button>
-          )}
-        </div>
-        {hasData ? (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div style={{ padding: '14px 16px', background: '#f0fdf4', borderRadius: 12, border: '1px solid #bbf7d0' }}>
-              <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 6px', fontWeight: 600 }}>% Novatos — sua escola</p>
-              <p style={{ fontSize: 24, fontWeight: 700, color: '#0d9488', margin: '0 0 4px' }}>{schoolNewPct}%</p>
-              {marketNewPct !== null && (
-                <span style={{
-                  background: schoolNewPct >= marketNewPct ? '#dcfce7' : '#fef9c3',
-                  color: schoolNewPct >= marketNewPct ? '#16a34a' : '#854d0e',
-                  padding: '2px 8px', borderRadius: 8, fontSize: 11, fontWeight: 700
-                }}>
-                  {schoolNewPct >= marketNewPct ? 'Acima da média' : 'Abaixo da média'} do setor
-                </span>
-              )}
-            </div>
-            <div style={{ padding: '14px 16px', background: '#eff6ff', borderRadius: 12, border: '1px solid #bfdbfe' }}>
-              <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 6px', fontWeight: 600 }}>Crescimento do setor em {sd?.city}</p>
-              <p style={{ fontSize: 24, fontWeight: 700, color: '#1d4ed8', margin: '0 0 4px' }}>
-                {marketData.sector_growth_rate ? `${(marketData.sector_growth_rate * 100).toFixed(1)}%/ano` : 'N/D'}
-              </p>
-              <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>
-                {marketData.average_students_per_school ? `Média regional: ${fmt(marketData.average_students_per_school)} alunos/escola` : ''}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <p style={{ fontSize: 13, color: '#94a3b8', textAlign: 'center', padding: '16px 0' }}>
-            Clique em "Buscar dados" para comparar sua escola com o mercado local.
-          </p>
+      {loading
+        ? <div style={{ height: 28, background: '#F1F5F9', borderRadius: 6, animation: 'pulse 1.5s infinite' }} />
+        : <span style={{ fontSize: 26, fontWeight: 800, color: '#1A2B4A', lineHeight: 1 }}>{value}</span>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {desvio !== undefined && (
+          <span style={{
+            fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 999,
+            background: desvio >= 0 ? '#F0FDF4' : desvio >= -15 ? '#FFFBEB' : '#FEF2F2',
+            color: desvioColor(desvio),
+            display: 'flex', alignItems: 'center', gap: 3
+          }}>
+            {desvio >= 0 ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
+            {Math.abs(desvio).toFixed(1)}% vs meta
+          </span>
         )}
+        {sub && <span style={{ fontSize: 11, color: '#94A3B8' }}>{sub}</span>}
       </div>
     </div>
   )
 }
 
-// ═══════════════════════════════════════════════════════════
-//  PRÉ-CAMPANHA: TAB MERCADO
-// ═══════════════════════════════════════════════════════════
-function TabMercado({
-  marketData, loadingMarket, onFetchMarket, setupCycle
-}: {
-  marketData: MarketData
-  loadingMarket: boolean
-  onFetchMarket: () => void
-  setupCycle: CampaignCycle | null
-}) {
-  const sd = setupCycle?.school_data as { city?: string; state?: string; current_students?: number } | null
-  const hasData = Object.keys(marketData).length > 0
-  const schoolStudents = sd?.current_students ?? 0
-
-  const opportunityStudents = marketData.school_age_population && marketData.private_school_rate
-    ? Math.round(marketData.school_age_population * marketData.private_school_rate - schoolStudents)
-    : null
-
-  const avgSchoolSize = marketData.average_students_per_school ?? 0
-  const competitiveness = schoolStudents > 0 && avgSchoolSize > 0
-    ? schoolStudents / avgSchoolSize
-    : null
-
+function SectionTitle({ children, sub }: { children: React.ReactNode; sub?: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {!hasData && (
-        <div style={{ textAlign: 'center', padding: '32px 0' }}>
-          <MapPin style={{ width: 48, height: 48, margin: '0 auto 12px', color: '#cbd5e1' }} />
-          <h3 style={{ fontSize: 16, fontWeight: 600, color: '#374151', margin: '0 0 8px' }}>Dados de mercado não carregados</h3>
-          <p style={{ fontSize: 13, color: '#94a3b8', margin: '0 0 20px' }}>
-            Buscaremos dados demográficos e educacionais de {sd?.city || 'sua cidade'}.
-          </p>
-          <button
-            onClick={onFetchMarket}
-            disabled={loadingMarket}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 10, background: '#0d9488', color: 'white', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', margin: '0 auto' }}>
-            {loadingMarket ? <Loader2 style={{ width: 15, height: 15, animation: 'spin 1s linear infinite' }} /> : <MapPin style={{ width: 15, height: 15 }} />}
-            {loadingMarket ? 'Buscando dados...' : 'Analisar mercado local'}
-          </button>
-        </div>
-      )}
-
-      {hasData && (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 16 }}>
-            {[
-              { label: `Crianças em idade escolar em ${sd?.city}`, value: marketData.school_age_population?.toLocaleString('pt-BR') ?? 'N/D', color: '#3B82F6', bg: '#EFF6FF' },
-              { label: 'Estudam em escola particular', value: marketData.private_school_rate ? `${(marketData.private_school_rate * 100).toFixed(1)}%` : 'N/D', color: '#10B981', bg: '#ECFDF5' },
-              { label: 'Crescimento do setor ao ano', value: marketData.sector_growth_rate ? `${(marketData.sector_growth_rate * 100).toFixed(1)}%` : 'N/D', color: '#00A896', bg: '#E6F7F5' },
-              { label: 'Média de alunos por escola', value: marketData.average_students_per_school?.toLocaleString('pt-BR') ?? 'N/D', color: '#6B7280', bg: '#F9FAFB' },
-            ].map(({ label, value, color, bg }) => (
-              <div key={label} style={{ background: bg, borderRadius: 12, padding: '14px 16px' }}>
-                <p style={{ fontSize: 11, color, fontWeight: 600, margin: '0 0 6px' }}>{label}</p>
-                <p style={{ fontSize: 22, fontWeight: 800, color, margin: 0 }}>{value}</p>
-              </div>
-            ))}
-          </div>
-
-          {opportunityStudents !== null && (
-            <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 12, padding: '14px 18px' }}>
-              <p style={{ margin: 0, fontSize: 14, color: '#4c1d95' }}>
-                🎯 <strong>Oportunidade:</strong> Com a taxa de escolarização privada atual, há potencial para{' '}
-                <strong>{fmt(Math.max(0, opportunityStudents))} novos alunos</strong> no mercado de {sd?.city}.
-              </p>
-            </div>
-          )}
-
-          {competitiveness !== null && (
-            <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: '0 0 14px' }}>Competitividade da escola</h3>
-              <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ height: 8, background: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${Math.min(100, competitiveness * 100)}%`, background: competitiveness >= 1 ? '#0d9488' : '#f97316', borderRadius: 999 }} />
-                  </div>
-                  <p style={{ fontSize: 12, color: '#64748b', margin: '8px 0 0' }}>
-                    Sua escola tem <strong>{fmt(schoolStudents)} alunos</strong> vs média regional de <strong>{fmt(avgSchoolSize)}</strong>
-                  </p>
-                </div>
-                <span style={{
-                  padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700,
-                  background: competitiveness >= 1 ? '#f0fdf4' : '#fff7ed',
-                  color: competitiveness >= 1 ? '#16a34a' : '#d97706'
-                }}>
-                  {competitiveness >= 1.2 ? 'Acima da média' : competitiveness >= 0.8 ? 'Na média' : 'Abaixo da média'}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {marketData.notes && (
-            <p style={{ fontSize: 12, color: '#64748b', background: '#f8fafc', padding: '10px 14px', borderRadius: 9, lineHeight: 1.6 }}>
-              💡 {marketData.notes}
-            </p>
-          )}
-          <p style={{ fontSize: 11, color: '#94a3b8' }}>Fonte: {marketData.data_source || 'IBGE Censo / Censo Escolar MEC'}</p>
-        </>
-      )}
+    <div style={{ marginBottom: 20 }}>
+      <h2 style={{ fontSize: 17, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>{children}</h2>
+      {sub && <p style={{ fontSize: 13, color: '#94A3B8', margin: '4px 0 0' }}>{sub}</p>}
     </div>
   )
 }
 
-// ═══════════════════════════════════════════════════════════
-//  CAMPANHA ATIVA: TAB VISÃO GERAL
-// ═══════════════════════════════════════════════════════════
-function TabVisaoGeral({
-  funnelData, reEnrollData, activeCycle, institutionId, leads, onEditCampaign
-}: {
-  funnelData: FunnelMetrics[]
-  reEnrollData: ReEnrollment[]
-  activeCycle: CampaignCycle | null
-  institutionId: string
-  leads: { id: string; created_at: string }[]
-  onEditCampaign: () => void
-}) {
-  const [loadingInsight, setLoadingInsight] = useState(false)
-  const [localInsight, setLocalInsight] = useState(activeCycle?.ai_reasoning ?? '')
-  const [localInsightDate, setLocalInsightDate] = useState(activeCycle?.insight_generated_at ?? '')
-
-  useEffect(() => {
-    setLocalInsight(activeCycle?.ai_reasoning ?? '')
-    setLocalInsightDate(activeCycle?.insight_generated_at ?? '')
-  }, [activeCycle?.id])
-
-  const latest = funnelData[funnelData.length - 1]
-  const lastRe = reEnrollData[reEnrollData.length - 1]
-
-  const totalEnrolled = funnelData.reduce((s, f) => s + (f.enrollments ?? 0), 0)
-  const metaProgress = (latest?.registrations_target ?? 0) > 0
-    ? Math.min(1, (latest?.registrations ?? 0) / (latest?.registrations_target ?? 1))
-    : 0
-  const conversionRate = (latest?.registrations ?? 0) > 0
-    ? (latest?.enrollments ?? 0) / (latest?.registrations ?? 1)
-    : 0
-  const reenrollRate = ((lastRe?.re_enrolled ?? 0) / Math.max(1, lastRe?.total_base ?? 1))
-  const thisWeekLeads = leads.filter(l =>
-    new Date(l.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-  ).length
-
-  const daysLeft = Math.max(1, Math.floor(
-    (new Date(activeCycle?.end_date ?? Date.now()).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-  ))
-  const weeksLeft = Math.max(1, Math.floor(daysLeft / 7))
-  const remainingTarget = Math.max(0, (activeCycle?.target_new_students ?? 0) - totalEnrolled)
-  const requiredWeekly = Math.ceil(remainingTarget / weeksLeft)
-  const weeklyRhythm = requiredWeekly > 0 ? Math.min(1, thisWeekLeads / requiredWeekly) : 0.5
-  const onTrack = thisWeekLeads >= requiredWeekly
-
-  const healthScore = Math.round(
-    metaProgress * 40 +
-    conversionRate * 30 +
-    weeklyRhythm * 20 +
-    reenrollRate * 10
-  )
-
-  const radius = 54
-  const circumference = 2 * Math.PI * radius
-  const offset = circumference - (healthScore / 100) * circumference
-  const gaugeColor = healthScore >= 75 ? '#0F6E56' : healthScore >= 50 ? '#BA7517' : '#E24B4A'
-
-  const generateInsight = async () => {
-    if (!activeCycle) return
-    setLoadingInsight(true)
-    try {
-      const res = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'weekly_insight',
-          payload: {
-            funnel: latest,
-            previousFunnel: funnelData.length > 1 ? funnelData[funnelData.length - 2] : null,
-            reenrollments: lastRe,
-            campaignWeek: latest?.period,
-            healthScore,
-            totalEnrolled,
-            target: activeCycle.target_new_students,
-          }
-        })
-      })
-      const data = await res.json()
-      const insight = data.result ?? ''
-      setLocalInsight(insight)
-      const now = new Date().toISOString()
-      setLocalInsightDate(now)
-      await supabase.from('campaign_cycles').update({
-        ai_reasoning: insight,
-        insight_generated_at: now
-      }).eq('id', activeCycle.id)
-    } catch { /* ignore */ }
-    finally { setLoadingInsight(false) }
-  }
-
+function DesvioTag({ value, suffix = '%' }: { value: number; suffix?: string }) {
+  const color = desvioColor(value)
+  const bg = value >= 0 ? '#F0FDF4' : value >= -15 ? '#FFFBEB' : '#FEF2F2'
+  const Icon = value >= 0 ? ArrowUp : ArrowDown
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 24 }}>
-        {/* Gauge */}
-        <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          <p style={{ fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.05em', margin: 0 }}>Índice de Saúde</p>
-          <svg width="140" height="140" viewBox="0 0 140 140">
-            <circle cx="70" cy="70" r={radius} fill="none" stroke="#e5e7eb" strokeWidth="12"/>
-            <circle cx="70" cy="70" r={radius} fill="none" stroke={gaugeColor} strokeWidth="12"
-              strokeDasharray={circumference} strokeDashoffset={offset}
-              strokeLinecap="round" transform="rotate(-90 70 70)"/>
-            <text x="70" y="68" textAnchor="middle" dominantBaseline="central"
-              fontSize="24" fontWeight="700" fill={gaugeColor}>{healthScore}</text>
-            <text x="70" y="90" textAnchor="middle" fontSize="11" fill="#6b7280">saúde</text>
-          </svg>
-          <p style={{ fontSize: 12, color: healthScore >= 75 ? '#16a34a' : healthScore >= 50 ? '#d97706' : '#dc2626', fontWeight: 600, margin: 0, textAlign: 'center' }}>
-            {healthScore >= 75 ? '🟢 Campanha saudável' : healthScore >= 50 ? '🟡 Atenção necessária' : '🔴 Em risco'}
-          </p>
-        </div>
-
-        {/* Velocity + KPIs */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Velocidade semanal */}
-          <div style={{ background: onTrack ? '#f0fdf4' : '#fffbeb', border: `1px solid ${onTrack ? '#bbf7d0' : '#fde68a'}`, borderRadius: 12, padding: '14px 18px' }}>
-            <p style={{ margin: 0, fontSize: 13, color: onTrack ? '#166534' : '#92400e' }}>
-              {onTrack ? '✓' : '⚠'} <strong>Ritmo necessário: {requiredWeekly}/semana</strong>
-              {' '}· Esta semana: <strong>{thisWeekLeads} leads</strong>
-              {' '}· {weeksLeft} semana{weeksLeft !== 1 ? 's' : ''} restante{weeksLeft !== 1 ? 's' : ''}
-              {' '}· {onTrack ? 'No ritmo' : 'Abaixo — intensifique a captação'}
-            </p>
-          </div>
-
-          {/* 4 KPIs */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
-            {[
-              { label: 'Cadastros', actual: latest?.registrations ?? 0, target: latest?.registrations_target ?? 0 },
-              { label: 'Visitas', actual: latest?.visits ?? 0, target: latest?.visits_target ?? 0 },
-              { label: 'Matrículas', actual: latest?.enrollments ?? 0, target: latest?.enrollments_target ?? 0 },
-            ].map(({ label, actual, target }) => (
-              <div key={label} style={{ background: 'white', borderRadius: 12, padding: '14px 16px', border: '1px solid #e2e8f0' }}>
-                <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, margin: '0 0 6px' }}>{label}</p>
-                <p style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: '0 0 4px' }}>{fmt(actual)}</p>
-                {target > 0 && deviationBadge(actual, target)}
-              </div>
-            ))}
-            <div style={{ background: 'white', borderRadius: 12, padding: '14px 16px', border: '1px solid #e2e8f0' }}>
-              <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, margin: '0 0 6px' }}>Total matrículas</p>
-              <p style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: '0 0 4px' }}>{fmt(totalEnrolled)}</p>
-              {(activeCycle?.target_new_students ?? 0) > 0 && (
-                <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>meta: {fmt(activeCycle?.target_new_students ?? 0)}</p>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Análise IA */}
-      <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Sparkles style={{ width: 16, height: 16, color: '#7c3aed' }} />
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Análise da IA</h3>
-          </div>
-          {!localInsight && (
-            <button
-              onClick={generateInsight}
-              disabled={loadingInsight || !latest}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, background: '#7c3aed', color: 'white', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: loadingInsight ? 0.7 : 1 }}>
-              {loadingInsight ? <Loader2 style={{ width: 13, height: 13, animation: 'spin 1s linear infinite' }} /> : <Sparkles style={{ width: 13, height: 13 }} />}
-              {loadingInsight ? 'Gerando...' : 'Gerar análise'}
-            </button>
-          )}
-          {localInsight && (
-            <button onClick={generateInsight} disabled={loadingInsight}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', fontSize: 12, cursor: 'pointer' }}>
-              <RefreshCw style={{ width: 11, height: 11 }} /> Regerar
-            </button>
-          )}
-        </div>
-        {localInsight ? (
-          <div>
-            <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.7, margin: '0 0 8px' }}>{localInsight}</p>
-            {localInsightDate && (
-              <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>
-                Gerado em {new Date(localInsightDate).toLocaleDateString('pt-BR')}
-              </p>
-            )}
-          </div>
-        ) : (
-          <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>
-            {!latest ? 'Registre dados de funil para gerar análise.' : 'Clique em "Gerar análise" para obter insights sobre a campanha.'}
-          </p>
-        )}
-      </div>
-    </div>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: bg, color }}>
+      <Icon size={9} />{value >= 0 ? '+' : ''}{value.toFixed(1)}{suffix}
+    </span>
   )
 }
 
-// ═══════════════════════════════════════════════════════════
-//  CAMPANHA ATIVA: TAB FUNIL
-// ═══════════════════════════════════════════════════════════
-function TabFunil({
-  funnelData, activeCycle, institutionId
-}: {
-  funnelData: FunnelMetrics[]
-  activeCycle: CampaignCycle | null
-  institutionId: string
+// ─── Aba 1 — Visão Geral ──────────────────────────────────────────────────────
+function TabVisaoGeral({ cycle, metrics, reenrollments, loading }: {
+  cycle: CampaignCycle | null
+  metrics: FunnelMetric[]
+  reenrollments: MonthlyReenrollment[]
+  loading: boolean
 }) {
-  const sortedMetrics = [...funnelData].sort((a, b) => a.period.localeCompare(b.period))
+  if (!cycle) return (
+    <div style={{ textAlign: 'center', padding: '60px 0', color: '#94A3B8' }}>
+      <BarChart3 size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
+      <p style={{ fontSize: 15, fontWeight: 600 }}>Nenhuma campanha ativa encontrada</p>
+      <p style={{ fontSize: 13, margin: '6px 0 0' }}>Configure a campanha para ver os relatórios</p>
+    </div>
+  )
 
-  const formatPeriod = (period: string) => {
-    const [year, month] = period.split('-')
-    const monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
-    return `${monthNames[parseInt(month) - 1]}/${year}`
-  }
+  // Totais acumulados do ciclo
+  const totalRegistrations = metrics.reduce((s, m) => s + m.registrations, 0)
+  const totalRegTarget = metrics.reduce((s, m) => s + m.registrations_target, 0)
+  const totalVisits = metrics.reduce((s, m) => s + m.visits, 0)
+  const totalVisitTarget = metrics.reduce((s, m) => s + m.visits_target, 0)
+  const totalEnrollments = metrics.reduce((s, m) => s + m.enrollments, 0)
+  const totalEnrollTarget = metrics.reduce((s, m) => s + m.enrollments_target, 0)
+  const totalReenroll = reenrollments.reduce((s, r) => s + r.confirmed, 0)
+  const totalReenrollTarget = reenrollments.reduce((s, r) => s + r.target, 0)
 
-  // ── Totais acumulados do ciclo ──────────────────────────────
-  const totalRegistrations = funnelData.reduce((s, f) => s + (f.registrations ?? 0), 0)
-  const totalVisits        = funnelData.reduce((s, f) => s + (f.visits ?? 0), 0)
-  const totalEnrollments   = funnelData.reduce((s, f) => s + (f.enrollments ?? 0), 0)
-  const totalRegTarget     = funnelData.reduce((s, f) => s + (f.registrations_target ?? 0), 0)
-  const totalVisTarget     = funnelData.reduce((s, f) => s + (f.visits_target ?? 0), 0)
-  const totalEnrTarget     = funnelData.reduce((s, f) => s + (f.enrollments_target ?? 0), 0)
+  const pctReg = totalRegTarget > 0 ? ((totalRegistrations - totalRegTarget) / totalRegTarget) * 100 : 0
+  const pctVisit = totalVisitTarget > 0 ? ((totalVisits - totalVisitTarget) / totalVisitTarget) * 100 : 0
+  const pctEnroll = totalEnrollTarget > 0 ? ((totalEnrollments - totalEnrollTarget) / totalEnrollTarget) * 100 : 0
+  const pctReenroll = totalReenrollTarget > 0 ? ((totalReenroll - totalReenrollTarget) / totalReenrollTarget) * 100 : 0
 
-  const convRegToVis = totalRegistrations > 0
-    ? ((totalVisits / totalRegistrations) * 100).toFixed(1) : '0'
-  const convVisToEnr = totalVisits > 0
-    ? ((totalEnrollments / totalVisits) * 100).toFixed(1) : '0'
+  // Health score (média ponderada dos 4 KPIs, 0-100)
+  const clamp = (v: number) => Math.max(0, Math.min(100, v))
+  const scoreReg = clamp(totalRegTarget > 0 ? (totalRegistrations / totalRegTarget) * 100 : 0)
+  const scoreVisit = clamp(totalVisitTarget > 0 ? (totalVisits / totalVisitTarget) * 100 : 0)
+  const scoreEnroll = clamp(totalEnrollTarget > 0 ? (totalEnrollments / totalEnrollTarget) * 100 : 0)
+  const scoreReenroll = clamp(totalReenrollTarget > 0 ? (totalReenroll / totalReenrollTarget) * 100 : 0)
+  const health = Math.round(scoreReg * 0.2 + scoreVisit * 0.2 + scoreEnroll * 0.35 + scoreReenroll * 0.25)
 
-  const funnelStages = [
-    { label: 'Cadastros',  real: totalRegistrations, meta: totalRegTarget, color: '#1D9E75' },
-    { label: 'Visitas',    real: totalVisits,         meta: totalVisTarget, color: '#0F6E56', conv: `${convRegToVis}% converteram` },
-    { label: 'Matrículas', real: totalEnrollments,    meta: totalEnrTarget, color: '#085041', conv: `${convVisToEnr}% fecharam` },
-  ]
+  const healthColor = health >= 75 ? '#16a34a' : health >= 50 ? '#f59e0b' : '#dc2626'
+  const healthLabel = health >= 75 ? 'Campanha saudável' : health >= 50 ? 'Atenção necessária' : 'Campanha em risco'
 
-  // ── Gráfico ─────────────────────────────────────────────────
-  const chartData = sortedMetrics.map(m => ({
-    period:          formatPeriod(m.period),
-    cadastros:       m.registrations ?? 0,
-    meta_cadastros:  m.registrations_target ?? 0,
-    matriculas:      m.enrollments ?? 0,
-    meta_matriculas: m.enrollments_target ?? 0,
+  // Esta semana
+  const now = new Date()
+  const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay())
+  const thisWeekLeads = 0 // simplificado — seria calculado dos leads diretos
+
+  // Velocidade necessária
+  const cycleEnd = new Date(cycle.end_date)
+  const daysLeft = Math.max(0, Math.ceil((cycleEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+  const weeksLeft = Math.max(1, Math.ceil(daysLeft / 7))
+  const enrollsLeft = Math.max(0, cycle.target_new_students - totalEnrollments)
+  const velocidadeNecessaria = Math.ceil(enrollsLeft / weeksLeft)
+
+  // Timeline mensal
+  const timelineData = metrics.map(m => ({
+    name: periodLabel(m.period),
+    cadastros: m.registrations,
+    meta_cad: m.registrations_target,
+    matriculas: m.enrollments,
+    meta_mat: m.enrollments_target,
   }))
 
-  // ── Alerta de recálculo ─────────────────────────────────────
-  const monthsOffTrack = sortedMetrics.filter(m => {
-    const d = (m.registrations_target ?? 0) > 0
-      ? (((m.registrations ?? 0) - m.registrations_target!) / m.registrations_target! * 100)
-      : 0
-    return d < -15
-  })
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+      {/* Health Score + KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 20 }}>
+        {/* Health Score */}
+        <div style={{
+          background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0',
+          padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
+        }}>
+          <div style={{ position: 'relative', width: 100, height: 100, marginBottom: 12 }}>
+            <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+              <circle cx="50" cy="50" r="42" fill="none" stroke="#F1F5F9" strokeWidth="10" />
+              <circle cx="50" cy="50" r="42" fill="none" stroke={healthColor} strokeWidth="10"
+                strokeDasharray={`${2 * Math.PI * 42 * health / 100} ${2 * Math.PI * 42 * (1 - health / 100)}`}
+                strokeLinecap="round" style={{ transition: 'stroke-dasharray 1s ease' }} />
+            </svg>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: 24, fontWeight: 900, color: healthColor, lineHeight: 1 }}>{health}</span>
+              <span style={{ fontSize: 9, color: '#94A3B8', fontWeight: 600 }}>SCORE</span>
+            </div>
+          </div>
+          <span style={{ fontSize: 12, fontWeight: 700, color: healthColor, textAlign: 'center' }}>{healthLabel}</span>
+          <span style={{ fontSize: 11, color: '#94A3B8', marginTop: 4, textAlign: 'center' }}>{daysLeft} dias restantes</span>
+        </div>
 
-  // ── Estado vazio ────────────────────────────────────────────
-  const hasRealData = funnelData.some(f => (f.registrations ?? 0) > 0)
+        {/* KPIs */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+          <KpiCard label="Cadastros" value={fmt(totalRegistrations)} sub={`meta: ${fmt(totalRegTarget)}`}
+            icon={<Users />} color="#3B82F6" desvio={pctReg} loading={loading} />
+          <KpiCard label="Visitas" value={fmt(totalVisits)} sub={`meta: ${fmt(totalVisitTarget)}`}
+            icon={<Activity />} color="#8B5CF6" desvio={pctVisit} loading={loading} />
+          <KpiCard label="Matrículas Novas" value={fmt(totalEnrollments)} sub={`meta: ${fmt(totalEnrollTarget)}`}
+            icon={<Target />} color="#00A896" desvio={pctEnroll} loading={loading} />
+          <KpiCard label="Rematrículas" value={fmt(totalReenroll)} sub={`meta: ${fmt(totalReenrollTarget)}`}
+            icon={<RefreshCw />} color="#F59E0B" desvio={pctReenroll} loading={loading} />
+        </div>
+      </div>
 
-  // ── Helper de badge de desvio ───────────────────────────────
-  const desvioStyle = (d: number | null): React.CSSProperties => {
-    if (d === null) return { color: '#94a3b8' }
-    return {
-      background: d >= 0 ? '#f0fdf4' : d >= -15 ? '#fffbeb' : '#fef2f2',
-      color:      d >= 0 ? '#16a34a' : d >= -15 ? '#d97706' : '#dc2626',
-      padding: '2px 8px', borderRadius: 8, fontSize: 11, fontWeight: 700,
-      display: 'inline-block',
-    }
+      {/* Velocidade */}
+      <div style={{
+        background: velocidadeNecessaria > 10 ? '#FEF2F2' : '#F0FDF4',
+        border: `1px solid ${velocidadeNecessaria > 10 ? '#FECACA' : '#BBF7D0'}`,
+        borderRadius: 14, padding: '14px 20px',
+        display: 'flex', alignItems: 'center', gap: 16
+      }}>
+        <div style={{ width: 36, height: 36, borderRadius: 10, background: velocidadeNecessaria > 10 ? '#FEE2E2' : '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          {velocidadeNecessaria > 10 ? <AlertTriangle size={16} color="#DC2626" /> : <CheckCircle size={16} color="#16A34A" />}
+        </div>
+        <div>
+          <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>
+            Velocidade necessária: <span style={{ color: velocidadeNecessaria > 10 ? '#DC2626' : '#16A34A' }}>{velocidadeNecessaria} matrículas/semana</span>
+          </p>
+          <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 0' }}>
+            Faltam {enrollsLeft} matrículas em {weeksLeft} semanas · {daysLeft} dias até o fim da campanha
+          </p>
+        </div>
+      </div>
+
+      {/* Gráfico evolução mensal */}
+      {timelineData.length > 0 && (
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
+          <SectionTitle sub="Cadastros e matrículas reais vs meta mês a mês">Evolução da Campanha</SectionTitle>
+          <ResponsiveContainer width="100%" height={240}>
+            <ComposedChart data={timelineData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94A3B8' }} />
+              <YAxis tick={{ fontSize: 11, fill: '#94A3B8' }} width={36} />
+              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #E2E8F0', fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Bar dataKey="cadastros" name="Cadastros" fill="#93C5FD" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="matriculas" name="Matrículas" fill="#00A896" radius={[4, 4, 0, 0]} />
+              <Line dataKey="meta_cad" name="Meta Cadastros" stroke="#3B82F6" strokeWidth={2} strokeDasharray="5 3" dot={false} />
+              <Line dataKey="meta_mat" name="Meta Matrículas" stroke="#047857" strokeWidth={2} strokeDasharray="5 3" dot={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Aba 2 — Funil ────────────────────────────────────────────────────────────
+function TabFunil({ metrics, loading }: { metrics: FunnelMetric[]; loading: boolean }) {
+  const total = {
+    reg: metrics.reduce((s, m) => s + m.registrations, 0),
+    regT: metrics.reduce((s, m) => s + m.registrations_target, 0),
+    sch: metrics.reduce((s, m) => s + m.schedules, 0),
+    schT: metrics.reduce((s, m) => s + m.schedules_target, 0),
+    vis: metrics.reduce((s, m) => s + m.visits, 0),
+    visT: metrics.reduce((s, m) => s + m.visits_target, 0),
+    enr: metrics.reduce((s, m) => s + m.enrollments, 0),
+    enrT: metrics.reduce((s, m) => s + m.enrollments_target, 0),
   }
-  const fmtDesvio = (d: number | null) =>
-    d === null ? '—' : `${d >= 0 ? '+' : ''}${d.toFixed(1)}%`
+
+  const taxaRegSch = total.reg > 0 ? (total.sch / total.reg) * 100 : 0
+  const taxaSchVis = total.sch > 0 ? (total.vis / total.sch) * 100 : 0
+  const taxaVisEnr = total.vis > 0 ? (total.enr / total.vis) * 100 : 0
+
+  const funnelSteps = [
+    { label: 'Cadastros', real: total.reg, meta: total.regT, color: '#3B82F6', bg: '#EFF6FF' },
+    { label: 'Agendamentos', real: total.sch, meta: total.schT, color: '#8B5CF6', bg: '#F5F3FF' },
+    { label: 'Visitas', real: total.vis, meta: total.visT, color: '#F59E0B', bg: '#FFFBEB' },
+    { label: 'Matrículas', real: total.enr, meta: total.enrT, color: '#00A896', bg: '#E6F7F5' },
+  ]
+
+  const chartData = metrics.map(m => ({
+    name: periodLabel(m.period),
+    cadastros: m.registrations,
+    agendas: m.schedules,
+    visitas: m.visits,
+    matriculas: m.enrollments,
+    meta_cad: m.registrations_target,
+    meta_mat: m.enrollments_target,
+  }))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <SectionTitle sub="Cascata de conversão completa do ciclo">Funil de Vendas</SectionTitle>
 
-      {/* ── Alerta de recálculo ── */}
-      {monthsOffTrack.length > 0 && (
-        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: '14px 18px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-            <AlertTriangle size={16} color="#dc2626" />
-            <span style={{ color: '#dc2626', fontWeight: 600, fontSize: 13 }}>
-              {monthsOffTrack.length} mês(es) abaixo da meta em mais de 15%
-            </span>
-          </div>
-          <p style={{ fontSize: 12, color: '#b91c1c', margin: 0 }}>
-            Considere revisar sua estratégia. O administrador pode liberar um recálculo de rota pela IA.
-          </p>
-        </div>
-      )}
+      {/* Funil cascata */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        {funnelSteps.map((step, i) => {
+          const desvio = step.meta > 0 ? ((step.real - step.meta) / step.meta) * 100 : 0
+          const maxVal = funnelSteps[0].meta || 1
+          const widthPct = Math.max(30, (step.meta / maxVal) * 100)
+          const realWidthPct = step.meta > 0 ? Math.min(100, (step.real / step.meta) * widthPct) : 0
 
-      {/* ── Funil cascata acumulado ── */}
-      <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
-        <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: '0 0 20px' }}>
-          Funil acumulado do ciclo
-        </h3>
+          return (
+            <div key={step.label} style={{ background: '#fff', borderRadius: 14, border: '1px solid #E2E8F0', padding: 16, position: 'relative', overflow: 'hidden' }}>
+              {/* Barra de fundo */}
+              <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 4, background: '#F1F5F9' }}>
+                <div style={{ height: '100%', width: `${realWidthPct}%`, background: step.color, borderRadius: 2, transition: 'width 1s ease' }} />
+              </div>
 
-        {!hasRealData ? (
-          <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8' }}>
-            <p style={{ fontWeight: 600, marginBottom: 4 }}>Nenhum dado de funil registrado ainda</p>
-            <p style={{ fontSize: 13, marginBottom: 4 }}>
-              Os dados aparecerão aqui conforme você cadastrar leads e visitas no sistema.
-            </p>
-            <p style={{ fontSize: 13, color: '#0F6E56' }}>
-              As metas já estão configuradas — aguardando dados reais.
-            </p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {funnelStages.map((stage, i) => {
-              const progressPct = stage.meta > 0 ? Math.min(100, (stage.real / stage.meta) * 100) : 0
-              const desvioNum = stage.meta > 0
-                ? ((stage.real - stage.meta) / stage.meta * 100)
-                : null
-              const desvioColor = desvioNum === null ? '#94a3b8'
-                : desvioNum >= 0 ? '#0F6E56'
-                : desvioNum >= -15 ? '#BA7517'
-                : '#E24B4A'
-
-              return (
-                <div key={i}>
-                  {i > 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 12px', color: '#94a3b8', fontSize: 11 }}>
-                      <div style={{ width: 1, height: 14, background: '#e2e8f0', marginLeft: 12 }} />
-                      {stage.conv}
-                    </div>
-                  )}
-                  <div style={{ width: `${100 - i * 12}%`, margin: '0 auto' }}>
-                    <div style={{
-                      background: stage.color + '12',
-                      borderLeft: `4px solid ${stage.color}`,
-                      borderRadius: 10, padding: '12px 16px',
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <span style={{ fontSize: 20, fontWeight: 800, color: stage.color }}>{fmt(stage.real)}</span>
-                          <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 8 }}>/ meta {fmt(stage.meta)}</span>
-                        </div>
-                        {desvioNum !== null && (
-                          <span style={{ fontSize: 13, fontWeight: 700, color: desvioColor }}>
-                            {desvioNum >= 0 ? '+' : ''}{desvioNum.toFixed(1)}%
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: stage.color, marginTop: 4 }}>{stage.label}</div>
-                      <div style={{ marginTop: 8, height: 6, background: '#e2e8f0', borderRadius: 999 }}>
-                        <div style={{
-                          height: '100%', width: `${progressPct}%`,
-                          background: stage.color, borderRadius: 999, transition: 'width 0.6s ease',
-                        }} />
-                      </div>
-                    </div>
-                  </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: step.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: step.color }}>{i + 1}</span>
                 </div>
-              )
-            })}
-          </div>
-        )}
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#64748B' }}>{step.label}</span>
+              </div>
+
+              <div style={{ fontSize: 32, fontWeight: 900, color: step.color, lineHeight: 1, marginBottom: 6 }}>
+                {fmt(step.real)}
+              </div>
+              <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 8 }}>meta: {fmt(step.meta)}</div>
+
+              <DesvioTag value={desvio} />
+
+              {i < 3 && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #F1F5F9', fontSize: 11, color: '#94A3B8' }}>
+                  {i === 0 && taxaRegSch > 0 && `→ ${taxaRegSch.toFixed(0)}% agendaram`}
+                  {i === 1 && taxaSchVis > 0 && `→ ${taxaSchVis.toFixed(0)}% visitaram`}
+                  {i === 2 && taxaVisEnr > 0 && `→ ${taxaVisEnr.toFixed(0)}% matricularam`}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
 
-      {/* ── Gráfico real vs meta ── */}
+      {/* Taxas de conversão */}
+      <div style={{ background: '#F8FAFC', borderRadius: 12, padding: 16, display: 'flex', gap: 24, alignItems: 'center', justifyContent: 'center' }}>
+        {[
+          { label: 'Cadastro → Agenda', value: taxaRegSch, ideal: 76 },
+          { label: 'Agenda → Visita', value: taxaSchVis, ideal: 63 },
+          { label: 'Visita → Matrícula', value: taxaVisEnr, ideal: 40 },
+        ].map(t => (
+          <div key={t.label} style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: t.value >= t.ideal ? '#16a34a' : t.value >= t.ideal * 0.7 ? '#F59E0B' : '#DC2626' }}>
+              {t.value.toFixed(1)}%
+            </div>
+            <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>{t.label}</div>
+            <div style={{ fontSize: 10, color: '#94A3B8' }}>ideal: {t.ideal}%</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Gráfico mensal detalhado */}
       {chartData.length > 0 && (
-        <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: '0 0 20px' }}>Real vs meta — mensal</h3>
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
+          <SectionTitle sub="Todas as etapas do funil mês a mês">Detalhe Mensal</SectionTitle>
           <ResponsiveContainer width="100%" height={280}>
-            <ComposedChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="period" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="cadastros"       fill="#1D9E75" name="Cadastros reais"   radius={[4,4,0,0]} />
-              <Line dataKey="meta_cadastros"  stroke="#BA7517" strokeWidth={2} strokeDasharray="5 4" name="Meta cadastros"   dot={{ r: 3 }} />
-              <Bar dataKey="matriculas"      fill="#085041" name="Matrículas reais"  radius={[4,4,0,0]} />
-              <Line dataKey="meta_matriculas" stroke="#E24B4A" strokeWidth={2} strokeDasharray="5 4" name="Meta matrículas"  dot={{ r: 3 }} />
+            <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94A3B8' }} />
+              <YAxis tick={{ fontSize: 11, fill: '#94A3B8' }} width={36} />
+              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #E2E8F0', fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Bar dataKey="cadastros" name="Cadastros" fill="#93C5FD" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="agendas" name="Agendas" fill="#C4B5FD" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="visitas" name="Visitas" fill="#FCD34D" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="matriculas" name="Matrículas" fill="#00A896" radius={[3, 3, 0, 0]} />
+              <Line dataKey="meta_cad" name="Meta Cad." stroke="#3B82F6" strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
+              <Line dataKey="meta_mat" name="Meta Mat." stroke="#047857" strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}
 
-      {/* ── MonthlyChart editável ── */}
-      <MonthlyChart institutionId={institutionId} editable={true} />
-
-      {/* ── Tabela mensal detalhada ── */}
-      {sortedMetrics.length > 0 && (
-        <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-          <div style={{ padding: '16px 24px', borderBottom: '1px solid #e2e8f0' }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Detalhamento mensal</h3>
+      {/* Tabela detalhe */}
+      {metrics.length > 0 && (
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid #E2E8F0' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Tabela Comparativa</span>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                  {['Mês','Cadastros','Meta Cad.','Desvio%','Visitas','Meta Vis.','Matrículas','Meta Mat.','Desvio Mat.'].map(h => (
-                    <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: '#6b7280', fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
+                <tr style={{ background: '#F8FAFC' }}>
+                  {['Mês', 'Cad. Real', 'Cad. Meta', 'Desvio', 'Vis. Real', 'Vis. Meta', 'Desvio', 'Mat. Real', 'Mat. Meta', 'Desvio'].map(h => (
+                    <th key={h} style={{ padding: '10px 12px', textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#64748B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {sortedMetrics.map(m => {
-                  const desvioReg = (m.registrations_target ?? 0) > 0
-                    ? (((m.registrations ?? 0) - m.registrations_target!) / m.registrations_target! * 100)
-                    : null
-                  const desvioEnr = (m.enrollments_target ?? 0) > 0
-                    ? (((m.enrollments ?? 0) - m.enrollments_target!) / m.enrollments_target! * 100)
-                    : null
-
+                {metrics.map((m, i) => {
+                  const dReg = m.registrations_target > 0 ? ((m.registrations - m.registrations_target) / m.registrations_target) * 100 : 0
+                  const dVis = m.visits_target > 0 ? ((m.visits - m.visits_target) / m.visits_target) * 100 : 0
+                  const dEnr = m.enrollments_target > 0 ? ((m.enrollments - m.enrollments_target) / m.enrollments_target) * 100 : 0
                   return (
-                    <tr key={m.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '10px 12px', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap' }}>{formatPeriod(m.period)}</td>
-                      <td style={{ padding: '10px 12px' }}>{fmt(m.registrations ?? 0)}</td>
-                      <td style={{ padding: '10px 12px', color: '#94a3b8' }}>{m.registrations_target ? fmt(m.registrations_target) : '—'}</td>
-                      <td style={{ padding: '8px 12px' }}>
-                        <span style={desvioReg !== null ? desvioStyle(desvioReg) : { color: '#94a3b8' }}>
-                          {fmtDesvio(desvioReg)}
-                        </span>
-                      </td>
-                      <td style={{ padding: '10px 12px' }}>{fmt(m.visits ?? 0)}</td>
-                      <td style={{ padding: '10px 12px', color: '#94a3b8' }}>{m.visits_target ? fmt(m.visits_target) : '—'}</td>
-                      <td style={{ padding: '10px 12px', color: '#0F6E56', fontWeight: 600 }}>{fmt(m.enrollments ?? 0)}</td>
-                      <td style={{ padding: '10px 12px', color: '#94a3b8' }}>{m.enrollments_target ? fmt(m.enrollments_target) : '—'}</td>
-                      <td style={{ padding: '8px 12px' }}>
-                        <span style={desvioEnr !== null ? desvioStyle(desvioEnr) : { color: '#94a3b8' }}>
-                          {fmtDesvio(desvioEnr)}
-                        </span>
-                      </td>
+                    <tr key={m.id} style={{ borderBottom: '1px solid #F8FAFC', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
+                      <td style={{ padding: '10px 12px', fontWeight: 600, color: '#1A2B4A' }}>{periodLabel(m.period)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>{fmt(m.registrations)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', color: '#94A3B8' }}>{fmt(m.registrations_target)}</td>
+                      <td style={{ padding: '6px 12px', textAlign: 'center' }}><DesvioTag value={dReg} /></td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>{fmt(m.visits)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', color: '#94A3B8' }}>{fmt(m.visits_target)}</td>
+                      <td style={{ padding: '6px 12px', textAlign: 'center' }}><DesvioTag value={dVis} /></td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: '#00A896' }}>{fmt(m.enrollments)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', color: '#94A3B8' }}>{fmt(m.enrollments_target)}</td>
+                      <td style={{ padding: '6px 12px', textAlign: 'center' }}><DesvioTag value={dEnr} /></td>
                     </tr>
                   )
                 })}
@@ -903,177 +488,208 @@ function TabFunil({
   )
 }
 
-// ═══════════════════════════════════════════════════════════
-//  CAMPANHA ATIVA: TAB MARKETING & ROI
-// ═══════════════════════════════════════════════════════════
-const DEFAULT_CHANNELS = ['Google Ads', 'Facebook/Instagram', 'Indicação', 'Outdoor/Rádio', 'WhatsApp', 'Outros']
-
-function TabMarketingROI({
-  marketingData, institutionId, onRefresh, showToast
-}: {
-  marketingData: MarketingCampaign[]
-  institutionId: string
-  onRefresh: () => void
-  showToast: (msg: string, type?: 'success' | 'error') => void
+// ─── Aba 3 — Marketing & CPA ──────────────────────────────────────────────────
+function TabMarketing({ institutionId, cycle, metrics }: {
+  institutionId: string; cycle: CampaignCycle | null; metrics: FunnelMetric[]
 }) {
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editVals, setEditVals] = useState({ investment: '', leads_generated: '', cpa_target: '' })
-  const [showAdd, setShowAdd] = useState(false)
-  const [newRow, setNewRow] = useState({ month_year: '', investment: '', leads_generated: '', cpa_target: '' })
+  const [entries, setEntries] = useState<MarketingEntry[]>([])
   const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
 
-  const totalInv = marketingData.reduce((s, m) => s + (m.investment || 0), 0)
-  const totalLeads = marketingData.reduce((s, m) => s + (m.leads_generated || 0), 0)
-  const cpaGeral = totalLeads > 0 ? totalInv / totalLeads : 0
+  useEffect(() => {
+    if (!cycle) return
+    loadEntries()
+  }, [cycle])
 
-  const chartData = marketingData.map(m => ({
-    month: m.month_year,
-    cpa_real: m.leads_generated > 0 ? Math.round(m.investment / m.leads_generated) : 0,
-    cpa_alvo: m.cpa_target || 0,
-  }))
-
-  const saveEdit = async (id: string) => {
-    setSaving(true)
-    try {
-      await supabase.from('marketing_campaigns').update({
-        investment: parseFloat(editVals.investment) || 0,
-        leads_generated: parseInt(editVals.leads_generated) || 0,
-        cpa_target: editVals.cpa_target ? parseFloat(editVals.cpa_target) : null,
-      }).eq('id', id)
-      setEditingId(null)
-      onRefresh()
-      showToast('Dados atualizados!')
-    } catch { showToast('Erro ao salvar', 'error') }
-    finally { setSaving(false) }
-  }
-
-  const saveNew = async () => {
-    if (!newRow.month_year) return
-    setSaving(true)
-    try {
-      await supabase.from('marketing_campaigns').upsert({
-        month_year: newRow.month_year,
-        investment: parseFloat(newRow.investment) || 0,
-        leads_generated: parseInt(newRow.leads_generated) || 0,
-        cpa_target: newRow.cpa_target ? parseFloat(newRow.cpa_target) : null,
+  const loadEntries = async () => {
+    if (!cycle) return
+    const { data } = await supabase
+      .from('marketing_campaigns')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .order('month_year')
+    if (data) setEntries(data)
+    else {
+      // Criar entradas vazias a partir das metas
+      const empty: MarketingEntry[] = (cycle?.monthly_targets || []).map((mt, i) => ({
         institution_id: institutionId,
-      }, { onConflict: 'month_year,institution_id' })
-      setShowAdd(false)
-      setNewRow({ month_year: '', investment: '', leads_generated: '', cpa_target: '' })
-      onRefresh()
-      showToast('Registro adicionado!')
-    } catch { showToast('Erro ao adicionar', 'error') }
-    finally { setSaving(false) }
+        month_year: `${mt.month}-${mt.year}`,
+        investment: 0,
+        leads_generated: metrics[i]?.registrations || 0,
+        cpa_target: mt.cpa_target || 0,
+      }))
+      setEntries(empty)
+    }
   }
+
+  const updateEntry = (idx: number, field: keyof MarketingEntry, value: number) => {
+    setEntries(prev => prev.map((e, i) => i === idx ? { ...e, [field]: value } : e))
+  }
+
+  const saveAll = async () => {
+    setSaving(true)
+    try {
+      for (const entry of entries) {
+        if (entry.id) {
+          await supabase.from('marketing_campaigns').update({ investment: entry.investment, leads_generated: entry.leads_generated }).eq('id', entry.id)
+        } else {
+          await supabase.from('marketing_campaigns').upsert({ ...entry }, { onConflict: 'month_year,institution_id' })
+        }
+      }
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+      await loadEntries()
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const totalInvestment = entries.reduce((s, e) => s + (e.investment || 0), 0)
+  const totalLeads = entries.reduce((s, e) => s + (e.leads_generated || 0), 0)
+  const cpaGeral = totalLeads > 0 ? totalInvestment / totalLeads : 0
+  const cpaProjetado = cycle?.projected_cpa || 0
+  const cpaStatus = cpaProjetado > 0 ? ((cpaGeral - cpaProjetado) / cpaProjetado) * 100 : 0
+
+  const chartData = entries.map((e, i) => {
+    const cpa = e.leads_generated > 0 ? e.investment / e.leads_generated : 0
+    const mt = cycle?.monthly_targets?.[i]
+    return {
+      name: e.month_year ? `${MONTH_NAMES[(parseInt(e.month_year.split('-')[0]) - 1) % 12]}` : `M${i + 1}`,
+      investimento: e.investment,
+      leads: e.leads_generated,
+      cpa: Math.round(cpa),
+      cpa_meta: mt?.cpa_target || 0,
+    }
+  })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* KPI cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
-        {[
-          { label: 'Investimento Total', value: fmtCurrency(totalInv), sub: `${marketingData.length} meses` },
-          { label: 'Leads Gerados', value: fmt(totalLeads), sub: 'acumulado' },
-          { label: 'CPA Geral', value: fmtCurrency(cpaGeral), sub: 'custo por lead', hl: true },
-        ].map(({ label, value, sub, hl }) => (
-          <div key={label} style={{ background: hl ? '#0d9488' : 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '18px 20px' }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: hl ? 'rgba(255,255,255,0.8)' : '#94a3b8', textTransform: 'uppercase', letterSpacing: '.05em', margin: '0 0 8px' }}>{label}</p>
-            <p style={{ fontSize: 24, fontWeight: 700, color: hl ? 'white' : '#1e2d6b', margin: '0 0 4px' }}>{value}</p>
-            <p style={{ fontSize: 11, color: hl ? 'rgba(255,255,255,0.7)' : '#94a3b8', margin: 0 }}>{sub}</p>
-          </div>
-        ))}
+      <SectionTitle sub="Insira os investimentos mensais para calcular o CPA automaticamente">Marketing & CPA</SectionTitle>
+
+      {/* KPIs de marketing */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+        <KpiCard label="Investimento Total" value={fmtBRL(totalInvestment)} icon={<DollarSign />} color="#8B5CF6" />
+        <KpiCard label="CPA Geral" value={fmtBRL(cpaGeral)} sub={`projetado: ${fmtBRL(cpaProjetado)}`} icon={<Target />} color={cpaStatus > 20 ? '#DC2626' : '#00A896'} desvio={cpaStatus} />
+        <KpiCard label="Total de Leads" value={fmt(totalLeads)} icon={<Users />} color="#3B82F6" />
       </div>
 
-      {/* Benchmark */}
-      <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '12px 18px' }}>
-        <p style={{ margin: 0, fontSize: 13, color: '#1e3a8a' }}>
-          📊 <strong>Benchmark:</strong> CPA médio de escolas similares é R$ 350.
-          {cpaGeral > 0 && (
-            <> Seu CPA atual é {fmtCurrency(cpaGeral)} —{' '}
-              <strong style={{ color: cpaGeral <= 350 ? '#16a34a' : '#dc2626' }}>
-                {cpaGeral <= 350 ? 'abaixo' : 'acima'} do benchmark
-              </strong>.
-            </>
+      {/* Status do CPA */}
+      {cpaProjetado > 0 && cpaGeral > 0 && (
+        <div style={{
+          background: cpaStatus > 20 ? '#FEF2F2' : '#F0FDF4',
+          border: `1px solid ${cpaStatus > 20 ? '#FECACA' : '#BBF7D0'}`,
+          borderRadius: 12, padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 12
+        }}>
+          {cpaStatus > 20
+            ? <AlertTriangle size={16} color="#DC2626" />
+            : <CheckCircle size={16} color="#16A34A" />}
+          <p style={{ fontSize: 13, color: '#1A2B4A', margin: 0, fontWeight: 600 }}>
+            {cpaStatus > 0
+              ? `CPA ${cpaStatus.toFixed(1)}% acima do projetado — campanha gerando leads acima do custo esperado`
+              : `CPA dentro do projetado — campanha eficiente`}
+          </p>
+          {cpaStatus > 20 && (
+            <span style={{ marginLeft: 'auto', fontSize: 11, color: '#DC2626', fontWeight: 600, whiteSpace: 'nowrap' }}>
+              Avaliar canais e investimento
+            </span>
           )}
-        </p>
-      </div>
+        </div>
+      )}
 
-      {/* CPA chart */}
-      {chartData.length > 0 && (
-        <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>CPA Real vs Alvo</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-              <YAxis tickFormatter={v => `R$${v}`} tick={{ fontSize: 11, fill: '#94a3b8' }} />
-              <Tooltip formatter={(v, n) => [fmtCurrency(Number(v)), String(n) === 'cpa_real' ? 'CPA Real' : 'CPA Alvo']} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
-              <Legend wrapperStyle={{ fontSize: 12 }} formatter={v => v === 'cpa_real' ? 'CPA Real' : 'CPA Alvo'} />
-              <Line type="monotone" dataKey="cpa_real" stroke="#f97316" strokeWidth={2} dot={{ r: 4 }} />
-              <Line type="monotone" dataKey="cpa_alvo" stroke="#94a3b8" strokeWidth={2} strokeDasharray="6 3" dot={{ r: 3 }} />
-            </LineChart>
+      {/* Gráfico CPA */}
+      {chartData.length > 0 && chartData.some(d => d.investimento > 0) && (
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
+          <SectionTitle sub="CPA real vs meta por mês">Evolução do CPA</SectionTitle>
+          <ResponsiveContainer width="100%" height={240}>
+            <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94A3B8' }} />
+              <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#94A3B8' }} width={60} tickFormatter={v => `R$${v}`} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#94A3B8' }} width={40} />
+              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #E2E8F0', fontSize: 12 }}
+                formatter={(val, name) => {
+                  if (name === 'investimento' || name === 'cpa' || name === 'cpa_meta') return [fmtBRL(Number(val)), name]
+                  return [fmt(Number(val)), name]
+                }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Bar yAxisId="left" dataKey="investimento" name="Investimento" fill="#C4B5FD" radius={[4, 4, 0, 0]} />
+              <Line yAxisId="left" dataKey="cpa" name="CPA Real" stroke="#8B5CF6" strokeWidth={2.5} dot={{ r: 4 }} />
+              <Line yAxisId="left" dataKey="cpa_meta" name="CPA Meta" stroke="#DC2626" strokeWidth={1.5} strokeDasharray="5 3" dot={false} />
+              <Bar yAxisId="right" dataKey="leads" name="Leads" fill="#93C5FD" radius={[4, 4, 0, 0]} />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}
 
       {/* Tabela editável */}
-      <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Campanhas mensais</h3>
-          <button onClick={() => setShowAdd(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#0d9488', color: 'white', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-            <Plus style={{ width: 13, height: 13 }} /> Novo Mês
+      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Inserir Investimento Mensal</span>
+          <button onClick={saveAll} disabled={saving} style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px',
+            borderRadius: 9, background: saved ? '#16a34a' : '#00A896', color: '#fff',
+            border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            opacity: saving ? 0.7 : 1
+          }}>
+            {saving ? <Loader2 size={12} className="animate-spin" /> : saved ? <CheckCircle size={12} /> : <Save size={12} />}
+            {saving ? 'Salvando...' : saved ? 'Salvo!' : 'Salvar tudo'}
           </button>
         </div>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                {['Mês/Ano', 'Investimento', 'Leads', 'CPA Real', 'CPA Alvo', 'Ações'].map(h => (
-                  <th key={h} style={{ padding: '10px 16px', textAlign: 'left', color: '#6b7280', fontWeight: 600, fontSize: 12 }}>{h}</th>
+              <tr style={{ background: '#F8FAFC' }}>
+                {['Mês', '% Leads', 'Leads Gerados', 'Investimento (R$)', 'CPA Real', 'CPA Meta', 'Status'].map(h => (
+                  <th key={h} style={{ padding: '10px 12px', textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {showAdd && (
-                <tr style={{ background: '#fffbeb', borderBottom: '1px solid #fde68a' }}>
-                  <td style={{ padding: '8px 12px' }}><input value={newRow.month_year} onChange={e => setNewRow({ ...newRow, month_year: e.target.value })} placeholder="MM/AAAA" style={{ width: 90, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12 }} /></td>
-                  {(['investment', 'leads_generated', 'cpa_target'] as const).map(f => (
-                    <td key={f} style={{ padding: '8px 12px' }}><input type="number" value={newRow[f]} onChange={e => setNewRow({ ...newRow, [f]: e.target.value })} placeholder="0" style={{ width: 90, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12 }} /></td>
-                  ))}
-                  <td /><td style={{ padding: '8px 12px' }}>
-                    <button onClick={saveNew} disabled={saving} style={{ background: '#0d9488', color: 'white', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12, marginRight: 4 }}>Salvar</button>
-                    <button onClick={() => setShowAdd(false)} style={{ background: '#f1f5f9', color: '#6b7280', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}>Cancelar</button>
-                  </td>
-                </tr>
-              )}
-              {marketingData.map(m => {
-                const cpaReal = m.leads_generated > 0 ? m.investment / m.leads_generated : 0
-                const isEditing = editingId === m.id
+              {entries.map((e, i) => {
+                const cpa = e.leads_generated > 0 ? Math.round(e.investment / e.leads_generated) : 0
+                const mt = cycle?.monthly_targets?.[i]
+                const cpaMeta = mt?.cpa_target || 0
+                const pctLeads = totalLeads > 0 ? (e.leads_generated / totalLeads) * 100 : 0
+                const cpaStatus = cpaMeta > 0 && cpa > 0 ? ((cpa - cpaMeta) / cpaMeta) * 100 : null
+
                 return (
-                  <tr key={m.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '10px 16px', fontWeight: 600, color: '#374151' }}>{m.month_year}</td>
-                    <td style={{ padding: '10px 16px' }}>{isEditing ? <input type="number" value={editVals.investment} onChange={e => setEditVals({ ...editVals, investment: e.target.value })} style={{ width: 90, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12 }} /> : fmtCurrency(m.investment)}</td>
-                    <td style={{ padding: '10px 16px' }}>{isEditing ? <input type="number" value={editVals.leads_generated} onChange={e => setEditVals({ ...editVals, leads_generated: e.target.value })} style={{ width: 70, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12 }} /> : fmt(m.leads_generated)}</td>
-                    <td style={{ padding: '10px 16px', color: '#f97316' }}>{fmtCurrency(cpaReal)}</td>
-                    <td style={{ padding: '10px 16px' }}>{isEditing ? <input type="number" value={editVals.cpa_target} onChange={e => setEditVals({ ...editVals, cpa_target: e.target.value })} style={{ width: 80, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12 }} /> : (m.cpa_target ? fmtCurrency(m.cpa_target) : '—')}</td>
-                    <td style={{ padding: '10px 16px' }}>
-                      {isEditing ? (
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <button onClick={() => saveEdit(m.id)} disabled={saving} style={{ background: '#0d9488', color: 'white', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}><Check style={{ width: 12, height: 12 }} /></button>
-                          <button onClick={() => setEditingId(null)} style={{ background: '#f1f5f9', color: '#6b7280', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}><X style={{ width: 12, height: 12 }} /></button>
-                        </div>
-                      ) : (
-                        <button onClick={() => { setEditingId(m.id); setEditVals({ investment: String(m.investment), leads_generated: String(m.leads_generated), cpa_target: String(m.cpa_target || '') }) }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><Edit2 style={{ width: 14, height: 14 }} /></button>
-                      )}
+                  <tr key={i} style={{ borderBottom: '1px solid #F8FAFC', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
+                    <td style={{ padding: '8px 12px', fontWeight: 600, color: '#1A2B4A' }}>
+                      {e.month_year ? `${MONTH_NAMES[(parseInt(e.month_year.split('-')[0]) - 1) % 12]}/${e.month_year.split('-')[1]}` : `M${i + 1}`}
+                    </td>
+                    <td style={{ padding: '8px 12px', textAlign: 'center', color: '#64748B' }}>{pctLeads.toFixed(1)}%</td>
+                    <td style={{ padding: '6px 12px', textAlign: 'center' }}>
+                      <input type="number" value={e.leads_generated || 0} onChange={ev => updateEntry(i, 'leads_generated', parseInt(ev.target.value) || 0)}
+                        style={{ width: 70, padding: '4px 8px', borderRadius: 7, border: '1px solid #E2E8F0', textAlign: 'center', fontSize: 12, outline: 'none', background: '#F8FAFC' }} />
+                    </td>
+                    <td style={{ padding: '6px 12px', textAlign: 'center' }}>
+                      <input type="number" value={e.investment || 0} onChange={ev => updateEntry(i, 'investment', parseFloat(ev.target.value) || 0)}
+                        style={{ width: 90, padding: '4px 8px', borderRadius: 7, border: '1.5px solid #C4B5FD', textAlign: 'center', fontSize: 12, outline: 'none', background: '#F5F3FF' }} />
+                    </td>
+                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, color: cpaStatus && cpaStatus > 20 ? '#DC2626' : '#1A2B4A' }}>
+                      {cpa > 0 ? fmtBRL(cpa) : '—'}
+                    </td>
+                    <td style={{ padding: '8px 12px', textAlign: 'center', color: '#94A3B8' }}>{cpaMeta > 0 ? fmtBRL(cpaMeta) : '—'}</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                      {cpaStatus !== null
+                        ? <DesvioTag value={-cpaStatus} />
+                        : <span style={{ color: '#94A3B8', fontSize: 11 }}>—</span>}
                     </td>
                   </tr>
                 )
               })}
-              <tr style={{ background: '#f8fafc', fontWeight: 700, borderTop: '2px solid #e2e8f0' }}>
-                <td style={{ padding: '12px 16px', color: '#374151' }}>Total</td>
-                <td style={{ padding: '12px 16px', color: '#374151' }}>{fmtCurrency(totalInv)}</td>
-                <td style={{ padding: '12px 16px', color: '#374151' }}>{fmt(totalLeads)}</td>
-                <td style={{ padding: '12px 16px', color: '#f97316' }}>{fmtCurrency(cpaGeral)}</td>
-                <td /><td />
+              <tr style={{ background: '#F0FDF4', borderTop: '2px solid #BBF7D0' }}>
+                <td style={{ padding: '10px 12px', fontWeight: 800, color: '#1A2B4A' }}>TOTAL</td>
+                <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700 }}>100%</td>
+                <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700 }}>{fmt(totalLeads)}</td>
+                <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700 }}>{fmtBRL(totalInvestment)}</td>
+                <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: cpaStatus > 20 ? '#DC2626' : '#00A896' }}>{cpaGeral > 0 ? fmtBRL(cpaGeral) : '—'}</td>
+                <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: '#94A3B8' }}>{cpaProjetado > 0 ? fmtBRL(cpaProjetado) : '—'}</td>
+                <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                  {cpaStatus !== 0 && cpaGeral > 0 && <DesvioTag value={-cpaStatus} />}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -1083,651 +699,737 @@ function TabMarketingROI({
   )
 }
 
-// ═══════════════════════════════════════════════════════════
-//  CAMPANHA ATIVA: TAB RETENÇÃO
-// ═══════════════════════════════════════════════════════════
-function TabRetencao({
-  reEnrollData, transfers, activeCycle, institutionId, surveyResponses
-}: {
-  reEnrollData: ReEnrollment[]
-  transfers: StudentTransfer[]
-  activeCycle: CampaignCycle | null
-  institutionId: string
-  surveyResponses: { answers?: { reenrollment?: string } }[]
-}) {
-  const highRisk = surveyResponses.filter(r =>
-    ['Provavelmente não', 'Não vou rematricular'].includes(r.answers?.reenrollment ?? '')
-  ).length
-  const undecided = surveyResponses.filter(r =>
-    r.answers?.reenrollment === 'Ainda não decidi'
-  ).length
-  const confirmedTransfers = transfers.filter(t => t.status === 'confirmed' && !t.deleted_at).length
+// ─── Aba 4 — Rematrículas ─────────────────────────────────────────────────────
+function TabRematriculas({ institutionId, cycle }: { institutionId: string; cycle: CampaignCycle | null }) {
+  const [entries, setEntries] = useState<MonthlyReenrollment[]>([])
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [loading, setLoading] = useState(true)
 
-  const exits = activeCycle?.school_data?.total_exits ?? 0
-  const currentStudents = activeCycle?.school_data?.current_students ?? 0
-  const eligible = Math.max(0, currentStudents - exits - confirmedTransfers)
+  useEffect(() => {
+    if (!cycle) return
+    load()
+  }, [cycle])
 
-  const lastRe = reEnrollData[reEnrollData.length - 1]
-  const taxaAtual = lastRe ? pct(lastRe.re_enrolled, lastRe.total_base) : 0
-  const regrPoints = reEnrollData.map((r, i) => ({ x: i, y: pct(r.re_enrolled, r.total_base) }))
-  const { slope, intercept } = linearRegression(regrPoints)
-  const n = regrPoints.length
-  const proj = n > 0 ? Math.min(100, Math.max(0, Math.round(slope * n + intercept))) : taxaAtual
-  const trendLabel = slope > 0.5 ? 'crescimento' : slope < -0.5 ? 'queda' : 'estável'
+  const load = async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('monthly_reenrollments')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .order('period')
 
-  const chartData = reEnrollData.map(r => ({
-    period: r.period,
-    pct_real: pct(r.re_enrolled, r.total_base),
-    target: r.target_percentage,
+    if (data && data.length > 0) {
+      setEntries(data)
+    } else {
+      // Gerar entradas vazias a partir das metas do ciclo
+      const months = cycle?.monthly_targets?.map((mt, i) => {
+        const period = `${mt.year}-${String(typeof mt.month === 'number' ? mt.month : i + 8).padStart(2, '0')}`
+        const accTarget = Math.round((cycle.base_students * cycle.target_reenrollment_rate) * ((i + 1) / (cycle.monthly_targets?.length || 1)))
+        return {
+          institution_id: institutionId,
+          period,
+          confirmed: 0,
+          target: mt.enrollments_returning || accTarget,
+          base_total: cycle.base_students || 0,
+        }
+      }) || []
+      setEntries(months)
+    }
+    setLoading(false)
+  }
+
+  const update = (idx: number, field: keyof MonthlyReenrollment, value: number | string) => {
+    setEntries(prev => prev.map((e, i) => i === idx ? { ...e, [field]: value } : e))
+  }
+
+  const saveAll = async () => {
+    setSaving(true)
+    try {
+      for (const entry of entries) {
+        await supabase.from('monthly_reenrollments').upsert({
+          institution_id: entry.institution_id,
+          period: entry.period,
+          confirmed: entry.confirmed,
+          target: entry.target,
+          base_total: entry.base_total,
+          notes: entry.notes,
+        }, { onConflict: 'institution_id,period' })
+      }
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+      await load()
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const baseElegivel = (cycle?.base_students || 0) - Object.values(cycle?.school_data?.exits || {}).reduce((s, v) => s + (Number(v) || 0), 0)
+  const totalConfirmed = entries.reduce((s, e) => s + e.confirmed, 0)
+  const totalTarget = entries.length > 0 ? entries[entries.length - 1]?.target || 0 : 0
+  const taxaFidelizacao = baseElegivel > 0 ? (totalConfirmed / baseElegivel) * 100 : 0
+  const taxaMeta = cycle ? cycle.target_reenrollment_rate * 100 : 0
+
+  const chartData = entries.map(e => ({
+    name: periodLabel(e.period),
+    confirmadas: e.confirmed,
+    meta: e.target,
+    pctConfirmed: baseElegivel > 0 ? parseFloat(((e.confirmed / baseElegivel) * 100).toFixed(2)) : 0,
+    pctMeta: baseElegivel > 0 ? parseFloat(((e.target / baseElegivel) * 100).toFixed(2)) : 0,
   }))
+
+  // Acumulado
+  let accConfirmed = 0
+  let accTarget = 0
+  const accData = entries.map(e => {
+    accConfirmed += e.confirmed
+    accTarget += e.target
+    return {
+      name: periodLabel(e.period),
+      acumulado: accConfirmed,
+      meta_acum: accTarget,
+      pct: baseElegivel > 0 ? parseFloat(((accConfirmed / baseElegivel) * 100).toFixed(1)) : 0,
+      pct_meta: baseElegivel > 0 ? parseFloat(((accTarget / baseElegivel) * 100).toFixed(1)) : 0,
+    }
+  })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* Risk radar */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
-        <div style={{ background: highRisk > 0 ? '#fef2f2' : '#f8fafc', border: `1px solid ${highRisk > 0 ? '#fca5a5' : '#e2e8f0'}`, borderRadius: 16, padding: '18px 20px' }}>
-          <p style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.05em', margin: '0 0 8px' }}>Alto Risco</p>
-          <p style={{ fontSize: 28, fontWeight: 700, color: highRisk > 0 ? '#dc2626' : '#94a3b8', margin: '0 0 4px' }}>{highRisk}</p>
-          <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>famílias não vão rematricular</p>
-        </div>
-        <div style={{ background: undecided > 0 ? '#fffbeb' : '#f8fafc', border: `1px solid ${undecided > 0 ? '#fde68a' : '#e2e8f0'}`, borderRadius: 16, padding: '18px 20px' }}>
-          <p style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.05em', margin: '0 0 8px' }}>Indecisos</p>
-          <p style={{ fontSize: 28, fontWeight: 700, color: undecided > 0 ? '#d97706' : '#94a3b8', margin: '0 0 4px' }}>{undecided}</p>
-          <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>oportunidade de retenção</p>
-        </div>
-        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 16, padding: '18px 20px' }}>
-          <p style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.05em', margin: '0 0 8px' }}>Transferências</p>
-          <p style={{ fontSize: 28, fontWeight: 700, color: '#374151', margin: '0 0 4px' }}>{confirmedTransfers}</p>
-          <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>confirmadas este ciclo</p>
-        </div>
+      <SectionTitle sub="Insira as rematrículas confirmadas mês a mês">Rematrículas</SectionTitle>
+
+      {/* KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        <KpiCard label="Rematriculados" value={fmt(totalConfirmed)} sub={`meta total: ${fmt(totalTarget)}`} icon={<RefreshCw />} color="#F59E0B" desvio={totalTarget > 0 ? ((totalConfirmed - totalTarget) / totalTarget) * 100 : 0} />
+        <KpiCard label="Base Elegível" value={fmt(baseElegivel)} sub="total - formandos" icon={<Users />} color="#64748B" />
+        <KpiCard label="Taxa Fidelização" value={`${taxaFidelizacao.toFixed(1)}%`} sub={`meta: ${taxaMeta.toFixed(1)}%`} icon={<Target />} color={taxaFidelizacao >= taxaMeta ? '#16a34a' : '#DC2626'} desvio={taxaFidelizacao - taxaMeta} />
+        <KpiCard label="A Rematricular" value={fmt(Math.max(0, baseElegivel - totalConfirmed))} sub="ainda elegíveis" icon={<Clock />} color="#8B5CF6" />
       </div>
 
-      {/* Base elegível */}
-      {currentStudents > 0 && (exits > 0 || confirmedTransfers > 0) && (
-        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '12px 18px' }}>
-          <p style={{ margin: 0, fontSize: 13, color: '#1e3a8a' }}>
-            <strong>Base elegível para rematrícula: {fmt(eligible)} alunos</strong>
-            {' '}(total: {currentStudents}
-            {exits > 0 ? ` − formandos: ${exits}` : ''}
-            {confirmedTransfers > 0 ? ` − transferências: ${confirmedTransfers}` : ''})
-          </p>
-        </div>
-      )}
-
-      {/* Taxa de rematrícula */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
-        {[
-          { label: 'Taxa Atual', value: `${taxaAtual}%`, sub: `${lastRe?.re_enrolled ?? 0} de ${lastRe?.total_base ?? 0}` },
-          { label: 'Meta', value: `${lastRe?.target_percentage ?? 85}%`, sub: 'fidelização' },
-          { label: 'Projeção', value: `${proj}%`, sub: `Tendência: ${trendLabel}`, hl: proj >= (lastRe?.target_percentage ?? 85) },
-        ].map(({ label, value, sub, hl }) => (
-          <div key={label} style={{ background: hl ? '#0d9488' : 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: '18px 20px' }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: hl ? 'rgba(255,255,255,0.8)' : '#94a3b8', textTransform: 'uppercase', letterSpacing: '.05em', margin: '0 0 8px' }}>{label}</p>
-            <p style={{ fontSize: 28, fontWeight: 700, color: hl ? 'white' : '#1e2d6b', margin: '0 0 4px' }}>{value}</p>
-            <p style={{ fontSize: 11, color: hl ? 'rgba(255,255,255,0.7)' : '#94a3b8', margin: 0 }}>{sub}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Gráfico rematrícula */}
-      {chartData.length > 0 && (
-        <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Evolução das rematrículas</h3>
-          <ResponsiveContainer width="100%" height={240}>
-            <ComposedChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="period" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 11, fill: '#94a3b8' }} />
-              <Tooltip formatter={(v, n) => [`${Number(v)}%`, String(n) === 'pct_real' ? '% Rematric.' : 'Meta']} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
-              <Legend wrapperStyle={{ fontSize: 12 }} formatter={v => v === 'pct_real' ? '% Rematric.' : 'Meta'} />
-              <Bar dataKey="pct_real" radius={[4, 4, 0, 0]}>
-                {chartData.map((entry, i) => (
-                  <Cell key={i} fill={entry.pct_real >= entry.target ? '#0d9488' : '#f87171'} />
-                ))}
-              </Bar>
-              <Line type="monotone" dataKey="target" stroke="#94a3b8" strokeWidth={2} strokeDasharray="6 3" dot={false} />
+      {/* Gráfico % acumulado */}
+      {accData.length > 0 && (
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
+          <SectionTitle sub="% de rematrícula acumulada vs meta mês a mês">Evolução de Rematrículas</SectionTitle>
+          <ResponsiveContainer width="100%" height={220}>
+            <ComposedChart data={accData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94A3B8' }} />
+              <YAxis yAxisId="vol" tick={{ fontSize: 11, fill: '#94A3B8' }} width={40} />
+              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 11, fill: '#94A3B8' }} width={40} tickFormatter={v => `${v}%`} />
+              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #E2E8F0', fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Bar yAxisId="vol" dataKey="acumulado" name="Confirmadas" fill="#FCD34D" radius={[4, 4, 0, 0]} />
+              <Bar yAxisId="vol" dataKey="meta_acum" name="Meta" fill="#E2E8F0" radius={[4, 4, 0, 0]} />
+              <Line yAxisId="pct" dataKey="pct" name="% Real" stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 4 }} />
+              <Line yAxisId="pct" dataKey="pct_meta" name="% Meta" stroke="#DC2626" strokeWidth={1.5} strokeDasharray="5 3" dot={false} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}
+
+      {/* Tabela editável */}
+      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Inserir Rematrículas Mensais</span>
+          <button onClick={saveAll} disabled={saving} style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px',
+            borderRadius: 9, background: saved ? '#16a34a' : '#F59E0B', color: '#fff',
+            border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer'
+          }}>
+            {saving ? <Loader2 size={12} className="animate-spin" /> : saved ? <CheckCircle size={12} /> : <Save size={12} />}
+            {saving ? 'Salvando...' : saved ? 'Salvo!' : 'Salvar'}
+          </button>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: '#F8FAFC' }}>
+                {['Mês', '% Remat.', 'Meta Acum.', 'Confirmadas', 'Desvio Vol.', 'Desvio %', 'Observações'].map(h => (
+                  <th key={h} style={{ padding: '10px 12px', textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e, i) => {
+                const pct = baseElegivel > 0 ? (e.confirmed / baseElegivel) * 100 : 0
+                const desvioVol = e.confirmed - e.target
+                const desvioPct = e.target > 0 ? ((e.confirmed - e.target) / e.target) * 100 : 0
+                return (
+                  <tr key={i} style={{ borderBottom: '1px solid #F8FAFC', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
+                    <td style={{ padding: '8px 12px', fontWeight: 600, color: '#1A2B4A' }}>{periodLabel(e.period)}</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: pct >= taxaMeta ? '#16a34a' : '#F59E0B' }}>
+                      {pct.toFixed(2)}%
+                    </td>
+                    <td style={{ padding: '8px 12px', textAlign: 'center', color: '#94A3B8' }}>{fmt(e.target)}</td>
+                    <td style={{ padding: '6px 12px', textAlign: 'center' }}>
+                      <input type="number" value={e.confirmed} onChange={ev => update(i, 'confirmed', parseInt(ev.target.value) || 0)}
+                        style={{ width: 80, padding: '4px 8px', borderRadius: 7, border: '1.5px solid #FCD34D', textAlign: 'center', fontSize: 12, outline: 'none', background: '#FFFBEB' }} />
+                    </td>
+                    <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                      <span style={{ fontWeight: 700, color: desvioVol >= 0 ? '#16a34a' : '#DC2626' }}>
+                        {desvioVol >= 0 ? '+' : ''}{desvioVol}
+                      </span>
+                    </td>
+                    <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                      {e.target > 0 ? <DesvioTag value={desvioPct} /> : <span style={{ color: '#94A3B8' }}>—</span>}
+                    </td>
+                    <td style={{ padding: '6px 12px' }}>
+                      <input type="text" value={e.notes || ''} onChange={ev => update(i, 'notes', ev.target.value)}
+                        placeholder="Observações..." style={{ width: '100%', padding: '4px 8px', borderRadius: 7, border: '1px solid #E2E8F0', fontSize: 11, outline: 'none', background: '#F8FAFC' }} />
+                    </td>
+                  </tr>
+                )
+              })}
+              <tr style={{ background: '#FFFBEB', borderTop: '2px solid #FCD34D' }}>
+                <td style={{ padding: '10px 12px', fontWeight: 800 }}>TOTAL</td>
+                <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: taxaFidelizacao >= taxaMeta ? '#16a34a' : '#DC2626' }}>{taxaFidelizacao.toFixed(2)}%</td>
+                <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: '#94A3B8' }}>{fmt(totalTarget)}</td>
+                <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#F59E0B' }}>{fmt(totalConfirmed)}</td>
+                <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: totalConfirmed >= totalTarget ? '#16a34a' : '#DC2626' }}>
+                  {totalConfirmed >= totalTarget ? '+' : ''}{totalConfirmed - totalTarget}
+                </td>
+                <td colSpan={2} />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
 }
 
-// ═══════════════════════════════════════════════════════════
-//  CAMPANHA ATIVA: TAB INTELIGÊNCIA
-// ═══════════════════════════════════════════════════════════
-function TabInteligencia({
-  funnelData, marketingData, reEnrollData, activeCycle, institutionId, showToast
-}: {
-  funnelData: FunnelMetrics[]
-  marketingData: MarketingCampaign[]
-  reEnrollData: ReEnrollment[]
-  activeCycle: CampaignCycle | null
-  institutionId: string
-  showToast: (msg: string, type?: 'success' | 'error') => void
-}) {
-  const [reportLoading, setReportLoading] = useState(false)
-  const [report, setReport] = useState('')
-  const [showReport, setShowReport] = useState(false)
+// ─── Aba 5 — Transferências & Recusas ────────────────────────────────────────
+function TabTransferencias({ institutionId }: { institutionId: string }) {
+  const [transfers, setTransfers] = useState<Transfer[]>([])
+  const [lostLeads, setLostLeads] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const totalEnrolled = funnelData.reduce((s, f) => s + (f.enrollments ?? 0), 0)
-  const totalNew = funnelData.reduce((s, f) => s + (f.enrollments ?? 0), 0)
-  const baseStudents = activeCycle?.base_students ?? 0
-  const newPct = baseStudents > 0 ? Math.round(totalNew / baseStudents * 100) : 0
+  useEffect(() => { load() }, [])
 
-  const totalInv = marketingData.reduce((s, m) => s + (m.investment || 0), 0)
-  const totalLeads = marketingData.reduce((s, m) => s + (m.leads_generated || 0), 0)
-  const avgCPA = totalLeads > 0 ? Math.round(totalInv / totalLeads) : 0
-
-  const latest = funnelData[funnelData.length - 1]
-  const convPct = (latest?.registrations ?? 0) > 0
-    ? Math.round((latest?.enrollments ?? 0) / (latest?.registrations ?? 1) * 100)
-    : 0
-
-  const lastRe = reEnrollData[reEnrollData.length - 1]
-  const reenrollPct = lastRe ? pct(lastRe.re_enrolled, lastRe.total_base) : 0
-
-  const benchmarks = [
-    { label: '% de novatos', escola: newPct, setor: 18, unit: '%', reverse: false },
-    { label: 'CPA médio', escola: avgCPA, setor: 350, unit: 'R$', reverse: true },
-    { label: 'Conversão lead→matrícula', escola: convPct, setor: 18, unit: '%', reverse: false },
-    { label: 'Taxa de rematrícula', escola: reenrollPct, setor: 85, unit: '%', reverse: false },
-  ]
-
-  // Heat map data
-  const monthlyEnrolls = funnelData.map(f => ({
-    period: f.period,
-    enrollments: f.enrollments ?? 0,
-  }))
-  const maxEnrolls = Math.max(1, ...monthlyEnrolls.map(m => m.enrollments))
-
-  const interpolateColor = (val: number, max: number) => {
-    const t = max > 0 ? val / max : 0
-    const r1 = 0x9F, g1 = 0xE1, b1 = 0xCB
-    const r2 = 0x08, g2 = 0x50, b2 = 0x41
-    const r = Math.round(r1 + (r2 - r1) * t)
-    const g = Math.round(g1 + (g2 - g1) * t)
-    const b = Math.round(b1 + (b2 - b1) * t)
-    return `rgb(${r},${g},${b})`
+  const load = async () => {
+    setLoading(true)
+    const [{ data: tr }, { data: ll }] = await Promise.all([
+      supabase.from('student_transfers').select('*').eq('institution_id', institutionId).order('transfer_date', { ascending: false }),
+      supabase.from('leads').select('id,student_name,responsible_name,lost_reason,lost_reason_detail,created_at,source,grade_interest').eq('institution_id', institutionId).eq('status', 'lost').not('lost_reason', 'is', null),
+    ])
+    setTransfers(tr || [])
+    setLostLeads(ll || [])
+    setLoading(false)
   }
 
-  const generateReport = async () => {
-    setReportLoading(true)
-    try {
-      const res = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'weekly_insight',
-          payload: {
-            funnel: latest,
-            previousFunnel: funnelData.length > 1 ? funnelData[funnelData.length - 2] : null,
-            reenrollments: lastRe,
-            campaignWeek: latest?.period,
-            benchmarks,
-            totalEnrolled,
-            target: activeCycle?.target_new_students,
-            reportType: 'executive'
-          }
-        })
-      })
-      const data = await res.json()
-      setReport(data.result ?? '')
-      setShowReport(true)
-    } catch { showToast('Erro ao gerar relatório', 'error') }
-    finally { setReportLoading(false) }
+  // Pareto de recusas
+  const reasonCounts: Record<string, number> = {}
+  lostLeads.forEach(l => {
+    const r = l.lost_reason || 'Não informado'
+    reasonCounts[r] = (reasonCounts[r] || 0) + 1
+  })
+
+  const LOST_REASON_LABELS: Record<string, string> = {
+    preco_alto: 'Valor alto', nao_retornou: 'Não retornou', outra_escola: 'Outra escola',
+    sem_vaga: 'Sem vaga', nao_oferece_serie: 'Série não ofertada', nao_gostou: 'Não gostou',
+    mudou_cidade: 'Mudou de cidade', dificuldade_fin: 'Dificuldade financeira',
+    desistiu: 'Desistiu', outro: 'Outro'
   }
+  const FATOR_MAP: Record<string, string> = {
+    preco_alto: 'Interno', nao_retornou: 'Externo', outra_escola: 'Externo',
+    sem_vaga: 'Interno', nao_oferece_serie: 'Interno', nao_gostou: 'Interno',
+    mudou_cidade: 'Externo', dificuldade_fin: 'Externo', desistiu: 'Externo', outro: 'Interno'
+  }
+
+  const paretoData = Object.entries(reasonCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, count]) => ({
+      name: LOST_REASON_LABELS[key] || key,
+      count,
+      fator: FATOR_MAP[key] || 'Externo',
+      pct: lostLeads.length > 0 ? (count / lostLeads.length * 100).toFixed(1) : '0',
+    }))
+
+  const totalInterno = lostLeads.filter(l => FATOR_MAP[l.lost_reason] === 'Interno').length
+  const totalExterno = lostLeads.filter(l => FATOR_MAP[l.lost_reason] === 'Externo').length
+
+  const PARETO_COLORS = ['#DC2626', '#EF4444', '#F87171', '#FCA5A5', '#FECACA', '#FEE2E2', '#FFF1F2', '#DC2626', '#EF4444', '#F87171']
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 60 }}><Loader2 size={28} color="#00A896" className="animate-spin" style={{ margin: '0 auto' }} /></div>
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* Benchmark table */}
-      <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid #e2e8f0' }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Benchmark nacional</h3>
-        </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead>
-            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              {['Métrica', 'Sua escola', 'Setor', 'Resultado'].map(h => (
-                <th key={h} style={{ padding: '10px 16px', textAlign: 'left', color: '#6b7280', fontWeight: 600, fontSize: 12 }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {benchmarks.map(({ label, escola, setor, unit, reverse }) => {
-              const isAbove = reverse ? escola <= setor : escola >= setor
-              const diff = reverse ? setor - escola : escola - setor
-              return (
-                <tr key={label} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '12px 16px', color: '#374151', fontWeight: 500 }}>{label}</td>
-                  <td style={{ padding: '12px 16px', fontWeight: 700, color: '#1e2d6b' }}>
-                    {unit === 'R$' ? fmtCurrency(escola) : `${escola}${unit}`}
-                  </td>
-                  <td style={{ padding: '12px 16px', color: '#6b7280' }}>
-                    {unit === 'R$' ? fmtCurrency(setor) : `${setor}${unit}`}
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span style={{
-                      background: isAbove ? '#f0fdf4' : Math.abs(diff) < setor * 0.1 ? '#fffbeb' : '#fef2f2',
-                      color: isAbove ? '#16a34a' : Math.abs(diff) < setor * 0.1 ? '#d97706' : '#dc2626',
-                      padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700
-                    }}>
-                      {isAbove ? 'Acima da média' : Math.abs(diff) < setor * 0.1 ? 'Na média' : 'Abaixo da média'}
-                    </span>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+      <SectionTitle sub="Transferências e motivos de perda de leads">Transferências & Desistências</SectionTitle>
+
+      {/* KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        <KpiCard label="Transferências" value={fmt(transfers.length)} sub="saídas confirmadas" icon={<ArrowUpRight />} color="#6B7280" />
+        <KpiCard label="Leads Perdidos" value={fmt(lostLeads.length)} sub="com motivo registrado" icon={<X />} color="#DC2626" />
+        <KpiCard label="Fator Interno" value={fmt(totalInterno)} sub={`${lostLeads.length > 0 ? ((totalInterno / lostLeads.length) * 100).toFixed(0) : 0}% das recusas`} icon={<AlertTriangle />} color="#F59E0B" />
+        <KpiCard label="Fator Externo" value={fmt(totalExterno)} sub={`${lostLeads.length > 0 ? ((totalExterno / lostLeads.length) * 100).toFixed(0) : 0}% das recusas`} icon={<Info />} color="#3B82F6" />
       </div>
 
-      {/* Heat map */}
-      {monthlyEnrolls.length > 0 && (
-        <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Mapa de calor — matrículas por mês</h3>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {monthlyEnrolls.map(m => (
-              <div key={m.period} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                <div style={{
-                  width: 52, height: 52, borderRadius: 10,
-                  background: m.enrollments > 0 ? interpolateColor(m.enrollments, maxEnrolls) : '#f1f5f9',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: m.enrollments > maxEnrolls * 0.5 ? 'white' : '#374151' }}>
-                    {m.enrollments}
-                  </span>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        {/* Pareto de recusas */}
+        {paretoData.length > 0 && (
+          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
+            <SectionTitle sub="Motivos de perda por frequência">Recusas (Pareto)</SectionTitle>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {paretoData.map((item, i) => (
+                <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ width: 130, fontSize: 12, color: '#475569', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</span>
+                  <div style={{ flex: 1, height: 20, background: '#F1F5F9', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', borderRadius: 4, transition: 'width 0.8s ease',
+                      width: `${(item.count / paretoData[0].count) * 100}%`,
+                      background: item.fator === 'Interno' ? '#F59E0B' : '#3B82F6'
+                    }} />
+                  </div>
+                  <span style={{ width: 30, fontSize: 12, fontWeight: 700, color: '#1A2B4A', textAlign: 'right', flexShrink: 0 }}>{item.count}</span>
+                  <span style={{ width: 38, fontSize: 10, color: '#94A3B8', textAlign: 'right', flexShrink: 0 }}>{item.pct}%</span>
+                  <span style={{
+                    fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 999, flexShrink: 0,
+                    background: item.fator === 'Interno' ? '#FFFBEB' : '#EFF6FF',
+                    color: item.fator === 'Interno' ? '#92400E' : '#1D4ED8'
+                  }}>{item.fator}</span>
                 </div>
-                <span style={{ fontSize: 10, color: '#94a3b8' }}>{m.period?.slice(5)}</span>
+              ))}
+            </div>
+            <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #F1F5F9', display: 'flex', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 10, height: 10, borderRadius: 2, background: '#F59E0B' }} />
+                <span style={{ fontSize: 11, color: '#64748B' }}>Fator Interno (escola pode melhorar)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 10, height: 10, borderRadius: 2, background: '#3B82F6' }} />
+                <span style={{ fontSize: 11, color: '#64748B' }}>Fator Externo</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Lista de leads perdidos recentes */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid #E2E8F0' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Leads Perdidos Recentes</span>
+          </div>
+          <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+            {lostLeads.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 32, color: '#94A3B8' }}>
+                <CheckCircle size={32} style={{ margin: '0 auto 10px', opacity: 0.3 }} />
+                <p style={{ fontSize: 13 }}>Nenhum lead perdido com motivo registrado</p>
+              </div>
+            ) : lostLeads.slice(0, 10).map(l => (
+              <div key={l.id} style={{ padding: '12px 16px', borderBottom: '1px solid #F8FAFC', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A' }}>{l.student_name}</span>
+                  <span style={{ fontSize: 10, color: '#94A3B8' }}>{l.grade_interest}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    fontSize: 11, padding: '2px 8px', borderRadius: 999, fontWeight: 600,
+                    background: FATOR_MAP[l.lost_reason] === 'Interno' ? '#FFFBEB' : '#FEF2F2',
+                    color: FATOR_MAP[l.lost_reason] === 'Interno' ? '#92400E' : '#DC2626'
+                  }}>
+                    {LOST_REASON_LABELS[l.lost_reason] || l.lost_reason}
+                  </span>
+                  <span style={{ fontSize: 10, color: '#94A3B8' }}>{l.source}</span>
+                </div>
+                {l.lost_reason_detail && (
+                  <span style={{ fontSize: 11, color: '#64748B', fontStyle: 'italic' }}>{l.lost_reason_detail}</span>
+                )}
               </div>
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Transferências */}
+      {transfers.length > 0 && (
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid #E2E8F0' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Histórico de Transferências</span>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: '#F8FAFC' }}>
+                  {['Aluno', 'Série', 'Data', 'Destino', 'Motivo'].map(h => (
+                    <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {transfers.map((t, i) => (
+                  <tr key={t.id} style={{ borderBottom: '1px solid #F8FAFC', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
+                    <td style={{ padding: '10px 14px', fontWeight: 600, color: '#1A2B4A' }}>{t.student_name}</td>
+                    <td style={{ padding: '10px 14px', color: '#64748B' }}>{t.grade}</td>
+                    <td style={{ padding: '10px 14px', color: '#64748B' }}>{t.transfer_date ? new Date(t.transfer_date).toLocaleDateString('pt-BR') : '—'}</td>
+                    <td style={{ padding: '10px 14px', color: '#64748B' }}>{t.destination || '—'}</td>
+                    <td style={{ padding: '10px 14px', color: '#94A3B8', fontStyle: 'italic' }}>{t.reason || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Aba 6 — Diagnóstico IA ───────────────────────────────────────────────────
+function TabDiagnosticoIA({ institutionId, cycle, metrics, reenrollments }: {
+  institutionId: string
+  cycle: CampaignCycle | null
+  metrics: FunnelMetric[]
+  reenrollments: MonthlyReenrollment[]
+}) {
+  const [reports, setReports] = useState<AIReport[]>([])
+  const [generating, setGenerating] = useState(false)
+  const [selectedReport, setSelectedReport] = useState<AIReport | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [avgTime, setAvgTime] = useState<number | null>(null)
+
+  useEffect(() => { loadReports(); calcAvgTime() }, [])
+
+  const loadReports = async () => {
+    const { data } = await supabase
+      .from('ai_monthly_reports')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .order('created_at', { ascending: false })
+    if (data) {
+      setReports(data)
+      if (data.length > 0) setSelectedReport(data[0])
+    }
+    setLoading(false)
+  }
+
+  const calcAvgTime = async () => {
+    // Tempo médio entre created_at do lead e enrolled_at da matrícula
+    const { data: enrollments } = await supabase
+      .from('enrollments')
+      .select('lead_id, created_at')
+      .eq('institution_id', institutionId)
+      .not('lead_id', 'is', null)
+      .limit(50)
+
+    if (!enrollments || enrollments.length === 0) return
+
+    const leadIds = enrollments.map(e => e.lead_id)
+    const { data: leads } = await supabase
+      .from('leads')
+      .select('id, created_at')
+      .in('id', leadIds)
+
+    if (!leads) return
+
+    const times: number[] = []
+    enrollments.forEach(enr => {
+      const lead = leads.find(l => l.id === enr.lead_id)
+      if (lead) {
+        const diff = (new Date(enr.created_at).getTime() - new Date(lead.created_at).getTime()) / (1000 * 60 * 60 * 24)
+        if (diff >= 0 && diff < 365) times.push(diff)
+      }
+    })
+
+    if (times.length > 0) setAvgTime(Math.round(times.reduce((s, t) => s + t, 0) / times.length))
+  }
+
+  const generateReport = async () => {
+    if (!cycle) return
+    setGenerating(true)
+    try {
+      const period = new Date().toISOString().slice(0, 7)
+
+      // Monta contexto para a IA
+      const totalReg = metrics.reduce((s, m) => s + m.registrations, 0)
+      const totalRegT = metrics.reduce((s, m) => s + m.registrations_target, 0)
+      const totalVis = metrics.reduce((s, m) => s + m.visits, 0)
+      const totalVisT = metrics.reduce((s, m) => s + m.visits_target, 0)
+      const totalEnr = metrics.reduce((s, m) => s + m.enrollments, 0)
+      const totalEnrT = metrics.reduce((s, m) => s + m.enrollments_target, 0)
+      const totalReen = reenrollments.reduce((s, r) => s + r.confirmed, 0)
+      const totalReenT = reenrollments.reduce((s, r) => s + r.target, 0)
+
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'monthly_report',
+          payload: {
+            institutionName: cycle.label,
+            period,
+            cycle: { year: cycle.year, target_new: cycle.target_new_students, target_reenroll: cycle.target_reenrollment_rate, base_students: cycle.base_students },
+            funnel: { registrations: totalReg, registrations_target: totalRegT, visits: totalVis, visits_target: totalVisT, enrollments: totalEnr, enrollments_target: totalEnrT },
+            reenrollments: { confirmed: totalReen, target: totalReenT },
+            avg_time_days: avgTime,
+            monthly_data: metrics.map(m => ({ period: m.period, registrations: m.registrations, visits: m.visits, enrollments: m.enrollments })),
+          }
+        })
+      })
+
+      const data = await res.json()
+      const content = data.result || data.content || 'Relatório gerado.'
+
+      // Salva no banco
+      const { data: saved } = await supabase.from('ai_monthly_reports').insert({
+        institution_id: institutionId,
+        period,
+        content,
+      }).select().single()
+
+      if (saved) {
+        setReports(prev => [saved, ...prev])
+        setSelectedReport(saved)
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const MONTH_NAMES_FULL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <SectionTitle sub="Análise mensal gerada por IA com ações recomendadas">Diagnóstico IA</SectionTitle>
+        <button
+          onClick={generateReport}
+          disabled={generating || !cycle}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px',
+            borderRadius: 12, background: generating ? '#E2E8F0' : 'linear-gradient(135deg, #00A896, #1A2B4A)',
+            color: generating ? '#94A3B8' : '#fff', border: 'none', fontSize: 13, fontWeight: 700,
+            cursor: generating ? 'not-allowed' : 'pointer', boxShadow: generating ? 'none' : '0 4px 14px rgba(0,168,150,0.3)'
+          }}
+        >
+          {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+          {generating ? 'Gerando relatório...' : 'Gerar relatório do mês'}
+        </button>
+      </div>
+
+      {/* Tempo médio de matrícula */}
+      {avgTime !== null && (
+        <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 12, padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Clock size={20} color="#1D4ED8" />
+          </div>
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#1E40AF', margin: 0 }}>
+              Tempo médio de matrícula: <span style={{ fontSize: 20, fontWeight: 900 }}>{avgTime} dias</span>
+            </p>
+            <p style={{ fontSize: 12, color: '#3B82F6', margin: '2px 0 0' }}>
+              Média entre o cadastro do lead e a confirmação da matrícula.
+              {avgTime <= 14 ? ' ✅ Conversão rápida — time está eficiente.' : avgTime <= 30 ? ' ⚠ Moderado — há espaço para acelerar o fechamento.' : ' 🔴 Lento — considere ações de urgência com os leads em proposta.'}
+            </p>
+          </div>
+        </div>
       )}
 
-      {/* Relatório executivo */}
-      <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', padding: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e2d6b', margin: '0 0 4px' }}>Relatório executivo</h3>
-            <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>Resumo executivo com pontos fortes, riscos e recomendações</p>
-          </div>
-          <button
-            onClick={generateReport}
-            disabled={reportLoading}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 10, background: '#1e2d6b', color: 'white', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: reportLoading ? 0.7 : 1 }}>
-            {reportLoading ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> : <Sparkles style={{ width: 14, height: 14 }} />}
-            {reportLoading ? 'Gerando...' : 'Gerar relatório'}
-          </button>
+      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 20 }}>
+        {/* Sidebar de relatórios */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Histórico</span>
+          {loading && <div style={{ height: 40, background: '#F1F5F9', borderRadius: 8, animation: 'pulse 1.5s infinite' }} />}
+          {!loading && reports.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '20px 12px', color: '#94A3B8', fontSize: 12 }}>
+              <FileText size={24} style={{ margin: '0 auto 8px', opacity: 0.3 }} />
+              Nenhum relatório ainda
+            </div>
+          )}
+          {reports.map(r => {
+            const d = new Date(r.created_at)
+            const isSelected = selectedReport?.id === r.id
+            return (
+              <button key={r.id} onClick={() => setSelectedReport(r)} style={{
+                padding: '10px 12px', borderRadius: 10, textAlign: 'left', cursor: 'pointer',
+                border: isSelected ? '2px solid #00A896' : '1px solid #E2E8F0',
+                background: isSelected ? '#E6F7F5' : '#fff',
+                transition: 'all 0.15s'
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: isSelected ? '#00A896' : '#1A2B4A' }}>
+                  {r.period ? `${MONTH_NAMES_FULL[parseInt(r.period.split('-')[1]) - 1]}/${r.period.split('-')[0]}` : 'Relatório'}
+                </div>
+                <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>
+                  {d.toLocaleDateString('pt-BR')}
+                </div>
+              </button>
+            )
+          })}
         </div>
-        {report && (
-          <div style={{ background: '#f8fafc', borderRadius: 10, padding: '16px 20px', lineHeight: 1.7 }}>
-            <p style={{ fontSize: 13, color: '#374151', margin: '0 0 14px', whiteSpace: 'pre-wrap' }}>{report}</p>
-            <button
-              onClick={() => window.print()}
-              style={{ padding: '6px 14px', borderRadius: 8, background: '#0d9488', color: 'white', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-              Imprimir
-            </button>
-          </div>
-        )}
+
+        {/* Conteúdo do relatório */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 28, minHeight: 300 }}>
+          {generating && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200, gap: 16 }}>
+              <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Sparkles size={24} color="#00A896" className="animate-spin" />
+              </div>
+              <p style={{ fontSize: 14, color: '#475569' }}>Analisando todos os dados da campanha...</p>
+              <p style={{ fontSize: 12, color: '#94A3B8' }}>Isso pode levar até 20 segundos</p>
+            </div>
+          )}
+          {!generating && !selectedReport && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200, gap: 12, color: '#94A3B8' }}>
+              <Sparkles size={36} style={{ opacity: 0.3 }} />
+              <p style={{ fontSize: 14, fontWeight: 600 }}>Gere o primeiro relatório do mês</p>
+              <p style={{ fontSize: 12 }}>A IA analisa funil, rematrículas, marketing e gera ações recomendadas</p>
+            </div>
+          )}
+          {!generating && selectedReport && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>
+                    {selectedReport.period
+                      ? `Relatório ${MONTH_NAMES_FULL[parseInt(selectedReport.period.split('-')[1]) - 1]}/${selectedReport.period.split('-')[0]}`
+                      : 'Relatório IA'}
+                  </h3>
+                  <p style={{ fontSize: 12, color: '#94A3B8', margin: '4px 0 0' }}>
+                    Gerado em {new Date(selectedReport.created_at).toLocaleString('pt-BR')}
+                  </p>
+                </div>
+                <div style={{ width: 32, height: 32, borderRadius: 9, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Sparkles size={15} color="#00A896" />
+                </div>
+              </div>
+              <div style={{
+                fontSize: 13, color: '#374151', lineHeight: 1.8,
+                whiteSpace: 'pre-wrap',
+                background: '#FAFAFA', borderRadius: 12, padding: 20,
+                border: '1px solid #F1F5F9'
+              }}>
+                {selectedReport.content}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
 }
 
-// ═══════════════════════════════════════════════════════════
-//  COMPONENTE PRINCIPAL
-// ═══════════════════════════════════════════════════════════
-export default function GestorReports() {
-  const { user } = useAuth()
-  const institutionId = user?.institution_id!
-
-  const [activeTab, setActiveTab] = useState('historico')
+// ─── Componente principal ─────────────────────────────────────────────────────
+export default function GestorReports({ institutionId, institutionName }: Props) {
+  const [activeTab, setActiveTab] = useState(0)
+  const [cycle, setCycle] = useState<CampaignCycle | null>(null)
+  const [metrics, setMetrics] = useState<FunnelMetric[]>([])
+  const [reenrollments, setReenrollments] = useState<MonthlyReenrollment[]>([])
   const [loading, setLoading] = useState(true)
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
-  const [showCampaignModal, setShowCampaignModal] = useState(false)
-  const [modalPreload, setModalPreload] = useState<{ openAtStep?: number } | null>(null)
 
-  // Dados
-  const [funnelData, setFunnelData] = useState<FunnelMetrics[]>([])
-  const [marketingData, setMarketingData] = useState<MarketingCampaign[]>([])
-  const [reEnrollData, setReEnrollData] = useState<ReEnrollment[]>([])
-  const [allCycles, setAllCycles] = useState<CampaignCycle[]>([])
-  const [transfers, setTransfers] = useState<StudentTransfer[]>([])
-  const [leads, setLeads] = useState<{ id: string; created_at: string }[]>([])
-  const [surveyResponses, setSurveyResponses] = useState<{ answers?: { reenrollment?: string } }[]>([])
-  const [marketData, setMarketData] = useState<MarketData>({})
-  const [loadingMarket, setLoadingMarket] = useState(false)
+  useEffect(() => { loadData() }, [institutionId])
 
-  function showToast(message: string, type: 'success' | 'error' = 'success') {
-    setToast({ message, type })
-    setTimeout(() => setToast(null), 3500)
-  }
-
-  const loadAll = useCallback(async () => {
-    if (!institutionId) return
+  const loadData = async () => {
     setLoading(true)
     try {
-      const [f, m, r] = await Promise.all([
-        supabase.from('funnel_metrics').select('*').eq('institution_id', institutionId).order('period', { ascending: true }),
-        supabase.from('marketing_campaigns').select('*').eq('institution_id', institutionId).order('created_at', { ascending: true }),
-        supabase.from('re_enrollments').select('*').eq('institution_id', institutionId).order('created_at', { ascending: true }),
-      ])
-      setFunnelData(f.data || [])
-      setMarketingData(m.data || [])
-      setReEnrollData(r.data || [])
-    } catch (err) { console.error('loadAll error:', err) }
-
-    try {
-      const { data: cyclesData } = await supabase
-        .from('campaign_cycles').select('*')
-        .eq('institution_id', institutionId).order('created_at', { ascending: false })
-      setAllCycles((cyclesData || []) as CampaignCycle[])
-    } catch { /* ignore */ }
-
-    try {
-      const { data } = await supabase
-        .from('student_transfers').select('*')
-        .eq('institution_id', institutionId).is('deleted_at', null).order('created_at', { ascending: false })
-      setTransfers(data || [])
-    } catch { /* ignore */ }
-
-    try {
-      const { data } = await supabase
-        .from('leads').select('id, created_at')
-        .eq('institution_id', institutionId).order('created_at', { ascending: false })
-      setLeads(data || [])
-    } catch { /* ignore */ }
-
-    try {
-      const { data } = await supabase
-        .from('satisfaction_responses').select('answers')
+      // Ciclo ativo
+      const { data: cycleData } = await supabase
+        .from('campaign_cycles')
+        .select('*')
         .eq('institution_id', institutionId)
-      setSurveyResponses(data || [])
-    } catch { /* ignore */ }
+        .in('status', ['active', 'released'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
 
-    setLoading(false)
-  }, [institutionId])
+      setCycle(cycleData)
 
-  useEffect(() => { loadAll() }, [loadAll])
+      if (cycleData) {
+        // Funil metrics do ciclo
+        const { data: metricsData } = await supabase
+          .from('funnel_metrics')
+          .select('*')
+          .eq('institution_id', institutionId)
+          .gte('period', cycleData.start_date.slice(0, 7))
+          .lte('period', cycleData.end_date.slice(0, 7))
+          .order('period')
 
-  const fetchMarket = useCallback(async () => {
-    const setupCycle = allCycles.find(c => c.status === 'setup')
-    const sd = setupCycle?.school_data as { city?: string; state?: string } | null
-    if (!sd?.city) return
-    setLoadingMarket(true)
-    try {
-      const res = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'fetch_ibge', payload: { city: sd.city, state: sd.state } })
-      })
-      const data = await res.json()
-      if (data.result) setMarketData(data.result)
-    } catch { /* ignore */ }
-    finally { setLoadingMarket(false) }
-  }, [allCycles])
+        setMetrics(metricsData?.filter(m => /^\d{4}-\d{2}$/.test(m.period)) || [])
 
-  // Phase logic
-  const setupCycle = allCycles.find(c => c.status === 'setup' || c.status === 'released') ?? null
-  const releasedCycle = allCycles.find(c => c.status === 'released') ?? null
-  const activeCycle = allCycles.find(c => c.status === 'active' || !!(c as CampaignCycle & { applied_at?: string }).applied_at)
-  const hasSetup = !!setupCycle
-  const hasCampaign = !!activeCycle
+        // Rematrículas
+        const { data: reenrollData } = await supabase
+          .from('monthly_reenrollments')
+          .select('*')
+          .eq('institution_id', institutionId)
+          .order('period')
 
-  type Phase = 'no_setup' | 'pre_campaign' | 'campaign_released' | 'campaign_active'
-  const phase: Phase = !hasSetup ? 'no_setup'
-    : hasCampaign ? 'campaign_active'
-    : releasedCycle ? 'campaign_released'
-    : 'pre_campaign'
-
-  const PRE_TABS = [
-    { id: 'historico', label: 'Histórico', icon: BarChart3 },
-    { id: 'comparativo', label: 'Comparativo', icon: TrendingUp },
-    { id: 'mercado', label: 'Mercado', icon: MapPin },
-  ]
-
-  const CAMPAIGN_TABS = [
-    { id: 'visao_geral', label: 'Visão Geral', icon: TrendingUp },
-    { id: 'funil', label: 'Funil', icon: Target },
-    { id: 'marketing', label: 'Marketing & ROI', icon: BarChart3 },
-    { id: 'retencao', label: 'Retenção', icon: RefreshCw },
-    { id: 'inteligencia', label: 'Inteligência', icon: Sparkles },
-  ]
-
-  // Histórico/Comparativo/Mercado sempre visíveis. Campanhas liberadas quando released ou active.
-  const CAMPAIGN_UNLOCKED = phase === 'campaign_released' || phase === 'campaign_active'
-  const tabs = phase === 'no_setup' ? PRE_TABS : [...PRE_TABS, ...CAMPAIGN_TABS]
-  const cycleForModal = activeCycle ?? releasedCycle ?? setupCycle ?? null
-
-  // Reset tab when phase changes
-  useEffect(() => {
-    const validTabs = phase === 'no_setup' ? PRE_TABS : [...PRE_TABS, ...CAMPAIGN_TABS]
-    if (!validTabs.find(t => t.id === activeTab)) {
-      setActiveTab('historico')
+        setReenrollments(reenrollData || [])
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
     }
-  }, [phase]) // eslint-disable-line
+  }
+
+  const TABS = [
+    { label: 'Visão Geral', icon: <BarChart3 size={15} /> },
+    { label: 'Funil', icon: <Activity size={15} /> },
+    { label: 'Marketing & CPA', icon: <DollarSign size={15} /> },
+    { label: 'Rematrículas', icon: <RefreshCw size={15} /> },
+    { label: 'Transferências', icon: <ArrowUpRight size={15} /> },
+    { label: 'Diagnóstico IA', icon: <Sparkles size={15} /> },
+  ]
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: '#f8f9fb' }}>
-      <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}} @keyframes slideUp{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}`}</style>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: 'var(--bg-page)' }}>
+      <style>{`
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+        .animate-spin { animation: spin 1s linear infinite }
+        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+      `}</style>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Relatórios & Inteligência</h1>
-          <p style={{ fontSize: 12, color: '#94a3b8', margin: '2px 0 0' }}>
-            {phase === 'no_setup' ? 'Configure sua escola para começar'
-              : phase === 'pre_campaign' ? 'Pré-campanha — visualizando histórico'
-              : phase === 'campaign_released' ? `Campanha ${releasedCycle?.year ?? ''} liberada — configure agora`
-              : `Campanha ativa — Ano letivo ${activeCycle?.year ?? ''}`}
-          </p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 12, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <BarChart3 style={{ width: 20, height: 20, color: '#00A896' }} />
+          </div>
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Relatórios da Campanha</h1>
+            <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>
+              {cycle ? `${cycle.label} · ${new Date(cycle.start_date).toLocaleDateString('pt-BR')} até ${new Date(cycle.end_date).toLocaleDateString('pt-BR')}` : institutionName}
+            </p>
+          </div>
         </div>
-        {phase === 'campaign_active' && (
-          <button
-            onClick={() => setShowCampaignModal(true)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10,
-              background: '#f0fdf4', color: '#065f46', border: '1px solid #bbf7d0',
-              fontSize: 12, fontWeight: 600, cursor: 'pointer',
-            }}>
-            <Settings style={{ width: 13, height: 13 }} />
-            Ajustar campanha
-          </button>
-        )}
+        <button onClick={loadData} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', fontSize: 12, color: '#64748B', cursor: 'pointer' }}>
+          <RefreshCw size={13} /> Atualizar
+        </button>
       </div>
 
-      {/* Phase banner */}
-      {phase === 'pre_campaign' && (
-        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 16 }}>ℹ</span>
-          <p style={{ fontSize: 13, color: '#1e40af', margin: 0 }}>
-            <strong>Fase pré-campanha</strong> — visualizando histórico da escola. A campanha {new Date().getFullYear() + 1} será configurada pelo seu administrador.
-          </p>
-        </div>
-      )}
-      {phase === 'campaign_released' && (
-        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '16px 20px' }}>
-          <p style={{ fontSize: 14, fontWeight: 700, color: '#15803d', margin: '0 0 4px' }}>
-            🎉 Campanha liberada pelo administrador!
-          </p>
-          <p style={{ fontSize: 13, color: '#166534', margin: '0 0 12px' }}>
-            Configure seu plano de campanha para o ano letivo {releasedCycle?.year}.
-            {releasedCycle?.campaign_start_month ? ` Início previsto: ${fmtMonth(releasedCycle.campaign_start_month)}/${new Date().getFullYear()}.` : ''}
-          </p>
-          <button
-            onClick={() => setShowCampaignModal(true)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 18px', borderRadius: 8, background: '#16a34a', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            <Settings style={{ width: 13, height: 13 }} />
-            Configurar campanha agora →
-          </button>
-        </div>
-      )}
-      {phase === 'campaign_active' && (
-        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 16 }}>✓</span>
-          <p style={{ fontSize: 13, color: '#166534', margin: 0 }}>
-            <strong>Campanha ativa</strong> — ano letivo {activeCycle?.year}. Início: {fmtMonth(activeCycle?.campaign_start_month)}/{new Date().getFullYear()}
-          </p>
-        </div>
-      )}
-
-      {/* No setup state */}
-      {phase === 'no_setup' && (
-        <div style={{ textAlign: 'center', padding: '64px 0' }}>
-          <BarChart3 style={{ width: 56, height: 56, margin: '0 auto 16px', color: '#cbd5e1' }} />
-          <h2 style={{ fontSize: 20, fontWeight: 600, color: '#374151', margin: '0 0 8px' }}>Configure sua escola primeiro</h2>
-          <p style={{ fontSize: 14, color: '#94a3b8', margin: '0 0 24px' }}>Importe o histórico do ERP para liberar os relatórios.</p>
-          <button
-            onClick={() => setShowCampaignModal(true)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderRadius: 10, background: '#00A896', color: 'white', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-            <Settings style={{ width: 16, height: 16 }} />
-            Configurar escola
-          </button>
-        </div>
-      )}
-
       {/* Tabs */}
-      {phase !== 'no_setup' && (
-        <div style={{ background: 'white', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-          <div style={{ display: 'flex', overflowX: 'auto', borderBottom: '1px solid #e2e8f0' }}>
-            {tabs.map(tab => {
-              const Icon = tab.icon
-              const active = activeTab === tab.id
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '12px 18px', fontSize: 13, fontWeight: 500,
-                    whiteSpace: 'nowrap', border: 'none', cursor: 'pointer',
-                    borderBottom: active ? '2px solid #0d9488' : '2px solid transparent',
-                    color: active ? '#0d9488' : '#6b7280',
-                    background: active ? '#f0fdfa' : 'transparent',
-                    transition: 'all 0.15s'
-                  }}>
-                  <Icon style={{ width: 14, height: 14 }} />
-                  {tab.label}
-                </button>
-              )
-            })}
+      <div style={{ display: 'flex', gap: 4, background: '#F8FAFC', borderRadius: 14, padding: 4, border: '1px solid #E2E8F0' }}>
+        {TABS.map((tab, i) => (
+          <button key={i} onClick={() => setActiveTab(i)} style={{
+            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            padding: '9px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+            background: activeTab === i ? '#fff' : 'transparent',
+            color: activeTab === i ? '#00A896' : '#64748B',
+            boxShadow: activeTab === i ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+            transition: 'all 0.2s', whiteSpace: 'nowrap'
+          }}>
+            {tab.icon} {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Conteúdo da aba */}
+      <div style={{ flex: 1 }}>
+        {loading && activeTab === 0 ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
+            <Loader2 size={28} color="#00A896" className="animate-spin" />
           </div>
-
-          <div style={{ padding: 24 }}>
-            {loading ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
-                {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
-              </div>
-            ) : (
-              <>
-                {/* Tabs sempre visíveis — Histórico, Comparativo, Mercado */}
-                {activeTab === 'historico' && (
-                  <TabHistorico setupCycle={setupCycle ?? null} institutionId={institutionId} />
-                )}
-                {activeTab === 'comparativo' && (
-                  <TabComparativoPre
-                    setupCycle={setupCycle ?? null}
-                    institutionId={institutionId}
-                    marketData={marketData}
-                    loadingMarket={loadingMarket}
-                    onFetchMarket={fetchMarket}
-                  />
-                )}
-                {activeTab === 'mercado' && (
-                  <TabMercado
-                    marketData={marketData}
-                    loadingMarket={loadingMarket}
-                    onFetchMarket={fetchMarket}
-                    setupCycle={setupCycle ?? null}
-                  />
-                )}
-
-                {/* Tela bloqueada para tabs de campanha quando não liberada */}
-                {['visao_geral','funil','marketing','retencao','inteligencia'].includes(activeTab) && !CAMPAIGN_UNLOCKED && (
-                  <div style={{ textAlign: 'center', padding: '60px 24px' }}>
-                    <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-                      <Lock style={{ width: 28, height: 28, color: '#94a3b8' }} />
-                    </div>
-                    <h2 style={{ fontSize: 18, fontWeight: 700, color: '#374151', margin: '0 0 10px' }}>Relatórios de campanha bloqueados</h2>
-                    <p style={{ fontSize: 14, color: '#6b7280', margin: '0 0 24px', maxWidth: 400, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6 }}>
-                      Seu administrador liberará o acesso quando chegar o momento certo de configurar a campanha.
-                    </p>
-                    <button
-                      onClick={() => setActiveTab('historico')}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 22px', borderRadius: 10, background: '#0d9488', color: 'white', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                      <BarChart3 style={{ width: 14, height: 14 }} />
-                      Ver histórico da escola
-                    </button>
-                  </div>
-                )}
-
-                {/* Tabs de campanha liberadas */}
-                {activeTab === 'visao_geral' && CAMPAIGN_UNLOCKED && (
-                  <TabVisaoGeral
-                    funnelData={funnelData}
-                    reEnrollData={reEnrollData}
-                    activeCycle={activeCycle ?? null}
-                    institutionId={institutionId}
-                    leads={leads}
-                    onEditCampaign={() => { setModalPreload({ openAtStep: 5 }); setShowCampaignModal(true) }}
-                  />
-                )}
-                {activeTab === 'funil' && CAMPAIGN_UNLOCKED && (
-                  <TabFunil
-                    funnelData={funnelData}
-                    activeCycle={activeCycle ?? null}
-                    institutionId={institutionId}
-                  />
-                )}
-                {activeTab === 'marketing' && CAMPAIGN_UNLOCKED && (
-                  <TabMarketingROI
-                    marketingData={marketingData}
-                    institutionId={institutionId}
-                    onRefresh={loadAll}
-                    showToast={showToast}
-                  />
-                )}
-                {activeTab === 'retencao' && CAMPAIGN_UNLOCKED && (
-                  <TabRetencao
-                    reEnrollData={reEnrollData}
-                    transfers={transfers}
-                    activeCycle={activeCycle ?? null}
-                    institutionId={institutionId}
-                    surveyResponses={surveyResponses}
-                  />
-                )}
-                {activeTab === 'inteligencia' && CAMPAIGN_UNLOCKED && (
-                  <TabInteligencia
-                    funnelData={funnelData}
-                    marketingData={marketingData}
-                    reEnrollData={reEnrollData}
-                    activeCycle={activeCycle ?? null}
-                    institutionId={institutionId}
-                    showToast={showToast}
-                  />
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {toast && <Toast message={toast.message} type={toast.type} />}
-
-      <CampaignGeneratorModal
-        isOpen={showCampaignModal}
-        onClose={() => { setShowCampaignModal(false); setModalPreload(null) }}
-        onApply={() => { loadAll(); showToast('Campanha aplicada com sucesso!') }}
-        existingCycle={cycleForModal as Parameters<typeof CampaignGeneratorModal>[0]['existingCycle']}
-        institutionId={institutionId}
-        institutionName={user?.institution_name || 'Escola'}
-        openAtStep={modalPreload?.openAtStep}
-        isAdjustMode={phase === 'campaign_active'}
-        currentUserId={user?.id}
-        currentUserName={user?.full_name}
-      />
+        ) : (
+          <>
+            {activeTab === 0 && <TabVisaoGeral cycle={cycle} metrics={metrics} reenrollments={reenrollments} loading={loading} />}
+            {activeTab === 1 && <TabFunil metrics={metrics} loading={loading} />}
+            {activeTab === 2 && <TabMarketing institutionId={institutionId} cycle={cycle} metrics={metrics} />}
+            {activeTab === 3 && <TabRematriculas institutionId={institutionId} cycle={cycle} />}
+            {activeTab === 4 && <TabTransferencias institutionId={institutionId} />}
+            {activeTab === 5 && <TabDiagnosticoIA institutionId={institutionId} cycle={cycle} metrics={metrics} reenrollments={reenrollments} />}
+          </>
+        )}
+      </div>
     </div>
   )
 }
