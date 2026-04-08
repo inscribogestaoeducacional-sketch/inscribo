@@ -24,6 +24,7 @@ import GestorHome from './pages/gestor/GestorHome'
 import AttendantHome from './pages/gestor/AttendantHome'
 import GestorTransfers from './pages/gestor/GestorTransfers'
 import GestorSurveys from './pages/gestor/GestorSurveys'
+import GestorEmbed from './pages/gestor/GestorEmbed'
 import LeadKanban from './components/leads/LeadKanban'
 import VisitCalendar from './components/calendar/VisitCalendar'
 import EnrollmentManager from './components/enrollments/EnrollmentManager'
@@ -298,6 +299,12 @@ function AppContent() {
 
             <Route path="/transferencias" element={<GestorTransfers />} />
             <Route path="/pesquisas" element={<GestorSurveys />} />
+
+            <Route path="/embed" element={
+              <ProtectedRoute allowedRoles={['admin', 'manager']}>
+                <GestorEmbed />
+              </ProtectedRoute>
+            } />
 
             <Route path="/reports" element={
               <ProtectedRoute allowedRoles={['manager', 'admin']}>

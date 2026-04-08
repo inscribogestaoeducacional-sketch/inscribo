@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useNotifications } from '../../hooks/useNotifications'
 import {
   LayoutDashboard, Users, Calendar,
-  MessageCircle, BarChart3, UserCog, Settings, ArrowRightLeft, ClipboardList
+  MessageCircle, BarChart3, UserCog, Settings, ArrowRightLeft, ClipboardList, Code2
 } from 'lucide-react'
 
 const NAV_CFG = [
@@ -15,6 +15,7 @@ const NAV_CFG = [
   { path: '/reports',         label: 'Relatórios',      iconBg: '#DBEAFE', iconColor: '#3B82F6', Icon: BarChart3,       roles: ['admin','manager'] },
   { path: '/transferencias',  label: 'Transferências',  iconBg: '#FEE2E2', iconColor: '#DC2626', Icon: ArrowRightLeft,  roles: ['admin','manager','user'] },
   { path: '/pesquisas',       label: 'Pesquisas',       iconBg: '#FFF7ED', iconColor: '#F97316', Icon: ClipboardList,   roles: ['admin','manager'] },
+  { path: '/embed',           label: 'Site da escola',  iconBg: '#F0F9FF', iconColor: '#0EA5E9', Icon: Code2,           roles: ['admin','manager'] },
   { path: '/users',           label: 'Usuários',        iconBg: '#F1F5F9', iconColor: '#64748B', Icon: UserCog,         roles: ['admin'] },
   { path: '/settings',        label: 'Config.',         iconBg: '#F1F5F9', iconColor: '#64748B', Icon: Settings,        roles: ['admin'] },
 ]

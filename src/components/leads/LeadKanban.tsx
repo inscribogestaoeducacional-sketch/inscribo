@@ -654,9 +654,18 @@ function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory,
               </span>
             )}
             {lead.source && (
-              <span className="inline-flex items-center bg-gray-100 text-gray-500 text-xs font-medium px-2 py-0.5 rounded-full">
-                {lead.source}
-              </span>
+              lead.source === 'embed'
+                ? (
+                  <span className="inline-flex items-center gap-1 bg-sky-100 text-sky-700 text-xs font-semibold px-2 py-0.5 rounded-full border border-sky-200">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                    Via site
+                  </span>
+                )
+                : (
+                  <span className="inline-flex items-center bg-gray-100 text-gray-500 text-xs font-medium px-2 py-0.5 rounded-full">
+                    {lead.source}
+                  </span>
+                )
             )}
           </div>
         )}
