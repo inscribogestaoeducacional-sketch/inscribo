@@ -28,11 +28,38 @@ const ACTION_CONFIG: Record<string, { icon: string; color: string; bg: string; l
   status_changed: { icon: '🔄', color: '#d97706', bg: '#fef3c7', label: 'alterou status' },
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  new:            'Novo',
+  contact:        'Contato feito',
+  scheduled:      'Visita agendada',
+  visit:          'Visitou',
+  proposal:       'Proposta',
+  enrolled:       'Matriculado',
+  lost:           'Perdido',
+}
+
+function translateStatus(status: string): string {
+  return STATUS_LABELS[status] ?? status
+}
+
+function translateAction(action: string): string {
+  const map: Record<string, string> = {
+    note_added:      'adicionou uma observação',
+    status_changed:  'alterou o status',
+    created:         'criou o lead',
+    'Lead criado':   'criou o lead',
+    'Visita agendada': 'agendou uma visita',
+    'Status alterado': 'alterou o status',
+  }
+  return map[action] ?? action
+}
+
 function actionIcon(action: string) {
   if (action === 'created' || action === 'Lead criado') return '➕'
   if (action === 'deleted') return '🗑️'
   if (action === 'note_added') return '📝'
   if (action.toLowerCase().includes('status') || action.toLowerCase().includes('moveu')) return '🔄'
+  if (action === 'Visita agendada') return '📅'
   return '✏️'
 }
 
@@ -47,7 +74,6 @@ export default function AuditModal({ recordId, moduleName, isOpen, onClose }: Pr
   const { user } = useAuth()
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [loading, setLoading] = useState(false)
-  const [userNameCache, setUserNameCache] = useState<Record<string, string>>({})
 
   // Note-adding state
   const [newNote, setNewNote] = useState('')
@@ -57,41 +83,43 @@ export default function AuditModal({ recordId, moduleName, isOpen, onClose }: Pr
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
 
-  const resolveUserNames = useCallback(async (logsData: LogEntry[]) => {
-    const ids = logsData
-      .filter(l => l.user_id && !l.details?.changed_by && !l.details?.responsible_name && !l.details?.user_name)
-      .map(l => l.user_id as string)
-    const uniqueIds = [...new Set(ids)]
-    if (uniqueIds.length === 0) return
-
-    const { data } = await supabase
-      .from('users')
-      .select('id, full_name')
-      .in('id', uniqueIds)
-
-    if (data) {
-      setUserNameCache(prev => {
-        const next = { ...prev }
-        for (const u of data) next[u.id] = u.full_name
-        return next
-      })
-    }
-  }, [])
-
   const loadLogs = useCallback(async () => {
     if (!recordId) return
     setLoading(true)
 
     if (moduleName === 'leads') {
-      const { data } = await supabase
+      const { data: rawLogs } = await supabase
         .from('activity_logs')
         .select('*')
         .eq('entity_id', recordId)
         .eq('entity_type', 'lead')
         .order('created_at', { ascending: false })
-      const logsData = (data ?? []) as LogEntry[]
-      setLogs(logsData)
-      await resolveUserNames(logsData)
+
+      if (!rawLogs?.length) {
+        setLogs([])
+        setLoading(false)
+        return
+      }
+
+      // Fetch all user names in one query
+      const userIds = [...new Set(rawLogs.map((l: LogEntry) => l.user_id).filter(Boolean))] as string[]
+      const { data: usersData } = userIds.length
+        ? await supabase.from('users').select('id, full_name').in('id', userIds)
+        : { data: [] }
+
+      const userMap = Object.fromEntries((usersData ?? []).map((u: { id: string; full_name: string }) => [u.id, u.full_name]))
+
+      // Enrich logs with resolved user_name
+      const enriched = rawLogs.map((log: LogEntry) => ({
+        ...log,
+        user_name: (log.user_id ? userMap[log.user_id] : null)
+          ?? (log.details?.changed_by as string | undefined)
+          ?? (log.details?.responsible_name as string | undefined)
+          ?? (log.details?.added_by as string | undefined)
+          ?? 'Sistema',
+      }))
+
+      setLogs(enriched as LogEntry[])
     } else {
       const { data } = await supabase
         .from('audit_logs')
@@ -102,7 +130,7 @@ export default function AuditModal({ recordId, moduleName, isOpen, onClose }: Pr
     }
 
     setLoading(false)
-  }, [recordId, moduleName, resolveUserNames])
+  }, [recordId, moduleName])
 
   useEffect(() => {
     if (!isOpen || !recordId) return
@@ -207,17 +235,14 @@ export default function AuditModal({ recordId, moduleName, isOpen, onClose }: Pr
                   const isNote = log.action === 'note_added'
                   const isEditing = editingId === log.id
 
-                  // Resolve actor: prefer details fields, then cache, then 'Sistema'
-                  const actor = (details?.changed_by as string)
-                    ?? (details?.responsible_name as string)
-                    ?? (details?.user_name as string)
-                    ?? (details?.added_by as string)
-                    ?? (log.user_id ? (userNameCache[log.user_id] ?? '...') : 'Sistema')
+                  // user_name already resolved in loadLogs
+                  const actor = log.user_name ?? 'Sistema'
 
                   const iconBg = icon === '🔄' ? '#fef3c7'
                     : icon === '➕' ? '#dcfce7'
                     : icon === '🗑️' ? '#fee2e2'
                     : icon === '📝' ? '#f0f9ff'
+                    : icon === '📅' ? '#f0fdf4'
                     : '#dbeafe'
 
                   const canEdit = isNote && (log.user_id === user?.id)
@@ -285,14 +310,16 @@ export default function AuditModal({ recordId, moduleName, isOpen, onClose }: Pr
                               ) : isStatusChange ? (
                                 <>
                                   <span style={{ color: '#d97706' }}>
-                                    {`moveu para "${details?.new_status ?? ''}"`}
+                                    {`moveu para "${translateStatus(details?.new_status as string ?? '')}"`}
                                   </span>
                                   {details?.previous_status && (
-                                    <span style={{ color: '#94a3b8' }}> (de &ldquo;{details.previous_status as string}&rdquo;)</span>
+                                    <span style={{ color: '#94a3b8' }}>
+                                      {' '}(de &ldquo;{translateStatus(details.previous_status as string)}&rdquo;)
+                                    </span>
                                   )}
                                 </>
                               ) : (
-                                <span style={{ color: '#1d4ed8' }}>{log.action}</span>
+                                <span style={{ color: '#1d4ed8' }}>{translateAction(log.action)}</span>
                               )}
                             </p>
                             {isNote && details?.note && (
@@ -340,7 +367,7 @@ export default function AuditModal({ recordId, moduleName, isOpen, onClose }: Pr
                           </button>
                         </div>
                       )}
-                      {/* Date for non-note, non-editing entries */}
+                      {/* Date for non-note entries */}
                       {!isNote && !isEditing && (
                         <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap', flexShrink: 0 }}>
                           {dateStr} {timeStr}
