@@ -22,6 +22,9 @@ interface Props {
   preloadedHistoricalData?: HistoricalYear[]
   preloadedErpFiles?: ErpFileEntry[]
   openAtStep?: number
+  isAdjustMode?: boolean
+  currentUserId?: string
+  currentUserName?: string
 }
 
 interface CycleData {
@@ -90,6 +93,8 @@ interface MonthlyTarget {
   schedules: number
   visits: number
   enrollments: number
+  enrollments_new?: number
+  enrollments_returning?: number
   investment_suggested: number
   leads_target: number
   cpa_target: number
@@ -160,7 +165,8 @@ function getCampaignMonths(startDate: string, endDate: string): { label: string;
 // ─── Componente principal ────────────────────────────────────────
 export default function CampaignGeneratorModal({
   isOpen, onClose, onApply, existingCycle, institutionId, institutionName,
-  preloadedHistoricalData, preloadedErpFiles, openAtStep
+  preloadedHistoricalData, preloadedErpFiles, openAtStep,
+  isAdjustMode, currentUserId, currentUserName
 }: Props) {
   const [step, setStep] = useState(1)
 
@@ -630,6 +636,37 @@ export default function CampaignGeneratorModal({
         applied_at: new Date().toISOString()
       }
 
+      // Modo ajuste (campanha ativa): gera solicitação de aprovação em vez de aplicar direto
+      if (isAdjustMode) {
+        const { data: activeCycle } = await supabase
+          .from('campaign_cycles')
+          .select('id')
+          .eq('institution_id', institutionId)
+          .eq('status', 'active')
+          .maybeSingle()
+
+        await supabase.from('campaign_change_requests').insert({
+          institution_id: institutionId,
+          cycle_id: activeCycle?.id ?? null,
+          requested_by: currentUserId ?? null,
+          requested_by_name: currentUserName ?? null,
+          changes: cycleData,
+          status: 'pending',
+          created_at: new Date().toISOString()
+        })
+
+        if (isMounted.current) {
+          setDraftToast('📋 Solicitação de ajuste enviada. Aguardando aprovação do administrador.')
+          setTimeout(() => {
+            if (isMounted.current) setDraftToast(null)
+            onClose()
+          }, 2500)
+        } else {
+          onClose()
+        }
+        return
+      }
+
       await supabase.from('campaign_cycles').upsert({
         ...cycleData,
         status: 'active',
@@ -652,7 +689,10 @@ export default function CampaignGeneratorModal({
           schedules_target: month.schedules,
           visits_target: month.visits,
           enrollments_target: month.enrollments,
-          registrations: 0, schedules: 0, visits: 0, enrollments: 0
+          enrollments_new_target: month.enrollments_new ?? 0,
+          enrollments_returning_target: month.enrollments_returning ?? 0,
+          registrations: 0, schedules: 0, visits: 0, enrollments: 0,
+          enrollments_new_actual: 0, enrollments_returning_actual: 0,
         }, { onConflict: 'period,institution_id', ignoreDuplicates: false })
 
         await supabase.from('marketing_campaigns').upsert({
@@ -702,7 +742,19 @@ export default function CampaignGeneratorModal({
     updated.monthly_targets = updated.monthly_targets.map((m, i) => {
       if (i !== idx) return m
       const newM = { ...m, [field]: value }
-      if (field === 'investment_suggested' || field === 'leads_target') {
+      // Recalcular Total = Novatos + Rematrícula quando um dos dois muda
+      if (field === 'enrollments_new' || field === 'enrollments_returning') {
+        newM.enrollments = (newM.enrollments_new ?? 0) + (newM.enrollments_returning ?? 0)
+      }
+      // CPA = Investimento ÷ Total matrículas
+      if (field === 'investment_suggested' || field === 'enrollments_new' || field === 'enrollments_returning' || field === 'enrollments') {
+        const totalEnroll = newM.enrollments || 0
+        newM.cpa_target = totalEnroll > 0
+          ? Math.round(newM.investment_suggested / totalEnroll)
+          : 0
+      }
+      // Manter também cálculo por leads_target para compatibilidade
+      if (field === 'leads_target') {
         newM.cpa_target = newM.leads_target > 0
           ? Math.round(newM.investment_suggested / newM.leads_target)
           : 0
@@ -712,8 +764,9 @@ export default function CampaignGeneratorModal({
     // Recalcular totais
     updated.total_investment_suggested = updated.monthly_targets.reduce((s, m) => s + (m.investment_suggested || 0), 0)
     updated.total_leads_needed = updated.monthly_targets.reduce((s, m) => s + (m.leads_target || 0), 0)
-    updated.average_cpa = updated.total_leads_needed > 0
-      ? Math.round(updated.total_investment_suggested / updated.total_leads_needed)
+    const totalEnrollments = updated.monthly_targets.reduce((s, m) => s + (m.enrollments || 0), 0)
+    updated.average_cpa = totalEnrollments > 0
+      ? Math.round(updated.total_investment_suggested / totalEnrollments)
       : 0
     setAdjustedPlan(updated)
   }
@@ -831,6 +884,7 @@ export default function CampaignGeneratorModal({
               currentStudents={schoolData.current_students}
               onAmbitiousChange={handleAmbitiousChange}
               onUpdateCell={updateMonthlyCell}
+              onRegenerate={() => { setStep(4); generateCampaign() }}
             />
           )}
         </div>
@@ -868,9 +922,26 @@ export default function CampaignGeneratorModal({
 
             {step < 3 && (
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (step === 1) {
                     if (!schoolData.city || !schoolData.state) return
+                    // Auto-save passo 1: school_data
+                    try {
+                      await supabase.from('campaign_cycles').upsert({
+                        institution_id: institutionId,
+                        year: executionYear,
+                        label: `Campanha ${executionYear}`,
+                        start_date: schoolData.start_date || `${executionYear}-08-01`,
+                        end_date: schoolData.end_date || `${executionYear + 1}-02-28`,
+                        status: 'draft',
+                        wizard_step: 1,
+                        campaign_start_month: campaignStartMonthNum,
+                        school_data: { ...schoolData, exits: schoolData.exits ?? {}, total_exits: totalExits },
+                        base_students: schoolData.current_students || 0,
+                        target_new_students: 0,
+                        target_reenrollment_rate: 85,
+                      }, { onConflict: 'institution_id,year' })
+                    } catch { /* silencioso */ }
                     setStep(2)
                   } else if (step === 2) {
                     if (!schoolData.city || !schoolData.state) {
@@ -878,6 +949,25 @@ export default function CampaignGeneratorModal({
                       setStep(1)
                       return
                     }
+                    // Auto-save passo 2: historical_data e erp_files
+                    try {
+                      await supabase.from('campaign_cycles').upsert({
+                        institution_id: institutionId,
+                        year: executionYear,
+                        label: `Campanha ${executionYear}`,
+                        start_date: schoolData.start_date || `${executionYear}-08-01`,
+                        end_date: schoolData.end_date || `${executionYear + 1}-02-28`,
+                        status: 'draft',
+                        wizard_step: 2,
+                        campaign_start_month: campaignStartMonthNum,
+                        school_data: { ...schoolData, exits: schoolData.exits ?? {}, total_exits: totalExits },
+                        base_students: schoolData.current_students || 0,
+                        target_new_students: 0,
+                        target_reenrollment_rate: 85,
+                        historical_data: historicalData,
+                        erp_files: erpFiles,
+                      }, { onConflict: 'institution_id,year' })
+                    } catch { /* silencioso */ }
                     setStep(3)
                     fetchMarket()
                   }
@@ -889,12 +979,32 @@ export default function CampaignGeneratorModal({
 
             {step === 3 && !loadingMarket && Object.keys(marketData).length > 0 && (
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (!schoolData.city || !schoolData.state) {
                     setError('Preencha cidade e estado no Passo 1 antes de gerar o plano.')
                     setStep(1)
                     return
                   }
+                  // Auto-save passo 3: market_data
+                  try {
+                    await supabase.from('campaign_cycles').upsert({
+                      institution_id: institutionId,
+                      year: executionYear,
+                      label: `Campanha ${executionYear}`,
+                      start_date: schoolData.start_date || `${executionYear}-08-01`,
+                      end_date: schoolData.end_date || `${executionYear + 1}-02-28`,
+                      status: 'draft',
+                      wizard_step: 3,
+                      campaign_start_month: campaignStartMonthNum,
+                      school_data: { ...schoolData, exits: schoolData.exits ?? {}, total_exits: totalExits },
+                      base_students: schoolData.current_students || 0,
+                      target_new_students: 0,
+                      target_reenrollment_rate: 85,
+                      historical_data: historicalData,
+                      erp_files: erpFiles,
+                      market_data: marketData,
+                    }, { onConflict: 'institution_id,year' })
+                  } catch { /* silencioso */ }
                   setStep(4); generateCampaign()
                 }}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
@@ -926,10 +1036,9 @@ export default function CampaignGeneratorModal({
               <span style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A' }}>Confirmar aplicação</span>
             </div>
             <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, marginBottom: 20 }}>
-              Ao aplicar, todo o sistema usará estas metas como referência.
-              Desvios, notificações e análises da IA serão baseados neste plano.
-              <br /><br />
-              <strong>Você pode regerar a qualquer momento.</strong>
+              {isAdjustMode
+                ? <>Uma solicitação de ajuste será enviada ao administrador para aprovação. O sistema continuará usando as metas atuais até a aprovação.<br /><br /><strong>Você será notificado quando o ajuste for aprovado.</strong></>
+                : <>Ao aplicar, todo o sistema usará estas metas como referência. Desvios, notificações e análises da IA serão baseados neste plano.<br /><br /><strong>Você pode regerar a qualquer momento.</strong></>}
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button onClick={() => setShowConfirm(false)} style={{ padding: '9px 18px', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#64748B' }}>
@@ -1394,7 +1503,7 @@ function StepFour({ loading, msgIdx, msgs, progress, error, onRetry }: {
 }
 
 // ─── Passo 5 — Revisão ───────────────────────────────────────────
-function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, campaignStartMonth, campaignYear, executionYear, startDate, endDate, erpFiles, totalExits, currentStudents, onAmbitiousChange, onUpdateCell }: {
+function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, campaignStartMonth, campaignYear, executionYear, startDate, endDate, erpFiles, totalExits, currentStudents, onAmbitiousChange, onUpdateCell, onRegenerate }: {
   plan: GeneratedPlan
   ambitiousLevel: number
   regenLoading: boolean
@@ -1409,6 +1518,7 @@ function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, cam
   currentStudents: number
   onAmbitiousChange: (level: number) => void
   onUpdateCell: (idx: number, field: keyof MonthlyTarget, value: number) => void
+  onRegenerate?: () => void
 }) {
   const realismMap = {
     conservative: { label: 'Meta Conservadora', bg: '#EFF6FF', color: '#1D4ED8' },
@@ -1551,15 +1661,26 @@ function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, cam
               </div>
             )}
 
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 12 }}>
-              Plano de campanha — Ano letivo {campaignYear}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>
+                Plano de campanha — Ano letivo {campaignYear}
+              </div>
+              {onRegenerate && (
+                <button
+                  onClick={onRegenerate}
+                  disabled={regenLoading}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: regenLoading ? 0.6 : 1 }}>
+                  <RefreshCw size={12} />
+                  Recalcular tudo
+                </button>
+              )}
             </div>
 
             <div style={{ overflowX: 'auto', marginBottom: 16 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ background: '#F8FAFC' }}>
-                    {['Mês', 'Cadastros', 'Agendas', 'Visitas', 'Matrículas', 'Investimento R$', 'CPA R$'].map(h => (
+                    {['Mês', 'Cadastros', 'Agendas', 'Visitas', 'Novatos meta', 'Rematrícula meta', 'Total meta', 'Investimento R$', 'CPA R$'].map(h => (
                       <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Mês' ? 'left' : 'center', fontSize: 11, fontWeight: 700, color: '#64748B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -1568,21 +1689,50 @@ function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, cam
                   {plan.monthly_targets.map((m, i) => {
                     const campaignMonths = getCampaignMonths(startDate, endDate)
                     const monthLabel = campaignMonths[i]?.label ?? `${m.month}/${m.year}`
+                    const totalEnroll = (m.enrollments_new ?? 0) + (m.enrollments_returning ?? 0) || m.enrollments || 0
+                    const cpa = totalEnroll > 0 ? Math.round((m.investment_suggested || 0) / totalEnroll) : 0
                     return (
                       <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
                         <td style={{ padding: '7px 10px', fontWeight: 600, color: '#1A2B4A', whiteSpace: 'nowrap' }}>{monthLabel}</td>
-                        {(['registrations', 'schedules', 'visits', 'enrollments', 'investment_suggested', 'leads_target'] as const).map(field => (
+                        {(['registrations', 'schedules', 'visits'] as const).map(field => (
                           <td key={field} style={{ padding: '4px 6px', textAlign: 'center' }}>
                             <input
                               type="number"
-                              style={{ width: 70, padding: '4px 6px', borderRadius: 6, border: '1px solid #E2E8F0', textAlign: 'center', fontSize: 12, outline: 'none', background: '#F8FAFC' }}
+                              style={{ width: 60, padding: '4px 6px', borderRadius: 6, border: '1px solid #E2E8F0', textAlign: 'center', fontSize: 12, outline: 'none', background: '#F8FAFC' }}
                               value={m[field] || 0}
                               onChange={e => onUpdateCell(i, field, parseFloat(e.target.value) || 0)}
                             />
                           </td>
                         ))}
+                        <td style={{ padding: '4px 6px', textAlign: 'center' }}>
+                          <input
+                            type="number"
+                            style={{ width: 60, padding: '4px 6px', borderRadius: 6, border: '1px solid #bfdbfe', textAlign: 'center', fontSize: 12, outline: 'none', background: '#eff6ff' }}
+                            value={m.enrollments_new ?? 0}
+                            onChange={e => onUpdateCell(i, 'enrollments_new', parseFloat(e.target.value) || 0)}
+                          />
+                        </td>
+                        <td style={{ padding: '4px 6px', textAlign: 'center' }}>
+                          <input
+                            type="number"
+                            style={{ width: 60, padding: '4px 6px', borderRadius: 6, border: '1px solid #bbf7d0', textAlign: 'center', fontSize: 12, outline: 'none', background: '#f0fdf4' }}
+                            value={m.enrollments_returning ?? 0}
+                            onChange={e => onUpdateCell(i, 'enrollments_returning', parseFloat(e.target.value) || 0)}
+                          />
+                        </td>
+                        <td style={{ padding: '7px 10px', textAlign: 'center', fontWeight: 700, color: '#0d9488' }}>
+                          {totalEnroll}
+                        </td>
+                        <td style={{ padding: '4px 6px', textAlign: 'center' }}>
+                          <input
+                            type="number"
+                            style={{ width: 70, padding: '4px 6px', borderRadius: 6, border: '1px solid #E2E8F0', textAlign: 'center', fontSize: 12, outline: 'none', background: '#F8FAFC' }}
+                            value={m.investment_suggested || 0}
+                            onChange={e => onUpdateCell(i, 'investment_suggested', parseFloat(e.target.value) || 0)}
+                          />
+                        </td>
                         <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B', fontWeight: 500 }}>
-                          {m.leads_target > 0 ? Math.round((m.investment_suggested || 0) / m.leads_target).toLocaleString('pt-BR') : '—'}
+                          {cpa > 0 ? cpa.toLocaleString('pt-BR') : '—'}
                         </td>
                       </tr>
                     )
@@ -1592,10 +1742,16 @@ function StepFive({ plan, ambitiousLevel, regenLoading, monthsUntilCampaign, cam
                     <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>{totals.registrations}</td>
                     <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>{totals.schedules}</td>
                     <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>{totals.visits}</td>
-                    <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>{totals.enrollments}</td>
+                    <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700, color: '#1d4ed8' }}>
+                      {plan.monthly_targets.reduce((s, m) => s + (m.enrollments_new ?? 0), 0)}
+                    </td>
+                    <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700, color: '#16a34a' }}>
+                      {plan.monthly_targets.reduce((s, m) => s + (m.enrollments_returning ?? 0), 0)}
+                    </td>
+                    <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700, color: '#0d9488' }}>{totals.enrollments}</td>
                     <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>R$ {totals.investment_suggested.toLocaleString('pt-BR')}</td>
                     <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>
-                      {totals.leads_target > 0 ? `R$ ${Math.round(totals.investment_suggested / totals.leads_target).toLocaleString('pt-BR')}` : '—'}
+                      {totals.enrollments > 0 ? `R$ ${Math.round(totals.investment_suggested / totals.enrollments).toLocaleString('pt-BR')}` : '—'}
                     </td>
                   </tr>
                 </tbody>

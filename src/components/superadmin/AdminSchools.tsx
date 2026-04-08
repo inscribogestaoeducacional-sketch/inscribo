@@ -14,9 +14,11 @@ function Skeleton({ h = 'h-4', w = 'w-full', cls = '' }: { h?: string; w?: strin
 const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all'
 
 export default function AdminSchools() {
+  const [activeSection, setActiveSection] = useState<'schools' | 'requests'>('schools')
   const [institutions, setInstitutions] = useState<any[]>([])
   const [consultants, setConsultants] = useState<any[]>([])
   const [cycles, setCycles] = useState<any[]>([])
+  const [changeRequests, setChangeRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [toast, setToast] = useState('')
@@ -37,15 +39,50 @@ export default function AdminSchools() {
 
   const loadData = async () => {
     setLoading(true)
-    const [instRes, consultRes, cycleRes] = await Promise.all([
+    const [instRes, consultRes, cycleRes, reqRes] = await Promise.all([
       supabase.from('institutions').select('*').order('name'),
       supabase.from('users').select('id, full_name, email').eq('user_type', 'consultant'),
       supabase.from('campaign_cycles').select('institution_id, status, year').order('created_at', { ascending: false }),
+      supabase.from('campaign_change_requests').select('*, institutions(name)').order('created_at', { ascending: false }),
     ])
     setInstitutions(instRes.data || [])
     setConsultants(consultRes.data || [])
     setCycles(cycleRes.data || [])
+    setChangeRequests(reqRes.data || [])
     setLoading(false)
+  }
+
+  const handleApproveRequest = async (req: any) => {
+    try {
+      // Aplica as mudanças na campanha
+      const changes = req.changes as any
+      if (changes && req.cycle_id) {
+        await supabase.from('campaign_cycles')
+          .update({
+            target_new_students: changes.target_new_students,
+            target_reenrollment_rate: changes.target_reenrollment_rate,
+            projected_cpa: changes.projected_cpa,
+            monthly_targets: changes.monthly_targets,
+            ai_reasoning: changes.ai_reasoning,
+          })
+          .eq('id', req.cycle_id)
+      }
+      await supabase.from('campaign_change_requests')
+        .update({ status: 'approved', reviewed_by: 'superadmin', reviewed_at: new Date().toISOString() })
+        .eq('id', req.id)
+      showToast('Solicitação aprovada e campanha atualizada!')
+      loadData()
+    } catch {
+      showToast('Erro ao aprovar solicitação.', false)
+    }
+  }
+
+  const handleRejectRequest = async (req: any) => {
+    await supabase.from('campaign_change_requests')
+      .update({ status: 'rejected', reviewed_by: 'superadmin', reviewed_at: new Date().toISOString() })
+      .eq('id', req.id)
+    showToast('Solicitação rejeitada.')
+    loadData()
   }
 
   const showToast = (msg: string, success = true) => {

@@ -400,8 +400,16 @@ DADOS DE MERCADO:
 ${hasHistory
   ? `HISTÓRICO DA ESCOLA:\n${historicalData.map(d =>
     `- ${d.year}: ${d.total_students} alunos, ${d.new_enrollments} novas matrículas, ${d.reenrollments} rematrículas, ${d.transfers} transferências`
-  ).join('\n')}`
-  : 'HISTÓRICO: Primeiro ano no sistema. Use benchmarks do setor educacional privado brasileiro.'}
+  ).join('\n')}
+
+ANÁLISE DE REMATRÍCULAS:
+- Taxa de rematrícula histórica média: ${historicalData.length > 0
+    ? ((historicalData.reduce((s, d) => s + (d.total_students > 0 ? d.reenrollments / d.total_students : 0), 0) / historicalData.length * 100).toFixed(1) + '%')
+    : 'N/D'}
+- Padrão histórico de rematrículas: concentradas em Out/Nov/Dez (65-70% do total), com pico em outubro/novembro
+- Calcule a meta de rematrícula total = elegíveis × taxa histórica ajustada
+- Distribua as rematrículas pelos meses conforme padrão histórico (Out: 25%, Nov: 30%, Dez: 20%, Jan: 15%, restante nos demais meses)`
+  : 'HISTÓRICO: Primeiro ano no sistema. Use benchmarks do setor educacional privado brasileiro.\nPara rematrículas, use taxa benchmark de 85% e distribua: Out 25%, Nov 30%, Dez 20%, Jan 15%, Ago-Set-Fev 10% restante.'}
 
 ${(total_exits ?? 0) > 0 ? `MOVIMENTAÇÃO ESPERADA:
 - Alunos atuais: ${schoolData.current_students}
@@ -451,7 +459,10 @@ Gere o plano completo em JSON:
     {
       "month": "Ago", "year": ${execYear},
       "registrations": 0, "schedules": 0,
-      "visits": 0, "enrollments": 0,
+      "visits": 0,
+      "enrollments_new": 0,
+      "enrollments_returning": 0,
+      "enrollments": 0,
       "investment_suggested": 0, "leads_target": 0, "cpa_target": 0.0
     }
   ],
@@ -469,6 +480,7 @@ Gere o plano completo em JSON:
 }
 
 Gere exatamente ${totalMonths} registros mensais em monthly_targets, um para cada mês nessa ordem: ${monthsListStr}.${hasPrecampaign ? ' Preencha pre_campaign com ações práticas e realistas para os meses de preparação.' : ''}
+Em cada mês: enrollments_new = matrículas de alunos novos captados naquele mês; enrollments_returning = rematrículas de alunos já existentes que acontecem naquele mês (distribua conforme padrão histórico Out/Nov/Dez); enrollments = enrollments_new + enrollments_returning; cpa_target = investment_suggested / enrollments (quando enrollments > 0).
 Retorne SOMENTE o JSON válido.`
 
       const result = await callClaude(prompt, 2200)

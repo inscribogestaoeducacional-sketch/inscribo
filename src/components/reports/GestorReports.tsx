@@ -6,7 +6,7 @@ import {
 import {
   TrendingUp, Target, RefreshCw, AlertTriangle,
   Loader2, Sparkles, BarChart3, Users, MapPin,
-  Check, X, Edit2, Plus, Settings
+  Check, X, Edit2, Plus, Settings, Lock
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -1488,7 +1488,7 @@ export default function GestorReports() {
     { id: 'mercado', label: 'Mercado', icon: MapPin },
   ]
 
-  const ACTIVE_TABS = [
+  const CAMPAIGN_TABS = [
     { id: 'visao_geral', label: 'Visão Geral', icon: TrendingUp },
     { id: 'funil', label: 'Funil', icon: Target },
     { id: 'marketing', label: 'Marketing & ROI', icon: BarChart3 },
@@ -1496,14 +1496,15 @@ export default function GestorReports() {
     { id: 'inteligencia', label: 'Inteligência', icon: Sparkles },
   ]
 
-  const tabs = phase === 'campaign_active' ? ACTIVE_TABS : PRE_TABS
+  // Histórico/Comparativo/Mercado sempre visíveis. Campanhas liberadas quando released ou active.
+  const CAMPAIGN_UNLOCKED = phase === 'campaign_released' || phase === 'campaign_active'
+  const tabs = phase === 'no_setup' ? PRE_TABS : [...PRE_TABS, ...CAMPAIGN_TABS]
   const cycleForModal = activeCycle ?? releasedCycle ?? setupCycle ?? null
 
   // Reset tab when phase changes
   useEffect(() => {
-    if (phase === 'campaign_active' && !ACTIVE_TABS.find(t => t.id === activeTab)) {
-      setActiveTab('visao_geral')
-    } else if (phase !== 'campaign_active' && !PRE_TABS.find(t => t.id === activeTab)) {
+    const validTabs = phase === 'no_setup' ? PRE_TABS : [...PRE_TABS, ...CAMPAIGN_TABS]
+    if (!validTabs.find(t => t.id === activeTab)) {
       setActiveTab('historico')
     }
   }, [phase]) // eslint-disable-line
@@ -1523,18 +1524,18 @@ export default function GestorReports() {
               : `Campanha ativa — Ano letivo ${activeCycle?.year ?? ''}`}
           </p>
         </div>
-        <button
-          onClick={() => setShowCampaignModal(true)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10,
-            background: hasCampaign ? '#f0fdf4' : phase === 'campaign_released' ? '#16a34a' : '#00A896',
-            color: hasCampaign ? '#065f46' : '#fff',
-            border: hasCampaign ? '1px solid #bbf7d0' : 'none',
-            fontSize: 12, fontWeight: 600, cursor: 'pointer',
-          }}>
-          <Settings style={{ width: 13, height: 13 }} />
-          {hasCampaign ? 'Regerar campanha' : phase === 'campaign_released' ? 'Configurar campanha →' : 'Configurar campanha'}
-        </button>
+        {phase === 'campaign_active' && (
+          <button
+            onClick={() => setShowCampaignModal(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10,
+              background: '#f0fdf4', color: '#065f46', border: '1px solid #bbf7d0',
+              fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            }}>
+            <Settings style={{ width: 13, height: 13 }} />
+            Ajustar campanha
+          </button>
+        )}
       </div>
 
       {/* Phase banner */}
@@ -1621,11 +1622,11 @@ export default function GestorReports() {
               </div>
             ) : (
               <>
-                {/* Pre-campaign tabs (also shown when campaign_released) */}
-                {activeTab === 'historico' && (phase === 'pre_campaign' || phase === 'campaign_released') && (
+                {/* Tabs sempre visíveis — Histórico, Comparativo, Mercado */}
+                {activeTab === 'historico' && (
                   <TabHistorico setupCycle={setupCycle ?? null} institutionId={institutionId} />
                 )}
-                {activeTab === 'comparativo' && (phase === 'pre_campaign' || phase === 'campaign_released') && (
+                {activeTab === 'comparativo' && (
                   <TabComparativoPre
                     setupCycle={setupCycle ?? null}
                     institutionId={institutionId}
@@ -1634,7 +1635,7 @@ export default function GestorReports() {
                     onFetchMarket={fetchMarket}
                   />
                 )}
-                {activeTab === 'mercado' && (phase === 'pre_campaign' || phase === 'campaign_released') && (
+                {activeTab === 'mercado' && (
                   <TabMercado
                     marketData={marketData}
                     loadingMarket={loadingMarket}
@@ -1643,8 +1644,27 @@ export default function GestorReports() {
                   />
                 )}
 
-                {/* Active campaign tabs */}
-                {activeTab === 'visao_geral' && phase === 'campaign_active' && (
+                {/* Tela bloqueada para tabs de campanha quando não liberada */}
+                {['visao_geral','funil','marketing','retencao','inteligencia'].includes(activeTab) && !CAMPAIGN_UNLOCKED && (
+                  <div style={{ textAlign: 'center', padding: '60px 24px' }}>
+                    <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                      <Lock style={{ width: 28, height: 28, color: '#94a3b8' }} />
+                    </div>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, color: '#374151', margin: '0 0 10px' }}>Relatórios de campanha bloqueados</h2>
+                    <p style={{ fontSize: 14, color: '#6b7280', margin: '0 0 24px', maxWidth: 400, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6 }}>
+                      Seu administrador liberará o acesso quando chegar o momento certo de configurar a campanha.
+                    </p>
+                    <button
+                      onClick={() => setActiveTab('historico')}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 22px', borderRadius: 10, background: '#0d9488', color: 'white', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                      <BarChart3 style={{ width: 14, height: 14 }} />
+                      Ver histórico da escola
+                    </button>
+                  </div>
+                )}
+
+                {/* Tabs de campanha liberadas */}
+                {activeTab === 'visao_geral' && CAMPAIGN_UNLOCKED && (
                   <TabVisaoGeral
                     funnelData={funnelData}
                     reEnrollData={reEnrollData}
@@ -1654,14 +1674,14 @@ export default function GestorReports() {
                     onEditCampaign={() => { setModalPreload({ openAtStep: 5 }); setShowCampaignModal(true) }}
                   />
                 )}
-                {activeTab === 'funil' && phase === 'campaign_active' && (
+                {activeTab === 'funil' && CAMPAIGN_UNLOCKED && (
                   <TabFunil
                     funnelData={funnelData}
                     activeCycle={activeCycle ?? null}
                     institutionId={institutionId}
                   />
                 )}
-                {activeTab === 'marketing' && phase === 'campaign_active' && (
+                {activeTab === 'marketing' && CAMPAIGN_UNLOCKED && (
                   <TabMarketingROI
                     marketingData={marketingData}
                     institutionId={institutionId}
@@ -1669,7 +1689,7 @@ export default function GestorReports() {
                     showToast={showToast}
                   />
                 )}
-                {activeTab === 'retencao' && phase === 'campaign_active' && (
+                {activeTab === 'retencao' && CAMPAIGN_UNLOCKED && (
                   <TabRetencao
                     reEnrollData={reEnrollData}
                     transfers={transfers}
@@ -1678,7 +1698,7 @@ export default function GestorReports() {
                     surveyResponses={surveyResponses}
                   />
                 )}
-                {activeTab === 'inteligencia' && phase === 'campaign_active' && (
+                {activeTab === 'inteligencia' && CAMPAIGN_UNLOCKED && (
                   <TabInteligencia
                     funnelData={funnelData}
                     marketingData={marketingData}
@@ -1704,6 +1724,9 @@ export default function GestorReports() {
         institutionId={institutionId}
         institutionName={user?.institution_name || 'Escola'}
         openAtStep={modalPreload?.openAtStep}
+        isAdjustMode={phase === 'campaign_active'}
+        currentUserId={user?.id}
+        currentUserName={user?.full_name}
       />
     </div>
   )
