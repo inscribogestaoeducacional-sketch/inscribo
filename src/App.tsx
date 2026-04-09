@@ -4,8 +4,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { supabase } from './lib/supabase'
 
 // ── Auth ──────────────────────────────────────────────────────────────────
-import LoginForm      from './components/auth/LoginForm'
-import InitialSetup   from './components/auth/InitialSetup'
+import LoginForm    from './components/auth/LoginForm'
+import InitialSetup from './components/auth/InitialSetup'
 
 // ── Public pages ──────────────────────────────────────────────────────────
 import TransferSurveyPage from './pages/survey/TransferSurveyPage'
@@ -18,52 +18,45 @@ import SobreNos           from './pages/SobreNos'
 import Parceiros          from './pages/Parceiros'
 import Blog, { BlogPost } from './pages/Blog'
 
-// ── School user components ────────────────────────────────────────────────
-import Dashboard        from './components/dashboard/Dashboard'
-import GestorHome       from './pages/gestor/GestorHome'
-import AttendantHome    from './pages/gestor/AttendantHome'
-import GestorTransfers  from './pages/gestor/GestorTransfers'
-import GestorSurveys    from './pages/gestor/GestorSurveys'
-import GestorEmbed      from './pages/gestor/GestorEmbed'
-import LeadKanban       from './components/leads/LeadKanban'
-import VisitCalendar    from './components/calendar/VisitCalendar'
+// ── School user ───────────────────────────────────────────────────────────
+import Dashboard         from './components/dashboard/Dashboard'
+import GestorHome        from './pages/gestor/GestorHome'
+import AttendantHome     from './pages/gestor/AttendantHome'
+import GestorTransfers   from './pages/gestor/GestorTransfers'
+import GestorSurveys     from './pages/gestor/GestorSurveys'
+import GestorEmbed       from './pages/gestor/GestorEmbed'
+import LeadKanban        from './components/leads/LeadKanban'
+import VisitCalendar     from './components/calendar/VisitCalendar'
 import EnrollmentManager from './components/enrollments/EnrollmentManager'
-import WhatsAppHub      from './components/whatsapp/WhatsAppHub'
-import GestorReports    from './components/reports/GestorReports'
-import UserManagement   from './components/management/UserManagement'
-import SystemSettings   from './components/management/SystemSettings'
-import UserProfile      from './components/management/UserProfile'
+import WhatsAppHub       from './components/whatsapp/WhatsAppHub'
+import GestorReports     from './components/reports/GestorReports'
+import UserManagement    from './components/management/UserManagement'
+import SystemSettings    from './components/management/SystemSettings'
+import UserProfile       from './components/management/UserProfile'
 
 // ── Layout ────────────────────────────────────────────────────────────────
 import Sidebar from './components/layout/Sidebar'
 import TopBar  from './components/layout/TopBar'
 
-// ── Super Admin — principal ───────────────────────────────────────────────
-import AdminHome        from './components/superadmin/AdminHome'
-import AdminSchools     from './components/superadmin/AdminSchools'
-import AdminFinancial   from './components/superadmin/AdminFinancial'
-import AdminContracts   from './components/superadmin/AdminContracts'
-import AdminSettings    from './components/superadmin/AdminSettings'
-import AdminCRM         from './components/superadmin/AdminCRM'
+// ── Super Admin — ativos ──────────────────────────────────────────────────
+import AdminHome       from './components/superadmin/AdminHome'
+import AdminSchools    from './components/superadmin/AdminSchools'
+import AdminFinancial  from './components/superadmin/AdminFinancial'
+import AdminContracts  from './components/superadmin/AdminContracts'
+import AdminSettings   from './components/superadmin/AdminSettings'
+import AdminCRM        from './components/superadmin/AdminCRM'
+import AdminOnboarding from './components/superadmin/AdminOnboarding'
+import AdminConsultants from './components/superadmin/AdminConsultants'
+import ConsultantDetails from './components/superadmin/ConsultantDetails'
 
-// ── Super Admin — legado (mantém para não quebrar links antigos) ──────────
-import SuperAdminDashboard  from './components/superadmin/SuperAdminDashboard'
+// ── Super Admin — legado (mantém para não quebrar links salvos) ───────────
 import SuperAdminInstitutions from './components/superadmin/SuperAdminInstitutions'
-import InstitutionDetails   from './components/superadmin/InstitutionDetails'
-import SuperAdminsPage      from './components/superadmin/SuperAdminsPage'
-import NotificationsPage    from './components/superadmin/NotificationsPage'
-import FinancialDashboard   from './components/superadmin/FinancialDashboard'
-import ConsultantsOverview  from './components/superadmin/ConsultantsOverview'
-import AdminConsultants     from './components/superadmin/AdminConsultants'
-import ConsultantDetails    from './components/superadmin/ConsultantDetails'
+import InstitutionDetails     from './components/superadmin/InstitutionDetails'
+import ConsultantHome         from './components/superadmin/ConsultantHome'
+import ConsultantSchools      from './components/superadmin/ConsultantSchools'
+import ConsultantContracts    from './components/superadmin/ConsultantContracts'
 
-// ── Consultor (mantido para compatibilidade) ──────────────────────────────
-import ConsultantHome      from './components/superadmin/ConsultantHome'
-import ConsultantPipeline  from './components/superadmin/ConsultantPipeline'
-import ConsultantSchools   from './components/superadmin/ConsultantSchools'
-import ConsultantContracts from './components/superadmin/ConsultantContracts'
-
-// ─── Guards ───────────────────────────────────────────────────────────────
+// ─── Helpers de rota ──────────────────────────────────────────────────────
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles: string[] }) {
   const { user } = useAuth()
   if (!user) return <Navigate to="/login" replace />
@@ -78,7 +71,6 @@ function RequireRole({ children, roles }: { children: React.ReactNode; roles: st
   return <>{children}</>
 }
 
-// ─── Wrapper de relatórios ────────────────────────────────────────────────
 function ReportsPage() {
   const { user } = useAuth()
   return (
@@ -89,7 +81,7 @@ function ReportsPage() {
   )
 }
 
-// ─── Páginas simples ──────────────────────────────────────────────────────
+// ─── Páginas inline simples ───────────────────────────────────────────────
 function UnauthorizedPage() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -120,7 +112,6 @@ function NotFoundPage() {
   )
 }
 
-// Página de perfil do admin (placeholder até criar o componente real)
 function AdminProfilePage() {
   const { user } = useAuth()
   return (
@@ -128,40 +119,35 @@ function AdminProfilePage() {
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Meu Perfil</h1>
       <p className="text-gray-500 mb-6">Informações da sua conta de administrador.</p>
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Nome</p>
-          <p className="text-gray-900 font-medium">{user?.full_name || '—'}</p>
-        </div>
-        <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">E-mail</p>
-          <p className="text-gray-900 font-medium">{user?.email || '—'}</p>
-        </div>
-        <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Tipo de acesso</p>
-          <p className="text-gray-900 font-medium capitalize">{user?.user_type || user?.role || '—'}</p>
-        </div>
+        {[
+          ['Nome',          user?.full_name  || '—'],
+          ['E-mail',        user?.email      || '—'],
+          ['Tipo de acesso',user?.user_type  || user?.role || '—'],
+        ].map(([k,v]) => (
+          <div key={k}>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{k}</p>
+            <p className="text-gray-900 font-medium capitalize">{v}</p>
+          </div>
+        ))}
       </div>
       <p className="text-xs text-gray-400 mt-4">Edição de perfil em breve.</p>
     </div>
   )
 }
 
-// ─── App Content ──────────────────────────────────────────────────────────
+// ─── Lógica principal ─────────────────────────────────────────────────────
 function AppContent() {
   const { user, initializing } = useAuth()
-  const [ready, setReady] = useState(false)
+  const [ready, setReady]      = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession()
-      .then(({ data: { session } }) => {
-        console.log('🚀 App ready, session:', session?.user?.id || 'none')
-      })
-      .catch(err => console.error('Init error:', err))
+      .catch(console.error)
       .finally(() => setReady(true))
   }, [])
 
-  // ── Rotas públicas sem auth ────────────────────────────
-  const pathname = window.location.pathname
+  // Rotas públicas independentes de auth
+  const { pathname } = window.location
   if (pathname.startsWith('/survey/')) {
     return <Routes><Route path="/survey/:token" element={<TransferSurveyPage />} /></Routes>
   }
@@ -169,13 +155,13 @@ function AppContent() {
     return <Routes><Route path="/satisfaction/:token" element={<SatisfactionPage />} /></Routes>
   }
 
-  // ── Loading ────────────────────────────────────────────
+  // Loading
   if (initializing || !ready) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-cyan-50 to-blue-50">
         <div className="text-center">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center mx-auto mb-5 shadow-lg">
-            <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
           </div>
           <p className="text-lg font-bold text-gray-900">Áion Edu</p>
           <p className="text-sm text-gray-400 mt-1">Carregando...</p>
@@ -184,30 +170,33 @@ function AppContent() {
     )
   }
 
-  // ── Não logado ─────────────────────────────────────────
+  // Não logado — rotas públicas
   if (!user) {
     return (
       <Routes>
-        <Route path="/"                element={<Landing />} />
-        <Route path="/privacidade"     element={<Privacidade />} />
-        <Route path="/termos"          element={<Termos />} />
-        <Route path="/sobre"           element={<SobreNos />} />
-        <Route path="/parceiros"       element={<Parceiros />} />
-        <Route path="/blog"            element={<Blog />} />
-        <Route path="/blog/:slug"      element={<BlogPost />} />
-        <Route path="/login"           element={<LoginForm />} />
-        <Route path="/reset-password"  element={<ResetPassword />} />
-        <Route path="/unauthorized"    element={<UnauthorizedPage />} />
-        <Route path="*"                element={<Navigate to="/" replace />} />
+        <Route path="/"               element={<Landing />} />
+        <Route path="/privacidade"    element={<Privacidade />} />
+        <Route path="/termos"         element={<Termos />} />
+        <Route path="/sobre"          element={<SobreNos />} />
+        <Route path="/parceiros"      element={<Parceiros />} />
+        <Route path="/blog"           element={<Blog />} />
+        <Route path="/blog/:slug"     element={<BlogPost />} />
+        <Route path="/login"          element={<LoginForm />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/unauthorized"   element={<UnauthorizedPage />} />
+        <Route path="*"               element={<Navigate to="/" replace />} />
       </Routes>
     )
   }
 
-  // ── Área do Admin / Consultor ──────────────────────────
+  // ── ÁREA DO ADMIN ─────────────────────────────────────
+  // IMPORTANTE: verifica user_type ANTES de qualquer outra coisa
+  // para não cair no fluxo de escola.
   const isAdminArea =
-    user.user_type === 'admin_geral' ||
-    user.user_type === 'consultant'  ||
-    user.role      === 'super_admin'
+    user.user_type === 'admin_geral'  ||
+    user.user_type === 'consultant'   ||
+    user.role      === 'super_admin'  ||
+    user.role      === 'admin_geral'
 
   if (isAdminArea) {
     const isConsultant = user.user_type === 'consultant'
@@ -215,43 +204,40 @@ function AppContent() {
 
     return (
       <Routes>
-        {/* ── Dashboard ── */}
-        <Route path="/super-admin"            element={<AdminHome />} />
+        {/* ── Dashboard principal ── */}
+        <Route path="/super-admin"                  element={<AdminHome />} />
 
         {/* ── CRM Comercial ── */}
-        <Route path="/super-admin/crm"        element={<AdminCRM />} />
+        <Route path="/super-admin/crm"              element={<AdminCRM />} />
+
+        {/* ── Implantação & Onboarding ── */}
+        <Route path="/super-admin/onboarding"       element={<AdminOnboarding />} />
 
         {/* ── Escolas ── */}
-        <Route path="/super-admin/schools"    element={<AdminSchools />} />
+        <Route path="/super-admin/schools"          element={<AdminSchools />} />
 
         {/* ── Consultores ── */}
-        <Route path="/super-admin/consultants"     element={<AdminConsultants />} />
-        <Route path="/super-admin/consultants/:id" element={<ConsultantDetails />} />
+        <Route path="/super-admin/consultants"      element={<AdminConsultants />} />
+        <Route path="/super-admin/consultants/:id"  element={<ConsultantDetails />} />
 
         {/* ── Financeiro ── */}
-        <Route path="/super-admin/financial"  element={<AdminFinancial />} />
+        <Route path="/super-admin/financial"        element={<AdminFinancial />} />
 
         {/* ── Contratos ── */}
-        <Route path="/super-admin/contracts"  element={<AdminContracts />} />
+        <Route path="/super-admin/contracts"        element={<AdminContracts />} />
 
         {/* ── Configurações ── */}
-        <Route path="/super-admin/settings"   element={<AdminSettings />} />
+        <Route path="/super-admin/settings"         element={<AdminSettings />} />
 
         {/* ── Perfil ── */}
-        <Route path="/super-admin/profile"    element={<AdminProfilePage />} />
+        <Route path="/super-admin/profile"          element={<AdminProfilePage />} />
 
-        {/* ── Legado (não quebra links antigos) ── */}
-        <Route path="/super-admin/dashboard"         element={<SuperAdminDashboard />} />
-        <Route path="/super-admin/institutions"      element={<SuperAdminInstitutions />} />
-        <Route path="/super-admin/institutions/:id"  element={<InstitutionDetails />} />
-        <Route path="/super-admin/super-admins"      element={<SuperAdminsPage />} />
-        <Route path="/super-admin/notifications"     element={<NotificationsPage />} />
-        <Route path="/super-admin/legacy-financial"  element={<FinancialDashboard />} />
-        <Route path="/super-admin/legacy-consultants" element={<ConsultantsOverview />} />
+        {/* ── Legado — não quebra links antigos ── */}
+        <Route path="/super-admin/institutions"     element={<SuperAdminInstitutions />} />
+        <Route path="/super-admin/institutions/:id" element={<InstitutionDetails />} />
 
-        {/* ── Consultor (mantido para compatibilidade) ── */}
+        {/* ── Consultor (compatibilidade) ── */}
         <Route path="/super-admin/consultant"           element={<ConsultantHome />} />
-        <Route path="/super-admin/consultant/pipeline"  element={<ConsultantPipeline />} />
         <Route path="/super-admin/consultant/schools"   element={<ConsultantSchools />} />
         <Route path="/super-admin/consultant/contracts" element={<ConsultantContracts />} />
 
@@ -264,7 +250,8 @@ function AppContent() {
     )
   }
 
-  // ── Área da Escola ─────────────────────────────────────
+  // ── ÁREA DA ESCOLA ────────────────────────────────────
+  // Só chega aqui se NÃO for admin/consultor
   const isAttendant   = user.role === 'user'
   const schoolDefault = isAttendant ? '/atendente' : '/home'
 
@@ -333,7 +320,6 @@ function AppContent() {
   )
 }
 
-// ─── Root ─────────────────────────────────────────────────────────────────
 export default function App() {
   return (
     <Router>
