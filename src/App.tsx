@@ -3,97 +3,82 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { supabase } from './lib/supabase'
 
-// Auth Components
-import LoginForm from './components/auth/LoginForm'
-import InitialSetup from './components/auth/InitialSetup'
-import LandingPage from './components/landing/LandingPage'
+// ── Auth ──────────────────────────────────────────────────────────────────
+import LoginForm      from './components/auth/LoginForm'
+import InitialSetup   from './components/auth/InitialSetup'
 
-// Public Pages
+// ── Public pages ──────────────────────────────────────────────────────────
 import TransferSurveyPage from './pages/survey/TransferSurveyPage'
-import SatisfactionPage from './pages/survey/SatisfactionPage'
-import Landing from './pages/Landing'
-import ResetPassword from './pages/ResetPassword'
-import Privacidade from './pages/Privacidade'
-import Termos from './pages/Termos'
-import SobreNos from './pages/SobreNos'
-import Parceiros from './pages/Parceiros'
+import SatisfactionPage   from './pages/survey/SatisfactionPage'
+import Landing            from './pages/Landing'
+import ResetPassword      from './pages/ResetPassword'
+import Privacidade        from './pages/Privacidade'
+import Termos             from './pages/Termos'
+import SobreNos           from './pages/SobreNos'
+import Parceiros          from './pages/Parceiros'
 import Blog, { BlogPost } from './pages/Blog'
 
-// Regular User Components
-import Dashboard from './components/dashboard/Dashboard'
-import GestorHome from './pages/gestor/GestorHome'
-import AttendantHome from './pages/gestor/AttendantHome'
-import GestorTransfers from './pages/gestor/GestorTransfers'
-import GestorSurveys from './pages/gestor/GestorSurveys'
-import GestorEmbed from './pages/gestor/GestorEmbed'
-import LeadKanban from './components/leads/LeadKanban'
-import VisitCalendar from './components/calendar/VisitCalendar'
+// ── School user components ────────────────────────────────────────────────
+import Dashboard        from './components/dashboard/Dashboard'
+import GestorHome       from './pages/gestor/GestorHome'
+import AttendantHome    from './pages/gestor/AttendantHome'
+import GestorTransfers  from './pages/gestor/GestorTransfers'
+import GestorSurveys    from './pages/gestor/GestorSurveys'
+import GestorEmbed      from './pages/gestor/GestorEmbed'
+import LeadKanban       from './components/leads/LeadKanban'
+import VisitCalendar    from './components/calendar/VisitCalendar'
 import EnrollmentManager from './components/enrollments/EnrollmentManager'
-import WhatsAppHub from './components/whatsapp/WhatsAppHub'
-import GestorReports from './components/reports/GestorReports'
-import UserManagement from './components/management/UserManagement'
-import SystemSettings from './components/management/SystemSettings'
-import UserProfile from './components/management/UserProfile'
+import WhatsAppHub      from './components/whatsapp/WhatsAppHub'
+import GestorReports    from './components/reports/GestorReports'
+import UserManagement   from './components/management/UserManagement'
+import SystemSettings   from './components/management/SystemSettings'
+import UserProfile      from './components/management/UserProfile'
 
-// Layout Components
+// ── Layout ────────────────────────────────────────────────────────────────
 import Sidebar from './components/layout/Sidebar'
-import TopBar from './components/layout/TopBar'
+import TopBar  from './components/layout/TopBar'
 
-// Super Admin Components — Admin Geral
-import SuperAdminDashboard from './components/superadmin/SuperAdminDashboard'
+// ── Super Admin — principal ───────────────────────────────────────────────
+import AdminHome        from './components/superadmin/AdminHome'
+import AdminSchools     from './components/superadmin/AdminSchools'
+import AdminFinancial   from './components/superadmin/AdminFinancial'
+import AdminContracts   from './components/superadmin/AdminContracts'
+import AdminSettings    from './components/superadmin/AdminSettings'
+import AdminCRM         from './components/superadmin/AdminCRM'
+
+// ── Super Admin — legado (mantém para não quebrar links antigos) ──────────
+import SuperAdminDashboard  from './components/superadmin/SuperAdminDashboard'
 import SuperAdminInstitutions from './components/superadmin/SuperAdminInstitutions'
-import InstitutionDetails from './components/superadmin/InstitutionDetails'
-import SuperAdminsPage from './components/superadmin/SuperAdminsPage'
-import NotificationsPage from './components/superadmin/NotificationsPage'
-import FinancialDashboard from './components/superadmin/FinancialDashboard'
-import ConsultantsOverview from './components/superadmin/ConsultantsOverview'
-import AdminHome from './components/superadmin/AdminHome'
-import AdminSchools from './components/superadmin/AdminSchools'
-import AdminConsultants from './components/superadmin/AdminConsultants'
-import AdminFinancial from './components/superadmin/AdminFinancial'
-import AdminContracts from './components/superadmin/AdminContracts'
-import AdminSettings from './components/superadmin/AdminSettings'
-// Super Admin Components — Consultor
-import ConsultantHome from './components/superadmin/ConsultantHome'
-import ConsultantDashboard from './components/superadmin/ConsultantDashboard'
-import ConsultantPipeline from './components/superadmin/ConsultantPipeline'
-import ConsultantSchools from './components/superadmin/ConsultantSchools'
-import ConsultantContracts from './components/superadmin/ConsultantContracts'
-import ConsultantDetails from './components/superadmin/ConsultantDetails'
+import InstitutionDetails   from './components/superadmin/InstitutionDetails'
+import SuperAdminsPage      from './components/superadmin/SuperAdminsPage'
+import NotificationsPage    from './components/superadmin/NotificationsPage'
+import FinancialDashboard   from './components/superadmin/FinancialDashboard'
+import ConsultantsOverview  from './components/superadmin/ConsultantsOverview'
+import AdminConsultants     from './components/superadmin/AdminConsultants'
+import ConsultantDetails    from './components/superadmin/ConsultantDetails'
 
-// ─── Protected Route Component ────────────────────────────────────────────────
-function ProtectedRoute({
-  children,
-  allowedRoles
-}: {
-  children: React.ReactNode
-  allowedRoles: string[]
-}) {
+// ── Consultor (mantido para compatibilidade) ──────────────────────────────
+import ConsultantHome      from './components/superadmin/ConsultantHome'
+import ConsultantPipeline  from './components/superadmin/ConsultantPipeline'
+import ConsultantSchools   from './components/superadmin/ConsultantSchools'
+import ConsultantContracts from './components/superadmin/ConsultantContracts'
+
+// ─── Guards ───────────────────────────────────────────────────────────────
+function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles: string[] }) {
   const { user } = useAuth()
   if (!user) return <Navigate to="/login" replace />
   if (!allowedRoles.includes(user.role)) return <Navigate to="/unauthorized" replace />
   return <>{children}</>
 }
 
-// ─── RequireRole ──────────────────────────────────────────────────────────────
-function RequireRole({
-  children,
-  roles,
-}: {
-  children: React.ReactNode
-  roles: string[]
-}) {
+function RequireRole({ children, roles }: { children: React.ReactNode; roles: string[] }) {
   const { user } = useAuth()
-  const match =
-    roles.includes(user?.role ?? '') ||
-    roles.includes(user?.user_type ?? '')
+  const match = roles.includes(user?.role ?? '') || roles.includes(user?.user_type ?? '')
   if (!match) return <Navigate to="/unauthorized" replace />
   return <>{children}</>
 }
 
-// ─── ReportsPage — injeta institutionId do usuário logado ─────────────────────
-// CORREÇÃO: GestorReports precisa de institutionId e institutionName como props.
-// Sem esse wrapper, a query retorna vazio pois o componente não sabe qual escola buscar.
+// ─── Wrapper de relatórios ────────────────────────────────────────────────
 function ReportsPage() {
   const { user } = useAuth()
   return (
@@ -104,15 +89,16 @@ function ReportsPage() {
   )
 }
 
-// ─── Placeholder Pages ────────────────────────────────────────────────────────
+// ─── Páginas simples ──────────────────────────────────────────────────────
 function UnauthorizedPage() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold text-red-600 mb-4">Acesso Negado</h1>
-        <p className="text-gray-600 mb-8">Você não tem permissão para acessar esta página.</p>
-        <a href="/login" className="px-6 py-3 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700">
-          Voltar para Login
+      <div className="text-center max-w-md px-6">
+        <div className="text-6xl mb-4">🔒</div>
+        <h1 className="text-2xl font-bold text-gray-900 mb-3">Acesso negado</h1>
+        <p className="text-gray-500 mb-6">Você não tem permissão para acessar esta página.</p>
+        <a href="/login" className="px-6 py-3 bg-cyan-600 text-white rounded-xl font-semibold hover:bg-cyan-700 inline-block">
+          Voltar para o login
         </a>
       </div>
     </div>
@@ -122,195 +108,203 @@ function UnauthorizedPage() {
 function NotFoundPage() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold text-gray-800 mb-4">404 - Página Não Encontrada</h1>
-        <p className="text-gray-600 mb-8">A página que você procura não existe.</p>
-        <a href="/super-admin" className="px-6 py-3 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700">
-          Voltar para Dashboard
+      <div className="text-center max-w-md px-6">
+        <div className="text-6xl mb-4">🔍</div>
+        <h1 className="text-2xl font-bold text-gray-900 mb-3">Página não encontrada</h1>
+        <p className="text-gray-500 mb-6">A página que você procura não existe.</p>
+        <a href="/super-admin" className="px-6 py-3 bg-cyan-600 text-white rounded-xl font-semibold hover:bg-cyan-700 inline-block">
+          Voltar para o dashboard
         </a>
       </div>
     </div>
   )
 }
 
-function AllUsersPage() {
+// Página de perfil do admin (placeholder até criar o componente real)
+function AdminProfilePage() {
+  const { user } = useAuth()
   return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold">Todos os Usuários</h1>
-      <p className="text-gray-600 mt-2">Página em desenvolvimento...</p>
+    <div className="p-8 max-w-xl">
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">Meu Perfil</h1>
+      <p className="text-gray-500 mb-6">Informações da sua conta de administrador.</p>
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Nome</p>
+          <p className="text-gray-900 font-medium">{user?.full_name || '—'}</p>
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">E-mail</p>
+          <p className="text-gray-900 font-medium">{user?.email || '—'}</p>
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Tipo de acesso</p>
+          <p className="text-gray-900 font-medium capitalize">{user?.user_type || user?.role || '—'}</p>
+        </div>
+      </div>
+      <p className="text-xs text-gray-400 mt-4">Edição de perfil em breve.</p>
     </div>
   )
 }
 
-function AnalyticsPage() {
-  return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold">Analytics</h1>
-      <p className="text-gray-600 mt-2">Página em desenvolvimento...</p>
-    </div>
-  )
-}
-
-function ProfilePage() {
-  return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold">Meu Perfil</h1>
-      <p className="text-gray-600 mt-2">Página em desenvolvimento...</p>
-    </div>
-  )
-}
-
-// ─── Main App Content ─────────────────────────────────────────────────────────
+// ─── App Content ──────────────────────────────────────────────────────────
 function AppContent() {
   const { user, initializing } = useAuth()
-  const [supabaseInitialized, setSupabaseInitialized] = useState(false)
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    const initSupabase = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        console.log('🚀 App initialized, session:', session?.user?.id || 'none')
-        setSupabaseInitialized(true)
-      } catch (error) {
-        console.error('❌ Error initializing:', error)
-        setSupabaseInitialized(true)
-      }
-    }
-    initSupabase()
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        console.log('🚀 App ready, session:', session?.user?.id || 'none')
+      })
+      .catch(err => console.error('Init error:', err))
+      .finally(() => setReady(true))
   }, [])
 
-  // Rotas públicas — survey e satisfaction
-  if (window.location.pathname.startsWith('/survey/')) {
-    return (
-      <Routes>
-        <Route path="/survey/:token" element={<TransferSurveyPage />} />
-      </Routes>
-    )
+  // ── Rotas públicas sem auth ────────────────────────────
+  const pathname = window.location.pathname
+  if (pathname.startsWith('/survey/')) {
+    return <Routes><Route path="/survey/:token" element={<TransferSurveyPage />} /></Routes>
+  }
+  if (pathname.startsWith('/satisfaction/')) {
+    return <Routes><Route path="/satisfaction/:token" element={<SatisfactionPage />} /></Routes>
   }
 
-  if (window.location.pathname.startsWith('/satisfaction/')) {
+  // ── Loading ────────────────────────────────────────────
+  if (initializing || !ready) {
     return (
-      <Routes>
-        <Route path="/satisfaction/:token" element={<SatisfactionPage />} />
-      </Routes>
-    )
-  }
-
-  // Loading state
-  if (initializing || !supabaseInitialized) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-        <div className="text-center px-4">
-          <div className="w-12 h-12 sm:w-16 sm:h-16 mb-4 sm:mb-6 mx-auto">
-            <div className="animate-spin rounded-full h-12 w-12 sm:h-16 sm:w-16 border-4 border-blue-200 border-t-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-cyan-50 to-blue-50">
+        <div className="text-center">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center mx-auto mb-5 shadow-lg">
+            <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin" />
           </div>
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">Áion Edu</h2>
-          <p className="text-sm sm:text-base text-gray-600">Carregando...</p>
+          <p className="text-lg font-bold text-gray-900">Áion Edu</p>
+          <p className="text-sm text-gray-400 mt-1">Carregando...</p>
         </div>
       </div>
     )
   }
 
-  // Not logged in
+  // ── Não logado ─────────────────────────────────────────
   if (!user) {
     return (
       <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/privacidade" element={<Privacidade />} />
-        <Route path="/termos" element={<Termos />} />
-        <Route path="/sobre" element={<SobreNos />} />
-        <Route path="/parceiros" element={<Parceiros />} />
-        <Route path="/blog" element={<Blog />} />
-        <Route path="/blog/:slug" element={<BlogPost />} />
-        <Route path="/login" element={<LoginForm />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/unauthorized" element={<UnauthorizedPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="/"                element={<Landing />} />
+        <Route path="/privacidade"     element={<Privacidade />} />
+        <Route path="/termos"          element={<Termos />} />
+        <Route path="/sobre"           element={<SobreNos />} />
+        <Route path="/parceiros"       element={<Parceiros />} />
+        <Route path="/blog"            element={<Blog />} />
+        <Route path="/blog/:slug"      element={<BlogPost />} />
+        <Route path="/login"           element={<LoginForm />} />
+        <Route path="/reset-password"  element={<ResetPassword />} />
+        <Route path="/unauthorized"    element={<UnauthorizedPage />} />
+        <Route path="*"                element={<Navigate to="/" replace />} />
       </Routes>
     )
   }
 
-  // SUPER ADMIN / CONSULTANT / ADMIN GERAL ROUTES
-  const isConsultantArea = user.is_super_admin || user.user_type === 'consultant' || user.user_type === 'admin_geral'
-  const defaultPath = user.user_type === 'consultant' ? '/super-admin/consultant' : '/super-admin'
+  // ── Área do Admin / Consultor ──────────────────────────
+  const isAdminArea =
+    user.user_type === 'admin_geral' ||
+    user.user_type === 'consultant'  ||
+    user.role      === 'super_admin'
 
-  if (isConsultantArea) {
+  if (isAdminArea) {
+    const isConsultant = user.user_type === 'consultant'
+    const defaultPath  = isConsultant ? '/super-admin/consultant' : '/super-admin'
+
     return (
       <Routes>
-        {/* Admin Geral */}
-        <Route path="/super-admin" element={<AdminHome />} />
-        <Route path="/super-admin/schools" element={<AdminSchools />} />
-        <Route path="/super-admin/consultants" element={<AdminConsultants />} />
+        {/* ── Dashboard ── */}
+        <Route path="/super-admin"            element={<AdminHome />} />
+
+        {/* ── CRM Comercial ── */}
+        <Route path="/super-admin/crm"        element={<AdminCRM />} />
+
+        {/* ── Escolas ── */}
+        <Route path="/super-admin/schools"    element={<AdminSchools />} />
+
+        {/* ── Consultores ── */}
+        <Route path="/super-admin/consultants"     element={<AdminConsultants />} />
         <Route path="/super-admin/consultants/:id" element={<ConsultantDetails />} />
-        <Route path="/super-admin/financial" element={<AdminFinancial />} />
-        <Route path="/super-admin/contracts" element={<AdminContracts />} />
-        <Route path="/super-admin/settings" element={<AdminSettings />} />
-        {/* Legacy routes */}
-        <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
-        <Route path="/super-admin/institutions" element={<SuperAdminInstitutions />} />
-        <Route path="/super-admin/institutions/:id" element={<InstitutionDetails />} />
-        <Route path="/super-admin/super-admins" element={<SuperAdminsPage />} />
-        <Route path="/super-admin/notifications" element={<NotificationsPage />} />
-        <Route path="/super-admin/users" element={<AllUsersPage />} />
-        <Route path="/super-admin/analytics" element={<AnalyticsPage />} />
-        <Route path="/super-admin/profile" element={<ProfilePage />} />
-        <Route path="/super-admin/legacy-financial" element={<FinancialDashboard />} />
+
+        {/* ── Financeiro ── */}
+        <Route path="/super-admin/financial"  element={<AdminFinancial />} />
+
+        {/* ── Contratos ── */}
+        <Route path="/super-admin/contracts"  element={<AdminContracts />} />
+
+        {/* ── Configurações ── */}
+        <Route path="/super-admin/settings"   element={<AdminSettings />} />
+
+        {/* ── Perfil ── */}
+        <Route path="/super-admin/profile"    element={<AdminProfilePage />} />
+
+        {/* ── Legado (não quebra links antigos) ── */}
+        <Route path="/super-admin/dashboard"         element={<SuperAdminDashboard />} />
+        <Route path="/super-admin/institutions"      element={<SuperAdminInstitutions />} />
+        <Route path="/super-admin/institutions/:id"  element={<InstitutionDetails />} />
+        <Route path="/super-admin/super-admins"      element={<SuperAdminsPage />} />
+        <Route path="/super-admin/notifications"     element={<NotificationsPage />} />
+        <Route path="/super-admin/legacy-financial"  element={<FinancialDashboard />} />
         <Route path="/super-admin/legacy-consultants" element={<ConsultantsOverview />} />
-        {/* Consultor */}
-        <Route path="/super-admin/consultant" element={<ConsultantHome />} />
-        <Route path="/super-admin/consultant/pipeline" element={<ConsultantPipeline />} />
-        <Route path="/super-admin/consultant/schools" element={<ConsultantSchools />} />
+
+        {/* ── Consultor (mantido para compatibilidade) ── */}
+        <Route path="/super-admin/consultant"           element={<ConsultantHome />} />
+        <Route path="/super-admin/consultant/pipeline"  element={<ConsultantPipeline />} />
+        <Route path="/super-admin/consultant/schools"   element={<ConsultantSchools />} />
         <Route path="/super-admin/consultant/contracts" element={<ConsultantContracts />} />
-        <Route path="/unauthorized" element={<UnauthorizedPage />} />
-        <Route path="/login" element={<Navigate to={defaultPath} replace />} />
-        <Route path="/" element={<Navigate to={defaultPath} replace />} />
-        <Route path="*" element={<NotFoundPage />} />
+
+        {/* ── Catchalls ── */}
+        <Route path="/unauthorized"  element={<UnauthorizedPage />} />
+        <Route path="/login"         element={<Navigate to={defaultPath} replace />} />
+        <Route path="/"              element={<Navigate to={defaultPath} replace />} />
+        <Route path="*"              element={<NotFoundPage />} />
       </Routes>
     )
   }
 
-  // REGULAR USER ROUTES
-  const isAttendant = user.role === 'user' && user.user_type !== 'admin_geral' && user.user_type !== 'consultant'
-  const schoolDefaultPath = isAttendant ? '/atendente' : '/home'
+  // ── Área da Escola ─────────────────────────────────────
+  const isAttendant   = user.role === 'user'
+  const schoolDefault = isAttendant ? '/atendente' : '/home'
 
   return (
-    <div style={{ display: 'flex', width: '100vw', height: '100vh', overflow: 'hidden', background: 'var(--bg-page)' }}>
+    <div style={{ display:'flex', width:'100vw', height:'100vh', overflow:'hidden', background:'var(--bg-page)' }}>
       <Sidebar />
-      <div style={{ flex: 1, minWidth: 0, height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ flex:1, minWidth:0, height:'100vh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
         <TopBar />
-        <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--bg-page)' }}>
+        <main style={{ flex:1, minHeight:0, overflowY:'auto', background:'var(--bg-page)' }}>
           <Routes>
-            <Route path="/" element={<Navigate to={schoolDefaultPath} replace />} />
+            <Route path="/" element={<Navigate to={schoolDefault} replace />} />
 
             <Route path="/home" element={
-              <RequireRole roles={['admin', 'manager']}>
+              <RequireRole roles={['admin','manager']}>
                 <GestorHome />
               </RequireRole>
             } />
 
             <Route path="/atendente" element={
-              <RequireRole roles={['user', 'school_user']}>
+              <RequireRole roles={['user','school_user']}>
                 <AttendantHome />
               </RequireRole>
             } />
 
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/leads" element={<LeadKanban />} />
-            <Route path="/visits" element={<VisitCalendar />} />
-            <Route path="/enrollments" element={<EnrollmentManager />} />
-            <Route path="/whatsapp" element={<WhatsAppHub />} />
+            <Route path="/dashboard"      element={<Dashboard />} />
+            <Route path="/leads"          element={<LeadKanban />} />
+            <Route path="/visits"         element={<VisitCalendar />} />
+            <Route path="/enrollments"    element={<EnrollmentManager />} />
+            <Route path="/whatsapp"       element={<WhatsAppHub />} />
             <Route path="/transferencias" element={<GestorTransfers />} />
-            <Route path="/pesquisas" element={<GestorSurveys />} />
+            <Route path="/pesquisas"      element={<GestorSurveys />} />
 
             <Route path="/embed" element={
-              <ProtectedRoute allowedRoles={['admin', 'manager']}>
+              <ProtectedRoute allowedRoles={['admin','manager']}>
                 <GestorEmbed />
               </ProtectedRoute>
             } />
 
-            {/* ✅ CORRIGIDO: usa ReportsPage que injeta institutionId do user logado */}
             <Route path="/reports" element={
-              <ProtectedRoute allowedRoles={['manager', 'admin']}>
+              <ProtectedRoute allowedRoles={['manager','admin']}>
                 <ReportsPage />
               </ProtectedRoute>
             } />
@@ -327,11 +321,11 @@ function AppContent() {
               </ProtectedRoute>
             } />
 
-            <Route path="/profile" element={<UserProfile />} />
-            <Route path="/setup" element={<InitialSetup />} />
-            <Route path="/login" element={<Navigate to={schoolDefaultPath} replace />} />
+            <Route path="/profile"      element={<UserProfile />} />
+            <Route path="/setup"        element={<InitialSetup />} />
+            <Route path="/login"        element={<Navigate to={schoolDefault} replace />} />
             <Route path="/unauthorized" element={<UnauthorizedPage />} />
-            <Route path="*" element={<Navigate to={schoolDefaultPath} replace />} />
+            <Route path="*"             element={<Navigate to={schoolDefault} replace />} />
           </Routes>
         </main>
       </div>
@@ -339,8 +333,8 @@ function AppContent() {
   )
 }
 
-// ─── Main App Component ───────────────────────────────────────────────────────
-function App() {
+// ─── Root ─────────────────────────────────────────────────────────────────
+export default function App() {
   return (
     <Router>
       <AuthProvider>
@@ -349,5 +343,3 @@ function App() {
     </Router>
   )
 }
-
-export default App
