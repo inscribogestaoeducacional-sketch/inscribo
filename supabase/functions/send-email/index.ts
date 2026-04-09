@@ -56,6 +56,89 @@ const templates: Record<string, (d: any) => { subject: string; html: string }> =
     `)
   }),
 
+  new_institution: (d) => ({
+    subject: `🎉 Bem-vindo à Áion Edu — ${d.institution_name}`,
+    html: base(`
+      <h2 style="color:#00523C">Sua escola foi cadastrada na Áion Edu! 🎉</h2>
+      <p>Olá! A escola <strong>${d.institution_name}</strong> foi configurada com sucesso na plataforma Áion Edu.</p>
+      <p style="margin-top:16px">Abaixo estão os dados de acesso da sua instituição:</p>
+      <div class="m">
+        <strong>${d.institution_name}</strong>
+        <span>Instituição cadastrada na plataforma</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
+        <tr style="border-bottom:1px solid #eee">
+          <td style="padding:10px 0;color:#666;width:40%">Plataforma</td>
+          <td style="padding:10px 0;font-weight:600;color:#111">Áion Edu</td>
+        </tr>
+        <tr style="border-bottom:1px solid #eee">
+          <td style="padding:10px 0;color:#666">Link de acesso</td>
+          <td style="padding:10px 0;font-weight:600;color:#00A896"><a href="https://aionedu.com.br/login" style="color:#00A896">aionedu.com.br/login</a></td>
+        </tr>
+        <tr style="border-bottom:1px solid #eee">
+          <td style="padding:10px 0;color:#666">Suporte</td>
+          <td style="padding:10px 0;font-weight:600;color:#111">contato@aionedu.com.br</td>
+        </tr>
+        ${d.consultant_name ? `<tr><td style="padding:10px 0;color:#666">Seu consultor</td><td style="padding:10px 0;font-weight:600;color:#111">${d.consultant_name}</td></tr>` : ''}
+      </table>
+      <p style="color:#666;font-size:13px">Seu consultor entrará em contato para iniciar a implantação e configuração completa da plataforma.</p>
+      <div style="text-align:center">
+        <a href="https://aionedu.com.br/login" class="btn">Acessar a plataforma →</a>
+      </div>
+      <p style="font-size:12px;color:#999;margin-top:24px">Dúvidas? Fale com nossa equipe pelo WhatsApp: (83) 98556-6393</p>
+    `)
+  }),
+
+  user_welcome: (d) => ({
+    subject: `👋 Bem-vindo à ${d.school_name} — Suas credenciais de acesso`,
+    html: base(`
+      <h2 style="color:#00523C">Bem-vindo, ${d.user_name}! 👋</h2>
+      <p>Você foi cadastrado na plataforma <strong>Áion Edu</strong> pela escola <strong>${d.school_name}</strong>.</p>
+      <p style="margin-top:16px">Suas credenciais de acesso:</p>
+      <div class="m">
+        <strong>${d.user_name}</strong>
+        <span>${d.role_label} · ${d.school_name}</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
+        <tr style="border-bottom:1px solid #eee">
+          <td style="padding:10px 0;color:#666;width:40%">E-mail</td>
+          <td style="padding:10px 0;font-weight:600;color:#111">${d.user_email}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #eee">
+          <td style="padding:10px 0;color:#666">Senha temporária</td>
+          <td style="padding:10px 0;font-weight:700;color:#00523C;font-size:16px;letter-spacing:1px">${d.temp_password}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 0;color:#666">Perfil de acesso</td>
+          <td style="padding:10px 0;font-weight:600;color:#111">${d.role_label}</td>
+        </tr>
+      </table>
+      <p style="background:#FEF3C7;border-left:4px solid #F59E0B;padding:12px 16px;border-radius:0 8px 8px 0;font-size:13px;color:#92400E">
+        ⚠️ <strong>Recomendamos alterar sua senha</strong> no primeiro acesso. Acesse seu perfil após entrar na plataforma.
+      </p>
+      <div style="text-align:center;margin-top:24px">
+        <a href="https://aionedu.com.br/login" class="btn">Acessar a plataforma →</a>
+      </div>
+      <p style="font-size:12px;color:#999;margin-top:24px">Dúvidas? Entre em contato com o administrador da sua escola ou com o suporte: contato@aionedu.com.br</p>
+    `)
+  }),
+
+  password_reset: (d) => ({
+    subject: `🔐 Redefinição de senha — Áion Edu`,
+    html: base(`
+      <h2 style="color:#00523C">Redefinição de senha</h2>
+      <p>Olá${d.user_name ? `, <strong>${d.user_name}</strong>` : ''}! Recebemos uma solicitação para redefinir a senha da sua conta na Áion Edu.</p>
+      <p style="margin-top:16px;color:#6B7280">Clique no botão abaixo para criar uma nova senha. Este link é válido por <strong>1 hora</strong>.</p>
+      <div style="text-align:center;margin:32px 0">
+        <a href="${d.reset_url}" class="btn">Redefinir minha senha →</a>
+      </div>
+      <p style="background:#FEF3C7;border-left:4px solid #F59E0B;padding:12px 16px;border-radius:0 8px 8px 0;font-size:13px;color:#92400E">
+        ⚠️ Se você não solicitou a redefinição de senha, ignore este e-mail. Sua senha permanecerá a mesma.
+      </p>
+      <p style="font-size:12px;color:#999;margin-top:24px">Por segurança, nunca compartilhe este link com ninguém. A equipe Áion Edu jamais solicitará sua senha.</p>
+    `)
+  }),
+
 }
 
 const CORS = {

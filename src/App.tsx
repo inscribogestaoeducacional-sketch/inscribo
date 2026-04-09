@@ -12,6 +12,7 @@ import LandingPage from './components/landing/LandingPage'
 import TransferSurveyPage from './pages/survey/TransferSurveyPage'
 import SatisfactionPage from './pages/survey/SatisfactionPage'
 import Landing from './pages/Landing'
+import ResetPassword from './pages/ResetPassword'
 import Privacidade from './pages/Privacidade'
 import Termos from './pages/Termos'
 import SobreNos from './pages/SobreNos'
@@ -222,6 +223,7 @@ function AppContent() {
         <Route path="/blog" element={<Blog />} />
         <Route path="/blog/:slug" element={<BlogPost />} />
         <Route path="/login" element={<LoginForm />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

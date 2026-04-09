@@ -1,7 +1,14 @@
 import { supabase } from './supabase'
 
+export type EmailType =
+  | 'welcome'
+  | 'campaign_ready'
+  | 'new_institution'
+  | 'user_welcome'
+  | 'password_reset'
+
 export const sendEmail = async (
-  type: 'welcome' | 'campaign_ready',
+  type: EmailType,
   to: string,
   data: Record<string, any>
 ): Promise<boolean> => {

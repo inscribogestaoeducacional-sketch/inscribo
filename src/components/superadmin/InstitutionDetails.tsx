@@ -3,11 +3,11 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
-import { 
-  Users, 
-  GraduationCap, 
-  Calendar, 
-  TrendingUp, 
+import {
+  Users,
+  GraduationCap,
+  Calendar,
+  TrendingUp,
   Sparkles,
   Plus,
   Edit,
@@ -17,6 +17,7 @@ import {
   Save,
   X
 } from 'lucide-react'
+import { sendEmail } from '../../lib/email'
 
 interface Institution {
   id: string
@@ -114,6 +115,20 @@ export default function InstitutionDetails() {
         }])
 
       if (userError) throw userError
+
+      const roleLabels: Record<string, string> = {
+        admin: 'Administrador',
+        manager: 'Gestor',
+        user: 'Atendente',
+        consultant: 'Consultor',
+      }
+      await sendEmail('user_welcome', newUser.email, {
+        user_name: newUser.full_name,
+        user_email: newUser.email,
+        temp_password: newUser.password,
+        school_name: institution?.name ?? '',
+        role_label: roleLabels[newUser.role] ?? newUser.role,
+      })
 
       alert('✅ Usuário criado!')
       setShowNewUser(false)

@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
 import { Building2, Plus, Save, X, Edit, Trash2, ToggleLeft, ToggleRight, Sparkles, Eye } from 'lucide-react'
+import { sendEmail } from '../../lib/email'
 
 interface Institution {
   id: string
@@ -21,7 +22,7 @@ export default function SuperAdminInstitutions() {
   const [showNewInstitution, setShowNewInstitution] = useState(false)
   const [showEditInstitution, setShowEditInstitution] = useState(false)
 
-  const [newInst, setNewInst] = useState({ name: '', primary_color: '#00C7B7', secondary_color: '#1A1F71' })
+  const [newInst, setNewInst] = useState({ name: '', email: '', primary_color: '#00C7B7', secondary_color: '#1A1F71' })
   const [editInst, setEditInst] = useState<Institution | null>(null)
 
   useEffect(() => {
@@ -47,15 +48,22 @@ export default function SuperAdminInstitutions() {
   const handleCreateInstitution = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      const { email, ...instData } = newInst
       const { error } = await supabase
         .from('institutions')
-        .insert([{ ...newInst, active: true }])
+        .insert([{ ...instData, active: true }])
 
       if (error) throw error
-      
+
+      if (email) {
+        await sendEmail('new_institution', email, {
+          institution_name: newInst.name,
+        })
+      }
+
       alert('✅ Instituição criada!')
       setShowNewInstitution(false)
-      setNewInst({ name: '', primary_color: '#00C7B7', secondary_color: '#1A1F71' })
+      setNewInst({ name: '', email: '', primary_color: '#00C7B7', secondary_color: '#1A1F71' })
       loadInstitutions()
     } catch (error: any) {
       alert('❌ Erro: ' + error.message)
@@ -302,6 +310,17 @@ export default function SuperAdminInstitutions() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                     placeholder="Ex: Escola Exemplo"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">E-mail de contato</label>
+                  <input
+                    type="email"
+                    value={newInst.email}
+                    onChange={(e) => setNewInst({ ...newInst, email: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                    placeholder="Ex: contato@escola.com.br"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Se informado, a escola receberá um e-mail de boas-vindas.</p>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Cor Primária</label>
