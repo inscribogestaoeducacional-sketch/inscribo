@@ -56,23 +56,19 @@ export default function AdminSchools() {
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [toast, setToast] = useState<Toast | null>(null)
 
-  // Modals
   const [releaseModal, setReleaseModal] = useState<any | null>(null)
   const [editModal, setEditModal] = useState<any | null>(null)
   const [newSchoolModal, setNewSchoolModal] = useState(false)
   const [detailModal, setDetailModal] = useState<any | null>(null)
 
-  // Release form
   const [startMonth, setStartMonth] = useState(8)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [releasing, setReleasing] = useState(false)
 
-  // Edit form
   const [editForm, setEditForm] = useState({ plan: '', plan_status: '', consultant_id: '', name: '', city: '', state: '', phone: '' })
   const [savingEdit, setSavingEdit] = useState(false)
 
-  // New school form
   const [newForm, setNewForm] = useState({ name: '', cnpj: '', city: '', state: '', email: '', password: '', phone: '', plan: 'trial', consultantId: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [savingSchool, setSavingSchool] = useState(false)
@@ -243,14 +239,19 @@ export default function AdminSchools() {
       const sd = startDate || `${currentYear}-${String(startMonth).padStart(2, '0')}-01`
       const ed = endDate || `${campaignYear}-02-28`
 
-      // Busca qualquer ciclo existente que não seja active/completed/archived
-      const existing = cycles.find(c =>
+      // Prioriza 'setup' (tem mais dados do wizard), depois 'draft', depois qualquer outro elegível
+      // NUNCA altera year/label no update — evita conflito da constraint única institution_id+year
+      const allEligible = cycles.filter(c =>
         c.institution_id === releaseModal.id &&
         !['active', 'completed', 'archived'].includes(c.status)
       )
+      const existing =
+        allEligible.find(c => c.status === 'setup') ??
+        allEligible.find(c => c.status === 'draft') ??
+        allEligible[0] ??
+        null
 
       if (existing) {
-        // Atualiza ciclo existente (setup/draft) para released
         const { error } = await supabase
           .from('campaign_cycles')
           .update({
@@ -258,13 +259,10 @@ export default function AdminSchools() {
             campaign_start_month: startMonth,
             start_date: sd,
             end_date: ed,
-            year: campaignYear,
-            label: `Campanha ${campaignYear}`,
           })
           .eq('id', existing.id)
         if (error) throw error
       } else {
-        // Cria ciclo novo com todos os campos obrigatórios
         const { error } = await supabase
           .from('campaign_cycles')
           .insert({
@@ -288,7 +286,6 @@ export default function AdminSchools() {
         if (error) throw error
       }
 
-      // Notifica o gestor
       await supabase.from('system_notifications').insert({
         institution_id: releaseModal.id,
         title: `Campanha ${campaignYear} liberada! 🎉`,
@@ -346,6 +343,20 @@ export default function AdminSchools() {
     active: institutions.filter(i => i.plan_status === 'active' && i.plan !== 'trial').length,
     trial: institutions.filter(i => i.plan === 'trial').length,
     suspended: institutions.filter(i => i.plan_status === 'suspended').length,
+  }
+
+  // Helper para pegar o melhor ciclo elegível para exibição no modal
+  const getBestEligibleCycle = (institutionId: string) => {
+    const allEligible = cycles.filter(c =>
+      c.institution_id === institutionId &&
+      !['active', 'completed', 'archived'].includes(c.status)
+    )
+    return (
+      allEligible.find(c => c.status === 'setup') ??
+      allEligible.find(c => c.status === 'draft') ??
+      allEligible[0] ??
+      null
+    )
   }
 
   return (
@@ -455,11 +466,11 @@ export default function AdminSchools() {
                           <button
                             onClick={() => {
                               const yr = new Date().getFullYear()
-                              const existingCycle = cycles.find(c => c.institution_id === inst.id)
+                              const bestCycle = getBestEligibleCycle(inst.id)
                               setReleaseModal(inst)
-                              setStartMonth(existingCycle?.campaign_start_month || 8)
-                              setStartDate(existingCycle?.start_date || `${yr}-08-01`)
-                              setEndDate(existingCycle?.end_date || `${yr + 1}-02-28`)
+                              setStartMonth(bestCycle?.campaign_start_month || 8)
+                              setStartDate(bestCycle?.start_date || `${yr}-08-01`)
+                              setEndDate(bestCycle?.end_date || `${yr + 1}-02-28`)
                             }}
                             className="flex items-center gap-1 text-xs px-2 py-1.5 bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100 font-medium transition-colors"
                           >
@@ -653,9 +664,8 @@ export default function AdminSchools() {
               <button onClick={() => setReleaseModal(null)} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
             </div>
 
-            {/* Aviso sobre ciclo existente */}
             {(() => {
-              const existingCycle = cycles.find(c => c.institution_id === releaseModal.id && !['active', 'completed', 'archived'].includes(c.status))
+              const existingCycle = getBestEligibleCycle(releaseModal.id)
               if (!existingCycle) return null
               return (
                 <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
