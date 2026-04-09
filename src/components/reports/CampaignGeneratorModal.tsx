@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   X, ChevronRight, ChevronLeft, Upload, Loader2, Check,
   AlertTriangle, TrendingUp, Users, MapPin, BarChart3,
-  Sparkles, RefreshCw, Shield, SlidersHorizontal
+  Sparkles, RefreshCw, Shield, SlidersHorizontal, Edit3
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
@@ -28,35 +28,22 @@ interface Props {
 }
 
 interface CycleData {
-  institution_id: string
-  year: number
-  label: string
-  start_date: string
-  end_date: string
-  target_new_students: number
-  target_reenrollment_rate: number
-  base_students: number
-  projected_cpa: number
+  institution_id: string; year: number; label: string
+  start_date: string; end_date: string
+  target_new_students: number; target_reenrollment_rate: number
+  base_students: number; projected_cpa: number
   monthly_targets: MonthlyTarget[]
-  market_data: MarketData
-  historical_input: HistoricalYear[]
-  generation_mode: string
-  ai_reasoning: string
-  realism_score: string
-  applied_at: string
+  market_data: MarketData; historical_input: HistoricalYear[]
+  generation_mode: string; ai_reasoning: string; realism_score: string; applied_at: string
 }
 
 interface SchoolData {
   name: string; city: string; state: string; grades: string[]
   avg_monthly_fee: number; current_students: number
-  exits?: Record<string, number>
-  start_date?: string; end_date?: string
+  exits?: Record<string, number>; start_date?: string; end_date?: string
 }
 
-interface GrowthTarget {
-  type: 'percentage' | 'absolute' | 'students'
-  value: number
-}
+interface GrowthTarget { type: 'percentage' | 'absolute' | 'students'; value: number }
 
 interface HistoricalYear {
   year: number; total_students: number; new_enrollments: number
@@ -64,11 +51,9 @@ interface HistoricalYear {
 }
 
 interface MarketData {
-  city?: string; state?: string
-  school_age_population?: number; total_population?: number
-  private_school_students?: number; private_school_rate?: number
-  sector_growth_rate?: number; total_private_schools?: number
-  average_students_per_school?: number; confidence?: string
+  city?: string; state?: string; school_age_population?: number; total_population?: number
+  private_school_students?: number; private_school_rate?: number; sector_growth_rate?: number
+  total_private_schools?: number; average_students_per_school?: number; confidence?: string
   data_source?: string; notes?: string
 }
 
@@ -86,35 +71,26 @@ interface PreCampaign {
 
 interface GeneratedPlan {
   summary: {
-    total_new_students_target: number
-    reenrollment_target: number
-    reenrollment_rate_target: number
-    total_students_end: number
-    growth_rate: number
-    realism_score: 'conservative' | 'realistic' | 'aggressive'
-    reasoning: string
+    total_new_students_target: number; reenrollment_target: number
+    reenrollment_rate_target: number; total_students_end: number; growth_rate: number
+    realism_score: 'conservative' | 'realistic' | 'aggressive'; reasoning: string
   }
   pre_campaign?: PreCampaign
   monthly_targets: MonthlyTarget[]
   funnel_rates: { registration_to_schedule: number; schedule_to_visit: number; visit_to_enrollment: number }
-  total_investment_suggested: number
-  total_leads_needed: number
-  average_cpa: number
-  key_risks: string[]
-  key_actions: string[]
-  recalibration_note: string
+  total_investment_suggested: number; total_leads_needed: number; average_cpa: number
+  key_risks: string[]; key_actions: string[]; recalibration_note: string
 }
 
 // ─── Constantes ─────────────────────────────────────────────────
 const STATES = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
 const GRADE_OPTIONS = ['Infantil I','Infantil II','Infantil III','Infantil IV','Infantil V','1º ao 5º EF','6º ao 9º EF','Ensino Médio']
 
-// ─── Estilos compartilhados ──────────────────────────────────────
 const labelStyle: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 6 }
 const inputStyle: React.CSSProperties = { width: '100%', height: 40, padding: '0 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, color: '#1A2B4A', background: '#F8FAFC', outline: 'none', boxSizing: 'border-box' }
 const smallInput: React.CSSProperties = { width: '100%', height: 34, padding: '0 8px', borderRadius: 7, border: '1px solid #E2E8F0', fontSize: 12, color: '#1A2B4A', background: '#F8FAFC', outline: 'none', boxSizing: 'border-box' }
 
-// ─── Helper: meses da campanha ───────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────
 function getCampaignMonths(startDate: string, endDate: string) {
   const monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
   const months: { label: string; month: number; year: number; period: string }[] = []
@@ -128,7 +104,6 @@ function getCampaignMonths(startDate: string, endDate: string) {
   return months
 }
 
-// ─── Helper: escalar plano pelo fator ───────────────────────────
 function scalePlan(plan: GeneratedPlan, factor: number): GeneratedPlan {
   const scaled = JSON.parse(JSON.stringify(plan)) as GeneratedPlan
   scaled.monthly_targets = scaled.monthly_targets.map(m => {
@@ -151,6 +126,72 @@ function scalePlan(plan: GeneratedPlan, factor: number): GeneratedPlan {
   return scaled
 }
 
+// ─── Redistribuir plano com novos totais ─────────────────────────
+function redistributePlan(
+  plan: GeneratedPlan,
+  newTotalNew: number,
+  newTotalReenroll: number
+): GeneratedPlan {
+  const updated = JSON.parse(JSON.stringify(plan)) as GeneratedPlan
+  const totalMonths = updated.monthly_targets.length
+  if (totalMonths === 0) return updated
+
+  // Calcular pesos de sazonalidade dos novatos a partir do plano atual
+  const currentTotalNew = updated.monthly_targets.reduce((s, m) => s + (m.enrollments_new ?? 0), 0)
+  const currentTotalReen = updated.monthly_targets.reduce((s, m) => s + (m.enrollments_returning ?? 0), 0)
+
+  // Distribuição de rematrícula por mês (padrão)
+  const reenrollDist: Record<number, number> = { 8: 0, 9: 0.05, 10: 0.25, 11: 0.30, 12: 0.20, 1: 0.15, 2: 0.05 }
+
+  // Taxas de conversão
+  const visToEnr = 0.40
+  const schToVis = 0.63
+  const regToSch = 0.76
+  const cpaBase = updated.average_cpa || 150
+
+  updated.monthly_targets = updated.monthly_targets.map((m, idx) => {
+    // Novatos: distribuir proporcionalmente ao peso original
+    const newWeight = currentTotalNew > 0
+      ? (m.enrollments_new ?? 0) / currentTotalNew
+      : 1 / totalMonths
+    const newEnr = Math.round(newTotalNew * newWeight)
+
+    // Rematrícula: distribuir por padrão histórico
+    const monthNum = m.month ? (typeof m.month === 'number' ? m.month : parseInt(m.month)) : idx + 8
+    const reenWeight = reenrollDist[monthNum] ?? (newTotalReenroll > 0 ? 0.05 : 0)
+    const retEnr = Math.round(newTotalReenroll * reenWeight)
+
+    const totalEnr = newEnr + retEnr
+    const vis = newEnr > 0 ? Math.ceil(newEnr / visToEnr) : 0
+    const sch = vis > 0 ? Math.ceil(vis / schToVis) : 0
+    const reg = sch > 0 ? Math.ceil(sch / regToSch) : 0
+    const inv = Math.round(newEnr * cpaBase)
+
+    return {
+      ...m,
+      enrollments_new: newEnr,
+      enrollments_returning: retEnr,
+      enrollments: totalEnr,
+      visits: vis,
+      schedules: sch,
+      registrations: reg,
+      leads_target: reg,
+      investment_suggested: inv,
+      cpa_target: totalEnr > 0 ? Math.round(inv / totalEnr) : 0
+    }
+  })
+
+  updated.summary.total_new_students_target = newTotalNew
+  updated.summary.reenrollment_target = newTotalReenroll
+  updated.total_investment_suggested = updated.monthly_targets.reduce((s, m) => s + m.investment_suggested, 0)
+  updated.total_leads_needed = updated.monthly_targets.reduce((s, m) => s + m.registrations, 0)
+  const totalEnrAll = updated.monthly_targets.reduce((s, m) => s + m.enrollments, 0)
+  updated.average_cpa = totalEnrAll > 0 ? Math.round(updated.total_investment_suggested / totalEnrAll) : 0
+  updated.summary.total_students_end = newTotalNew + newTotalReenroll
+
+  return updated
+}
+
 // ─── Componente principal ────────────────────────────────────────
 export default function CampaignGeneratorModal({
   isOpen, onClose, onApply, existingCycle, institutionId, institutionName,
@@ -169,7 +210,7 @@ export default function CampaignGeneratorModal({
   const [erpFiles, setErpFiles] = useState<ErpFileEntry[]>([])
   const [draftToast, setDraftToast] = useState<string | null>(null)
   const [multiFileProgress, setMultiFileProgress] = useState<string | null>(null)
-  const [ambitiousLevel, setAmbitiousLevel] = useState(1) // 0=conservador,1=realista,2=agressivo
+  const [ambitiousLevel, setAmbitiousLevel] = useState(1)
   const [draftSaved, setDraftSaved] = useState(false)
   const [institutionPrefill, setInstitutionPrefill] = useState<{ city: string; state: string } | null>(null)
   const [loadingMarket, setLoadingMarket] = useState(false)
@@ -194,13 +235,11 @@ export default function CampaignGeneratorModal({
   const MONTH_NAMES_FULL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
   const campaignStartMonth = `${MONTH_NAMES_FULL[_startDate.getMonth()]}/${executionYear}`
   const monthsUntil = Math.max(0, (executionYear - new Date().getFullYear()) * 12 + _startDate.getMonth() - new Date().getMonth())
-
   const DRAFT_KEY = `inscribo_campaign_draft_${institutionId}`
 
   const MARKET_MSGS = [`Consultando dados demográficos de ${schoolData.city || '...'}...`, 'Analisando o mercado de ensino privado na região...', 'Cruzando com dados do Censo Escolar MEC...', 'Quase lá...']
   const GEN_MSGS = [`Analisando o potencial da sua escola em ${schoolData.city || '...'}...`, 'Calculando sazonalidade e taxas de conversão...', 'Definindo metas mensais realistas...', 'Estimando investimento necessário...', 'Preparando seu plano completo...']
 
-  // Pré-preencher cidade/estado da instituição
   useEffect(() => {
     if (!isOpen || !institutionId) return
     ;(async () => {
@@ -208,14 +247,10 @@ export default function CampaignGeneratorModal({
       if (!data) return
       const city = (data.city as string) || ''
       const state = (data.state as string) || ''
-      if (city || state) {
-        setInstitutionPrefill({ city, state })
-        setSchoolData(s => ({ ...s, city: s.city || city, state: s.state || state }))
-      }
+      if (city || state) { setInstitutionPrefill({ city, state }); setSchoolData(s => ({ ...s, city: s.city || city, state: s.state || state })) }
     })()
   }, [isOpen, institutionId])
 
-  // Pré-preencher existingCycle
   useEffect(() => {
     if (existingCycle) {
       setSchoolData(s => ({ ...s, current_students: existingCycle.base_students || 0, ...(existingCycle.start_date ? { start_date: existingCycle.start_date } : {}), ...(existingCycle.end_date ? { end_date: existingCycle.end_date } : {}) }))
@@ -226,10 +261,7 @@ export default function CampaignGeneratorModal({
 
   useEffect(() => { if (!loadingMarket) return; const i = setInterval(() => setMarketMsgIdx(x => (x + 1) % MARKET_MSGS.length), 1500); return () => clearInterval(i) }, [loadingMarket])
   useEffect(() => { if (!loadingGenerate) return; const i = setInterval(() => { setGenMsgIdx(x => Math.min(x + 1, GEN_MSGS.length - 1)); setGenProgress(p => Math.min(p + 18, 92)) }, 2000); return () => clearInterval(i) }, [loadingGenerate])
-
-  useEffect(() => {
-    if (!isOpen) { setStep(1); setError(null); setGeneratedPlan(null); setAdjustedPlan(null); setMarketMsgIdx(0); setGenMsgIdx(0); setGenProgress(0) }
-  }, [isOpen])
+  useEffect(() => { if (!isOpen) { setStep(1); setError(null); setGeneratedPlan(null); setAdjustedPlan(null); setMarketMsgIdx(0); setGenMsgIdx(0); setGenProgress(0) } }, [isOpen])
 
   useEffect(() => {
     if (!isOpen) return
@@ -243,7 +275,6 @@ export default function CampaignGeneratorModal({
     if (openAtStep && openAtStep > 1) setStep(openAtStep)
   }, [isOpen])
 
-  // Carregar rascunho
   useEffect(() => {
     if (!isOpen || !institutionId) return
     if (openAtStep && openAtStep > 1) return
@@ -265,7 +296,6 @@ export default function CampaignGeneratorModal({
         if (data.wizard_step && (data.wizard_step as number) > 1) setStep(Math.min(data.wizard_step as number, 3))
         if (data.status !== 'setup') { setDraftToast('Rascunho encontrado — continuando de onde você parou'); setTimeout(() => setDraftToast(null), 4000) }
       } catch {}
-
       try {
         const { data: setupCycle } = await supabase.from('campaign_cycles').select('school_data, historical_data, erp_files').eq('institution_id', institutionId).eq('status', 'setup').maybeSingle()
         if (setupCycle) {
@@ -280,7 +310,6 @@ export default function CampaignGeneratorModal({
     })()
   }, [isOpen, institutionId])
 
-  // ── Salvar rascunho ───────────────────────────────────────────
   const saveDraft = async () => {
     try {
       await supabase.from('campaign_cycles').upsert({ institution_id: institutionId, year: executionYear, label: `Campanha ${executionYear}`, start_date: schoolData.start_date || `${executionYear}-08-01`, end_date: schoolData.end_date || `${executionYear + 1}-02-28`, target_new_students: adjustedPlan?.summary.total_new_students_target || 0, target_reenrollment_rate: adjustedPlan?.summary.reenrollment_rate_target || 85, base_students: schoolData.current_students || 0, status: 'draft', wizard_step: step, campaign_start_month: campaignStartMonthNum, school_data: { ...schoolData, exits: schoolData.exits ?? {}, total_exits: totalExits }, historical_data: historicalData, market_data: marketData, erp_files: erpFiles }, { onConflict: 'institution_id,year' })
@@ -291,7 +320,6 @@ export default function CampaignGeneratorModal({
     setTimeout(() => setDraftSaved(false), 2500)
   }
 
-  // ── Buscar mercado ────────────────────────────────────────────
   const fetchMarket = useCallback(async () => {
     setLoadingMarket(true); setError(null); setMarketMsgIdx(0)
     try {
@@ -302,7 +330,6 @@ export default function CampaignGeneratorModal({
     } catch (e) { setError((e as Error).message) } finally { setLoadingMarket(false) }
   }, [schoolData.city, schoolData.state])
 
-  // ── Gerar campanha ────────────────────────────────────────────
   const generateCampaign = useCallback(async (overrideTarget?: GrowthTarget) => {
     setLoadingGenerate(true); setGenMsgIdx(0); setGenProgress(5); setError(null)
     try {
@@ -319,7 +346,6 @@ export default function CampaignGeneratorModal({
     } catch (e) { setError((e as Error).message) } finally { setLoadingGenerate(false) }
   }, [schoolData, historicalData, marketData, growthTarget, institutionName])
 
-  // ── Slider de ambição — só escala, não chama IA de novo ──────
   const handleAmbitiousChange = (level: number) => {
     if (!generatedPlan) return
     setAmbitiousLevel(level)
@@ -327,7 +353,13 @@ export default function CampaignGeneratorModal({
     setAdjustedPlan(scalePlan(generatedPlan, factors[level]))
   }
 
-  // ── Upload arquivos ───────────────────────────────────────────
+  const handleManualTargets = (newStudents: number, reenroll: number) => {
+    if (!generatedPlan) return
+    setAdjustedPlan(redistributePlan(generatedPlan, newStudents, reenroll))
+    setAmbitiousLevel(-1) // sem nível selecionado quando edição manual
+  }
+
+  // ── Upload arquivos ── CORREÇÃO: reenrollments = returning_students para SIGA
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     if (!files.length) return
@@ -354,7 +386,16 @@ export default function CampaignGeneratorModal({
         const veterans = (result.returning_students as number) || 0
         const fee = (result.avg_monthly_fee as number | null) || null
         newErpFiles.push({ name: file.name, year: detectedYear, total, novatos, veterans, fee: fee || undefined })
-        if (detectedYear > 2000) newHistoricalData.push({ year: detectedYear, total_students: total || 0, new_enrollments: novatos || 0, reenrollments: (result.reenrollments as number) || (result.returning_students as number) || veterans || 0, transfers: (result.transfers as number) || 0 })
+        if (detectedYear > 2000) {
+          newHistoricalData.push({
+            year: detectedYear,
+            total_students: total || 0,
+            new_enrollments: novatos || 0,
+            // ✅ CORREÇÃO: para o SIGA, returning_students (veteranos) = reenrollments
+            reenrollments: (result.reenrollments as number) || veterans || 0,
+            transfers: (result.transfers as number) || 0
+          })
+        }
         if (fee && !extractedFee) extractedFee = fee
       } catch { newErpFiles.push({ name: file.name, year: 0, total: 0, novatos: 0, veterans: 0, error: true }) }
     }
@@ -366,7 +407,6 @@ export default function CampaignGeneratorModal({
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  // ── Editar célula ─────────────────────────────────────────────
   const updateMonthlyCell = (idx: number, field: keyof MonthlyTarget, value: number) => {
     if (!adjustedPlan) return
     const updated = JSON.parse(JSON.stringify(adjustedPlan)) as GeneratedPlan
@@ -384,7 +424,6 @@ export default function CampaignGeneratorModal({
     setAdjustedPlan(updated)
   }
 
-  // ── Aplicar campanha ──────────────────────────────────────────
   const applyCampaign = async () => {
     if (!adjustedPlan) return
     setApplying(true)
@@ -408,17 +447,13 @@ export default function CampaignGeneratorModal({
         const cm = campaignMonths[mi]
         const period = cm ? cm.period : `${month.year}-${String(month.month).padStart(2, '0')}`
         await supabase.from('funnel_metrics').upsert({ institution_id: institutionId, period, registrations_target: month.registrations, schedules_target: month.schedules, visits_target: month.visits, enrollments_target: month.enrollments, enrollments_new_target: month.enrollments_new ?? 0, enrollments_returning_target: month.enrollments_returning ?? 0, registrations: 0, schedules: 0, visits: 0, enrollments: 0, enrollments_new_actual: 0, enrollments_returning_actual: 0 }, { onConflict: 'period,institution_id', ignoreDuplicates: false })
-
-        // Salvar metas de rematrícula em monthly_reenrollments
         if ((month.enrollments_returning ?? 0) > 0) {
           await supabase.from('monthly_reenrollments').upsert({ institution_id: institutionId, period, target: month.enrollments_returning ?? 0, confirmed: 0, base_total: schoolData.current_students }, { onConflict: 'institution_id,period', ignoreDuplicates: false })
         }
-
         await supabase.from('marketing_campaigns').upsert({ institution_id: institutionId, month_year: cm ? `${cm.month}-${cm.year}` : `${month.month}-${month.year}`, cpa_target: month.cpa_target, investment: 0, leads_generated: 0 }, { onConflict: 'month_year,institution_id', ignoreDuplicates: false })
       }
 
-      await supabase.from('system_notifications').insert({ institution_id: institutionId, type: 'milestone', severity: 'success', title: `Campanha ${executionYear} configurada!`, message: `Suas metas estão ativas. O sistema agora acompanha ${adjustedPlan.summary.total_new_students_target} matrículas novas e ${(adjustedPlan.summary.reenrollment_rate_target * 100).toFixed(0)}% de rematrículas como objetivo.` })
-
+      await supabase.from('system_notifications').insert({ institution_id: institutionId, type: 'milestone', severity: 'success', title: `Campanha ${executionYear} configurada!`, message: `Suas metas estão ativas. ${adjustedPlan.summary.total_new_students_target} matrículas novas e ${adjustedPlan.summary.reenrollment_target} rematrículas como objetivo.` })
       localStorage.removeItem(`inscribo_campaign_draft_${institutionId}`)
       onApply(cycleData)
       if (isMounted.current) { setDraftToast('✅ Campanha aplicada com sucesso!'); setTimeout(() => { if (isMounted.current) setDraftToast(null); onClose() }, 1500) } else onClose()
@@ -430,7 +465,7 @@ export default function CampaignGeneratorModal({
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: step === 5 ? 1100 : 680, maxHeight: '95vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,0.25)' }}>
+      <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: step === 5 ? 1140 : 680, maxHeight: '95vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,0.25)' }}>
 
         {/* Header */}
         <div style={{ padding: '20px 28px 0', flexShrink: 0 }}>
@@ -461,7 +496,6 @@ export default function CampaignGeneratorModal({
               <Check size={14} color="#16a34a" /> {draftToast}
             </div>
           )}
-
           {step === 1 && <StepOne schoolData={schoolData} setSchoolData={setSchoolData} growthTarget={growthTarget} setGrowthTarget={setGrowthTarget} institutionPrefill={institutionPrefill} totalExits={totalExits} />}
           {step === 2 && <StepTwo historyOption={historyOption} setHistoryOption={setHistoryOption} historicalData={historicalData} setHistoricalData={setHistoricalData} loadingFile={loadingFile} multiFileProgress={multiFileProgress} erpFiles={erpFiles} setErpFiles={setErpFiles} fileInputRef={fileInputRef} onFileChange={handleFileChange} />}
           {step === 3 && <StepThree loading={loadingMarket} msgIdx={marketMsgIdx} msgs={MARKET_MSGS} marketData={marketData} city={schoolData.city} error={error} onRetry={fetchMarket} />}
@@ -481,6 +515,7 @@ export default function CampaignGeneratorModal({
               totalExits={totalExits}
               currentStudents={schoolData.current_students}
               onAmbitiousChange={handleAmbitiousChange}
+              onManualTargets={handleManualTargets}
               onUpdateCell={updateMonthlyCell}
               onRegenerate={() => { setStep(4); generateCampaign() }}
             />
@@ -490,11 +525,7 @@ export default function CampaignGeneratorModal({
         {/* Footer */}
         <div style={{ padding: '16px 28px 20px', borderTop: '1px solid #E2E8F0', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#FAFAFA' }}>
           <div>
-            {step > 1 && (
-              <button onClick={() => setStep(s => s - 1)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, color: '#64748B', cursor: 'pointer' }}>
-                <ChevronLeft size={14} /> Voltar
-              </button>
-            )}
+            {step > 1 && <button onClick={() => setStep(s => s - 1)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, color: '#64748B', cursor: 'pointer' }}><ChevronLeft size={14} /> Voltar</button>}
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             {[1,2,3,4,5].map(s => <div key={s} style={{ width: s === step ? 18 : 6, height: 6, borderRadius: 999, background: s === step ? '#00A896' : s < step ? '#0DD3BF' : '#E2E8F0', transition: 'all 0.3s' }} />)}
@@ -538,7 +569,6 @@ export default function CampaignGeneratorModal({
         </div>
       </div>
 
-      {/* Dialog confirmação */}
       {showConfirm && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,23,42,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div style={{ background: '#fff', borderRadius: 16, padding: 28, maxWidth: 440, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
@@ -547,7 +577,7 @@ export default function CampaignGeneratorModal({
               <span style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A' }}>Confirmar aplicação</span>
             </div>
             <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, marginBottom: 20 }}>
-              {isAdjustMode ? <>Uma solicitação de ajuste será enviada ao administrador para aprovação.<br /><br /><strong>Você será notificado quando o ajuste for aprovado.</strong></> : <>Ao aplicar, todo o sistema usará estas metas como referência. Desvios, notificações e análises da IA serão baseados neste plano.<br /><br /><strong>Você pode regerar a qualquer momento.</strong></>}
+              {isAdjustMode ? <>Uma solicitação de ajuste será enviada ao administrador.<br /><br /><strong>Você será notificado quando aprovado.</strong></> : <>Ao aplicar, todo o sistema usará estas metas como referência.<br /><br /><strong>Você pode regerar a qualquer momento.</strong></>}
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button onClick={() => setShowConfirm(false)} style={{ padding: '9px 18px', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#64748B' }}>Cancelar</button>
@@ -575,48 +605,22 @@ function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget, ins
         <input style={{ ...inputStyle, background: '#f8fafc', color: '#94a3b8', cursor: 'not-allowed' }} value={schoolData.name} readOnly />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-        <div>
-          <label style={labelStyle}>Cidade <span style={{ color: '#F43F5E' }}>*</span>{institutionPrefill?.city && <PrefillBadge />}</label>
-          <input style={inputStyle} placeholder="Ex: São Paulo" value={schoolData.city} onChange={e => setSchoolData(s => ({ ...s, city: e.target.value }))} />
-        </div>
-        <div>
-          <label style={labelStyle}>Estado <span style={{ color: '#F43F5E' }}>*</span>{institutionPrefill?.state && <PrefillBadge />}</label>
-          <select style={inputStyle} value={schoolData.state} onChange={e => setSchoolData(s => ({ ...s, state: e.target.value }))}>
-            <option value="">Selecione...</option>
-            {STATES.map(uf => <option key={uf} value={uf}>{uf}</option>)}
-          </select>
-        </div>
+        <div><label style={labelStyle}>Cidade <span style={{ color: '#F43F5E' }}>*</span>{institutionPrefill?.city && <PrefillBadge />}</label><input style={inputStyle} placeholder="Ex: São Paulo" value={schoolData.city} onChange={e => setSchoolData(s => ({ ...s, city: e.target.value }))} /></div>
+        <div><label style={labelStyle}>Estado <span style={{ color: '#F43F5E' }}>*</span>{institutionPrefill?.state && <PrefillBadge />}</label><select style={inputStyle} value={schoolData.state} onChange={e => setSchoolData(s => ({ ...s, state: e.target.value }))}><option value="">Selecione...</option>{STATES.map(uf => <option key={uf} value={uf}>{uf}</option>)}</select></div>
       </div>
       <div style={{ marginBottom: 14 }}>
         <label style={labelStyle}>Séries oferecidas</label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 6 }}>
-          {GRADE_OPTIONS.map(g => {
-            const active = schoolData.grades.includes(g)
-            return <button key={g} onClick={() => setSchoolData(s => ({ ...s, grades: active ? s.grades.filter(x => x !== g) : [...s.grades, g] }))} style={{ padding: '7px 10px', borderRadius: 8, fontSize: 12, cursor: 'pointer', textAlign: 'center', border: active ? '1.5px solid #00A896' : '1px solid #E2E8F0', background: active ? '#E6F7F5' : '#F8FAFC', color: active ? '#00A896' : '#64748B', fontWeight: active ? 600 : 400 }}>{g}</button>
-          })}
+          {GRADE_OPTIONS.map(g => { const active = schoolData.grades.includes(g); return <button key={g} onClick={() => setSchoolData(s => ({ ...s, grades: active ? s.grades.filter(x => x !== g) : [...s.grades, g] }))} style={{ padding: '7px 10px', borderRadius: 8, fontSize: 12, cursor: 'pointer', textAlign: 'center', border: active ? '1.5px solid #00A896' : '1px solid #E2E8F0', background: active ? '#E6F7F5' : '#F8FAFC', color: active ? '#00A896' : '#64748B', fontWeight: active ? 600 : 400 }}>{g}</button> })}
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-        <div>
-          <label style={labelStyle}>Mensalidade média</label>
-          <div style={{ position: 'relative' }}><span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: '#94A3B8' }}>R$</span><input type="number" style={{ ...inputStyle, paddingLeft: 36 }} placeholder="1500" value={schoolData.avg_monthly_fee || ''} onChange={e => setSchoolData(s => ({ ...s, avg_monthly_fee: parseFloat(e.target.value) || 0 }))} /></div>
-        </div>
-        <div>
-          <label style={labelStyle}>Total de alunos atualmente</label>
-          <input type="number" style={inputStyle} placeholder="350" value={schoolData.current_students || ''} onChange={e => setSchoolData(s => ({ ...s, current_students: parseInt(e.target.value) || 0 }))} />
-        </div>
+        <div><label style={labelStyle}>Mensalidade média</label><div style={{ position: 'relative' }}><span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: '#94A3B8' }}>R$</span><input type="number" style={{ ...inputStyle, paddingLeft: 36 }} placeholder="1500" value={schoolData.avg_monthly_fee || ''} onChange={e => setSchoolData(s => ({ ...s, avg_monthly_fee: parseFloat(e.target.value) || 0 }))} /></div></div>
+        <div><label style={labelStyle}>Total de alunos atualmente</label><input type="number" style={inputStyle} placeholder="350" value={schoolData.current_students || ''} onChange={e => setSchoolData(s => ({ ...s, current_students: parseInt(e.target.value) || 0 }))} /></div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
-        <div>
-          <label style={labelStyle}>Data de início da campanha</label>
-          <input type="date" style={inputStyle} value={schoolData.start_date || ''} min={`${thisYear}-01-01`} onChange={e => setSchoolData(prev => ({ ...prev, start_date: e.target.value }))} />
-          <span style={{ fontSize: 11, color: '#94A3B8', marginTop: 4, display: 'block' }}>Quando começa a captação para o ano letivo {schoolData.start_date ? new Date(schoolData.start_date + 'T12:00:00').getFullYear() + 1 : thisYear + 1}</span>
-        </div>
-        <div>
-          <label style={labelStyle}>Data de fim da campanha</label>
-          <input type="date" style={inputStyle} value={schoolData.end_date || ''} onChange={e => setSchoolData(prev => ({ ...prev, end_date: e.target.value }))} />
-          <span style={{ fontSize: 11, color: '#94A3B8', marginTop: 4, display: 'block' }}>Normalmente fevereiro do ano seguinte</span>
-        </div>
+        <div><label style={labelStyle}>Data de início da campanha</label><input type="date" style={inputStyle} value={schoolData.start_date || ''} min={`${thisYear}-01-01`} onChange={e => setSchoolData(prev => ({ ...prev, start_date: e.target.value }))} /><span style={{ fontSize: 11, color: '#94A3B8', marginTop: 4, display: 'block' }}>Quando começa a captação para o ano letivo {schoolData.start_date ? new Date(schoolData.start_date + 'T12:00:00').getFullYear() + 1 : thisYear + 1}</span></div>
+        <div><label style={labelStyle}>Data de fim da campanha</label><input type="date" style={inputStyle} value={schoolData.end_date || ''} onChange={e => setSchoolData(prev => ({ ...prev, end_date: e.target.value }))} /><span style={{ fontSize: 11, color: '#94A3B8', marginTop: 4, display: 'block' }}>Normalmente fevereiro do ano seguinte</span></div>
       </div>
       <div>
         <label style={labelStyle}>Objetivo de crescimento <span style={{ fontSize: 11, color: '#94A3B8', fontWeight: 400 }}>— intenção do gestor, a IA analisa criticamente</span></label>
@@ -637,7 +641,7 @@ function StepOne({ schoolData, setSchoolData, growthTarget, setGrowthTarget, ins
       {schoolData.grades.length > 0 && (
         <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #E2E8F0' }}>
           <label style={{ ...labelStyle, fontSize: 13, marginBottom: 2 }}>Movimentação esperada este ciclo</label>
-          <p style={{ fontSize: 12, color: '#94A3B8', margin: '0 0 14px' }}>Quantos alunos vão concluir e sair este ano (formandos). Ajuda a IA a calcular a meta real de novatos.</p>
+          <p style={{ fontSize: 12, color: '#94A3B8', margin: '0 0 14px' }}>Quantos alunos vão concluir e sair este ano (formandos).</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {schoolData.grades.map(grade => (
               <div key={grade} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -660,9 +664,9 @@ function StepTwo({ historyOption, setHistoryOption, historicalData, setHistorica
   return (
     <div style={{ paddingBottom: 24 }}>
       <h2 style={{ fontSize: 22, fontWeight: 800, color: '#1A2B4A', marginBottom: 6 }}>Você tem dados dos anos anteriores?</h2>
-      <p style={{ fontSize: 14, color: '#64748B', marginBottom: 20 }}>Esses dados tornam as metas muito mais precisas e calculam a sazonalidade real da sua escola.</p>
+      <p style={{ fontSize: 14, color: '#64748B', marginBottom: 20 }}>Esses dados calculam a sazonalidade real e a taxa de retenção da sua escola.</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-        {([{ key: 'upload', icon: '📂', label: 'Sim, tenho dados — vou subir agora', sub: 'Aceita CSV, Excel ou PDF do seu sistema' }, { key: 'partial', icon: '📊', label: 'Tenho dados parciais (1 ano apenas)', sub: 'Preencha manualmente abaixo' }, { key: 'none', icon: '🆕', label: 'Não tenho / é o primeiro ano no sistema', sub: 'A IA usará benchmarks do setor' }] as const).map(opt => {
+        {([{ key: 'upload', icon: '📂', label: 'Sim, tenho dados — vou subir agora', sub: 'Aceita CSV, Excel ou PDF do SIGA e outros ERPs' }, { key: 'partial', icon: '📊', label: 'Tenho dados parciais (1 ano apenas)', sub: 'Preencha manualmente abaixo' }, { key: 'none', icon: '🆕', label: 'Não tenho / é o primeiro ano no sistema', sub: 'A IA usará benchmarks do setor' }] as const).map(opt => {
           const active = historyOption === opt.key
           return <div key={opt.key} onClick={() => setHistoryOption(opt.key)} style={{ padding: '14px 18px', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, border: active ? '2px solid #00A896' : '1.5px solid #E2E8F0', background: active ? '#E6F7F5' : '#F8FAFC' }}>
             <span style={{ fontSize: 22 }}>{opt.icon}</span>
@@ -682,7 +686,7 @@ function StepTwo({ historyOption, setHistoryOption, historicalData, setHistorica
                       <span style={{ fontSize: 16 }}>{f.error ? '⚠️' : '✅'}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: f.error ? '#991b1b' : '#166534', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
-                        {!f.error && f.year > 0 && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{f.year} · {f.total > 0 ? `${f.total} alunos` : ''}{f.novatos > 0 ? ` · ${f.novatos} novatos` : ''}{f.fee ? ` · R$${f.fee.toLocaleString('pt-BR')}/mês` : ''}</div>}
+                        {!f.error && f.year > 0 && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{f.year} · {f.total > 0 ? `${f.total} alunos` : ''}{f.novatos > 0 ? ` · ${f.novatos} novatos` : ''}{f.veterans > 0 ? ` · ${f.veterans} veteranos` : ''}{f.fee ? ` · R$${f.fee.toLocaleString('pt-BR')}/mês` : ''}</div>}
                         {f.error && <div style={{ fontSize: 11, color: '#991b1b', marginTop: 2 }}>Não foi possível ler — verifique se é um relatório do ERP</div>}
                       </div>
                       <button onClick={() => setErpFiles(prev => prev.filter((_, fi) => fi !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}>✕</button>
@@ -691,23 +695,26 @@ function StepTwo({ historyOption, setHistoryOption, historicalData, setHistorica
                 </div>
               )}
               <div onClick={() => !loadingFile && fileInputRef.current?.click()} style={{ border: '2px dashed #CBD5E1', borderRadius: 12, padding: 24, textAlign: 'center', cursor: loadingFile ? 'default' : 'pointer', background: '#F8FAFC' }} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); if (!loadingFile) { const dt = new DataTransfer(); Array.from(e.dataTransfer.files).forEach(f => dt.items.add(f)); if (fileInputRef.current) { fileInputRef.current.files = dt.files; onFileChange({ target: fileInputRef.current } as React.ChangeEvent<HTMLInputElement>) } } }}>
-                {loadingFile ? <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}><Loader2 size={24} color="#00A896" className="animate-spin" /><span style={{ fontSize: 13, color: '#64748B' }}>{multiFileProgress || 'Processando...'}</span></div> : <><Upload size={22} color="#94A3B8" style={{ margin: '0 auto 8px' }} /><p style={{ fontSize: 14, color: '#475569', fontWeight: 500, margin: '0 0 4px' }}>{erpFiles.length > 0 ? 'Adicionar mais arquivos' : 'Arraste ou clique para selecionar'}</p><p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Até 5 arquivos — CSV, Excel ou PDF · Aceita relatórios SIGA, Totvs e outros ERPs</p></>}
+                {loadingFile ? <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}><Loader2 size={24} color="#00A896" className="animate-spin" /><span style={{ fontSize: 13, color: '#64748B' }}>{multiFileProgress || 'Processando...'}</span></div> : <><Upload size={22} color="#94A3B8" style={{ margin: '0 auto 8px' }} /><p style={{ fontSize: 14, color: '#475569', fontWeight: 500, margin: '0 0 4px' }}>{erpFiles.length > 0 ? 'Adicionar mais arquivos' : 'Arraste ou clique para selecionar'}</p><p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Até 5 arquivos — CSV, Excel ou PDF · SIGA, Totvs e outros ERPs</p></>}
               </div>
               <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls,.pdf" multiple style={{ display: 'none' }} onChange={onFileChange} />
             </div>
           )}
           <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: 16, marginBottom: 10 }}>
             <div style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', marginBottom: 14 }}>ou preencha manualmente</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr 1fr 1fr', gap: 8, marginBottom: 6 }}>
+              {['Ano','Alunos','Novatos','Rematrículas','Transferências'].map(h => <span key={h} style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, textAlign: 'center' }}>{h}</span>)}
+            </div>
             {historicalData.map((row, i) => (
               <div key={i} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr 1fr 1fr', gap: 8, marginBottom: 8, alignItems: 'center' }}>
                 <input type="number" placeholder="Ano" style={smallInput} value={row.year || ''} onChange={e => setHistoricalData(d => d.map((r, ri) => ri === i ? { ...r, year: parseInt(e.target.value) || 0 } : r))} />
-                <input type="number" placeholder="Alunos" style={smallInput} value={row.total_students || ''} onChange={e => setHistoricalData(d => d.map((r, ri) => ri === i ? { ...r, total_students: parseInt(e.target.value) || 0 } : r))} />
-                <input type="number" placeholder="Novas matrículas" style={smallInput} value={row.new_enrollments || ''} onChange={e => setHistoricalData(d => d.map((r, ri) => ri === i ? { ...r, new_enrollments: parseInt(e.target.value) || 0 } : r))} />
-                <input type="number" placeholder="Rematrículas" style={smallInput} value={row.reenrollments || ''} onChange={e => setHistoricalData(d => d.map((r, ri) => ri === i ? { ...r, reenrollments: parseInt(e.target.value) || 0 } : r))} />
-                <input type="number" placeholder="Transferências" style={smallInput} value={row.transfers || ''} onChange={e => setHistoricalData(d => d.map((r, ri) => ri === i ? { ...r, transfers: parseInt(e.target.value) || 0 } : r))} />
+                <input type="number" placeholder="Ex: 956" style={smallInput} value={row.total_students || ''} onChange={e => setHistoricalData(d => d.map((r, ri) => ri === i ? { ...r, total_students: parseInt(e.target.value) || 0 } : r))} />
+                <input type="number" placeholder="Ex: 116" style={smallInput} value={row.new_enrollments || ''} onChange={e => setHistoricalData(d => d.map((r, ri) => ri === i ? { ...r, new_enrollments: parseInt(e.target.value) || 0 } : r))} />
+                <input type="number" placeholder="Ex: 840" style={smallInput} value={row.reenrollments || ''} onChange={e => setHistoricalData(d => d.map((r, ri) => ri === i ? { ...r, reenrollments: parseInt(e.target.value) || 0 } : r))} />
+                <input type="number" placeholder="Ex: 0" style={smallInput} value={row.transfers || ''} onChange={e => setHistoricalData(d => d.map((r, ri) => ri === i ? { ...r, transfers: parseInt(e.target.value) || 0 } : r))} />
               </div>
             ))}
-            {historicalData.length < 3 && <button onClick={addYear} style={{ fontSize: 13, color: '#00A896', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0', display: 'flex', alignItems: 'center', gap: 6 }}>+ Adicionar ano</button>}
+            {historicalData.length < 5 && <button onClick={addYear} style={{ fontSize: 13, color: '#00A896', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0', display: 'flex', alignItems: 'center', gap: 6 }}>+ Adicionar ano</button>}
           </div>
         </>
       )}
@@ -753,33 +760,40 @@ function StepFour({ loading, msgIdx, msgs, progress, error, onRetry }: { loading
   )
 }
 
-// ─── Passo 5 — MELHORADO ─────────────────────────────────────────
-function StepFive({ plan, basePlan, ambitiousLevel, monthsUntilCampaign, campaignStartMonth, campaignYear, executionYear, startDate, endDate, erpFiles, totalExits, currentStudents, onAmbitiousChange, onUpdateCell, onRegenerate }: {
+// ─── Passo 5 ─────────────────────────────────────────────────────
+function StepFive({ plan, basePlan, ambitiousLevel, monthsUntilCampaign, campaignStartMonth, campaignYear, executionYear, startDate, endDate, erpFiles, totalExits, currentStudents, onAmbitiousChange, onManualTargets, onUpdateCell, onRegenerate }: {
   plan: GeneratedPlan; basePlan: GeneratedPlan; ambitiousLevel: number
   monthsUntilCampaign: number; campaignStartMonth: string; campaignYear: number; executionYear: number
-  startDate: string; endDate: string
-  erpFiles: ErpFileEntry[]; totalExits: number; currentStudents: number
+  startDate: string; endDate: string; erpFiles: ErpFileEntry[]; totalExits: number; currentStudents: number
   onAmbitiousChange: (level: number) => void
+  onManualTargets: (newStudents: number, reenroll: number) => void
   onUpdateCell: (idx: number, field: keyof MonthlyTarget, value: number) => void
   onRegenerate?: () => void
 }) {
   const [activeView, setActiveView] = useState<'novatos' | 'rematriculas'>('novatos')
+  const [manualNew, setManualNew] = useState(plan.summary.total_new_students_target)
+  const [manualReenroll, setManualReenroll] = useState(plan.summary.reenrollment_target)
+  const [showManual, setShowManual] = useState(false)
+
+  // Sincronizar inputs manuais quando o plano muda externamente (slider)
+  useEffect(() => {
+    setManualNew(plan.summary.total_new_students_target)
+    setManualReenroll(plan.summary.reenrollment_target)
+  }, [plan.summary.total_new_students_target, plan.summary.reenrollment_target])
 
   const realismMap = { conservative: { label: 'Meta Conservadora', bg: '#EFF6FF', color: '#1D4ED8' }, realistic: { label: 'Meta Realista', bg: '#ECFDF5', color: '#065F46' }, aggressive: { label: 'Meta Agressiva', bg: '#FFF7ED', color: '#9A3412' } }
   const realism = realismMap[plan.summary.realism_score] || realismMap.realistic
-
   const campaignMonths = getCampaignMonths(startDate, endDate)
-
-  // Calcular % acumulado de rematrícula mês a mês
   const reenrollTarget = plan.summary.reenrollment_target || 0
   const eligibleBase = Math.max(1, currentStudents - totalExits)
+
+  // Rematrícula acumulada
   let accReenroll = 0
   const reenrollRows = plan.monthly_targets.map((m, i) => {
     const monthReenroll = m.enrollments_returning ?? 0
     accReenroll += monthReenroll
     const pctAcum = reenrollTarget > 0 ? (accReenroll / reenrollTarget) * 100 : 0
-    const metaAcum = accReenroll // meta acumulada em volume
-    return { label: campaignMonths[i]?.label ?? `${m.month}/${m.year}`, monthReenroll, accReenroll, pctAcum, metaAcum, target: m.enrollments_returning ?? 0 }
+    return { label: campaignMonths[i]?.label ?? `${m.month}/${m.year}`, monthNum: campaignMonths[i]?.month ?? 0, monthReenroll, accReenroll, pctAcum, target: m.enrollments_returning ?? 0 }
   })
 
   const totals = plan.monthly_targets.reduce((acc, m) => ({ registrations: acc.registrations + m.registrations, schedules: acc.schedules + m.schedules, visits: acc.visits + m.visits, enrollments: acc.enrollments + m.enrollments, investment_suggested: acc.investment_suggested + m.investment_suggested, enrollments_new: acc.enrollments_new + (m.enrollments_new ?? 0), enrollments_returning: acc.enrollments_returning + (m.enrollments_returning ?? 0) }), { registrations: 0, schedules: 0, visits: 0, enrollments: 0, investment_suggested: 0, enrollments_new: 0, enrollments_returning: 0 })
@@ -788,23 +802,103 @@ function StepFive({ plan, basePlan, ambitiousLevel, monthsUntilCampaign, campaig
     <div style={{ paddingBottom: 24 }}>
       <div style={{ display: 'flex', gap: 20 }}>
 
-        {/* ── Coluna esquerda ──────────────────────────────────── */}
+        {/* ── Coluna esquerda ── */}
         <div style={{ width: '34%', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'inline-block', padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: realism.bg, color: realism.color }}>{realism.label}</div>
 
-          {/* KPIs */}
+          {/* KPIs resumo */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <KpiCard label="Alunos novos" value={plan.summary.total_new_students_target} unit="alunos" color="#00A896" />
-            <KpiCard label="Meta rematrícula" value={reenrollTarget} unit="alunos" color="#3B82F6" />
+            <KpiCard label="Rematrículas" value={reenrollTarget} unit="alunos" color="#3B82F6" />
             <KpiCard label="Investimento" value={`R$ ${plan.total_investment_suggested.toLocaleString('pt-BR')}`} unit="" color="#8B5CF6" raw />
             <KpiCard label="CPA médio" value={`R$ ${plan.average_cpa.toLocaleString('pt-BR')}`} unit="" color="#F59E0B" raw />
           </div>
 
-          {/* Slider de ambição */}
+          {/* ── PAINEL DE AJUSTE MANUAL ── */}
+          <div style={{ background: showManual ? '#F0FDF4' : '#F8FAFC', borderRadius: 12, border: `1px solid ${showManual ? '#BBF7D0' : '#E2E8F0'}`, overflow: 'hidden' }}>
+            <button
+              onClick={() => setShowManual(v => !v)}
+              style={{ width: '100%', padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Edit3 size={14} color={showManual ? '#16a34a' : '#64748B'} />
+                <span style={{ fontSize: 12, fontWeight: 600, color: showManual ? '#16a34a' : '#475569' }}>Ajustar metas manualmente</span>
+              </div>
+              <span style={{ fontSize: 11, color: '#94A3B8' }}>{showManual ? '▲' : '▼'}</span>
+            </button>
+
+            {showManual && (
+              <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <p style={{ fontSize: 11, color: '#64748B', margin: 0, lineHeight: 1.5 }}>
+                  Defina os totais do ciclo e o sistema redistribui automaticamente pelos meses.
+                </p>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: '#475569', marginBottom: 4, display: 'block' }}>
+                    Alunos novos (meta total do ciclo)
+                  </label>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      min={0}
+                      value={manualNew}
+                      onChange={e => setManualNew(parseInt(e.target.value) || 0)}
+                      style={{ flex: 1, height: 36, padding: '0 10px', borderRadius: 8, border: '1.5px solid #BBF7D0', fontSize: 13, background: '#fff', outline: 'none', fontWeight: 600, color: '#00A896' }}
+                    />
+                    <span style={{ fontSize: 11, color: '#94A3B8', flexShrink: 0 }}>alunos</span>
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: '#475569', marginBottom: 4, display: 'block' }}>
+                    Rematrículas (meta total do ciclo)
+                  </label>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      min={0}
+                      value={manualReenroll}
+                      onChange={e => setManualReenroll(parseInt(e.target.value) || 0)}
+                      style={{ flex: 1, height: 36, padding: '0 10px', borderRadius: 8, border: '1.5px solid #BFDBFE', fontSize: 13, background: '#fff', outline: 'none', fontWeight: 600, color: '#3B82F6' }}
+                    />
+                    <span style={{ fontSize: 11, color: '#94A3B8', flexShrink: 0 }}>alunos</span>
+                  </div>
+                </div>
+
+                {/* Sugestões da IA */}
+                {basePlan && (
+                  <div style={{ background: '#fff', borderRadius: 8, padding: 10, border: '1px solid #E2E8F0' }}>
+                    <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 8px' }}>Sugestões da IA</p>
+                    {[
+                      { label: '🛡️ Conservador', new: Math.round(basePlan.summary.total_new_students_target * 0.75), reen: Math.round(basePlan.summary.reenrollment_target * 0.75), color: '#1D4ED8' },
+                      { label: '🎯 Realista', new: basePlan.summary.total_new_students_target, reen: basePlan.summary.reenrollment_target, color: '#065F46' },
+                      { label: '🚀 Agressivo', new: Math.round(basePlan.summary.total_new_students_target * 1.3), reen: Math.round(basePlan.summary.reenrollment_target * 1.3), color: '#9A3412' },
+                    ].map(s => (
+                      <button
+                        key={s.label}
+                        onClick={() => { setManualNew(s.new); setManualReenroll(s.reen); onManualTargets(s.new, s.reen) }}
+                        style={{ width: '100%', marginBottom: 6, padding: '7px 10px', borderRadius: 7, border: '1px solid #E2E8F0', background: '#F8FAFC', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                      >
+                        <span style={{ fontSize: 11, fontWeight: 600, color: s.color }}>{s.label}</span>
+                        <span style={{ fontSize: 10, color: '#64748B' }}>{s.new} novos · {s.reen} remat.</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  onClick={() => onManualTargets(manualNew, manualReenroll)}
+                  style={{ padding: '9px 0', borderRadius: 9, background: '#00A896', color: '#fff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                >
+                  <RefreshCw size={12} /> Redistribuir pelos meses
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Slider ambição */}
           <div style={{ background: '#F8FAFC', borderRadius: 12, padding: 14, border: '1px solid #E2E8F0' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
               <SlidersHorizontal size={14} color="#64748B" />
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>Nível de ambição</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>Ou ajuste por nível</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
               {[{ level: 0, label: 'Conservador', icon: '🛡️', desc: '−25%' }, { level: 1, label: 'Realista', icon: '🎯', desc: 'IA sugeriu' }, { level: 2, label: 'Agressivo', icon: '🚀', desc: '+30%' }].map(opt => (
@@ -815,48 +909,53 @@ function StepFive({ plan, basePlan, ambitiousLevel, monthsUntilCampaign, campaig
                 </button>
               ))}
             </div>
-            <p style={{ fontSize: 10, color: '#94A3B8', marginTop: 8, textAlign: 'center' }}>Ajusta proporcionalmente todas as metas sem rechamar a IA</p>
+            <p style={{ fontSize: 10, color: '#94A3B8', marginTop: 8, textAlign: 'center' }}>Escala todas as metas proporcionalmente</p>
           </div>
 
           {/* Movimentação */}
-          {totalExits > 0 && (
+          {(totalExits > 0 || eligibleBase > 0) && (
             <div style={{ background: '#F0FDF4', borderRadius: 10, padding: '10px 14px', border: '1px solid #BBF7D0' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#065F46', marginBottom: 6 }}>Movimentação do ciclo</div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#374151', marginBottom: 4 }}><span style={{ color: '#64748B' }}>Saídas naturais (formandos)</span><span style={{ fontWeight: 600 }}>{totalExits}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#374151' }}><span style={{ color: '#64748B' }}>Elegíveis para rematrícula</span><span style={{ fontWeight: 600 }}>{eligibleBase}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#374151', marginBottom: 4 }}><span style={{ color: '#64748B' }}>Saídas naturais</span><span style={{ fontWeight: 600 }}>{totalExits}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#374151' }}><span style={{ color: '#64748B' }}>Elegíveis rematrícula</span><span style={{ fontWeight: 600 }}>{eligibleBase}</span></div>
             </div>
           )}
 
-          {/* Reasoning IA */}
+          {/* Análise da IA */}
           <div style={{ background: '#EFF6FF', borderRadius: 12, padding: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}><Sparkles size={14} color="#3B82F6" /><span style={{ fontSize: 12, fontWeight: 700, color: '#1D4ED8' }}>Análise da IA</span></div>
             <p style={{ fontSize: 11, color: '#1E40AF', lineHeight: 1.65, margin: 0 }}>{plan.summary.reasoning}</p>
           </div>
 
           {/* Histórico */}
-          {erpFiles.filter(f => !f.error && f.year > 0).length >= 2 && (() => {
+          {erpFiles.filter(f => !f.error && f.year > 0).length >= 1 && (() => {
             const valid = erpFiles.filter(f => !f.error && f.year > 0).sort((a, b) => a.year - b.year)
-            const last = valid[valid.length - 1]; const prev = valid[valid.length - 2]
-            const novDiff = prev.novatos > 0 ? Math.round((last.novatos - prev.novatos) / prev.novatos * 100) : 0
+            const last = valid[valid.length - 1]
+            const prev = valid[valid.length - 2]
+            const novDiff = prev && prev.novatos > 0 ? Math.round((last.novatos - prev.novatos) / prev.novatos * 100) : null
             return (
               <div style={{ background: '#F5F3FF', borderRadius: 10, padding: 12 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#5B21B6', marginBottom: 8 }}>Histórico importado</div>
-                {valid.map((f, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#4C1D95', marginBottom: 4 }}><span style={{ fontWeight: 600 }}>{f.year}</span><span>{f.total > 0 ? `${f.total} alunos` : '—'} · {f.novatos > 0 ? `${f.novatos} novatos` : '—'}</span></div>)}
-                {novDiff !== 0 && <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #DDD6FE', fontSize: 11, color: '#6D28D9', fontStyle: 'italic' }}>{novDiff < -20 ? `⚠ Novatos caíram ${Math.abs(novDiff)}% de ${prev.year} para ${last.year}` : novDiff > 10 ? `✓ Novatos cresceram ${novDiff}% de ${prev.year} para ${last.year}` : `Novatos estáveis entre ${prev.year} e ${last.year}`}</div>}
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#5B21B6', marginBottom: 8 }}>Histórico SIGA importado</div>
+                {valid.map((f, i) => {
+                  const retention = f.total > 0 ? ((f.veterans / f.total) * 100).toFixed(1) : '—'
+                  return <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#4C1D95', marginBottom: 4 }}>
+                    <span style={{ fontWeight: 600 }}>{f.year}</span>
+                    <span>{f.total} alunos · {f.novatos} novatos · {f.veterans} vet. · {retention}% retenção</span>
+                  </div>
+                })}
+                {novDiff !== null && <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #DDD6FE', fontSize: 11, color: '#6D28D9', fontStyle: 'italic' }}>{novDiff < -20 ? `⚠ Novatos caíram ${Math.abs(novDiff)}% de ${prev.year} para ${last.year}` : novDiff > 10 ? `✓ Novatos cresceram ${novDiff}%` : `Novatos estáveis`}</div>}
               </div>
             )
           })()}
 
-          {/* Riscos e ações */}
           {plan.key_risks?.length > 0 && <div><div style={{ fontSize: 12, fontWeight: 700, color: '#92400E', marginBottom: 6 }}>Riscos identificados</div>{plan.key_risks.map((r, i) => <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 4, alignItems: 'flex-start' }}><AlertTriangle size={12} color="#F59E0B" style={{ marginTop: 2, flexShrink: 0 }} /><span style={{ fontSize: 11, color: '#78350F', lineHeight: 1.5 }}>{r}</span></div>)}</div>}
           {plan.key_actions?.length > 0 && <div><div style={{ fontSize: 12, fontWeight: 700, color: '#065F46', marginBottom: 6 }}>Ações prioritárias</div>{plan.key_actions.map((a, i) => <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 4, alignItems: 'flex-start' }}><Check size={12} color="#00A896" style={{ marginTop: 2, flexShrink: 0 }} /><span style={{ fontSize: 11, color: '#047857', lineHeight: 1.5 }}>{a}</span></div>)}</div>}
           {plan.recalibration_note && <p style={{ fontSize: 10, color: '#94A3B8', lineHeight: 1.55 }}>📅 {plan.recalibration_note}</p>}
         </div>
 
-        {/* ── Coluna direita ───────────────────────────────────── */}
+        {/* ── Coluna direita ── */}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Pre-campaign */}
           {plan.pre_campaign && monthsUntilCampaign > 0 && (
             <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: '14px 16px' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#92400E', marginBottom: 4 }}>Antes da campanha — {plan.pre_campaign.period}</div>
@@ -866,7 +965,7 @@ function StepFive({ plan, basePlan, ambitiousLevel, monthsUntilCampaign, campaig
             </div>
           )}
 
-          {/* Tabs novatos / rematrícula */}
+          {/* Tabs */}
           <div style={{ display: 'flex', gap: 4, background: '#F8FAFC', borderRadius: 10, padding: 4, border: '1px solid #E2E8F0' }}>
             {[{ key: 'novatos', label: '📋 Plano de Captação' }, { key: 'rematriculas', label: '🔄 Plano de Rematrícula' }].map(tab => (
               <button key={tab.key} onClick={() => setActiveView(tab.key as 'novatos' | 'rematriculas')} style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: activeView === tab.key ? '#fff' : 'transparent', color: activeView === tab.key ? '#00A896' : '#64748B', boxShadow: activeView === tab.key ? '0 1px 4px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.2s' }}>
@@ -875,12 +974,12 @@ function StepFive({ plan, basePlan, ambitiousLevel, monthsUntilCampaign, campaig
             ))}
           </div>
 
-          {/* ── Tabela Captação de Novatos ── */}
+          {/* Tabela Captação */}
           {activeView === 'novatos' && (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>Plano de campanha — Ano letivo {campaignYear}</span>
-                {onRegenerate && <button onClick={onRegenerate} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}><RefreshCw size={11} /> Recalcular</button>}
+                {onRegenerate && <button onClick={onRegenerate} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}><RefreshCw size={11} /> Recalcular com IA</button>}
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -898,16 +997,10 @@ function StepFive({ plan, basePlan, ambitiousLevel, monthsUntilCampaign, campaig
                         <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
                           <td style={{ padding: '6px 8px', fontWeight: 600, color: '#1A2B4A', whiteSpace: 'nowrap', fontSize: 11 }}>{monthLabel}</td>
                           {(['registrations', 'schedules', 'visits'] as const).map(field => <td key={field} style={{ padding: '3px 4px', textAlign: 'center' }}><input type="number" style={{ width: 52, padding: '3px 4px', borderRadius: 5, border: '1px solid #E2E8F0', textAlign: 'center', fontSize: 11, outline: 'none', background: '#F8FAFC' }} value={m[field] || 0} onChange={e => onUpdateCell(i, field, parseFloat(e.target.value) || 0)} /></td>)}
-                          <td style={{ padding: '3px 4px', textAlign: 'center' }}>
-                            <input type="number" style={{ width: 52, padding: '3px 4px', borderRadius: 5, border: '1px solid #bfdbfe', textAlign: 'center', fontSize: 11, outline: 'none', background: '#eff6ff' }} value={m.enrollments_new ?? 0} onChange={e => onUpdateCell(i, 'enrollments_new', parseFloat(e.target.value) || 0)} />
-                          </td>
-                          <td style={{ padding: '3px 4px', textAlign: 'center' }}>
-                            <input type="number" style={{ width: 52, padding: '3px 4px', borderRadius: 5, border: '1px solid #bbf7d0', textAlign: 'center', fontSize: 11, outline: 'none', background: '#f0fdf4' }} value={m.enrollments_returning ?? 0} onChange={e => onUpdateCell(i, 'enrollments_returning', parseFloat(e.target.value) || 0)} />
-                          </td>
+                          <td style={{ padding: '3px 4px', textAlign: 'center' }}><input type="number" style={{ width: 52, padding: '3px 4px', borderRadius: 5, border: '1px solid #bfdbfe', textAlign: 'center', fontSize: 11, outline: 'none', background: '#eff6ff' }} value={m.enrollments_new ?? 0} onChange={e => onUpdateCell(i, 'enrollments_new', parseFloat(e.target.value) || 0)} /></td>
+                          <td style={{ padding: '3px 4px', textAlign: 'center' }}><input type="number" style={{ width: 52, padding: '3px 4px', borderRadius: 5, border: '1px solid #bbf7d0', textAlign: 'center', fontSize: 11, outline: 'none', background: '#f0fdf4' }} value={m.enrollments_returning ?? 0} onChange={e => onUpdateCell(i, 'enrollments_returning', parseFloat(e.target.value) || 0)} /></td>
                           <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700, color: '#0d9488', fontSize: 11 }}>{totalEnroll}</td>
-                          <td style={{ padding: '3px 4px', textAlign: 'center' }}>
-                            <input type="number" style={{ width: 60, padding: '3px 4px', borderRadius: 5, border: '1px solid #E2E8F0', textAlign: 'center', fontSize: 11, outline: 'none', background: '#F8FAFC' }} value={m.investment_suggested || 0} onChange={e => onUpdateCell(i, 'investment_suggested', parseFloat(e.target.value) || 0)} />
-                          </td>
+                          <td style={{ padding: '3px 4px', textAlign: 'center' }}><input type="number" style={{ width: 60, padding: '3px 4px', borderRadius: 5, border: '1px solid #E2E8F0', textAlign: 'center', fontSize: 11, outline: 'none', background: '#F8FAFC' }} value={m.investment_suggested || 0} onChange={e => onUpdateCell(i, 'investment_suggested', parseFloat(e.target.value) || 0)} /></td>
                           <td style={{ padding: '6px 8px', textAlign: 'center', color: '#64748B', fontSize: 11 }}>{cpa > 0 ? cpa.toLocaleString('pt-BR') : '—'}</td>
                         </tr>
                       )
@@ -929,57 +1022,47 @@ function StepFive({ plan, basePlan, ambitiousLevel, monthsUntilCampaign, campaig
             </div>
           )}
 
-          {/* ── Tabela Rematrícula Acumulada (modelo Colégio Ágape) ── */}
+          {/* Tabela Rematrícula Acumulada */}
           {activeView === 'rematriculas' && (
             <div>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>Plano de Rematrícula — Acumulado</span>
-                  <span style={{ fontSize: 11, color: '#94A3B8' }}>Base elegível: {eligibleBase} alunos · Meta: {reenrollTarget} rematrículas</span>
-                </div>
-                <div style={{ fontSize: 12, color: '#64748B', marginBottom: 12 }}>
-                  Acompanhamento progressivo — cada mês mostra o acumulado até ali, como no modelo do Colégio Ágape.
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>Plano de Rematrícula — Acumulado</span>
+                <span style={{ fontSize: 11, color: '#94A3B8' }}>Base elegível: {eligibleBase} · Meta: {reenrollTarget}</span>
               </div>
-
+              <p style={{ fontSize: 12, color: '#64748B', marginBottom: 12 }}>Acompanhamento progressivo mês a mês — modelo Colégio Ágape.</p>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC' }}>
-                      {['Período', '% Remat. Acum.', 'Meta Acum.', 'No mês', 'Diferença Vol.'].map(h => <th key={h} style={{ padding: '9px 12px', textAlign: h === 'Período' ? 'left' : 'center', fontSize: 11, fontWeight: 700, color: '#64748B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{h}</th>)}
+                      {['Período', '% Acumulado', 'Meta Acum.', 'No mês', 'Desvio Vol.'].map(h => <th key={h} style={{ padding: '9px 12px', textAlign: h === 'Período' ? 'left' : 'center', fontSize: 11, fontWeight: 700, color: '#64748B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{h}</th>)}
                     </tr>
                   </thead>
                   <tbody>
                     {reenrollRows.map((row, i) => {
                       const isZero = row.monthReenroll === 0
                       const pctColor = row.pctAcum >= 80 ? '#16a34a' : row.pctAcum >= 40 ? '#f59e0b' : row.pctAcum > 0 ? '#3b82f6' : '#94a3b8'
-                      const desvioVol = row.accReenroll - row.metaAcum
+                      const desvioVol = row.accReenroll - row.accReenroll // self = 0, placeholder
                       return (
                         <tr key={i} style={{ borderBottom: '1px solid #F8FAFC', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
                           <td style={{ padding: '9px 12px', fontWeight: 600, color: '#1A2B4A' }}>{row.label}</td>
                           <td style={{ padding: '9px 12px', textAlign: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
                               <div style={{ width: 60, height: 6, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${Math.min(100, row.pctAcum)}%`, background: pctColor, borderRadius: 999, transition: 'width 0.5s ease' }} />
+                                <div style={{ height: '100%', width: `${Math.min(100, row.pctAcum)}%`, background: pctColor, borderRadius: 999 }} />
                               </div>
-                              <span style={{ fontWeight: 700, color: pctColor, fontSize: 12, minWidth: 40 }}>{row.pctAcum.toFixed(1)}%</span>
+                              <span style={{ fontWeight: 700, color: pctColor, fontSize: 12, minWidth: 42 }}>{row.pctAcum.toFixed(1)}%</span>
                             </div>
                           </td>
                           <td style={{ padding: '9px 12px', textAlign: 'center', color: '#94A3B8', fontWeight: 500 }}>{row.accReenroll}</td>
                           <td style={{ padding: '9px 12px', textAlign: 'center' }}>
-                            {isZero
-                              ? <span style={{ color: '#94A3B8', fontSize: 11 }}>—</span>
-                              : <span style={{ fontWeight: 700, color: '#00A896', background: '#E6F7F5', padding: '2px 10px', borderRadius: 999, fontSize: 11 }}>{row.monthReenroll}</span>}
+                            {isZero ? <span style={{ color: '#94A3B8', fontSize: 11 }}>—</span> : <span style={{ fontWeight: 700, color: '#00A896', background: '#E6F7F5', padding: '2px 10px', borderRadius: 999, fontSize: 11 }}>{row.monthReenroll}</span>}
                           </td>
                           <td style={{ padding: '9px 12px', textAlign: 'center' }}>
-                            {row.accReenroll === 0
-                              ? <span style={{ color: '#94A3B8' }}>—</span>
-                              : <span style={{ fontWeight: 700, color: desvioVol >= 0 ? '#16a34a' : '#dc2626', fontSize: 11 }}>{desvioVol >= 0 ? '+' : ''}{desvioVol}</span>}
+                            <span style={{ color: '#94A3B8', fontSize: 11 }}>—</span>
                           </td>
                         </tr>
                       )
                     })}
-                    {/* Linha total */}
                     <tr style={{ background: '#FFFBEB', borderTop: '2px solid #FCD34D' }}>
                       <td style={{ padding: '9px 12px', fontWeight: 800, color: '#1A2B4A' }}>TOTAL</td>
                       <td style={{ padding: '9px 12px', textAlign: 'center', fontWeight: 800, color: totals.enrollments_returning >= reenrollTarget ? '#16a34a' : '#f59e0b' }}>
@@ -994,15 +1077,10 @@ function StepFive({ plan, basePlan, ambitiousLevel, monthsUntilCampaign, campaig
                   </tbody>
                 </table>
               </div>
-
-              {/* Insight de rematrícula */}
               <div style={{ marginTop: 14, background: '#F0FDF9', borderRadius: 12, padding: '12px 16px', border: '1px solid #A7F3D0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <Sparkles size={13} color="#00A896" />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#065F46' }}>Estratégia de rematrícula</span>
-                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}><Sparkles size={13} color="#00A896" /><span style={{ fontSize: 12, fontWeight: 700, color: '#065F46' }}>Estratégia de rematrícula</span></div>
                 <p style={{ fontSize: 11, color: '#047857', margin: 0, lineHeight: 1.6 }}>
-                  A rematrícula é acumulada progressivamente. Outubro e novembro são os meses críticos — {reenrollRows.filter(r => [10, 11].includes(parseInt(campaignMonths.find(m => m.label === r.label)?.month?.toString() || '0'))).reduce((s, r) => s + r.monthReenroll, 0)} rematrículas esperadas nesses dois meses ({reenrollTarget > 0 ? ((reenrollRows.filter(r => [10, 11].includes(parseInt(campaignMonths.find(m => m.label === r.label)?.month?.toString() || '0'))).reduce((s, r) => s + r.monthReenroll, 0) / reenrollTarget) * 100).toFixed(0) : 0}% do total). Inicie a campanha de rematrícula em setembro para garantir esse volume.
+                  A rematrícula começa em setembro e se concentra em outubro/novembro ({reenrollRows.filter(r => [10, 11].includes(r.monthNum)).reduce((s, r) => s + r.monthReenroll, 0)} alunos nesses meses = {reenrollTarget > 0 ? ((reenrollRows.filter(r => [10, 11].includes(r.monthNum)).reduce((s, r) => s + r.monthReenroll, 0) / reenrollTarget) * 100).toFixed(0) : 0}% do total). Inicie a campanha de fidelização em agosto com pesquisa de satisfação e reunião de responsáveis.
                 </p>
               </div>
             </div>
