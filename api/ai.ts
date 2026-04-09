@@ -24,7 +24,7 @@ async function callClaude(prompt: string, maxTokens = 1024): Promise<string> {
   return data.content[0].text
 }
 
-async function callClaudeWithDocument(pdfBase64: string, textPrompt: string, maxTokens = 1500): Promise<string> {
+async function callClaudeWithDocument(pdfBase64: string, textPrompt: string, maxTokens = 2000): Promise<string> {
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
     headers: {
@@ -145,48 +145,65 @@ Máximo 4 linhas. Sem subtítulos. Sem markdown. Seja objetivo e prático.`
       return res.json({ result })
     }
 
-    // ── EXTRAÇÃO DE ARQUIVO ERP ───────────────────────────────────────────────
+    // ── EXTRAÇÃO DE ARQUIVO ERP (SIGA/PDF CORRIGIDO) ─────────────────────────
     if (action === 'extract_file') {
       const { fileContent, fileType, fileName, isPdfImage } = payload as {
         fileContent: string; fileType: 'csv' | 'xlsx' | 'pdf'; fileName: string; isPdfImage?: boolean
       }
       console.log('[extract_file] modo:', isPdfImage ? 'PDF visão' : 'texto')
       let raw: string
+
       if (isPdfImage) {
-        const visionPrompt = `Você está analisando um Relatório de Matrículas Efetivadas de uma escola brasileira gerado pelo sistema SIGA (Activesoft).
+        // ── PDF SIGA: Relatório de Matrículas Efetivadas ──────────────────────
+        const visionPrompt = `Você está analisando um "RELATÓRIO DE MATRÍCULAS EFETIVADAS" do sistema SIGA (Activesoft) de uma escola brasileira.
 
-O relatório tem uma tabela com as colunas: Data de matrícula | Novatos (Quantidade, %) | Veteranos (Quantidade, %) | Total (Quantidade, %).
+O relatório tem colunas: Data de matrícula | Novatos (Qtd, %) | Veteranos (Qtd, %) | Total (Qtd, %)
+A última linha "Total de alunos" contém os totais globais do relatório.
 
-REGRA DE ANO LETIVO: matrículas feitas entre set/YYYY e fev/YYYY+1 são para o ano letivo YYYY+1.
-Exemplo: matrículas de set/2024 a fev/2025 → detected_year = 2025.
+━━━ DEFINIÇÕES CRÍTICAS ━━━
+- "Novatos" = alunos NOVOS que entraram pela primeira vez → new_students
+- "Veteranos" = alunos que JÁ ESTUDAVAM e renovaram matrícula → returning_students E reenrollments
+- IMPORTANTE: o campo "reenrollments" deve ser EXATAMENTE igual a "returning_students" (veteranos)
+- "transfers" = null (este relatório não tem dados de transferências)
 
-IMPORTANTE: extraia também o histórico mensal em historical_funnel — quantas matrículas por mês no formato { "YYYY-MM": quantidade }.
+━━━ REGRA DE ANO LETIVO ━━━
+- Matrículas de set/YYYY até mar/YYYY+1 → pertencem ao ano letivo YYYY+1
+- Exemplo: matrículas de set/2025 a mar/2026 → detected_year = 2026
 
-Extraia todos os dados e retorne APENAS um JSON válido sem markdown:
+━━━ HISTÓRICO MENSAL ━━━
+Some todas as matrículas por mês no formato YYYY-MM:
+- historical_funnel: soma de Novatos + Veteranos por mês
+- new_students_by_month: soma só de Novatos por mês
+- returning_students_by_month: soma só de Veteranos por mês
+
+Retorne APENAS JSON válido sem markdown, sem texto adicional:
 {
-  "detected_year": <número inteiro do ano letivo alvo>,
-  "period_start": "<YYYY-MM da data mais antiga>",
-  "period_end": "<YYYY-MM da data mais recente>",
-  "total_students": <número total>,
-  "new_students": <total da coluna Novatos>,
-  "returning_students": <total da coluna Veteranos>,
-  "new_students_pct": <percentual de novatos como número>,
-  "returning_students_pct": <percentual de veteranos como número>,
+  "detected_year": <ano letivo inteiro ex: 2026>,
+  "period_start": "<YYYY-MM mais antigo>",
+  "period_end": "<YYYY-MM mais recente>",
+  "total_students": <linha Total de alunos — coluna Total Qtd>,
+  "new_students": <linha Total de alunos — coluna Novatos Qtd>,
+  "returning_students": <linha Total de alunos — coluna Veteranos Qtd>,
+  "new_students_pct": <% novatos ex: 12.1>,
+  "returning_students_pct": <% veteranos ex: 87.9>,
   "avg_monthly_fee": null,
-  "reenrollments": null,
+  "reenrollments": <IGUAL a returning_students — veteranos São rematrículas>,
   "transfers": null,
-  "historical_funnel": { "YYYY-MM": <quantidade> },
-  "summary": "<resumo em uma linha>"
+  "historical_funnel": { "YYYY-MM": <novatos+veteranos do mês> },
+  "new_students_by_month": { "YYYY-MM": <só novatos do mês> },
+  "returning_students_by_month": { "YYYY-MM": <só veteranos do mês> },
+  "summary": "<ex: 2026: 956 alunos — 116 novatos (12.1%) + 840 veteranos/rematrículas (87.9%)>"
 }`
-        raw = await callClaudeWithDocument(fileContent, visionPrompt, 1500)
+        raw = await callClaudeWithDocument(fileContent, visionPrompt, 2000)
       } else {
         const prompt = `Você está analisando um arquivo exportado de um sistema ERP de escola privada brasileira.
 Arquivo: ${fileName} | Tipo: ${fileType}
 
 INSTRUÇÕES:
-1. detected_year = ANO LETIVO dos alunos (matrículas set/YYYY–fev/YYYY+1 → detected_year = YYYY+1)
-2. Extraia historical_funnel: { "YYYY-MM": quantidade_matriculas }
-3. Retorne null nos campos não encontrados.
+1. detected_year = ANO LETIVO dos alunos (matrículas set/YYYY–mar/YYYY+1 → detected_year = YYYY+1)
+2. Se o arquivo tiver colunas "Novatos" e "Veteranos": returning_students = Veteranos = reenrollments
+3. Extraia historical_funnel: { "YYYY-MM": total_matriculas_mes }
+4. Retorne null nos campos não encontrados.
 
 Retorne SOMENTE JSON válido:
 {
@@ -204,6 +221,8 @@ Retorne SOMENTE JSON válido:
   "reenrollments": null,
   "transfers": null,
   "historical_funnel": {},
+  "new_students_by_month": {},
+  "returning_students_by_month": {},
   "summary": { "total_records": 0, "date_range": "", "notes": "" }
 }
 
@@ -211,6 +230,7 @@ Conteúdo:
 ${fileContent.slice(0, 8000)}`
         raw = await callClaude(prompt, 4000)
       }
+
       let parsed: unknown
       try {
         const match = raw.match(/\{[\s\S]*\}/)
@@ -218,7 +238,14 @@ ${fileContent.slice(0, 8000)}`
       } catch {
         return res.status(422).json({ error: 'Não foi possível extrair dados estruturados do arquivo', raw })
       }
-      console.log('[extract_file] resultado:', JSON.stringify(parsed).slice(0, 300))
+
+      // ── Pós-processamento: garantir que reenrollments = returning_students ──
+      const p = parsed as Record<string, unknown>
+      if (p.returning_students && !p.reenrollments) {
+        p.reenrollments = p.returning_students
+      }
+
+      console.log('[extract_file] resultado:', JSON.stringify(parsed).slice(0, 400))
       return res.json({ result: parsed })
     }
 
@@ -261,7 +288,7 @@ Respostas: ${JSON.stringify(responses)}
           main_competitors: ['Escolas públicas municipais', 'Redes privadas regionais', 'Escolas confessionais'],
           market_opportunity: 'Crescimento da classe média local com demanda por ensino privado de qualidade.',
           risk_factors: 'Expansão de redes nacionais com mensalidades competitivas na região.',
-        },
+        }
       }
       const prompt = `Você é especialista em dados educacionais brasileiros (IBGE, Censo Escolar MEC).
 Para ${city}, ${state}, retorne SOMENTE JSON válido. Se não tiver dados precisos, estime com base no porte do município.
@@ -302,11 +329,15 @@ Para ${city}, ${state}, retorne SOMENTE JSON válido. Se não tiver dados precis
         current_date, campaign_start_month, months_until_campaign, total_exits
       } = payload as {
         schoolData: { name: string; city: string; state: string; grades: string[]; avg_monthly_fee: number; current_students: number }
-        historicalData: { year: number; total_students: number; new_enrollments: number; reenrollments: number; transfers: number; historical_funnel?: Record<string, number> | null }[]
+        historicalData: {
+          year: number; total_students: number; new_enrollments: number
+          reenrollments: number; transfers: number
+          historical_funnel?: Record<string, number> | null
+          returning_students?: number
+        }[]
         marketData: { school_age_population?: number; private_school_rate?: number; sector_growth_rate?: number }
         growthTarget: { type: 'percentage' | 'absolute' | 'students'; value: number }
-        campaignYear: number
-        executionYear?: number
+        campaignYear: number; executionYear?: number
         start_date?: string; end_date?: string; current_date?: string
         campaign_start_month?: string; months_until_campaign?: number; total_exits?: number
       }
@@ -315,37 +346,50 @@ Para ${city}, ${state}, retorne SOMENTE JSON válido. Se não tiver dados precis
       const sd = start_date || `${execYear}-08-01`
       const ed = end_date   || `${execYear + 1}-02-28`
 
-      // Meses da campanha
       const campaignMonths = getCampaignMonths(sd, ed)
       const totalMonths = campaignMonths.length
       const monthsStr = campaignMonths.map(m => m.label).join(', ')
 
-      // Sazonalidade real vs benchmark
       const realSeasonality = calcRealSeasonality(historicalData || [])
       const benchmarkSeas: Record<number, number> = { 1: 5, 2: 4, 8: 8, 9: 12, 10: 28, 11: 23, 12: 20 }
       const rawPcts = campaignMonths.map(m => ({ ...m, pct: realSeasonality?.[m.month] ?? benchmarkSeas[m.month] ?? 5 }))
       const totalPct = rawPcts.reduce((s, m) => s + m.pct, 0)
-      const normalizedSeas = rawPcts.map(m => ({ ...m, pct: totalPct > 0 ? +(m.pct / totalPct * 100).toFixed(1) : +(100 / totalMonths).toFixed(1) }))
+      const normalizedSeas = rawPcts.map(m => ({
+        ...m,
+        pct: totalPct > 0 ? +(m.pct / totalPct * 100).toFixed(1) : +(100 / totalMonths).toFixed(1)
+      }))
 
-      // Taxa histórica de rematrícula
       const hasHistory = historicalData && historicalData.length > 0
+
+      // ── Taxa histórica de rematrícula (Veteranos / Total do ano anterior) ──
+      // Para o SIGA: returning_students = veteranos = rematrículas reais
       const avgReenrollRate = hasHistory
         ? historicalData.reduce((s, d) => {
-            const eligible = d.total_students - (d.new_enrollments ?? 0)
-            return s + (eligible > 0 ? Math.min(1, d.reenrollments / eligible) : 0.85)
+            // Usa returning_students se disponível (do SIGA), senão usa reenrollments
+            const reEnroll = (d.returning_students ?? d.reenrollments) || 0
+            const eligible = d.total_students > 0 ? d.total_students - (d.new_enrollments || 0) : 0
+            // Taxa = veteranos / (total do ano - novatos) = veteranos / base elegível do ano anterior
+            // Mas mais simples: taxa = veteranos / total
+            const rate = d.total_students > 0 ? reEnroll / d.total_students : 0
+            return s + Math.min(rate, 1)
           }, 0) / historicalData.length
         : 0.85
 
-      // Elegíveis e meta de rematrícula
+      // ── Histórico detalhado para análise ──
+      const histSummary = hasHistory
+        ? historicalData.map(d => {
+            const reEnroll = (d.returning_students ?? d.reenrollments) || 0
+            const retention = d.total_students > 0 ? ((reEnroll / d.total_students) * 100).toFixed(1) : '—'
+            return `${d.year}: ${d.total_students} alunos | ${d.new_enrollments} novatos | ${reEnroll} veteranos/rematrículas | retenção ${retention}%`
+          }).join('\n')
+        : 'Sem histórico — usar benchmarks do setor'
+
       const currentStudents = schoolData.current_students || 0
       const exits = total_exits || 0
       const eligibleForReenroll = Math.max(0, currentStudents - exits)
       const reenrollTarget = Math.round(eligibleForReenroll * avgReenrollRate)
 
-      // Distribuição mensal de rematrícula (acumulada progressiva, modelo Colégio Ágape)
-      const reenrollMonthlyDist: Record<number, number> = { 8: 0, 9: 0.05, 10: 0.25, 11: 0.30, 12: 0.20, 1: 0.15, 2: 0.05 }
-
-      // Meta de novatos
+      // Meta de novatos baseada no objetivo
       let targetNewStudents: number
       if (growthTarget.type === 'percentage') {
         targetNewStudents = exits + Math.round(currentStudents * (growthTarget.value / 100))
@@ -355,10 +399,11 @@ Para ${city}, ${state}, retorne SOMENTE JSON válido. Se não tiver dados precis
         targetNewStudents = Math.max(0, growthTarget.value - reenrollTarget)
       }
 
-      // Taxas de conversão
+      // Distribuição mensal rematrícula (acumulada progressiva)
+      const reenrollMonthlyDist: Record<number, number> = { 8: 0, 9: 0.05, 10: 0.25, 11: 0.30, 12: 0.20, 1: 0.15, 2: 0.05 }
+
       const conv = { regToSch: 0.76, schToVis: 0.63, visToEnr: 0.40 }
 
-      // Contexto mensal pré-calculado para o prompt
       const monthlyContext = normalizedSeas.map(m => {
         const newEnr = Math.round(targetNewStudents * (m.pct / 100))
         const reEnr  = Math.round(reenrollTarget * (reenrollMonthlyDist[m.month] ?? 0.03))
@@ -380,38 +425,37 @@ Alunos atuais: ${currentStudents} | Formandos: ${exits} | Elegíveis rematrícul
 Período: ${sd} → ${ed} | Meses: ${monthsStr} (${totalMonths} meses)
 Ano letivo alvo: ${campaignYear}
 
-━━━ OBJETIVO DO GESTOR (intenção, analise criticamente) ━━━
+━━━ OBJETIVO DO GESTOR (analise criticamente) ━━━
 ${growthTarget.type === 'percentage' ? `Crescer ~${growthTarget.value}% no volume de alunos` : ''}
 ${growthTarget.type === 'absolute' ? `Adicionar ~${growthTarget.value} alunos novos` : ''}
 ${growthTarget.type === 'students' ? `Atingir ~${growthTarget.value} alunos total` : ''}
 
-━━━ ANÁLISE PRÉ-CALCULADA (use como base) ━━━
-Taxa histórica rematrícula: ${(avgReenrollRate * 100).toFixed(1)}%
-Meta rematrícula: ${reenrollTarget} alunos
-Meta novatos: ${targetNewStudents}
-Sazonalidade: ${realSeasonality ? 'REAL da escola (histórico mensal importado)' : 'Benchmark setor educacional BR'}
+━━━ HISTÓRICO REAL DA ESCOLA ━━━
+${histSummary}
+
+━━━ ANÁLISE DE RETENÇÃO ━━━
+Taxa histórica média de retenção (veteranos/total): ${(avgReenrollRate * 100).toFixed(1)}%
+Esta taxa é baseada nos dados REAIS do SIGA — Veteranos são os alunos que renovaram matrícula.
+Meta de rematrícula calculada: ${reenrollTarget} alunos (${(avgReenrollRate * 100).toFixed(1)}% × ${eligibleForReenroll} elegíveis)
+Meta de novatos calculada: ${targetNewStudents}
+Sazonalidade: ${realSeasonality ? 'REAL da escola (histórico mensal SIGA)' : 'Benchmark setor'}
 
 Distribuição mensal estimada:
 ${monthlyContext}
-
-━━━ HISTÓRICO ━━━
-${hasHistory
-  ? historicalData.map(d => `${d.year}: ${d.total_students} alunos | ${d.new_enrollments} novatos | ${d.reenrollments} rematrículas | ${d.transfers} transferências`).join('\n')
-  : 'Primeiro ano no sistema. Use benchmarks do setor.'}
 
 ━━━ MERCADO ━━━
 Pop. escolar: ${marketData.school_age_population?.toLocaleString('pt-BR') ?? 'N/D'}
 Rede privada: ${marketData.private_school_rate ?? 18}% | Crescimento: ${marketData.sector_growth_rate ?? 3}%/ano
 
 ━━━ REGRAS OBRIGATÓRIAS ━━━
-1. enrollments_returning DEVE ser > 0 em Set/Out/Nov/Dez/Jan. Distribua ${reenrollTarget} rematrículas: Set 5%, Out 25%, Nov 30%, Dez 20%, Jan 15%, Fev 5%
-2. enrollments_new = novatos do mês (use sazonalidade calculada acima)
+1. enrollments_returning em Set/Out/Nov/Dez/Jan DEVE ser > 0
+   Distribua ${reenrollTarget} rematrículas: Set 5%, Out 25%, Nov 30%, Dez 20%, Jan 15%, Fev 5%
+2. enrollments_new = novatos do mês pela sazonalidade calculada
 3. enrollments = enrollments_new + enrollments_returning
-4. registrations = ceil(schedules / 0.76) | schedules = ceil(visits / 0.63) | visits = ceil(enrollments_new / 0.40)
-5. investment_suggested: CPA R$80-200 × enrollments_new
-6. cpa_target = investment_suggested / enrollments (quando > 0), senão 0
-7. Gere EXATAMENTE ${totalMonths} meses em ordem: ${monthsStr}
-8. reasoning: analise se o objetivo do gestor é realista vs histórico
+4. registrations = ceil(schedules/0.76) | schedules = ceil(visits/0.63) | visits = ceil(enrollments_new/0.40)
+5. investment_suggested: CPA R$100-250 × enrollments_new
+6. Gere EXATAMENTE ${totalMonths} meses em ordem: ${monthsStr}
+7. No reasoning: analise CRITICAMENTE a tendência histórica (escola perdeu alunos de 2023→2026?) e comente se o objetivo é realista
 
 Retorne SOMENTE JSON válido:
 {
@@ -422,7 +466,7 @@ Retorne SOMENTE JSON válido:
     "total_students_end": <reenrollTarget + targetNewStudents>,
     "growth_rate": <% vs alunos atuais>,
     "realism_score": "conservative|realistic|aggressive",
-    "reasoning": "<4-5 frases: análise crítica do objetivo do gestor vs histórico, realismo das metas de novatos e rematrícula, principal risco>"
+    "reasoning": "<5-6 frases: analise a TENDÊNCIA histórica (crescimento ou queda?), a taxa de retenção real, se o objetivo é realista, o maior risco e o que precisa melhorar>"
   },
   ${hasPrecampaign ? `"pre_campaign": {
     "period": "preparação antes de ${campaign_start_month}",
@@ -433,7 +477,7 @@ Retorne SOMENTE JSON válido:
   },` : ''}
   "monthly_targets": [
     {
-      "month": "Ago", "year": ${execYear},
+      "month": "Set", "year": ${execYear},
       "registrations": 0, "schedules": 0, "visits": 0,
       "enrollments_new": 0, "enrollments_returning": 0, "enrollments": 0,
       "investment_suggested": 0, "leads_target": 0, "cpa_target": 0
@@ -457,14 +501,14 @@ Retorne SOMENTE JSON válido:
         return res.status(422).json({ error: 'Erro ao parsear resposta da IA', raw: result })
       }
 
-      // Fallback: rematrícula não pode ser zero
+      // Fallback: rematrícula não pode ser zero se há histórico
       const targets = parsed.monthly_targets as { month: number; enrollments_returning?: number; enrollments_new?: number; enrollments?: number; investment_suggested?: number }[] | undefined
       if (targets && reenrollTarget > 0) {
         const totalReturning = targets.reduce((s, m) => s + (m.enrollments_returning || 0), 0)
         if (totalReturning === 0) {
           const dist: Record<number, number> = { 1: 0.15, 2: 0.05, 8: 0, 9: 0.05, 10: 0.25, 11: 0.30, 12: 0.20 }
           parsed.monthly_targets = targets.map((m, idx) => {
-            const monthNum = campaignMonths[idx]?.month || 8
+            const monthNum = campaignMonths[idx]?.month || 9
             const returning = Math.round(reenrollTarget * (dist[monthNum] || 0.03))
             const total = (m.enrollments_new || 0) + returning
             return { ...m, enrollments_returning: returning, enrollments: total, cpa_target: total > 0 && m.investment_suggested ? Math.round(m.investment_suggested / total) : 0 }
@@ -481,8 +525,7 @@ Retorne SOMENTE JSON válido:
     // ── RELATÓRIO MENSAL IA ───────────────────────────────────────────────────
     if (action === 'monthly_report') {
       const { institutionName, period, cycle, funnel, reenrollments, avg_time_days, monthly_data } = payload as {
-        institutionName: string
-        period: string
+        institutionName: string; period: string
         cycle: { year: number; target_new: number; target_reenroll: number; base_students: number }
         funnel: { registrations: number; registrations_target: number; visits: number; visits_target: number; enrollments: number; enrollments_target: number }
         reenrollments: { confirmed: number; target: number }
@@ -490,27 +533,16 @@ Retorne SOMENTE JSON válido:
         monthly_data: { period: string; registrations: number; visits: number; enrollments: number }[]
       }
       const devReg  = funnel.registrations_target > 0 ? ((funnel.registrations / funnel.registrations_target - 1) * 100).toFixed(1) : '0'
-      const devVis  = funnel.visits_target > 0         ? ((funnel.visits / funnel.visits_target - 1) * 100).toFixed(1)               : '0'
-      const devEnr  = funnel.enrollments_target > 0    ? ((funnel.enrollments / funnel.enrollments_target - 1) * 100).toFixed(1)     : '0'
-      const devReen = reenrollments.target > 0         ? ((reenrollments.confirmed / reenrollments.target - 1) * 100).toFixed(1)     : '0'
+      const devVis  = funnel.visits_target > 0         ? ((funnel.visits / funnel.visits_target - 1) * 100).toFixed(1) : '0'
+      const devEnr  = funnel.enrollments_target > 0    ? ((funnel.enrollments / funnel.enrollments_target - 1) * 100).toFixed(1) : '0'
+      const devReen = reenrollments.target > 0         ? ((reenrollments.confirmed / reenrollments.target - 1) * 100).toFixed(1) : '0'
       const prompt = `Você é consultor especialista em campanhas de matrículas de escolas privadas brasileiras.
-
 Gere o relatório mensal para ${institutionName} — período ${period}.
-
-FUNIL ACUMULADO:
-- Cadastros: ${funnel.registrations} (meta: ${funnel.registrations_target}, desvio: ${devReg}%)
-- Visitas: ${funnel.visits} (meta: ${funnel.visits_target}, desvio: ${devVis}%)
-- Matrículas novas: ${funnel.enrollments} (meta: ${funnel.enrollments_target}, desvio: ${devEnr}%)
-- Rematrículas: ${reenrollments.confirmed} (meta: ${reenrollments.target}, desvio: ${devReen}%)
-${avg_time_days !== null ? `Tempo médio de matrícula: ${avg_time_days} dias` : ''}
-
-HISTÓRICO MENSAL:
-${monthly_data.map(m => `${m.period}: ${m.registrations} cadastros | ${m.visits} visitas | ${m.enrollments} matrículas`).join('\n')}
-
-Gere um relatório em português com as seções:
-RESUMO EXECUTIVO | ANÁLISE DO FUNIL | ANÁLISE DE REMATRÍCULAS | AÇÕES — MARKETING | AÇÕES — TIME DE MATRÍCULAS | AÇÕES — REMATRÍCULAS | PRÓXIMOS PASSOS
-
-Seja direto, objetivo e prático. Use dados concretos. Máximo 400 palavras.`
+FUNIL: Cadastros ${funnel.registrations}/${funnel.registrations_target} (${devReg}%) | Visitas ${funnel.visits}/${funnel.visits_target} (${devVis}%) | Matrículas ${funnel.enrollments}/${funnel.enrollments_target} (${devEnr}%) | Rematrículas ${reenrollments.confirmed}/${reenrollments.target} (${devReen}%)
+${avg_time_days !== null ? `Tempo médio matrícula: ${avg_time_days} dias` : ''}
+HISTÓRICO: ${monthly_data.map(m => `${m.period}: ${m.registrations} cad | ${m.visits} vis | ${m.enrollments} mat`).join(' | ')}
+Seções: RESUMO EXECUTIVO | ANÁLISE DO FUNIL | ANÁLISE DE REMATRÍCULAS | AÇÕES MARKETING | AÇÕES TIME | AÇÕES REMATRÍCULAS | PRÓXIMOS PASSOS
+Máximo 400 palavras. Direto e prático.`
       const result = await callClaude(prompt, 900)
       return res.json({ result })
     }
@@ -519,8 +551,7 @@ Seja direto, objetivo e prático. Use dados concretos. Máximo 400 palavras.`
     if (action === 'survey_report') {
       const { responses, surveyTitle, institutionName } = payload as {
         responses: { answers: Record<string, unknown> }[]
-        surveyTitle: string
-        institutionName: string
+        surveyTitle: string; institutionName: string
       }
       function avg(nums: number[]) {
         const valid = nums.filter(n => typeof n === 'number' && !isNaN(n))
@@ -539,22 +570,10 @@ Seja direto, objetivo e prático. Use dados concretos. Máximo 400 palavras.`
         return acc
       }, {})
       const comments = responses.filter(r => r.answers.comment).map(r => r.answers.comment as string).slice(0, 10)
-      const prompt = `Você é especialista em gestão escolar brasileira.
-Analise os resultados da pesquisa "${surveyTitle}" do ${institutionName} e retorne APENAS JSON válido.
-Médias (1-5): ${JSON.stringify(avgScores)}
-Distribuição rematrícula: ${JSON.stringify(reenrollmentDist)}
-Total respostas: ${responses.length}
+      const prompt = `Especialista em gestão escolar brasileira. Analise "${surveyTitle}" do ${institutionName}. Retorne APENAS JSON.
+Médias (1-5): ${JSON.stringify(avgScores)} | Rematrícula: ${JSON.stringify(reenrollmentDist)} | Respostas: ${responses.length}
 Comentários: ${JSON.stringify(comments)}
-{
-  "overall_score": <nota 0-10>,
-  "summary": "<resumo em 2-3 frases>",
-  "strengths": ["<ponto forte 1>", "<ponto forte 2>", "<ponto forte 3>"],
-  "weaknesses": ["<ponto fraco 1>", "<ponto fraco 2>"],
-  "reenrollment_risk": "<baixo|médio|alto>",
-  "reenrollment_analysis": "<análise em 2 frases>",
-  "priority_actions": ["<ação 1>", "<ação 2>", "<ação 3>"],
-  "retention_opportunities": "<oportunidade principal>"
-}`
+{ "overall_score": <0-10>, "summary": "<2-3 frases>", "strengths": ["<1>","<2>","<3>"], "weaknesses": ["<1>","<2>"], "reenrollment_risk": "<baixo|médio|alto>", "reenrollment_analysis": "<2 frases>", "priority_actions": ["<1>","<2>","<3>"], "retention_opportunities": "<1 frase>" }`
       const raw = await callClaude(prompt, 800)
       let parsed
       try {
