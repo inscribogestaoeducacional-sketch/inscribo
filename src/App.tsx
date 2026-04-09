@@ -38,25 +38,25 @@ import UserProfile       from './components/management/UserProfile'
 import Sidebar from './components/layout/Sidebar'
 import TopBar  from './components/layout/TopBar'
 
-// ── Super Admin — ativos ──────────────────────────────────────────────────
-import AdminHome       from './components/superadmin/AdminHome'
-import AdminSchools    from './components/superadmin/AdminSchools'
-import AdminFinancial  from './components/superadmin/AdminFinancial'
-import AdminContracts  from './components/superadmin/AdminContracts'
-import AdminSettings   from './components/superadmin/AdminSettings'
-import AdminCRM        from './components/superadmin/AdminCRM'
-import AdminOnboarding from './components/superadmin/AdminOnboarding'
+// ── Super Admin ───────────────────────────────────────────────────────────
+import AdminHome        from './components/superadmin/AdminHome'
+import AdminSchools     from './components/superadmin/AdminSchools'
+import AdminFinancial   from './components/superadmin/AdminFinancial'
+import AdminContracts   from './components/superadmin/AdminContracts'
+import AdminSettings    from './components/superadmin/AdminSettings'
+import AdminCRM         from './components/superadmin/AdminCRM'
+import AdminOnboarding  from './components/superadmin/AdminOnboarding'
 import AdminConsultants from './components/superadmin/AdminConsultants'
 import ConsultantDetails from './components/superadmin/ConsultantDetails'
 
-// ── Super Admin — legado (mantém para não quebrar links salvos) ───────────
+// ── Legado ────────────────────────────────────────────────────────────────
 import SuperAdminInstitutions from './components/superadmin/SuperAdminInstitutions'
 import InstitutionDetails     from './components/superadmin/InstitutionDetails'
 import ConsultantHome         from './components/superadmin/ConsultantHome'
 import ConsultantSchools      from './components/superadmin/ConsultantSchools'
 import ConsultantContracts    from './components/superadmin/ConsultantContracts'
 
-// ─── Helpers de rota ──────────────────────────────────────────────────────
+// ─── Guards ───────────────────────────────────────────────────────────────
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles: string[] }) {
   const { user } = useAuth()
   if (!user) return <Navigate to="/login" replace />
@@ -81,7 +81,7 @@ function ReportsPage() {
   )
 }
 
-// ─── Páginas inline simples ───────────────────────────────────────────────
+// ─── Páginas simples ──────────────────────────────────────────────────────
 function UnauthorizedPage() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -120,10 +120,10 @@ function AdminProfilePage() {
       <p className="text-gray-500 mb-6">Informações da sua conta de administrador.</p>
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         {[
-          ['Nome',          user?.full_name  || '—'],
-          ['E-mail',        user?.email      || '—'],
-          ['Tipo de acesso',user?.user_type  || user?.role || '—'],
-        ].map(([k,v]) => (
+          ['Nome',           user?.full_name  || '—'],
+          ['E-mail',         user?.email      || '—'],
+          ['Tipo de acesso', user?.user_type  || user?.role || '—'],
+        ].map(([k, v]) => (
           <div key={k}>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{k}</p>
             <p className="text-gray-900 font-medium capitalize">{v}</p>
@@ -135,18 +135,39 @@ function AdminProfilePage() {
   )
 }
 
-// ─── Lógica principal ─────────────────────────────────────────────────────
+// ─── Limpeza de cache inválido ────────────────────────────────────────────
+// Remove cache antigo que não tinha user_type, forçando re-fetch do banco
+function purgeLegacyCache() {
+  try {
+    const raw = localStorage.getItem('inscribo-user')
+    if (!raw) return
+    const cached = JSON.parse(raw)
+    // Cache legado: tinha is_super_admin mas não user_type correto,
+    // ou institution_id = 'super-admin' (formato antigo do super admin)
+    const isLegacy =
+      cached.institution_id === 'super-admin' ||
+      (cached.is_super_admin && !cached.user_type)
+    if (isLegacy) {
+      console.log('🧹 Removendo cache legado inválido')
+      localStorage.removeItem('inscribo-user')
+      localStorage.removeItem('inscribo-auth-token')
+    }
+  } catch {}
+}
+
+// ─── App Content ──────────────────────────────────────────────────────────
 function AppContent() {
   const { user, initializing } = useAuth()
-  const [ready, setReady]      = useState(false)
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
+    purgeLegacyCache()
     supabase.auth.getSession()
       .catch(console.error)
       .finally(() => setReady(true))
   }, [])
 
-  // Rotas públicas independentes de auth
+  // Rotas públicas sem auth
   const { pathname } = window.location
   if (pathname.startsWith('/survey/')) {
     return <Routes><Route path="/survey/:token" element={<TransferSurveyPage />} /></Routes>
@@ -170,7 +191,7 @@ function AppContent() {
     )
   }
 
-  // Não logado — rotas públicas
+  // Não logado
   if (!user) {
     return (
       <Routes>
@@ -189,13 +210,13 @@ function AppContent() {
     )
   }
 
-  // ── ÁREA DO ADMIN ─────────────────────────────────────
-  // IMPORTANTE: verifica user_type ANTES de qualquer outra coisa
-  // para não cair no fluxo de escola.
+  // ── ÁREA DO ADMIN ─────────────────────────────────────────────────────
+  // Detecta admin por user_type OU por role = 'super_admin'/'admin_geral'
+  // NÃO usa is_super_admin (campo legado que causava o bug)
   const isAdminArea =
-    user.user_type === 'admin_geral'  ||
-    user.user_type === 'consultant'   ||
-    user.role      === 'super_admin'  ||
+    user.user_type === 'admin_geral' ||
+    user.user_type === 'consultant'  ||
+    user.role      === 'super_admin' ||
     user.role      === 'admin_geral'
 
   if (isAdminArea) {
@@ -204,74 +225,73 @@ function AppContent() {
 
     return (
       <Routes>
-        {/* ── Dashboard principal ── */}
-        <Route path="/super-admin"                  element={<AdminHome />} />
+        {/* Dashboard */}
+        <Route path="/super-admin"                    element={<AdminHome />} />
 
-        {/* ── CRM Comercial ── */}
-        <Route path="/super-admin/crm"              element={<AdminCRM />} />
+        {/* CRM */}
+        <Route path="/super-admin/crm"                element={<AdminCRM />} />
 
-        {/* ── Implantação & Onboarding ── */}
-        <Route path="/super-admin/onboarding"       element={<AdminOnboarding />} />
+        {/* Implantação */}
+        <Route path="/super-admin/onboarding"         element={<AdminOnboarding />} />
 
-        {/* ── Escolas ── */}
-        <Route path="/super-admin/schools"          element={<AdminSchools />} />
+        {/* Escolas */}
+        <Route path="/super-admin/schools"            element={<AdminSchools />} />
 
-        {/* ── Consultores ── */}
-        <Route path="/super-admin/consultants"      element={<AdminConsultants />} />
-        <Route path="/super-admin/consultants/:id"  element={<ConsultantDetails />} />
+        {/* Consultores */}
+        <Route path="/super-admin/consultants"        element={<AdminConsultants />} />
+        <Route path="/super-admin/consultants/:id"    element={<ConsultantDetails />} />
 
-        {/* ── Financeiro ── */}
-        <Route path="/super-admin/financial"        element={<AdminFinancial />} />
+        {/* Financeiro */}
+        <Route path="/super-admin/financial"          element={<AdminFinancial />} />
 
-        {/* ── Contratos ── */}
-        <Route path="/super-admin/contracts"        element={<AdminContracts />} />
+        {/* Contratos */}
+        <Route path="/super-admin/contracts"          element={<AdminContracts />} />
 
-        {/* ── Configurações ── */}
-        <Route path="/super-admin/settings"         element={<AdminSettings />} />
+        {/* Configurações */}
+        <Route path="/super-admin/settings"           element={<AdminSettings />} />
 
-        {/* ── Perfil ── */}
-        <Route path="/super-admin/profile"          element={<AdminProfilePage />} />
+        {/* Perfil */}
+        <Route path="/super-admin/profile"            element={<AdminProfilePage />} />
 
-        {/* ── Legado — não quebra links antigos ── */}
-        <Route path="/super-admin/institutions"     element={<SuperAdminInstitutions />} />
-        <Route path="/super-admin/institutions/:id" element={<InstitutionDetails />} />
+        {/* Legado */}
+        <Route path="/super-admin/institutions"       element={<SuperAdminInstitutions />} />
+        <Route path="/super-admin/institutions/:id"   element={<InstitutionDetails />} />
 
-        {/* ── Consultor (compatibilidade) ── */}
-        <Route path="/super-admin/consultant"           element={<ConsultantHome />} />
-        <Route path="/super-admin/consultant/schools"   element={<ConsultantSchools />} />
-        <Route path="/super-admin/consultant/contracts" element={<ConsultantContracts />} />
+        {/* Consultor */}
+        <Route path="/super-admin/consultant"             element={<ConsultantHome />} />
+        <Route path="/super-admin/consultant/schools"     element={<ConsultantSchools />} />
+        <Route path="/super-admin/consultant/contracts"   element={<ConsultantContracts />} />
 
-        {/* ── Catchalls ── */}
-        <Route path="/unauthorized"  element={<UnauthorizedPage />} />
-        <Route path="/login"         element={<Navigate to={defaultPath} replace />} />
-        <Route path="/"              element={<Navigate to={defaultPath} replace />} />
-        <Route path="*"              element={<NotFoundPage />} />
+        {/* Catchalls */}
+        <Route path="/unauthorized"   element={<UnauthorizedPage />} />
+        <Route path="/login"          element={<Navigate to={defaultPath} replace />} />
+        <Route path="/"               element={<Navigate to={defaultPath} replace />} />
+        <Route path="*"               element={<NotFoundPage />} />
       </Routes>
     )
   }
 
-  // ── ÁREA DA ESCOLA ────────────────────────────────────
-  // Só chega aqui se NÃO for admin/consultor
+  // ── ÁREA DA ESCOLA ────────────────────────────────────────────────────
   const isAttendant   = user.role === 'user'
   const schoolDefault = isAttendant ? '/atendente' : '/home'
 
   return (
-    <div style={{ display:'flex', width:'100vw', height:'100vh', overflow:'hidden', background:'var(--bg-page)' }}>
+    <div style={{ display: 'flex', width: '100vw', height: '100vh', overflow: 'hidden', background: 'var(--bg-page)' }}>
       <Sidebar />
-      <div style={{ flex:1, minWidth:0, height:'100vh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
+      <div style={{ flex: 1, minWidth: 0, height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <TopBar />
-        <main style={{ flex:1, minHeight:0, overflowY:'auto', background:'var(--bg-page)' }}>
+        <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--bg-page)' }}>
           <Routes>
             <Route path="/" element={<Navigate to={schoolDefault} replace />} />
 
             <Route path="/home" element={
-              <RequireRole roles={['admin','manager']}>
+              <RequireRole roles={['admin', 'manager']}>
                 <GestorHome />
               </RequireRole>
             } />
 
             <Route path="/atendente" element={
-              <RequireRole roles={['user','school_user']}>
+              <RequireRole roles={['user', 'school_user']}>
                 <AttendantHome />
               </RequireRole>
             } />
@@ -285,13 +305,13 @@ function AppContent() {
             <Route path="/pesquisas"      element={<GestorSurveys />} />
 
             <Route path="/embed" element={
-              <ProtectedRoute allowedRoles={['admin','manager']}>
+              <ProtectedRoute allowedRoles={['admin', 'manager']}>
                 <GestorEmbed />
               </ProtectedRoute>
             } />
 
             <Route path="/reports" element={
-              <ProtectedRoute allowedRoles={['manager','admin']}>
+              <ProtectedRoute allowedRoles={['manager', 'admin']}>
                 <ReportsPage />
               </ProtectedRoute>
             } />
