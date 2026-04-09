@@ -60,7 +60,7 @@ import ConsultantSchools from './components/superadmin/ConsultantSchools'
 import ConsultantContracts from './components/superadmin/ConsultantContracts'
 import ConsultantDetails from './components/superadmin/ConsultantDetails'
 
-// Protected Route Component — proteção por role (admin/manager/user)
+// ─── Protected Route Component ────────────────────────────────────────────────
 function ProtectedRoute({
   children,
   allowedRoles
@@ -69,19 +69,12 @@ function ProtectedRoute({
   allowedRoles: string[]
 }) {
   const { user } = useAuth()
-
-  if (!user) {
-    return <Navigate to="/login" replace />
-  }
-
-  if (!allowedRoles.includes(user.role)) {
-    return <Navigate to="/unauthorized" replace />
-  }
-
+  if (!user) return <Navigate to="/login" replace />
+  if (!allowedRoles.includes(user.role)) return <Navigate to="/unauthorized" replace />
   return <>{children}</>
 }
 
-// RequireRole — bloqueia cruzamento de perfil (gestor vs atendente)
+// ─── RequireRole ──────────────────────────────────────────────────────────────
 function RequireRole({
   children,
   roles,
@@ -97,7 +90,20 @@ function RequireRole({
   return <>{children}</>
 }
 
-// Placeholder Components
+// ─── ReportsPage — injeta institutionId do usuário logado ─────────────────────
+// CORREÇÃO: GestorReports precisa de institutionId e institutionName como props.
+// Sem esse wrapper, a query retorna vazio pois o componente não sabe qual escola buscar.
+function ReportsPage() {
+  const { user } = useAuth()
+  return (
+    <GestorReports
+      institutionId={user?.institution_id || ''}
+      institutionName={user?.institution_name || user?.full_name || 'Escola'}
+    />
+  )
+}
+
+// ─── Placeholder Pages ────────────────────────────────────────────────────────
 function UnauthorizedPage() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -144,15 +150,6 @@ function AnalyticsPage() {
   )
 }
 
-function SettingsPage() {
-  return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold">Configurações</h1>
-      <p className="text-gray-600 mt-2">Página em desenvolvimento...</p>
-    </div>
-  )
-}
-
 function ProfilePage() {
   return (
     <div className="p-8">
@@ -162,7 +159,7 @@ function ProfilePage() {
   )
 }
 
-// Main App Content
+// ─── Main App Content ─────────────────────────────────────────────────────────
 function AppContent() {
   const { user, initializing } = useAuth()
   const [supabaseInitialized, setSupabaseInitialized] = useState(false)
@@ -178,11 +175,10 @@ function AppContent() {
         setSupabaseInitialized(true)
       }
     }
-
     initSupabase()
   }, [])
 
-  // Rotas públicas — sem necessidade de autenticação (antes de qualquer check de auth)
+  // Rotas públicas — survey e satisfaction
   if (window.location.pathname.startsWith('/survey/')) {
     return (
       <Routes>
@@ -247,7 +243,7 @@ function AppContent() {
         <Route path="/super-admin/financial" element={<AdminFinancial />} />
         <Route path="/super-admin/contracts" element={<AdminContracts />} />
         <Route path="/super-admin/settings" element={<AdminSettings />} />
-        {/* Legacy routes — preserved for backwards compatibility */}
+        {/* Legacy routes */}
         <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
         <Route path="/super-admin/institutions" element={<SuperAdminInstitutions />} />
         <Route path="/super-admin/institutions/:id" element={<InstitutionDetails />} />
@@ -264,7 +260,6 @@ function AppContent() {
         <Route path="/super-admin/consultant/schools" element={<ConsultantSchools />} />
         <Route path="/super-admin/consultant/contracts" element={<ConsultantContracts />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
-        {/* ✅ CORREÇÃO: redireciona /login para o dashboard correto ao invés de 404 */}
         <Route path="/login" element={<Navigate to={defaultPath} replace />} />
         <Route path="/" element={<Navigate to={defaultPath} replace />} />
         <Route path="*" element={<NotFoundPage />} />
@@ -279,29 +274,29 @@ function AppContent() {
   return (
     <div style={{ display: 'flex', width: '100vw', height: '100vh', overflow: 'hidden', background: 'var(--bg-page)' }}>
       <Sidebar />
-
       <div style={{ flex: 1, minWidth: 0, height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <TopBar />
-
         <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--bg-page)' }}>
           <Routes>
             <Route path="/" element={<Navigate to={schoolDefaultPath} replace />} />
+
             <Route path="/home" element={
               <RequireRole roles={['admin', 'manager']}>
                 <GestorHome />
               </RequireRole>
             } />
+
             <Route path="/atendente" element={
               <RequireRole roles={['user', 'school_user']}>
                 <AttendantHome />
               </RequireRole>
             } />
+
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/leads" element={<LeadKanban />} />
             <Route path="/visits" element={<VisitCalendar />} />
             <Route path="/enrollments" element={<EnrollmentManager />} />
             <Route path="/whatsapp" element={<WhatsAppHub />} />
-
             <Route path="/transferencias" element={<GestorTransfers />} />
             <Route path="/pesquisas" element={<GestorSurveys />} />
 
@@ -311,24 +306,25 @@ function AppContent() {
               </ProtectedRoute>
             } />
 
+            {/* ✅ CORRIGIDO: usa ReportsPage que injeta institutionId do user logado */}
             <Route path="/reports" element={
               <ProtectedRoute allowedRoles={['manager', 'admin']}>
-                <GestorReports />
+                <ReportsPage />
               </ProtectedRoute>
             } />
-            
+
             <Route path="/users" element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <UserManagement />
               </ProtectedRoute>
             } />
-            
+
             <Route path="/settings" element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <SystemSettings />
               </ProtectedRoute>
             } />
-            
+
             <Route path="/profile" element={<UserProfile />} />
             <Route path="/setup" element={<InitialSetup />} />
             <Route path="/login" element={<Navigate to={schoolDefaultPath} replace />} />
@@ -341,7 +337,7 @@ function AppContent() {
   )
 }
 
-// Main App Component
+// ─── Main App Component ───────────────────────────────────────────────────────
 function App() {
   return (
     <Router>
