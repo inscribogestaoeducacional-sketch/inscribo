@@ -4,7 +4,7 @@ import {
   RefreshCw, AlertTriangle, CheckCircle, ChevronRight,
   Sparkles, ArrowUp, ArrowDown, Minus, Save, Loader2,
   FileText, Clock, Activity, PieChart, ArrowUpRight,
-  ArrowDownRight, Info, X, Edit3
+  ArrowDownRight, Info, X, Edit3, Settings, Rocket
 } from 'lucide-react'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
@@ -14,6 +14,7 @@ import {
 } from 'recharts'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
+import CampaignGeneratorModal from './CampaignGeneratorModal'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface CampaignCycle {
@@ -1311,18 +1312,20 @@ function TabDiagnosticoIA({ institutionId, cycle, metrics, reenrollments }: {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function GestorReports({ institutionId, institutionName }: Props) {
+  const { user } = useAuth()
   const [activeTab, setActiveTab] = useState(0)
   const [cycle, setCycle] = useState<CampaignCycle | null>(null)
   const [metrics, setMetrics] = useState<FunnelMetric[]>([])
   const [reenrollments, setReenrollments] = useState<MonthlyReenrollment[]>([])
   const [loading, setLoading] = useState(true)
+  const [showCampaignModal, setShowCampaignModal] = useState(false)
+  const [isAdjustMode, setIsAdjustMode] = useState(false)
 
   useEffect(() => { loadData() }, [institutionId])
 
   const loadData = async () => {
     setLoading(true)
     try {
-      // Ciclo ativo
       const { data: cycleData } = await supabase
         .from('campaign_cycles')
         .select('*')
@@ -1335,7 +1338,6 @@ export default function GestorReports({ institutionId, institutionName }: Props)
       setCycle(cycleData)
 
       if (cycleData) {
-        // Funil metrics do ciclo
         const { data: metricsData } = await supabase
           .from('funnel_metrics')
           .select('*')
@@ -1346,7 +1348,6 @@ export default function GestorReports({ institutionId, institutionName }: Props)
 
         setMetrics(metricsData?.filter(m => /^\d{4}-\d{2}$/.test(m.period)) || [])
 
-        // Rematrículas
         const { data: reenrollData } = await supabase
           .from('monthly_reenrollments')
           .select('*')
@@ -1361,6 +1362,16 @@ export default function GestorReports({ institutionId, institutionName }: Props)
       setLoading(false)
     }
   }
+
+  // Ciclo liberado mas sem metas configuradas ainda
+  const cycleNeedsSetup = cycle && (
+    !cycle.monthly_targets ||
+    cycle.monthly_targets.length === 0 ||
+    cycle.target_new_students === 0
+  )
+
+  // Ciclo com metas configuradas
+  const cycleIsConfigured = cycle && cycle.monthly_targets && cycle.monthly_targets.length > 0
 
   const TABS = [
     { label: 'Visão Geral', icon: <BarChart3 size={15} /> },
@@ -1388,14 +1399,75 @@ export default function GestorReports({ institutionId, institutionName }: Props)
           <div>
             <h1 style={{ fontSize: 20, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Relatórios da Campanha</h1>
             <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>
-              {cycle ? `${cycle.label} · ${new Date(cycle.start_date).toLocaleDateString('pt-BR')} até ${new Date(cycle.end_date).toLocaleDateString('pt-BR')}` : institutionName}
+              {cycle
+                ? `${cycle.label} · ${new Date(cycle.start_date).toLocaleDateString('pt-BR')} até ${new Date(cycle.end_date).toLocaleDateString('pt-BR')}`
+                : institutionName}
             </p>
           </div>
         </div>
-        <button onClick={loadData} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', fontSize: 12, color: '#64748B', cursor: 'pointer' }}>
-          <RefreshCw size={13} /> Atualizar
-        </button>
+
+        {/* Botões do header */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {/* Botão Ajustar — aparece quando campanha já está configurada */}
+          {cycleIsConfigured && (
+            <button
+              onClick={() => { setIsAdjustMode(true); setShowCampaignModal(true) }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '8px 16px', borderRadius: 10,
+                border: '1px solid #E2E8F0', background: '#fff',
+                fontSize: 12, color: '#475569', cursor: 'pointer', fontWeight: 600
+              }}
+            >
+              <Settings size={13} /> Ajustar campanha
+            </button>
+          )}
+          <button
+            onClick={loadData}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', fontSize: 12, color: '#64748B', cursor: 'pointer' }}
+          >
+            <RefreshCw size={13} /> Atualizar
+          </button>
+        </div>
       </div>
+
+      {/* ── Banner: campanha liberada mas sem metas ─────────────────────────── */}
+      {cycleNeedsSetup && (
+        <div style={{
+          background: 'linear-gradient(135deg, #1A2B4A, #2d4494)',
+          borderRadius: 16, padding: 28,
+          display: 'flex', alignItems: 'center', gap: 24
+        }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: 16,
+            background: 'rgba(255,255,255,0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+          }}>
+            <Rocket size={26} color="#fff" />
+          </div>
+          <div style={{ flex: 1 }}>
+            <h3 style={{ fontSize: 17, fontWeight: 800, color: '#fff', margin: '0 0 6px' }}>
+              🎉 Sua campanha foi liberada!
+            </h3>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', margin: 0, lineHeight: 1.6 }}>
+              Configure as metas de captação e rematrícula para começar a acompanhar os resultados em tempo real. Leva menos de 5 minutos.
+            </p>
+          </div>
+          <button
+            onClick={() => { setIsAdjustMode(false); setShowCampaignModal(true) }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '12px 24px', borderRadius: 12,
+              background: '#00A896', color: '#fff',
+              border: 'none', fontSize: 14, fontWeight: 700,
+              cursor: 'pointer', whiteSpace: 'nowrap',
+              boxShadow: '0 4px 14px rgba(0,168,150,0.4)'
+            }}
+          >
+            <Sparkles size={15} /> Configurar agora
+          </button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, background: '#F8FAFC', borderRadius: 14, padding: 4, border: '1px solid #E2E8F0' }}>
@@ -1430,6 +1502,21 @@ export default function GestorReports({ institutionId, institutionName }: Props)
           </>
         )}
       </div>
+
+      {/* Modal de configuração/ajuste da campanha */}
+      {showCampaignModal && (
+        <CampaignGeneratorModal
+          isOpen={showCampaignModal}
+          onClose={() => { setShowCampaignModal(false); setIsAdjustMode(false) }}
+          onApply={() => { loadData(); setShowCampaignModal(false); setIsAdjustMode(false) }}
+          existingCycle={cycle as any}
+          institutionId={institutionId}
+          institutionName={institutionName}
+          isAdjustMode={isAdjustMode}
+          currentUserId={user?.id}
+          currentUserName={user?.full_name}
+        />
+      )}
     </div>
   )
 }
