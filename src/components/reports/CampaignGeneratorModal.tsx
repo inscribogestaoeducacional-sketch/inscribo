@@ -354,7 +354,7 @@ export default function CampaignGeneratorModal({
         const veterans = (result.returning_students as number) || 0
         const fee = (result.avg_monthly_fee as number | null) || null
         newErpFiles.push({ name: file.name, year: detectedYear, total, novatos, veterans, fee: fee || undefined })
-        if (detectedYear > 2000) newHistoricalData.push({ year: detectedYear, total_students: total || 0, new_enrollments: novatos || 0, reenrollments: (result.reenrollments as number) || 0, transfers: (result.transfers as number) || 0 })
+        if (detectedYear > 2000) newHistoricalData.push({ year: detectedYear, total_students: total || 0, new_enrollments: novatos || 0, reenrollments: (result.reenrollments as number) || (result.returning_students as number) || veterans || 0, transfers: (result.transfers as number) || 0 })
         if (fee && !extractedFee) extractedFee = fee
       } catch { newErpFiles.push({ name: file.name, year: 0, total: 0, novatos: 0, veterans: 0, error: true }) }
     }
