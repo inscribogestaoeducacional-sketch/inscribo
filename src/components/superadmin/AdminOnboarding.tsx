@@ -619,9 +619,9 @@ export default function AdminOnboarding() {
           .select('*, institutions(id, name, city, state)')
           .order('scheduled_at'),
         supabase.from('institutions')
-          .select('id, name, city, state, email')
-          .eq('plan_status', 'active')
-          .order('name'),
+      .select('id, name, city, state, email, plan_status')
+      .not('plan_status', 'in', '("cancelled")')
+      .order('name'),
       ])
 
       const procs: Process[] = (procRes.data || []).map((p: any) => ({
