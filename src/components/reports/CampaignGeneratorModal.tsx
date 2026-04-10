@@ -113,7 +113,7 @@ function redistributePlan(plan: GeneratedPlan, newTotal: number, reenrollTotal: 
   u.monthly_targets = u.monthly_targets.map((m, idx) => {
     const w = curNew > 0 ? (m.enrollments_new??0)/curNew : 1/n
     const ne = Math.round(newTotal * w)
-    const mn = typeof m.month === 'number' ? m.month : parseInt(String(m.month)) || [9,10,11,12,1,2,3][idx] || 9 + 9))
+    const mn = typeof m.month === 'number' ? m.month : parseInt(String(m.month)) || [9,10,11,12,1,2,3][idx] || 9
     const re = Math.round(reenrollTotal * (reenDist[mn] ?? 0.03))
     const te = ne + re
     const vis = ne > 0 ? Math.ceil(ne/0.40) : 0
