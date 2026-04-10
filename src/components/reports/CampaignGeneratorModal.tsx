@@ -196,13 +196,39 @@ export default function CampaignGeneratorModal({
     })()
   }, [isOpen, institutionId])
 
-  // Pré-preencher existingCycle
+  // Pré-preencher existingCycle — em modo ajuste pula para Passo 3
   useEffect(() => {
-    if (existingCycle) {
-      setSchoolData(s => ({ ...s, current_students: existingCycle.base_students||0, ...(existingCycle.start_date?{start_date:existingCycle.start_date}:{}), ...(existingCycle.end_date?{end_date:existingCycle.end_date}:{}) }))
-      if (existingCycle.historical_input?.length) setHistoricalData(existingCycle.historical_input)
+    if (!isOpen || !existingCycle) return
+    const sd = (existingCycle as any).school_data
+    setSchoolData(s => ({
+      ...s,
+      current_students: existingCycle.base_students || 0,
+      ...(existingCycle.start_date ? { start_date: existingCycle.start_date } : {}),
+      ...(existingCycle.end_date ? { end_date: existingCycle.end_date } : {}),
+      ...(sd?.city ? { city: sd.city } : {}),
+      ...(sd?.state ? { state: sd.state } : {}),
+      ...(sd?.grades?.length ? { grades: sd.grades } : {}),
+      ...(sd?.avg_monthly_fee ? { avg_monthly_fee: sd.avg_monthly_fee } : {}),
+      ...(sd?.exits ? { exits: sd.exits } : {}),
+    }))
+    if (existingCycle.historical_input?.length) {
+      setHistoricalData(existingCycle.historical_input)
     }
-  }, [existingCycle])
+    if (isAdjustMode && existingCycle.historical_input?.length) {
+      setAiAnalysis({
+        summary: "Ajuste de campanha — dados históricos carregados do ciclo anterior.",
+        retention_rate: existingCycle.target_reenrollment_rate || 0.85,
+        retention_trend: 'stable', novatos_trend: 'stable',
+        suggested_start_date: existingCycle.start_date || new Date().getFullYear() + '-09-01',
+        suggested_end_date: existingCycle.end_date || (new Date().getFullYear()+1) + '-02-28',
+        suggested_new_students: existingCycle.target_new_students || 50,
+        suggested_reenrollment: Math.round((existingCycle.base_students || 0) * (existingCycle.target_reenrollment_rate || 0.85)),
+        key_insight: 'Campanha em andamento — ajuste as metas conforme o andamento real.',
+        risk: 'Verifique se as metas estão alinhadas com o resultado atual da campanha.'
+      })
+      setStep(3)
+    }
+  }, [isOpen, existingCycle])
 
   useEffect(() => {
     if (!isOpen) return
@@ -363,7 +389,7 @@ export default function CampaignGeneratorModal({
       for (let mi=0;mi<adjustedPlan.monthly_targets.length;mi++) {
         const month=adjustedPlan.monthly_targets[mi]; const cm=campaignMonths[mi]
         const period=cm?cm.period:`${month.year}-${String(month.month).padStart(2,'0')}`
-        await supabase.from('funnel_metrics').upsert({ institution_id:institutionId,period,registrations_target:month.registrations,schedules_target:month.schedules,visits_target:month.visits,enrollments_target:month.enrollments,enrollments_new_target:month.enrollments_new??0,enrollments_returning_target:month.enrollments_returning??0,registrations:0,schedules:0,visits:0,enrollments:0,enrollments_new_actual:0,enrollments_returning_actual:0 },{onConflict:'period,institution_id',ignoreDuplicates:false})
+        await supabase.from('funnel_metrics').upsert({ institution_id:institutionId,period,registrations_target:month.registrations,schedules_target:month.schedules,visits_target:month.visits,enrollments_target:month.enrollments,registrations:0,schedules:0,visits:0,enrollments:0 },{onConflict:'period,institution_id',ignoreDuplicates:false})
         if ((month.enrollments_returning??0)>0) await supabase.from('monthly_reenrollments').upsert({institution_id:institutionId,period,target:month.enrollments_returning??0,confirmed:0,base_total:schoolData.current_students},{onConflict:'institution_id,period',ignoreDuplicates:false})
         await supabase.from('marketing_campaigns').upsert({institution_id:institutionId,month_year:cm?`${cm.month}-${cm.year}`:`${month.month}-${month.year}`,cpa_target:month.cpa_target,investment:0,leads_generated:0},{onConflict:'month_year,institution_id',ignoreDuplicates:false})
       }

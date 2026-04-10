@@ -47,6 +47,7 @@ import AdminSettings    from './components/superadmin/AdminSettings'
 import AdminCRM         from './components/superadmin/AdminCRM'
 import AdminOnboarding  from './components/superadmin/AdminOnboarding'
 import AdminConsultants from './components/superadmin/AdminConsultants'
+import AdminProfile     from './components/superadmin/AdminProfile'
 import ConsultantDetails from './components/superadmin/ConsultantDetails'
 
 // ── Legado ────────────────────────────────────────────────────────────────
@@ -112,43 +113,16 @@ function NotFoundPage() {
   )
 }
 
-function AdminProfilePage() {
-  const { user } = useAuth()
-  return (
-    <div className="p-8 max-w-xl">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Meu Perfil</h1>
-      <p className="text-gray-500 mb-6">Informações da sua conta de administrador.</p>
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        {[
-          ['Nome',           user?.full_name  || '—'],
-          ['E-mail',         user?.email      || '—'],
-          ['Tipo de acesso', user?.user_type  || user?.role || '—'],
-        ].map(([k, v]) => (
-          <div key={k}>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{k}</p>
-            <p className="text-gray-900 font-medium capitalize">{v}</p>
-          </div>
-        ))}
-      </div>
-      <p className="text-xs text-gray-400 mt-4">Edição de perfil em breve.</p>
-    </div>
-  )
-}
-
-// ─── Limpeza de cache inválido ────────────────────────────────────────────
-// Remove cache antigo que não tinha user_type, forçando re-fetch do banco
+// ─── Limpeza de cache legado ───────────────────────────────────────────────
 function purgeLegacyCache() {
   try {
     const raw = localStorage.getItem('inscribo-user')
     if (!raw) return
     const cached = JSON.parse(raw)
-    // Cache legado: tinha is_super_admin mas não user_type correto,
-    // ou institution_id = 'super-admin' (formato antigo do super admin)
     const isLegacy =
       cached.institution_id === 'super-admin' ||
       (cached.is_super_admin && !cached.user_type)
     if (isLegacy) {
-      console.log('🧹 Removendo cache legado inválido')
       localStorage.removeItem('inscribo-user')
       localStorage.removeItem('inscribo-auth-token')
     }
@@ -167,7 +141,6 @@ function AppContent() {
       .finally(() => setReady(true))
   }, [])
 
-  // Rotas públicas sem auth
   const { pathname } = window.location
   if (pathname.startsWith('/survey/')) {
     return <Routes><Route path="/survey/:token" element={<TransferSurveyPage />} /></Routes>
@@ -176,7 +149,6 @@ function AppContent() {
     return <Routes><Route path="/satisfaction/:token" element={<SatisfactionPage />} /></Routes>
   }
 
-  // Loading
   if (initializing || !ready) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-cyan-50 to-blue-50">
@@ -191,7 +163,6 @@ function AppContent() {
     )
   }
 
-  // Não logado
   if (!user) {
     return (
       <Routes>
@@ -211,8 +182,6 @@ function AppContent() {
   }
 
   // ── ÁREA DO ADMIN ─────────────────────────────────────────────────────
-  // Detecta admin por user_type OU por role = 'super_admin'/'admin_geral'
-  // NÃO usa is_super_admin (campo legado que causava o bug)
   const isAdminArea =
     user.user_type === 'admin_geral' ||
     user.user_type === 'consultant'  ||
@@ -225,33 +194,16 @@ function AppContent() {
 
     return (
       <Routes>
-        {/* Dashboard */}
         <Route path="/super-admin"                    element={<AdminHome />} />
-
-        {/* CRM */}
         <Route path="/super-admin/crm"                element={<AdminCRM />} />
-
-        {/* Implantação */}
         <Route path="/super-admin/onboarding"         element={<AdminOnboarding />} />
-
-        {/* Escolas */}
         <Route path="/super-admin/schools"            element={<AdminSchools />} />
-
-        {/* Consultores */}
         <Route path="/super-admin/consultants"        element={<AdminConsultants />} />
         <Route path="/super-admin/consultants/:id"    element={<ConsultantDetails />} />
-
-        {/* Financeiro */}
         <Route path="/super-admin/financial"          element={<AdminFinancial />} />
-
-        {/* Contratos */}
         <Route path="/super-admin/contracts"          element={<AdminContracts />} />
-
-        {/* Configurações */}
         <Route path="/super-admin/settings"           element={<AdminSettings />} />
-
-        {/* Perfil */}
-        <Route path="/super-admin/profile"            element={<AdminProfilePage />} />
+        <Route path="/super-admin/profile"            element={<AdminProfile />} />
 
         {/* Legado */}
         <Route path="/super-admin/institutions"       element={<SuperAdminInstitutions />} />
@@ -262,11 +214,10 @@ function AppContent() {
         <Route path="/super-admin/consultant/schools"     element={<ConsultantSchools />} />
         <Route path="/super-admin/consultant/contracts"   element={<ConsultantContracts />} />
 
-        {/* Catchalls */}
-        <Route path="/unauthorized"   element={<UnauthorizedPage />} />
-        <Route path="/login"          element={<Navigate to={defaultPath} replace />} />
-        <Route path="/"               element={<Navigate to={defaultPath} replace />} />
-        <Route path="*"               element={<NotFoundPage />} />
+        <Route path="/unauthorized"  element={<UnauthorizedPage />} />
+        <Route path="/login"         element={<Navigate to={defaultPath} replace />} />
+        <Route path="/"              element={<Navigate to={defaultPath} replace />} />
+        <Route path="*"              element={<NotFoundPage />} />
       </Routes>
     )
   }
@@ -283,19 +234,8 @@ function AppContent() {
         <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--bg-page)' }}>
           <Routes>
             <Route path="/" element={<Navigate to={schoolDefault} replace />} />
-
-            <Route path="/home" element={
-              <RequireRole roles={['admin', 'manager']}>
-                <GestorHome />
-              </RequireRole>
-            } />
-
-            <Route path="/atendente" element={
-              <RequireRole roles={['user', 'school_user']}>
-                <AttendantHome />
-              </RequireRole>
-            } />
-
+            <Route path="/home" element={<RequireRole roles={['admin','manager']}><GestorHome /></RequireRole>} />
+            <Route path="/atendente" element={<RequireRole roles={['user','school_user']}><AttendantHome /></RequireRole>} />
             <Route path="/dashboard"      element={<Dashboard />} />
             <Route path="/leads"          element={<LeadKanban />} />
             <Route path="/visits"         element={<VisitCalendar />} />
@@ -303,31 +243,10 @@ function AppContent() {
             <Route path="/whatsapp"       element={<WhatsAppHub />} />
             <Route path="/transferencias" element={<GestorTransfers />} />
             <Route path="/pesquisas"      element={<GestorSurveys />} />
-
-            <Route path="/embed" element={
-              <ProtectedRoute allowedRoles={['admin', 'manager']}>
-                <GestorEmbed />
-              </ProtectedRoute>
-            } />
-
-            <Route path="/reports" element={
-              <ProtectedRoute allowedRoles={['manager', 'admin']}>
-                <ReportsPage />
-              </ProtectedRoute>
-            } />
-
-            <Route path="/users" element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <UserManagement />
-              </ProtectedRoute>
-            } />
-
-            <Route path="/settings" element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <SystemSettings />
-              </ProtectedRoute>
-            } />
-
+            <Route path="/embed" element={<ProtectedRoute allowedRoles={['admin','manager']}><GestorEmbed /></ProtectedRoute>} />
+            <Route path="/reports" element={<ProtectedRoute allowedRoles={['manager','admin']}><ReportsPage /></ProtectedRoute>} />
+            <Route path="/users" element={<ProtectedRoute allowedRoles={['admin']}><UserManagement /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin']}><SystemSettings /></ProtectedRoute>} />
             <Route path="/profile"      element={<UserProfile />} />
             <Route path="/setup"        element={<InitialSetup />} />
             <Route path="/login"        element={<Navigate to={schoolDefault} replace />} />
