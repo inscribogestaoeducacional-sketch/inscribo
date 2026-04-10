@@ -47,7 +47,7 @@ import AdminSettings    from './components/superadmin/AdminSettings'
 import AdminCRM         from './components/superadmin/AdminCRM'
 import AdminOnboarding  from './components/superadmin/AdminOnboarding'
 import AdminConsultants from './components/superadmin/AdminConsultants'
-import AdminProfile     from './components/superadmin/AdminProfile'
+import AdminProfile     from './components/superadmin/AdminProfile.tsx'
 import ConsultantDetails from './components/superadmin/ConsultantDetails'
 
 // ── Legado ────────────────────────────────────────────────────────────────
