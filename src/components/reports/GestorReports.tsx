@@ -490,6 +490,10 @@ function TabFunil({ metrics, loading }: { metrics: FunnelMetric[]; loading: bool
 }
 
 // ─── Aba 3 — Marketing & CPA ──────────────────────────────────────────────────
+// ─── SUBSTITUA TODA A FUNÇÃO TabMarketing NO GestorReports.tsx ───────────────
+// Localizar: "function TabMarketing({" até o próximo "// ─── Aba 4"
+// e substituir por este bloco completo:
+
 function TabMarketing({ institutionId, cycle, metrics }: {
   institutionId: string; cycle: CampaignCycle | null; metrics: FunnelMetric[]
 }) {
@@ -500,7 +504,7 @@ function TabMarketing({ institutionId, cycle, metrics }: {
   useEffect(() => {
     if (!cycle) return
     loadEntries()
-  }, [cycle])
+  }, [cycle, metrics]) // ← metrics na dependência para sincronizar automaticamente
 
   const loadEntries = async () => {
     if (!cycle) return
@@ -509,33 +513,39 @@ function TabMarketing({ institutionId, cycle, metrics }: {
       .select('*')
       .eq('institution_id', institutionId)
       .order('month_year')
-    if (data) setEntries(data)
-    else {
-      // Criar entradas vazias a partir das metas
-      const empty: MarketingEntry[] = (cycle?.monthly_targets || []).map((mt, i) => ({
+
+    // ✅ Leads SEMPRE vêm do funil real (registrations) — gestor só insere investimento
+    const base: MarketingEntry[] = (cycle?.monthly_targets || []).map((mt, i) => {
+      const existing = data?.find(d => d.month_year === `${mt.month}-${mt.year}`)
+      return {
         institution_id: institutionId,
         month_year: `${mt.month}-${mt.year}`,
-        investment: 0,
+        investment: existing?.investment || 0,
         leads_generated: metrics[i]?.registrations || 0,
         cpa_target: mt.cpa_target || 0,
-      }))
-      setEntries(empty)
-    }
+        id: existing?.id,
+        channel: existing?.channel,
+      }
+    })
+    setEntries(base)
   }
 
-  const updateEntry = (idx: number, field: keyof MarketingEntry, value: number) => {
-    setEntries(prev => prev.map((e, i) => i === idx ? { ...e, [field]: value } : e))
+  // ✅ Só atualiza investment — leads vêm automaticamente do funil
+  const updateInvestment = (idx: number, value: number) => {
+    setEntries(prev => prev.map((e, i) => i === idx ? { ...e, investment: value } : e))
   }
 
   const saveAll = async () => {
     setSaving(true)
     try {
       for (const entry of entries) {
-        if (entry.id) {
-          await supabase.from('marketing_campaigns').update({ investment: entry.investment, leads_generated: entry.leads_generated }).eq('id', entry.id)
-        } else {
-          await supabase.from('marketing_campaigns').upsert({ ...entry }, { onConflict: 'month_year,institution_id' })
-        }
+        await supabase.from('marketing_campaigns').upsert({
+          institution_id: entry.institution_id,
+          month_year: entry.month_year,
+          investment: entry.investment,
+          leads_generated: entry.leads_generated,
+          cpa_target: entry.cpa_target,
+        }, { onConflict: 'month_year,institution_id' })
       }
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
@@ -567,13 +577,13 @@ function TabMarketing({ institutionId, cycle, metrics }: {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <SectionTitle sub="Insira os investimentos mensais para calcular o CPA automaticamente">Marketing & CPA</SectionTitle>
+      <SectionTitle sub="Insira o investimento mensal — leads sincronizados automaticamente do funil">Marketing & CPA</SectionTitle>
 
       {/* KPIs de marketing */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
         <KpiCard label="Investimento Total" value={fmtBRL(totalInvestment)} icon={<DollarSign />} color="#8B5CF6" />
         <KpiCard label="CPA Geral" value={fmtBRL(cpaGeral)} sub={`projetado: ${fmtBRL(cpaProjetado)}`} icon={<Target />} color={cpaStatus > 20 ? '#DC2626' : '#00A896'} desvio={cpaStatus} />
-        <KpiCard label="Total de Leads" value={fmt(totalLeads)} icon={<Users />} color="#3B82F6" />
+        <KpiCard label="Total de Leads" value={fmt(totalLeads)} sub="sincronizado do funil" icon={<Users />} color="#3B82F6" />
       </div>
 
       {/* Status do CPA */}
@@ -624,10 +634,15 @@ function TabMarketing({ institutionId, cycle, metrics }: {
         </div>
       )}
 
-      {/* Tabela editável */}
+      {/* Tabela — apenas investimento editável */}
       <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
         <div style={{ padding: '14px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Inserir Investimento Mensal</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Inserir Investimento Mensal</span>
+            <span style={{ fontSize: 11, color: '#3B82F6', background: '#EFF6FF', padding: '2px 8px', borderRadius: 999, fontWeight: 600 }}>
+              Leads sincronizados do funil
+            </span>
+          </div>
           <button onClick={saveAll} disabled={saving} style={{
             display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px',
             borderRadius: 9, background: saved ? '#16a34a' : '#00A896', color: '#fff',
@@ -642,7 +657,7 @@ function TabMarketing({ institutionId, cycle, metrics }: {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ background: '#F8FAFC' }}>
-                {['Mês', '% Leads', 'Leads Gerados', 'Investimento (R$)', 'CPA Real', 'CPA Meta', 'Status'].map(h => (
+                {['Mês', '% Leads', 'Leads (funil)', 'Investimento (R$)', 'CPA Real', 'CPA Meta', 'Status'].map(h => (
                   <th key={h} style={{ padding: '10px 12px', textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>{h}</th>
                 ))}
               </tr>
@@ -653,7 +668,7 @@ function TabMarketing({ institutionId, cycle, metrics }: {
                 const mt = cycle?.monthly_targets?.[i]
                 const cpaMeta = mt?.cpa_target || 0
                 const pctLeads = totalLeads > 0 ? (e.leads_generated / totalLeads) * 100 : 0
-                const cpaStatus = cpaMeta > 0 && cpa > 0 ? ((cpa - cpaMeta) / cpaMeta) * 100 : null
+                const cpaStatusRow = cpaMeta > 0 && cpa > 0 ? ((cpa - cpaMeta) / cpaMeta) * 100 : null
 
                 return (
                   <tr key={i} style={{ borderBottom: '1px solid #F8FAFC', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
@@ -661,21 +676,28 @@ function TabMarketing({ institutionId, cycle, metrics }: {
                       {e.month_year ? `${MONTH_NAMES[(parseInt(e.month_year.split('-')[0]) - 1) % 12]}/${e.month_year.split('-')[1]}` : `M${i + 1}`}
                     </td>
                     <td style={{ padding: '8px 12px', textAlign: 'center', color: '#64748B' }}>{pctLeads.toFixed(1)}%</td>
-                    <td style={{ padding: '6px 12px', textAlign: 'center' }}>
-                      <input type="number" value={e.leads_generated || 0} onChange={ev => updateEntry(i, 'leads_generated', parseInt(ev.target.value) || 0)}
-                        style={{ width: 70, padding: '4px 8px', borderRadius: 7, border: '1px solid #E2E8F0', textAlign: 'center', fontSize: 12, outline: 'none', background: '#F8FAFC' }} />
+                    {/* ✅ Leads: somente leitura, vem do funil */}
+                    <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                      <span style={{ fontWeight: 700, color: '#3B82F6', fontSize: 13 }}>
+                        {fmt(e.leads_generated || 0)}
+                      </span>
                     </td>
+                    {/* ✅ Apenas investimento é editável */}
                     <td style={{ padding: '6px 12px', textAlign: 'center' }}>
-                      <input type="number" value={e.investment || 0} onChange={ev => updateEntry(i, 'investment', parseFloat(ev.target.value) || 0)}
-                        style={{ width: 90, padding: '4px 8px', borderRadius: 7, border: '1.5px solid #C4B5FD', textAlign: 'center', fontSize: 12, outline: 'none', background: '#F5F3FF' }} />
+                      <input
+                        type="number"
+                        value={e.investment || 0}
+                        onChange={ev => updateInvestment(i, parseFloat(ev.target.value) || 0)}
+                        style={{ width: 90, padding: '4px 8px', borderRadius: 7, border: '1.5px solid #C4B5FD', textAlign: 'center', fontSize: 12, outline: 'none', background: '#F5F3FF' }}
+                      />
                     </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, color: cpaStatus && cpaStatus > 20 ? '#DC2626' : '#1A2B4A' }}>
+                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, color: cpaStatusRow && cpaStatusRow > 20 ? '#DC2626' : '#1A2B4A' }}>
                       {cpa > 0 ? fmtBRL(cpa) : '—'}
                     </td>
                     <td style={{ padding: '8px 12px', textAlign: 'center', color: '#94A3B8' }}>{cpaMeta > 0 ? fmtBRL(cpaMeta) : '—'}</td>
                     <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                      {cpaStatus !== null
-                        ? <DesvioTag value={-cpaStatus} />
+                      {cpaStatusRow !== null
+                        ? <DesvioTag value={-cpaStatusRow} />
                         : <span style={{ color: '#94A3B8', fontSize: 11 }}>—</span>}
                     </td>
                   </tr>
@@ -684,7 +706,7 @@ function TabMarketing({ institutionId, cycle, metrics }: {
               <tr style={{ background: '#F0FDF4', borderTop: '2px solid #BBF7D0' }}>
                 <td style={{ padding: '10px 12px', fontWeight: 800, color: '#1A2B4A' }}>TOTAL</td>
                 <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700 }}>100%</td>
-                <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700 }}>{fmt(totalLeads)}</td>
+                <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: '#3B82F6' }}>{fmt(totalLeads)}</td>
                 <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700 }}>{fmtBRL(totalInvestment)}</td>
                 <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: cpaStatus > 20 ? '#DC2626' : '#00A896' }}>{cpaGeral > 0 ? fmtBRL(cpaGeral) : '—'}</td>
                 <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: '#94A3B8' }}>{cpaProjetado > 0 ? fmtBRL(cpaProjetado) : '—'}</td>
@@ -699,7 +721,6 @@ function TabMarketing({ institutionId, cycle, metrics }: {
     </div>
   )
 }
-
 // ─── Aba 4 — Rematrículas ─────────────────────────────────────────────────────
 function TabRematriculas({ institutionId, cycle }: { institutionId: string; cycle: CampaignCycle | null }) {
   const [entries, setEntries] = useState<MonthlyReenrollment[]>([])
