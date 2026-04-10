@@ -384,7 +384,23 @@ export default function CampaignGeneratorModal({
         if (isMounted.current) { setDraftToast('📋 Solicitação enviada. Aguardando aprovação.'); setTimeout(()=>{if(isMounted.current){setDraftToast(null);onClose()}},2500) } else onClose()
         return
       }
-      await supabase.from('campaign_cycles').upsert({ ...cycleData, status:'active', campaign_start_month:campaignStartMonthNum, school_data:{...schoolData,exits:schoolData.exits??{},total_exits:totalExits}, erp_files:erpFiles }, { onConflict:'institution_id,year' })
+      const { data: existingCycle } = await supabase
+  .from('campaign_cycles')
+  .select('id')
+  .eq('institution_id', institutionId)
+  .in('status', ['released', 'active'])
+  .order('created_at', { ascending: false })
+  .maybeSingle()
+
+if (existingCycle) {
+  await supabase.from('campaign_cycles')
+    .update({ ...cycleData, status:'active', campaign_start_month:campaignStartMonthNum, school_data:{...schoolData,exits:schoolData.exits??{},total_exits:totalExits}, erp_files:erpFiles })
+    .eq('id', existingCycle.id)
+} else {
+  await supabase.from('campaign_cycles').insert(
+    { ...cycleData, status:'active', campaign_start_month:campaignStartMonthNum, school_data:{...schoolData,exits:schoolData.exits??{},total_exits:totalExits}, erp_files:erpFiles }
+  )
+}
       const campaignMonths = getCampaignMonths(sd,ed)
       for (let mi=0;mi<adjustedPlan.monthly_targets.length;mi++) {
         const month=adjustedPlan.monthly_targets[mi]; const cm=campaignMonths[mi]
