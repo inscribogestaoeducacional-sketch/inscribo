@@ -482,7 +482,7 @@ Rede privada: ${marketData.private_school_rate ?? 18}% | Crescimento: ${marketDa
 
 ━━━ REGRAS OBRIGATÓRIAS ━━━
 1. enrollments_returning em Set/Out/Nov/Dez/Jan DEVE ser > 0
-   Distribua ${reenrollTarget} rematrículas: Set 5%, Out 25%, Nov 30%, Dez 20%, Jan 15%, Fev 5%
+   Distribua ${reenrollTarget} rematrículas conforme distribuição ${realReenrollDist ? 'REAL da escola' : 'padrão Brasil'}: ${Object.entries(reenrollMonthlyDist).map(([m,p]) => `Mês ${m}: ${(Number(p)*100).toFixed(1)}%`).join(' | ')}
 2. enrollments_new = novatos do mês pela sazonalidade calculada
 3. enrollments = enrollments_new + enrollments_returning
 4. registrations = ceil(schedules/0.76) | schedules = ceil(visits/0.63) | visits = ceil(enrollments_new/0.40)
