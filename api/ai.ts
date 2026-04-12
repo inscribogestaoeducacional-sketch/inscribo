@@ -7,7 +7,10 @@ function calcRealReenrollDistribution(
 ): Record<number, number> | null {
   const monthSums: Record<number, number> = {}
   const yearCount: Record<number, number> = {}
-  for (const entry of historicalData) {
+  // Usar apenas o ano mais recente para distribuição mais precisa
+  const sortedData = [...historicalData].sort((a, b) => (b as any).year - (a as any).year)
+  const recentData = sortedData.slice(0, 2) // últimos 2 anos
+  for (const entry of recentData) {
     const byMonth = entry.returning_students_by_month
     if (!byMonth || typeof byMonth !== 'object') continue
     const total = Object.values(byMonth).reduce((s, v) => s + Number(v), 0)
