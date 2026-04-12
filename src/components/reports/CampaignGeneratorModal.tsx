@@ -123,13 +123,21 @@ function redistributePlan(plan: GeneratedPlan, newTotal: number, reenrollTotal: 
     const inv = Math.round(ne * cpa)
     return { ...m, enrollments_new: ne, enrollments_returning: re, enrollments: te, visits: vis, schedules: sch, registrations: reg, leads_target: reg, investment_suggested: inv, cpa_target: te > 0 ? Math.round(inv/te) : 0 }
   })
-  // Corrigir diferença de arredondamento na rematrícula
+  // Corrigir arredondamento rematrícula
   const reenSum = u.monthly_targets.reduce((s,m) => s + (m.enrollments_returning??0), 0)
   const reenDiff = reenrollTotal - reenSum
   if (reenDiff !== 0) {
-    const lastIdx = u.monthly_targets.reduce((best, m, i) => (m.enrollments_returning??0) > (u.monthly_targets[best].enrollments_returning??0) ? i : best, 0)
-    u.monthly_targets[lastIdx].enrollments_returning = (u.monthly_targets[lastIdx].enrollments_returning??0) + reenDiff
-    u.monthly_targets[lastIdx].enrollments = (u.monthly_targets[lastIdx].enrollments_new??0) + (u.monthly_targets[lastIdx].enrollments_returning??0)
+    const lastReenIdx = u.monthly_targets.reduce((best,m,i) => (m.enrollments_returning??0) > (u.monthly_targets[best].enrollments_returning??0) ? i : best, 0)
+    u.monthly_targets[lastReenIdx].enrollments_returning = (u.monthly_targets[lastReenIdx].enrollments_returning??0) + reenDiff
+    u.monthly_targets[lastReenIdx].enrollments = (u.monthly_targets[lastReenIdx].enrollments_new??0) + (u.monthly_targets[lastReenIdx].enrollments_returning??0)
+  }
+  // Corrigir arredondamento novatos
+  const newSum = u.monthly_targets.reduce((s,m) => s + (m.enrollments_new??0), 0)
+  const newDiff = newTotal - newSum
+  if (newDiff !== 0) {
+    const lastNewIdx = u.monthly_targets.reduce((best,m,i) => (m.enrollments_new??0) > (u.monthly_targets[best].enrollments_new??0) ? i : best, 0)
+    u.monthly_targets[lastNewIdx].enrollments_new = (u.monthly_targets[lastNewIdx].enrollments_new??0) + newDiff
+    u.monthly_targets[lastNewIdx].enrollments = (u.monthly_targets[lastNewIdx].enrollments_new??0) + (u.monthly_targets[lastNewIdx].enrollments_returning??0)
   }
   u.summary.total_new_students_target = newTotal
   u.summary.reenrollment_target = reenrollTotal

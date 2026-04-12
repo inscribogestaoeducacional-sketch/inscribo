@@ -363,6 +363,7 @@ Para ${city}, ${state}, retorne SOMENTE JSON válido. Se não tiver dados precis
           reenrollments: number; transfers: number
           historical_funnel?: Record<string, number> | null
           returning_students?: number
+          returning_students_by_month?: Record<string, number> | null
         }[]
         marketData: { school_age_population?: number; private_school_rate?: number; sector_growth_rate?: number }
         growthTarget: { type: 'percentage' | 'absolute' | 'students'; value: number }
