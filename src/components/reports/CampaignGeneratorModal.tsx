@@ -367,6 +367,7 @@ const handleManualTargets = (newS: number, reen: number) => {
   const yearCount: Record<number, number> = {}
   for (const entry of historicalData as any[]) {
     const byMonth = entry.returning_students_by_month
+    console.log('entry.year:', entry.year, 'byMonth:', JSON.stringify(byMonth))
     if (!byMonth) continue
     const total = Object.values(byMonth).reduce((s: number, v) => s + Number(v), 0)
     if (!total) continue
