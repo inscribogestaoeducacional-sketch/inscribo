@@ -219,7 +219,7 @@ export default function UserManagement() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('*, institutions(name)')
+        .select('*')
         .eq('institution_id', user.institution_id)
         .order('created_at', { ascending: false })
       if (error) throw error
