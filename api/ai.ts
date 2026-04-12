@@ -533,7 +533,25 @@ Retorne SOMENTE JSON válido:
       } catch {
         return res.status(422).json({ error: 'Erro ao parsear resposta da IA', raw: result })
       }
-
+// ✅ Sobrescrever rematrículas com distribuição real — não confiar na IA para isso
+      if (reenrollTarget > 0 && parsed.monthly_targets) {
+        const tgts = parsed.monthly_targets as any[]
+        tgts.forEach((m, idx) => {
+          const monthNum = campaignMonths[idx]?.month ?? 9
+          const pct = reenrollMonthlyDist[monthNum] ?? 0.03
+          m.enrollments_returning = Math.round(reenrollTarget * pct)
+          m.enrollments = (m.enrollments_new || 0) + m.enrollments_returning
+          m.cpa_target = m.enrollments > 0 && m.investment_suggested ? Math.round(m.investment_suggested / m.enrollments) : 0
+        })
+        // Corrigir arredondamento
+        const reenSum = tgts.reduce((s: number, m: any) => s + m.enrollments_returning, 0)
+        const diff = reenrollTarget - reenSum
+        if (diff !== 0) {
+          const maxIdx = tgts.reduce((best: number, m: any, i: number) => m.enrollments_returning > tgts[best].enrollments_returning ? i : best, 0)
+          tgts[maxIdx].enrollments_returning += diff
+          tgts[maxIdx].enrollments = (tgts[maxIdx].enrollments_new || 0) + tgts[maxIdx].enrollments_returning
+        }
+      }
       // Fallback: rematrícula não pode ser zero se há histórico
       const targets = parsed.monthly_targets as { month: number; enrollments_returning?: number; enrollments_new?: number; enrollments?: number; investment_suggested?: number }[] | undefined
       if (targets && reenrollTarget > 0) {
