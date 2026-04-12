@@ -358,11 +358,38 @@ export default function CampaignGeneratorModal({
     setAdjustedPlan(scalePlan(generatedPlan, [0.75,1.0,1.3][level]))
   }
 
-  const handleManualTargets = (newS: number, reen: number) => {
-    if (!generatedPlan) return
-    setAdjustedPlan(redistributePlan(generatedPlan, newS, reen, (generatedPlan as any)?.reenroll_distribution ?? reenrollDistribution))
-    setAmbitiousLevel(-1)
+const handleManualTargets = (newS: number, reen: number) => {
+  if (!generatedPlan) return
+  // Calcular distribuição real a partir do historicalData disponível
+  const monthSums: Record<number, number> = {}
+  const yearCount: Record<number, number> = {}
+  for (const entry of historicalData as any[]) {
+    const byMonth = entry.returning_students_by_month
+    if (!byMonth) continue
+    const total = Object.values(byMonth).reduce((s: number, v) => s + Number(v), 0)
+    if (!total) continue
+    for (const [key, count] of Object.entries(byMonth)) {
+      const mn = key.includes('-') ? parseInt(key.split('-')[1]) : parseInt(key)
+      if (isNaN(mn) || mn < 1 || mn > 12) continue
+      const pct = Number(count) / total
+      monthSums[mn] = (monthSums[mn] ?? 0) + pct
+      yearCount[mn] = (yearCount[mn] ?? 0) + 1
+    }
   }
+  let dist: Record<number,number> | null = null
+  if (Object.keys(monthSums).length > 0) {
+    const raw: Record<number,number> = {}
+    for (const [m, sum] of Object.entries(monthSums)) raw[Number(m)] = sum / yearCount[Number(m)]
+    const totalSum = Object.values(raw).reduce((s,v) => s+v, 0)
+    if (totalSum > 0) {
+      dist = {}
+      for (const [m,v] of Object.entries(raw)) dist[Number(m)] = v / totalSum
+    }
+  }
+  const finalDist = dist ?? reenrollDistribution
+  setAdjustedPlan(redistributePlan(generatedPlan, newS, reen, finalDist))
+  setAmbitiousLevel(-1)
+}
 
   const updateMonthlyCell = (idx: number, field: keyof MonthlyTarget, value: number) => {
     if (!adjustedPlan) return
