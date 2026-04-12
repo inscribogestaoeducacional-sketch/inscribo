@@ -278,7 +278,7 @@ export default function CampaignGeneratorModal({
         const data = await res.json()
         const result = data.result
         if (!result) throw new Error('sem resultado')
-        console.log('PDF resultado:', JSON.stringify(result).slice(0, 300))  
+        console.log('returning_by_month:', JSON.stringify((result as any).returning_students_by_month))  
         const detectedYear = (result.detected_year as number) || parseInt(file.name.match(/\d{4}/)?.[0]||'0')
         const total = (result.total_students as number)||0
         const novatos = (result.new_students as number)||0
