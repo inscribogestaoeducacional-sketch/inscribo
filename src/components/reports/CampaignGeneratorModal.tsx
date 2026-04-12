@@ -405,7 +405,7 @@ if (existingCycle) {
       for (let mi=0;mi<adjustedPlan.monthly_targets.length;mi++) {
         const month=adjustedPlan.monthly_targets[mi]; const cm=campaignMonths[mi]
         const period=cm?cm.period:`${month.year}-${String(month.month).padStart(2,'0')}`
-        await supabase.from('funnel_metrics').upsert({ institution_id:institutionId,period,registrations_target:month.registrations,schedules_target:month.schedules,visits_target:month.visits,enrollments_target:month.enrollments,registrations:0,schedules:0,visits:0,enrollments:0 },{onConflict:'period,institution_id',ignoreDuplicates:false})
+        await supabase.from('funnel_metrics').upsert({ institution_id:institutionId,period,registrations_target:month.registrations,schedules_target:month.schedules,visits_target:month.visits,enrollments_target:month.enrollments_new??0,registrations:0,schedules:0,visits:0,enrollments:0 },{onConflict:'period,institution_id',ignoreDuplicates:false})
         if ((month.enrollments_returning??0)>0) await supabase.from('monthly_reenrollments').upsert({institution_id:institutionId,period,target:month.enrollments_returning??0,confirmed:0,base_total:schoolData.current_students},{onConflict:'institution_id,period',ignoreDuplicates:false})
         await supabase.from('marketing_campaigns').upsert({institution_id:institutionId,month_year:cm?`${cm.month}-${cm.year}`:`${month.month}-${month.year}`,cpa_target:month.cpa_target,investment:0,leads_generated:0},{onConflict:'month_year,institution_id',ignoreDuplicates:false})
       }
