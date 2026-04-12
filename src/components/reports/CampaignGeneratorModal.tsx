@@ -293,7 +293,15 @@ export default function CampaignGeneratorModal({
     }
     setErpFiles(prev => [...prev, ...newErpFiles].filter((f,i,arr) => arr.findIndex(x=>x.name===f.name)===i))
     if (newHistData.length) {
-      setHistoricalData(prev => [...prev,...newHistData].reduce<HistoricalYear[]>((acc,r) => { if(!acc.find(x=>x.year===r.year)) acc.push(r); return acc },[]).sort((a,b)=>a.year-b.year))
+      setHistoricalData(prev => {
+  const merged = [...prev]
+  for (const r of newHistData) {
+    const idx = merged.findIndex(x => x.year === r.year)
+    if (idx >= 0) merged[idx] = { ...merged[idx], ...r } // atualiza preservando returning_students_by_month
+    else merged.push(r)
+  }
+  return merged.sort((a,b) => a.year - b.year)
+})
       const mostRecent = newErpFiles.filter(f=>!f.error&&f.year>2000).sort((a,b)=>b.year-a.year)[0]
       if (mostRecent) setSchoolData(s => ({ ...s, current_students:mostRecent.total||s.current_students, ...(mostRecent.fee?{avg_monthly_fee:mostRecent.fee}:{}) }))
     }
