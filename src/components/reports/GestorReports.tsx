@@ -744,15 +744,16 @@ function TabRematriculas({ institutionId, cycle }: { institutionId: string; cycl
     if (data && data.length > 0) {
       setEntries(data)
     } else {
-      // Gerar entradas vazias a partir das metas do ciclo
+// Gerar entradas vazias a partir das metas do ciclo
       const months = cycle?.monthly_targets?.map((mt, i) => {
-        const period = `${mt.year}-${String(typeof mt.month === 'number' ? mt.month : i + 8).padStart(2, '0')}`
-        const accTarget = Math.round((cycle.base_students * cycle.target_reenrollment_rate) * ((i + 1) / (cycle.monthly_targets?.length || 1)))
+        const monthNum = typeof mt.month === 'number' ? mt.month :
+          ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'].indexOf(String(mt.month)) + 1 || (i < 4 ? i + 9 : i - 3)
+        const period = `${mt.year}-${String(monthNum).padStart(2, '0')}`
         return {
           institution_id: institutionId,
           period,
           confirmed: 0,
-          target: mt.enrollments_returning || accTarget,
+          target: mt.enrollments_returning || 0,
           base_total: cycle.base_students || 0,
         }
       }) || []
@@ -790,7 +791,7 @@ function TabRematriculas({ institutionId, cycle }: { institutionId: string; cycl
 
   const baseElegivel = (cycle?.base_students || 0) - Object.values(cycle?.school_data?.exits || {}).reduce((s, v) => s + (Number(v) || 0), 0)
   const totalConfirmed = entries.reduce((s, e) => s + e.confirmed, 0)
-  const totalTarget = entries.length > 0 ? entries[entries.length - 1]?.target || 0 : 0
+  const totalTarget = entries.reduce((s, e) => s + e.target, 0)
   const taxaFidelizacao = baseElegivel > 0 ? (totalConfirmed / baseElegivel) * 100 : 0
   const taxaMeta = cycle ? cycle.target_reenrollment_rate * 100 : 0
 
@@ -883,7 +884,9 @@ function TabRematriculas({ institutionId, cycle }: { institutionId: string; cycl
                     <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: pct >= taxaMeta ? '#16a34a' : '#F59E0B' }}>
                       {pct.toFixed(2)}%
                     </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'center', color: '#94A3B8' }}>{fmt(e.target)}</td>
+                    <td style={{ padding: '8px 12px', textAlign: 'center', color: '#94A3B8' }}>
+  {fmt(entries.slice(0, i + 1).reduce((s, x) => s + x.target, 0))}
+</td>
                     <td style={{ padding: '6px 12px', textAlign: 'center' }}>
                       <input type="number" value={e.confirmed} onChange={ev => update(i, 'confirmed', parseInt(ev.target.value) || 0)}
                         style={{ width: 80, padding: '4px 8px', borderRadius: 7, border: '1.5px solid #FCD34D', textAlign: 'center', fontSize: 12, outline: 'none', background: '#FFFBEB' }} />
