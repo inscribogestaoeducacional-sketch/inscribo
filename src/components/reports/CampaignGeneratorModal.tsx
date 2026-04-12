@@ -285,7 +285,7 @@ export default function CampaignGeneratorModal({
         newErpFiles.push({ name:file.name, year:detectedYear, total, novatos, veterans, fee:fee||undefined })
         if (detectedYear > 2000) {
           // ✅ SIGA: returning_students (veteranos) = reenrollments
-          newHistData.push({ year:detectedYear, total_students:total||0, new_enrollments:novatos||0, reenrollments:(result.reenrollments as number)||veterans||0, transfers:(result.transfers as number)||0 })
+          newHistData.push({ year:detectedYear, total_students:total||0, new_enrollments:novatos||0, reenrollments:(result.reenrollments as number)||veterans||0, transfers:(result.transfers as number)||0, returning_students_by_month:(result.returning_students_by_month as Record<string,number>)||null } as any)
         }
       } catch { newErpFiles.push({ name:file.name, year:0, total:0, novatos:0, veterans:0, error:true }) }
     }
