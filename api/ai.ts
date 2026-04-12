@@ -551,7 +551,7 @@ Retorne SOMENTE JSON válido:
       }
 
       const mode = hasHistory ? (historicalData.length >= 2 ? 'historical' : 'hybrid') : 'benchmark'
-      return res.json({ result: parsed, mode })
+      return res.json({ result: parsed, mode, reenroll_distribution: realReenrollDist })
     }
 
     // ── RELATÓRIO MENSAL IA ───────────────────────────────────────────────────

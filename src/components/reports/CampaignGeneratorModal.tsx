@@ -177,6 +177,7 @@ export default function CampaignGeneratorModal({
     end_date: `${new Date().getFullYear() + 1}-02-28`
   })
   const [growthTarget, setGrowthTarget] = useState<GrowthTarget>({ type: 'percentage', value: 10 })
+  const [reenrollDistribution, setReenrollDistribution] = useState<Record<number,number> | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isMounted = useRef(true)
@@ -345,6 +346,7 @@ export default function CampaignGeneratorModal({
       setGenerationMode(data.mode||'benchmark')
       setGeneratedPlan(data.result)
       setAdjustedPlan(JSON.parse(JSON.stringify(data.result)))
+      if (data.reenroll_distribution) setReenrollDistribution(data.reenroll_distribution)
       setAmbitiousLevel(1); setGenProgress(100)
       setTimeout(() => setStep(5), 400)
     } catch (e) { setError((e as Error).message) } finally { setLoadingGenerate(false) }
@@ -358,7 +360,7 @@ export default function CampaignGeneratorModal({
 
   const handleManualTargets = (newS: number, reen: number) => {
     if (!generatedPlan) return
-    setAdjustedPlan(redistributePlan(generatedPlan, newS, reen, generatedPlan?.reenroll_distribution))
+    setAdjustedPlan(redistributePlan(generatedPlan, newS, reen, (generatedPlan as any)?.reenroll_distribution ?? reenrollDistribution))
     setAmbitiousLevel(-1)
   }
 
