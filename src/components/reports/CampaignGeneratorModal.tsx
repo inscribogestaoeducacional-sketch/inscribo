@@ -103,12 +103,12 @@ function scalePlan(plan: GeneratedPlan, factor: number): GeneratedPlan {
   return s
 }
 
-function redistributePlan(plan: GeneratedPlan, newTotal: number, reenrollTotal: number): GeneratedPlan {
+function redistributePlan(plan: GeneratedPlan, newTotal: number, reenrollTotal: number, realReenrollDist?: Record<number,number> | null): GeneratedPlan {
   const u = JSON.parse(JSON.stringify(plan)) as GeneratedPlan
   const n = u.monthly_targets.length
   if (!n) return u
   const curNew = u.monthly_targets.reduce((s,m) => s + (m.enrollments_new??0), 0)
-  const reenDist: Record<number,number> = {8:0,9:0.05,10:0.25,11:0.30,12:0.20,1:0.15,2:0.05}
+  const reenDist: Record<number,number> = realReenrollDist ?? {8:0,9:0.05,10:0.25,11:0.30,12:0.20,1:0.15,2:0.05}
   const cpa = u.average_cpa || 150
   u.monthly_targets = u.monthly_targets.map((m, idx) => {
     const w = curNew > 0 ? (m.enrollments_new??0)/curNew : 1/n
@@ -358,7 +358,7 @@ export default function CampaignGeneratorModal({
 
   const handleManualTargets = (newS: number, reen: number) => {
     if (!generatedPlan) return
-    setAdjustedPlan(redistributePlan(generatedPlan, newS, reen))
+    setAdjustedPlan(redistributePlan(generatedPlan, newS, reen, generatedPlan?.reenroll_distribution))
     setAmbitiousLevel(-1)
   }
 

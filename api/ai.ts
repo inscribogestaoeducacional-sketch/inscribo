@@ -1,7 +1,36 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
-
+// ─── Distribuição mensal real de rematrículas (returning_students_by_month) ──
+function calcRealReenrollDistribution(
+  historicalData: { returning_students_by_month?: Record<string, number> | null }[]
+): Record<number, number> | null {
+  const monthSums: Record<number, number> = {}
+  const yearCount: Record<number, number> = {}
+  for (const entry of historicalData) {
+    const byMonth = entry.returning_students_by_month
+    if (!byMonth || typeof byMonth !== 'object') continue
+    const total = Object.values(byMonth).reduce((s, v) => s + Number(v), 0)
+    if (total === 0) continue
+    for (const [key, count] of Object.entries(byMonth)) {
+      const monthNum = key.includes('-') ? parseInt(key.split('-')[1]) : parseInt(key)
+      if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) continue
+      const pct = Number(count) / total
+      monthSums[monthNum] = (monthSums[monthNum] ?? 0) + pct
+      yearCount[monthNum] = (yearCount[monthNum] ?? 0) + 1
+    }
+  }
+  if (Object.keys(monthSums).length === 0) return null
+  const raw: Record<number, number> = {}
+  for (const [m, sum] of Object.entries(monthSums)) {
+    raw[Number(m)] = sum / yearCount[Number(m)]
+  }
+  const totalSum = Object.values(raw).reduce((s, v) => s + v, 0)
+  if (totalSum === 0) return null
+  const result: Record<number, number> = {}
+  for (const [m, v] of Object.entries(raw)) result[Number(m)] = v / totalSum
+  return result
+}
 async function callClaude(prompt: string, maxTokens = 1024): Promise<string> {
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
@@ -400,7 +429,10 @@ Para ${city}, ${state}, retorne SOMENTE JSON válido. Se não tiver dados precis
       }
 
       // Distribuição mensal rematrícula (acumulada progressiva)
-      const reenrollMonthlyDist: Record<number, number> = { 8: 0, 9: 0.05, 10: 0.25, 11: 0.30, 12: 0.20, 1: 0.15, 2: 0.05 }
+      const realReenrollDist = calcRealReenrollDistribution(historicalData || [])
+const reenrollMonthlyDist: Record<number, number> = realReenrollDist
+  ?? { 8: 0, 9: 0.05, 10: 0.25, 11: 0.30, 12: 0.20, 1: 0.15, 2: 0.05 }
+console.log('[generate_campaign] distribuição:', realReenrollDist ? 'REAL da escola' : 'padrão Brasil')
 
       const conv = { regToSch: 0.76, schToVis: 0.63, visToEnr: 0.40 }
 
