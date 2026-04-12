@@ -444,7 +444,7 @@ const handleManualTargets = (newS: number, reen: number) => {
   .from('campaign_cycles')
   .select('id')
   .eq('institution_id', institutionId)
-  .in('status', ['released', 'active'])
+  .in('status', ['released'])
   .order('created_at', { ascending: false })
   .maybeSingle()
 
