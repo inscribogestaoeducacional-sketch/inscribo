@@ -421,7 +421,7 @@ export default function UserManagement() {
                     </span>
                   </td>
                   <td style={{ padding: '12px 16px', color: '#64748B', fontSize: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Building2 size={12} color="#94A3B8" />{u.institutions?.name || '—'}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Building2 size={12} color="#94A3B8" />{user?.institution_name || institutionId}</div>
                   </td>
                   <td style={{ padding: '12px 16px' }}>
                     <button onClick={() => handleToggle(u.id, u.active)} style={{ padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', background: u.active ? '#D1FAE5' : '#FEE2E2', color: u.active ? '#16a34a' : '#DC2626', display: 'flex', alignItems: 'center', gap: 4 }}>
