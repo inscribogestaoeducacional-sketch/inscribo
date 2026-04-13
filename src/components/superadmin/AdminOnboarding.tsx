@@ -298,11 +298,12 @@ function PaymentPanel({ process, onSuccess }: { process: Process; onSuccess: () 
 
       // Cria cobrança no Asaas
       const { data, error } = await supabase.functions.invoke('asaas-create-charge', {
-        body: {
-          institution_id: process.institution_id,
-          name:           process.institution?.name,
-          email:          process.institution?.email,
-          value:          implPerParcel,
+       body: {
+  institution_id: process.institution_id,
+  name:           process.institution?.name,
+  email:          process.institution?.email,
+  cpfCnpj:        process.institution?.cnpj || '',
+  value:          implPerParcel,
           description:    `Implantação${Number(form.installments) > 1 ? ` (1/${form.installments})` : ''} — ${process.institution?.name}`,
           dueDate:        form.dueDate,
           billingType:    form.billingType,
@@ -820,11 +821,11 @@ export default function AdminOnboarding() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [procRes, meetRes, instRes] = await Promise.all([
-        supabase.from('onboarding_processes').select('*, institutions(id,name,city,state,email,monthly_value,implementation_value)').order('created_at',{ascending:false}),
-        supabase.from('onboarding_meetings').select('*, institutions(id,name,city,state)').order('scheduled_at'),
-        supabase.from('institutions').select('id,name,city,state,email,monthly_value,implementation_value,plan_status').not('plan_status','in','("cancelled")').order('name'),
-      ])
+     const [procRes, meetRes, instRes] = await Promise.all([
+  supabase.from('onboarding_processes').select('*, institutions(id,name,city,state,email,cnpj,monthly_value,implementation_value)').order('created_at',{ascending:false}),
+  supabase.from('onboarding_meetings').select('*, institutions(id,name,city,state)').order('scheduled_at'),
+  supabase.from('institutions').select('id,name,city,state,email,cnpj,monthly_value,implementation_value,plan_status').not('plan_status','in','("cancelled")').order('name'),
+])
       const procs: Process[] = (procRes.data||[]).map((p:any)=>({...p,institution:p.institutions}))
       if (procs.length>0) {
         const tasksRes = await supabase.from('onboarding_tasks').select('*').in('process_id',procs.map(p=>p.id)).order('sort_order')
