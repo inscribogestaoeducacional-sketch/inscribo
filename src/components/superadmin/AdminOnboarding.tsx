@@ -263,8 +263,20 @@ function PaymentPanel({ process, onSuccess }: { process: Process; onSuccess: () 
     // Plano mensal
     planMonths:   '12',
   })
-  const [saving, setSaving]     = useState(false)
   const [payLink, setPayLink] = useState('')
+const [copied, setCopied]     = useState(false)
+
+useEffect(() => {
+  supabase.from('payments')
+    .select('asaas_charge_url')
+    .eq('institution_id', process.institution_id)
+    .eq('payment_type', 'implementation')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+    .then(({ data }) => { if (data?.asaas_charge_url) setPayLink(data.asaas_charge_url) })
+}, [process.institution_id])
 
 useEffect(() => {
   supabase.from('payments')
