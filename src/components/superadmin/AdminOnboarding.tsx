@@ -16,7 +16,7 @@ type Phase = 'contract' | 'implementation' | 'training' | 'campaign' | 'monthly'
 type MeetingType = 'kickoff' | 'implementation' | 'training' | 'monthly' | 'extra'
 type MeetingStatus = 'scheduled' | 'done' | 'cancelled' | 'rescheduled'
 
-interface Institution { id: string; name: string; city: string; state: string; email: string; monthly_value?: number; implementation_value?: number }
+interface Institution { id: string; name: string; city: string; state: string; email: string; cnpj?: string; monthly_value?: number; implementation_value?: number }
 interface Process {
   id: string; institution_id: string
   status: 'pending' | 'in_progress' | 'completed' | 'paused'
