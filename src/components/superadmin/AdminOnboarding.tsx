@@ -250,31 +250,64 @@ function ContractPanel({ process, onSuccess }: { process: Process; onSuccess: ()
 }
 
 // ─── Painel de Pagamento (inline no card) ─────────────────────────────────
-const [payLink, setPayLink] = useState('')
-const [copied, setCopied]   = useState(false)
-const [saving, setSaving]   = useState(false)
-const [err, setErr]         = useState('')
+function PaymentPanel({ process, onSuccess }: { process: Process; onSuccess: () => void }) {
+  const [open, setOpen]         = useState(false)
+  const [isFree, setIsFree]     = useState(false)
+  const [form, setForm]         = useState({
+    implValue:    String(process.institution?.implementation_value || 550),
+    monthlyValue: String(process.institution?.monthly_value || 550),
+    dueDate:      new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+    billingType:  'PIX',
+    installments: '1',
+    planMonths:   '12',
+  })
+  const [payLink, setPayLink] = useState('')
+  const [copied, setCopied]   = useState(false)
+  const [saving, setSaving]   = useState(false)
+  const [err, setErr]         = useState('')
 
-useEffect(() => {
-  supabase.from('payments')
-    .select('asaas_charge_url')
-    .eq('institution_id', process.institution_id)
-    .eq('payment_type', 'implementation')
-    .eq('status', 'pending')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-    .then(({ data }) => { if (data?.asaas_charge_url) setPayLink(data.asaas_charge_url) })
-}, [process.institution_id])
+  useEffect(() => {
+    supabase.from('payments')
+      .select('asaas_charge_url')
+      .eq('institution_id', process.institution_id)
+      .eq('payment_type', 'implementation')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => { if (data?.asaas_charge_url) setPayLink(data.asaas_charge_url) })
+  }, [process.institution_id])
 
-      // Cria cobrança no Asaas
+  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
+
+  const implTotal     = Number(form.implValue) || 0
+  const implPerParcel = form.installments === '1' ? implTotal : Math.ceil(implTotal / Number(form.installments))
+  const monthlyTotal  = Number(form.monthlyValue) * Number(form.planMonths)
+
+  const handleGenerate = async () => {
+    if (!isFree && (!form.implValue || !form.monthlyValue)) { setErr('Preencha os valores.'); return }
+    setSaving(true); setErr('')
+    try {
+      if (isFree) {
+        await supabase.from('payments').insert({
+          institution_id: process.institution_id,
+          amount: 0, status: 'paid', payment_type: 'implementation',
+          due_date: new Date().toISOString().split('T')[0],
+          description: 'Implantação gratuita',
+        })
+        const task = (process.tasks || []).find(t => t.phase === 'contract' && t.title.toLowerCase().includes('pagamento'))
+        if (task) await supabase.from('onboarding_tasks').update({ done: true, done_at: new Date().toISOString() }).eq('id', task.id)
+        await supabase.from('institutions').update({ plan_status: 'active' }).eq('id', process.institution_id)
+        onSuccess(); setOpen(false); return
+      }
+
       const { data, error } = await supabase.functions.invoke('asaas-create-charge', {
-       body: {
-  institution_id: process.institution_id,
-  name:           process.institution?.name,
-  email:          process.institution?.email,
-  cpfCnpj:        process.institution?.cnpj || '',
-  value:          implPerParcel,
+        body: {
+          institution_id: process.institution_id,
+          name:           process.institution?.name,
+          email:          process.institution?.email,
+          cpfCnpj:        process.institution?.cnpj || '',
+          value:          implPerParcel,
           description:    `Implantação${Number(form.installments) > 1 ? ` (1/${form.installments})` : ''} — ${process.institution?.name}`,
           dueDate:        form.dueDate,
           billingType:    form.billingType,
@@ -282,15 +315,14 @@ useEffect(() => {
       })
       if (error) throw new Error(error.message)
 
-      // Salva mensalidade no cadastro da escola
       await supabase.from('institutions').update({
         monthly_value:        Number(form.monthlyValue),
         implementation_value: implTotal,
+        plan_status:          'pending_payment',
       }).eq('id', process.institution_id)
 
       if (data?.paymentLink) setPayLink(data.paymentLink)
 
-      // Cria agendamento das mensalidades futuras (registro local)
       await supabase.from('payments').insert({
         institution_id: process.institution_id,
         amount:         Number(form.monthlyValue),
@@ -302,7 +334,7 @@ useEffect(() => {
 
       onSuccess()
     } catch (e: any) {
-      setErr(e?.message || 'Erro ao gerar cobrança. Configure Asaas em Configurações.')
+      setErr(e?.message || 'Erro ao gerar cobrança.')
     } finally {
       setSaving(false)
     }
@@ -329,7 +361,6 @@ useEffect(() => {
         <div className="p-4 bg-white space-y-4 border-t border-green-100">
           {err && <p className="text-xs text-red-500 font-medium flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" />{err}</p>}
 
-          {/* Toggle gratuito */}
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
             <div className="flex items-center gap-2">
               <Gift className="w-4 h-4 text-purple-500" />
@@ -343,7 +374,6 @@ useEffect(() => {
 
           {!isFree && (
             <>
-              {/* Implantação */}
               <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 space-y-3">
                 <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">Taxa de implantação</p>
                 <div className="grid grid-cols-2 gap-3">
@@ -365,14 +395,9 @@ useEffect(() => {
                     </select>
                   </div>
                 </div>
-                {Number(form.installments) > 1 && (
-                  <p className="text-xs text-blue-600 font-semibold">
-                    {form.installments}x de {fmtBRL(implPerParcel)}
-                  </p>
-                )}
+                {Number(form.installments) > 1 && <p className="text-xs text-blue-600 font-semibold">{form.installments}x de {fmtBRL(implPerParcel)}</p>}
               </div>
 
-              {/* Mensalidade */}
               <div className="bg-cyan-50 rounded-xl p-4 border border-cyan-100 space-y-3">
                 <p className="text-xs font-bold text-cyan-700 uppercase tracking-wide">Plano mensal</p>
                 <div className="grid grid-cols-2 gap-3">
@@ -399,43 +424,27 @@ useEffect(() => {
                 </div>
               </div>
 
-              {/* Cobrança */}
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={lbl}>Vencimento da implantação</label>
-                    <input type="date" className={inp} value={form.dueDate} onChange={e => set('dueDate', e.target.value)} />
-                  </div>
-                  <div>
-                    <label className={lbl}>Forma de pagamento</label>
-                    <select className={inp} value={form.billingType} onChange={e => set('billingType', e.target.value)}>
-                      <option value="PIX">PIX</option>
-                      <option value="BOLETO">Boleto</option>
-                      <option value="CREDIT_CARD">Cartão de crédito</option>
-                    </select>
-                  </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={lbl}>Vencimento da implantação</label>
+                  <input type="date" className={inp} value={form.dueDate} onChange={e => set('dueDate', e.target.value)} />
+                </div>
+                <div>
+                  <label className={lbl}>Forma de pagamento</label>
+                  <select className={inp} value={form.billingType} onChange={e => set('billingType', e.target.value)}>
+                    <option value="PIX">PIX</option>
+                    <option value="BOLETO">Boleto</option>
+                    <option value="CREDIT_CARD">Cartão de crédito</option>
+                  </select>
                 </div>
               </div>
 
-              {/* Resumo */}
               <div className="bg-gray-50 rounded-xl p-3 border border-gray-200 space-y-1 text-xs">
                 <p className="font-bold text-gray-700 mb-2">Resumo financeiro</p>
-                <div className="flex justify-between text-gray-600">
-                  <span>Implantação</span>
-                  <span className="font-semibold">{fmtBRL(implTotal)}{Number(form.installments) > 1 ? ` (${form.installments}x ${fmtBRL(implPerParcel)})` : ''}</span>
-                </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Mensalidade</span>
-                  <span className="font-semibold">{fmtBRL(Number(form.monthlyValue))}/mês</span>
-                </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Plano contratado</span>
-                  <span className="font-semibold">{form.planMonths} meses</span>
-                </div>
-                <div className="flex justify-between text-gray-700 font-bold pt-1 border-t border-gray-200">
-                  <span>Total do contrato</span>
-                  <span>{fmtBRL(implTotal + monthlyTotal)}</span>
-                </div>
+                <div className="flex justify-between text-gray-600"><span>Implantação</span><span className="font-semibold">{fmtBRL(implTotal)}</span></div>
+                <div className="flex justify-between text-gray-600"><span>Mensalidade</span><span className="font-semibold">{fmtBRL(Number(form.monthlyValue))}/mês</span></div>
+                <div className="flex justify-between text-gray-600"><span>Plano contratado</span><span className="font-semibold">{form.planMonths} meses</span></div>
+                <div className="flex justify-between text-gray-700 font-bold pt-1 border-t border-gray-200"><span>Total do contrato</span><span>{fmtBRL(implTotal + monthlyTotal)}</span></div>
               </div>
             </>
           )}
@@ -459,10 +468,8 @@ useEffect(() => {
             className="w-full flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold text-sm disabled:opacity-60">
             {saving
               ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Gerando...</>
-              : isFree
-              ? <><Gift className="w-4 h-4" /> Confirmar sem cobrança</>
-              : alreadyPaid
-              ? <><CreditCard className="w-4 h-4" /> Atualizar cobrança</>
+              : isFree ? <><Gift className="w-4 h-4" /> Confirmar sem cobrança</>
+              : alreadyPaid ? <><CreditCard className="w-4 h-4" /> Atualizar cobrança</>
               : <><CreditCard className="w-4 h-4" /> Gerar cobrança</>
             }
           </button>
