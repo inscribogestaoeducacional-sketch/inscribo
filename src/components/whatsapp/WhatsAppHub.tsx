@@ -800,19 +800,19 @@ export default function WhatsAppHub() {
     if (!user?.institution_id) { setLoading(false); return }
 
     const init = async () => {
-      const inst = await DatabaseService.getInstitution(user.institution_id!)
+      const { data: phoneRecord } = await supabase
+        .from('whatsapp_phone_numbers')
+        .select('id')
+        .eq('institution_id', user.institution_id!)
+        .eq('is_active', true)
+        .maybeSingle()
 
-      // Detectar qual API usar: Meta tem precedência se whatsapp_connected === true
-      const isMeta = !!(inst as any)?.whatsapp_connected && !!(inst as any)?.whatsapp_phone_id
-      setUseMetaApi(isMeta)
-      if (isMeta) {
-        setMetaConfig({
-          phone_id: (inst as any).whatsapp_phone_id,
-          token: (inst as any).whatsapp_token,
-        })
+      if (phoneRecord) {
+        setUseMetaApi(true)
         setConnectionStatus('connected')
         setIsConnected(true)
       } else {
+        const inst = await DatabaseService.getInstitution(user.institution_id!)
         setIsConnected(!!inst?.evolution_instance)
       }
 
@@ -1074,7 +1074,15 @@ export default function WhatsAppHub() {
     if (!inputText.trim() || !activeId) return
     const text = inputText.trim()
     const tempId = `temp-${Date.now()}`
-    const tempMsg: Message = { id: tempId, type: 'text', content: text, from: 'me', ts: new Date(), status: 'sent' }
+    const tempMsg: Message = {
+      id: tempId,
+      type: 'text',
+      content: text,
+      from: 'me',
+      ts: new Date(),
+      status: 'sent',
+    }
+
     setConversations(prev => prev.map(c =>
       c.id === activeId
         ? { ...c, messages: [...c.messages, tempMsg], lastMessage: text, lastTime: tempMsg.ts }
@@ -1082,66 +1090,46 @@ export default function WhatsAppHub() {
     ))
     setInputText('')
     setShowQuickReplies(false)
+
     try {
-      if (useMetaApi && metaConfig) {
-        // ── Meta Cloud API ────────────────────────────────────────
-        const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/\D/g, '')
-        const res = await fetch(
-          `https://graph.facebook.com/v18.0/${metaConfig.phone_id}/messages`,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${metaConfig.token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              messaging_product: 'whatsapp',
-              to,
-              type: 'text',
-              text: { body: text },
-            }),
-          }
-        )
-        const data = await res.json()
-        if (!res.ok) throw new Error((data as any)?.error?.message || 'Erro Meta API')
-        const sentMsgId = (data as any).messages?.[0]?.id || `sent-${Date.now()}`
-        // Salvar no Supabase para aparecer no hub
-        await supabase.from('whatsapp_messages').insert({
+      const to = activeId
+        .replace(/@s\.whatsapp\.net$/, '')
+        .replace(/@.*/, '')
+        .replace(/\D/g, '')
+
+      const res = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           institution_id: user?.institution_id,
-          remote_jid: activeId,
-          phone_number: to,
-          from_me: true,
-          direction: 'outbound',
-          message_type: 'text',
-          content: text,
-          status: 'sent',
-          message_id: sentMsgId,
-          timestamp: new Date().toISOString(),
-        }).catch(() => {})
-        setConversations(prev => prev.map(c =>
-          c.id === activeId
-            ? { ...c, messages: c.messages.map(m => m.id === tempId ? { ...m, id: sentMsgId, status: 'sent' as const } : m) }
-            : c
-        ))
-      } else {
-        // ── Evolution API (fallback) ──────────────────────────────
-        const res = await fetch('/api/evolution/send-message', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instanceName: instance, remoteJid: activeId, message: text, institutionId: user?.institution_id }),
-        })
-        if (!res.ok) throw new Error()
-        setConversations(prev => prev.map(c =>
-          c.id === activeId
-            ? { ...c, messages: c.messages.map(m => m.id === tempId ? { ...m, status: 'delivered' as const } : m) }
-            : c
-        ))
-      }
-    } catch {
+          to,
+          text,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao enviar')
+
       setConversations(prev => prev.map(c =>
-        c.id === activeId ? { ...c, messages: c.messages.filter(m => m.id !== tempId) } : c
+        c.id === activeId
+          ? {
+              ...c,
+              messages: c.messages.map(m =>
+                m.id === tempId
+                  ? { ...m, id: data.wamid || tempId, status: 'sent' as const }
+                  : m
+              ),
+            }
+          : c
       ))
-      setSendError('Erro ao enviar mensagem. Verifique a conexão do WhatsApp.')
+
+    } catch (err: any) {
+      setConversations(prev => prev.map(c =>
+        c.id === activeId
+          ? { ...c, messages: c.messages.filter(m => m.id !== tempId) }
+          : c
+      ))
+      setSendError(err.message || 'Erro ao enviar mensagem.')
     }
   }
 
