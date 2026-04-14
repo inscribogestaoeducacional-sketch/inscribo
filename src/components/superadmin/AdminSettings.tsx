@@ -72,32 +72,31 @@ function Section({ icon: Icon, title, subtitle, color = 'cyan', children, defaul
   )
 }
 
-// ─── Template editor com variáveis ────────────────────────────────────────
 const CONTRACT_VARS = [
-  { key: '{{escola}}',          desc: 'Nome da escola' },
-  { key: '{{cnpj}}',            desc: 'CNPJ da escola' },
-  { key: '{{cidade_uf}}',       desc: 'Cidade/UF' },
-  { key: '{{gestor}}',          desc: 'Nome do gestor' },
-  { key: '{{email_gestor}}',    desc: 'E-mail do gestor' },
+  { key: '{{escola}}',            desc: 'Nome da escola' },
+  { key: '{{cnpj}}',              desc: 'CNPJ da escola' },
+  { key: '{{cidade_uf}}',         desc: 'Cidade/UF' },
+  { key: '{{gestor}}',            desc: 'Nome do gestor' },
+  { key: '{{email_gestor}}',      desc: 'E-mail do gestor' },
   { key: '{{valor_implantacao}}', desc: 'Taxa de implantação' },
-  { key: '{{valor_mensal}}',    desc: 'Mensalidade' },
-  { key: '{{dia_vencimento}}',  desc: 'Dia de vencimento' },
-  { key: '{{data_inicio}}',     desc: 'Data de início' },
-  { key: '{{consultor}}',       desc: 'Consultor responsável' },
-  { key: '{{data_hoje}}',       desc: 'Data atual' },
+  { key: '{{valor_mensal}}',      desc: 'Mensalidade' },
+  { key: '{{dia_vencimento}}',    desc: 'Dia de vencimento' },
+  { key: '{{data_inicio}}',       desc: 'Data de início' },
+  { key: '{{consultor}}',         desc: 'Consultor responsável' },
+  { key: '{{data_hoje}}',         desc: 'Data atual' },
 ]
 
 const EMAIL_VARS = [
-  { key: '{{gestor}}',          desc: 'Nome do gestor' },
-  { key: '{{escola}}',          desc: 'Nome da escola' },
+  { key: '{{gestor}}',            desc: 'Nome do gestor' },
+  { key: '{{escola}}',            desc: 'Nome da escola' },
   { key: '{{valor_implantacao}}', desc: 'Taxa de implantação' },
-  { key: '{{valor_mensal}}',    desc: 'Mensalidade' },
-  { key: '{{link_pagamento}}',  desc: 'Link de pagamento' },
-  { key: '{{link_acesso}}',     desc: 'Link de acesso' },
-  { key: '{{email_acesso}}',    desc: 'E-mail de acesso' },
-  { key: '{{consultor}}',       desc: 'Consultor responsável' },
-  { key: '{{dias_atraso}}',     desc: 'Dias em atraso' },
-  { key: '{{data_suspensao}}',  desc: 'Data de suspensão' },
+  { key: '{{valor_mensal}}',      desc: 'Mensalidade' },
+  { key: '{{link_pagamento}}',    desc: 'Link de pagamento' },
+  { key: '{{link_acesso}}',       desc: 'Link de acesso' },
+  { key: '{{email_acesso}}',      desc: 'E-mail de acesso' },
+  { key: '{{consultor}}',         desc: 'Consultor responsável' },
+  { key: '{{dias_atraso}}',       desc: 'Dias em atraso' },
+  { key: '{{data_suspensao}}',    desc: 'Data de suspensão' },
 ]
 
 function TemplateEditor({ value, onChange, vars, rows = 10, placeholder }:
@@ -114,7 +113,6 @@ function TemplateEditor({ value, onChange, vars, rows = 10, placeholder }:
   }
   return (
     <div className="space-y-2">
-      {/* Variáveis disponíveis */}
       <div>
         <p className="text-xs font-semibold text-gray-500 mb-1.5">Variáveis disponíveis — clique para inserir</p>
         <div className="flex flex-wrap gap-1.5">
@@ -151,14 +149,13 @@ const DEFAULTS: Settings = {
   whatsapp_extra_conversation_price: '0.50',
   // Asaas
   asaas_api_key: '',
-  asaas_environment: 'sandbox',
-  // ZapSign
-  zapsign_api_token: '',
-  contract_template_url: '',
-  // Resend
-  resend_api_key: '',
-  resend_from_email: 'noreply@aionedu.com.br',
-  resend_from_name: 'Áion Edu',
+  asaas_environment: 'production',
+  // Autentique
+  autentique_api_token: '5b05e93af43286958a4b751db049225de54c3cefbf7c2b21470c9c0b855549ae',
+  // Brevo
+  brevo_api_key: '',
+  brevo_from_email: 'noreply@aionedu.com.br',
+  brevo_from_name: 'Áion Edu',
   // Inadimplência
   overdue_warning1_days: '3',
   overdue_warning2_days: '7',
@@ -276,9 +273,7 @@ export default function AdminSettings() {
         data.forEach((r: any) => { map[r.key] = r.value })
         setSettings(prev => ({ ...prev, ...map }))
       }
-    } catch {
-      // table may not exist yet
-    }
+    } catch {}
     setLoading(false)
   }
 
@@ -317,7 +312,7 @@ export default function AdminSettings() {
     )
   }
 
-  const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL || 'https://SEU-PROJETO.supabase.co'}/functions/v1/asaas-webhook`
+  const webhookUrl = `https://syxxuumxkhhnoqrxporj.supabase.co/functions/v1/asaas-webhook`
 
   if (loading) {
     return (
@@ -343,7 +338,6 @@ export default function AdminSettings() {
           </div>
         )}
 
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Configurações</h1>
@@ -399,7 +393,6 @@ export default function AdminSettings() {
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
                 <input type="number" className={inp + ' pl-9'} value={settings.default_implementation_value} onChange={e => set('default_implementation_value', e.target.value)} />
               </div>
-              <p className={hint}>Sugerido ao criar nova escola — pode ser alterado por escola.</p>
             </div>
             <div>
               <label className={lbl}>Mensalidade padrão (R$)</label>
@@ -421,7 +414,6 @@ export default function AdminSettings() {
               <div>
                 <label className={lbl}>Limite de conversas gratuitas/mês</label>
                 <input type="number" className={inp} value={settings.whatsapp_conversation_limit} onChange={e => set('whatsapp_conversation_limit', e.target.value)} />
-                <p className={hint}>Padrão Meta: 1.000 conversas/mês por número.</p>
               </div>
               <div>
                 <label className={lbl}>Valor por conversa extra (R$)</label>
@@ -429,7 +421,6 @@ export default function AdminSettings() {
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
                   <input type="number" step="0.01" className={inp + ' pl-9'} value={settings.whatsapp_extra_conversation_price} onChange={e => set('whatsapp_extra_conversation_price', e.target.value)} />
                 </div>
-                <p className={hint}>Cobrado por conversa acima do limite.</p>
               </div>
             </div>
           </div>
@@ -450,9 +441,9 @@ export default function AdminSettings() {
           <div className="grid grid-cols-2 gap-4">
             {[
               { k: 'overdue_warning1_days', label: '1º aviso — e-mail lembrete', desc: 'E-mail de aviso amigável' },
-              { k: 'overdue_warning2_days', label: '2º aviso — e-mail + notificação', desc: 'Aviso mais urgente + alerta no sistema' },
+              { k: 'overdue_warning2_days', label: '2º aviso — e-mail + notificação', desc: 'Aviso mais urgente' },
               { k: 'overdue_warning3_days', label: '3º aviso — aviso de suspensão', desc: 'Informa data de suspensão' },
-              { k: 'overdue_suspend_days', label: 'Suspensão automática', desc: 'Sistema bloqueado automaticamente' },
+              { k: 'overdue_suspend_days',  label: 'Suspensão automática', desc: 'Sistema bloqueado automaticamente' },
             ].map(item => (
               <div key={item.k} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
                 <label className={lbl}>{item.label}</label>
@@ -466,26 +457,6 @@ export default function AdminSettings() {
               </div>
             ))}
           </div>
-          <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-            <p className="text-xs font-bold text-gray-500 mb-2">Linha do tempo configurada</p>
-            <div className="flex items-center gap-0">
-              {[
-                { day: settings.overdue_warning1_days, label: '1º aviso', color: 'bg-amber-400' },
-                { day: settings.overdue_warning2_days, label: '2º aviso', color: 'bg-orange-500' },
-                { day: settings.overdue_warning3_days, label: 'Aviso final', color: 'bg-red-500' },
-                { day: settings.overdue_suspend_days,  label: 'Suspensão', color: 'bg-red-700' },
-              ].map((item, i, arr) => (
-                <div key={i} className="flex items-center flex-1">
-                  <div className="flex flex-col items-center gap-1 flex-shrink-0">
-                    <div className={`w-3 h-3 rounded-full ${item.color}`} />
-                    <p className="text-[9px] font-bold text-gray-600 whitespace-nowrap">D+{item.day}</p>
-                    <p className="text-[9px] text-gray-400 whitespace-nowrap">{item.label}</p>
-                  </div>
-                  {i < arr.length - 1 && <div className="flex-1 h-0.5 bg-gray-200 mx-1 mb-4" />}
-                </div>
-              ))}
-            </div>
-          </div>
           <div className="flex justify-end pt-2">
             <SaveBtn keys={['overdue_warning1_days','overdue_warning2_days','overdue_warning3_days','overdue_suspend_days']} id="overdue" />
           </div>
@@ -497,7 +468,7 @@ export default function AdminSettings() {
             <label className={lbl}>Ambiente</label>
             <div className="flex gap-3">
               {[
-                { v: 'sandbox', l: 'Sandbox (testes)', desc: 'api-sandbox.asaas.com' },
+                { v: 'sandbox', l: 'Sandbox (testes)', desc: 'sandbox.asaas.com' },
                 { v: 'production', l: 'Produção', desc: 'api.asaas.com' },
               ].map(opt => (
                 <button key={opt.v} onClick={() => set('asaas_environment', opt.v)}
@@ -516,43 +487,45 @@ export default function AdminSettings() {
           <div>
             <label className={lbl}>URL do Webhook (configure no Asaas)</label>
             <CopyInput value={webhookUrl} />
-            <p className={hint}>Cole esta URL em <span className="font-medium">Asaas → Integrações → Webhook</span> para receber atualizações de pagamento.</p>
+            <p className={hint}>Cole esta URL em <span className="font-medium">Asaas → Integrações → Webhook</span></p>
           </div>
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800 space-y-1">
-            <p className="font-semibold">Eventos de webhook necessários no Asaas:</p>
-            <p>• <code className="bg-amber-100 px-1 rounded">PAYMENT_CONFIRMED</code> — ativa a escola e envia e-mail de boas-vindas</p>
-            <p>• <code className="bg-amber-100 px-1 rounded">PAYMENT_OVERDUE</code> — inicia fluxo de inadimplência</p>
-            <p>• <code className="bg-amber-100 px-1 rounded">PAYMENT_RECEIVED</code> — reativa escola e envia e-mail de confirmação</p>
+            <p className="font-semibold">Eventos necessários no Asaas:</p>
+            <p>• <code className="bg-amber-100 px-1 rounded">PAYMENT_CONFIRMED</code> — ativa a escola</p>
+            <p>• <code className="bg-amber-100 px-1 rounded">PAYMENT_RECEIVED</code> — confirma recebimento</p>
+            <p>• <code className="bg-amber-100 px-1 rounded">PAYMENT_OVERDUE</code> — inicia inadimplência</p>
           </div>
           <div className="flex justify-end pt-2">
             <SaveBtn keys={['asaas_api_key','asaas_environment']} id="asaas" />
           </div>
         </Section>
 
-        {/* ── 5. ZapSign ── */}
-        <Section icon={FileText} title="ZapSign — Assinatura digital" subtitle="Token de API e template de contrato" color="indigo">
+        {/* ── 5. Autentique ── */}
+        <Section icon={FileText} title="Autentique — Assinatura digital" subtitle="Token de API para envio de contratos" color="indigo">
           <div>
-            <label className={lbl}>Token de API ZapSign</label>
-            <SecretInput value={settings.zapsign_api_token} onChange={v => set('zapsign_api_token', v)} placeholder="Bearer token da API ZapSign" />
-            <p className={hint}>Obtido em <span className="font-medium">app.zapsign.com.br → Conta → API → Token</span></p>
+            <label className={lbl}>Token de API Autentique</label>
+            <SecretInput value={settings.autentique_api_token} onChange={v => set('autentique_api_token', v)} placeholder="Token da API Autentique" />
+            <p className={hint}>Obtido em <span className="font-medium">autentique.com.br → Configurações → API</span></p>
           </div>
-          <div>
-            <label className={lbl}>URL do template PDF base (opcional)</label>
-            <input className={inp} type="url" value={settings.contract_template_url} onChange={e => set('contract_template_url', e.target.value)} placeholder="https://..." />
-            <p className={hint}>URL pública de um PDF que será usado como base para o contrato. Deixe em branco para usar o template de texto abaixo.</p>
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-800 space-y-1">
+            <p className="font-semibold">Como funciona:</p>
+            <p>• O sistema gera o contrato com os dados da escola</p>
+            <p>• Envia via API Autentique para assinatura digital</p>
+            <p>• O gestor assina pelo link recebido no e-mail</p>
+            <p>• Após assinatura, status vira <code className="bg-blue-100 px-1 rounded">pending_payment</code></p>
           </div>
           <div className="flex justify-end pt-2">
-            <SaveBtn keys={['zapsign_api_token','contract_template_url']} id="zapsign" />
+            <SaveBtn keys={['autentique_api_token']} id="autentique" />
           </div>
         </Section>
 
         {/* ── 6. Template do contrato ── */}
-        <Section icon={FileText} title="Template do contrato" subtitle="Texto base com variáveis dinâmicas — edite com seu jurídico" color="purple">
+        <Section icon={FileText} title="Template do contrato" subtitle="Texto base com variáveis dinâmicas" color="purple">
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3 text-sm text-blue-800">
             <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <div>
               <p className="font-semibold">Como usar</p>
-              <p className="text-xs mt-1">Edite o template abaixo com seu texto jurídico. Use as variáveis para inserir dados dinâmicos de cada escola. O sistema substituirá automaticamente ao gerar cada contrato.</p>
+              <p className="text-xs mt-1">Edite o template com seu texto jurídico. O sistema substituirá as variáveis automaticamente ao gerar cada contrato.</p>
             </div>
           </div>
           <TemplateEditor
@@ -571,35 +544,35 @@ export default function AdminSettings() {
           </div>
         </Section>
 
-        {/* ── 7. Resend ── */}
-        <Section icon={Mail} title="Resend — E-mails automáticos" subtitle="Chave API e configurações de envio" color="teal">
+        {/* ── 7. Brevo ── */}
+        <Section icon={Mail} title="Brevo — E-mails automáticos" subtitle="Chave API e configurações de envio" color="teal">
           <div>
-            <label className={lbl}>Chave API Resend</label>
-            <SecretInput value={settings.resend_api_key} onChange={v => set('resend_api_key', v)} placeholder="re_..." />
-            <p className={hint}>Obtida em <span className="font-medium">resend.com → API Keys</span></p>
+            <label className={lbl}>Chave API Brevo</label>
+            <SecretInput value={settings.brevo_api_key} onChange={v => set('brevo_api_key', v)} placeholder="xkeysib-..." />
+            <p className={hint}>Obtida em <span className="font-medium">brevo.com → Configurações → Chaves API</span></p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={lbl}>E-mail remetente</label>
-              <input type="email" className={inp} value={settings.resend_from_email} onChange={e => set('resend_from_email', e.target.value)} placeholder="noreply@aionedu.com.br" />
+              <input type="email" className={inp} value={settings.brevo_from_email} onChange={e => set('brevo_from_email', e.target.value)} placeholder="noreply@aionedu.com.br" />
             </div>
             <div>
               <label className={lbl}>Nome remetente</label>
-              <input className={inp} value={settings.resend_from_name} onChange={e => set('resend_from_name', e.target.value)} placeholder="Áion Edu" />
+              <input className={inp} value={settings.brevo_from_name} onChange={e => set('brevo_from_name', e.target.value)} placeholder="Áion Edu" />
             </div>
           </div>
           <div className="flex justify-end pt-2">
-            <SaveBtn keys={['resend_api_key','resend_from_email','resend_from_name']} id="resend" />
+            <SaveBtn keys={['brevo_api_key','brevo_from_email','brevo_from_name']} id="brevo" />
           </div>
         </Section>
 
         {/* ── 8. Templates de e-mail ── */}
-        <Section icon={Mail} title="Templates de e-mail" subtitle="Personalize cada e-mail automático enviado pelo sistema" color="cyan">
+        <Section icon={Mail} title="Templates de e-mail" subtitle="Personalize cada e-mail automático do sistema" color="cyan">
           {[
             {
               id: 'email_template_welcome_pending',
               label: '🎉 Boas-vindas — aguardando pagamento',
-              desc: 'Enviado ao gestor quando a escola é criada (plano pago)',
+              desc: 'Enviado ao gestor quando a escola é criada',
               default: DEFAULT_EMAIL_WELCOME_PENDING,
             },
             {
@@ -608,7 +581,7 @@ export default function AdminSettings() {
               desc: 'Enviado ao gestor de escola gratuita com dados de acesso',
               default: `<h2>Bem-vindo(a) à Áion Edu! 🎉</h2>
 <p>Olá, <strong>{{gestor}}</strong>!</p>
-<p>Sua escola <strong>{{escola}}</strong> tem acesso gratuito à plataforma Áion Edu.</p>
+<p>Sua escola <strong>{{escola}}</strong> tem acesso gratuito à plataforma.</p>
 <p><strong>Dados de acesso:</strong></p>
 <ul><li>E-mail: {{email_acesso}}</li><li>Link: <a href="{{link_acesso}}">{{link_acesso}}</a></li></ul>
 <p>Equipe Áion Edu</p>`,
@@ -634,11 +607,10 @@ export default function AdminSettings() {
             {
               id: 'email_template_overdue_3',
               label: '🚨 Inadimplência — aviso de suspensão',
-              desc: `Enviado em D+${settings.overdue_warning3_days} — avisa a data de suspensão`,
+              desc: `Enviado em D+${settings.overdue_warning3_days}`,
               default: `<h2>Aviso de suspensão 🚨</h2>
 <p>Olá, <strong>{{gestor}}</strong>!</p>
 <p>Sua conta será suspensa em <strong>{{data_suspensao}}</strong> por falta de pagamento.</p>
-<p>Regularize agora para evitar a suspensão:</p>
 {{#if link_pagamento}}<p><a href="{{link_pagamento}}">Pagar agora</a></p>{{/if}}
 <p>Equipe Áion Edu</p>`,
             },
@@ -651,7 +623,7 @@ export default function AdminSettings() {
             {
               id: 'email_template_reactivated',
               label: '✅ Sistema reativado',
-              desc: 'Enviado quando o pagamento é regularizado e o acesso restaurado',
+              desc: 'Enviado quando o pagamento é regularizado',
               default: `<h2>Sistema reativado! ✅</h2>
 <p>Olá, <strong>{{gestor}}</strong>!</p>
 <p>Seu pagamento foi confirmado e o acesso da escola <strong>{{escola}}</strong> foi reativado.</p>
