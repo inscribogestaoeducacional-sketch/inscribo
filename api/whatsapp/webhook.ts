@@ -35,52 +35,68 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .eq('phone_number_id', phoneNumberId)
         .single()
 
-      // Se não achar, usa fallback pelo env (número único por enquanto)
       const institutionId = phoneRecord?.institution_id ?? null
-      if (!institutionId) return res.status(200).end()
+      if (!institutionId) {
+        console.log('⚠️ phone_number_id não mapeado:', phoneNumberId)
+        return res.status(200).end()
+      }
 
-      // Mensagens recebidas
+      // ── Mensagens recebidas ──
       for (const msg of value.messages || []) {
-        const remoteJid = msg.from
-        const text = msg.text?.body || ''
-        const timestamp = new Date(parseInt(msg.timestamp) * 1000).toISOString()
+        const remoteJid   = msg.from
+        const text        = msg.text?.body || ''
+        const timestamp   = new Date(parseInt(msg.timestamp) * 1000).toISOString()
         const contactName = value.contacts?.[0]?.profile?.name || remoteJid
 
         // Upsert da conversa
-        await supabase.from('whatsapp_conversations').upsert({
-          institution_id: institutionId,
-          remote_jid: remoteJid,
-          contact_name: contactName,
-          last_message: text,
-          last_message_at: timestamp,
-        }, { onConflict: 'institution_id,remote_jid' })
+        const { error: convErr } = await supabase
+          .from('whatsapp_conversations')
+          .upsert({
+            institution_id:  institutionId,
+            remote_jid:      remoteJid,
+            contact_name:    contactName,
+            last_message:    text,
+            last_message_at: timestamp,
+            status:          'waiting',
+          }, { onConflict: 'institution_id,remote_jid' })
 
-        // Insere a mensagem
-        await supabase.from('whatsapp_messages').insert({
-          institution_id: institutionId,
-          remote_jid: remoteJid,
-          wa_message_id: msg.id,
-          content: text,
-          message_type: msg.type,
-          from_me: false,
-          timestamp,
-          status: 'received',
-        })
+        if (convErr) console.error('❌ conv upsert error:', convErr.message)
+
+        // Insert da mensagem com campos corretos da tabela
+        const { error: msgErr } = await supabase
+          .from('whatsapp_messages')
+          .insert({
+            institution_id: institutionId,
+            remote_jid:     remoteJid,
+            message_id:     msg.id,           // coluna correta (não wa_message_id)
+            instance_name:  'cloud-api',      // obrigatório na tabela
+            content:        text,
+            message_type:   msg.type || 'conversation',
+            from_me:        false,
+            contact_name:   contactName,
+            timestamp:      timestamp,
+            status:         'received',
+            raw_data:       msg,
+          })
+
+        if (msgErr) console.error('❌ msg insert error:', msgErr.message)
       }
 
-      // Atualiza status de entrega (sent/delivered/read/failed)
+      // ── Atualiza status de entrega (sent/delivered/read/failed) ──
       for (const status of value.statuses || []) {
-        await supabase
+        const { error: statusErr } = await supabase
           .from('whatsapp_messages')
           .update({
-            status: status.status,
+            status:            status.status,
             status_updated_at: new Date().toISOString(),
           })
-          .eq('wa_message_id', status.id)
+          .eq('message_id', status.id)   // coluna correta
+
+        if (statusErr) console.error('❌ status update error:', statusErr.message)
       }
 
     } catch (err) {
-      console.error('Webhook error:', err)
+      console.error('❌ Webhook error:', err)
       // Sempre 200 — a Meta desativa o webhook se receber 5xx
     }
 
