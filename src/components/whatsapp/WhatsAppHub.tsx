@@ -154,23 +154,25 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
   return Array.from(byJid.entries()).map(([jid, jidMsgs]) => {
     const sorted = [...jidMsgs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
     const last = sorted[sorted.length - 1]
-    const isGroup = jid.endsWith('@g.us')
-    const convData = convMap?.get(jid)
+    // Normaliza JIDs da Cloud API (número puro) para o formato padrão
+    const normalizedJid = jid.includes('@') ? jid : `${jid}@s.whatsapp.net`
+    const isGroup = normalizedJid.endsWith('@g.us')
+    const convData = convMap?.get(normalizedJid)
 
     let name: string
     if (isGroup) {
-      name = jidMsgs.find(m => m.contact_name)?.contact_name || jid.replace(/@g\.us$/, '')
+      name = jidMsgs.find(m => m.contact_name)?.contact_name || normalizedJid.replace(/@g\.us$/, '')
     } else {
       name = jidMsgs.find(m => !m.from_me && m.contact_name)?.contact_name
         || convData?.contact_name
-        || formatPhone(jid)
+        || formatPhone(normalizedJid)
     }
 
     return {
-      id: jid,
+      id: normalizedJid,
       name,
-      phone: isGroup ? jid.replace(/@g\.us$/, '') : formatPhone(jid),
-      avatarColor: jidToColor(jid),
+      phone: isGroup ? normalizedJid.replace(/@g\.us$/, '') : formatPhone(normalizedJid),
+      avatarColor: jidToColor(normalizedJid),
       lastMessage: last.content,
       lastTime: new Date(last.timestamp),
       unreadCount: convData?.unread_count ?? 0,
@@ -1687,7 +1689,7 @@ export default function WhatsAppHub() {
       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#F0FDFB', height: '100%' }}>
 
         {/* Connection warning banner */}
-        {connectionStatus === 'disconnected' && (
+        {connectionStatus === 'disconnected' && !useMetaApi && (
           <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12, margin: '8px 16px', padding: '10px 16px', borderRadius: 10, background: '#FEF3C7', border: '1px solid #F59E0B' }}>
             <span style={{ fontSize: 16 }}>⚠️</span>
             <span style={{ fontSize: 13, color: '#92400E', flex: 1 }}>Conexão com WhatsApp instável ou desconectada. Verifique em Configurações → WhatsApp.</span>
