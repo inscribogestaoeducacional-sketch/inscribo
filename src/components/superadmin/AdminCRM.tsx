@@ -4,45 +4,28 @@ import { supabase } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
 import { useNavigate } from 'react-router-dom'
 import {
-  Plus, X, Search, Phone, Mail, MapPin, User,
+  Plus, X, Search, Phone, Mail, MapPin,
   Calendar, Clock, ChevronRight, AlertCircle, CheckCircle2,
   MessageCircle, Edit2, Trash2, Building2, DollarSign,
-  ArrowRight, RefreshCw, Eye, Star, TrendingUp,
-  Bell, ChevronDown, StickyNote, Send, Zap
+  RefreshCw, Eye, Star, TrendingUp,
+  Bell, ChevronDown, StickyNote, Send, Zap, EyeOff
 } from 'lucide-react'
 
-// ─── tipos ────────────────────────────────────────────────────────────────
 type Stage = 'interesse' | 'qualificacao' | 'proposta' | 'negociacao' | 'fechado' | 'cliente'
 
 interface Lead {
-  id: string
-  name: string
-  school_name: string
-  city: string
-  state: string
-  phone: string
-  email: string
-  stage: Stage
-  origin: string
-  monthly_value?: number
-  implementation_value?: number
-  consultant_id?: string
-  notes?: string
-  next_followup?: string
-  converted_institution_id?: string
-  created_at: string
-  updated_at: string
+  id: string; name: string; school_name: string; city: string; state: string
+  phone: string; email: string; stage: Stage; origin: string
+  monthly_value?: number; implementation_value?: number
+  consultant_id?: string; notes?: string; next_followup?: string
+  converted_institution_id?: string; created_at: string; updated_at: string
 }
 
 interface Interaction {
-  id: string
-  lead_id: string
-  type: 'call' | 'whatsapp' | 'email' | 'meeting' | 'note'
-  content: string
-  created_at: string
+  id: string; lead_id: string; type: 'call' | 'whatsapp' | 'email' | 'meeting' | 'note'
+  content: string; created_at: string
 }
 
-// ─── constantes ───────────────────────────────────────────────────────────
 const STAGES: { id: Stage; label: string; color: string; bg: string; border: string }[] = [
   { id: 'interesse',    label: 'Interesse',    color: '#6366F1', bg: '#EEF2FF', border: '#C7D2FE' },
   { id: 'qualificacao', label: 'Qualificação', color: '#0891B2', bg: '#ECFEFF', border: '#A5F3FC' },
@@ -101,8 +84,7 @@ function LeadCard({ lead, stage, consultants, onClick, onMoveStage, onDelete }: 
   }, [])
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3.5 cursor-pointer hover:shadow-md transition-all hover:border-gray-200 group"
-      onClick={onClick}>
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3.5 cursor-pointer hover:shadow-md transition-all hover:border-gray-200 group" onClick={onClick}>
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex-1 min-w-0">
           <p className="font-bold text-gray-900 text-sm leading-tight truncate">{lead.school_name}</p>
@@ -118,8 +100,7 @@ function LeadCard({ lead, stage, consultants, onClick, onMoveStage, onDelete }: 
                 <p className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide">Mover para</p>
                 {STAGES.filter(s => s.id !== lead.stage).map(s => (
                   <button key={s.id} onClick={() => { onMoveStage(s.id); setMenu(false) }}
-                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 font-semibold transition-colors"
-                    style={{ color: s.color }}>
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 font-semibold" style={{ color: s.color }}>
                     → {s.label}
                   </button>
                 ))}
@@ -167,7 +148,6 @@ function LeadCard({ lead, stage, consultants, onClick, onMoveStage, onDelete }: 
         <span className="text-xs text-gray-400">{timeAgo(lead.updated_at || lead.created_at)}</span>
       </div>
 
-      {/* CTA para iniciar onboarding quando fechado OU cliente */}
       {(lead.stage === 'fechado' || lead.stage === 'cliente') && !lead.converted_institution_id && (
         <div className="mt-2 w-full py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-xs font-bold rounded-lg text-center"
           onClick={e => { e.stopPropagation(); onClick() }}>
@@ -186,37 +166,28 @@ function LeadCard({ lead, stage, consultants, onClick, onMoveStage, onDelete }: 
 
 // ─── Lead Modal ───────────────────────────────────────────────────────────
 function LeadModal({ lead: initialLead, consultants, onClose, onSave, onStartOnboarding }: {
-  lead: Lead | null
-  consultants: any[]
-  onClose: () => void
-  onSave: (lead: Partial<Lead>) => Promise<void>
+  lead: Lead | null; consultants: any[]
+  onClose: () => void; onSave: (lead: Partial<Lead>) => Promise<void>
   onStartOnboarding: (lead: Lead) => void
 }) {
   const isNew = !initialLead?.id
-  const [form, setForm] = useState<Partial<Lead>>(
-    initialLead || { stage: 'interesse', origin: 'Indicação' }
-  )
-  const [interactions, setInteractions]   = useState<Interaction[]>([])
-  const [newInt, setNewInt]               = useState({ type: 'note' as Interaction['type'], content: '' })
-  const [saving, setSaving]               = useState(false)
-  const [addingInt, setAddingInt]         = useState(false)
-  const [activeTab, setActiveTab]         = useState<'info' | 'history'>('info')
+  const [form, setForm] = useState<Partial<Lead>>(initialLead || { stage: 'interesse', origin: 'Indicação' })
+  const [interactions, setInteractions] = useState<Interaction[]>([])
+  const [newInt, setNewInt] = useState({ type: 'note' as Interaction['type'], content: '' })
+  const [saving, setSaving] = useState(false)
+  const [addingInt, setAddingInt] = useState(false)
+  const [activeTab, setActiveTab] = useState<'info' | 'history'>('info')
 
   const set = (k: keyof Lead, v: any) => setForm(f => ({ ...f, [k]: v }))
 
   const loadInteractions = async () => {
     if (!initialLead?.id) return
-    const { data } = await supabase.from('crm_interactions')
-      .select('*').eq('lead_id', initialLead.id).order('created_at', { ascending: false })
+    const { data } = await supabase.from('crm_interactions').select('*').eq('lead_id', initialLead.id).order('created_at', { ascending: false })
     setInteractions(data || [])
   }
   useEffect(() => { loadInteractions() }, [initialLead?.id])
 
-  const handleSave = async () => {
-    setSaving(true)
-    await onSave(form)
-    setSaving(false)
-  }
+  const handleSave = async () => { setSaving(true); await onSave(form); setSaving(false) }
 
   const handleAddInteraction = async () => {
     if (!initialLead?.id || !newInt.content.trim()) return
@@ -234,33 +205,22 @@ function LeadModal({ lead: initialLead, consultants, onClose, onSave, onStartOnb
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
       <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[94vh]">
-
-        {/* Header */}
         <div className="px-6 pt-5 pb-4 border-b border-gray-100 flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-bold px-2.5 py-1 rounded-full"
-                style={{ color: stage.color, background: stage.bg, border: `1px solid ${stage.border}` }}>
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: stage.color, background: stage.bg, border: `1px solid ${stage.border}` }}>
                 {stage.label}
               </span>
               {form.origin && <span className="text-xs text-gray-400">{form.origin}</span>}
             </div>
-            <h2 className="text-lg font-bold text-gray-900">
-              {isNew ? 'Novo lead' : (form.school_name || 'Lead')}
-            </h2>
+            <h2 className="text-lg font-bold text-gray-900">{isNew ? 'Novo lead' : (form.school_name || 'Lead')}</h2>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl">
-            <X className="w-5 h-5 text-gray-400" />
-          </button>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><X className="w-5 h-5 text-gray-400" /></button>
         </div>
 
-        {/* Tabs — só mostra se já existe */}
         {!isNew && (
           <div className="flex border-b border-gray-100 px-6">
-            {[
-              { id: 'info' as const,    label: 'Dados' },
-              { id: 'history' as const, label: `Histórico (${interactions.length})` },
-            ].map(tab => (
+            {[{ id: 'info' as const, label: 'Dados' }, { id: 'history' as const, label: `Histórico (${interactions.length})` }].map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                 className={`py-3 px-4 text-sm font-semibold border-b-2 transition-colors
                   ${activeTab === tab.id ? 'border-cyan-500 text-cyan-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
@@ -270,10 +230,7 @@ function LeadModal({ lead: initialLead, consultants, onClose, onSave, onStartOnb
           </div>
         )}
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
-
-          {/* ── Banner iniciar onboarding ── */}
           {isClientOrClosed && !isNew && !alreadyConverted && (
             <div className="mb-4 bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -295,14 +252,12 @@ function LeadModal({ lead: initialLead, consultants, onClose, onSave, onStartOnb
           {alreadyConverted && !isNew && (
             <div className="mb-4 bg-gray-50 border border-gray-200 rounded-xl p-3 flex items-center gap-2 text-sm text-gray-600">
               <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
-              Escola já criada no sistema. Gerencie em <strong className="text-gray-800 ml-1">Escolas →</strong>
+              Escola já criada. Gerencie em <strong className="text-gray-800 ml-1">Escolas →</strong>
             </div>
           )}
 
-          {/* ── Tab: Dados ── */}
           {(isNew || activeTab === 'info') && (
             <div className="space-y-4">
-              {/* Estágio */}
               <div>
                 <label className={lbl}>Estágio no funil</label>
                 <div className="grid grid-cols-3 gap-2">
@@ -320,51 +275,45 @@ function LeadModal({ lead: initialLead, consultants, onClose, onSave, onStartOnb
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className={lbl}>Nome da escola *</label>
-                  <input className={inp} placeholder="Colégio..." value={form.school_name || ''}
-                    onChange={e => set('school_name', e.target.value)} />
+                  <input className={inp} placeholder="Colégio..." value={form.school_name || ''} onChange={e => set('school_name', e.target.value)} />
                 </div>
                 <div>
                   <label className={lbl}>Nome do contato *</label>
-                  <input className={inp} placeholder="Nome do diretor..." value={form.name || ''}
-                    onChange={e => set('name', e.target.value)} />
+                  <input className={inp} placeholder="Nome do diretor..." value={form.name || ''} onChange={e => set('name', e.target.value)} />
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2">
                   <label className={lbl}>Cidade</label>
-                  <input className={inp} placeholder="João Pessoa" value={form.city || ''}
-                    onChange={e => set('city', e.target.value)} />
+                  <input className={inp} placeholder="João Pessoa" value={form.city || ''} onChange={e => set('city', e.target.value)} />
                 </div>
                 <div>
                   <label className={lbl}>UF</label>
-                  <input className={inp} placeholder="PB" maxLength={2} value={form.state || ''}
-                    onChange={e => set('state', e.target.value.toUpperCase())} />
+                  <input className={inp} placeholder="PB" maxLength={2} value={form.state || ''} onChange={e => set('state', e.target.value.toUpperCase())} />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className={lbl}>Telefone / WhatsApp</label>
-                  <input className={inp} placeholder="(83) 99999-9999" value={form.phone || ''}
-                    onChange={e => set('phone', e.target.value)} />
+                  <input className={inp} placeholder="(83) 99999-9999" value={form.phone || ''} onChange={e => set('phone', e.target.value)} />
                 </div>
                 <div>
                   <label className={lbl}>E-mail</label>
-                  <input type="email" className={inp} placeholder="contato@escola.com" value={form.email || ''}
-                    onChange={e => set('email', e.target.value)} />
+                  <input type="email" className={inp} value={form.email || ''} onChange={e => set('email', e.target.value)} />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={lbl}>Origem do lead</label>
+                  <label className={lbl}>Origem</label>
                   <select className={inp} value={form.origin || 'Indicação'} onChange={e => set('origin', e.target.value)}>
                     {ORIGINS.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className={lbl}>Consultor responsável</label>
+                  <label className={lbl}>Consultor</label>
                   <select className={inp} value={form.consultant_id || ''} onChange={e => set('consultant_id', e.target.value)}>
                     <option value="">Sem consultor</option>
                     {consultants.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
@@ -377,38 +326,32 @@ function LeadModal({ lead: initialLead, consultants, onClose, onSave, onStartOnb
                   <label className={lbl}>Mensalidade proposta (R$)</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
-                    <input type="number" className={inp + ' pl-9'} placeholder="550"
-                      value={form.monthly_value || ''} onChange={e => set('monthly_value', Number(e.target.value))} />
+                    <input type="number" className={inp + ' pl-9'} placeholder="550" value={form.monthly_value || ''} onChange={e => set('monthly_value', Number(e.target.value))} />
                   </div>
                 </div>
                 <div>
                   <label className={lbl}>Implantação proposta (R$)</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
-                    <input type="number" className={inp + ' pl-9'} placeholder="550"
-                      value={form.implementation_value || ''} onChange={e => set('implementation_value', Number(e.target.value))} />
+                    <input type="number" className={inp + ' pl-9'} placeholder="550" value={form.implementation_value || ''} onChange={e => set('implementation_value', Number(e.target.value))} />
                   </div>
                 </div>
               </div>
 
               <div>
                 <label className={lbl}>Próximo follow-up</label>
-                <input type="datetime-local" className={inp} value={form.next_followup?.slice(0, 16) || ''}
-                  onChange={e => set('next_followup', e.target.value)} />
+                <input type="datetime-local" className={inp} value={form.next_followup?.slice(0, 16) || ''} onChange={e => set('next_followup', e.target.value)} />
               </div>
 
               <div>
                 <label className={lbl}>Observações</label>
-                <textarea rows={3} className={inp + ' resize-none'} placeholder="Notas sobre este lead..."
-                  value={form.notes || ''} onChange={e => set('notes', e.target.value)} />
+                <textarea rows={3} className={inp + ' resize-none'} placeholder="Notas sobre este lead..." value={form.notes || ''} onChange={e => set('notes', e.target.value)} />
               </div>
             </div>
           )}
 
-          {/* ── Tab: Histórico ── */}
           {!isNew && activeTab === 'history' && (
             <div className="space-y-4">
-              {/* Nova interação */}
               <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
                 <p className="text-xs font-bold text-gray-500 mb-3">Registrar interação</p>
                 <div className="flex gap-2 mb-3 flex-wrap">
@@ -425,8 +368,7 @@ function LeadModal({ lead: initialLead, consultants, onClose, onSave, onStartOnb
                   })}
                 </div>
                 <div className="flex gap-2">
-                  <textarea rows={2} className={inp + ' flex-1 resize-none text-xs'}
-                    placeholder="Descreva o contato..."
+                  <textarea rows={2} className={inp + ' flex-1 resize-none text-xs'} placeholder="Descreva o contato..."
                     value={newInt.content} onChange={e => setNewInt(n => ({ ...n, content: e.target.value }))} />
                   <button onClick={handleAddInteraction} disabled={addingInt || !newInt.content.trim()}
                     className="px-4 bg-cyan-500 text-white rounded-xl text-xs font-bold hover:bg-cyan-600 disabled:opacity-50 flex items-center gap-1.5 self-end py-2.5">
@@ -436,7 +378,6 @@ function LeadModal({ lead: initialLead, consultants, onClose, onSave, onStartOnb
                 </div>
               </div>
 
-              {/* Timeline */}
               {interactions.length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
                   <StickyNote className="w-10 h-10 mx-auto mb-2 text-gray-200" />
@@ -447,8 +388,7 @@ function LeadModal({ lead: initialLead, consultants, onClose, onSave, onStartOnb
                 const Icon = tType.icon
                 return (
                   <div key={int.id} className="flex gap-3">
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
-                      style={{ background: `${tType.color}15` }}>
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: `${tType.color}15` }}>
                       <Icon className="w-3.5 h-3.5" style={{ color: tType.color }} />
                     </div>
                     <div className="flex-1 bg-gray-50 rounded-xl p-3 border border-gray-100">
@@ -465,25 +405,20 @@ function LeadModal({ lead: initialLead, consultants, onClose, onSave, onStartOnb
           )}
         </div>
 
-        {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-100 flex gap-3 flex-wrap">
-          {/* Botão iniciar onboarding no footer também */}
           {isClientOrClosed && !isNew && !alreadyConverted && (
             <button onClick={() => { onStartOnboarding(form as Lead); onClose() }}
               className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold text-sm shadow-sm">
               🏫 Iniciar onboarding
             </button>
           )}
-          <button onClick={onClose}
-            className="px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm hover:bg-gray-50">
+          <button onClick={onClose} className="px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm hover:bg-gray-50">
             {isNew ? 'Cancelar' : 'Fechar'}
           </button>
           <button onClick={handleSave} disabled={saving || !form.school_name || !form.name}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
-            {saving
-              ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Salvando...</>
-              : <><CheckCircle2 className="w-4 h-4" /> {isNew ? 'Criar lead' : 'Salvar alterações'}</>
-            }
+            {saving ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Salvando...</>
+              : <><CheckCircle2 className="w-4 h-4" /> {isNew ? 'Criar lead' : 'Salvar alterações'}</>}
           </button>
         </div>
       </div>
@@ -491,32 +426,22 @@ function LeadModal({ lead: initialLead, consultants, onClose, onSave, onStartOnb
   )
 }
 
-// ─── Onboarding Modal (inline — abre wizard de escola com dados pré-preenchidos) ──
+// ─── Onboarding Modal ─────────────────────────────────────────────────────
 function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
-  lead: Lead
-  consultants: any[]
-  onClose: () => void
-  onSuccess: (institutionId: string) => void
+  lead: Lead; consultants: any[]; onClose: () => void; onSuccess: (institutionId: string) => void
 }) {
   const [form, setForm] = useState({
-    name:            lead.school_name || '',
-    cnpj:            '',
-    city:            lead.city        || '',
-    state:           lead.state       || '',
-    phone:           lead.phone       || '',
-    plan:            'escola',
-    consultantId:    lead.consultant_id || '',
-    managerName:     lead.name         || '',
-    email:           lead.email        || '',
-    password:        '',
-    isFree:          false,
+    name: lead.school_name || '', cnpj: '', city: lead.city || '', state: lead.state || '',
+    phone: lead.phone || '', plan: 'escola', consultantId: lead.consultant_id || '',
+    managerName: lead.name || '', email: lead.email || '', password: '',
+    isFree: false,
     implementationValue: String(lead.implementation_value || 550),
-    monthlyValue:        String(lead.monthly_value        || 550),
-    billingDueDay:   '10',
+    monthlyValue: String(lead.monthly_value || 550),
+    billingDueDay: '10',
   })
-  const [showPw, setShowPw]   = useState(false)
-  const [saving, setSaving]   = useState(false)
-  const [errors, setErrors]   = useState<Record<string, string>>({})
+  const [showPw, setShowPw] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }))
 
@@ -540,55 +465,77 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
       if (!session) throw new Error('Sessão expirada.')
 
       // 1. Criar instituição
-      const { data: institution, error: instErr } = await supabase
-        .from('institutions')
-        .insert({
-          name:                 form.name.trim(),
-          cnpj:                 form.cnpj.trim() || null,
-          city:                 form.city.trim(),
-          state:                form.state.trim().toUpperCase(),
-          phone:                form.phone.trim() || null,
-          email:                form.email.trim().toLowerCase(),
-          consultant_id:        form.consultantId || null,
-          plan:                 form.plan,
-          plan_status:          form.isFree ? 'active' : 'pending_contract',
-          monthly_value:        form.isFree ? 0 : Number(form.monthlyValue),
-          implementation_value: form.isFree ? 0 : Number(form.implementationValue),
-        })
-        .select().single()
+      const { data: institution, error: instErr } = await supabase.from('institutions').insert({
+        name: form.name.trim(), cnpj: form.cnpj.trim() || null,
+        city: form.city.trim(), state: form.state.trim().toUpperCase(),
+        phone: form.phone.trim() || null, email: form.email.trim().toLowerCase(),
+        consultant_id: form.consultantId || null, plan: form.plan,
+        plan_status: form.isFree ? 'active' : 'pending_contract',
+        monthly_value: form.isFree ? 0 : Number(form.monthlyValue),
+        implementation_value: form.isFree ? 0 : Number(form.implementationValue),
+      }).select().single()
       if (instErr) throw new Error(instErr.message)
 
       // 2. Criar usuário gestor
-      const fnRes = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            email:          form.email.trim().toLowerCase(),
-            password:       form.password,
-            full_name:      form.managerName.trim(),
-            role:           'admin',
-            user_type:      'school_user',
-            institution_id: institution.id,
-          }),
-        }
-      )
+      const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ email: form.email.trim().toLowerCase(), password: form.password, full_name: form.managerName.trim(), role: 'admin', user_type: 'school_user', institution_id: institution.id }),
+      })
       const fnData = await fnRes.json()
       if (!fnRes.ok || fnData?.error) {
         await supabase.from('institutions').delete().eq('id', institution.id)
         throw new Error(fnData?.error || 'Erro ao criar usuário')
       }
 
-      // 3. Vincular lead à instituição criada
+      // 3. Gerar cobrança no Asaas (se não gratuito)
+      let paymentLink: string | undefined
+      if (!form.isFree) {
+        try {
+          const { data: asaasData } = await supabase.functions.invoke('asaas-create-charge', {
+            body: {
+              institution_id: institution.id, name: form.name.trim(),
+              email: form.email.trim().toLowerCase(), cpfCnpj: form.cnpj.replace(/\D/g, '') || null,
+              value: Number(form.implementationValue),
+              description: `Taxa de implantação — ${form.name.trim()}`,
+              dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+            },
+          })
+          if (asaasData?.paymentLink) paymentLink = asaasData.paymentLink
+        } catch {}
+
+        // 4. Email ao gestor com link de pagamento
+        try {
+          await supabase.functions.invoke('send-email', {
+            body: {
+              type: 'payment_link',
+              to: form.email.trim().toLowerCase(),
+              data: {
+                institution_name: form.name.trim(),
+                value: Number(form.implementationValue).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+                due_date: new Date(Date.now() + 7 * 86400000).toLocaleDateString('pt-BR'),
+                billing_type: 'PIX/Boleto',
+                payment_link: paymentLink || '',
+              }
+            }
+          })
+        } catch {}
+      } else {
+        // Gratuito — email de acesso direto
+        try {
+          await supabase.functions.invoke('send-email', {
+            body: {
+              type: 'new_institution',
+              to: form.email.trim().toLowerCase(),
+              data: { institution_name: form.name.trim(), login_url: 'https://aionedu.com.br/login' }
+            }
+          })
+        } catch {}
+      }
+
+      // 5. Vincular lead à instituição
       await supabase.from('crm_leads').update({
-        stage: 'cliente',
-        converted_institution_id: institution.id,
-        updated_at: new Date().toISOString(),
+        stage: 'cliente', converted_institution_id: institution.id, updated_at: new Date().toISOString(),
       }).eq('id', lead.id)
 
       onSuccess(institution.id)
@@ -606,24 +553,17 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
       <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[94vh]">
         <div className="px-6 pt-5 pb-4 border-b border-gray-100 flex items-start justify-between">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-bold px-2 py-0.5 bg-green-100 text-green-700 rounded-full">
-                🏫 Onboarding de lead
-              </span>
-            </div>
-            <h2 className="text-lg font-bold text-gray-900">Criar escola — {lead.school_name}</h2>
+            <span className="text-xs font-bold px-2 py-0.5 bg-green-100 text-green-700 rounded-full">🏫 Onboarding de lead</span>
+            <h2 className="text-lg font-bold text-gray-900 mt-1">Criar escola — {lead.school_name}</h2>
             <p className="text-xs text-gray-400 mt-0.5">Dados pré-preenchidos do lead. Revise e confirme.</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl">
-            <X className="w-5 h-5 text-gray-400" />
-          </button>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><X className="w-5 h-5 text-gray-400" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
           {errors._global && (
             <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              {errors._global}
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />{errors._global}
             </div>
           )}
 
@@ -644,7 +584,6 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
             <div>
               <label className={lbl}>Cidade *</label>
               <input className={inp2(errors.city)} value={form.city} onChange={e => set('city', e.target.value)} />
-              {errors.city && <p className="text-xs text-red-500 mt-1">{errors.city}</p>}
             </div>
             <div>
               <label className={lbl}>UF *</label>
@@ -670,11 +609,10 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
             </div>
           </div>
 
-          {/* Financeiro */}
           <div className="flex items-center justify-between bg-gray-50 rounded-xl p-3 border border-gray-200">
             <div>
               <p className="text-sm font-semibold text-gray-700">Acesso gratuito</p>
-              <p className="text-xs text-gray-400">Sem cobrança de implantação ou mensalidade</p>
+              <p className="text-xs text-gray-400">Sem cobrança</p>
             </div>
             <button onClick={() => set('isFree', !form.isFree)}
               className={`relative w-10 h-5 rounded-full transition-colors ${form.isFree ? 'bg-purple-500' : 'bg-gray-300'}`}>
@@ -686,58 +624,61 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={lbl}>Implantação (R$)</label>
-                <input type="number" className={inp2(errors.implementationValue)} value={form.implementationValue}
-                  onChange={e => set('implementationValue', e.target.value)} />
+                <input type="number" className={inp} value={form.implementationValue} onChange={e => set('implementationValue', e.target.value)} />
               </div>
               <div>
                 <label className={lbl}>Mensalidade (R$)</label>
-                <input type="number" className={inp} value={form.monthlyValue}
-                  onChange={e => set('monthlyValue', e.target.value)} />
+                <input type="number" className={inp} value={form.monthlyValue} onChange={e => set('monthlyValue', e.target.value)} />
               </div>
             </div>
           )}
 
-          {/* Acesso do gestor */}
           <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 space-y-3">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Acesso do gestor</p>
             <div>
               <label className={lbl}>Nome do gestor *</label>
-              <input className={inp2(errors.managerName)} value={form.managerName}
-                onChange={e => set('managerName', e.target.value)} />
+              <input className={inp2(errors.managerName)} value={form.managerName} onChange={e => set('managerName', e.target.value)} />
               {errors.managerName && <p className="text-xs text-red-500 mt-1">{errors.managerName}</p>}
             </div>
             <div>
               <label className={lbl}>E-mail *</label>
-              <input type="email" className={inp2(errors.email)} value={form.email}
-                onChange={e => set('email', e.target.value)} />
+              <input type="email" className={inp2(errors.email)} value={form.email} onChange={e => set('email', e.target.value)} />
               {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
             </div>
             <div>
               <label className={lbl}>Senha inicial *</label>
               <div className="relative">
                 <input type={showPw ? 'text' : 'password'} className={inp2(errors.password) + ' pr-10'}
-                  placeholder="Mínimo 8 caracteres" value={form.password}
-                  onChange={e => set('password', e.target.value)} />
-                <button type="button" onClick={() => setShowPw(!showPw)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  placeholder="Mínimo 8 caracteres" value={form.password} onChange={e => set('password', e.target.value)} />
+                <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
                   {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
               {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password}</p>}
             </div>
           </div>
+
+          {/* O que vai acontecer */}
+          <div className="bg-cyan-50 border border-cyan-100 rounded-xl p-4">
+            <p className="text-xs font-bold text-cyan-700 uppercase tracking-wide mb-2">O que será feito</p>
+            <div className="space-y-1">
+              {[
+                '✅ Criar escola e usuário gestor',
+                form.isFree ? '✅ Enviar e-mail de acesso imediato' : '✅ Gerar cobrança no Asaas',
+                !form.isFree ? '✅ Enviar e-mail com link de pagamento' : null,
+                '✅ Lead convertido para cliente no CRM',
+              ].filter(Boolean).map((item, i) => (
+                <p key={i} className="text-xs text-cyan-700">{item}</p>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
-          <button onClick={onClose} className="px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm hover:bg-gray-50">
-            Cancelar
-          </button>
+          <button onClick={onClose} className="px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm hover:bg-gray-50">Cancelar</button>
           <button onClick={handleCreate} disabled={saving}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold text-sm disabled:opacity-60">
-            {saving
-              ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Criando escola...</>
-              : <>🏫 Criar escola e iniciar onboarding</>
-            }
+            {saving ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Criando...</> : <>🏫 Criar escola e iniciar onboarding</>}
           </button>
         </div>
       </div>
@@ -745,25 +686,21 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
   )
 }
 
-// imports adicionais necessários
-import { Eye, EyeOff } from 'lucide-react'
-
 // ─── MAIN ─────────────────────────────────────────────────────────────────
 export default function AdminCRM() {
   const navigate = useNavigate()
-  const [leads, setLeads]           = useState<Lead[]>([])
-  const [consultants, setConsultants] = useState<any[]>([])
-  const [loading, setLoading]       = useState(true)
-  const [search, setSearch]         = useState('')
-  const [filterStage, setFilterStage] = useState<Stage | 'all'>('all')
+  const [leads, setLeads]               = useState<Lead[]>([])
+  const [consultants, setConsultants]   = useState<any[]>([])
+  const [loading, setLoading]           = useState(true)
+  const [search, setSearch]             = useState('')
+  const [filterStage, setFilterStage]   = useState<Stage | 'all'>('all')
   const [filterConsultant, setFilterConsultant] = useState('')
   const [filterOrigin, setFilterOrigin] = useState('')
   const [showOverdueOnly, setShowOverdueOnly] = useState(false)
-  const [view, setView]             = useState<'kanban' | 'list'>('kanban')
-
+  const [view, setView]                 = useState<'kanban' | 'list'>('kanban')
   const [selectedLead, setSelectedLead] = useState<Lead | null | 'new'>(null)
   const [onboardingLead, setOnboardingLead] = useState<Lead | null>(null)
-  const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null)
+  const [toast, setToast]               = useState<{ msg: string; ok: boolean } | null>(null)
 
   const showToast = (msg: string, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 4000) }
 
@@ -794,15 +731,11 @@ export default function AdminCRM() {
   const handleSaveLead = async (form: Partial<Lead>) => {
     try {
       if (form.id) {
-        const { error } = await supabase.from('crm_leads').update({
-          ...form, updated_at: new Date().toISOString(),
-        }).eq('id', form.id)
+        const { error } = await supabase.from('crm_leads').update({ ...form, updated_at: new Date().toISOString() }).eq('id', form.id)
         if (error) throw error
         showToast('Lead atualizado!')
       } else {
-        const { error } = await supabase.from('crm_leads').insert({
-          ...form, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-        })
+        const { error } = await supabase.from('crm_leads').insert({ ...form, created_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         if (error) throw error
         showToast('Lead criado!')
       }
@@ -827,9 +760,8 @@ export default function AdminCRM() {
 
   const handleOnboardingSuccess = (institutionId: string) => {
     setOnboardingLead(null)
-    showToast('🎉 Escola criada! Lead convertido para cliente.')
+    showToast('🎉 Escola criada! Lead convertido.')
     loadData()
-    // Navega para onboarding da nova escola
     navigate('/super-admin/onboarding')
   }
 
@@ -868,20 +800,12 @@ export default function AdminCRM() {
               </button>
             )}
             <div className="flex border border-gray-200 rounded-xl overflow-hidden">
-              <button onClick={() => setView('kanban')}
-                className={`px-3 py-2 text-sm font-semibold transition-colors ${view === 'kanban' ? 'bg-cyan-500 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
-                Kanban
-              </button>
-              <button onClick={() => setView('list')}
-                className={`px-3 py-2 text-sm font-semibold transition-colors ${view === 'list' ? 'bg-cyan-500 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
-                Lista
-              </button>
+              <button onClick={() => setView('kanban')} className={`px-3 py-2 text-sm font-semibold transition-colors ${view === 'kanban' ? 'bg-cyan-500 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>Kanban</button>
+              <button onClick={() => setView('list')} className={`px-3 py-2 text-sm font-semibold transition-colors ${view === 'list' ? 'bg-cyan-500 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>Lista</button>
             </div>
-            <button onClick={loadData} className="p-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-500">
-              <RefreshCw className="w-4 h-4" />
-            </button>
+            <button onClick={loadData} className="p-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-500"><RefreshCw className="w-4 h-4" /></button>
             <button onClick={() => setSelectedLead('new')}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm shadow-sm hover:from-cyan-600 hover:to-blue-700">
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm shadow-sm">
               <Plus className="w-4 h-4" /> Novo lead
             </button>
           </div>
@@ -894,7 +818,7 @@ export default function AdminCRM() {
             { label: 'Em andamento',    value: kpis.active,       icon: Clock,       color: 'text-cyan-600',    bg: 'bg-cyan-50'    },
             { label: 'Fechados',        value: kpis.closed,       icon: Star,        color: 'text-green-600',   bg: 'bg-green-50'   },
             { label: 'Clientes',        value: kpis.clients,      icon: Building2,   color: 'text-emerald-700', bg: 'bg-emerald-50' },
-            { label: 'MRR no pipeline', value: kpis.mrr_pipeline.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), icon: DollarSign, color: 'text-purple-600', bg: 'bg-purple-50' },
+            { label: 'MRR pipeline',    value: kpis.mrr_pipeline > 0 ? kpis.mrr_pipeline.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—', icon: DollarSign, color: 'text-purple-600', bg: 'bg-purple-50' },
           ].map(k => {
             const Icon = k.icon
             return (
@@ -911,7 +835,7 @@ export default function AdminCRM() {
           })}
         </div>
 
-        {/* Filters */}
+        {/* Filtros */}
         <div className="flex gap-3 flex-wrap">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -946,22 +870,13 @@ export default function AdminCRM() {
                   <div className="flex items-center justify-between mb-3 px-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold" style={{ color: stage.color }}>{stage.label}</span>
-                      <span className="text-xs px-2 py-0.5 rounded-full font-bold"
-                        style={{ background: stage.bg, color: stage.color }}>{stageLeads.length}</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: stage.bg, color: stage.color }}>{stageLeads.length}</span>
                     </div>
-                    {stageValue > 0 && (
-                      <span className="text-xs text-gray-400 font-semibold">
-                        {stageValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </span>
-                    )}
+                    {stageValue > 0 && <span className="text-xs text-gray-400 font-semibold">{stageValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>}
                   </div>
                   <div className="space-y-3 min-h-[200px]">
                     {stageLeads.map(lead => (
-                      <LeadCard
-                        key={lead.id}
-                        lead={lead}
-                        stage={stage}
-                        consultants={consultants}
+                      <LeadCard key={lead.id} lead={lead} stage={stage} consultants={consultants}
                         onClick={() => setSelectedLead(lead)}
                         onMoveStage={to => handleMoveStage(lead, to)}
                         onDelete={() => handleDelete(lead.id)}
@@ -1008,19 +923,14 @@ export default function AdminCRM() {
                     const overdue = isOverdue(lead.next_followup)
                     return (
                       <tr key={lead.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedLead(lead)}>
-                        <td className="px-4 py-3.5">
-                          <p className="font-semibold text-gray-900 text-sm">{lead.school_name}</p>
-                        </td>
+                        <td className="px-4 py-3.5"><p className="font-semibold text-gray-900 text-sm">{lead.school_name}</p></td>
                         <td className="px-4 py-3.5">
                           <p className="text-sm text-gray-700">{lead.name}</p>
                           {lead.phone && <p className="text-xs text-gray-400">{lead.phone}</p>}
                         </td>
-                        <td className="px-4 py-3.5 text-sm text-gray-500">
-                          {[lead.city, lead.state].filter(Boolean).join('/')}
-                        </td>
+                        <td className="px-4 py-3.5 text-sm text-gray-500">{[lead.city, lead.state].filter(Boolean).join('/')}</td>
                         <td className="px-4 py-3.5">
-                          <span className="text-xs font-bold px-2.5 py-1 rounded-full"
-                            style={{ color: stage.color, background: stage.bg }}>{stage.label}</span>
+                          <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: stage.color, background: stage.bg }}>{stage.label}</span>
                         </td>
                         <td className="px-4 py-3.5 text-xs text-gray-600">
                           {lead.monthly_value && <p className="font-semibold">{fmtBRL(lead.monthly_value)}/mês</p>}
@@ -1035,13 +945,9 @@ export default function AdminCRM() {
                         <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
                             {(lead.stage === 'fechado' || lead.stage === 'cliente') && !lead.converted_institution_id && (
-                              <button onClick={() => setOnboardingLead(lead)}
-                                className="text-xs px-2 py-1 bg-green-50 text-green-700 rounded-lg font-bold hover:bg-green-100">
-                                🏫
-                              </button>
+                              <button onClick={() => setOnboardingLead(lead)} className="text-xs px-2 py-1 bg-green-50 text-green-700 rounded-lg font-bold hover:bg-green-100">🏫</button>
                             )}
-                            <button onClick={() => handleDelete(lead.id)}
-                              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                            <button onClick={() => handleDelete(lead.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -1056,7 +962,6 @@ export default function AdminCRM() {
         )}
       </div>
 
-      {/* ── Modal lead ── */}
       {selectedLead !== null && (
         <LeadModal
           lead={selectedLead === 'new' ? null : selectedLead}
@@ -1067,7 +972,6 @@ export default function AdminCRM() {
         />
       )}
 
-      {/* ── Modal onboarding de lead ── */}
       {onboardingLead && (
         <OnboardingFromLeadModal
           lead={onboardingLead}
