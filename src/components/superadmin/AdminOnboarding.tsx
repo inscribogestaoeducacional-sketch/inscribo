@@ -250,21 +250,10 @@ function ContractPanel({ process, onSuccess }: { process: Process; onSuccess: ()
 }
 
 // ─── Painel de Pagamento (inline no card) ─────────────────────────────────
-function PaymentPanel({ process, onSuccess }: { process: Process; onSuccess: () => void }) {
-  const [open, setOpen]         = useState(false)
-  const [isFree, setIsFree]     = useState(false)
-  const [form, setForm]         = useState({
-    implValue:    String(process.institution?.implementation_value || 550),
-    monthlyValue: String(process.institution?.monthly_value || 550),
-    dueDate:      new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-    billingType:  'PIX',
-    // Parcelamento da implantação
-    installments: '1',
-    // Plano mensal
-    planMonths:   '12',
-  })
-  const [payLink, setPayLink] = useState('')
-const [copied, setCopied]     = useState(false)
+const [payLink, setPayLink] = useState('')
+const [copied, setCopied]   = useState(false)
+const [saving, setSaving]   = useState(false)
+const [err, setErr]         = useState('')
 
 useEffect(() => {
   supabase.from('payments')
@@ -277,49 +266,6 @@ useEffect(() => {
     .maybeSingle()
     .then(({ data }) => { if (data?.asaas_charge_url) setPayLink(data.asaas_charge_url) })
 }, [process.institution_id])
-
-useEffect(() => {
-  supabase.from('payments')
-    .select('asaas_charge_url')
-    .eq('institution_id', process.institution_id)
-    .eq('payment_type', 'implementation')
-    .eq('status', 'pending')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-    .then(({ data }) => { if (data?.asaas_charge_url) setPayLink(data.asaas_charge_url) })
-}, [process.institution_id])
-  const [saving, setSaving]     = useState(false)
-  const [copied, setCopied]     = useState(false)
-  const [err, setErr]           = useState('')
-
-  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
-
-  const implTotal     = Number(form.implValue) || 0
-  const implPerParcel = form.installments === '1' ? implTotal : Math.ceil(implTotal / Number(form.installments))
-  const monthlyTotal  = Number(form.monthlyValue) * Number(form.planMonths)
-
-  const handleGenerate = async () => {
-    if (!isFree && (!form.implValue || !form.monthlyValue)) { setErr('Preencha os valores.'); return }
-    setSaving(true); setErr('')
-    try {
-      if (isFree) {
-        // Registra sem cobrança e marca tarefa
-        await supabase.from('payments').insert({
-          institution_id: process.institution_id,
-          amount:         0,
-          status:         'paid',
-          payment_type:   'implementation',
-          due_date:       new Date().toISOString().split('T')[0],
-          description:    'Implantação gratuita',
-        })
-        const task = (process.tasks || []).find(t => t.phase === 'contract' && t.title.toLowerCase().includes('pagamento'))
-        if (task) await supabase.from('onboarding_tasks').update({ done: true, done_at: new Date().toISOString() }).eq('id', task.id)
-        await supabase.from('institutions').update({ plan_status: 'active' }).eq('id', process.institution_id)
-        onSuccess()
-        setOpen(false)
-        return
-      }
 
       // Cria cobrança no Asaas
       const { data, error } = await supabase.functions.invoke('asaas-create-charge', {
