@@ -289,7 +289,6 @@ useEffect(() => {
     .maybeSingle()
     .then(({ data }) => { if (data?.asaas_charge_url) setPayLink(data.asaas_charge_url) })
 }, [process.institution_id])
-  const [copied, setCopied]     = useState(false)
   const [err, setErr]           = useState('')
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
