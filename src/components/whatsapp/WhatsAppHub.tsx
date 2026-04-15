@@ -157,7 +157,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
     // Normaliza JIDs da Cloud API (número puro) para o formato padrão
     const normalizedJid = jid.includes('@') ? jid : `${jid}@s.whatsapp.net`
     const isGroup = normalizedJid.endsWith('@g.us')
-    const convData = convMap?.get(normalizedJid)
+    const convData = convMap?.get(normalizedJid) || convMap?.get(jid)
 
     let name: string
     if (isGroup) {
@@ -186,15 +186,17 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
       contact_type: convData?.contact_type,
       tags: convData?.tags || [],
       profile_picture_url: convData?.profile_picture_url,
-      messages: sorted.map(m => ({
-        id: m.id,
-        type: mapMsgType(m.message_type),
-        content: m.content,
-        from: m.from_me ? 'me' : 'them' as 'me' | 'them',
-        ts: new Date(m.timestamp),
-        status: 'delivered' as const,
-        media_url: m.media_url,
-      })),
+      messages: sorted
+        .filter((m, idx, self) => idx === self.findIndex(t => (t.message_id && t.message_id === m.message_id) || t.id === m.id))
+        .map(m => ({
+          id: m.id,
+          type: mapMsgType(m.message_type),
+          content: m.content,
+          from: m.from_me ? 'me' : 'them' as 'me' | 'them',
+          ts: new Date(m.timestamp),
+          status: 'delivered' as const,
+          media_url: m.media_url,
+        })),
     }
   }).sort((a, b) => b.lastTime.getTime() - a.lastTime.getTime())
 }
@@ -970,26 +972,6 @@ export default function WhatsAppHub() {
         .catch(() => {})
     }
 
-    // Fetch profile picture if not loaded yet
-    if (conv && !conv.profile_picture_url && !conv.isGroup && instance && user.institution_id) {
-      fetch('/api/evolution/get-profile-picture', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceName: instance, number: conv.phone.replace(/\D/g,'') })
-      })
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
-          const pictureUrl = data?.profilePictureUrl || data?.picture
-          if (pictureUrl) {
-            DatabaseService.updateProfilePicture(user.institution_id!, activeId, pictureUrl)
-            setConversations(prev => prev.map(c => c.id === activeId
-              ? { ...c, profile_picture_url: pictureUrl }
-              : c
-            ))
-          }
-        })
-        .catch(() => {})
-    }
   }, [activeId])
 
   // Load history when switching to history tab
@@ -2567,6 +2549,33 @@ export default function WhatsAppHub() {
                     </button>
                   )}
                 </div>
+
+                {/* Janela de 24h */}
+                {!activeConv.isGroup && (() => {
+                  const lastIncoming = [...activeConv.messages].filter(m => m.from === 'them').slice(-1)[0]
+                  const msElapsed    = lastIncoming ? Date.now() - lastIncoming.ts.getTime() : Infinity
+                  const windowOpen   = msElapsed < 24 * 3600000
+                  const hoursLeft    = Math.max(0, 24 - msElapsed / 3600000)
+                  const hh           = Math.floor(hoursLeft)
+                  const mm           = Math.round((hoursLeft - hh) * 60)
+                  return (
+                    <div style={{ margin: '10px 12px 0', padding: '8px 12px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 8,
+                      background: windowOpen ? '#D1FAE5' : '#FEE2E2',
+                      border: `1px solid ${windowOpen ? '#A7F3D0' : '#FECACA'}` }}>
+                      <span style={{ fontSize: 14 }}>{windowOpen ? '🟢' : '🔴'}</span>
+                      <div>
+                        <p style={{ fontSize: 12, fontWeight: 700, color: windowOpen ? '#059669' : '#DC2626', margin: 0 }}>
+                          {windowOpen ? 'Janela aberta' : 'Janela expirada'}
+                        </p>
+                        <p style={{ fontSize: 11, color: windowOpen ? '#065F46' : '#991B1B', margin: 0 }}>
+                          {windowOpen
+                            ? `Expira em ${hh}h ${mm}min`
+                            : 'Use template para iniciar'}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 {/* Inline edit form */}
                 {editingContact && (

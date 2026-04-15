@@ -50,6 +50,7 @@ async function processFlow(
   text: string,
   isNewConversation: boolean
 ) {
+  console.log('[flow] iniciando para:', { institutionId, remoteJid, isNewConversation, text: text.slice(0, 80) })
   try {
     const { data: flow } = await supabase
       .from('whatsapp_flows')
@@ -57,13 +58,17 @@ async function processFlow(
       .eq('institution_id', institutionId)
       .single()
 
-    if (!flow || !flow.is_active) return
+    if (!flow || !flow.is_active) {
+      console.log('[flow] sem fluxo ativo, pulando')
+      return
+    }
 
-    // Verifica horário de atendimento
-    const dayKeys = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
-    const now = new Date()
-    const currentDay = dayKeys[now.getDay()]
-    const isWorkingDay = (flow.working_days as string[])?.includes(currentDay)
+    // Horário de Fortaleza (UTC-3) — evita erro de fuso UTC
+    const tz       = flow.timezone || 'America/Fortaleza'
+    const now      = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
+    const dayKeys  = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+    const currentDay     = dayKeys[now.getDay()]
+    const isWorkingDay   = (flow.working_days as string[])?.includes(currentDay)
 
     const [startH, startM] = (flow.working_start || '07:00').split(':').map(Number)
     const [endH, endM]     = (flow.working_end   || '17:00').split(':').map(Number)
@@ -71,22 +76,40 @@ async function processFlow(
     const isWorkingHours   = currentMinutes >= startH * 60 + startM && currentMinutes <= endH * 60 + endM
     const isOpen           = isWorkingDay && isWorkingHours
 
+    console.log('[flow] isOpen:', isOpen, '| isWorkingDay:', isWorkingDay, '| isWorkingHours:', isWorkingHours, '| day:', currentDay, '| time:', `${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`)
+
     const menuOptions: any[] = flow.menu_options || []
     const trimmedText = text.trim()
     const menuChoice  = menuOptions.find((opt: any) => opt.keyword === trimmedText)
 
+    const action = !isOpen ? 'off-hours' : isNewConversation ? 'new-conv' : menuChoice ? 'menu-choice' : 'none'
+    console.log('[flow] ação:', action)
+
     if (!isOpen && flow.off_hours_message) {
-      // Fora do horário — envia mensagem automática apenas em conversas novas
+      // Fora do horário — envia apenas em conversas novas
       if (isNewConversation) {
         await sendAutoMessage(institutionId, remoteJid, flow.off_hours_message)
       }
     } else if (isOpen && isNewConversation) {
-      // Nova conversa dentro do horário — boas-vindas e/ou menu
-      if (flow.welcome_message) {
-        await sendAutoMessage(institutionId, remoteJid, flow.welcome_message)
-      }
-      if (flow.menu_enabled && flow.menu_message) {
-        await sendAutoMessage(institutionId, remoteJid, flow.menu_message)
+      // Nova conversa — previne duplicata verificando mensagens automáticas recentes (5 min)
+      const { data: recentAuto } = await supabase
+        .from('whatsapp_messages')
+        .select('id')
+        .eq('institution_id', institutionId)
+        .eq('remote_jid', remoteJid)
+        .eq('from_me', true)
+        .gte('timestamp', new Date(Date.now() - 5 * 60 * 1000).toISOString())
+        .maybeSingle()
+
+      if (!recentAuto) {
+        if (flow.welcome_message) {
+          await sendAutoMessage(institutionId, remoteJid, flow.welcome_message)
+        }
+        if (flow.menu_enabled && flow.menu_message) {
+          await sendAutoMessage(institutionId, remoteJid, flow.menu_message)
+        }
+      } else {
+        console.log('[flow] boas-vindas suprimidas (mensagem automática recente detectada)')
       }
     } else if (isOpen && menuChoice && flow.menu_enabled) {
       // Resposta ao menu — atribui atendente
@@ -100,6 +123,7 @@ async function processFlow(
           })
           .eq('institution_id', institutionId)
           .eq('remote_jid', remoteJid)
+        console.log('[flow] atendente atribuído:', menuChoice.assignee_name)
       }
     }
   } catch (e) {

@@ -715,20 +715,23 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
       })
       if (!testRes.ok) { const err = await testRes.json(); throw new Error((err as any)?.error?.message || 'Token ou Phone ID inválido') }
       const testData = await testRes.json()
+      const verifiedName  = (testData as any).verified_name || waForm.display_name
+      const verifiedPhone = waForm.phone_number || (testData as any).display_phone_number || ''
       await supabase.from('institutions').update({
         whatsapp_phone_id:     waForm.phone_id,
         whatsapp_token:        waForm.token,
-        whatsapp_phone_number: waForm.phone_number || (testData as any).display_phone_number || '',
-        whatsapp_display_name: (testData as any).verified_name || waForm.display_name,
+        whatsapp_phone_number: verifiedPhone,
+        whatsapp_display_name: verifiedName,
         whatsapp_connected:    true,
       }).eq('id', inst.id)
       try {
         await supabase.from('whatsapp_phone_numbers').upsert({
-          institution_id: inst.id,
+          institution_id:  inst.id,
           phone_number_id: waForm.phone_id,
-          phone_number: waForm.phone_number || (testData as any).display_phone_number || '',
-          display_name: (testData as any).verified_name || waForm.display_name,
-          is_active: true,
+          phone_number:    verifiedPhone,
+          display_name:    verifiedName,
+          waba_id:         '1222972209822315',
+          is_active:       true,
         }, { onConflict: 'phone_number_id' })
       } catch {}
       setWaSaved(true)

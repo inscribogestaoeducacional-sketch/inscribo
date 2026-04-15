@@ -348,6 +348,9 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [connecting, setConnecting]       = useState(false)
   const [connectError, setConnectError]   = useState<string | null>(null)
   const [disconnecting, setDisconnecting] = useState(false)
+  const [phoneRecord, setPhoneRecord]     = useState<any>(null)
+  const [testing, setTesting]             = useState(false)
+  const [testResult, setTestResult]       = useState<{ ok: boolean; msg: string } | null>(null)
 
   // ── Flow config ──
   const [flow, setFlow] = useState({
@@ -381,6 +384,13 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
           .select('conversation_count,monthly_limit')
           .eq('institution_id', institutionId).eq('month_year', monthYear).single()
         if (u) setUsage({ count: (u as any).conversation_count || 0, limit: (u as any).monthly_limit || 1000 })
+        // Busca número preciso da tabela whatsapp_phone_numbers
+        const { data: pr } = await supabase.from('whatsapp_phone_numbers')
+          .select('phone_number,display_name,phone_number_id')
+          .eq('institution_id', institutionId)
+          .eq('is_active', true)
+          .maybeSingle()
+        if (pr) setPhoneRecord(pr)
       }
     } catch {}
     try {
@@ -409,9 +419,12 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
       }).eq('id', institutionId)
       try {
         await supabase.from('whatsapp_phone_numbers').upsert({
-          institution_id: institutionId, phone_number_id: form.phone_id,
-          phone_number: form.phone_number || (testData as any).display_phone_number || '',
-          display_name: (testData as any).verified_name || form.display_name, is_active: true,
+          institution_id:  institutionId,
+          phone_number_id: form.phone_id,
+          phone_number:    form.phone_number || (testData as any).display_phone_number || '',
+          display_name:    (testData as any).verified_name || form.display_name,
+          waba_id:         '1222972209822315',
+          is_active:       true,
         }, { onConflict: 'phone_number_id' })
       } catch {}
       await loadConfig()
@@ -436,6 +449,27 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
       )
       setFlowSaved(true); setTimeout(() => setFlowSaved(false), 2500)
     } catch (e) { console.error(e) } finally { setSavingFlow(false) }
+  }
+
+  const handleTestConnection = async () => {
+    const phoneId = metaConfig?.whatsapp_phone_id || phoneRecord?.phone_number_id
+    const token   = metaConfig?.whatsapp_token
+    if (!phoneId || !token) { setTestResult({ ok: false, msg: 'Phone ID ou token não encontrado.' }); return }
+    setTesting(true); setTestResult(null)
+    try {
+      const res  = await fetch(`https://graph.facebook.com/v19.0/${phoneId}?fields=display_phone_number,verified_name`, { headers: { Authorization: `Bearer ${token}` } })
+      const data = await res.json()
+      if (res.ok) {
+        setTestResult({ ok: true, msg: `✅ Conectado: ${data.verified_name} (${data.display_phone_number})` })
+      } else {
+        setTestResult({ ok: false, msg: `❌ ${data.error?.message || 'Token inválido'}` })
+      }
+    } catch (e) {
+      setTestResult({ ok: false, msg: '❌ Erro de rede ao testar conexão.' })
+    } finally {
+      setTesting(false)
+      setTimeout(() => setTestResult(null), 6000)
+    }
   }
 
   const toggleDay = (d: string) => setFlow(f => ({
@@ -472,16 +506,25 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
             <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: '#ECFDF5', borderRadius: 999, fontSize: 12, fontWeight: 600, color: '#059669' }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981' }} />Online</span>
           </div>
           <div style={{ padding: '10px 14px', background: '#F8FAFC', borderRadius: 10, fontSize: 13, color: '#475569', marginBottom: 16 }}>
-            Número: <strong>{metaConfig.whatsapp_phone_number || '—'}</strong>
+            <div>Número: <strong>{phoneRecord?.phone_number || metaConfig.whatsapp_phone_number || '—'}</strong></div>
+            {metaConfig.whatsapp_phone_id && <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>Phone ID: {metaConfig.whatsapp_phone_id}</div>}
           </div>
           <div style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}><span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Conversas este mês</span><span style={{ fontSize: 12, fontWeight: 700, color: usageColor }}>{usage.count} / {usage.limit.toLocaleString('pt-BR')}</span></div>
             <div style={{ height: 8, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden' }}><div style={{ height: '100%', width: `${usagePct}%`, background: usageColor, borderRadius: 999 }} /></div>
             {usagePct >= 90 && <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: '#DC2626' }}><AlertCircle size={14} />Limite quase atingido.</div>}
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setShowBot(true)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', background: '#E6F7F5', border: '1px solid #99F6E4', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#00A896', cursor: 'pointer' }}><Bot size={15} />Configurar Bot</button>
-            <button onClick={handleDisconnect} disabled={disconnecting} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', background: '#FFF1F2', border: '1px solid #FECDD3', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#E11D48', cursor: 'pointer', opacity: disconnecting ? 0.6 : 1 }}><WifiOff size={15} />{disconnecting ? 'Desconectando...' : 'Desconectar'}</button>
+          {testResult && (
+            <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 10, fontSize: 12, fontWeight: 600, background: testResult.ok ? '#F0FDF4' : '#FFF1F2', border: `1px solid ${testResult.ok ? '#BBF7D0' : '#FECDD3'}`, color: testResult.ok ? '#166534' : '#BE123C' }}>
+              {testResult.msg}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={() => setShowBot(true)} style={{ flex: 1, minWidth: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', background: '#E6F7F5', border: '1px solid #99F6E4', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#00A896', cursor: 'pointer' }}><Bot size={15} />Configurar Bot</button>
+            <button onClick={handleTestConnection} disabled={testing} style={{ flex: 1, minWidth: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', background: '#F0FDFB', border: '1px solid #99F6E4', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#00A896', cursor: 'pointer', opacity: testing ? 0.6 : 1 }}>
+              {testing ? <><Loader2 size={14} className="animate-spin" />Testando...</> : <><RefreshCw size={14} />Testar conexão</>}
+            </button>
+            <button onClick={handleDisconnect} disabled={disconnecting} style={{ flex: 1, minWidth: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', background: '#FFF1F2', border: '1px solid #FECDD3', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#E11D48', cursor: 'pointer', opacity: disconnecting ? 0.6 : 1 }}><WifiOff size={15} />{disconnecting ? 'Desconectando...' : 'Desconectar'}</button>
           </div>
         </div>
 
