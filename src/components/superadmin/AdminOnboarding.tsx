@@ -8,7 +8,8 @@ import {
   RefreshCw, Video, Check, Zap, Users, BookOpen,
   TrendingUp, Star, Bell, ArrowRight, Send, Copy,
   DollarSign, FileText, ExternalLink, Gift, Lock,
-  Unlock, Eye, EyeOff, CreditCard, Link as LinkIcon
+  Unlock, Eye, EyeOff, CreditCard, Link as LinkIcon,
+  MessageCircle, Wifi, WifiOff
 } from 'lucide-react'
 
 // ─── tipos ────────────────────────────────────────────────────────────────
@@ -583,6 +584,85 @@ function MeetingModal({ meeting, process, onClose, onSave }: {
   )
 }
 
+// ─── WhatsApp Panel (fase: implantação) ───────────────────────────────────
+function WhatsAppPanel({ process, onSuccess }: { process: Process; onSuccess: () => void }) {
+  const [open, setOpen]       = useState(false)
+  const [waStatus, setWaStatus] = useState<{ connected: boolean; phone_number?: string; display_name?: string } | null>(null)
+  const [waLoading, setWaLoading] = useState(false)
+
+  useEffect(() => {
+    if (open && waStatus === null) loadWaStatus()
+  }, [open])
+
+  const loadWaStatus = async () => {
+    setWaLoading(true)
+    try {
+      const { data } = await supabase.from('institutions')
+        .select('whatsapp_connected,whatsapp_phone_number,whatsapp_display_name')
+        .eq('id', process.institution_id).single()
+      setWaStatus(data ? { connected: !!data.whatsapp_connected, phone_number: data.whatsapp_phone_number, display_name: data.whatsapp_display_name } : { connected: false })
+    } catch { setWaStatus({ connected: false }) }
+    setWaLoading(false)
+  }
+
+  const waTask = (process.tasks || []).find(t => t.phase === 'implementation' && t.title.toLowerCase().includes('whatsapp'))
+  const alreadyDone = waTask?.done
+
+  const markDone = async () => {
+    if (!waTask) return
+    await supabase.from('onboarding_tasks').update({ done: true, done_at: new Date().toISOString() }).eq('id', waTask.id)
+    onSuccess()
+  }
+
+  return (
+    <div className="border border-cyan-200 rounded-xl overflow-hidden">
+      <button onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-cyan-50 hover:bg-cyan-100 transition-colors">
+        <div className="flex items-center gap-2.5">
+          <MessageCircle className="w-4 h-4 text-cyan-600" />
+          <span className="text-sm font-bold text-cyan-800">WhatsApp Business</span>
+          {alreadyDone && <span className="text-[10px] font-bold px-2 py-0.5 bg-green-100 text-green-700 rounded-full">✓ Homologado</span>}
+        </div>
+        {open ? <ChevronDown className="w-4 h-4 text-cyan-400" /> : <ChevronRight className="w-4 h-4 text-cyan-400" />}
+      </button>
+
+      {open && (
+        <div className="p-4 bg-white space-y-3 border-t border-cyan-100">
+          {waLoading ? (
+            <div className="flex justify-center py-4">
+              <div className="w-5 h-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : waStatus?.connected ? (
+            <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Wifi className="w-4 h-4 text-green-600" />
+                <span className="text-sm font-bold text-green-700">✓ WhatsApp conectado</span>
+              </div>
+              {waStatus.display_name && <p className="text-xs text-green-600">{waStatus.display_name}</p>}
+              {waStatus.phone_number  && <p className="text-xs text-green-500">{waStatus.phone_number}</p>}
+            </div>
+          ) : (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <WifiOff className="w-4 h-4 text-amber-600" />
+                <span className="text-sm font-bold text-amber-700">WhatsApp não configurado</span>
+              </div>
+              <p className="text-xs text-amber-600">Configure o número em Configurações → WhatsApp no painel da escola.</p>
+            </div>
+          )}
+
+          {!alreadyDone && waStatus?.connected && (
+            <button onClick={markDone}
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-bold text-sm">
+              <Check className="w-4 h-4" /> Marcar como homologado
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Process Card ─────────────────────────────────────────────────────────
 function ProcessCard({ process, onToggleTask, onAddMeeting, onEditMeeting, onMarkMeetingDone, onDeleteMeeting, onRefresh }: {
   process: Process; onToggleTask: (id: string, done: boolean) => void
@@ -688,6 +768,12 @@ function ProcessCard({ process, onToggleTask, onAddMeeting, onEditMeeting, onMar
                 <div className="space-y-3">
                   <ContractPanel process={process} onSuccess={onRefresh} />
                   <PaymentPanel  process={process} onSuccess={onRefresh} />
+                </div>
+              )}
+
+              {activePhase === 'implementation' && (
+                <div className="space-y-3">
+                  <WhatsAppPanel process={process} onSuccess={onRefresh} />
                 </div>
               )}
 

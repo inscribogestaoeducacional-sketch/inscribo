@@ -3,7 +3,7 @@ import {
   Save, Upload, Building, Mail, Phone, Globe, Palette,
   MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
   Bot, X, Plus, Check, AlertCircle, GraduationCap,
-  MapPin, FileText, DollarSign, Loader2, CheckCircle
+  MapPin, FileText, DollarSign, Loader2, CheckCircle, Clock
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -334,27 +334,63 @@ function BotConfigModal({ institutionId, onClose }: { institutionId: string; onC
   )
 }
 
+const FLOW_DAYS = [
+  { id: 'MON', label: 'Seg' }, { id: 'TUE', label: 'Ter' }, { id: 'WED', label: 'Qua' },
+  { id: 'THU', label: 'Qui' }, { id: 'FRI', label: 'Sex' }, { id: 'SAT', label: 'Sáb' }, { id: 'SUN', label: 'Dom' },
+]
+
 function WhatsAppTab({ institutionId }: { institutionId: string }) {
-  const [metaConfig, setMetaConfig] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [showBot, setShowBot] = useState(false)
-  const [usage, setUsage] = useState({ count: 0, limit: 1000 })
-  const [form, setForm] = useState({ phone_id: '', token: '', phone_number: '', display_name: '' })
-  const [connecting, setConnecting] = useState(false)
-  const [connectError, setConnectError] = useState<string | null>(null)
+  const [metaConfig, setMetaConfig]       = useState<any>(null)
+  const [loading, setLoading]             = useState(true)
+  const [showBot, setShowBot]             = useState(false)
+  const [usage, setUsage]                 = useState({ count: 0, limit: 1000 })
+  const [form, setForm]                   = useState({ phone_id: '', token: '', phone_number: '', display_name: '' })
+  const [connecting, setConnecting]       = useState(false)
+  const [connectError, setConnectError]   = useState<string | null>(null)
   const [disconnecting, setDisconnecting] = useState(false)
+
+  // ── Flow config ──
+  const [flow, setFlow] = useState({
+    is_active:            true,
+    working_days:         ['MON','TUE','WED','THU','FRI'] as string[],
+    working_start:        '07:00',
+    working_end:          '17:00',
+    timezone:             'America/Fortaleza',
+    welcome_message:      'Olá! Bem-vindo! Como posso ajudar? 😊',
+    off_hours_message:    'Olá! Nosso atendimento é de seg a sex das 7h às 17h. Sua mensagem foi registrada e retornaremos em breve! 👋',
+    menu_message:         '',
+    menu_enabled:         false,
+    menu_options:         [] as { id: string; label: string; keyword: string; assignee_id: string; assignee_name: string }[],
+  })
+  const [flowUsers, setFlowUsers]     = useState<any[]>([])
+  const [savingFlow, setSavingFlow]   = useState(false)
+  const [flowSaved, setFlowSaved]     = useState(false)
 
   useEffect(() => { loadConfig() }, [])
 
   const loadConfig = async () => {
     setLoading(true)
-    const { data } = await supabase.from('institutions').select('whatsapp_phone_id,whatsapp_token,whatsapp_phone_number,whatsapp_display_name,whatsapp_connected').eq('id', institutionId).single().catch(() => ({ data: null }))
-    if (data?.whatsapp_phone_id) {
-      setMetaConfig(data)
-      const monthYear = new Date().toISOString().slice(0, 7)
-      const { data: u } = await supabase.from('whatsapp_usage').select('conversation_count,monthly_limit').eq('institution_id', institutionId).eq('month_year', monthYear).single().catch(() => ({ data: null }))
-      if (u) setUsage({ count: (u as any).conversation_count || 0, limit: (u as any).monthly_limit || 1000 })
-    }
+    try {
+      const { data } = await supabase.from('institutions')
+        .select('whatsapp_phone_id,whatsapp_token,whatsapp_phone_number,whatsapp_display_name,whatsapp_connected')
+        .eq('id', institutionId).single()
+      if (data?.whatsapp_phone_id) {
+        setMetaConfig(data)
+        const monthYear = new Date().toISOString().slice(0, 7)
+        const { data: u } = await supabase.from('whatsapp_usage')
+          .select('conversation_count,monthly_limit')
+          .eq('institution_id', institutionId).eq('month_year', monthYear).single()
+        if (u) setUsage({ count: (u as any).conversation_count || 0, limit: (u as any).monthly_limit || 1000 })
+      }
+    } catch {}
+    try {
+      const { data: flowData } = await supabase.from('whatsapp_flows').select('*').eq('institution_id', institutionId).maybeSingle()
+      if (flowData) setFlow(f => ({ ...f, ...flowData }))
+    } catch {}
+    try {
+      const { data: users } = await supabase.from('users').select('id,full_name').eq('institution_id', institutionId)
+      setFlowUsers(users || [])
+    } catch {}
     setLoading(false)
   }
 
@@ -362,10 +398,22 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
     if (!form.phone_id || !form.token) { setConnectError('Phone ID e Token são obrigatórios.'); return }
     setConnecting(true); setConnectError(null)
     try {
-      const testRes = await fetch(`https://graph.facebook.com/v18.0/${form.phone_id}?fields=display_phone_number,verified_name`, { headers: { Authorization: `Bearer ${form.token}` } })
-      if (!testRes.ok) { const err = await testRes.json().catch(() => ({})); throw new Error((err as any)?.error?.message || 'Token ou Phone ID inválido') }
+      const testRes = await fetch(`https://graph.facebook.com/v19.0/${form.phone_id}?fields=display_phone_number,verified_name`, { headers: { Authorization: `Bearer ${form.token}` } })
+      if (!testRes.ok) { const err = await testRes.json(); throw new Error((err as any)?.error?.message || 'Token ou Phone ID inválido') }
       const testData = await testRes.json()
-      await supabase.from('institutions').update({ whatsapp_phone_id: form.phone_id, whatsapp_token: form.token, whatsapp_phone_number: form.phone_number || (testData as any).display_phone_number || '', whatsapp_display_name: (testData as any).verified_name || form.display_name, whatsapp_connected: true }).eq('id', institutionId)
+      await supabase.from('institutions').update({
+        whatsapp_phone_id: form.phone_id, whatsapp_token: form.token,
+        whatsapp_phone_number: form.phone_number || (testData as any).display_phone_number || '',
+        whatsapp_display_name: (testData as any).verified_name || form.display_name,
+        whatsapp_connected: true,
+      }).eq('id', institutionId)
+      try {
+        await supabase.from('whatsapp_phone_numbers').upsert({
+          institution_id: institutionId, phone_number_id: form.phone_id,
+          phone_number: form.phone_number || (testData as any).display_phone_number || '',
+          display_name: (testData as any).verified_name || form.display_name, is_active: true,
+        }, { onConflict: 'phone_number_id' })
+      } catch {}
       await loadConfig()
     } catch (e) { setConnectError((e as Error).message) } finally { setConnecting(false) }
   }
@@ -373,11 +421,40 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const handleDisconnect = async () => {
     if (!confirm('Desconectar o WhatsApp? O bot deixará de funcionar.')) return
     setDisconnecting(true)
-    await supabase.from('institutions').update({ whatsapp_phone_id: null, whatsapp_token: null, whatsapp_phone_number: null, whatsapp_display_name: null, whatsapp_connected: false }).eq('id', institutionId).catch(() => {})
+    try {
+      await supabase.from('institutions').update({ whatsapp_phone_id: null, whatsapp_token: null, whatsapp_phone_number: null, whatsapp_display_name: null, whatsapp_connected: false }).eq('id', institutionId)
+    } catch {}
     setMetaConfig(null); setForm({ phone_id: '', token: '', phone_number: '', display_name: '' }); setDisconnecting(false)
   }
 
-  const usagePct = Math.min(100, Math.round((usage.count / usage.limit) * 100))
+  const handleSaveFlow = async () => {
+    setSavingFlow(true)
+    try {
+      await supabase.from('whatsapp_flows').upsert(
+        { ...flow, institution_id: institutionId, updated_at: new Date().toISOString() },
+        { onConflict: 'institution_id' }
+      )
+      setFlowSaved(true); setTimeout(() => setFlowSaved(false), 2500)
+    } catch (e) { console.error(e) } finally { setSavingFlow(false) }
+  }
+
+  const toggleDay = (d: string) => setFlow(f => ({
+    ...f, working_days: f.working_days.includes(d) ? f.working_days.filter(x => x !== d) : [...f.working_days, d]
+  }))
+
+  const addMenuOption = () => setFlow(f => ({
+    ...f, menu_options: [...f.menu_options, { id: String(Date.now()), label: '', keyword: String(f.menu_options.length + 1), assignee_id: '', assignee_name: '' }]
+  }))
+
+  const removeMenuOption = (id: string) => setFlow(f => ({ ...f, menu_options: f.menu_options.filter(o => o.id !== id) }))
+
+  const updateMenuOption = (id: string, k: string, v: string) => setFlow(f => ({
+    ...f, menu_options: f.menu_options.map(o => o.id === id
+      ? { ...o, [k]: v, ...(k === 'assignee_id' ? { assignee_name: flowUsers.find(u => u.id === v)?.full_name || '' } : {}) }
+      : o)
+  }))
+
+  const usagePct  = Math.min(100, Math.round((usage.count / usage.limit) * 100))
   const usageColor = usagePct >= 90 ? '#EF4444' : usagePct >= 70 ? '#F59E0B' : '#10B981'
 
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Loader2 size={28} color="#00A896" className="animate-spin" /></div>
@@ -385,7 +462,9 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   if (metaConfig?.whatsapp_phone_id) return (
     <>
       {showBot && <BotConfigModal institutionId={institutionId} onClose={() => setShowBot(false)} />}
-      <div style={{ maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ maxWidth: 600, display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+        {/* ── Status da conexão ── */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
             <div style={{ width: 48, height: 48, background: '#ECFDF5', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Wifi size={22} color="#10B981" /></div>
@@ -405,6 +484,97 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
             <button onClick={handleDisconnect} disabled={disconnecting} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', background: '#FFF1F2', border: '1px solid #FECDD3', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#E11D48', cursor: 'pointer', opacity: disconnecting ? 0.6 : 1 }}><WifiOff size={15} />{disconnecting ? 'Desconectando...' : 'Desconectar'}</button>
           </div>
         </div>
+
+        {/* ── Horário de atendimento ── */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+            <Clock size={16} color="#64748B" />
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>⏰ Horário de Atendimento</span>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 8 }}>Dias da semana</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {FLOW_DAYS.map(d => (
+                <button key={d.id} onClick={() => toggleDay(d.id)} style={{ padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: `2px solid ${flow.working_days.includes(d.id) ? '#00A896' : '#E2E8F0'}`, background: flow.working_days.includes(d.id) ? '#E6F7F5' : '#fff', color: flow.working_days.includes(d.id) ? '#00A896' : '#94A3B8' }}>
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Início</label>
+              <input type="time" className={inputCls} value={flow.working_start} onChange={e => setFlow(f => ({ ...f, working_start: e.target.value }))} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Fim</label>
+              <input type="time" className={inputCls} value={flow.working_end} onChange={e => setFlow(f => ({ ...f, working_end: e.target.value }))} />
+            </div>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Mensagem fora do horário</label>
+            <textarea rows={3} className={inputCls} style={{ resize: 'vertical' }} value={flow.off_hours_message} onChange={e => setFlow(f => ({ ...f, off_hours_message: e.target.value }))} />
+          </div>
+        </div>
+
+        {/* ── Primeira mensagem ── */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <MessageCircle size={16} color="#64748B" />
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>💬 Primeira mensagem</span>
+          </div>
+          <p style={{ fontSize: 12, color: '#64748B', marginBottom: 14 }}>Enviada automaticamente quando um contato inicia uma conversa nova.</p>
+          <textarea rows={3} className={inputCls} style={{ resize: 'vertical' }} value={flow.welcome_message} onChange={e => setFlow(f => ({ ...f, welcome_message: e.target.value }))} placeholder="Olá! Bem-vindo!..." />
+        </div>
+
+        {/* ── Menu automático ── */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FileText size={16} color="#64748B" />
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>📋 Menu automático</span>
+            </div>
+            <button onClick={() => setFlow(f => ({ ...f, menu_enabled: !f.menu_enabled }))}
+              style={{ width: 44, height: 24, borderRadius: 999, background: flow.menu_enabled ? '#00A896' : '#CBD5E1', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s' }}>
+              <span style={{ position: 'absolute', top: 3, left: flow.menu_enabled ? 22 : 3, width: 18, height: 18, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
+            </button>
+          </div>
+          {flow.menu_enabled && (
+            <>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Mensagem do menu</label>
+                <textarea rows={3} className={inputCls} style={{ resize: 'vertical' }} value={flow.menu_message} onChange={e => setFlow(f => ({ ...f, menu_message: e.target.value }))} placeholder={'Olá! Escolha uma opção:\n1️⃣ Matrículas\n2️⃣ Financeiro'} />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 8 }}>Opções</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
+                  {flow.menu_options.map((opt, i) => (
+                    <div key={opt.id} style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#F8FAFC', borderRadius: 10, padding: '10px 12px', border: '1px solid #E2E8F0' }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#94A3B8', minWidth: 20 }}>{i + 1}</span>
+                      <input className={inputCls} style={{ flex: 1 }} placeholder="Ex: Matrículas" value={opt.label} onChange={e => updateMenuOption(opt.id, 'label', e.target.value)} />
+                      <span style={{ fontSize: 12, color: '#94A3B8' }}>→</span>
+                      <select className={inputCls} style={{ flex: 1 }} value={opt.assignee_id} onChange={e => updateMenuOption(opt.id, 'assignee_id', e.target.value)}>
+                        <option value="">Sem atendente</option>
+                        {flowUsers.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                      </select>
+                      <button onClick={() => removeMenuOption(opt.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CBD5E1', padding: 4 }}><X size={14} /></button>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={addMenuOption} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 14px', background: '#F8FAFC', border: '1px dashed #CBD5E1', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#64748B', cursor: 'pointer', width: '100%' }}>
+                  <Plus size={14} /> Adicionar opção
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* ── Salvar fluxo ── */}
+        <button onClick={handleSaveFlow} disabled={savingFlow}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 24px', borderRadius: 12, border: 'none', background: flowSaved ? '#16a34a' : 'linear-gradient(135deg,#00A896,#007A6E)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
+          {savingFlow ? <><Loader2 size={14} className="animate-spin" />Salvando...</> : flowSaved ? <><Check size={14} />Salvo!</> : <><Save size={14} />Salvar configurações de fluxo</>}
+        </button>
+
         <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#92400E', marginBottom: 6 }}>⚠️ Configure o webhook no Meta</div>
           <div style={{ fontSize: 12, color: '#78350F', lineHeight: 1.6 }}>Em <strong>developers.facebook.com</strong> → WhatsApp → Configuração:<br />URL: <code style={{ background: '#FEF3C7', padding: '2px 6px', borderRadius: 4 }}>https://aionedu.com.br/api/whatsapp/webhook</code></div>
