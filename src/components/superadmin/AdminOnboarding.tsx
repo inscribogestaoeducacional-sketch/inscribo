@@ -47,7 +47,7 @@ const MEETING_TYPES: { id: MeetingType; label: string; color: string; bg: string
 
 const DEFAULT_TASKS: Record<Phase, { title: string; description: string }[]> = {
   contract: [
-    { title: 'Contrato enviado via ZapSign',        description: 'Enviar contrato para assinatura digital' },
+    { title: 'Contrato enviado via Autentique',      description: 'Enviar contrato para assinatura digital' },
     { title: 'Contrato assinado pela escola',       description: 'Confirmar assinatura do responsável' },
     { title: 'Pagamento da implantação confirmado', description: 'Verificar pagamento no Asaas' },
   ],
@@ -110,6 +110,7 @@ function ContractPanel({ process, onSuccess }: { process: Process; onSuccess: ()
   const [signUrl, setSignUrl]     = useState('')
   const [copied, setCopied]       = useState(false)
   const [err, setErr]             = useState('')
+  const [contractStatus, setContractStatus] = useState('')
 
   // pré-preenche com dados da escola
   useEffect(() => {
@@ -117,6 +118,20 @@ function ContractPanel({ process, onSuccess }: { process: Process; onSuccess: ()
       setSignerName(process.institution.name || '')
       setSignerEmail(process.institution.email || '')
     }
+  }, [process.institution_id])
+
+  // busca contrato existente no banco
+  useEffect(() => {
+    supabase.from('contracts')
+      .select('sign_url, status, signer_name, signer_email, autentique_document_id')
+      .eq('institution_id', process.institution_id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.sign_url) setSignUrl(data.sign_url)
+        if (data?.status) setContractStatus(data.status)
+      })
   }, [process.institution_id])
 
   const handleSend = async () => {
@@ -167,9 +182,11 @@ function ContractPanel({ process, onSuccess }: { process: Process; onSuccess: ()
     setTimeout(() => setCopied(false), 2500)
   }
 
-  // já tem link de assinatura
-  const contractTask = (process.tasks || []).find(t => t.phase === 'contract' && t.title.toLowerCase().includes('enviado'))
-  const alreadySent = contractTask?.done
+  const statusBadge = contractStatus === 'signed'
+    ? <span className="text-[10px] font-bold px-2 py-0.5 bg-green-100 text-green-700 rounded-full">✓ Assinado</span>
+    : contractStatus === 'sent'
+    ? <span className="text-[10px] font-bold px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full">⏳ Aguardando assinatura</span>
+    : null
 
   return (
     <div className="border border-indigo-200 rounded-xl overflow-hidden">
@@ -178,7 +195,7 @@ function ContractPanel({ process, onSuccess }: { process: Process; onSuccess: ()
         <div className="flex items-center gap-2.5">
           <FileText className="w-4 h-4 text-indigo-600" />
           <span className="text-sm font-bold text-indigo-800">Contrato</span>
-          {alreadySent && <span className="text-[10px] font-bold px-2 py-0.5 bg-green-100 text-green-700 rounded-full">✓ Enviado</span>}
+          {statusBadge}
         </div>
         {open ? <ChevronDown className="w-4 h-4 text-indigo-400" /> : <ChevronRight className="w-4 h-4 text-indigo-400" />}
       </button>
@@ -187,63 +204,87 @@ function ContractPanel({ process, onSuccess }: { process: Process; onSuccess: ()
         <div className="p-4 bg-white space-y-3 border-t border-indigo-100">
           {err && <p className="text-xs text-red-500 font-medium flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" />{err}</p>}
 
-          {/* Toggle gratuito */}
-          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
-            <div className="flex items-center gap-2">
-              <Gift className="w-4 h-4 text-purple-500" />
-              <span className="text-xs font-semibold text-gray-700">Escola gratuita — pular contrato</span>
+          {contractStatus === 'signed' ? (
+            /* Contrato assinado — só mostra link */
+            <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+              <p className="text-xs font-bold text-green-700 mb-2">✓ Contrato assinado</p>
+              {signUrl && (
+                <div className="flex items-center gap-2">
+                  <input readOnly className="flex-1 text-xs bg-white border border-green-200 rounded-lg px-3 py-2 text-gray-700 truncate" value={signUrl} />
+                  <button onClick={copyLink} className="p-2 bg-white border border-green-200 rounded-lg hover:bg-green-50">
+                    {copied ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-gray-500" />}
+                  </button>
+                  <a href={signUrl} target="_blank" rel="noopener noreferrer" className="p-2 bg-green-100 border border-green-200 rounded-lg hover:bg-green-200">
+                    <ExternalLink className="w-4 h-4 text-green-700" />
+                  </a>
+                </div>
+              )}
             </div>
-            <button onClick={() => setIsFree(!isFree)}
-              className={`relative w-9 h-5 rounded-full transition-colors ${isFree ? 'bg-purple-500' : 'bg-gray-300'}`}>
-              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${isFree ? 'translate-x-4' : 'translate-x-0.5'}`} />
-            </button>
-          </div>
-
-          {!isFree && (
+          ) : contractStatus === 'sent' ? (
+            /* Aguardando assinatura — mostra link */
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
+              <p className="text-xs font-bold text-yellow-700 mb-2">⏳ Aguardando assinatura da escola</p>
+              {signUrl && (
+                <div className="flex items-center gap-2">
+                  <input readOnly className="flex-1 text-xs bg-white border border-yellow-200 rounded-lg px-3 py-2 text-gray-700 truncate" value={signUrl} />
+                  <button onClick={copyLink} className="p-2 bg-white border border-yellow-200 rounded-lg hover:bg-yellow-50">
+                    {copied ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-gray-500" />}
+                  </button>
+                  <a href={signUrl} target="_blank" rel="noopener noreferrer" className="p-2 bg-yellow-100 border border-yellow-200 rounded-lg hover:bg-yellow-200">
+                    <ExternalLink className="w-4 h-4 text-yellow-700" />
+                  </a>
+                </div>
+              )}
+              <button onClick={handleSend} disabled={sending}
+                className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-indigo-500 to-violet-600 text-white rounded-xl font-bold text-sm disabled:opacity-60">
+                {sending ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Enviando...</> : <><Send className="w-4 h-4" /> Reenviar contrato</>}
+              </button>
+            </div>
+          ) : (
+            /* Sem contrato — formulário completo */
             <>
-              <div>
-                <label className={lbl}>Nome do signatário *</label>
-                <input className={inp} value={signerName} onChange={e => setSignerName(e.target.value)} placeholder="Diretor / Responsável" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={lbl}>E-mail *</label>
-                  <input type="email" className={inp} value={signerEmail} onChange={e => setSignerEmail(e.target.value)} />
+              {/* Toggle gratuito */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
+                <div className="flex items-center gap-2">
+                  <Gift className="w-4 h-4 text-purple-500" />
+                  <span className="text-xs font-semibold text-gray-700">Escola gratuita — pular contrato</span>
                 </div>
-                <div>
-                  <label className={lbl}>WhatsApp</label>
-                  <input className={inp} placeholder="5583999..." value={signerPhone} onChange={e => setSignerPhone(e.target.value)} />
-                </div>
+                <button onClick={() => setIsFree(!isFree)}
+                  className={`relative w-9 h-5 rounded-full transition-colors ${isFree ? 'bg-purple-500' : 'bg-gray-300'}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${isFree ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </button>
               </div>
+
+              {!isFree && (
+                <>
+                  <div>
+                    <label className={lbl}>Nome do signatário *</label>
+                    <input className={inp} value={signerName} onChange={e => setSignerName(e.target.value)} placeholder="Diretor / Responsável" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={lbl}>E-mail *</label>
+                      <input type="email" className={inp} value={signerEmail} onChange={e => setSignerEmail(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className={lbl}>WhatsApp</label>
+                      <input className={inp} placeholder="5583999..." value={signerPhone} onChange={e => setSignerPhone(e.target.value)} />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <button onClick={handleSend} disabled={sending}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-indigo-500 to-violet-600 text-white rounded-xl font-bold text-sm disabled:opacity-60">
+                {sending
+                  ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Enviando...</>
+                  : isFree
+                  ? <><Gift className="w-4 h-4" /> Marcar como gratuito</>
+                  : <><Send className="w-4 h-4" /> Enviar via Autentique</>
+                }
+              </button>
             </>
           )}
-
-          {signUrl && (
-            <div className="bg-green-50 border border-green-200 rounded-xl p-3">
-              <p className="text-xs font-bold text-green-700 mb-2">✓ Link de assinatura gerado</p>
-              <div className="flex items-center gap-2">
-                <input readOnly className="flex-1 text-xs bg-white border border-green-200 rounded-lg px-3 py-2 text-gray-700 truncate" value={signUrl} />
-                <button onClick={copyLink} className="p-2 bg-white border border-green-200 rounded-lg hover:bg-green-50">
-                  {copied ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-gray-500" />}
-                </button>
-                <a href={signUrl} target="_blank" rel="noopener noreferrer" className="p-2 bg-green-100 border border-green-200 rounded-lg hover:bg-green-200">
-                  <ExternalLink className="w-4 h-4 text-green-700" />
-                </a>
-              </div>
-            </div>
-          )}
-
-          <button onClick={handleSend} disabled={sending}
-            className="w-full flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-indigo-500 to-violet-600 text-white rounded-xl font-bold text-sm disabled:opacity-60">
-            {sending
-              ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Enviando...</>
-              : isFree
-              ? <><Gift className="w-4 h-4" /> Marcar como gratuito</>
-              : alreadySent
-              ? <><Send className="w-4 h-4" /> Reenviar contrato</>
-              : <><Send className="w-4 h-4" /> Enviar via Autentique</>
-            }
-          </button>
         </div>
       )}
     </div>
@@ -262,21 +303,30 @@ function PaymentPanel({ process, onSuccess }: { process: Process; onSuccess: () 
     installments: '1',
     planMonths:   '12',
   })
-  const [payLink, setPayLink] = useState('')
-  const [copied, setCopied]   = useState(false)
-  const [saving, setSaving]   = useState(false)
-  const [err, setErr]         = useState('')
+  const [payLink, setPayLink]         = useState('')
+  const [copied, setCopied]           = useState(false)
+  const [saving, setSaving]           = useState(false)
+  const [err, setErr]                 = useState('')
+  const [paymentStatus, setPaymentStatus] = useState('')
+  const [paymentPaidAt, setPaymentPaidAt] = useState('')
+  const [payAmount, setPayAmount]     = useState(0)
+  const [payDueDate, setPayDueDate]   = useState('')
 
   useEffect(() => {
     supabase.from('payments')
-      .select('asaas_charge_url')
+      .select('asaas_charge_url, status, paid_at, amount, due_date')
       .eq('institution_id', process.institution_id)
       .eq('payment_type', 'implementation')
-      .eq('status', 'pending')
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
-      .then(({ data }) => { if (data?.asaas_charge_url) setPayLink(data.asaas_charge_url) })
+      .then(({ data }) => {
+        if (data?.asaas_charge_url) setPayLink(data.asaas_charge_url)
+        if (data?.status)           setPaymentStatus(data.status)
+        if (data?.paid_at)          setPaymentPaidAt(data.paid_at)
+        if (data?.amount)           setPayAmount(data.amount)
+        if (data?.due_date)         setPayDueDate(data.due_date)
+      })
   }, [process.institution_id])
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
@@ -343,8 +393,11 @@ function PaymentPanel({ process, onSuccess }: { process: Process; onSuccess: () 
 
   const copyLink = () => { navigator.clipboard.writeText(payLink); setCopied(true); setTimeout(() => setCopied(false), 2500) }
 
-  const payTask = (process.tasks || []).find(t => t.phase === 'contract' && t.title.toLowerCase().includes('pagamento'))
-  const alreadyPaid = payTask?.done
+  const payBadge = paymentStatus === 'paid'
+    ? <span className="text-[10px] font-bold px-2 py-0.5 bg-green-100 text-green-700 rounded-full">✅ Pago</span>
+    : paymentStatus === 'pending'
+    ? <span className="text-[10px] font-bold px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full">⏳ Aguardando</span>
+    : null
 
   return (
     <div className="border border-green-200 rounded-xl overflow-hidden">
@@ -353,7 +406,7 @@ function PaymentPanel({ process, onSuccess }: { process: Process; onSuccess: () 
         <div className="flex items-center gap-2.5">
           <CreditCard className="w-4 h-4 text-green-600" />
           <span className="text-sm font-bold text-green-800">Pagamento & Plano</span>
-          {alreadyPaid && <span className="text-[10px] font-bold px-2 py-0.5 bg-green-100 text-green-700 rounded-full">✓ Configurado</span>}
+          {payBadge}
         </div>
         {open ? <ChevronDown className="w-4 h-4 text-green-400" /> : <ChevronRight className="w-4 h-4 text-green-400" />}
       </button>
@@ -362,118 +415,147 @@ function PaymentPanel({ process, onSuccess }: { process: Process; onSuccess: () 
         <div className="p-4 bg-white space-y-4 border-t border-green-100">
           {err && <p className="text-xs text-red-500 font-medium flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" />{err}</p>}
 
-          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
-            <div className="flex items-center gap-2">
-              <Gift className="w-4 h-4 text-purple-500" />
-              <span className="text-xs font-semibold text-gray-700">Escola gratuita — sem cobrança</span>
+          {paymentStatus === 'paid' ? (
+            /* Pago — só mostra confirmação */
+            <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+              <p className="text-sm font-bold text-green-700 mb-1">✅ Implantação paga</p>
+              {paymentPaidAt && <p className="text-xs text-green-600">Data do pagamento: {fmtDate(paymentPaidAt)}</p>}
+              {payAmount > 0  && <p className="text-xs text-green-600">Valor: {fmtBRL(payAmount)}</p>}
             </div>
-            <button onClick={() => setIsFree(!isFree)}
-              className={`relative w-9 h-5 rounded-full transition-colors ${isFree ? 'bg-purple-500' : 'bg-gray-300'}`}>
-              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${isFree ? 'translate-x-4' : 'translate-x-0.5'}`} />
-            </button>
-          </div>
-
-          {!isFree && (
+          ) : paymentStatus === 'pending' ? (
+            /* Aguardando — mostra link + botão WhatsApp */
+            <div className="space-y-3">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
+                <p className="text-xs font-bold text-yellow-700 mb-1">⏳ Aguardando pagamento</p>
+                {payAmount > 0   && <p className="text-xs text-yellow-600">Valor: {fmtBRL(payAmount)}</p>}
+                {payDueDate      && <p className="text-xs text-yellow-600">Vencimento: {fmtDate(payDueDate)}</p>}
+              </div>
+              {payLink && (
+                <div className="bg-white border border-yellow-200 rounded-xl p-3 space-y-2">
+                  <p className="text-xs font-bold text-gray-700">Link de pagamento</p>
+                  <div className="flex items-center gap-2">
+                    <input readOnly className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-700 truncate" value={payLink} />
+                    <button onClick={copyLink} className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                      {copied ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-gray-500" />}
+                    </button>
+                    <a href={payLink} target="_blank" rel="noopener noreferrer" className="p-2 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200">
+                      <ExternalLink className="w-4 h-4 text-gray-600" />
+                    </a>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const phone = (process.institution as any)?.phone?.replace(/\D/g, '')
+                      const waMsg = encodeURIComponent(`Olá! Segue o link para pagamento da implantação:\n\n${payLink}`)
+                      window.open(`https://wa.me/55${phone}?text=${waMsg}`, '_blank')
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-2 bg-green-500 text-white rounded-xl font-bold text-xs hover:bg-green-600">
+                    <MessageCircle className="w-3.5 h-3.5" /> Enviar link via WhatsApp
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Sem cobrança — formulário completo */
             <>
-              <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 space-y-3">
-                <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">Taxa de implantação</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={lbl}>Valor total (R$)</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
-                      <input type="number" className={inp + ' pl-9'} value={form.implValue} onChange={e => set('implValue', e.target.value)} />
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
+                <div className="flex items-center gap-2">
+                  <Gift className="w-4 h-4 text-purple-500" />
+                  <span className="text-xs font-semibold text-gray-700">Escola gratuita — sem cobrança</span>
+                </div>
+                <button onClick={() => setIsFree(!isFree)}
+                  className={`relative w-9 h-5 rounded-full transition-colors ${isFree ? 'bg-purple-500' : 'bg-gray-300'}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${isFree ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
+
+              {!isFree && (
+                <>
+                  <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 space-y-3">
+                    <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">Taxa de implantação</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={lbl}>Valor total (R$)</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
+                          <input type="number" className={inp + ' pl-9'} value={form.implValue} onChange={e => set('implValue', e.target.value)} />
+                        </div>
+                      </div>
+                      <div>
+                        <label className={lbl}>Parcelamento</label>
+                        <select className={inp} value={form.installments} onChange={e => set('installments', e.target.value)}>
+                          <option value="1">À vista</option>
+                          <option value="2">2x</option>
+                          <option value="3">3x</option>
+                          <option value="6">6x</option>
+                          <option value="12">12x</option>
+                        </select>
+                      </div>
+                    </div>
+                    {Number(form.installments) > 1 && <p className="text-xs text-blue-600 font-semibold">{form.installments}x de {fmtBRL(implPerParcel)}</p>}
+                  </div>
+
+                  <div className="bg-cyan-50 rounded-xl p-4 border border-cyan-100 space-y-3">
+                    <p className="text-xs font-bold text-cyan-700 uppercase tracking-wide">Plano mensal</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={lbl}>Mensalidade (R$)</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
+                          <input type="number" className={inp + ' pl-9'} value={form.monthlyValue} onChange={e => set('monthlyValue', e.target.value)} />
+                        </div>
+                      </div>
+                      <div>
+                        <label className={lbl}>Duração do plano</label>
+                        <select className={inp} value={form.planMonths} onChange={e => set('planMonths', e.target.value)}>
+                          <option value="1">Mensal (1 mês)</option>
+                          <option value="6">Semestral (6 meses)</option>
+                          <option value="12">Anual (12 meses)</option>
+                          <option value="24">Bienal (24 meses)</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-xs font-semibold text-cyan-700 bg-white rounded-lg px-3 py-2 border border-cyan-200">
+                      <span>Total do plano</span>
+                      <span>{fmtBRL(monthlyTotal)} ({form.planMonths} meses)</span>
                     </div>
                   </div>
-                  <div>
-                    <label className={lbl}>Parcelamento</label>
-                    <select className={inp} value={form.installments} onChange={e => set('installments', e.target.value)}>
-                      <option value="1">À vista</option>
-                      <option value="2">2x</option>
-                      <option value="3">3x</option>
-                      <option value="6">6x</option>
-                      <option value="12">12x</option>
-                    </select>
-                  </div>
-                </div>
-                {Number(form.installments) > 1 && <p className="text-xs text-blue-600 font-semibold">{form.installments}x de {fmtBRL(implPerParcel)}</p>}
-              </div>
 
-              <div className="bg-cyan-50 rounded-xl p-4 border border-cyan-100 space-y-3">
-                <p className="text-xs font-bold text-cyan-700 uppercase tracking-wide">Plano mensal</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={lbl}>Mensalidade (R$)</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
-                      <input type="number" className={inp + ' pl-9'} value={form.monthlyValue} onChange={e => set('monthlyValue', e.target.value)} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={lbl}>Vencimento da implantação</label>
+                      <input type="date" className={inp} value={form.dueDate} onChange={e => set('dueDate', e.target.value)} />
+                    </div>
+                    <div>
+                      <label className={lbl}>Forma de pagamento</label>
+                      <select className={inp} value={form.billingType} onChange={e => set('billingType', e.target.value)}>
+                        <option value="PIX">PIX</option>
+                        <option value="BOLETO">Boleto</option>
+                        <option value="CREDIT_CARD">Cartão de crédito</option>
+                      </select>
                     </div>
                   </div>
-                  <div>
-                    <label className={lbl}>Duração do plano</label>
-                    <select className={inp} value={form.planMonths} onChange={e => set('planMonths', e.target.value)}>
-                      <option value="1">Mensal (1 mês)</option>
-                      <option value="6">Semestral (6 meses)</option>
-                      <option value="12">Anual (12 meses)</option>
-                      <option value="24">Bienal (24 meses)</option>
-                    </select>
+
+                  <div className="bg-gray-50 rounded-xl p-3 border border-gray-200 space-y-1 text-xs">
+                    <p className="font-bold text-gray-700 mb-2">Resumo financeiro</p>
+                    <div className="flex justify-between text-gray-600"><span>Implantação</span><span className="font-semibold">{fmtBRL(implTotal)}</span></div>
+                    <div className="flex justify-between text-gray-600"><span>Mensalidade</span><span className="font-semibold">{fmtBRL(Number(form.monthlyValue))}/mês</span></div>
+                    <div className="flex justify-between text-gray-600"><span>Plano contratado</span><span className="font-semibold">{form.planMonths} meses</span></div>
+                    <div className="flex justify-between text-gray-700 font-bold pt-1 border-t border-gray-200"><span>Total do contrato</span><span>{fmtBRL(implTotal + monthlyTotal)}</span></div>
                   </div>
-                </div>
-                <div className="flex items-center justify-between text-xs font-semibold text-cyan-700 bg-white rounded-lg px-3 py-2 border border-cyan-200">
-                  <span>Total do plano</span>
-                  <span>{fmtBRL(monthlyTotal)} ({form.planMonths} meses)</span>
-                </div>
-              </div>
+                </>
+              )}
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={lbl}>Vencimento da implantação</label>
-                  <input type="date" className={inp} value={form.dueDate} onChange={e => set('dueDate', e.target.value)} />
-                </div>
-                <div>
-                  <label className={lbl}>Forma de pagamento</label>
-                  <select className={inp} value={form.billingType} onChange={e => set('billingType', e.target.value)}>
-                    <option value="PIX">PIX</option>
-                    <option value="BOLETO">Boleto</option>
-                    <option value="CREDIT_CARD">Cartão de crédito</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="bg-gray-50 rounded-xl p-3 border border-gray-200 space-y-1 text-xs">
-                <p className="font-bold text-gray-700 mb-2">Resumo financeiro</p>
-                <div className="flex justify-between text-gray-600"><span>Implantação</span><span className="font-semibold">{fmtBRL(implTotal)}</span></div>
-                <div className="flex justify-between text-gray-600"><span>Mensalidade</span><span className="font-semibold">{fmtBRL(Number(form.monthlyValue))}/mês</span></div>
-                <div className="flex justify-between text-gray-600"><span>Plano contratado</span><span className="font-semibold">{form.planMonths} meses</span></div>
-                <div className="flex justify-between text-gray-700 font-bold pt-1 border-t border-gray-200"><span>Total do contrato</span><span>{fmtBRL(implTotal + monthlyTotal)}</span></div>
-              </div>
+              <button onClick={handleGenerate} disabled={saving}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold text-sm disabled:opacity-60">
+                {saving
+                  ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Gerando...</>
+                  : isFree
+                  ? <><Gift className="w-4 h-4" /> Confirmar sem cobrança</>
+                  : <><CreditCard className="w-4 h-4" /> Gerar cobrança</>
+                }
+              </button>
             </>
           )}
-
-          {payLink && (
-            <div className="bg-green-50 border border-green-200 rounded-xl p-3">
-              <p className="text-xs font-bold text-green-700 mb-2">✓ Link de pagamento gerado</p>
-              <div className="flex items-center gap-2">
-                <input readOnly className="flex-1 text-xs bg-white border border-green-200 rounded-lg px-3 py-2 text-gray-700 truncate" value={payLink} />
-                <button onClick={copyLink} className="p-2 bg-white border border-green-200 rounded-lg hover:bg-green-50">
-                  {copied ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-gray-500" />}
-                </button>
-                <a href={payLink} target="_blank" rel="noopener noreferrer" className="p-2 bg-green-100 border border-green-200 rounded-lg">
-                  <ExternalLink className="w-4 h-4 text-green-700" />
-                </a>
-              </div>
-            </div>
-          )}
-
-          <button onClick={handleGenerate} disabled={saving}
-            className="w-full flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold text-sm disabled:opacity-60">
-            {saving
-              ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Gerando...</>
-              : isFree ? <><Gift className="w-4 h-4" /> Confirmar sem cobrança</>
-              : alreadyPaid ? <><CreditCard className="w-4 h-4" /> Atualizar cobrança</>
-              : <><CreditCard className="w-4 h-4" /> Gerar cobrança</>
-            }
-          </button>
         </div>
       )}
     </div>
