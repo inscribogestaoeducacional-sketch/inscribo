@@ -94,7 +94,7 @@ export default function Sidebar() {
         <div style={{ display: 'flex', alignItems: 'center' }}>
           {expanded
             ? <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 36, width: 'auto', objectFit: 'contain', maxWidth: 150 }} />
-            : <img src="/aion-logo-icon.png" alt="Áion Edu" style={{ width: 32, height: 32, objectFit: 'contain' }} />
+            : <img src="/aion-logo-icon.png" alt="Áion" style={{ width: 36, height: 36, objectFit: 'contain', borderRadius: 8 }} />
           }
         </div>
 

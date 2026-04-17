@@ -172,7 +172,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
           <div className="flex items-center gap-3 min-w-0 overflow-hidden">
             {sidebarOpen
               ? <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 28, objectFit: 'contain' }} />
-              : <img src="/aion-logo-icon.png" alt="Áion Edu" style={{ width: 32, height: 32, borderRadius: 8 }} />
+              : <img src="/aion-logo-icon.png" alt="Aion" style={{ width: 36, height: 36, objectFit: 'contain', borderRadius: 8 }} />
             }
           </div>
           <button onClick={toggleSidebar}
