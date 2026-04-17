@@ -134,7 +134,7 @@ function ContractPanel({ process, onSuccess }: { process: Process; onSuccess: ()
         return
       }
 
-      const { data, error } = await supabase.functions.invoke('zapsign', {
+      const { data, error } = await supabase.functions.invoke('autentique', {
         body: {
           institution_id:       process.institution_id,
           school_name:          process.institution?.name,
@@ -149,13 +149,13 @@ function ContractPanel({ process, onSuccess }: { process: Process; onSuccess: ()
 
       if (data?.signUrl) setSignUrl(data.signUrl)
 
-      // Marca tarefa "Contrato enviado via ZapSign"
+      // Marca tarefa "Contrato enviado"
       const task = (process.tasks || []).find(t => t.phase === 'contract' && t.title.toLowerCase().includes('enviado'))
       if (task) await supabase.from('onboarding_tasks').update({ done: true, done_at: new Date().toISOString() }).eq('id', task.id)
 
       onSuccess()
     } catch (e: any) {
-      setErr(e?.message || 'Erro ao enviar. Configure ZapSign em Configurações.')
+      setErr(e?.message || 'Erro ao enviar. Configure Autentique em Configurações.')
     } finally {
       setSending(false)
     }
@@ -241,7 +241,7 @@ function ContractPanel({ process, onSuccess }: { process: Process; onSuccess: ()
               ? <><Gift className="w-4 h-4" /> Marcar como gratuito</>
               : alreadySent
               ? <><Send className="w-4 h-4" /> Reenviar contrato</>
-              : <><Send className="w-4 h-4" /> Enviar via ZapSign</>
+              : <><Send className="w-4 h-4" /> Enviar via Autentique</>
             }
           </button>
         </div>
