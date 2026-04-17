@@ -8,6 +8,12 @@ import {
   Bell, Shield, ChevronDown, ChevronRight, Copy, ExternalLink,
   Zap, AlertCircle, Info, RefreshCw, Plus, Trash2, X
 } from 'lucide-react'
+import { useEditor, EditorContent } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import TipTapImage from '@tiptap/extension-image'
+import TextAlign from '@tiptap/extension-text-align'
+import Underline from '@tiptap/extension-underline'
+import TextStyle from '@tiptap/extension-text-style'
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 const inp = 'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all bg-white'
@@ -133,6 +139,94 @@ function TemplateEditor({ value, onChange, vars, rows = 10, placeholder }:
         placeholder={placeholder}
       />
       <p className={hint}>Escreva em HTML para e-mails. Para o contrato, texto simples ou HTML são aceitos.</p>
+    </div>
+  )
+}
+
+function RichTextEditor({ value, onChange, vars }: {
+  value: string
+  onChange: (v: string) => void
+  vars: typeof CONTRACT_VARS
+}) {
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Underline,
+      TextStyle,
+      TipTapImage.configure({ inline: false, allowBase64: true }),
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+    ],
+    content: value,
+    onUpdate: ({ editor }) => {
+      onChange(editor.getHTML())
+    },
+  })
+
+  const insertVar = (v: string) => {
+    editor?.chain().focus().insertContent(v).run()
+  }
+
+  const addImage = () => {
+    const url = window.prompt('Cole a URL da imagem:')
+    if (url) editor?.chain().focus().setImage({ src: url }).run()
+  }
+
+  if (!editor) return null
+
+  const btnCls = (active: boolean) =>
+    `px-2 py-1.5 text-xs font-bold rounded-lg border transition-all ${active ? 'bg-cyan-500 text-white border-cyan-500' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`
+
+  return (
+    <div className="space-y-2">
+      {/* Variáveis */}
+      <div>
+        <p className="text-xs font-semibold text-gray-500 mb-1.5">Variáveis — clique para inserir no cursor</p>
+        <div className="flex flex-wrap gap-1.5">
+          {vars.map(v => (
+            <button key={v.key} onClick={() => insertVar(v.key)} title={v.desc}
+              className="text-xs px-2 py-1 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded-md hover:bg-cyan-100 font-mono transition-colors">
+              {v.key}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex flex-wrap gap-1 p-2 bg-gray-50 border border-gray-200 rounded-t-xl border-b-0">
+        <button onClick={() => editor.chain().focus().toggleBold().run()} className={btnCls(editor.isActive('bold'))}>N</button>
+        <button onClick={() => editor.chain().focus().toggleItalic().run()} className={btnCls(editor.isActive('italic'))}><em>I</em></button>
+        <button onClick={() => editor.chain().focus().toggleUnderline().run()} className={btnCls(editor.isActive('underline'))}><u>S</u></button>
+        <div className="w-px bg-gray-200 mx-1" />
+        <button onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className={btnCls(editor.isActive('heading', { level: 1 }))}>H1</button>
+        <button onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={btnCls(editor.isActive('heading', { level: 2 }))}>H2</button>
+        <button onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} className={btnCls(editor.isActive('heading', { level: 3 }))}>H3</button>
+        <div className="w-px bg-gray-200 mx-1" />
+        <button onClick={() => editor.chain().focus().setTextAlign('left').run()} className={btnCls(editor.isActive({ textAlign: 'left' }))}>&#8801;</button>
+        <button onClick={() => editor.chain().focus().setTextAlign('center').run()} className={btnCls(editor.isActive({ textAlign: 'center' }))}>&#8801;</button>
+        <button onClick={() => editor.chain().focus().setTextAlign('right').run()} className={btnCls(editor.isActive({ textAlign: 'right' }))}>&#8801;</button>
+        <div className="w-px bg-gray-200 mx-1" />
+        <button onClick={() => editor.chain().focus().toggleBulletList().run()} className={btnCls(editor.isActive('bulletList'))}>• Lista</button>
+        <button onClick={() => editor.chain().focus().toggleOrderedList().run()} className={btnCls(editor.isActive('orderedList'))}>1. Lista</button>
+        <div className="w-px bg-gray-200 mx-1" />
+        <button onClick={addImage} className={btnCls(false)}>Imagem</button>
+        <div className="w-px bg-gray-200 mx-1" />
+        <button onClick={() => editor.chain().focus().undo().run()} className={btnCls(false)}>Desfazer</button>
+        <button onClick={() => editor.chain().focus().redo().run()} className={btnCls(false)}>Refazer</button>
+      </div>
+
+      {/* Editor */}
+      <EditorContent
+        editor={editor}
+        className="border border-gray-200 rounded-b-xl min-h-[400px] p-5 text-sm leading-relaxed focus:outline-none prose prose-sm max-w-none
+          [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[380px]
+          [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mb-3
+          [&_h2]:text-xl [&_h2]:font-bold [&_h2]:mb-2
+          [&_h3]:text-lg [&_h3]:font-bold [&_h3]:mb-2
+          [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5
+          [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded"
+      />
+
+      <p className="text-xs text-gray-400">O conteúdo é salvo em HTML e enviado para a Autentique.</p>
     </div>
   )
 }
@@ -528,12 +622,10 @@ export default function AdminSettings() {
               <p className="text-xs mt-1">Edite o template com seu texto jurídico. O sistema substituirá as variáveis automaticamente ao gerar cada contrato.</p>
             </div>
           </div>
-          <TemplateEditor
+          <RichTextEditor
             value={settings.contract_template_text || DEFAULT_CONTRACT}
             onChange={v => set('contract_template_text', v)}
             vars={CONTRACT_VARS}
-            rows={18}
-            placeholder="Cole aqui o texto do contrato com as variáveis..."
           />
           <div className="flex items-center justify-between pt-2">
             <button onClick={() => set('contract_template_text', DEFAULT_CONTRACT)}
