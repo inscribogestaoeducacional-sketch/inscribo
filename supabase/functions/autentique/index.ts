@@ -108,146 +108,123 @@ serve(async (req) => {
     // ── Montar HTML do contrato ──────────────────────────────────────────
     const htmlContent = `<!DOCTYPE html>
 <html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Inter', Arial, sans-serif; background: #F0F4F8; color: #1A202C; }
-  .wrapper { max-width: 820px; margin: 0 auto; background: white; }
-
-  /* HEADER */
-  .header { background: linear-gradient(135deg, #00A896 0%, #007A6E 100%); padding: 48px 56px 40px; position: relative; overflow: hidden; }
-  .header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 200px; height: 200px; border-radius: 50%; background: rgba(255,255,255,0.07); }
-  .header::after { content: ''; position: absolute; bottom: -80px; left: 40%; width: 240px; height: 240px; border-radius: 50%; background: rgba(255,255,255,0.05); }
-  .header-inner { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 24px; }
-  .header-logo img { height: 48px; filter: brightness(0) invert(1); }
-  .header-title { text-align: right; }
-  .header-title h1 { color: white; font-size: 20px; font-weight: 700; letter-spacing: 0.5px; line-height: 1.3; }
-  .header-title p { color: rgba(255,255,255,0.75); font-size: 12px; margin-top: 4px; }
-  .header-badge { margin-top: 28px; display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: white; font-size: 11px; font-weight: 600; padding: 6px 14px; border-radius: 20px; letter-spacing: 0.3px; }
-
-  /* META BAR */
-  .meta-bar { background: #F7FAFC; border-bottom: 1px solid #E2E8F0; padding: 16px 56px; display: flex; gap: 40px; flex-wrap: wrap; }
-  .meta-item { display: flex; flex-direction: column; gap: 2px; }
-  .meta-item .meta-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #A0AEC0; }
-  .meta-item .meta-value { font-size: 13px; font-weight: 600; color: #2D3748; }
-
-  /* CONTENT */
-  .content { padding: 48px 56px; }
-  .section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #00A896; margin-bottom: 20px; display: flex; align-items: center; gap-8px; }
-  .section-title::after { content: ''; flex: 1; height: 1px; background: #E2E8F0; margin-left: 12px; display: inline-block; }
-  .contract-body { font-size: 13.5px; line-height: 1.95; color: #4A5568; white-space: pre-wrap; word-break: break-word; }
-
-  /* SIGNATURE BLOCK */
-  .signature-section { margin-top: 48px; padding-top: 32px; border-top: 2px solid #EDF2F7; }
-  .signature-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #A0AEC0; margin-bottom: 20px; text-align: center; }
-  .signature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-  .signature-box { background: #F7FAFC; border: 1.5px dashed #CBD5E0; border-radius: 12px; padding: 24px 20px; text-align: center; }
-  .signature-box .sig-label { font-size: 10px; color: #A0AEC0; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-  .signature-box .sig-name { font-size: 13px; font-weight: 700; color: #2D3748; margin-bottom: 2px; }
-  .signature-box .sig-email { font-size: 11px; color: #718096; }
-  .signature-box .sig-line { height: 1px; background: #CBD5E0; margin: 16px 0 8px; }
-  .signature-box .sig-date { font-size: 10px; color: #A0AEC0; }
-
-  /* FOOTER */
-  .footer { background: #1A202C; padding: 28px 56px; margin-top: 0; }
-  .footer-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-  .footer-col .footer-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #4A5568; margin-bottom: 4px; }
-  .footer-col .footer-value { font-size: 11px; color: #A0AEC0; line-height: 1.5; }
-  .footer-bottom { border-top: 1px solid #2D3748; padding-top: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-  .footer-bottom .footer-brand { font-size: 10px; color: #4A5568; }
-  .footer-bottom .footer-secure { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #4A5568; }
-</style>
-</head>
-<body>
-<div class="wrapper">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#1A202C;">
 
   <!-- HEADER -->
-  <div class="header">
-    <div class="header-inner">
-      <div class="header-logo">
-        <img src="https://www.aionedu.com.br/aion-logo-full.png" alt="Áion Edu" />
-      </div>
-      <div class="header-title">
-        <h1>Contrato de Prestação<br>de Serviços</h1>
-        <p>Documento com validade jurídica</p>
-      </div>
-    </div>
-    <div class="header-badge">🔒 Assinatura digital certificada · Áion Edu</div>
-  </div>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#007A6E;">
+    <tr>
+      <td style="padding:40px 56px 32px;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="vertical-align:middle;">
+              <img src="https://www.aionedu.com.br/aion-logo-full.png" alt="Aion Edu" height="42" style="display:block;height:42px;width:auto;filter:brightness(0) invert(1);" />
+            </td>
+            <td style="vertical-align:middle;text-align:right;">
+              <div style="color:#ffffff;font-size:19px;font-weight:700;line-height:1.3;">Contrato de Prestacao<br>de Servicos</div>
+              <div style="color:rgba(255,255,255,0.75);font-size:11px;margin-top:4px;">Documento com validade juridica</div>
+            </td>
+          </tr>
+        </table>
+        <div style="margin-top:20px;display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);color:#ffffff;font-size:10px;font-weight:600;padding:5px 14px;border-radius:20px;letter-spacing:0.3px;">
+          Assinatura digital certificada · Aion Edu
+        </div>
+      </td>
+    </tr>
+  </table>
 
   <!-- META BAR -->
-  <div class="meta-bar">
-    <div class="meta-item">
-      <span class="meta-label">Data de emissão</span>
-      <span class="meta-value">${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
-    </div>
-    <div class="meta-item">
-      <span class="meta-label">Signatário</span>
-      <span class="meta-value">${signer_name}</span>
-    </div>
-    <div class="meta-item">
-      <span class="meta-label">E-mail</span>
-      <span class="meta-value">${signer_email}</span>
-    </div>
-    <div class="meta-item">
-      <span class="meta-label">Status</span>
-      <span class="meta-value">⏳ Aguardando assinatura</span>
-    </div>
-  </div>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F7FAFC;border-bottom:1px solid #E2E8F0;">
+    <tr>
+      <td style="padding:16px 56px;">
+        <table cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="padding-right:40px;vertical-align:top;">
+              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#A0AEC0;margin-bottom:3px;">Data de emissao</div>
+              <div style="font-size:13px;font-weight:600;color:#2D3748;">${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+            </td>
+            <td style="padding-right:40px;vertical-align:top;">
+              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#A0AEC0;margin-bottom:3px;">Signatario</div>
+              <div style="font-size:13px;font-weight:600;color:#2D3748;">${signer_name}</div>
+            </td>
+            <td style="padding-right:40px;vertical-align:top;">
+              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#A0AEC0;margin-bottom:3px;">E-mail</div>
+              <div style="font-size:13px;font-weight:600;color:#2D3748;">${signer_email}</div>
+            </td>
+            <td style="vertical-align:top;">
+              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#A0AEC0;margin-bottom:3px;">Status</div>
+              <div style="font-size:13px;font-weight:600;color:#2D3748;">Aguardando assinatura</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 
   <!-- CONTENT -->
-  <div class="content">
-    <div class="section-title">Conteúdo do contrato</div>
-    <div class="contract-body">${contractText}</div>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;">
+    <tr>
+      <td style="padding:48px 56px;">
+        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#00A896;margin-bottom:20px;border-bottom:1px solid #E2E8F0;padding-bottom:10px;">Conteudo do contrato</div>
+        <div style="font-size:13px;line-height:1.9;color:#4A5568;white-space:pre-wrap;word-break:break-word;">${contractText}</div>
 
-    <!-- ASSINATURAS -->
-    <div class="signature-section">
-      <div class="signature-title">Bloco de assinaturas</div>
-      <div class="signature-grid">
-        <div class="signature-box">
-          <div class="sig-label">Contratante</div>
-          <div class="sig-name">${signer_name}</div>
-          <div class="sig-email">${signer_email}</div>
-          <div class="sig-line"></div>
-          <div class="sig-date">Assinar digitalmente via link recebido por e-mail</div>
-        </div>
-        <div class="signature-box">
-          <div class="sig-label">Contratada</div>
-          <div class="sig-name">Áion Soluções Tecnológicas LTDA</div>
-          <div class="sig-email">contato@aionedu.com.br</div>
-          <div class="sig-line"></div>
-          <div class="sig-date">CNPJ: 65.835.064/0001-58</div>
-        </div>
-      </div>
-    </div>
-  </div>
+        <!-- ASSINATURAS -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:48px;border-top:2px solid #EDF2F7;padding-top:32px;">
+          <tr>
+            <td colspan="3" style="padding-top:24px;padding-bottom:20px;text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#A0AEC0;">Bloco de assinaturas</td>
+          </tr>
+          <tr>
+            <td width="48%" style="background:#F7FAFC;border:1px dashed #CBD5E0;padding:24px 20px;text-align:center;vertical-align:top;">
+              <div style="font-size:9px;color:#A0AEC0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Contratante</div>
+              <div style="font-size:13px;font-weight:700;color:#2D3748;margin-bottom:2px;">${signer_name}</div>
+              <div style="font-size:11px;color:#718096;margin-bottom:16px;">${signer_email}</div>
+              <div style="height:1px;background:#CBD5E0;margin-bottom:8px;"></div>
+              <div style="font-size:10px;color:#A0AEC0;">Assinar digitalmente via link recebido por e-mail</div>
+            </td>
+            <td width="4%"></td>
+            <td width="48%" style="background:#F7FAFC;border:1px dashed #CBD5E0;padding:24px 20px;text-align:center;vertical-align:top;">
+              <div style="font-size:9px;color:#A0AEC0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Contratada</div>
+              <div style="font-size:13px;font-weight:700;color:#2D3748;margin-bottom:2px;">Aion Solucoes Tecnologicas LTDA</div>
+              <div style="font-size:11px;color:#718096;margin-bottom:16px;">contato@aionedu.com.br</div>
+              <div style="height:1px;background:#CBD5E0;margin-bottom:8px;"></div>
+              <div style="font-size:10px;color:#A0AEC0;">CNPJ: 65.835.064/0001-58</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 
   <!-- FOOTER -->
-  <div class="footer">
-    <div class="footer-grid">
-      <div class="footer-col">
-        <div class="footer-label">Empresa</div>
-        <div class="footer-value">Áion Soluções Tecnológicas LTDA<br>CNPJ: 65.835.064/0001-58</div>
-      </div>
-      <div class="footer-col">
-        <div class="footer-label">Endereço</div>
-        <div class="footer-value">R. Francisco Vicente de Araújo, 48<br>Patos/PB · CEP: 58700-000</div>
-      </div>
-      <div class="footer-col">
-        <div class="footer-label">Contato</div>
-        <div class="footer-value">contato@aionedu.com.br<br>aionedu.com.br</div>
-      </div>
-    </div>
-    <div class="footer-bottom">
-      <span class="footer-brand">© ${new Date().getFullYear()} Áion Edu · Todos os direitos reservados</span>
-      <span class="footer-secure">🔒 Documento gerado em ${new Date().toLocaleDateString('pt-BR')}</span>
-    </div>
-  </div>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#1A202C;">
+    <tr>
+      <td style="padding:28px 56px;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:20px;">
+          <tr>
+            <td width="33%" style="vertical-align:top;padding-right:20px;">
+              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#4A5568;margin-bottom:4px;">Empresa</div>
+              <div style="font-size:11px;color:#A0AEC0;line-height:1.6;">Aion Solucoes Tecnologicas LTDA<br>CNPJ: 65.835.064/0001-58</div>
+            </td>
+            <td width="33%" style="vertical-align:top;padding-right:20px;">
+              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#4A5568;margin-bottom:4px;">Endereco</div>
+              <div style="font-size:11px;color:#A0AEC0;line-height:1.6;">R. Francisco Vicente de Araujo, 48<br>Patos/PB · CEP: 58700-000</div>
+            </td>
+            <td width="33%" style="vertical-align:top;">
+              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#4A5568;margin-bottom:4px;">Contato</div>
+              <div style="font-size:11px;color:#A0AEC0;line-height:1.6;">contato@aionedu.com.br<br>aionedu.com.br</div>
+            </td>
+          </tr>
+        </table>
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #2D3748;padding-top:16px;">
+          <tr>
+            <td style="padding-top:16px;font-size:10px;color:#4A5568;">© ${new Date().getFullYear()} Aion Edu · Todos os direitos reservados</td>
+            <td style="padding-top:16px;font-size:10px;color:#4A5568;text-align:right;">Documento gerado em ${new Date().toLocaleDateString('pt-BR')}</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 
-</div>
 </body>
 </html>`
 
