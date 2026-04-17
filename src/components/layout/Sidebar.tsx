@@ -84,38 +84,39 @@ export default function Sidebar() {
     }}>
 
       {/* Logo + toggle */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: expanded ? 'space-between' : 'center',
-        padding: expanded ? '4px 6px 12px' : '4px 0 12px',
-        flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          {expanded
-            ? <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 36, width: 'auto', objectFit: 'contain', maxWidth: 150 }} />
-            : <img src="/aion-logo-icon.png" alt="Áion" style={{ width: 44, height: 44, objectFit: 'contain', transform: 'scale(1.3)' }} />
-          }
+      {expanded ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 6px 12px', flexShrink: 0 }}>
+          <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 36, width: 'auto', objectFit: 'contain', maxWidth: 150 }} />
+          <button onClick={toggle} style={{
+            width: 24, height: 24, borderRadius: 6,
+            border: '0.5px solid #D1FAE5', background: '#F0FDFB',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', flexShrink: 0, color: '#00A896',
+          }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
         </div>
-
-        {/* Toggle button */}
-        <button onClick={toggle} style={{
-          width: 24, height: 24, borderRadius: 6,
-          border: '0.5px solid #D1FAE5',
-          background: '#F0FDFB',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', flexShrink: 0,
-          color: '#00A896',
-          marginLeft: expanded ? 0 : 4,
-        }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            {expanded
-              ? <polyline points="15 18 9 12 15 6" />
-              : <polyline points="9 18 15 12 9 6" />
-            }
-          </svg>
-        </button>
-      </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, paddingBottom: 12, flexShrink: 0, width: '100%' }}>
+          {/* Ícone centralizado */}
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '12px 0' }}>
+            <img src="/aion-logo-icon.png" alt="Áion" style={{ width: 40, height: 40, objectFit: 'contain', borderRadius: 10 }} />
+          </div>
+          {/* Botão de expandir separado abaixo */}
+          <button onClick={toggle} style={{
+            width: 24, height: 24, borderRadius: 6,
+            border: '0.5px solid #D1FAE5', background: '#F0FDFB',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', color: '#00A896',
+          }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Nav items */}
       {navItems.map(item => {
