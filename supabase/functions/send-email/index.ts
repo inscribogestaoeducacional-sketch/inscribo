@@ -15,7 +15,7 @@ body{font-family:-apple-system,sans-serif;margin:0;background:#f5f5f5}
 .f p{color:#999;font-size:12px;margin:4px 0}.f a{color:#00A896;text-decoration:none}
 </style></head><body><div class="c">
 <div class="h"><h1>Áion Edu</h1><p>Inteligência em matrículas</p></div>
-<div class="b">${content}</div>
+<div class="b"><div style="text-align:center;padding:24px 0 16px;background:#ffffff"><img src="https://aionedu.com.br/aion-logo-full.png" alt="Aion Edu" style="height:40px;width:auto;object-fit:contain"/></div>${content}</div>
 <div class="f"><p>© 2026 Áion Edu · <a href="https://aionedu.com.br">aionedu.com.br</a></p>
 <p><a href="https://aionedu.com.br/privacidade">Privacidade</a> · <a href="https://aionedu.com.br/termos">Termos</a></p>
 </div></div></body></html>`

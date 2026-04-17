@@ -150,11 +150,17 @@ export default function LoginForm() {
         <div className="lf-card">
 
           {/* ── Logo ── */}
-          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', marginBottom: view === 'forgot-sent' ? 0 : 32 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 16 }}>
-              <img src="/aion-logo-icon.png" alt="Áion Edu" style={{ width: 56, height: 56, borderRadius: 14, marginBottom: 10 }} />
-              <img src="/aion-logo-name.png" alt="Áion Edu" style={{ height: 24, objectFit: 'contain' }} />
-            </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 24 }}>
+            <img
+              src="/aion-logo-icon.png"
+              alt="Áion Edu"
+              style={{ width: 64, height: 64, objectFit: 'contain', marginBottom: 12 }}
+            />
+            <img
+              src="/aion-logo-name.png"
+              alt="Áion Edu"
+              style={{ height: 28, objectFit: 'contain', maxWidth: 160 }}
+            />
           </div>
 
           {/* ══ LOGIN ══════════════════════════════════════════ */}
