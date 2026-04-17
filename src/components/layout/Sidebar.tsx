@@ -91,24 +91,11 @@ export default function Sidebar() {
         padding: expanded ? '4px 6px 12px' : '4px 0 12px',
         flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: expanded ? 8 : 0 }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: 10,
-            background: '#00A896', flexShrink: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <div style={{ width: 14, height: 14, borderRadius: '50%', background: 'white', border: '2px solid rgba(255,255,255,0.5)' }} />
-          </div>
-          {expanded && (
-            <div style={{ overflow: 'hidden' }}>
-              <span style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', whiteSpace: 'nowrap', display: 'block' }}>
-                Áion Edu
-              </span>
-              <span style={{ fontSize: 10, color: '#64748B', whiteSpace: 'nowrap', display: 'block' }}>
-                Inteligência em matrículas
-              </span>
-            </div>
-          )}
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          {expanded
+            ? <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 32, objectFit: 'contain', maxWidth: 140 }} />
+            : <img src="/aion-logo-icon.png" alt="Áion Edu" style={{ width: 36, height: 36, borderRadius: 10 }} />
+          }
         </div>
 
         {/* Toggle button */}

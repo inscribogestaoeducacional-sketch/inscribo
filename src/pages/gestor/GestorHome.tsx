@@ -842,7 +842,7 @@ export default function GestorHome() {
               <Sparkles size={16} color="#fff" />
             </div>
             <div>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#fff', margin: 0 }}>Análise da IA — Inscribo</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#fff', margin: 0 }}>Análise da IA — Áion Edu</h3>
               <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>Baseada nos dados do funil e histórico da escola</p>
             </div>
           </div>

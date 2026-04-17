@@ -6,7 +6,7 @@ import { supabase } from '../../lib/supabase'
 import {
   Home, Building2, DollarSign, FileText, Settings,
   Bell, LogOut, UserCog, ChevronDown, X, Menu,
-  TrendingUp, Shield, AlertCircle, CheckCircle2,
+  TrendingUp, AlertCircle, CheckCircle2,
   AlertTriangle, Info, BookOpen, Users
 } from 'lucide-react'
 
@@ -170,17 +170,10 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
         {/* Logo */}
         <div className="flex items-center justify-between px-4 h-16 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0 overflow-hidden">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-              <Shield className="w-4 h-4 text-white" />
-            </div>
-            {sidebarOpen && (
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-gray-900 truncate leading-tight">Áion Edu</p>
-                <p className="text-[10px] text-gray-400 truncate">
-                  {isConsultant ? 'Consultor' : 'Admin Geral'}
-                </p>
-              </div>
-            )}
+            {sidebarOpen
+              ? <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 28, objectFit: 'contain' }} />
+              : <img src="/aion-logo-icon.png" alt="Áion Edu" style={{ width: 32, height: 32, borderRadius: 8 }} />
+            }
           </div>
           <button onClick={toggleSidebar}
             className="p-1.5 hover:bg-gray-100 rounded-lg flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors">

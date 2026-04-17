@@ -158,10 +158,7 @@ function Header() {
         transition:'background .3s, border-color .3s',
       }}>
         <Link to="/" style={{ textDecoration:'none', display:'flex', alignItems:'center', gap:10 }}>
-          <div style={{ width:34, height:34, borderRadius:10, background:'linear-gradient(135deg,#00523C,#00A896)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 14px rgba(0,82,60,.35)' }}>
-            <span style={{ fontFamily:'Bricolage Grotesque,sans-serif', fontWeight:900, fontSize:17, color:'#fff' }}>Á</span>
-          </div>
-          <span style={{ fontFamily:'Bricolage Grotesque,sans-serif', fontWeight:900, fontSize:18, color: sc ? '#00523C' : '#fff', transition:'color .3s' }}>Áion Edu</span>
+          <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 36, objectFit: 'contain' }} />
         </Link>
 
         <div className="nav-links" style={{ display:'flex', gap:30, alignItems:'center' }}>
@@ -894,10 +891,7 @@ function Footer() {
         <div className="footer-g" style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr', gap:48, marginBottom:48 }}>
           <div>
             <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:18 }}>
-              <div style={{ width:34, height:34, borderRadius:10, background:'linear-gradient(135deg,#00523C,#00A896)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <span style={{ fontFamily:'Bricolage Grotesque,sans-serif', fontWeight:900, fontSize:16, color:'#fff' }}>Á</span>
-              </div>
-              <span style={{ fontFamily:'Bricolage Grotesque,sans-serif', fontWeight:900, fontSize:16, color:'#fff' }}>Áion Edu</span>
+              <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 32, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
             </div>
             <p style={{ fontSize:13, color:'#9CA3AF', lineHeight:1.75, marginBottom:16 }}>Inteligência em matrículas para escolas privadas brasileiras.</p>
             <p style={{ fontSize:12, color:'#6B7280', lineHeight:1.85 }}>

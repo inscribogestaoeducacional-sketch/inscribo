@@ -65,15 +65,7 @@ export default function ResetPassword() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex justify-center mb-8">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg,#00523C,#00A896)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ width: 15, height: 15, borderRadius: '50%', background: 'white', border: '2px solid rgba(255,255,255,0.5)' }} />
-            </div>
-            <div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: '#00523C', letterSpacing: '-0.02em' }}>Áion Edu</div>
-              <div style={{ fontSize: 11, color: '#6B7280' }}>Inteligência em matrículas</div>
-            </div>
-          </div>
+          <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 40, objectFit: 'contain', marginBottom: 20 }} />
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">

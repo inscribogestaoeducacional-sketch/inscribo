@@ -151,18 +151,10 @@ export default function LoginForm() {
 
           {/* ── Logo ── */}
           <div style={{ display:'flex', flexDirection:'column', alignItems:'center', marginBottom: view === 'forgot-sent' ? 0 : 32 }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: 14,
-              background: 'linear-gradient(135deg,#00523C,#00A896)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 16px rgba(0,82,60,.3)',
-              marginBottom: 12,
-            }}>
-              <span style={{ fontFamily:'Bricolage Grotesque,sans-serif', fontWeight:900, fontSize:22, color:'#fff' }}>Á</span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 16 }}>
+              <img src="/aion-logo-icon.png" alt="Áion Edu" style={{ width: 56, height: 56, borderRadius: 14, marginBottom: 10 }} />
+              <img src="/aion-logo-name.png" alt="Áion Edu" style={{ height: 24, objectFit: 'contain' }} />
             </div>
-            <span style={{ fontFamily:'Bricolage Grotesque,sans-serif', fontWeight:900, fontSize:18, color:'#00523C', letterSpacing:'-.01em' }}>
-              Áion Edu
-            </span>
           </div>
 
           {/* ══ LOGIN ══════════════════════════════════════════ */}

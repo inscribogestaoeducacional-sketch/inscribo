@@ -153,10 +153,8 @@ function AppContent() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-cyan-50 to-blue-50">
         <div className="text-center">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center mx-auto mb-5 shadow-lg">
-            <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          </div>
-          <p className="text-lg font-bold text-gray-900">Áion Edu</p>
+          <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 48, objectFit: 'contain', marginBottom: 24 }} />
+          <div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-sm text-gray-400 mt-1">Carregando...</p>
         </div>
       </div>
