@@ -178,7 +178,11 @@ function NewSchoolWizard({
       const fnData = await fnRes.json()
       if (!fnRes.ok || fnData?.error) {
         await supabase.from('institutions').delete().eq('id', institution.id)
-        throw new Error(fnData?.error || 'Erro ao criar usuário')
+        const errMsg = fnData?.error || 'Erro ao criar usuário'
+        if (errMsg.includes('already been registered') || errMsg.includes('already registered')) {
+          throw new Error('Este e-mail já está cadastrado no sistema. Use um e-mail diferente para o gestor.')
+        }
+        throw new Error(errMsg)
       }
 
       let paymentLink: string | undefined
