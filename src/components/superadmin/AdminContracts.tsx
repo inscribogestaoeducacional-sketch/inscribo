@@ -358,20 +358,6 @@ export default function AdminContracts() {
           })
           if (autErr) throw new Error(autErr.message)
 
-          // Envia email com link de assinatura via Brevo
-          if (autData?.signUrl) {
-            await supabase.functions.invoke('send-email', {
-              body: {
-                type: 'contract_sign',
-                to: form.signer_email,
-                data: {
-                  institution_name: inst?.name,
-                  signer_name: form.signer_name,
-                  sign_url: autData.signUrl,
-                }
-              }
-            })
-          }
 
           showToast('Contrato enviado via Autentique!')
         } catch (e: any) {
@@ -409,15 +395,6 @@ export default function AdminContracts() {
         },
       })
       if (error) throw error
-      if (data?.signUrl) {
-        await supabase.functions.invoke('send-email', {
-          body: {
-            type: 'contract_sign',
-            to: contract.signer_email,
-            data: { institution_name: inst?.name, signer_name: contract.signer_name, sign_url: data.signUrl }
-          }
-        })
-      }
       showToast('Reenvio via Autentique solicitado!')
       loadData()
     } catch (e: any) {

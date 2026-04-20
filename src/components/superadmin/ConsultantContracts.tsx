@@ -91,8 +91,9 @@ export default function ConsultantContracts() {
 
       if (form.signer_email && form.signer_name) {
         const school = institutions.find(i => i.id === form.institution_id)
-        const { error: zapErr } = await supabase.functions.invoke('zapsign', {
+        const { error: autErr } = await supabase.functions.invoke('autentique', {
           body: {
+            institution_id: form.institution_id,
             contract_id: contract.id,
             school_name: school?.name || 'Escola',
             signer_name: form.signer_name,
@@ -100,10 +101,10 @@ export default function ConsultantContracts() {
             signer_phone: form.signer_phone,
           },
         })
-        if (zapErr) {
-          showToast('Contrato criado. Erro ao enviar via ZapSign.')
+        if (autErr) {
+          showToast('Contrato criado. Erro ao enviar via Autentique.')
         } else {
-          showToast('Contrato criado e enviado via ZapSign!')
+          showToast('Contrato criado e enviado via Autentique!')
         }
       } else {
         showToast('Contrato salvo como rascunho.')
@@ -279,7 +280,7 @@ export default function ConsultantContracts() {
 
               <div className="border-t border-dashed border-gray-200 pt-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                  Signatário ZapSign (opcional)
+                  Signatário Autentique (opcional)
                 </p>
                 <div className="space-y-3">
                   <div>
@@ -317,7 +318,7 @@ export default function ConsultantContracts() {
                 {saving ? (
                   <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Criando...</>
                 ) : form.signer_email ? (
-                  <><Send className="w-4 h-4" /> Enviar via ZapSign</>
+                  <><Send className="w-4 h-4" /> Enviar via Autentique</>
                 ) : (
                   <><FileText className="w-4 h-4" /> Salvar rascunho</>
                 )}

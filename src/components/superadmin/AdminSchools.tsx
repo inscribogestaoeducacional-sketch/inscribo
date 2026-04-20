@@ -1,5 +1,6 @@
 // src/components/superadmin/AdminSchools.tsx
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
 import {
@@ -880,6 +881,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
 
 // ─── MAIN COMPONENT ────────────────────────────────────────────────────────
 export default function AdminSchools() {
+  const navigate = useNavigate()
   const [institutions, setInstitutions] = useState<any[]>([])
   const [consultants, setConsultants] = useState<any[]>([])
   const [cycles, setCycles] = useState<any[]>([])
@@ -1230,7 +1232,7 @@ export default function AdminSchools() {
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-1">
-                          <button onClick={() => setDetailModal(inst)} className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg" title="Detalhes">
+                          <button onClick={() => navigate(`/super-admin/schools/${inst.id}`)} className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg" title="Detalhes">
                             <Eye className="w-3.5 h-3.5" />
                           </button>
                           <button onClick={() => openEdit(inst)} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg" title="Editar">

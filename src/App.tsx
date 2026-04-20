@@ -136,6 +136,8 @@ function purgeLegacyCache() {
 function AppContent() {
   const { user, initializing } = useAuth()
   const [ready, setReady] = useState(false)
+  const [schoolStatus, setSchoolStatus] = useState<string | null>(null)
+  const [checkingStatus, setCheckingStatus] = useState(false)
 
   useEffect(() => {
     purgeLegacyCache()
@@ -143,6 +145,22 @@ function AppContent() {
       .catch(console.error)
       .finally(() => setReady(true))
   }, [])
+
+  useEffect(() => {
+    const checkSchoolStatus = async () => {
+      if (user?.user_type === 'school_user' && user?.institution_id) {
+        setCheckingStatus(true)
+        const { data } = await supabase
+          .from('institutions')
+          .select('plan_status')
+          .eq('id', user.institution_id)
+          .single()
+        setSchoolStatus(data?.plan_status || null)
+        setCheckingStatus(false)
+      }
+    }
+    if (user) checkSchoolStatus()
+  }, [user])
 
   const { pathname } = window.location
   if (pathname.startsWith('/survey/')) {
@@ -199,6 +217,7 @@ function AppContent() {
         <Route path="/super-admin/crm"                element={<AdminCRM />} />
         <Route path="/super-admin/onboarding"         element={<AdminOnboarding />} />
         <Route path="/super-admin/schools"            element={<AdminSchools />} />
+        <Route path="/super-admin/schools/:id"        element={<InstitutionDetails />} />
         <Route path="/super-admin/consultants"        element={<AdminConsultants />} />
         <Route path="/super-admin/consultants/:id"    element={<ConsultantDetails />} />
         <Route path="/super-admin/financial"          element={<AdminFinancial />} />
@@ -222,29 +241,13 @@ function AppContent() {
       </Routes>
     )
   }
-// ── BLOQUEIO POR STATUS ───────────────────────────────────────────────────
-if (user.user_type === 'school_user') {
-  if (user.plan_status === 'pending_contract') return <PendingScreen type="contract" />
-  if (user.plan_status === 'pending_payment') return <PendingScreen type="payment" />
-  if (user.plan_status === 'suspended') return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F9FAFB', padding: 24 }}>
-      <div style={{ background: '#fff', borderRadius: 24, border: '1px solid #E2E8F0', padding: 48, maxWidth: 480, width: '100%', textAlign: 'center', boxShadow: '0 8px 48px rgba(0,0,0,0.07)' }}>
-        <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-          <span style={{ fontSize: 32 }}>🔒</span>
-        </div>
-        <h2 style={{ fontSize: 22, fontWeight: 800, color: '#1A2B4A', marginBottom: 10 }}>Acesso suspenso</h2>
-        <p style={{ fontSize: 14, color: '#64748B', lineHeight: 1.7, marginBottom: 28 }}>
-          Sua conta foi suspensa por inadimplência. Entre em contato com a equipe Áion Edu para regularizar.
-        </p>
-        <p style={{ fontSize: 13, color: '#94A3B8' }}>Dúvidas? <strong>(83) 98556-6393</strong></p>
-        <button onClick={() => { localStorage.clear(); window.location.href = '/login' }}
-          style={{ marginTop: 16, background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#94A3B8', textDecoration: 'underline' }}>
-          Sair
-        </button>
-      </div>
-    </div>
-  )
-}
+  // ── BLOQUEIO POR STATUS ───────────────────────────────────────────────────
+  if (user.user_type === 'school_user') {
+    if (checkingStatus) return <div className="flex items-center justify-center h-screen"><div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" /></div>
+    if (schoolStatus === 'pending_contract') return <PendingScreen type="contract" />
+    if (schoolStatus === 'pending_payment') return <PendingScreen type="payment" />
+    if (schoolStatus === 'suspended') return <PendingScreen type="suspended" />
+  }
   // ── ÁREA DA ESCOLA ────────────────────────────────────────────────────
   const isAttendant   = user.role === 'user'
   const schoolDefault = isAttendant ? '/atendente' : '/home'
