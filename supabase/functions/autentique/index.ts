@@ -1,309 +1,235 @@
-// @ts-nocheck — Deno runtime
-// supabase/functions/autentique/index.ts
-// Cria documento no Autentique para assinatura digital e atualiza o contrato
+// @ts-nocheck
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const AUTENTIQUE_KEY = Deno.env.get('AUTENTIQUE_API_KEY')
+const AUTENTIQUE_URL = 'https://api.autentique.com.br/v2/graphql'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// ─── Substituição de variáveis do template ───────────────────────────────
-function applyVars(template: string, vars: Record<string, string>): string {
-  return Object.entries(vars).reduce(
-    (text, [key, val]) => text.replaceAll(key, val ?? ''),
-    template
-  )
-}
-
-function fmtBRL(n: number): string {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n || 0)
-}
-
-// ─── Mutation GraphQL Autentique ─────────────────────────────────────────
-const CREATE_DOCUMENT_MUTATION = `
-  mutation CreateDocument($document: CreateDocumentInput!, $signers: [SignerInput!]!) {
-    createDocument(document: $document, signers: $signers) {
-      document { id name }
-      signers {
-        action { name }
-        link { short_link }
-        user { email name }
-      }
-    }
-  }
-`
-
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: CORS })
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
   try {
+    const body = await req.json()
     const {
-      institution_id,
-      contract_id,
-      school_name,
-      signer_name,
-      signer_email,
-      signer_phone,
-      monthly_value,
-      implementation_value,
-    } = await req.json()
+      institution_id, contract_id,
+      school_name, school_cnpj, school_address, school_city, school_state,
+      signer_name, signer_email, signer_phone, signer_cpf, signer_role,
+      monthly_value, implementation_value, contract_start_date,
+    } = body
 
-    if (!contract_id || !signer_name || !signer_email) {
-      return new Response(
-        JSON.stringify({ error: 'contract_id, signer_name e signer_email são obrigatórios' }),
-        { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } }
-      )
-    }
+    if (!AUTENTIQUE_KEY) throw new Error('AUTENTIQUE_API_KEY não configurada')
+    if (!signer_email || !signer_name) throw new Error('Nome e e-mail do signatário são obrigatórios')
 
-    // ── Supabase admin client ────────────────────────────────────────────
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const sb = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    // ── Buscar configurações ─────────────────────────────────────────────
-    const { data: settings } = await supabase
-      .from('platform_settings')
-      .select('key, value')
-      .in('key', ['autentique_api_token', 'contract_template_text'])
+    // 1. Buscar template e configurações
+    const { data: cfg } = await sb.from('platform_settings').select('key, value')
+      .in('key', ['contract_template_text', 'billing_due_day', 'platform_name', 'platform_cnpj', 'platform_address', 'platform_email'])
+    const settings: Record<string, string> = {}
+    for (const row of cfg || []) settings[row.key] = row.value
 
-    const settingsMap = Object.fromEntries((settings ?? []).map((s: any) => [s.key, s.value]))
-    const AUTENTIQUE_TOKEN = settingsMap['autentique_api_token'] || Deno.env.get('AUTENTIQUE_API_TOKEN')
+    // 2. Buscar dados da instituição
+    const { data: inst } = await sb.from('institutions')
+      .select('name, cnpj, city, state, email, address, phone')
+      .eq('id', institution_id)
+      .single()
 
-    if (!AUTENTIQUE_TOKEN) {
-      return new Response(
-        JSON.stringify({ error: 'Token Autentique não configurado em Configurações → Autentique' }),
-        { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } }
-      )
+    // 3. Substituir variáveis no template
+    const fmtBRL = (n: number) => n?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) || 'R$ 0,00'
+    const startDate = contract_start_date
+      ? new Date(contract_start_date + 'T12:00:00').toLocaleDateString('pt-BR')
+      : new Date().toLocaleDateString('pt-BR')
+
+    const vars: Record<string, string> = {
+      escola:            inst?.name || school_name || '',
+      cnpj:              inst?.cnpj || school_cnpj || '',
+      endereco:          inst?.address || school_address || '',
+      cidade_uf:         `${inst?.city || school_city || ''}/${inst?.state || school_state || ''}`,
+      gestor:            signer_name,
+      cargo_gestor:      signer_role || 'Diretor',
+      cpf_gestor:        signer_cpf || '',
+      email_gestor:      signer_email,
+      telefone_gestor:   signer_phone || inst?.phone || '',
+      valor_implantacao: implementation_value ? fmtBRL(Number(implementation_value)) : '',
+      valor_mensal:      monthly_value ? fmtBRL(Number(monthly_value)) : '',
+      dia_vencimento:    settings.billing_due_day || '10',
+      data_inicio:       startDate,
+      consultor:         'Equipe Áion Edu',
+      data_hoje:         new Date().toLocaleDateString('pt-BR'),
+      plataforma:        settings.platform_name || 'Áion Soluções Tecnológicas LTDA',
+      cnpj_plataforma:   settings.platform_cnpj || '65.835.064/0001-58',
+      endereco_plataforma: settings.platform_address || 'Patos/PB',
+      email_plataforma:  settings.platform_email || 'contato@aionedu.com.br',
     }
 
-    // ── Buscar dados complementares da instituição ───────────────────────
-    const { data: inst } = await supabase
-      .from('institutions')
-      .select('name, cnpj, city, state, consultant_name, billing_due_day')
-      .eq('id', institution_id)
-      .maybeSingle()
+    let contractText = settings.contract_template_text || ''
+    contractText = contractText.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] || `{{${k}}}`)
 
-    // ── Montar texto do contrato ─────────────────────────────────────────
-    const templateText = settingsMap['contract_template_text'] || ''
-    const today = new Date()
-    const contractText = applyVars(templateText, {
-      '{{escola}}':            school_name ?? inst?.name ?? '',
-      '{{cnpj}}':              inst?.cnpj ?? '',
-      '{{cidade_uf}}':         inst?.city && inst?.state ? `${inst.city}/${inst.state}` : '',
-      '{{gestor}}':            signer_name,
-      '{{email_gestor}}':      signer_email,
-      '{{valor_implantacao}}': fmtBRL(Number(implementation_value ?? 0)),
-      '{{valor_mensal}}':      fmtBRL(Number(monthly_value ?? 0)),
-      '{{dia_vencimento}}':    String(inst?.billing_due_day ?? 10),
-      '{{data_inicio}}':       today.toLocaleDateString('pt-BR'),
-      '{{consultor}}':         inst?.consultant_name ?? '',
-      '{{data_hoje}}':         today.toLocaleDateString('pt-BR'),
+    // 4. Montar HTML do contrato
+    const isHtml = contractText.trim().startsWith('<')
+    const htmlContent = isHtml
+      ? contractText
+      : `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;font-size:14px;line-height:1.8;padding:40px;color:#222;white-space:pre-wrap;">${contractText.replace(/\n/g, '<br>')}</body></html>`
+
+    // 5. Montar mutation GraphQL
+    const mutation = `
+      mutation CreateDocument($document: DocumentInput!, $signers: [SignerInput!]!, $file: Upload!) {
+        createDocument(document: $document, signers: $signers, file: $file) {
+          id
+          name
+          signatures {
+            public_id
+            name
+            email
+            link { short_link }
+          }
+        }
+      }
+    `
+
+    const encoder = new TextEncoder()
+    const htmlBytes = encoder.encode(htmlContent)
+    const boundary = '----FormBoundary' + Math.random().toString(36).slice(2)
+    const enc = (s: string) => encoder.encode(s)
+
+    const operations = JSON.stringify({
+      query: mutation,
+      variables: {
+        document: { name: `Contrato — ${inst?.name || school_name}` },
+        signers: [{ email: signer_email, name: signer_name, action: 'SIGN' }],
+        file: null,
+      },
     })
 
-    // ── Montar HTML do contrato ──────────────────────────────────────────
-    const htmlContent = `<!DOCTYPE html>
-<html lang="pt-BR">
-<head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#1A202C;">
+    const map = JSON.stringify({ '0': ['variables.file'] })
 
-  <!-- HEADER -->
-  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#007A6E;">
-    <tr>
-      <td style="padding:40px 56px 32px;">
-        <table width="100%" cellpadding="0" cellspacing="0" border="0">
-          <tr>
-            <td style="vertical-align:middle;">
-              <img src="https://www.aionedu.com.br/aion-logo-full.png" alt="Aion Edu" height="42" style="display:block;height:42px;width:auto;filter:brightness(0) invert(1);" />
-            </td>
-            <td style="vertical-align:middle;text-align:right;">
-              <div style="color:#ffffff;font-size:19px;font-weight:700;line-height:1.3;">Contrato de Prestacao<br>de Servicos</div>
-              <div style="color:rgba(255,255,255,0.75);font-size:11px;margin-top:4px;">Documento com validade juridica</div>
-            </td>
-          </tr>
-        </table>
-        <div style="margin-top:20px;display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);color:#ffffff;font-size:10px;font-weight:600;padding:5px 14px;border-radius:20px;letter-spacing:0.3px;">
-          Assinatura digital certificada · Aion Edu
-        </div>
-      </td>
-    </tr>
-  </table>
+    const parts: Uint8Array[] = [
+      enc(`--${boundary}\r\nContent-Disposition: form-data; name="operations"\r\n\r\n${operations}\r\n`),
+      enc(`--${boundary}\r\nContent-Disposition: form-data; name="map"\r\n\r\n${map}\r\n`),
+      enc(`--${boundary}\r\nContent-Disposition: form-data; name="0"; filename="contrato.html"\r\nContent-Type: text/html\r\n\r\n`),
+      htmlBytes,
+      enc(`\r\n--${boundary}--\r\n`),
+    ]
 
-  <!-- META BAR -->
-  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F7FAFC;border-bottom:1px solid #E2E8F0;">
-    <tr>
-      <td style="padding:16px 56px;">
-        <table cellpadding="0" cellspacing="0" border="0">
-          <tr>
-            <td style="padding-right:40px;vertical-align:top;">
-              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#A0AEC0;margin-bottom:3px;">Data de emissao</div>
-              <div style="font-size:13px;font-weight:600;color:#2D3748;">${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
-            </td>
-            <td style="padding-right:40px;vertical-align:top;">
-              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#A0AEC0;margin-bottom:3px;">Signatario</div>
-              <div style="font-size:13px;font-weight:600;color:#2D3748;">${signer_name}</div>
-            </td>
-            <td style="padding-right:40px;vertical-align:top;">
-              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#A0AEC0;margin-bottom:3px;">E-mail</div>
-              <div style="font-size:13px;font-weight:600;color:#2D3748;">${signer_email}</div>
-            </td>
-            <td style="vertical-align:top;">
-              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#A0AEC0;margin-bottom:3px;">Status</div>
-              <div style="font-size:13px;font-weight:600;color:#2D3748;">Aguardando assinatura</div>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
+    const totalLength = parts.reduce((s, p) => s + p.length, 0)
+    const bodyBytes = new Uint8Array(totalLength)
+    let offset = 0
+    for (const part of parts) { bodyBytes.set(part, offset); offset += part.length }
 
-  <!-- CONTENT -->
-  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;">
-    <tr>
-      <td style="padding:48px 56px;">
-        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#00A896;margin-bottom:20px;border-bottom:1px solid #E2E8F0;padding-bottom:10px;">Conteudo do contrato</div>
-        <div style="font-size:13px;line-height:1.9;color:#4A5568;white-space:pre-wrap;word-break:break-word;">${contractText}</div>
-
-        <!-- ASSINATURAS -->
-        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:48px;border-top:2px solid #EDF2F7;padding-top:32px;">
-          <tr>
-            <td colspan="3" style="padding-top:24px;padding-bottom:20px;text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#A0AEC0;">Bloco de assinaturas</td>
-          </tr>
-          <tr>
-            <td width="48%" style="background:#F7FAFC;border:1px dashed #CBD5E0;padding:24px 20px;text-align:center;vertical-align:top;">
-              <div style="font-size:9px;color:#A0AEC0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Contratante</div>
-              <div style="font-size:13px;font-weight:700;color:#2D3748;margin-bottom:2px;">${signer_name}</div>
-              <div style="font-size:11px;color:#718096;margin-bottom:16px;">${signer_email}</div>
-              <div style="height:1px;background:#CBD5E0;margin-bottom:8px;"></div>
-              <div style="font-size:10px;color:#A0AEC0;">Assinar digitalmente via link recebido por e-mail</div>
-            </td>
-            <td width="4%"></td>
-            <td width="48%" style="background:#F7FAFC;border:1px dashed #CBD5E0;padding:24px 20px;text-align:center;vertical-align:top;">
-              <div style="font-size:9px;color:#A0AEC0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Contratada</div>
-              <div style="font-size:13px;font-weight:700;color:#2D3748;margin-bottom:2px;">Aion Solucoes Tecnologicas LTDA</div>
-              <div style="font-size:11px;color:#718096;margin-bottom:16px;">contato@aionedu.com.br</div>
-              <div style="height:1px;background:#CBD5E0;margin-bottom:8px;"></div>
-              <div style="font-size:10px;color:#A0AEC0;">CNPJ: 65.835.064/0001-58</div>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-
-  <!-- FOOTER -->
-  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#1A202C;">
-    <tr>
-      <td style="padding:28px 56px;">
-        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:20px;">
-          <tr>
-            <td width="33%" style="vertical-align:top;padding-right:20px;">
-              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#4A5568;margin-bottom:4px;">Empresa</div>
-              <div style="font-size:11px;color:#A0AEC0;line-height:1.6;">Aion Solucoes Tecnologicas LTDA<br>CNPJ: 65.835.064/0001-58</div>
-            </td>
-            <td width="33%" style="vertical-align:top;padding-right:20px;">
-              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#4A5568;margin-bottom:4px;">Endereco</div>
-              <div style="font-size:11px;color:#A0AEC0;line-height:1.6;">R. Francisco Vicente de Araujo, 48<br>Patos/PB · CEP: 58700-000</div>
-            </td>
-            <td width="33%" style="vertical-align:top;">
-              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#4A5568;margin-bottom:4px;">Contato</div>
-              <div style="font-size:11px;color:#A0AEC0;line-height:1.6;">contato@aionedu.com.br<br>aionedu.com.br</div>
-            </td>
-          </tr>
-        </table>
-        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #2D3748;padding-top:16px;">
-          <tr>
-            <td style="padding-top:16px;font-size:10px;color:#4A5568;">© ${new Date().getFullYear()} Aion Edu · Todos os direitos reservados</td>
-            <td style="padding-top:16px;font-size:10px;color:#4A5568;text-align:right;">Documento gerado em ${new Date().toLocaleDateString('pt-BR')}</td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-
-</body>
-</html>`
-
-    // ── Chamar API GraphQL Autentique ────────────────────────────────────
-    const gqlRes = await fetch('https://api.autentique.com.br/2/graphql', {
+    // 6. Chamar API Autentique
+    const autRes = await fetch(AUTENTIQUE_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${AUTENTIQUE_TOKEN}`,
+        'Authorization': `Bearer ${AUTENTIQUE_KEY}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
       },
-      body: JSON.stringify({
-        query: CREATE_DOCUMENT_MUTATION,
-        variables: {
-          document: {
-            name: `Contrato Áion Edu — ${school_name ?? inst?.name}`,
-            content: htmlContent,
-          },
-          signers: [
-            {
-              email: signer_email,
-              name: signer_name,
-              action: 'SIGN',
-              send_email: true,
-              ...(signer_phone ? { phone_number: signer_phone, send_whatsapp: true } : {}),
-            },
-          ],
-        },
-      }),
+      body: bodyBytes,
     })
 
-    if (!gqlRes.ok) {
-      const errText = await gqlRes.text()
-      console.error('Autentique HTTP error:', errText)
-      return new Response(
-        JSON.stringify({ error: `Erro Autentique HTTP ${gqlRes.status}`, details: errText }),
-        { status: 502, headers: { ...CORS, 'Content-Type': 'application/json' } }
-      )
-    }
+    const autData = await autRes.json()
+    console.log('[autentique] response:', JSON.stringify(autData))
 
-    const gqlData = await gqlRes.json()
+    if (autData.errors) throw new Error(autData.errors[0]?.message || 'Erro na Autentique')
 
-    if (gqlData.errors?.length) {
-      console.error('Autentique GraphQL errors:', JSON.stringify(gqlData.errors))
-      return new Response(
-        JSON.stringify({ error: gqlData.errors[0]?.message ?? 'Erro GraphQL Autentique', details: gqlData.errors }),
-        { status: 502, headers: { ...CORS, 'Content-Type': 'application/json' } }
-      )
-    }
+    const document = autData.data?.createDocument
+    const documentId = document?.id
 
-    const doc      = gqlData.data?.createDocument
-    const documentId = doc?.document?.id ?? null
-    const signUrl    = doc?.signers?.[0]?.link?.short_link ?? null
+    // 7. Buscar link de assinatura (segunda chamada pois vem null na criação)
+    let signUrl: string | null = null
 
-    // ── Atualizar contrato no banco ──────────────────────────────────────
-    const { error: updateErr } = await supabase
-      .from('contracts')
-      .update({
-        autentique_document_id: documentId,
-        sign_url:               signUrl,
-        status:                 'sent',
-        signer_name,
-        signer_email,
-        updated_at:             new Date().toISOString(),
+    if (documentId) {
+      await new Promise(r => setTimeout(r, 3000))
+
+      const fetchQuery = `
+        query {
+          document(id: "${documentId}") {
+            id
+            signatures {
+              public_id
+              name
+              email
+              link { short_link }
+            }
+          }
+        }
+      `
+
+      const fetchRes = await fetch(AUTENTIQUE_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${AUTENTIQUE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: fetchQuery }),
       })
-      .eq('id', contract_id)
 
-    if (updateErr) {
-      console.error('Supabase update error:', updateErr.message)
+      const fetchData = await fetchRes.json()
+      console.log('[autentique] fetch signatures:', JSON.stringify(fetchData))
+
+      const sigs = fetchData?.data?.document?.signatures || []
+      const signerSig = sigs.find((s: any) =>
+        s.email === signer_email
+      ) || sigs.find((s: any) =>
+        s.email !== 'contato@aionedu.com.br'
+      ) || sigs[sigs.length - 1]
+
+      signUrl = signerSig?.link?.short_link || null
+      console.log('[autentique] signUrl:', signUrl)
     }
+
+    // 8. Salvar no banco
+    const contractData = {
+      status: 'sent',
+      sign_url: signUrl,
+      autentique_document_id: documentId,
+      signer_name,
+      signer_email,
+    }
+
+    if (contract_id) {
+      await sb.from('contracts').update(contractData).eq('id', contract_id)
+    } else if (institution_id) {
+      await sb.from('contracts').insert({
+        institution_id,
+        ...contractData,
+        plan: 'escola',
+        monthly_value: monthly_value || 0,
+      })
+    }
+
+    if (institution_id) {
+      await sb.from('institutions')
+        .update({ plan_status: 'pending_contract' })
+        .eq('id', institution_id)
+    }
+
+    // 9. Notificação para admin
+    await sb.from('system_notifications').insert({
+      institution_id: null,
+      title: `Contrato enviado — ${inst?.name || school_name}`,
+      message: `Contrato enviado para assinatura de ${signer_name} (${signer_email}).`,
+      type: 'info',
+      read: false,
+    })
 
     return new Response(
-      JSON.stringify({ success: true, documentId, signUrl }),
+      JSON.stringify({ ok: true, signUrl, documentId }),
       { headers: { ...CORS, 'Content-Type': 'application/json' } }
     )
+
   } catch (err) {
-    console.error('Autentique function error:', String(err))
+    console.error('[autentique] erro:', String(err))
     return new Response(
-      JSON.stringify({ error: 'Erro interno', details: String(err) }),
-      { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: String(err) }),
+      { status: 500, headers: CORS }
     )
   }
 })

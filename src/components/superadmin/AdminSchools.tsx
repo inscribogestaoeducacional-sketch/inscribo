@@ -63,9 +63,11 @@ const STEPS = [
 
 type NewForm = {
   // step 1
-  name: string; cnpj: string; city: string; state: string; phone: string; plan: string; consultantId: string
+  name: string; cnpj: string; city: string; state: string; phone: string
+  address: string; plan: string; consultantId: string
   // step 2
   email: string; password: string; managerName: string
+  managerCpf: string; managerRole: string
   // step 3
   isFree: boolean
   implementationValue: string
@@ -73,17 +75,21 @@ type NewForm = {
   billingDueDay: string
   sendContractNow: boolean
   signerName: string; signerEmail: string; signerPhone: string
+  contractStartDate: string
 }
 
 const defaultForm: NewForm = {
-  name: '', cnpj: '', city: '', state: '', phone: '', plan: 'escola', consultantId: '',
+  name: '', cnpj: '', city: '', state: '', phone: '', address: '',
+  plan: 'escola', consultantId: '',
   email: '', password: '', managerName: '',
+  managerCpf: '', managerRole: 'Diretor',
   isFree: false,
   implementationValue: '550',
   monthlyValue: '550',
   billingDueDay: '10',
   sendContractNow: false,
   signerName: '', signerEmail: '', signerPhone: '',
+  contractStartDate: '',
 }
 
 // ─── WIZARD COMPONENT ─────────────────────────────────────────────────────
@@ -110,11 +116,14 @@ function NewSchoolWizard({
     const e: Record<string, string> = {}
     if (s === 1) {
       if (!form.name.trim()) e.name = 'Nome obrigatório'
+      if (!form.cnpj.trim()) e.cnpj = 'CNPJ obrigatório'
+      if (!form.address.trim()) e.address = 'Endereço obrigatório'
       if (!form.city.trim()) e.city = 'Cidade obrigatória'
       if (!form.state.trim()) e.state = 'UF obrigatório'
     }
     if (s === 2) {
       if (!form.managerName.trim()) e.managerName = 'Nome obrigatório'
+      if (!form.managerCpf.trim()) e.managerCpf = 'CPF obrigatório'
       if (!form.email.trim() || !form.email.includes('@')) e.email = 'E-mail inválido'
       if (!form.password || form.password.length < 8) e.password = 'Mínimo 8 caracteres'
     }
@@ -144,6 +153,7 @@ function NewSchoolWizard({
           city: form.city.trim(),
           state: form.state.trim().toUpperCase(),
           phone: form.phone.trim() || null,
+          address: form.address.trim() || null,
           email: form.email.trim().toLowerCase(),
           consultant_id: form.consultantId || null,
           plan: form.plan,
@@ -257,11 +267,18 @@ function NewSchoolWizard({
             body: {
               institution_id: institution.id,
               school_name: form.name.trim(),
-              signer_name: form.signerName,
-              signer_email: form.signerEmail,
+              school_cnpj: form.cnpj.trim(),
+              school_address: form.address.trim(),
+              school_city: form.city.trim(),
+              school_state: form.state.trim(),
+              signer_name: form.signerName || form.managerName,
+              signer_email: form.signerEmail || form.email,
               signer_phone: form.signerPhone,
+              signer_cpf: form.managerCpf,
+              signer_role: form.managerRole,
               monthly_value: Number(form.monthlyValue),
               implementation_value: Number(form.implementationValue),
+              contract_start_date: form.contractStartDate || new Date().toISOString().split('T')[0],
             },
           })
         } catch {}
@@ -366,6 +383,15 @@ function NewSchoolWizard({
                 </div>
               </div>
 
+              <div>
+                <label className={lbl}>Endereço completo *</label>
+                <input className={`${inp} ${errors.address ? 'border-red-400' : ''}`}
+                  placeholder="Rua, número, bairro, cidade/UF, CEP"
+                  value={form.address}
+                  onChange={e => set('address', e.target.value)} />
+                {err('address')}
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={lbl}>Plano</label>
@@ -418,6 +444,29 @@ function NewSchoolWizard({
                 {err('password')}
                 <p className="text-xs text-gray-400 mt-1">O gestor poderá alterar após o primeiro acesso.</p>
               </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={lbl}>CPF do representante legal *</label>
+                  <input className={`${inp} ${errors.managerCpf ? 'border-red-400' : ''}`}
+                    placeholder="000.000.000-00"
+                    value={form.managerCpf}
+                    onChange={e => set('managerCpf', e.target.value)} />
+                  {err('managerCpf')}
+                </div>
+                <div>
+                  <label className={lbl}>Cargo do signatário *</label>
+                  <select className={inp} value={form.managerRole} onChange={e => set('managerRole', e.target.value)}>
+                    <option value="Diretor">Diretor</option>
+                    <option value="Diretor Geral">Diretor Geral</option>
+                    <option value="Diretor Pedagógico">Diretor Pedagógico</option>
+                    <option value="Coordenador">Coordenador</option>
+                    <option value="Proprietário">Proprietário</option>
+                    <option value="Responsável Legal">Responsável Legal</option>
+                    <option value="Gerente">Gerente</option>
+                  </select>
+                </div>
+              </div>
             </div>
           )}
 
@@ -468,6 +517,14 @@ function NewSchoolWizard({
                     <select className={inp} value={form.billingDueDay} onChange={e => set('billingDueDay', e.target.value)}>
                       {[5, 10, 15, 20, 25].map(d => <option key={d} value={String(d)}>Todo dia {d}</option>)}
                     </select>
+                  </div>
+
+                  <div>
+                    <label className={lbl}>Data de início da vigência do contrato</label>
+                    <input type="date" className={inp}
+                      value={form.contractStartDate}
+                      onChange={e => set('contractStartDate', e.target.value)} />
+                    <p className="text-xs text-gray-400 mt-1">Data em que o contrato começa a valer.</p>
                   </div>
 
                   <div className="border-t border-dashed border-gray-200 pt-4">
@@ -526,6 +583,7 @@ function NewSchoolWizard({
                   {[
                     ['Nome', form.name],
                     ['CNPJ', form.cnpj || '—'],
+                    ['Endereço', form.address || '—'],
                     ['Cidade/UF', form.city && form.state ? `${form.city}/${form.state}` : '—'],
                     ['Plano', PLANS.find(p => p.value === form.plan)?.label || form.plan],
                     ['Consultor', consultants.find(c => c.id === form.consultantId)?.full_name || 'Sem consultor'],
@@ -543,6 +601,8 @@ function NewSchoolWizard({
                   </p>
                   {[
                     ['Nome', form.managerName],
+                    ['CPF', form.managerCpf || '—'],
+                    ['Cargo', form.managerRole || '—'],
                     ['E-mail', form.email],
                     ['Senha', '••••••••'],
                   ].map(([k, v]) => (
