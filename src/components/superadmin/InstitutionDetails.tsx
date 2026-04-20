@@ -1,4 +1,3 @@
-// src/components/superadmin/InstitutionDetails.tsx
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -9,11 +8,9 @@ import {
   Mail, Phone, MapPin, Calendar, CreditCard, Lock,
   Unlock, Send, MessageCircle, Edit2, X, Save,
   Plus, Trash2, ToggleLeft, ToggleRight, Eye, EyeOff,
-  ArrowLeft, Zap
+  ArrowLeft, ChevronRight, AlertCircle
 } from 'lucide-react'
-import { sendEmail } from '../../lib/email'
 
-// ─── helpers ──────────────────────────────────────────────────────────────
 const inp = 'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none bg-white'
 const lbl = 'block text-xs font-semibold text-gray-600 mb-1.5'
 
@@ -40,150 +37,85 @@ const PAYMENT_STATUS: Record<string, { l: string; c: string; bg: string }> = {
   cancelled: { l: 'Cancelado', c: '#9ca3af', bg: '#f9fafb' },
 }
 
-// ─── Toast ────────────────────────────────────────────────────────────────
-type ToastT = { msg: string; ok: boolean }
-function ToastBar({ toast, onClose }: { toast: ToastT; onClose: () => void }) {
-  return (
-    <div className={`fixed top-6 right-6 z-[200] flex items-center gap-3 px-5 py-3 rounded-xl shadow-xl text-sm font-semibold
-      ${toast.ok ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
-      {toast.ok ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-      {toast.msg}
-      <button onClick={onClose}><X className="w-4 h-4 opacity-70 hover:opacity-100" /></button>
-    </div>
-  )
+const CONTRACT_STATUS: Record<string, { l: string; c: string; bg: string }> = {
+  draft:     { l: 'Rascunho',  c: '#6b7280', bg: '#f3f4f6' },
+  sent:      { l: 'Enviado — aguardando assinatura', c: '#d97706', bg: '#fffbeb' },
+  signed:    { l: 'Assinado ✓', c: '#16a34a', bg: '#f0fdf4' },
+  cancelled: { l: 'Cancelado', c: '#dc2626', bg: '#fef2f2' },
 }
 
-// ─── Badge ────────────────────────────────────────────────────────────────
-function Badge({ label, color, bg }: { label: string; color: string; bg: string }) {
-  return (
-    <span style={{ color, background: bg, border: `1px solid ${color}30` }}
-      className="px-2.5 py-1 rounded-full text-xs font-semibold">
-      {label}
-    </span>
-  )
-}
-
-// ─── Section card wrapper ─────────────────────────────────────────────────
-function SectionCard({ title, icon: Icon, action, children }: {
-  title: string; icon: any; action?: React.ReactNode; children: React.ReactNode
-}) {
-  return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-        <div className="flex items-center gap-2.5">
-          <Icon className="w-4 h-4 text-cyan-600" />
-          <h3 className="text-sm font-bold text-gray-800">{title}</h3>
-        </div>
-        {action}
-      </div>
-      <div className="p-6">{children}</div>
-    </div>
-  )
-}
-
-// ─── Types ────────────────────────────────────────────────────────────────
-interface Institution {
-  id: string; name: string; cnpj?: string; city?: string; state?: string
-  email?: string; phone?: string; plan?: string; plan_status?: string
-  monthly_value?: number; implementation_value?: number
-  consultant_name?: string; created_at: string
-}
-interface UserRow {
-  id: string; email: string; full_name: string; role: string; active: boolean; created_at: string
-}
-interface Payment {
-  id: string; institution_id: string; payment_type: string; description?: string
-  amount: number; due_date?: string; paid_at?: string; status: string
-  asaas_charge_url?: string; asaas_charge_id?: string
-}
-interface Contract {
-  id: string; institution_id: string; status: string
-  signer_name?: string; signer_email?: string; monthly_value?: number
-  signed_at?: string; start_date?: string; end_date?: string
-  zapsign_url?: string; created_at: string
-}
-
-// ══════════════════════════════════════════════════════════════════════════
 export default function InstitutionDetails() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [institution, setInstitution] = useState<any>(null)
+  const [users, setUsers] = useState<any[]>([])
+  const [payments, setPayments] = useState<any[]>([])
+  const [contract, setContract] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState<'info' | 'contract' | 'financial' | 'users'>('info')
+  const [financialTab, setFinancialTab] = useState<'implementation' | 'monthly'>('implementation')
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
+  const [copied, setCopied] = useState(false)
 
-  const [institution, setInstitution] = useState<Institution | null>(null)
-  const [users, setUsers]             = useState<UserRow[]>([])
-  const [payments, setPayments]       = useState<Payment[]>([])
-  const [contracts, setContracts]     = useState<Contract[]>([])
-  const [loading, setLoading]         = useState(true)
-  const [toast, setToast]             = useState<ToastT | null>(null)
-  const [finTab, setFinTab]           = useState<'impl' | 'monthly'>('impl')
+  // Modal novo usuário
+  const [showNewUser, setShowNewUser] = useState(false)
+  const [newUser, setNewUser] = useState({ email: '', full_name: '', password: '', role: 'admin' })
+  const [showPw, setShowPw] = useState(false)
+  const [savingUser, setSavingUser] = useState(false)
 
-  // modals
-  const [showNewUser,  setShowNewUser]  = useState(false)
-  const [showEditUser, setShowEditUser] = useState(false)
-  const [editUser,     setEditUser]     = useState<UserRow | null>(null)
-  const [showNewPw,    setShowNewPw]    = useState(false)
-  const [newUser,      setNewUser]      = useState({ full_name: '', email: '', password: '', role: 'admin' })
-  const [saving,       setSaving]       = useState(false)
+  const showToast = (msg: string, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 4000) }
 
-  // ── load ──────────────────────────────────────────────────────────────
+  useEffect(() => { if (id) loadData() }, [id])
+
   const loadData = async () => {
-    if (!id) return
     setLoading(true)
-    try {
-      const [instRes, usersRes, paymentsRes, contractsRes] = await Promise.all([
-        supabase.from('institutions').select('*').eq('id', id).single(),
-        supabase.from('users').select('*').eq('institution_id', id).order('created_at', { ascending: false }),
-        supabase.from('payments').select('*').eq('institution_id', id).order('created_at', { ascending: false }),
-        supabase.from('contracts').select('*').eq('institution_id', id).order('created_at', { ascending: false }),
-      ])
-      if (instRes.error) throw instRes.error
-      setInstitution(instRes.data)
-      setUsers(usersRes.data || [])
-      setPayments(paymentsRes.data || [])
-      setContracts(contractsRes.data || [])
-    } catch (err: any) {
-      toast2(err.message || 'Erro ao carregar dados', false)
-    } finally {
-      setLoading(false)
-    }
+    const [instRes, usersRes, paymentsRes, contractsRes] = await Promise.all([
+      supabase.from('institutions').select('*').eq('id', id).single(),
+      supabase.from('users').select('*').eq('institution_id', id).order('created_at', { ascending: false }),
+      supabase.from('payments').select('*').eq('institution_id', id).order('created_at', { ascending: false }),
+      supabase.from('contracts').select('*').eq('institution_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    ])
+    setInstitution(instRes.data)
+    setUsers(usersRes.data || [])
+    setPayments(paymentsRes.data || [])
+    setContract(contractsRes.data)
+    setLoading(false)
   }
 
-  useEffect(() => { loadData() }, [id])
-
-  const toast2 = (msg: string, ok: boolean) => {
-    setToast({ msg, ok })
-    setTimeout(() => setToast(null), 4000)
-  }
-
-  // ── suspend / reactivate ──────────────────────────────────────────────
   const handleSuspend = async () => {
-    if (!confirm('Suspender esta instituição?')) return
-    await supabase.from('institutions').update({ plan_status: 'suspended' }).eq('id', id!)
-    toast2('Instituição suspensa', true)
+    if (!confirm(`Suspender acesso de "${institution?.name}"?`)) return
+    await supabase.from('institutions').update({ plan_status: 'suspended' }).eq('id', id)
+    showToast('Escola suspensa.')
     loadData()
   }
+
   const handleReactivate = async () => {
-    await supabase.from('institutions').update({ plan_status: 'active' }).eq('id', id!)
-    toast2('Instituição reativada', true)
+    if (!confirm(`Reativar acesso de "${institution?.name}"?`)) return
+    await supabase.from('institutions').update({ plan_status: 'active' }).eq('id', id)
+    showToast('Escola reativada!')
     loadData()
   }
 
-  // ── copy helper ───────────────────────────────────────────────────────
-  const copy = (text: string) => {
-    navigator.clipboard.writeText(text)
-    toast2('Link copiado!', true)
+  const copyLink = (url: string) => {
+    navigator.clipboard.writeText(url)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+    showToast('Link copiado!')
   }
 
-  // ── whatsapp ──────────────────────────────────────────────────────────
-  const whatsapp = (paymentLink: string) => {
+  const sendWhatsApp = (link: string) => {
     const phone = institution?.phone?.replace(/\D/g, '')
-    const msg = encodeURIComponent(`Olá! Segue o link de pagamento: ${paymentLink}`)
+    if (!phone) { showToast('Escola sem telefone cadastrado.', false); return }
+    const msg = encodeURIComponent(`Olá! Segue o link de pagamento:\n\n${link}`)
     window.open(`https://wa.me/55${phone}?text=${msg}`, '_blank')
   }
 
-  // ── create user ───────────────────────────────────────────────────────
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSaving(true)
+  const handleCreateUser = async () => {
+    if (!newUser.email || !newUser.full_name || newUser.password.length < 8) {
+      showToast('Preencha todos os campos. Senha mínimo 8 caracteres.', false)
+      return
+    }
+    setSavingUser(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
@@ -194,482 +126,450 @@ export default function InstitutionDetails() {
           'Authorization': `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({
-          email: newUser.email,
+          email: newUser.email.trim().toLowerCase(),
           password: newUser.password,
-          full_name: newUser.full_name,
+          full_name: newUser.full_name.trim(),
           role: newUser.role,
           user_type: 'school_user',
           institution_id: id,
         }),
       })
-      const result = await fnRes.json()
-      if (!fnRes.ok) throw new Error(result.error || 'Erro ao criar usuário')
-
-      const roleLabels: Record<string, string> = {
-        admin: 'Administrador', manager: 'Gestor', user: 'Atendente',
-      }
-      await sendEmail('user_welcome', newUser.email, {
-        user_name: newUser.full_name,
-        user_email: newUser.email,
-        temp_password: newUser.password,
-        school_name: institution?.name ?? '',
-        role_label: roleLabels[newUser.role] ?? newUser.role,
-      })
-
-      toast2('Usuário criado com sucesso!', true)
+      const fnData = await fnRes.json()
+      if (!fnRes.ok || fnData?.error) throw new Error(fnData?.error || 'Erro ao criar usuário')
+      showToast('Usuário criado!')
       setShowNewUser(false)
-      setNewUser({ full_name: '', email: '', password: '', role: 'admin' })
+      setNewUser({ email: '', full_name: '', password: '', role: 'admin' })
       loadData()
-    } catch (err: any) {
-      toast2(err.message, false)
+    } catch (e: any) {
+      showToast(e?.message || 'Erro.', false)
     } finally {
-      setSaving(false)
+      setSavingUser(false)
     }
   }
 
-  // ── update user ───────────────────────────────────────────────────────
-  const handleUpdateUser = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!editUser) return
-    setSaving(true)
-    try {
-      const { error } = await supabase.from('users')
-        .update({ full_name: editUser.full_name, role: editUser.role })
-        .eq('id', editUser.id)
-      if (error) throw error
-      toast2('Usuário atualizado!', true)
-      setShowEditUser(false)
-      setEditUser(null)
-      loadData()
-    } catch (err: any) {
-      toast2(err.message, false)
-    } finally {
-      setSaving(false)
-    }
+  const handleToggleUser = async (user: any) => {
+    await supabase.from('users').update({ active: !user.active }).eq('id', user.id)
+    showToast(user.active ? 'Usuário desativado.' : 'Usuário ativado!')
+    loadData()
   }
 
-  const handleToggleUser = async (u: UserRow) => {
-    const { error } = await supabase.from('users').update({ active: !u.active }).eq('id', u.id)
-    if (error) toast2(error.message, false)
-    else { toast2(`Usuário ${u.active ? 'desativado' : 'ativado'}!`, true); loadData() }
+  const handleDeleteUser = async (user: any) => {
+    if (!confirm(`Excluir "${user.full_name}"?`)) return
+    await supabase.from('users').delete().eq('id', user.id)
+    showToast('Usuário excluído.')
+    loadData()
   }
 
-  const handleDeleteUser = async (u: UserRow) => {
-    if (!confirm(`Excluir "${u.full_name}"? Esta ação não pode ser desfeita.`)) return
-    const { error } = await supabase.from('users').delete().eq('id', u.id)
-    if (error) toast2(error.message, false)
-    else { toast2('Usuário excluído!', true); loadData() }
-  }
+  if (loading) return (
+    <SuperAdminLayout>
+      <div className="p-8 flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    </SuperAdminLayout>
+  )
 
-  // ── derived ───────────────────────────────────────────────────────────
-  const contract      = contracts[0] ?? null
-  const implPayment   = payments.find(p => p.payment_type === 'implementation') ?? null
-  const monthlyPmts   = payments.filter(p => p.payment_type === 'monthly')
-  const status        = institution?.plan_status ?? 'active'
-  const statusInfo    = STATUS_MAP[status] ?? STATUS_MAP.active
-  const isSuspended   = status === 'suspended'
+  if (!institution) return (
+    <SuperAdminLayout>
+      <div className="p-8 text-center text-gray-500">Escola não encontrada.</div>
+    </SuperAdminLayout>
+  )
 
-  const ROLE_LABELS: Record<string, string> = {
-    admin: 'Administrador', manager: 'Gestor', user: 'Atendente', consultant: 'Consultor',
-  }
+  const st = STATUS_MAP[institution.plan_status] || { l: institution.plan_status, c: '#6b7280', bg: '#f3f4f6' }
+  const implPayment = payments.find(p => p.payment_type === 'implementation')
+  const monthlyPayments = payments.filter(p => p.payment_type === 'monthly')
+  const contractSt = contract ? (CONTRACT_STATUS[contract.status] || CONTRACT_STATUS.draft) : null
 
-  // ── loading ───────────────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <SuperAdminLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-        </div>
-      </SuperAdminLayout>
-    )
-  }
-
-  if (!institution) {
-    return (
-      <SuperAdminLayout>
-        <div className="p-8 text-center text-gray-500">Instituição não encontrada.</div>
-      </SuperAdminLayout>
-    )
-  }
-
-  // ══════════════════════════════════════════════════════════════════════
   return (
     <SuperAdminLayout>
-      {toast && <ToastBar toast={toast} onClose={() => setToast(null)} />}
+      <div className="p-8 space-y-6 max-w-5xl">
 
-      <div className="p-6 max-w-5xl mx-auto space-y-6">
-
-        {/* ── Header ──────────────────────────────────────────────────── */}
-        <div className="flex flex-wrap items-center gap-3">
-          <button onClick={() => navigate(-1)}
-            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors">
-            <ArrowLeft className="w-4 h-4" /> Voltar
-          </button>
-
-          <div className="flex-1 flex flex-wrap items-center gap-3">
-            <h1 className="text-xl font-bold text-gray-900">{institution.name}</h1>
-            <Badge label={statusInfo.l} color={statusInfo.c} bg={statusInfo.bg} />
+        {toast && (
+          <div className={`fixed top-6 right-6 z-[200] flex items-center gap-3 px-5 py-3 rounded-xl shadow-xl text-sm font-semibold
+            ${toast.ok ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+            {toast.ok ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+            {toast.msg}
           </div>
+        )}
 
-          <div className="flex items-center gap-2">
-            {isSuspended
-              ? (
-                <button onClick={handleReactivate}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 transition-colors">
-                  <Unlock className="w-3.5 h-3.5" /> Reativar
-                </button>
-              ) : (
-                <button onClick={handleSuspend}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 transition-colors">
-                  <Lock className="w-3.5 h-3.5" /> Suspender
-                </button>
-              )
-            }
-            <button onClick={loadData}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200 transition-colors">
-              <RefreshCw className="w-3.5 h-3.5" /> Atualizar
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-4">
+            <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-xl border border-gray-200">
+              <ArrowLeft className="w-4 h-4 text-gray-500" />
             </button>
+            <div>
+              <div className="flex items-center gap-3 mb-1">
+                <h1 className="text-2xl font-bold text-gray-900">{institution.name}</h1>
+                <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: st.c, background: st.bg }}>{st.l}</span>
+              </div>
+              <p className="text-sm text-gray-400">{[institution.city, institution.state].filter(Boolean).join('/')} · {institution.plan || 'escola'}</p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={loadData} className="p-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-500">
+              <RefreshCw className="w-4 h-4" />
+            </button>
+            {institution.plan_status === 'suspended'
+              ? <button onClick={handleReactivate} className="flex items-center gap-2 px-4 py-2.5 bg-green-500 text-white rounded-xl font-semibold text-sm">
+                  <Unlock className="w-4 h-4" /> Reativar
+                </button>
+              : institution.plan_status === 'active'
+              ? <button onClick={handleSuspend} className="flex items-center gap-2 px-4 py-2.5 bg-red-50 text-red-600 border border-red-200 rounded-xl font-semibold text-sm">
+                  <Lock className="w-4 h-4" /> Suspender
+                </button>
+              : null
+            }
           </div>
         </div>
 
-        {/* ── Seção 1 — Dados da escola ───────────────────────────────── */}
-        <SectionCard title="Dados da escola" icon={Building2}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 text-sm">
-            <InfoRow icon={Building2} label="Nome" value={institution.name} />
-            <InfoRow icon={FileText}  label="CNPJ" value={institution.cnpj} />
-            <InfoRow icon={MapPin}    label="Cidade / UF" value={[institution.city, institution.state].filter(Boolean).join(' / ') || undefined} />
-            <InfoRow icon={Mail}      label="E-mail" value={institution.email} />
-            <InfoRow icon={Phone}     label="Telefone" value={institution.phone} />
-            <InfoRow icon={Zap}       label="Plano" value={institution.plan} />
-            <InfoRow icon={DollarSign} label="Mensalidade" value={institution.monthly_value ? fmtBRL(institution.monthly_value) : undefined} />
-            <InfoRow icon={CreditCard} label="Implantação" value={institution.implementation_value ? fmtBRL(institution.implementation_value) : undefined} />
-            <InfoRow icon={Users}     label="Consultor" value={institution.consultant_name} />
-            <InfoRow icon={Calendar}  label="Criada em" value={fmtDate(institution.created_at)} />
-          </div>
-        </SectionCard>
-
-        {/* ── Seção 2 — Contrato ──────────────────────────────────────── */}
-        <SectionCard title="Contrato" icon={FileText}>
-          {!contract ? (
-            <div className="flex flex-col items-center gap-2 py-6 text-gray-400">
-              <FileText className="w-8 h-8 opacity-40" />
-              <p className="text-sm">Nenhum contrato gerado</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* status badge */}
-              <div className="flex items-center gap-2 flex-wrap">
-                {contract.status === 'sent' && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                    <Clock className="w-3 h-3" /> Aguardando assinatura
-                  </span>
-                )}
-                {contract.status === 'signed' && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
-                    <CheckCircle2 className="w-3 h-3" /> Assinado
-                  </span>
-                )}
-                {contract.status === 'draft' && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-200">
-                    <FileText className="w-3 h-3" /> Rascunho
-                  </span>
-                )}
-              </div>
-
-              {/* contract details */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-sm">
-                <InfoRow icon={Users}     label="Signatário"   value={contract.signer_name} />
-                <InfoRow icon={Mail}      label="E-mail"       value={contract.signer_email} />
-                <InfoRow icon={DollarSign} label="Mensalidade" value={contract.monthly_value ? fmtBRL(contract.monthly_value) : undefined} />
-                {contract.status === 'signed' && (
-                  <>
-                    <InfoRow icon={CheckCircle2} label="Assinado em" value={fmtDate(contract.signed_at)} />
-                    <InfoRow icon={Calendar} label="Vigência"
-                      value={contract.start_date && contract.end_date
-                        ? `${fmtDate(contract.start_date)} → ${fmtDate(contract.end_date)}`
-                        : undefined} />
-                  </>
-                )}
-              </div>
-
-              {/* actions for sent contract */}
-              {contract.status === 'sent' && contract.zapsign_url && (
-                <div className="flex gap-2 flex-wrap pt-1">
-                  <button onClick={() => copy(contract.zapsign_url!)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 transition-colors">
-                    <Copy className="w-3.5 h-3.5" /> Copiar link
-                  </button>
-                  <a href={contract.zapsign_url} target="_blank" rel="noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-cyan-50 text-cyan-700 hover:bg-cyan-100 border border-cyan-200 transition-colors">
-                    <ExternalLink className="w-3.5 h-3.5" /> Abrir contrato
-                  </a>
-                </div>
-              )}
-            </div>
-          )}
-        </SectionCard>
-
-        {/* ── Seção 3 — Financeiro ────────────────────────────────────── */}
-        <SectionCard title="Financeiro" icon={DollarSign}>
-          {/* tabs */}
-          <div className="flex gap-1 mb-5 bg-gray-100 p-1 rounded-lg w-fit">
-            {(['impl', 'monthly'] as const).map(tab => (
-              <button key={tab} onClick={() => setFinTab(tab)}
-                className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${finTab === tab ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}>
-                {tab === 'impl' ? 'Implantação' : 'Mensalidades'}
-              </button>
-            ))}
-          </div>
-
-          {/* tab: implantação */}
-          {finTab === 'impl' && (
-            !implPayment ? (
-              <div className="flex flex-col items-center gap-2 py-6 text-gray-400">
-                <DollarSign className="w-8 h-8 opacity-40" />
-                <p className="text-sm">Nenhuma cobrança gerada</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {implPayment.status === 'paid'
-                    ? <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
-                        <CheckCircle2 className="w-3 h-3" /> Pago em {fmtDate(implPayment.paid_at)}
-                      </span>
-                    : <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                        <Clock className="w-3 h-3" /> Pendente — venc. {fmtDate(implPayment.due_date)}
-                      </span>
-                  }
-                  <span className="text-sm font-bold text-gray-800">{fmtBRL(implPayment.amount)}</span>
-                </div>
-
-                {implPayment.status !== 'paid' && implPayment.asaas_charge_url && (
-                  <div className="flex gap-2 flex-wrap">
-                    <button onClick={() => copy(implPayment.asaas_charge_url!)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 transition-colors">
-                      <Copy className="w-3.5 h-3.5" /> Copiar link
-                    </button>
-                    <a href={implPayment.asaas_charge_url} target="_blank" rel="noreferrer"
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-cyan-50 text-cyan-700 hover:bg-cyan-100 border border-cyan-200 transition-colors">
-                      <ExternalLink className="w-3.5 h-3.5" /> Abrir fatura
-                    </a>
-                    <button onClick={() => whatsapp(implPayment.asaas_charge_url!)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 transition-colors">
-                      <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
-                    </button>
-                  </div>
-                )}
-              </div>
-            )
-          )}
-
-          {/* tab: mensalidades */}
-          {finTab === 'monthly' && (
-            monthlyPmts.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-6 text-gray-400">
-                <CreditCard className="w-8 h-8 opacity-40" />
-                <p className="text-sm">Nenhuma mensalidade gerada</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-xs font-semibold text-gray-500 border-b border-gray-100">
-                      <th className="pb-2 pr-4">Descrição</th>
-                      <th className="pb-2 pr-4">Valor</th>
-                      <th className="pb-2 pr-4">Vencimento</th>
-                      <th className="pb-2 pr-4">Pago em</th>
-                      <th className="pb-2 pr-4">Status</th>
-                      <th className="pb-2" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {monthlyPmts.map(p => {
-                      const ps = PAYMENT_STATUS[p.status] ?? PAYMENT_STATUS.pending
-                      return (
-                        <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="py-2.5 pr-4 text-gray-700">{p.description || 'Mensalidade'}</td>
-                          <td className="py-2.5 pr-4 font-semibold text-gray-800">{fmtBRL(p.amount)}</td>
-                          <td className="py-2.5 pr-4 text-gray-500">{fmtDate(p.due_date)}</td>
-                          <td className="py-2.5 pr-4 text-gray-500">{fmtDate(p.paid_at)}</td>
-                          <td className="py-2.5 pr-4">
-                            <Badge label={ps.l} color={ps.c} bg={ps.bg} />
-                          </td>
-                          <td className="py-2.5">
-                            {p.asaas_charge_url && (
-                              <a href={p.asaas_charge_url} target="_blank" rel="noreferrer"
-                                className="p-1.5 rounded-lg text-cyan-600 hover:bg-cyan-50 transition-colors inline-flex">
-                                <ExternalLink className="w-3.5 h-3.5" />
-                              </a>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )
-          )}
-        </SectionCard>
-
-        {/* ── Seção 4 — Usuários ──────────────────────────────────────── */}
-        <SectionCard
-          title={`Usuários (${users.length})`}
-          icon={Users}
-          action={
-            <button onClick={() => setShowNewUser(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:shadow-md transition-all">
-              <Plus className="w-3.5 h-3.5" /> Novo usuário
+        {/* Tabs */}
+        <div className="flex border-b border-gray-200 gap-0">
+          {[
+            { id: 'info' as const, label: 'Dados' },
+            { id: 'contract' as const, label: 'Contrato' },
+            { id: 'financial' as const, label: 'Financeiro' },
+            { id: 'users' as const, label: `Usuários (${users.length})` },
+          ].map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={`px-5 py-3 text-sm font-semibold border-b-2 transition-colors
+                ${tab === t.id ? 'border-cyan-500 text-cyan-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+              {t.label}
             </button>
-          }
-        >
-          {users.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-6 text-gray-400">
-              <Users className="w-8 h-8 opacity-40" />
-              <p className="text-sm">Nenhum usuário cadastrado</p>
+          ))}
+        </div>
+
+        {/* ── TAB: Dados ── */}
+        {tab === 'info' && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+              {[
+                ['Nome',        institution.name],
+                ['CNPJ',        institution.cnpj || '—'],
+                ['Cidade/UF',   [institution.city, institution.state].filter(Boolean).join('/') || '—'],
+                ['E-mail',      institution.email || '—'],
+                ['Telefone',    institution.phone || '—'],
+                ['Plano',       institution.plan || '—'],
+                ['Status',      st.l],
+                ['Mensalidade', institution.monthly_value ? fmtBRL(institution.monthly_value) : '—'],
+                ['Implantação', institution.implementation_value ? fmtBRL(institution.implementation_value) : '—'],
+                ['Criado em',   fmtDate(institution.created_at)],
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between py-2 border-b border-gray-50">
+                  <span className="text-sm text-gray-400 font-medium">{k}</span>
+                  <span className="text-sm text-gray-900 font-semibold text-right">{v}</span>
+                </div>
+              ))}
             </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {users.map(u => (
-                <div key={u.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200 hover:bg-white hover:shadow-sm transition-all">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{u.full_name}</p>
-                      <p className="text-xs text-gray-500 truncate">{u.email}</p>
+          </div>
+        )}
+
+        {/* ── TAB: Contrato ── */}
+        {tab === 'contract' && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            {!contract ? (
+              <div className="text-center py-12">
+                <FileText className="w-12 h-12 mx-auto mb-3 text-gray-200" />
+                <p className="text-gray-500 font-medium">Nenhum contrato gerado</p>
+                <p className="text-xs text-gray-400 mt-1">Envie o contrato pelo painel de Onboarding</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: contractSt?.c, background: contractSt?.bg }}>
+                      {contractSt?.l}
+                    </span>
+                    <p className="text-xs text-gray-400 mt-2">Enviado em {fmtDate(contract.created_at)}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {[
+                    ['Signatário',  contract.signer_name || '—'],
+                    ['E-mail',      contract.signer_email || '—'],
+                    ['Plano',       contract.plan || '—'],
+                    ['Mensalidade', contract.monthly_value ? fmtBRL(contract.monthly_value) : '—'],
+                    ['Início',      fmtDate(contract.start_date)],
+                    ['Vencimento',  fmtDate(contract.end_date)],
+                  ].map(([k, v]) => (
+                    <div key={k} className="flex justify-between py-2 border-b border-gray-50">
+                      <span className="text-sm text-gray-400">{k}</span>
+                      <span className="text-sm text-gray-900 font-semibold">{v}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {contract.sign_url && (
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                    <p className="text-xs font-bold text-gray-500 mb-2">Link de assinatura</p>
+                    <div className="flex items-center gap-2">
+                      <input readOnly className="flex-1 text-xs bg-white border border-gray-200 rounded-lg px-3 py-2 text-gray-700 truncate" value={contract.sign_url} />
+                      <button onClick={() => copyLink(contract.sign_url)} className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                        {copied ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-gray-500" />}
+                      </button>
+                      <a href={contract.sign_url} target="_blank" rel="noopener noreferrer" className="p-2 bg-cyan-50 border border-cyan-200 rounded-lg">
+                        <ExternalLink className="w-4 h-4 text-cyan-600" />
+                      </a>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                      {ROLE_LABELS[u.role] ?? u.role}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${u.active ? 'bg-green-50 text-green-700 border-green-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
-                      {u.active ? 'Ativo' : 'Inativo'}
-                    </span>
+                )}
+
+                {contract.status !== 'signed' && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async () => {
+                        const { error } = await supabase.from('contracts').update({ status: 'signed' }).eq('id', contract.id)
+                        if (!error) { showToast('Contrato marcado como assinado!'); loadData() }
+                      }}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-green-500 text-white rounded-xl font-semibold text-sm">
+                      <CheckCircle2 className="w-4 h-4" /> Marcar como assinado
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!confirm('Excluir este contrato?')) return
+                        await supabase.from('contracts').delete().eq('id', contract.id)
+                        showToast('Contrato excluído.')
+                        loadData()
+                      }}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-red-50 text-red-600 border border-red-200 rounded-xl font-semibold text-sm">
+                      <X className="w-4 h-4" /> Excluir contrato
+                    </button>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => { setEditUser(u); setShowEditUser(true) }}
-                      className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">
-                      <Edit2 className="w-3 h-3" /> Editar
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB: Financeiro ── */}
+        {tab === 'financial' && (
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              {[
+                { id: 'implementation' as const, label: 'Implantação' },
+                { id: 'monthly' as const, label: `Mensalidades (${monthlyPayments.length})` },
+              ].map(t => (
+                <button key={t.id} onClick={() => setFinancialTab(t.id)}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all
+                    ${financialTab === t.id ? 'bg-cyan-500 text-white border-cyan-500' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Implantação */}
+            {financialTab === 'implementation' && (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+                {!implPayment ? (
+                  <div className="text-center py-12">
+                    <DollarSign className="w-12 h-12 mx-auto mb-3 text-gray-200" />
+                    <p className="text-gray-500">Nenhuma cobrança de implantação gerada</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full"
+                        style={{ color: PAYMENT_STATUS[implPayment.status]?.c, background: PAYMENT_STATUS[implPayment.status]?.bg }}>
+                        {PAYMENT_STATUS[implPayment.status]?.l || implPayment.status}
+                      </span>
+                      {implPayment.status === 'paid' && implPayment.paid_at && (
+                        <span className="text-xs text-green-600 font-semibold">Pago em {fmtDate(implPayment.paid_at)}</span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      {[
+                        ['Valor',      fmtBRL(implPayment.amount)],
+                        ['Vencimento', fmtDate(implPayment.due_date)],
+                        ['Descrição',  implPayment.description || '—'],
+                        ['ID Asaas',   implPayment.asaas_payment_id || '—'],
+                      ].map(([k, v]) => (
+                        <div key={k} className="flex justify-between py-2 border-b border-gray-50">
+                          <span className="text-sm text-gray-400">{k}</span>
+                          <span className="text-sm text-gray-900 font-semibold text-right truncate max-w-[60%]">{v}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {implPayment.asaas_charge_url && (
+                      <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                        <p className="text-xs font-bold text-gray-500 mb-2">Link de pagamento</p>
+                        <div className="flex items-center gap-2">
+                          <input readOnly className="flex-1 text-xs bg-white border border-gray-200 rounded-lg px-3 py-2 text-gray-700 truncate" value={implPayment.asaas_charge_url} />
+                          <button onClick={() => copyLink(implPayment.asaas_charge_url)} className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                            {copied ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-gray-500" />}
+                          </button>
+                          <a href={implPayment.asaas_charge_url} target="_blank" rel="noopener noreferrer" className="p-2 bg-cyan-50 border border-cyan-200 rounded-lg">
+                            <ExternalLink className="w-4 h-4 text-cyan-600" />
+                          </a>
+                          <button onClick={() => sendWhatsApp(implPayment.asaas_charge_url)} className="p-2 bg-green-50 border border-green-200 rounded-lg">
+                            <MessageCircle className="w-4 h-4 text-green-600" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {implPayment.status === 'pending' && (
+                      <button
+                        onClick={async () => {
+                          if (!confirm('Marcar como pago manualmente?')) return
+                          await supabase.from('payments').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', implPayment.id)
+                          await supabase.from('institutions').update({ plan_status: 'active' }).eq('id', id)
+                          showToast('Pagamento confirmado! Escola ativada.')
+                          loadData()
+                        }}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-green-500 text-white rounded-xl font-semibold text-sm">
+                        <CheckCircle2 className="w-4 h-4" /> Marcar como pago manualmente
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Mensalidades */}
+            {financialTab === 'monthly' && (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                {monthlyPayments.length === 0 ? (
+                  <div className="text-center py-12">
+                    <CreditCard className="w-12 h-12 mx-auto mb-3 text-gray-200" />
+                    <p className="text-gray-500">Nenhuma mensalidade registrada</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-100">
+                          {['Descrição','Valor','Vencimento','Pago em','Status',''].map(h => (
+                            <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {monthlyPayments.map(p => {
+                          const pst = PAYMENT_STATUS[p.status] || PAYMENT_STATUS.pending
+                          return (
+                            <tr key={p.id} className="hover:bg-gray-50">
+                              <td className="px-5 py-3 text-sm text-gray-700">{p.description || 'Mensalidade'}</td>
+                              <td className="px-5 py-3 text-sm font-semibold text-gray-900">{fmtBRL(p.amount)}</td>
+                              <td className="px-5 py-3 text-sm text-gray-500">{fmtDate(p.due_date)}</td>
+                              <td className="px-5 py-3 text-sm text-gray-500">{p.paid_at ? fmtDate(p.paid_at) : '—'}</td>
+                              <td className="px-5 py-3">
+                                <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: pst.c, background: pst.bg }}>{pst.l}</span>
+                              </td>
+                              <td className="px-5 py-3">
+                                {p.asaas_charge_url && (
+                                  <a href={p.asaas_charge_url} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-cyan-600">
+                                    <ExternalLink className="w-4 h-4" />
+                                  </a>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB: Usuários ── */}
+        {tab === 'users' && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-gray-500">{users.length} usuário{users.length !== 1 ? 's' : ''} cadastrado{users.length !== 1 ? 's' : ''}</p>
+              <button onClick={() => setShowNewUser(true)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm">
+                <Plus className="w-4 h-4" /> Novo usuário
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {users.map(user => (
+                <div key={user.id} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <p className="font-bold text-gray-900 text-sm">{user.full_name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{user.email}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{user.role}</span>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${user.active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+                        {user.active ? 'Ativo' : 'Inativo'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => handleToggleUser(user)}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold border transition-colors
+                        ${user.active ? 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100' : 'bg-green-50 text-green-600 border-green-200 hover:bg-green-100'}`}>
+                      {user.active ? <ToggleRight className="w-3.5 h-3.5" /> : <ToggleLeft className="w-3.5 h-3.5" />}
+                      {user.active ? 'Desativar' : 'Ativar'}
                     </button>
-                    <button onClick={() => handleToggleUser(u)}
-                      className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg transition-colors ${u.active ? 'bg-amber-50 text-amber-600 hover:bg-amber-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
-                      {u.active ? <ToggleRight className="w-3 h-3" /> : <ToggleLeft className="w-3 h-3" />}
-                      {u.active ? 'Desativar' : 'Ativar'}
-                    </button>
-                    <button onClick={() => handleDeleteUser(u)}
-                      className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors">
+                    <button onClick={() => handleDeleteUser(user)}
+                      className="p-2 bg-red-50 text-red-500 border border-red-200 rounded-lg hover:bg-red-100">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
               ))}
             </div>
-          )}
-        </SectionCard>
-      </div>
 
-      {/* ── Modal: Novo Usuário ─────────────────────────────────────────── */}
-      {showNewUser && (
-        <Modal title="Novo Usuário" onClose={() => { setShowNewUser(false); setNewUser({ full_name: '', email: '', password: '', role: 'admin' }) }}>
-          <form onSubmit={handleCreateUser} className="space-y-4">
-            <div>
-              <label className={lbl}>Nome completo *</label>
-              <input className={inp} type="text" required value={newUser.full_name}
-                onChange={e => setNewUser(v => ({ ...v, full_name: e.target.value }))} />
-            </div>
-            <div>
-              <label className={lbl}>E-mail *</label>
-              <input className={inp} type="email" required value={newUser.email}
-                onChange={e => setNewUser(v => ({ ...v, email: e.target.value }))} />
-            </div>
-            <div>
-              <label className={lbl}>Senha temporária *</label>
-              <div className="relative">
-                <input className={inp} type={showNewPw ? 'text' : 'password'} required minLength={6}
-                  value={newUser.password} onChange={e => setNewUser(v => ({ ...v, password: e.target.value }))}
-                  style={{ paddingRight: 36 }} />
-                <button type="button" onClick={() => setShowNewPw(v => !v)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                  {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+            {/* Modal novo usuário */}
+            {showNewUser && (
+              <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-4">
+                <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
+                  <div className="flex items-center justify-between mb-5">
+                    <h2 className="text-lg font-bold text-gray-900">Novo usuário</h2>
+                    <button onClick={() => setShowNewUser(false)} className="p-2 hover:bg-gray-100 rounded-xl">
+                      <X className="w-5 h-5 text-gray-400" />
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className={lbl}>Nome completo *</label>
+                      <input className={inp} value={newUser.full_name} onChange={e => setNewUser(u => ({ ...u, full_name: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className={lbl}>E-mail *</label>
+                      <input type="email" className={inp} value={newUser.email} onChange={e => setNewUser(u => ({ ...u, email: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className={lbl}>Senha *</label>
+                      <div className="relative">
+                        <input type={showPw ? 'text' : 'password'} className={inp + ' pr-10'} placeholder="Mínimo 8 caracteres"
+                          value={newUser.password} onChange={e => setNewUser(u => ({ ...u, password: e.target.value }))} />
+                        <button onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                          {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className={lbl}>Perfil</label>
+                      <select className={inp} value={newUser.role} onChange={e => setNewUser(u => ({ ...u, role: e.target.value }))}>
+                        <option value="admin">Admin</option>
+                        <option value="manager">Gerente</option>
+                        <option value="user">Usuário</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 mt-5">
+                    <button onClick={() => setShowNewUser(false)} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">Cancelar</button>
+                    <button onClick={handleCreateUser} disabled={savingUser}
+                      className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
+                      {savingUser ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Criando...</> : 'Criar usuário'}
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div>
-              <label className={lbl}>Perfil *</label>
-              <select className={inp} value={newUser.role} onChange={e => setNewUser(v => ({ ...v, role: e.target.value }))}>
-                <option value="admin">Administrador</option>
-                <option value="manager">Gestor</option>
-                <option value="user">Atendente</option>
-              </select>
-            </div>
-            <button type="submit" disabled={saving}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:shadow-lg transition-all disabled:opacity-60">
-              {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
-              {saving ? 'Criando...' : 'Criar usuário'}
-            </button>
-          </form>
-        </Modal>
-      )}
+            )}
+          </div>
+        )}
 
-      {/* ── Modal: Editar Usuário ───────────────────────────────────────── */}
-      {showEditUser && editUser && (
-        <Modal title="Editar Usuário" onClose={() => { setShowEditUser(false); setEditUser(null) }}>
-          <form onSubmit={handleUpdateUser} className="space-y-4">
-            <div>
-              <label className={lbl}>Nome completo *</label>
-              <input className={inp} type="text" required value={editUser.full_name}
-                onChange={e => setEditUser(v => v ? { ...v, full_name: e.target.value } : v)} />
-            </div>
-            <div>
-              <label className={lbl}>E-mail</label>
-              <input className={`${inp} bg-gray-50 cursor-not-allowed`} type="email" disabled value={editUser.email} />
-            </div>
-            <div>
-              <label className={lbl}>Perfil *</label>
-              <select className={inp} value={editUser.role}
-                onChange={e => setEditUser(v => v ? { ...v, role: e.target.value } : v)}>
-                <option value="admin">Administrador</option>
-                <option value="manager">Gestor</option>
-                <option value="user">Atendente</option>
-              </select>
-            </div>
-            <button type="submit" disabled={saving}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:shadow-lg transition-all disabled:opacity-60">
-              {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
-              {saving ? 'Salvando...' : 'Salvar alterações'}
-            </button>
-          </form>
-        </Modal>
-      )}
+      </div>
     </SuperAdminLayout>
-  )
-}
-
-// ─── Sub-components ────────────────────────────────────────────────────────
-function InfoRow({ icon: Icon, label, value }: { icon: any; label: string; value?: string }) {
-  return (
-    <div className="flex items-start gap-2.5">
-      <Icon className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
-      <div className="min-w-0">
-        <p className="text-xs text-gray-400 leading-none mb-0.5">{label}</p>
-        <p className="text-sm font-medium text-gray-800 truncate">{value || '—'}</p>
-      </div>
-    </div>
-  )
-}
-
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h3 className="text-base font-bold text-gray-900">{title}</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="p-6">{children}</div>
-      </div>
-    </div>
   )
 }

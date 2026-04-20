@@ -211,19 +211,18 @@ function NewSchoolWizard({
           // Asaas não configurado ainda — ignora silenciosamente
         }
 
-        // 5. Enviar e-mail de boas-vindas com link de pagamento (Resend)
+        // 5. Enviar e-mail de boas-vindas com link de pagamento
         try {
           await supabase.functions.invoke('send-email', {
             body: {
+              type: 'payment_link',
               to: form.email.trim().toLowerCase(),
-              template: 'welcome_pending_payment',
               data: {
-                managerName: form.managerName.trim(),
-                schoolName: form.name.trim(),
-                implementationValue: Number(form.implementationValue).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
-                monthlyValue: Number(form.monthlyValue).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
-                paymentLink: paymentLink || null,
-                consultantName: consultants.find(c => c.id === form.consultantId)?.full_name || 'Equipe Áion Edu',
+                institution_name: form.name.trim(),
+                value: Number(form.implementationValue).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+                due_date: new Date(Date.now() + 7 * 86400000).toLocaleDateString('pt-BR'),
+                billing_type: 'PIX/Boleto',
+                payment_link: paymentLink || '',
               },
             },
           })
@@ -235,24 +234,21 @@ function NewSchoolWizard({
         try {
           await supabase.functions.invoke('send-email', {
             body: {
+              type: 'new_institution',
               to: form.email.trim().toLowerCase(),
-              template: 'welcome_free',
               data: {
-                managerName: form.managerName.trim(),
-                schoolName: form.name.trim(),
-                email: form.email.trim().toLowerCase(),
-                loginUrl: `${window.location.origin}/login`,
-                consultantName: consultants.find(c => c.id === form.consultantId)?.full_name || 'Equipe Áion Edu',
+                institution_name: form.name.trim(),
+                login_url: `${window.location.origin}/login`,
               },
             },
           })
         } catch {}
       }
 
-      // 6. Criar contrato se ZapSign configurado
+      // 6. Criar contrato se Autentique configurado
       if (form.sendContractNow && form.signerEmail && form.signerName) {
         try {
-          await supabase.functions.invoke('zapsign', {
+          await supabase.functions.invoke('autentique', {
             body: {
               institution_id: institution.id,
               school_name: form.name.trim(),
@@ -472,7 +468,7 @@ function NewSchoolWizard({
                   <div className="border-t border-dashed border-gray-200 pt-4">
                     <div className="flex items-center justify-between mb-3">
                       <div>
-                        <p className="text-sm font-semibold text-gray-700">Enviar contrato via ZapSign agora?</p>
+                        <p className="text-sm font-semibold text-gray-700">Enviar contrato via Autentique agora?</p>
                         <p className="text-xs text-gray-400">Opcional — pode ser feito depois em Contratos</p>
                       </div>
                       <button
@@ -588,7 +584,7 @@ function NewSchoolWizard({
                     '✅ Criar o usuário gestor',
                     form.isFree ? '✅ Enviar e-mail de acesso imediato' : '✅ Criar cobrança de implantação',
                     !form.isFree ? '✅ Enviar e-mail com link de pagamento' : null,
-                    form.sendContractNow && !form.isFree ? '✅ Enviar contrato via ZapSign' : null,
+                    form.sendContractNow && !form.isFree ? '✅ Enviar contrato via Autentique' : null,
                   ].filter(Boolean).map((item, i) => (
                     <p key={i} className="text-xs text-cyan-700">{item}</p>
                   ))}

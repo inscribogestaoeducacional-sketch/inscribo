@@ -50,6 +50,9 @@ import AdminConsultants from './components/superadmin/AdminConsultants'
 import AdminProfile     from './components/superadmin/AdminProfile.tsx'
 import ConsultantDetails from './components/superadmin/ConsultantDetails'
 
+// ── Pending screen ────────────────────────────────────────────────────────
+import PendingScreen from './components/PendingScreen'
+
 // ── Legado ────────────────────────────────────────────────────────────────
 import SuperAdminInstitutions from './components/superadmin/SuperAdminInstitutions'
 import InstitutionDetails     from './components/superadmin/InstitutionDetails'
@@ -219,34 +222,21 @@ function AppContent() {
       </Routes>
     )
   }
-// ── BLOQUEIO POR PAGAMENTO ────────────────────────────────────────────────
-if (
-  user.user_type === 'school_user' &&
-  ['pending_payment', 'pending_contract', 'suspended'].includes(user.plan_status || '')
-) {
-  return (
+// ── BLOQUEIO POR STATUS ───────────────────────────────────────────────────
+if (user.user_type === 'school_user') {
+  if (user.plan_status === 'pending_contract') return <PendingScreen type="contract" />
+  if (user.plan_status === 'pending_payment') return <PendingScreen type="payment" />
+  if (user.plan_status === 'suspended') return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F9FAFB', padding: 24 }}>
       <div style={{ background: '#fff', borderRadius: 24, border: '1px solid #E2E8F0', padding: 48, maxWidth: 480, width: '100%', textAlign: 'center', boxShadow: '0 8px 48px rgba(0,0,0,0.07)' }}>
-        <div style={{ width: 64, height: 64, borderRadius: '50%', background: user.plan_status === 'suspended' ? '#FEF2F2' : '#FFFBEB', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-          <span style={{ fontSize: 32 }}>{user.plan_status === 'suspended' ? '🔒' : '⏳'}</span>
+        <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+          <span style={{ fontSize: 32 }}>🔒</span>
         </div>
-        <h2 style={{ fontSize: 22, fontWeight: 800, color: '#1A2B4A', marginBottom: 10 }}>
-          {user.plan_status === 'suspended' ? 'Acesso suspenso' : 'Pagamento pendente'}
-        </h2>
+        <h2 style={{ fontSize: 22, fontWeight: 800, color: '#1A2B4A', marginBottom: 10 }}>Acesso suspenso</h2>
         <p style={{ fontSize: 14, color: '#64748B', lineHeight: 1.7, marginBottom: 28 }}>
-          {user.plan_status === 'suspended'
-            ? 'Sua conta foi suspensa por inadimplência. Entre em contato com a equipe Áion Edu para regularizar.'
-            : 'Para acessar o sistema, realize o pagamento da taxa de implantação.'}
+          Sua conta foi suspensa por inadimplência. Entre em contato com a equipe Áion Edu para regularizar.
         </p>
-        {user.payment_link && user.plan_status !== 'suspended' && (
-          <a href={user.payment_link} target="_blank" rel="noopener noreferrer"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '14px 28px', background: 'linear-gradient(135deg,#00A896,#00523C)', color: '#fff', borderRadius: 12, fontSize: 15, fontWeight: 700, textDecoration: 'none', marginBottom: 20 }}>
-            💳 Pagar agora
-          </a>
-        )}
-        <p style={{ fontSize: 13, color: '#94A3B8' }}>
-          Dúvidas? <strong>(83) 98556-6393</strong>
-        </p>
+        <p style={{ fontSize: 13, color: '#94A3B8' }}>Dúvidas? <strong>(83) 98556-6393</strong></p>
         <button onClick={() => { localStorage.clear(); window.location.href = '/login' }}
           style={{ marginTop: 16, background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#94A3B8', textDecoration: 'underline' }}>
           Sair

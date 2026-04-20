@@ -123,6 +123,51 @@ const templates: Record<string, (d: any) => { subject: string; html: string }> =
     `)
   }),
 
+  payment_link: (d) => ({
+    subject: `💳 Link de pagamento — ${d.institution_name}`,
+    html: base(`
+      <h2 style="color:#00523C">Olá, ${d.institution_name}! 👋</h2>
+      <p>Sua taxa de implantação na plataforma Áion Edu está disponível para pagamento. Utilize o link abaixo para realizar o pagamento com segurança.</p>
+      <div class="m">
+        <strong>${d.value}</strong>
+        <span>Taxa de implantação · Vencimento: ${d.due_date}</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
+        <tr style="border-bottom:1px solid #eee">
+          <td style="padding:10px 0;color:#666;width:40%">Valor</td>
+          <td style="padding:10px 0;font-weight:600;color:#111">${d.value}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #eee">
+          <td style="padding:10px 0;color:#666">Vencimento</td>
+          <td style="padding:10px 0;font-weight:600;color:#111">${d.due_date}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #eee">
+          <td style="padding:10px 0;color:#666">Forma de pagamento</td>
+          <td style="padding:10px 0;font-weight:600;color:#111">${d.billing_type}</td>
+        </tr>
+      </table>
+      ${d.payment_link ? `<div style="text-align:center"><a href="${d.payment_link}" class="btn">Pagar agora →</a></div>` : ''}
+      <p style="font-size:12px;color:#999;margin-top:24px">Dúvidas? Fale com nossa equipe pelo WhatsApp: (83) 98556-6393</p>
+    `)
+  }),
+
+  contract_sign: (d) => ({
+    subject: `📝 Contrato para assinatura — ${d.institution_name}`,
+    html: base(`
+      <h2 style="color:#00523C">Olá, ${d.signer_name || d.institution_name}! 📝</h2>
+      <p>Seu contrato com a <strong>Áion Edu</strong> está disponível para assinatura digital. Por favor, clique no botão abaixo para revisar e assinar.</p>
+      <div class="m">
+        <strong>${d.institution_name}</strong>
+        <span>Contrato de prestação de serviços</span>
+      </div>
+      <p style="color:#6B7280;font-size:13px">Após a assinatura, seu acesso à plataforma será liberado automaticamente.</p>
+      <div style="text-align:center;margin:32px 0">
+        <a href="${d.sign_url}" class="btn">Assinar contrato →</a>
+      </div>
+      <p style="font-size:12px;color:#999;margin-top:24px">Dúvidas? Fale com nossa equipe pelo WhatsApp: (83) 98556-6393</p>
+    `)
+  }),
+
   password_reset: (d) => ({
     subject: `🔐 Redefinição de senha — Áion Edu`,
     html: base(`
