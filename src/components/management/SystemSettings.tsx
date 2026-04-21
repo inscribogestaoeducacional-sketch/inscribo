@@ -651,9 +651,190 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   )
 }
 
+// ─── Aba: Pagamentos ──────────────────────────────────────────────────────────
+function PagamentosTab({ institutionId }: { institutionId: string }) {
+  const [payments, setPayments] = useState<any[]>([])
+  const [institution, setInstitution] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => { load() }, [])
+
+  const load = async () => {
+    setLoading(true)
+    const [paymentsRes, instRes] = await Promise.all([
+      supabase.from('payments')
+        .select('*')
+        .eq('institution_id', institutionId)
+        .order('due_date', { ascending: true }),
+      supabase.from('institutions')
+        .select('name, monthly_value, plan_status, plan')
+        .eq('id', institutionId)
+        .single()
+    ])
+    setPayments(paymentsRes.data || [])
+    setInstitution(instRes.data)
+    setLoading(false)
+  }
+
+  const fmtBRL = (n: number) => n?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) || 'R$ 0,00'
+  const fmtDate = (s: string) => s ? new Date(s + 'T12:00:00').toLocaleDateString('pt-BR') : '—'
+
+  const implPayment = payments.find(p => p.payment_type === 'implementation')
+  const monthlyPayments = payments.filter(p => p.payment_type === 'monthly')
+  const paidMonthly = monthlyPayments.filter(p => p.status === 'paid')
+  const pendingMonthly = monthlyPayments.filter(p => p.status === 'pending')
+  const overdueMonthly = monthlyPayments.filter(p => p.status === 'overdue')
+
+  const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
+    paid:      { label: '✅ Pago',      color: '#16A34A', bg: '#F0FDF4' },
+    pending:   { label: '⏳ Pendente',  color: '#D97706', bg: '#FFFBEB' },
+    overdue:   { label: '🔴 Atrasado',  color: '#DC2626', bg: '#FEF2F2' },
+    cancelled: { label: '❌ Cancelado', color: '#9CA3AF', bg: '#F3F4F6' },
+  }
+
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
+      <Loader2 size={28} color="#00A896" className="animate-spin" />
+    </div>
+  )
+
+  return (
+    <div style={{ maxWidth: 700, display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* Resumo financeiro */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+        {[
+          { label: 'Mensalidade', value: fmtBRL(institution?.monthly_value || 0), color: '#00A896', icon: '💰' },
+          { label: 'Pagas', value: paidMonthly.length, color: '#16A34A', icon: '✅' },
+          { label: 'Pendentes', value: pendingMonthly.length + overdueMonthly.length, color: overdueMonthly.length > 0 ? '#DC2626' : '#D97706', icon: overdueMonthly.length > 0 ? '🔴' : '⏳' },
+        ].map(k => (
+          <div key={k.label} style={{ background: '#fff', borderRadius: 14, border: '1px solid #E2E8F0', padding: '16px 20px' }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 6px' }}>{k.icon} {k.label}</p>
+            <p style={{ fontSize: 22, fontWeight: 800, color: k.color, margin: 0 }}>{k.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Implantação */}
+      {implPayment && (
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 20 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 14px' }}>Taxa de Implantação</p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <p style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: '0 0 4px' }}>{fmtBRL(implPayment.amount)}</p>
+              <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Vencimento: {fmtDate(implPayment.due_date)}</p>
+              {implPayment.paid_at && <p style={{ fontSize: 12, color: '#16A34A', margin: '2px 0 0' }}>Pago em: {fmtDate(implPayment.paid_at)}</p>}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{
+                padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700,
+                color: statusConfig[implPayment.status]?.color || '#6B7280',
+                background: statusConfig[implPayment.status]?.bg || '#F3F4F6'
+              }}>
+                {statusConfig[implPayment.status]?.label || implPayment.status}
+              </span>
+              {implPayment.asaas_charge_url && implPayment.status !== 'paid' && (
+                <a
+                  href={implPayment.asaas_charge_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ padding: '8px 20px', borderRadius: 10, background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, textDecoration: 'none', display: 'inline-block' }}
+                >
+                  💳 Pagar agora
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mensalidades */}
+      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: 1, margin: 0 }}>Mensalidades</p>
+          <span style={{ fontSize: 12, color: '#94A3B8' }}>{monthlyPayments.length} parcelas</span>
+        </div>
+
+        {monthlyPayments.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center' }}>
+            <DollarSign size={36} color="#E2E8F0" style={{ margin: '0 auto 10px', display: 'block' }} />
+            <p style={{ color: '#94A3B8', fontSize: 14, margin: 0 }}>Nenhuma mensalidade registrada ainda.</p>
+            <p style={{ color: '#CBD5E1', fontSize: 12, margin: '4px 0 0' }}>As mensalidades são geradas após a confirmação do pagamento da implantação.</p>
+          </div>
+        ) : (
+          <div style={{ maxHeight: 480, overflowY: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#F8FAFC' }}>
+                  {['Descrição', 'Valor', 'Vencimento', 'Status', ''].map(h => (
+                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.5 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyPayments.map((p, i) => {
+                  const st = statusConfig[p.status] || statusConfig.pending
+                  const isOverdue = p.status === 'overdue' || (p.status === 'pending' && new Date(p.due_date) < new Date())
+                  return (
+                    <tr key={p.id} style={{ borderTop: '1px solid #F1F5F9', background: i % 2 === 0 ? '#fff' : '#FAFBFC' }}>
+                      <td style={{ padding: '12px 16px', fontSize: 13, color: '#475569' }}>{p.description || 'Mensalidade'}</td>
+                      <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{fmtBRL(p.amount)}</td>
+                      <td style={{ padding: '12px 16px', fontSize: 13, color: isOverdue ? '#DC2626' : '#64748B', fontWeight: isOverdue ? 700 : 400 }}>
+                        {fmtDate(p.due_date)}
+                        {isOverdue && p.status !== 'paid' && <span style={{ fontSize: 10, display: 'block', color: '#DC2626' }}>Em atraso</span>}
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, color: st.color, background: st.bg }}>
+                          {st.label}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        {p.asaas_charge_url && p.status !== 'paid' && (
+                          <a
+                            href={p.asaas_charge_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ padding: '6px 14px', borderRadius: 8, background: isOverdue ? '#DC2626' : '#00A896', color: '#fff', fontSize: 12, fontWeight: 700, textDecoration: 'none', display: 'inline-block', whiteSpace: 'nowrap' }}
+                          >
+                            💳 Pagar
+                          </a>
+                        )}
+                        {p.status === 'paid' && p.paid_at && (
+                          <span style={{ fontSize: 11, color: '#16A34A' }}>Pago em {fmtDate(p.paid_at)}</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Alerta se tem atraso */}
+      {overdueMonthly.length > 0 && (
+        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, padding: 16, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <AlertCircle size={18} color="#DC2626" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#DC2626', margin: '0 0 4px' }}>
+              {overdueMonthly.length} mensalidade{overdueMonthly.length > 1 ? 's' : ''} em atraso
+            </p>
+            <p style={{ fontSize: 12, color: '#B91C1C', margin: 0 }}>
+              Regularize o pagamento para evitar a suspensão do sistema. Em caso de dúvidas, entre em contato com seu consultor.
+            </p>
+          </div>
+        </div>
+      )}
+
+    </div>
+  )
+}
+
 // ─── SystemSettings Principal ─────────────────────────────────────────────────
 const TABS = [
   { id: 'geral',      label: 'Geral',      icon: Building },
+  { id: 'pagamentos', label: 'Pagamentos', icon: DollarSign },
   { id: 'escola',     label: 'Escola',     icon: GraduationCap },
   { id: 'identidade', label: 'Identidade', icon: Palette },
   { id: 'whatsapp',   label: 'WhatsApp',   icon: MessageCircle },
@@ -706,6 +887,7 @@ export default function SystemSettings() {
       {activeTab === 'geral' && <GeralTab institutionId={institutionId} onToast={showToast} />}
       {activeTab === 'identidade' && <IdentidadeTab institutionId={institutionId} onToast={showToast} />}
       {activeTab === 'whatsapp' && <WhatsAppTab institutionId={institutionId} />}
+      {activeTab === 'pagamentos' && <PagamentosTab institutionId={institutionId} />}
       {activeTab === 'escola' && (
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 28, maxWidth: 500 }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', marginBottom: 6 }}>Configurações da Escola</h3>
