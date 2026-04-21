@@ -4,214 +4,265 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 const BREVO_KEY = Deno.env.get('BREVO_API_KEY')
 const FROM_EMAIL = 'noreply@aionedu.com.br'
 const FROM_NAME = 'Áion Edu'
+const LOGO_URL = 'https://www.aionedu.com.br/aion-logo-full.png'
+const SUPPORT_PHONE = '(83) 98556-6393'
+const SUPPORT_WA = 'https://wa.me/5583985556393'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const header = `
-  <div style="background:linear-gradient(135deg,#00523C,#00A896);padding:36px 32px;text-align:center">
-    <span style="font-size:32px;font-weight:900;color:#fff;font-family:Arial,sans-serif">Á</span>
-    <h1 style="color:#fff;margin:8px 0 0;font-size:22px;font-weight:800;font-family:Arial,sans-serif">Áion Edu</h1>
-    <p style="color:rgba(255,255,255,0.8);margin:6px 0 0;font-size:13px;font-family:Arial,sans-serif">Sistema de Gestão Educacional</p>
-  </div>
+const wrap = (content: string, preheader = '') => `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Áion Edu</title>
+  ${preheader ? `<span style="display:none;max-height:0;overflow:hidden;">${preheader}</span>` : ''}
+</head>
+<body style="margin:0;padding:0;background:#F0F4F8;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F0F4F8;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+          <!-- HEADER -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#00523C 0%,#00A896 100%);border-radius:16px 16px 0 0;padding:36px 40px;text-align:center;">
+              <img src="${LOGO_URL}" alt="Áion Edu" height="48" style="display:block;margin:0 auto;filter:brightness(0) invert(1);" />
+              <p style="color:rgba(255,255,255,0.85);margin:12px 0 0;font-size:13px;letter-spacing:0.5px;">Sistema de Gestão Educacional</p>
+            </td>
+          </tr>
+
+          <!-- CONTENT -->
+          <tr>
+            <td style="background:#ffffff;padding:40px;border-left:1px solid #E2E8F0;border-right:1px solid #E2E8F0;">
+              ${content}
+            </td>
+          </tr>
+
+          <!-- FOOTER -->
+          <tr>
+            <td style="background:#1A2B4A;border-radius:0 0 16px 16px;padding:28px 40px;text-align:center;">
+              <p style="color:rgba(255,255,255,0.9);font-size:13px;margin:0 0 8px;font-weight:600;">Áion Soluções Tecnológicas LTDA</p>
+              <p style="color:rgba(255,255,255,0.6);font-size:12px;margin:0 0 16px;">CNPJ: 65.835.064/0001-58 · Patos/PB</p>
+              <table cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                <tr>
+                  <td style="padding:0 8px;">
+                    <a href="mailto:contato@aionedu.com.br" style="color:rgba(255,255,255,0.7);font-size:12px;text-decoration:none;">contato@aionedu.com.br</a>
+                  </td>
+                  <td style="color:rgba(255,255,255,0.3);font-size:12px;">|</td>
+                  <td style="padding:0 8px;">
+                    <a href="${SUPPORT_WA}" style="color:rgba(255,255,255,0.7);font-size:12px;text-decoration:none;">${SUPPORT_PHONE}</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="color:rgba(255,255,255,0.3);font-size:11px;margin:16px 0 0;">© ${new Date().getFullYear()} Áion Edu · Todos os direitos reservados</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
 `
 
-const footer = `
-  <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:20px 32px;text-align:center">
-    <p style="color:#94A3B8;font-size:12px;margin:0;font-family:Arial,sans-serif">
-      Áion Soluções Tecnológicas LTDA · CNPJ: 65.835.064/0001-58<br>
-      Dúvidas? <strong>(83) 98556-6393</strong> · contato@aionedu.com.br
-    </p>
-  </div>
+const btn = (text: string, url: string, color = '#00A896') => `
+  <table cellpadding="0" cellspacing="0" style="margin:24px auto;">
+    <tr>
+      <td style="background:${color};border-radius:12px;">
+        <a href="${url}" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;letter-spacing:0.3px;">${text}</a>
+      </td>
+    </tr>
+  </table>
 `
 
-const wrap = (content: string) => `
-  <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 4px 24px rgba(0,0,0,0.06)">
-    ${header}
-    <div style="padding:36px 32px">${content}</div>
-    ${footer}
-  </div>
+const badge = (text: string, color = '#00A896') => `
+  <span style="display:inline-block;background:${color}18;color:${color};font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;border:1px solid ${color}40;">${text}</span>
 `
+
+const infoBox = (content: string, bgColor = '#F0FDF4', borderColor = '#BBF7D0', textColor = '#166534') => `
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;">
+    <tr>
+      <td style="background:${bgColor};border:1px solid ${borderColor};border-radius:12px;padding:20px;">
+        <p style="color:${textColor};margin:0;font-size:14px;line-height:1.7;">${content}</p>
+      </td>
+    </tr>
+  </table>
+`
+
+const divider = () => `<hr style="border:none;border-top:1px solid #E2E8F0;margin:24px 0;">`
 
 const templates: Record<string, (data: any) => { subject: string; html: string }> = {
 
   new_institution: (data) => ({
-    subject: `✅ Sua conta está ativa — Bem-vindo ao Áion Edu!`,
+    subject: `🎉 Conta ativa — Bem-vindo ao Áion Edu, ${data.institution_name}!`,
     html: wrap(`
-      <h2 style="color:#1A2B4A;font-size:20px;margin:0 0 16px">🎉 Sua conta está ativa!</h2>
-      <p style="color:#475569;line-height:1.7;margin:0 0 20px">
-        Olá! O pagamento da implantação de <strong>${data.institution_name}</strong> foi confirmado e sua conta já está liberada para acesso.
+      <p style="margin:0 0 4px;">${badge('✅ Acesso liberado', '#16A34A')}</p>
+      <h1 style="color:#1A2B4A;font-size:24px;font-weight:800;margin:16px 0 8px;">Sua conta está ativa!</h1>
+      <p style="color:#475569;font-size:15px;line-height:1.7;margin:0 0 24px;">
+        Olá! O pagamento da implantação de <strong>${data.institution_name}</strong> foi confirmado
+        e sua conta já está liberada para acesso completo ao sistema.
       </p>
-      <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:20px;margin-bottom:24px">
-        <p style="color:#166534;font-weight:700;margin:0 0 10px">✅ O que você pode fazer agora:</p>
-        <ul style="color:#15803D;margin:0;padding-left:20px;line-height:2.2">
-          <li>Acessar o painel de gestão</li>
-          <li>Cadastrar sua equipe</li>
-          <li>Configurar o WhatsApp Business</li>
-          <li>Criar sua primeira campanha de matrícula</li>
-        </ul>
-      </div>
-      <div style="text-align:center;margin-bottom:24px">
-        <a href="${data.login_url || 'https://app.aionedu.com.br/login'}"
-           style="display:inline-block;background:linear-gradient(135deg,#00523C,#00A896);color:#fff;text-decoration:none;padding:14px 36px;border-radius:12px;font-weight:700;font-size:16px">
-          Acessar o sistema →
-        </a>
-      </div>
-    `)
+      ${infoBox(`
+        <strong style="color:#166534;display:block;margin-bottom:12px;">✅ O que você pode fazer agora:</strong>
+        <table cellpadding="0" cellspacing="0">
+          <tr><td style="padding:4px 0;color:#15803D;">📊 &nbsp;Acessar o painel de gestão</td></tr>
+          <tr><td style="padding:4px 0;color:#15803D;">👥 &nbsp;Cadastrar sua equipe</td></tr>
+          <tr><td style="padding:4px 0;color:#15803D;">💬 &nbsp;Configurar o WhatsApp Business</td></tr>
+          <tr><td style="padding:4px 0;color:#15803D;">🎯 &nbsp;Criar sua primeira campanha de matrícula</td></tr>
+        </table>
+      `)}
+      ${btn('Acessar o sistema →', data.login_url || 'https://app.aionedu.com.br/login')}
+      ${divider()}
+      <p style="color:#94A3B8;font-size:13px;text-align:center;margin:0;">
+        Seu consultor entrará em contato para agendar o kickoff de implantação.<br>
+        Dúvidas? <a href="${SUPPORT_WA}" style="color:#00A896;text-decoration:none;font-weight:600;">Fale conosco via WhatsApp</a>
+      </p>
+    `, 'Sua conta Áion Edu está ativa! Acesse agora.')
   }),
 
   payment_link: (data) => ({
-    subject: `💳 Link de pagamento — Implantação ${data.institution_name}`,
+    subject: `💳 Link de pagamento — ${data.institution_name}`,
     html: wrap(`
-      <h2 style="color:#1A2B4A;font-size:20px;margin:0 0 16px">Pagamento da implantação</h2>
-      <p style="color:#475569;line-height:1.7;margin:0 0 20px">
+      <p style="margin:0 0 4px;">${badge('💳 Pagamento pendente', '#D97706')}</p>
+      <h1 style="color:#1A2B4A;font-size:24px;font-weight:800;margin:16px 0 8px;">Taxa de implantação</h1>
+      <p style="color:#475569;font-size:15px;line-height:1.7;margin:0 0 24px;">
         Olá! Sua escola <strong>${data.institution_name}</strong> foi cadastrada no sistema Áion Edu.
-        Para ativar o acesso, realize o pagamento da taxa de implantação.
+        Para liberar o acesso completo, realize o pagamento da taxa de implantação.
       </p>
-      <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:20px;margin-bottom:24px">
-        <p style="color:#92400E;font-weight:700;margin:0 0 10px">📋 Detalhes do pagamento:</p>
-        <p style="color:#78350F;margin:6px 0">💰 Valor: <strong>R$ ${data.value}</strong></p>
-        <p style="color:#78350F;margin:6px 0">📅 Vencimento: <strong>${data.due_date}</strong></p>
-        <p style="color:#78350F;margin:6px 0">💳 Forma: <strong>${data.billing_type || 'PIX/Boleto'}</strong></p>
-      </div>
-      ${data.payment_link ? `
-      <div style="text-align:center;margin-bottom:24px">
-        <a href="${data.payment_link}"
-           style="display:inline-block;background:linear-gradient(135deg,#D97706,#F59E0B);color:#fff;text-decoration:none;padding:14px 36px;border-radius:12px;font-weight:700;font-size:16px">
-          💳 Pagar agora →
-        </a>
-      </div>
-      ` : ''}
-      <p style="color:#475569;font-size:13px;line-height:1.6;margin:0">
-        Após a confirmação do pagamento, você receberá os dados de acesso ao sistema por e-mail.
+      ${infoBox(`
+        <strong style="color:#92400E;display:block;margin-bottom:12px;">📋 Detalhes do pagamento:</strong>
+        <table cellpadding="0" cellspacing="0" width="100%">
+          <tr>
+            <td style="padding:6px 0;color:#78350F;font-size:14px;">💰 Valor</td>
+            <td style="padding:6px 0;color:#78350F;font-size:14px;font-weight:700;text-align:right;">R$ ${data.value}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#78350F;font-size:14px;">📅 Vencimento</td>
+            <td style="padding:6px 0;color:#78350F;font-size:14px;font-weight:700;text-align:right;">${data.due_date}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#78350F;font-size:14px;">💳 Forma</td>
+            <td style="padding:6px 0;color:#78350F;font-size:14px;font-weight:700;text-align:right;">${data.billing_type || 'PIX / Boleto'}</td>
+          </tr>
+        </table>
+      `, '#FFFBEB', '#FDE68A', '#92400E')}
+      ${data.payment_link ? btn('💳 Pagar agora →', data.payment_link, '#D97706') : ''}
+      <p style="color:#475569;font-size:13px;line-height:1.6;text-align:center;margin:0;">
+        Após a confirmação, você receberá os dados de acesso por e-mail.<br>
+        <a href="${SUPPORT_WA}" style="color:#00A896;text-decoration:none;font-weight:600;">Dúvidas? Fale com seu consultor</a>
       </p>
-    `)
+    `, 'Pague a implantação e libere o acesso ao Áion Edu.')
   }),
 
   contract_sign: (data) => ({
     subject: `📝 Contrato para assinatura — ${data.institution_name}`,
     html: wrap(`
-      <h2 style="color:#1A2B4A;font-size:20px;margin:0 0 16px">Contrato de prestação de serviços</h2>
-      <p style="color:#475569;line-height:1.7;margin:0 0 20px">
+      <p style="margin:0 0 4px;">${badge('📝 Assinatura necessária', '#6366F1')}</p>
+      <h1 style="color:#1A2B4A;font-size:24px;font-weight:800;margin:16px 0 8px;">Contrato de prestação de serviços</h1>
+      <p style="color:#475569;font-size:15px;line-height:1.7;margin:0 0 24px;">
         Olá, <strong>${data.signer_name}</strong>!<br>
-        Segue o contrato da escola <strong>${data.institution_name}</strong> para assinatura digital.
+        Segue o contrato da escola <strong>${data.institution_name}</strong> para assinatura digital com validade jurídica.
       </p>
-      <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:12px;padding:20px;margin-bottom:24px">
-        <p style="color:#3730A3;font-weight:700;margin:0 0 8px">📋 Informações do contrato:</p>
-        <p style="color:#4338CA;margin:4px 0">O documento tem validade jurídica e usa assinatura digital certificada.</p>
-      </div>
-      ${data.sign_url ? `
-      <div style="text-align:center;margin-bottom:24px">
-        <a href="${data.sign_url}"
-           style="display:inline-block;background:linear-gradient(135deg,#6366F1,#7C3AED);color:#fff;text-decoration:none;padding:14px 36px;border-radius:12px;font-weight:700;font-size:16px">
-          📝 Assinar contrato →
-        </a>
-      </div>
-      ` : ''}
-    `)
+      ${infoBox(`
+        <strong style="color:#3730A3;display:block;margin-bottom:8px;">🔒 Assinatura digital certificada</strong>
+        <span style="color:#4338CA;font-size:13px;">O documento possui validade jurídica e é processado pela plataforma Autentique, certificada pelo ICP-Brasil.</span>
+      `, '#EEF2FF', '#C7D2FE', '#3730A3')}
+      ${data.sign_url ? btn('📝 Assinar contrato →', data.sign_url, '#6366F1') : ''}
+      <p style="color:#94A3B8;font-size:13px;text-align:center;margin:0;">
+        Dúvidas sobre o contrato? <a href="${SUPPORT_WA}" style="color:#00A896;text-decoration:none;font-weight:600;">Fale conosco</a>
+      </p>
+    `, 'Assine seu contrato Áion Edu com validade jurídica.')
   }),
 
   suspended: (data) => ({
     subject: `⚠️ Acesso suspenso — ${data.institution_name}`,
     html: wrap(`
-      <h2 style="color:#DC2626;font-size:20px;margin:0 0 16px">⚠️ Acesso suspenso</h2>
-      <p style="color:#475569;line-height:1.7;margin:0 0 20px">
+      <p style="margin:0 0 4px;">${badge('⚠️ Acesso suspenso', '#DC2626')}</p>
+      <h1 style="color:#DC2626;font-size:24px;font-weight:800;margin:16px 0 8px;">Acesso temporariamente suspenso</h1>
+      <p style="color:#475569;font-size:15px;line-height:1.7;margin:0 0 24px;">
         Olá! O acesso da escola <strong>${data.institution_name}</strong> foi suspenso por falta de pagamento
         ${data.dias_atraso && data.dias_atraso !== '0' ? `(${data.dias_atraso} dias em atraso)` : ''}.
       </p>
-      <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:20px;margin-bottom:24px">
-        <p style="color:#991B1B;font-weight:700;margin:0 0 8px">Para reativar o acesso:</p>
-        <p style="color:#B91C1C;margin:4px 0">Regularize o pagamento pendente e entre em contato com seu consultor.</p>
-      </div>
-      <div style="text-align:center;margin-bottom:24px">
-        <a href="https://wa.me/5583985556393"
-           style="display:inline-block;background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;text-decoration:none;padding:14px 36px;border-radius:12px;font-weight:700;font-size:16px">
-          💬 Falar com suporte
-        </a>
-      </div>
-    `)
+      ${infoBox(`
+        <strong style="color:#991B1B;display:block;margin-bottom:8px;">Para reativar o acesso:</strong>
+        <span style="color:#B91C1C;font-size:14px;">Regularize o pagamento pendente e entre em contato com seu consultor para reativação imediata.</span>
+      `, '#FEF2F2', '#FECACA', '#991B1B')}
+      ${btn('💬 Falar com suporte', SUPPORT_WA, '#DC2626')}
+    `, 'Seu acesso foi suspenso. Regularize para reativar.')
   }),
 
   reactivated: (data) => ({
     subject: `✅ Acesso reativado — ${data.institution_name}`,
     html: wrap(`
-      <h2 style="color:#16A34A;font-size:20px;margin:0 0 16px">✅ Acesso reativado!</h2>
-      <p style="color:#475569;line-height:1.7;margin:0 0 20px">
-        Olá! O acesso da escola <strong>${data.institution_name}</strong> foi reativado com sucesso.
+      <p style="margin:0 0 4px;">${badge('✅ Acesso reativado', '#16A34A')}</p>
+      <h1 style="color:#16A34A;font-size:24px;font-weight:800;margin:16px 0 8px;">Acesso reativado com sucesso!</h1>
+      <p style="color:#475569;font-size:15px;line-height:1.7;margin:0 0 24px;">
+        Olá! O acesso da escola <strong>${data.institution_name}</strong> foi reativado.
+        Você já pode acessar o sistema normalmente.
       </p>
-      <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:20px;margin-bottom:24px">
-        <p style="color:#166534;font-weight:700;margin:0 0 8px">✅ Seu acesso está liberado!</p>
-        <p style="color:#15803D;margin:4px 0">Acesse o sistema normalmente com suas credenciais.</p>
-      </div>
-      <div style="text-align:center;margin-bottom:24px">
-        <a href="${data.link_acesso || 'https://app.aionedu.com.br/login'}"
-           style="display:inline-block;background:linear-gradient(135deg,#00523C,#00A896);color:#fff;text-decoration:none;padding:14px 36px;border-radius:12px;font-weight:700;font-size:16px">
-          Acessar o sistema →
-        </a>
-      </div>
-    `)
+      ${infoBox(`
+        <strong style="color:#166534;display:block;margin-bottom:8px;">✅ Tudo certo!</strong>
+        <span style="color:#15803D;font-size:14px;">Seu pagamento foi confirmado e o acesso está liberado. Bem-vindo de volta!</span>
+      `)}
+      ${btn('Acessar o sistema →', data.link_acesso || 'https://app.aionedu.com.br/login')}
+    `, 'Seu acesso ao Áion Edu foi reativado!')
   }),
 
   overdue_1: (data) => ({
-    subject: `⚠️ Pagamento em atraso — ${data.institution_name}`,
+    subject: `⚠️ Lembrete — Pagamento em atraso · ${data.institution_name}`,
     html: wrap(`
-      <h2 style="color:#D97706;font-size:20px;margin:0 0 16px">⚠️ Lembrete de pagamento</h2>
-      <p style="color:#475569;line-height:1.7;margin:0 0 20px">
+      <p style="margin:0 0 4px;">${badge('⚠️ Pagamento em atraso', '#D97706')}</p>
+      <h1 style="color:#D97706;font-size:24px;font-weight:800;margin:16px 0 8px;">Lembrete de pagamento</h1>
+      <p style="color:#475569;font-size:15px;line-height:1.7;margin:0 0 24px;">
         Olá! Identificamos que a mensalidade da escola <strong>${data.institution_name}</strong>
         está com <strong>${data.dias_atraso} dias</strong> de atraso.
       </p>
-      <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:20px;margin-bottom:24px">
-        <p style="color:#92400E;margin:0">Para evitar a suspensão do sistema, realize o pagamento o quanto antes.</p>
-      </div>
-      ${data.payment_link ? `
-      <div style="text-align:center;margin-bottom:24px">
-        <a href="${data.payment_link}"
-           style="display:inline-block;background:linear-gradient(135deg,#D97706,#F59E0B);color:#fff;text-decoration:none;padding:14px 36px;border-radius:12px;font-weight:700;font-size:16px">
-          💳 Pagar agora →
-        </a>
-      </div>
-      ` : ''}
-    `)
+      ${infoBox(`
+        <span style="color:#92400E;font-size:14px;">Para evitar a suspensão do sistema, regularize o pagamento o quanto antes.</span>
+      `, '#FFFBEB', '#FDE68A', '#92400E')}
+      ${data.payment_link ? btn('💳 Pagar agora →', data.payment_link, '#D97706') : ''}
+      <p style="color:#94A3B8;font-size:13px;text-align:center;margin:0;">
+        <a href="${SUPPORT_WA}" style="color:#00A896;text-decoration:none;font-weight:600;">Fale com seu consultor</a>
+      </p>
+    `, 'Você tem um pagamento em atraso. Regularize agora.')
   }),
 
   overdue_2: (data) => ({
-    subject: `🔴 Urgente — Pagamento em atraso ${data.institution_name}`,
+    subject: `🔴 2º aviso — Pagamento urgente · ${data.institution_name}`,
     html: wrap(`
-      <h2 style="color:#DC2626;font-size:20px;margin:0 0 16px">🔴 2º aviso — Pagamento urgente</h2>
-      <p style="color:#475569;line-height:1.7;margin:0 0 20px">
+      <p style="margin:0 0 4px;">${badge('🔴 2º aviso urgente', '#DC2626')}</p>
+      <h1 style="color:#DC2626;font-size:24px;font-weight:800;margin:16px 0 8px;">Pagamento urgente</h1>
+      <p style="color:#475569;font-size:15px;line-height:1.7;margin:0 0 24px;">
         Olá! A mensalidade da escola <strong>${data.institution_name}</strong> está com
         <strong>${data.dias_atraso} dias</strong> de atraso. Regularize imediatamente para evitar a suspensão.
       </p>
-      ${data.payment_link ? `
-      <div style="text-align:center;margin-bottom:24px">
-        <a href="${data.payment_link}"
-           style="display:inline-block;background:linear-gradient(135deg,#DC2626,#B91C1C);color:#fff;text-decoration:none;padding:14px 36px;border-radius:12px;font-weight:700;font-size:16px">
-          💳 Regularizar agora →
-        </a>
-      </div>
-      ` : ''}
-    `)
+      ${data.payment_link ? btn('💳 Regularizar agora →', data.payment_link, '#DC2626') : ''}
+      <p style="color:#94A3B8;font-size:13px;text-align:center;margin:0;">
+        <a href="${SUPPORT_WA}" style="color:#00A896;text-decoration:none;font-weight:600;">Fale com seu consultor</a>
+      </p>
+    `, 'Pagamento urgente — evite a suspensão do sistema.')
   }),
 
   overdue_3: (data) => ({
-    subject: `🚨 Aviso de suspensão — ${data.institution_name}`,
+    subject: `🚨 Aviso final — Suspensão em breve · ${data.institution_name}`,
     html: wrap(`
-      <h2 style="color:#DC2626;font-size:20px;margin:0 0 16px">🚨 Aviso final antes da suspensão</h2>
-      <p style="color:#475569;line-height:1.7;margin:0 0 20px">
+      <p style="margin:0 0 4px;">${badge('🚨 Aviso final', '#DC2626')}</p>
+      <h1 style="color:#DC2626;font-size:24px;font-weight:800;margin:16px 0 8px;">Aviso final antes da suspensão</h1>
+      <p style="color:#475569;font-size:15px;line-height:1.7;margin:0 0 24px;">
         Olá! O acesso da escola <strong>${data.institution_name}</strong> será suspenso em
         <strong>${data.data_suspensao || 'breve'}</strong> por falta de pagamento.
       </p>
-      ${data.payment_link ? `
-      <div style="text-align:center;margin-bottom:24px">
-        <a href="${data.payment_link}"
-           style="display:inline-block;background:linear-gradient(135deg,#DC2626,#B91C1C);color:#fff;text-decoration:none;padding:14px 36px;border-radius:12px;font-weight:700;font-size:16px">
-          💳 Evitar suspensão →
-        </a>
-      </div>
-      ` : ''}
-    `)
+      ${infoBox(`
+        <span style="color:#991B1B;font-size:14px;font-weight:600;">⏰ Esta é sua última chance de evitar a suspensão do sistema.</span>
+      `, '#FEF2F2', '#FECACA', '#991B1B')}
+      ${data.payment_link ? btn('🚨 Evitar suspensão →', data.payment_link, '#DC2626') : ''}
+    `, 'Suspensão iminente — regularize agora.')
   }),
 
 }
@@ -226,7 +277,7 @@ serve(async (req) => {
     if (!BREVO_KEY) throw new Error('BREVO_API_KEY não configurada nos secrets do Supabase')
 
     const template = templates[type]
-    if (!template) throw new Error(`Template "${type}" não encontrado. Templates disponíveis: ${Object.keys(templates).join(', ')}`)
+    if (!template) throw new Error(`Template "${type}" não encontrado. Disponíveis: ${Object.keys(templates).join(', ')}`)
 
     const { subject, html } = template(data || {})
 

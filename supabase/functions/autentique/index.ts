@@ -142,47 +142,54 @@ serve(async (req) => {
     const document = autData.data?.createDocument
     const documentId = document?.id
 
-    // 7. Buscar link de assinatura (segunda chamada pois vem null na criação)
+    // 7. Buscar link de assinatura com retry
     let signUrl: string | null = null
 
     if (documentId) {
-      await new Promise(r => setTimeout(r, 3000))
+      // Tenta até 3 vezes com intervalo de 2 segundos
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        await new Promise(r => setTimeout(r, 2000))
 
-      const fetchQuery = `
-        query {
-          document(id: "${documentId}") {
-            id
-            signatures {
-              public_id
-              name
-              email
-              link { short_link }
+        const fetchQuery = `
+          query {
+            document(id: "${documentId}") {
+              id
+              signatures {
+                public_id
+                name
+                email
+                link { short_link }
+              }
             }
           }
+        `
+
+        const fetchRes = await fetch(AUTENTIQUE_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${AUTENTIQUE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ query: fetchQuery }),
+        })
+
+        const fetchData = await fetchRes.json()
+        console.log(`[autentique] attempt ${attempt} fetch:`, JSON.stringify(fetchData))
+
+        const sigs = fetchData?.data?.document?.signatures || []
+        const signerSig = sigs.find((s: any) => s.email === signer_email)
+          || sigs.find((s: any) => s.email !== 'contato@aionedu.com.br')
+          || sigs[sigs.length - 1]
+
+        signUrl = signerSig?.link?.short_link || null
+
+        if (signUrl) {
+          console.log('[autentique] signUrl encontrado:', signUrl)
+          break
         }
-      `
 
-      const fetchRes = await fetch(AUTENTIQUE_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${AUTENTIQUE_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ query: fetchQuery }),
-      })
-
-      const fetchData = await fetchRes.json()
-      console.log('[autentique] fetch signatures:', JSON.stringify(fetchData))
-
-      const sigs = fetchData?.data?.document?.signatures || []
-      const signerSig = sigs.find((s: any) =>
-        s.email === signer_email
-      ) || sigs.find((s: any) =>
-        s.email !== 'contato@aionedu.com.br'
-      ) || sigs[sigs.length - 1]
-
-      signUrl = signerSig?.link?.short_link || null
-      console.log('[autentique] signUrl:', signUrl)
+        console.log(`[autentique] attempt ${attempt}: link ainda null, tentando novamente...`)
+      }
     }
 
     // 8. Salvar no banco
