@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Save, Upload, Building, Mail, Phone, Globe, Palette,
   MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
@@ -27,8 +27,13 @@ function GeralTab({ institutionId, onToast }: { institutionId: string; onToast: 
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const mountedRef = useRef(true)
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    mountedRef.current = true
+    load()
+    return () => { mountedRef.current = false }
+  }, [])
 
   const load = async () => {
     setLoading(true)
@@ -37,8 +42,10 @@ function GeralTab({ institutionId, onToast }: { institutionId: string; onToast: 
       .select('name, email, phone, city, state, cnpj, plan, plan_status, monthly_value, billing_due_day, trial_ends_at')
       .eq('id', institutionId)
       .single()
-    if (inst) setData(inst as any)
-    setLoading(false)
+    if (mountedRef.current) {
+      if (inst) setData(inst as any)
+      setLoading(false)
+    }
   }
 
   const save = async (e: React.FormEvent) => {
@@ -155,12 +162,17 @@ function IdentidadeTab({ institutionId, onToast }: { institutionId: string; onTo
   const [institutionName, setInstitutionName] = useState('')
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const mountedRef = useRef(true)
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    mountedRef.current = true
+    load()
+    return () => { mountedRef.current = false }
+  }, [])
 
   const load = async () => {
     const { data } = await supabase.from('institutions').select('name,logo_url,primary_color,secondary_color').eq('id', institutionId).maybeSingle()
-    if (data) {
+    if (mountedRef.current && data) {
       setInstitutionName(data.name ?? '')
       setLogoUrl(data.logo_url ?? null)
       setPrimaryColor(data.primary_color ?? '#00A896')
@@ -260,10 +272,13 @@ function BotConfigModal({ institutionId, onClose }: { institutionId: string; onC
   const [newFaqQ, setNewFaqQ] = useState('')
   const [newFaqA, setNewFaqA] = useState('')
 
+  const botMountedRef = useRef(true)
   useEffect(() => {
+    botMountedRef.current = true
     supabase.from('whatsapp_bot_config').select('*').eq('institution_id', institutionId).single()
-      .then(({ data }) => { if (data) setCfg(data as any); setLoading(false) })
-      .catch(() => setLoading(false))
+      .then(({ data }) => { if (botMountedRef.current) { if (data) setCfg(data as any); setLoading(false) } })
+      .catch(() => { if (botMountedRef.current) setLoading(false) })
+    return () => { botMountedRef.current = false }
   }, [])
 
   const save = async () => {
@@ -369,7 +384,12 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [savingFlow, setSavingFlow]   = useState(false)
   const [flowSaved, setFlowSaved]     = useState(false)
 
-  useEffect(() => { loadConfig() }, [])
+  const waMountedRef = useRef(true)
+  useEffect(() => {
+    waMountedRef.current = true
+    loadConfig()
+    return () => { waMountedRef.current = false }
+  }, [])
 
   const loadConfig = async () => {
     setLoading(true)
@@ -377,31 +397,30 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
       const { data } = await supabase.from('institutions')
         .select('whatsapp_phone_id,whatsapp_token,whatsapp_phone_number,whatsapp_display_name,whatsapp_connected')
         .eq('id', institutionId).single()
-      if (data?.whatsapp_phone_id) {
+      if (waMountedRef.current && data?.whatsapp_phone_id) {
         setMetaConfig(data)
         const monthYear = new Date().toISOString().slice(0, 7)
         const { data: u } = await supabase.from('whatsapp_usage')
           .select('conversation_count,monthly_limit')
           .eq('institution_id', institutionId).eq('month_year', monthYear).single()
-        if (u) setUsage({ count: (u as any).conversation_count || 0, limit: (u as any).monthly_limit || 1000 })
-        // Busca número preciso da tabela whatsapp_phone_numbers
+        if (waMountedRef.current && u) setUsage({ count: (u as any).conversation_count || 0, limit: (u as any).monthly_limit || 1000 })
         const { data: pr } = await supabase.from('whatsapp_phone_numbers')
           .select('phone_number,display_name,phone_number_id')
           .eq('institution_id', institutionId)
           .eq('is_active', true)
           .maybeSingle()
-        if (pr) setPhoneRecord(pr)
+        if (waMountedRef.current && pr) setPhoneRecord(pr)
       }
     } catch {}
     try {
       const { data: flowData } = await supabase.from('whatsapp_flows').select('*').eq('institution_id', institutionId).maybeSingle()
-      if (flowData) setFlow(f => ({ ...f, ...flowData }))
+      if (waMountedRef.current && flowData) setFlow(f => ({ ...f, ...flowData }))
     } catch {}
     try {
       const { data: users } = await supabase.from('users').select('id,full_name').eq('institution_id', institutionId)
-      setFlowUsers(users || [])
+      if (waMountedRef.current) setFlowUsers(users || [])
     } catch {}
-    setLoading(false)
+    if (waMountedRef.current) setLoading(false)
   }
 
   const handleConnect = async () => {
@@ -656,8 +675,13 @@ function PagamentosTab({ institutionId }: { institutionId: string }) {
   const [payments, setPayments] = useState<any[]>([])
   const [institution, setInstitution] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const pagMountedRef = useRef(true)
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    pagMountedRef.current = true
+    load()
+    return () => { pagMountedRef.current = false }
+  }, [])
 
   const load = async () => {
     setLoading(true)
@@ -671,9 +695,11 @@ function PagamentosTab({ institutionId }: { institutionId: string }) {
         .eq('id', institutionId)
         .single()
     ])
-    setPayments(paymentsRes.data || [])
-    setInstitution(instRes.data)
-    setLoading(false)
+    if (pagMountedRef.current) {
+      setPayments(paymentsRes.data || [])
+      setInstitution(instRes.data)
+      setLoading(false)
+    }
   }
 
   const fmtBRL = (n: number) => n?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) || 'R$ 0,00'

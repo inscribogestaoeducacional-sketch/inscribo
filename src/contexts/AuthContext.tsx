@@ -226,9 +226,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ── auto-refresh ──────────────────────────────────────
   useEffect(() => {
     if (!session) return
-    const id = setInterval(refreshSession, 45 * 60 * 1000)
+    const id = setInterval(() => {
+      // Só faz refresh se a sessão está próxima de expirar
+      const expiresAt = session.expires_at
+      if (expiresAt && (expiresAt * 1000 - Date.now()) < 5 * 60 * 1000) {
+        refreshSession()
+      }
+    }, 60 * 1000) // checa a cada 1 minuto
     return () => clearInterval(id)
-  }, [session])
+  }, [session?.access_token])
 
   return (
     <AuthContext.Provider value={{ user, session, loading, initializing, signIn, signOut, signUp, refreshSession }}>
