@@ -10,6 +10,9 @@ const CORS = {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
+  // Webhook externo — não valida JWT do Supabase
+  // Valida apenas pelo token da Autentique se configurado
+
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
