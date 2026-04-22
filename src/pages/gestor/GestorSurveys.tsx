@@ -245,7 +245,7 @@ export default function GestorSurveys() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'survey_report',
-          payload: { responses, surveyTitle: survey.title, institutionName: inst?.name ?? 'Escola' },
+          payload: { responses, surveyTitle: survey.title, institutionName: inst?.name ?? 'Escola', customQuestions: survey.custom_questions || [] },
         }),
       })
       const json = await res.json()
