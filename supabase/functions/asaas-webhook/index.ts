@@ -258,7 +258,7 @@ async function generateMonthlyPayments(sb: any, institutionId: string, payment: 
         amount: monthlyValue,
         status: 'pending',
         due_date: dueDateStr,
-        description: `Mensalidade ${dueDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`,
+        description: `Mensalidade ${dueDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'America/Fortaleza' })}`,
       })
     }
 
