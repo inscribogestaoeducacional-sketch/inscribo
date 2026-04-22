@@ -675,6 +675,7 @@ function PagamentosTab({ institutionId }: { institutionId: string }) {
   const [payments, setPayments] = useState<any[]>([])
   const [institution, setInstitution] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [generatingLink, setGeneratingLink] = useState<string | null>(null)
   const pagMountedRef = useRef(true)
 
   useEffect(() => {
@@ -682,6 +683,31 @@ function PagamentosTab({ institutionId }: { institutionId: string }) {
     load()
     return () => { pagMountedRef.current = false }
   }, [])
+
+  const generateLink = async (paymentId: string) => {
+    setGeneratingLink(paymentId)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/asaas-generate-monthly`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ payment_id: paymentId })
+      })
+      const data = await res.json()
+      if (data.ok && data.generated > 0) {
+        await load()
+      } else {
+        alert('Erro ao gerar link: ' + (data.error || 'Tente novamente'))
+      }
+    } catch (e) {
+      alert('Erro ao gerar link')
+    } finally {
+      setGeneratingLink(null)
+    }
+  }
 
   const load = async () => {
     setLoading(true)
@@ -824,6 +850,15 @@ function PagamentosTab({ institutionId }: { institutionId: string }) {
                           >
                             💳 Pagar
                           </a>
+                        )}
+                        {!p.asaas_charge_url && p.status !== 'paid' && (
+                          <button
+                            onClick={() => generateLink(p.id)}
+                            disabled={generatingLink === p.id}
+                            style={{ padding: '6px 14px', borderRadius: 8, background: '#F8FAFC', border: '1px solid #E2E8F0', color: '#64748B', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                          >
+                            {generatingLink === p.id ? '⏳ Gerando...' : '🔗 Gerar link'}
+                          </button>
                         )}
                         {p.status === 'paid' && p.paid_at && (
                           <span style={{ fontSize: 11, color: '#16A34A' }}>Pago em {fmtDate(p.paid_at)}</span>
