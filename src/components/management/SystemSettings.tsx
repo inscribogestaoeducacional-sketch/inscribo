@@ -275,9 +275,14 @@ function BotConfigModal({ institutionId, onClose }: { institutionId: string; onC
   const botMountedRef = useRef(true)
   useEffect(() => {
     botMountedRef.current = true
-    supabase.from('whatsapp_bot_config').select('*').eq('institution_id', institutionId).single()
-      .then(({ data }) => { if (botMountedRef.current) { if (data) setCfg(data as any); setLoading(false) } })
-      .catch(() => { if (botMountedRef.current) setLoading(false) })
+    ;(async () => {
+      try {
+        const { data } = await supabase.from('whatsapp_bot_config').select('*').eq('institution_id', institutionId).single()
+        if (botMountedRef.current) { if (data) setCfg(data as any); setLoading(false) }
+      } catch {
+        if (botMountedRef.current) setLoading(false)
+      }
+    })()
     return () => { botMountedRef.current = false }
   }, [])
 
@@ -687,12 +692,12 @@ function PagamentosTab({ institutionId }: { institutionId: string }) {
   const generateLink = async (paymentId: string) => {
     setGeneratingLink(paymentId)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/asaas-generate-monthly`, {
+      const res = await fetch('https://syxxuumxkhhnoqrxporj.supabase.co/functions/v1/asaas-generate-monthly', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5eHh1dW14a2hobm9xcnhwb3JqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM4NzYwNTMsImV4cCI6MjA1OTQ1MjA1M30.tOCAoMTeAzwHJFmXbzvBbKFIQLNpvFNIwfBRNmhHXP0',
+          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5eHh1dW14a2hobm9xcnhwb3JqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM4NzYwNTMsImV4cCI6MjA1OTQ1MjA1M30.tOCAoMTeAzwHJFmXbzvBbKFIQLNpvFNIwfBRNmhHXP0',
         },
         body: JSON.stringify({ payment_id: paymentId })
       })
