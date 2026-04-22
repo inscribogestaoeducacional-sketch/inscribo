@@ -341,15 +341,17 @@ export default function InstitutionDetails() {
   }
 
   const handleResendPaymentEmail = async (payment: any) => {
+    const isMonthly = payment.payment_type === 'monthly'
     try {
       await supabase.functions.invoke('send-email', {
         body: {
-          type: 'payment_link',
+          type: isMonthly ? 'monthly_payment' : 'payment_link',
           to: institution?.email,
           data: {
             institution_name: institution?.name,
             value: fmtBRL(payment.amount),
             due_date: fmtDate(payment.due_date),
+            description: payment.description || (isMonthly ? 'Mensalidade' : 'Taxa de implantação'),
             billing_type: 'PIX/Boleto',
             payment_link: payment.asaas_charge_url || '',
           }
@@ -357,6 +359,27 @@ export default function InstitutionDetails() {
       })
       showToast('Email enviado!')
     } catch { showToast('Erro ao enviar email.', false) }
+  }
+
+  const handleGenerateLink = async (paymentId: string) => {
+    try {
+      const res = await fetch('https://syxxuumxkhhnoqrxporj.supabase.co/functions/v1/asaas-generate-monthly', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5eHh1dW14a2hobm9xcnhwb3JqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM4NzYwNTMsImV4cCI6MjA1OTQ1MjA1M30.tOCAoMTeAzwHJFmXbzvBbKFIQLNpvFNIwfBRNmhHXP0',
+          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5eHh1dW14a2hobm9xcnhwb3JqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM4NzYwNTMsImV4cCI6MjA1OTQ1MjA1M30.tOCAoMTeAzwHJFmXbzvBbKFIQLNpvFNIwfBRNmhHXP0',
+        },
+        body: JSON.stringify({ payment_id: paymentId })
+      })
+      const data = await res.json()
+      if (data.ok && data.generated > 0) {
+        showToast('Link gerado com sucesso!')
+        await loadAll()
+      } else {
+        showToast('Erro ao gerar link: ' + (data.error || 'Tente novamente'), false)
+      }
+    } catch { showToast('Erro ao gerar link.', false) }
   }
 
   const handleSendWhatsAppPayment = (payment: any) => {
@@ -887,20 +910,7 @@ export default function InstitutionDetails() {
                                 )}
                                 {!p.asaas_charge_url && p.status !== 'paid' && p.payment_type === 'monthly' && (
                                   <button
-                                    onClick={async () => {
-                                      const res = await fetch('https://syxxuumxkhhnoqrxporj.supabase.co/functions/v1/asaas-generate-monthly', {
-                                        method: 'POST',
-                                        headers: {
-                                          'Content-Type': 'application/json',
-                                          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5eHh1dW14a2hobm9xcnhwb3JqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM4NzYwNTMsImV4cCI6MjA1OTQ1MjA1M30.tOCAoMTeAzwHJFmXbzvBbKFIQLNpvFNIwfBRNmhHXP0',
-                                          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5eHh1dW14a2hobm9xcnhwb3JqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM4NzYwNTMsImV4cCI6MjA1OTQ1MjA1M30.tOCAoMTeAzwHJFmXbzvBbKFIQLNpvFNIwfBRNmhHXP0',
-                                        },
-                                        body: JSON.stringify({ payment_id: p.id })
-                                      })
-                                      const data = await res.json()
-                                      if (data.ok) loadAll()
-                                      else alert('Erro: ' + data.error)
-                                    }}
+                                    onClick={() => handleGenerateLink(p.id)}
                                     style={{ padding: '4px 10px', borderRadius: 6, background: '#F8FAFC', border: '1px solid #E2E8F0', color: '#64748B', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
                                   >
                                     🔗 Gerar link
