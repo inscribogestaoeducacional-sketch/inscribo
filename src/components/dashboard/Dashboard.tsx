@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Users,
   Calendar,
@@ -82,6 +82,7 @@ export default function Dashboard() {
     matriculas: 0
   })
   const [loading, setLoading] = useState(true)
+  const mountedRef = useRef(true)
   const [previousMonthKpis, setPreviousMonthKpis] = useState({
     totalLeads: 0,
     visitasHoje: 0,
@@ -90,9 +91,9 @@ export default function Dashboard() {
   })
 
   useEffect(() => {
-    if (user?.institution_id) {
-      loadDashboardData()
-    }
+    mountedRef.current = true
+    if (user?.institution_id) loadDashboardData()
+    return () => { mountedRef.current = false }
   }, [user])
 
   const loadDashboardData = async () => {
@@ -170,6 +171,8 @@ export default function Dashboard() {
       const propostasCount = leads.filter(l => ['proposal', 'enrolled'].includes(l.status)).length
       const matriculasCount = leads.filter(l => l.status === 'enrolled').length
 
+      if (!mountedRef.current) return
+
       setKpis({
         totalLeads,
         visitasHoje,
@@ -202,7 +205,7 @@ export default function Dashboard() {
       console.error('❌ Erro ao carregar dashboard:', error)
       setError('Erro ao carregar dados do dashboard: ' + (error as Error).message)
     } finally {
-      setLoading(false)
+      if (mountedRef.current) setLoading(false)
     }
   }
 

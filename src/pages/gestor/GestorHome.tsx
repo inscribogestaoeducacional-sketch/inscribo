@@ -681,6 +681,33 @@ export default function GestorHome() {
               )
             })}
           </div>
+          {/* Botões Finalizar / Apagar campanha */}
+          {activeCycle && activeCycle.status === 'active' && (
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button
+                onClick={async () => {
+                  if (!confirm('Finalizar a campanha? Isso encerrará o ciclo atual e gerará um relatório final.')) return
+                  await supabase.from('campaign_cycles')
+                    .update({ status: 'finished', finished_at: new Date().toISOString() })
+                    .eq('id', activeCycle.id)
+                  window.location.reload()
+                }}
+                style={{ padding: '10px 20px', borderRadius: 10, background: '#16A34A', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                ✅ Finalizar campanha
+              </button>
+              <button
+                onClick={async () => {
+                  if (!confirm('Apagar campanha? Todos os dados serão removidos e você poderá criar uma nova.')) return
+                  await supabase.from('campaign_cycles').delete().eq('id', activeCycle.id)
+                  window.location.reload()
+                }}
+                style={{ padding: '10px 20px', borderRadius: 10, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                🗑️ Apagar campanha
+              </button>
+            </div>
+          )}
         </div>
       )}
 
