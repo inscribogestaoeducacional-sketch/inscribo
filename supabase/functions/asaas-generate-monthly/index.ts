@@ -19,7 +19,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    // Força geração manual se vier payment_id no body
+    // Forca geracao manual se vier payment_id no body
     let forcePaymentId: string | null = null
     try {
       const body = await req.json()
@@ -95,7 +95,7 @@ serve(async (req) => {
           continue
         }
 
-        // Cria cobrança no Asaas
+        // Cria cobranca no Asaas
         const chargeRes = await fetch(`${ASAAS_URL}/payments`, {
           method: 'POST',
           headers: {
@@ -107,7 +107,7 @@ serve(async (req) => {
             billingType: 'UNDEFINED',
             value: Number(payment.amount),
             dueDate: payment.due_date,
-            description: payment.description || `Mensalidade — ${inst.name}`,
+            description: payment.description || `Mensalidade - ${inst.name}`,
             externalReference: payment.institution_id,
           })
         })
@@ -116,7 +116,7 @@ serve(async (req) => {
         console.log(`[asaas-generate-monthly] charge para ${inst.name}:`, JSON.stringify(charge))
 
         if (!chargeRes.ok) {
-          console.error(`[asaas-generate-monthly] erro ao criar cobrança:`, charge?.errors)
+          console.error(`[asaas-generate-monthly] erro ao criar cobranca:`, charge?.errors)
           continue
         }
 
@@ -144,7 +144,7 @@ serve(async (req) => {
                 institution_name: inst.name,
                 value: Number(payment.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
                 due_date: new Date(payment.due_date + 'T12:00:00').toLocaleDateString('pt-BR'),
-                description: payment.description || `Mensalidade — ${inst.name}`,
+                description: payment.description || `Mensalidade - ${inst.name}`,
                 billing_type: 'PIX / Boleto',
                 payment_link: paymentLink,
               }
