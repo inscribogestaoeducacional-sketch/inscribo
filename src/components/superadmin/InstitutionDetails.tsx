@@ -885,6 +885,27 @@ export default function InstitutionDetails() {
                                     <a href={p.asaas_charge_url} target="_blank" rel="noopener noreferrer" className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg"><ExternalLink className="w-3.5 h-3.5" /></a>
                                   </>
                                 )}
+                                {!p.asaas_charge_url && p.status !== 'paid' && p.payment_type === 'monthly' && (
+                                  <button
+                                    onClick={async () => {
+                                      const res = await fetch('https://syxxuumxkhhnoqrxporj.supabase.co/functions/v1/asaas-generate-monthly', {
+                                        method: 'POST',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5eHh1dW14a2hobm9xcnhwb3JqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM4NzYwNTMsImV4cCI6MjA1OTQ1MjA1M30.tOCAoMTeAzwHJFmXbzvBbKFIQLNpvFNIwfBRNmhHXP0',
+                                          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5eHh1dW14a2hobm9xcnhwb3JqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM4NzYwNTMsImV4cCI6MjA1OTQ1MjA1M30.tOCAoMTeAzwHJFmXbzvBbKFIQLNpvFNIwfBRNmhHXP0',
+                                        },
+                                        body: JSON.stringify({ payment_id: p.id })
+                                      })
+                                      const data = await res.json()
+                                      if (data.ok) loadAll()
+                                      else alert('Erro: ' + data.error)
+                                    }}
+                                    style={{ padding: '4px 10px', borderRadius: 6, background: '#F8FAFC', border: '1px solid #E2E8F0', color: '#64748B', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                                  >
+                                    🔗 Gerar link
+                                  </button>
+                                )}
                                 {p.status === 'pending' && (
                                   <button onClick={() => handleMarkPaid(p.id, false)} className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg"><CheckCircle2 className="w-3.5 h-3.5" /></button>
                                 )}

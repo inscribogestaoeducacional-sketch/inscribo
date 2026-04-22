@@ -160,6 +160,43 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     `, 'Pague a implantação e libere o acesso ao Áion Edu.')
   }),
 
+  monthly_payment: (data) => ({
+    subject: `💳 Mensalidade disponível — ${data.institution_name}`,
+    html: wrap(`
+      <p style="margin:0 0 4px;">${badge('💳 Mensalidade', '#D97706')}</p>
+      <h1 style="color:#1A2B4A;font-size:24px;font-weight:800;margin:16px 0 8px;">Link de pagamento disponível</h1>
+      <p style="color:#475569;font-size:15px;line-height:1.7;margin:0 0 24px;">
+        Olá! O link de pagamento da mensalidade de <strong>${data.institution_name}</strong> já está disponível.
+      </p>
+      ${infoBox(`
+        <strong style="color:#92400E;display:block;margin-bottom:12px;">📋 Detalhes:</strong>
+        <table cellpadding="0" cellspacing="0" width="100%">
+          <tr>
+            <td style="padding:5px 0;color:#78350F;font-size:14px;">📄 Referência</td>
+            <td style="padding:5px 0;color:#78350F;font-size:14px;font-weight:700;text-align:right;">${data.description || 'Mensalidade'}</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;color:#78350F;font-size:14px;">💰 Valor</td>
+            <td style="padding:5px 0;color:#78350F;font-size:14px;font-weight:700;text-align:right;">R$ ${data.value}</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;color:#78350F;font-size:14px;">📅 Vencimento</td>
+            <td style="padding:5px 0;color:#78350F;font-size:14px;font-weight:700;text-align:right;">${data.due_date}</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;color:#78350F;font-size:14px;">💳 Forma</td>
+            <td style="padding:5px 0;color:#78350F;font-size:14px;font-weight:700;text-align:right;">${data.billing_type || 'PIX / Boleto'}</td>
+          </tr>
+        </table>
+      `, '#FFFBEB', '#FDE68A', '#92400E')}
+      ${data.payment_link ? btn('💳 Pagar mensalidade →', data.payment_link, '#D97706') : ''}
+      <p style="color:#475569;font-size:13px;line-height:1.6;text-align:center;margin:0;">
+        Após o pagamento, o status será atualizado automaticamente no sistema.<br>
+        <a href="${SUPPORT_WA}" style="color:#00A896;text-decoration:none;font-weight:600;">Dúvidas? Fale com seu consultor</a>
+      </p>
+    `, `Mensalidade disponível — ${data.institution_name}`)
+  }),
+
   contract_sign: (data) => ({
     subject: `📝 Contrato para assinatura — ${data.institution_name}`,
     html: wrap(`

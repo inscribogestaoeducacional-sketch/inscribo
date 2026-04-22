@@ -138,12 +138,13 @@ serve(async (req) => {
               'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
             },
             body: JSON.stringify({
-              type: 'payment_link',
+              type: 'monthly_payment',
               to: inst.email,
               data: {
                 institution_name: inst.name,
                 value: Number(payment.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
                 due_date: new Date(payment.due_date + 'T12:00:00').toLocaleDateString('pt-BR'),
+                description: payment.description || `Mensalidade — ${inst.name}`,
                 billing_type: 'PIX / Boleto',
                 payment_link: paymentLink,
               }
