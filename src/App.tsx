@@ -30,6 +30,7 @@ import VisitCalendar     from './components/calendar/VisitCalendar'
 import EnrollmentManager from './components/enrollments/EnrollmentManager'
 import WhatsAppHub       from './components/whatsapp/WhatsAppHub'
 import GestorReports     from './components/reports/GestorReports'
+import ClientsModule    from './components/clients/ClientsModule'
 import UserManagement    from './components/management/UserManagement'
 import SystemSettings    from './components/management/SystemSettings'
 import UserProfile       from './components/management/UserProfile'
@@ -264,6 +265,7 @@ function AppContent() {
             <Route path="/atendente" element={<RequireRole roles={['user','school_user']}><AttendantHome /></RequireRole>} />
             <Route path="/dashboard"      element={<Dashboard />} />
             <Route path="/leads"          element={<LeadKanban />} />
+            <Route path="/clients"        element={<ClientsModule />} />
             <Route path="/visits"         element={<VisitCalendar />} />
             <Route path="/enrollments"    element={<EnrollmentManager />} />
             <Route path="/whatsapp"       element={<WhatsAppHub />} />

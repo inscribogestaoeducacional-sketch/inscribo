@@ -10,6 +10,7 @@ import {
 const NAV_CFG = [
   { path: '/home',            label: 'Início',          iconBg: '#E6F7F5', iconColor: '#00A896', Icon: LayoutDashboard, roles: ['admin','manager','user'] },
   { path: '/leads',           label: 'Leads',           iconBg: '#EDE9FE', iconColor: '#8B5CF6', Icon: Users,           roles: ['admin','manager','user'] },
+  { path: '/clients',         label: 'Clientes',        iconBg: '#EFF6FF', iconColor: '#3B82F6', Icon: Users,           roles: ['admin','manager','user'] },
   { path: '/visits',          label: 'Visitas',         iconBg: '#FEF3C7', iconColor: '#F59E0B', Icon: Calendar,        roles: ['admin','manager','user'] },
   { path: '/whatsapp',        label: 'WhatsApp',        iconBg: '#D1FAE5', iconColor: '#10B981', Icon: MessageCircle,   roles: ['admin','manager','user'] },
   { path: '/reports',         label: 'Relatórios',      iconBg: '#DBEAFE', iconColor: '#3B82F6', Icon: BarChart3,       roles: ['admin','manager'] },
