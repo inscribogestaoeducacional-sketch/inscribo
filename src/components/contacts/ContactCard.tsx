@@ -138,7 +138,7 @@ export default function ContactCard({
   const [notes, setNotes]               = useState<any[]>([])
   const [noteText, setNoteText]         = useState('')
   const [savingNote, setSavingNote]     = useState(false)
-  const [history, setHistory]           = useState<{ icon: string; title: string; description: string; date: string }[]>([])
+  const [history, setHistory]           = useState<{ icon: string; title: string; description: string | null; date: string; color?: string }[]>([])
   const [transfers, setTransfers]       = useState<any[]>([])
   const [loadingT, setLoadingT]         = useState(false)
   const [showTForm, setShowTForm]       = useState(false)
@@ -293,15 +293,62 @@ export default function ContactCard({
   }
 
   async function loadHistory() {
-    const items: { icon: string; title: string; description: string; date: string }[] = []
+    const items: { icon: string; title: string; description: string | null; date: string; color?: string }[] = []
 
-    if (initialData.lead_id) {
+    const leadId = initialData.lead_id
+
+    if (leadId) {
       const { data: lead } = await supabase.from('leads')
-        .select('created_at, source, status').eq('id', initialData.lead_id).single()
+        .select('created_at, source, status').eq('id', leadId).single()
       if (lead) {
-        items.push({ icon: '👤', title: 'Lead cadastrado', description: `Via ${lead.source || 'origem desconhecida'}`, date: lead.created_at })
-        if (lead.status === 'lost')
-          items.push({ icon: '❌', title: 'Lead perdido', description: 'Status alterado para perdido', date: lead.created_at })
+        items.push({ icon: '👤', title: 'Lead cadastrado', description: `Via ${lead.source || 'origem desconhecida'}`, date: lead.created_at, color: '#3B82F6' })
+      }
+
+      // Activity logs (mudanças de status, ações manuais)
+      const STATUS_LABELS: Record<string, string> = {
+        new: 'Novo', contact: 'Em Contato', scheduled: 'Visita Agendada',
+        visit: 'Visitou', proposal: 'Proposta', enrolled: 'Matriculado', lost: 'Perdido',
+      }
+      const { data: actLogs } = await supabase.from('activity_logs')
+        .select('id, action, details, created_at, user_name')
+        .eq('institution_id', institutionId).eq('entity_id', leadId)
+        .order('created_at', { ascending: false }).limit(20)
+      for (const log of (actLogs || [])) {
+        const det = log.details || {}
+        if (det.previous_status && det.new_status) {
+          const ns = det.new_status as string
+          items.push({
+            icon: ns === 'enrolled' ? '🎓' : ns === 'lost' ? '❌' : '🔄',
+            title: `Status alterado para ${STATUS_LABELS[ns] || ns}`,
+            description: log.user_name ? `Por ${log.user_name}` : null,
+            date: log.created_at,
+            color: ns === 'enrolled' ? '#16A34A' : ns === 'lost' ? '#DC2626' : '#3B82F6',
+          })
+        } else if (log.action && log.action !== 'Status alterado') {
+          items.push({
+            icon: '📋',
+            title: log.action,
+            description: det.description || (log.user_name ? `Por ${log.user_name}` : null),
+            date: log.created_at,
+            color: '#64748B',
+          })
+        }
+      }
+
+      // Visitas
+      const { data: visits } = await supabase.from('visits')
+        .select('id, scheduled_date, status, notes, created_at')
+        .eq('institution_id', institutionId).eq('lead_id', leadId)
+        .order('created_at', { ascending: false })
+      for (const v of (visits || [])) {
+        const statusLabel = v.status === 'completed' ? 'realizada' : v.status === 'cancelled' ? 'cancelada' : 'agendada'
+        items.push({
+          icon: v.status === 'completed' ? '✅' : v.status === 'cancelled' ? '❌' : '📅',
+          title: `Visita ${statusLabel}`,
+          description: v.notes || `Agendada para ${new Date(v.scheduled_date).toLocaleDateString('pt-BR')}`,
+          date: v.created_at,
+          color: v.status === 'completed' ? '#16A34A' : v.status === 'cancelled' ? '#DC2626' : '#F59E0B',
+        })
       }
     }
 
@@ -310,7 +357,7 @@ export default function ContactCard({
         .select('created_at, updated_at').eq('remote_jid', initialData.remote_jid)
         .eq('institution_id', institutionId).single()
       if (conv) {
-        items.push({ icon: '💬', title: 'Conversa WhatsApp iniciada', description: initialData.phone || initialData.name || '', date: conv.created_at || conv.updated_at })
+        items.push({ icon: '💬', title: 'Conversa WhatsApp iniciada', description: initialData.phone || initialData.name || '', date: conv.created_at || conv.updated_at, color: '#25D366' })
       }
     }
 
@@ -319,7 +366,7 @@ export default function ContactCard({
       const { data: nts } = await supabase.from('contact_notes')
         .select('created_at, author_name').eq('contact_ref_id', refId).eq('institution_id', institutionId)
       for (const n of (nts || []))
-        items.push({ icon: '📝', title: 'Anotação adicionada', description: `Por ${n.author_name}`, date: n.created_at })
+        items.push({ icon: '📝', title: 'Anotação adicionada', description: `Por ${n.author_name}`, date: n.created_at, color: '#8B5CF6' })
     }
 
     const studentName = initialData.student_name
@@ -328,9 +375,9 @@ export default function ContactCard({
         .select('transfer_date, course_grade, stated_reason, status')
         .eq('institution_id', institutionId).ilike('student_name', `%${studentName}%`).is('deleted_at', null)
       for (const t of (txs || [])) {
-        items.push({ icon: '🔄', title: 'Transferência registrada', description: `${t.course_grade} — ${t.stated_reason || 'Motivo não informado'}`, date: t.transfer_date })
-        if (t.status === 'retained')  items.push({ icon: '✅', title: 'Aluno retido',                description: t.course_grade, date: t.transfer_date })
-        if (t.status === 'confirmed') items.push({ icon: '🏫', title: 'Transferência confirmada', description: t.course_grade, date: t.transfer_date })
+        items.push({ icon: '🔄', title: 'Transferência registrada', description: `${t.course_grade} — ${t.stated_reason || 'Motivo não informado'}`, date: t.transfer_date, color: '#F97316' })
+        if (t.status === 'retained')  items.push({ icon: '✅', title: 'Aluno retido',             description: t.course_grade, date: t.transfer_date, color: '#16A34A' })
+        if (t.status === 'confirmed') items.push({ icon: '🏫', title: 'Transferência confirmada', description: t.course_grade, date: t.transfer_date, color: '#DC2626' })
       }
     }
 
@@ -355,7 +402,7 @@ export default function ContactCard({
     const [convRes, msgRes] = await Promise.all([
       supabase.from('whatsapp_conversations').select('*').eq('remote_jid', jid).eq('institution_id', institutionId).single(),
       supabase.from('whatsapp_messages').select('*').eq('remote_jid', jid).eq('institution_id', institutionId)
-        .order('timestamp', { ascending: false }).limit(5),
+        .order('timestamp', { ascending: false }).limit(60),
     ])
     if (!mountedRef.current) return
     if (convRes.data) setConvData(convRes.data)
@@ -372,7 +419,7 @@ export default function ContactCard({
       const leadId = resolvedLeadId || initialData.lead_id
       const remoteJid = initialData.remote_jid
 
-      const tasks: Promise<any>[] = []
+      const tasks: PromiseLike<any>[] = []
 
       if (leadId) {
         tasks.push(supabase.from('leads').update({
@@ -483,6 +530,17 @@ export default function ContactCard({
     setTagInput('')
   }
 
+  async function handleContactTypeChange(type: string) {
+    setForm(f => ({ ...f, contact_type: type }))
+    if (initialData.remote_jid) {
+      await supabase.from('whatsapp_conversations')
+        .update({ contact_type: type })
+        .eq('remote_jid', initialData.remote_jid)
+        .eq('institution_id', institutionId)
+    }
+    onUpdate?.({ contact_type: type })
+  }
+
   // ── Early return after all hooks ──────────────────────────────────────────
 
   if (mode === 'drawer' && !isOpen) return null
@@ -526,10 +584,10 @@ export default function ContactCard({
             </span>
           )}
           {displayPhone && (
-            <a href={`https://wa.me/55${displayPhone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer"
+            <button onClick={() => navigate('/whatsapp?phone=' + displayPhone.replace(/\D/g, ''))}
               className="text-xs px-2 py-0.5 rounded-full font-medium bg-[#D1FAE5] text-[#059669]">
               💬 WhatsApp
-            </a>
+            </button>
           )}
         </div>
       </div>
@@ -595,7 +653,7 @@ export default function ContactCard({
             <div className="grid grid-cols-2 gap-2">
               {CONTACT_TYPES.map(ct => (
                 <button key={ct.key}
-                  onClick={() => setForm(f => ({ ...f, contact_type: ct.key }))}
+                  onClick={() => handleContactTypeChange(ct.key)}
                   className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left ${
                     form.contact_type === ct.key
                       ? 'border-2 border-[#00A896] bg-[#E6F7F5] text-[#00A896]'
@@ -741,7 +799,8 @@ export default function ContactCard({
               <div className="absolute left-8 top-4 bottom-4 w-px bg-[#E2E8F0]" />
               {history.map((item, i) => (
                 <div key={i} className="relative flex gap-4 mb-5">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white border-2 border-[#E2E8F0] flex items-center justify-center text-sm z-10">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white border-2 flex items-center justify-center text-sm z-10"
+                    style={{ borderColor: item.color || '#E2E8F0' }}>
                     {item.icon}
                   </div>
                   <div className="flex-1 pt-1">
@@ -819,10 +878,10 @@ export default function ContactCard({
                 Abrir conversa completa
               </button>
               {displayPhone && (
-                <a href={`https://wa.me/55${displayPhone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer"
+                <button onClick={() => navigate('/whatsapp?phone=' + displayPhone.replace(/\D/g, ''))}
                   className="flex items-center justify-center gap-2 w-full py-3 bg-[#25D366] text-white rounded-lg text-sm font-semibold hover:bg-[#1da851] transition-colors">
                   Iniciar nova conversa
-                </a>
+                </button>
               )}
             </>
           ) : (
@@ -833,10 +892,10 @@ export default function ContactCard({
                 <p className="text-xs text-[#94A3B8]">Este contato ainda não possui conversa no WhatsApp.</p>
               </div>
               {displayPhone && (
-                <a href={`https://wa.me/55${displayPhone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer"
+                <button onClick={() => navigate('/whatsapp?phone=' + displayPhone.replace(/\D/g, ''))}
                   className="flex items-center gap-2 px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-semibold hover:bg-[#1da851] transition-colors">
                   Iniciar no WhatsApp
-                </a>
+                </button>
               )}
             </div>
           )}
@@ -948,25 +1007,36 @@ export default function ContactCard({
 
       {/* ── CONVERSAS ── */}
       {tab === 'conversas' && (
-        <div className="p-6">
-          {otherConvs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center gap-2">
+        <div className="flex flex-col h-full">
+          {lastMessages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center gap-2 flex-1">
               <span className="text-4xl">💬</span>
-              <p className="text-sm text-[#64748B]">Nenhuma outra conversa encontrada</p>
+              <p className="text-sm text-[#64748B]">Nenhuma mensagem encontrada</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {otherConvs.map((c: any) => (
-                <div key={c.id} className="p-3 rounded-xl border border-[#E2E8F0] bg-[#F8FAFB]">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE[c.status] || STATUS_BADGE.waiting}`}>
-                      {STATUS_LABEL[c.status] || c.status}
-                    </span>
-                    <span className="text-xs text-[#94A3B8]">{fmtConvTime(c.lastTime instanceof Date ? c.lastTime : new Date(c.lastTime))}</span>
+            <div className="flex-1 overflow-y-auto p-4 space-y-1 bg-[#F0F2F5]">
+              {lastMessages.map((msg: any) => (
+                <div key={msg.id} className={`flex ${msg.from_me ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm leading-snug shadow-sm ${
+                    msg.from_me
+                      ? 'bg-[#1A2B4A] text-white rounded-br-none'
+                      : 'bg-white border border-[#E2E8F0] text-[#334155] rounded-bl-none'
+                  }`}>
+                    <p className="break-words whitespace-pre-wrap">{msg.content || msg.text || msg.body || '—'}</p>
+                    <p className={`text-[10px] mt-1 text-right ${msg.from_me ? 'text-white/60' : 'text-[#94A3B8]'}`}>
+                      {msg.timestamp ? fmtConvTime(new Date(typeof msg.timestamp === 'number' ? msg.timestamp * 1000 : msg.timestamp)) : ''}
+                    </p>
                   </div>
-                  <p className="text-xs text-[#64748B] truncate">{c.lastMessage || '—'}</p>
                 </div>
               ))}
+            </div>
+          )}
+          {displayPhone && (
+            <div className="flex-shrink-0 p-3 border-t border-[#E2E8F0] bg-white">
+              <button onClick={() => navigate('/whatsapp?phone=' + displayPhone.replace(/\D/g, ''))}
+                className="w-full py-2.5 bg-[#25D366] text-white rounded-lg text-sm font-semibold hover:bg-[#1da851] transition-colors">
+                Abrir conversa completa
+              </button>
             </div>
           )}
         </div>
