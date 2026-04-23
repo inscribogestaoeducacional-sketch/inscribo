@@ -78,7 +78,7 @@ function getTransferStatus(t: any) {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'dados' | 'historico' | 'notas' | 'whatsapp' | 'transferencia' | 'conversas'
+type Tab = 'dados' | 'historico' | 'notas' | 'whatsapp' | 'transferencia'
 
 export interface ContactCardProps {
   mode: 'drawer' | 'page'
@@ -137,6 +137,7 @@ export default function ContactCard({
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({})
   const [notes, setNotes]               = useState<any[]>([])
   const [noteText, setNoteText]         = useState('')
+  const [newNote, setNewNote]           = useState('')
   const [savingNote, setSavingNote]     = useState(false)
   const [history, setHistory]           = useState<{ icon: string; title: string; description: string | null; date: string; color?: string }[]>([])
   const [transfers, setTransfers]       = useState<any[]>([])
@@ -284,10 +285,13 @@ export default function ContactCard({
   }
 
   async function loadNotes() {
-    const refId = initialData.lead_id || initialData.remote_jid
-    if (!refId) return
-    const { data } = await supabase.from('contact_notes')
-      .select('*').eq('institution_id', institutionId).eq('contact_ref_id', refId)
+    const contactRefId = initialData.lead_id || initialData.remote_jid || ''
+    if (!contactRefId) return
+    const { data } = await supabase
+      .from('contact_notes')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .eq('contact_ref_id', contactRefId)
       .order('created_at', { ascending: false })
     if (mountedRef.current) setNotes(data || [])
   }
@@ -480,21 +484,20 @@ export default function ContactCard({
   }
 
   async function handleAddNote() {
-    if (!noteText.trim()) return
+    const contactRefId = initialData.lead_id || initialData.remote_jid || ''
+    if (!contactRefId || !newNote.trim()) return
     setSavingNote(true)
-    const refId = resolvedLeadId || initialData.lead_id || initialData.remote_jid
-    const { data } = await supabase.from('contact_notes').insert({
-      institution_id:    institutionId,
-      contact_ref_id:    refId,
-      contact_ref_type:  (resolvedLeadId || initialData.lead_id) ? 'lead' : 'whatsapp',
-      content:           noteText.trim(),
-      author_name:       user?.full_name || 'Usuário',
-    }).select('*').single()
-    if (mountedRef.current) {
-      if (data) setNotes(prev => [data, ...prev])
-      setNoteText('')
-      setSavingNote(false)
+    const { error } = await supabase.from('contact_notes').insert({
+      institution_id: institutionId,
+      contact_ref_id: contactRefId,
+      content:        newNote.trim(),
+      author_name:    user?.full_name || 'Usuário',
+    })
+    if (!error) {
+      setNewNote('')
+      await loadNotes()
     }
+    if (mountedRef.current) setSavingNote(false)
   }
 
   async function handleDeleteNote(id: string) {
@@ -562,7 +565,6 @@ export default function ContactCard({
     { key: 'notas',         label: 'Anotações' },
     { key: 'whatsapp',      label: 'WhatsApp' },
     { key: 'transferencia', label: 'Transferência' },
-    { key: 'conversas',     label: 'Conversas' },
   ]
 
   // ── Shared UI blocks ──────────────────────────────────────────────────────
@@ -591,10 +593,29 @@ export default function ContactCard({
           )}
         </div>
       </div>
-      <button onClick={onClose}
-        className="flex-shrink-0 p-2 text-[#64748B] hover:text-[#1A2B4A] hover:bg-[#F1F5F9] rounded-lg transition-colors">
-        {mode === 'page' ? <ArrowLeft className="w-5 h-5" /> : <X className="w-5 h-5" />}
-      </button>
+      <div className="flex-shrink-0 flex flex-col items-end gap-2">
+        <button onClick={onClose}
+          className="p-2 text-[#64748B] hover:text-[#1A2B4A] hover:bg-[#F1F5F9] rounded-lg transition-colors">
+          {mode === 'page' ? <ArrowLeft className="w-5 h-5" /> : <X className="w-5 h-5" />}
+        </button>
+        <button
+          onClick={async () => {
+            if (!confirm('Excluir este contato? Esta ação remove os dados vinculados.')) return
+            const contactRefId = initialData.lead_id || initialData.remote_jid || ''
+            if (contactRefId) {
+              await supabase.from('contact_notes').delete().eq('contact_ref_id', contactRefId)
+            }
+            if (initialData.lead_id) {
+              await supabase.from('leads').update({ deleted_at: new Date().toISOString() }).eq('id', initialData.lead_id)
+            }
+            if (onUpdate) onUpdate({ deleted: true })
+            onClose()
+          }}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+        >
+          🗑️ Excluir
+        </button>
+      </div>
     </div>
   )
 
@@ -819,10 +840,10 @@ export default function ContactCard({
       {tab === 'notas' && (
         <div className="p-6 space-y-4">
           <div>
-            <textarea value={noteText} onChange={e => setNoteText(e.target.value)}
+            <textarea value={newNote} onChange={e => setNewNote(e.target.value)}
               placeholder="Adicionar anotação..." rows={3}
               className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none resize-none" />
-            <button onClick={handleAddNote} disabled={savingNote || !noteText.trim()}
+            <button onClick={handleAddNote} disabled={savingNote || !newNote.trim()}
               className="mt-2 w-full bg-[#00A896] text-white font-semibold py-2.5 rounded-lg hover:bg-[#008f81] disabled:opacity-50 transition-colors text-sm">
               {savingNote ? 'Salvando...' : 'Adicionar anotação'}
             </button>
@@ -1005,42 +1026,6 @@ export default function ContactCard({
         </div>
       )}
 
-      {/* ── CONVERSAS ── */}
-      {tab === 'conversas' && (
-        <div className="flex flex-col h-full">
-          {lastMessages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center gap-2 flex-1">
-              <span className="text-4xl">💬</span>
-              <p className="text-sm text-[#64748B]">Nenhuma mensagem encontrada</p>
-            </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto p-4 space-y-1 bg-[#F0F2F5]">
-              {lastMessages.map((msg: any) => (
-                <div key={msg.id} className={`flex ${msg.from_me ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm leading-snug shadow-sm ${
-                    msg.from_me
-                      ? 'bg-[#1A2B4A] text-white rounded-br-none'
-                      : 'bg-white border border-[#E2E8F0] text-[#334155] rounded-bl-none'
-                  }`}>
-                    <p className="break-words whitespace-pre-wrap">{msg.content || msg.text || msg.body || '—'}</p>
-                    <p className={`text-[10px] mt-1 text-right ${msg.from_me ? 'text-white/60' : 'text-[#94A3B8]'}`}>
-                      {msg.timestamp ? fmtConvTime(new Date(typeof msg.timestamp === 'number' ? msg.timestamp * 1000 : msg.timestamp)) : ''}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {displayPhone && (
-            <div className="flex-shrink-0 p-3 border-t border-[#E2E8F0] bg-white">
-              <button onClick={() => navigate('/whatsapp?phone=' + displayPhone.replace(/\D/g, ''))}
-                className="w-full py-2.5 bg-[#25D366] text-white rounded-lg text-sm font-semibold hover:bg-[#1da851] transition-colors">
-                Abrir conversa completa
-              </button>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 

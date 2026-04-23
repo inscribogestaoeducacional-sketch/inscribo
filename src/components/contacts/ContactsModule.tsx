@@ -189,7 +189,12 @@ export default function ContactsModule() {
     }
   }
 
-  function handleProfileUpdate(id: string, updates: Partial<UnifiedContact>) {
+  function handleProfileUpdate(id: string, updates: Record<string, any>) {
+    if (updates.deleted) {
+      setContacts(prev => prev.filter(c => c.id !== id))
+      setProfileContact(null)
+      return
+    }
     setContacts(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c))
     if (profileContact?.id === id) setProfileContact(prev => prev ? { ...prev, ...updates } : prev)
   }
