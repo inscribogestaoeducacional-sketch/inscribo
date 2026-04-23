@@ -26,6 +26,7 @@ interface Transfer {
   stated_reason: string | null
   internal_notes: string | null
   status: string | null
+  lead_id: string | null
   created_at: string
   deleted_at: string | null
   deleted_by: string | null
@@ -45,7 +46,9 @@ interface TransferForm {
   grade: string
   statedReason: string
   internalNotes: string
+  lead_id: string | null
 }
+
 
 // ─── constants ────────────────────────────────────────────────────────────────
 const GRADES = [
@@ -95,7 +98,7 @@ function getStatusInfo(t: Transfer) {
 
 function fmt(n: number) { return new Intl.NumberFormat('pt-BR').format(n) }
 
-const EMPTY_FORM: TransferForm = { studentName: '', grade: '', statedReason: '', internalNotes: '' }
+const EMPTY_FORM: TransferForm = { studentName: '', grade: '', statedReason: '', internalNotes: '', lead_id: null }
 
 // ─── component ────────────────────────────────────────────────────────────────
 export default function GestorTransfers() {
@@ -121,7 +124,30 @@ export default function GestorTransfers() {
   const [formError, setFormError]             = useState<string | null>(null)
   const [auditTransferId, setAuditTransferId] = useState<string | null>(null)
 
+  // lead search (new transfer modal)
+  const [pickMode, setPickMode]         = useState<'new' | 'existing'>('new')
+  const [leadSearch, setLeadSearch]     = useState('')
+  const [leadResults, setLeadResults]   = useState<{ id: string; responsible_name: string | null; student_name: string | null; grade_interest: string | null; phone: string | null }[]>([])
+  const [searchingLeads, setSearchingLeads] = useState(false)
+  const [selectedLead, setSelectedLead] = useState<{ id: string; student_name: string | null } | null>(null)
+
   useEffect(() => { if (!institutionId) return; load() }, [institutionId])
+
+  useEffect(() => {
+    if (pickMode !== 'existing' || leadSearch.length < 2) { setLeadResults([]); return }
+    const t = setTimeout(async () => {
+      setSearchingLeads(true)
+      const { data } = await supabase.from('leads')
+        .select('id, responsible_name, student_name, grade_interest, phone')
+        .eq('institution_id', institutionId)
+        .or(`student_name.ilike.%${leadSearch}%,responsible_name.ilike.%${leadSearch}%`)
+        .is('deleted_at', null)
+        .limit(6)
+      setLeadResults(data || [])
+      setSearchingLeads(false)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [leadSearch, pickMode])
 
   // close dropdown when clicking outside
   useEffect(() => {
@@ -194,6 +220,7 @@ export default function GestorTransfers() {
           transfer_date:  new Date().toISOString().split('T')[0],
           stated_reason:  form.statedReason || null,
           internal_notes: form.internalNotes || null,
+          lead_id:        form.lead_id || null,
           created_at:     new Date().toISOString(),
         }).select('id').single()
         if (error) throw new Error(error.message)
@@ -215,7 +242,7 @@ export default function GestorTransfers() {
   }
 
   function openEdit(t: Transfer) {
-    setForm({ studentName: t.student_name, grade: t.course_grade, statedReason: t.stated_reason ?? '', internalNotes: t.internal_notes ?? '' })
+    setForm({ studentName: t.student_name, grade: t.course_grade, statedReason: t.stated_reason ?? '', internalNotes: t.internal_notes ?? '', lead_id: t.lead_id ?? null })
     setEditingTransfer(t)
     setShowNewModal(true)
   }
@@ -225,6 +252,17 @@ export default function GestorTransfers() {
     setEditingTransfer(null)
     setForm(EMPTY_FORM)
     setFormError(null)
+    setPickMode('new')
+    setLeadSearch('')
+    setLeadResults([])
+    setSelectedLead(null)
+  }
+
+  function selectLead(l: { id: string; responsible_name: string | null; student_name: string | null; grade_interest: string | null; phone: string | null }) {
+    setForm(f => ({ ...f, studentName: l.student_name || '', grade: l.grade_interest || '', lead_id: l.id }))
+    setSelectedLead({ id: l.id, student_name: l.student_name })
+    setLeadSearch('')
+    setLeadResults([])
   }
 
   // ── delete (soft) ───────────────────────────────────────────────────────
@@ -609,10 +647,56 @@ export default function GestorTransfers() {
       {showNewModal && (
         <Modal onClose={closeForm} title={editingTransfer ? 'Editar transferência' : 'Registrar transferência'}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+            {/* Mode toggle — only on new transfer */}
+            {!editingTransfer && (
+              <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', borderRadius: 9, padding: 4 }}>
+                {(['new', 'existing'] as const).map(mode => (
+                  <button key={mode} onClick={() => { setPickMode(mode); setSelectedLead(null); setLeadSearch(''); setLeadResults([]) }}
+                    style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+                      background: pickMode === mode ? '#fff' : 'transparent',
+                      color: pickMode === mode ? '#1e2d6b' : '#64748b',
+                      boxShadow: pickMode === mode ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
+                    }}>
+                    {mode === 'new' ? 'Novo aluno' : 'Escolher contato existente'}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Lead search */}
+            {pickMode === 'existing' && !editingTransfer && (
+              <div>
+                <label style={labelStyle}>Buscar aluno ou responsável</label>
+                <input style={inputStyle} placeholder="Digite o nome..." value={leadSearch}
+                  onChange={e => setLeadSearch(e.target.value)} autoFocus />
+                {searchingLeads && <p style={{ margin: '6px 0 0', fontSize: 12, color: '#94A3B8' }}>Buscando...</p>}
+                {leadResults.length > 0 && (
+                  <div style={{ marginTop: 6, border: '1px solid #E2E8F0', borderRadius: 9, overflow: 'hidden' }}>
+                    {leadResults.map(l => (
+                      <button key={l.id} onClick={() => selectLead(l)}
+                        style={{ display: 'flex', flexDirection: 'column', width: '100%', padding: '9px 12px', background: 'white', border: 'none', borderBottom: '1px solid #F1F5F9', cursor: 'pointer', textAlign: 'left' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFC')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>{l.student_name || l.responsible_name || '—'}</span>
+                        <span style={{ fontSize: 11, color: '#94A3B8' }}>{[l.grade_interest, l.phone].filter(Boolean).join(' · ')}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {selectedLead && (
+                  <div style={{ marginTop: 6, padding: '7px 12px', background: '#D1FAE5', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#065F46' }}>
+                    ✓ Contato selecionado: {selectedLead.student_name || 'Aluno'}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <label style={labelStyle}>Nome do aluno <span style={{ color: '#F43F5E' }}>*</span></label>
               <input style={inputStyle} placeholder="Nome completo" value={form.studentName}
-                onChange={e => setForm(f => ({ ...f, studentName: e.target.value }))} autoFocus />
+                onChange={e => setForm(f => ({ ...f, studentName: e.target.value }))}
+                autoFocus={pickMode === 'new' && !editingTransfer} />
             </div>
             <div>
               <label style={labelStyle}>Série <span style={{ color: '#F43F5E' }}>*</span></label>

@@ -1,32 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { Users, Search, Phone, RefreshCw, Filter } from 'lucide-react'
-import ContactDrawer from '../whatsapp/ContactDrawer'
-
-// ─── Types ────────────────────────────────────────────────────
-interface UnifiedContact {
-  id: string
-  name: string
-  student_name: string | null
-  phone: string | null
-  email: string | null
-  grade: string | null
-  source: string | null
-  status_lead: string | null
-  status_whatsapp: string | null
-  has_lead: boolean
-  has_whatsapp: boolean
-  lead_id: string | null
-  remote_jid: string | null
-  contact_type: string | null
-  assigned_user_name: string | null
-  tags: string[]
-  last_contact: string
-  origin_label: string
-  origin_color: string
-  origin_bg: string
-}
+import { Users, Search, Phone, RefreshCw } from 'lucide-react'
+import ContactProfile, { UnifiedContact } from './ContactProfile'
 
 // ─── Helpers ─────────────────────────────────────────────────
 const HEX_COLORS = ['#00A896','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
@@ -39,7 +15,7 @@ function nameHash(name: string) {
 }
 
 const hexColor = (name: string) => HEX_COLORS[nameHash(name) % HEX_COLORS.length]
-const twColor  = (name: string) => TW_COLORS[nameHash(name) % TW_COLORS.length]
+const twColor  = (name: string) => TW_COLORS[nameHash(name) % TW_COLORS.length]  // eslint-disable-line @typescript-eslint/no-unused-vars
 
 function initials(name: string) {
   const parts = name.trim().split(' ').filter(Boolean)
@@ -97,7 +73,6 @@ export default function ContactsModule() {
   const mountedRef = useRef(true)
 
   const [contacts, setContacts] = useState<UnifiedContact[]>([])
-  const [rawConvs, setRawConvs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   const [search, setSearch] = useState('')
@@ -105,10 +80,8 @@ export default function ContactsModule() {
   const [filterGrade, setFilterGrade] = useState('all')
   const [filterAttendant, setFilterAttendant] = useState('all')
 
-  // Drawer state
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [drawerConv, setDrawerConv] = useState<any>(null)
-  const [drawerAllConvs, setDrawerAllConvs] = useState<any[]>([])
+  // Profile state
+  const [profileContact, setProfileContact] = useState<UnifiedContact | null>(null)
 
   useEffect(() => {
     mountedRef.current = true
@@ -121,7 +94,7 @@ export default function ContactsModule() {
     if (!mountedRef.current) return
     setLoading(true)
     try {
-      const [leadsRes, convsRes] = await Promise.all([
+      const [leadsRes, convsRes, transfersRes] = await Promise.all([
         supabase.from('leads')
           .select('id, student_name, responsible_name, phone, email, grade_interest, source, status, created_at')
           .eq('institution_id', institutionId)
@@ -131,15 +104,26 @@ export default function ContactsModule() {
           .select('remote_jid, contact_name, contact_type, assigned_user_name, tags, status, updated_at, lead_id')
           .eq('institution_id', institutionId)
           .order('updated_at', { ascending: false }),
+        supabase.from('student_transfers')
+          .select('student_name, status, course_grade')
+          .eq('institution_id', institutionId)
+          .is('deleted_at', null),
       ])
 
       if (!mountedRef.current) return
 
-      const leads = leadsRes.data || []
-      const convs = convsRes.data || []
-      setRawConvs(convs)
+      const leads     = leadsRes.data || []
+      const convs     = convsRes.data || []
+      const txData    = transfersRes.data || []
 
-      // Build map keyed by normalized phone (last 9 digits)
+      // Build transfer index by normalized student name
+      const txMap = new Map<string, string>()
+      for (const t of txData) {
+        const key = (t.student_name || '').toLowerCase().trim()
+        if (key && !txMap.has(key)) txMap.set(key, t.status || 'pending')
+      }
+
+      // Build unified contact map
       const map = new Map<string, UnifiedContact>()
 
       for (const l of leads) {
@@ -147,6 +131,8 @@ export default function ContactsModule() {
         const mapKey   = phoneKey || `lead:${l.id}`
         const existing = map.get(mapKey)
         const cfg = originCfg(true, false)
+        const txKey = (l.student_name || '').toLowerCase().trim()
+        const transferStatus = txMap.get(txKey) || null
 
         if (existing) {
           existing.has_lead      = true
@@ -156,6 +142,7 @@ export default function ContactsModule() {
           existing.grade         = existing.grade || l.grade_interest || null
           existing.source        = existing.source || l.source || null
           existing.status_lead   = l.status
+          existing.transfer_status = existing.transfer_status || transferStatus
           const c2 = originCfg(true, existing.has_whatsapp)
           existing.origin_label  = c2.label
           existing.origin_color  = c2.color
@@ -185,6 +172,7 @@ export default function ContactsModule() {
             origin_label:       cfg.label,
             origin_color:       cfg.color,
             origin_bg:          cfg.bg,
+            transfer_status:    transferStatus,
           })
         }
       }
@@ -237,6 +225,7 @@ export default function ContactsModule() {
             origin_label:       cfg.label,
             origin_color:       cfg.color,
             origin_bg:          cfg.bg,
+            transfer_status:    null,
           })
         }
       }
@@ -253,53 +242,11 @@ export default function ContactsModule() {
     }
   }
 
-  // ── Open drawer ─────────────────────────────────────────────
-  function openDrawer(contact: UnifiedContact) {
-    const conv = {
-      id:          contact.remote_jid || `${contact.phone?.replace(/\D/g, '')}@s.whatsapp.net`,
-      name:        contact.name,
-      phone:       contact.phone || '',
-      avatarColor: twColor(contact.name),
-      contact_type: contact.contact_type || undefined,
-      lead_id:      contact.lead_id || undefined,
-      tags:         contact.tags,
-      status:       contact.status_whatsapp || 'waiting',
-      lastTime:     new Date(contact.last_contact),
-      lastMessage:  '',
+  function handleProfileUpdate(id: string, updates: Partial<UnifiedContact>) {
+    setContacts(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c))
+    if (profileContact?.id === id) {
+      setProfileContact(prev => prev ? { ...prev, ...updates } : prev)
     }
-
-    // All convs as DrawerConversation for "Conversas" tab
-    const allDC = rawConvs.map(c => ({
-      id:           c.remote_jid,
-      name:         c.contact_name || phoneFromJid(c.remote_jid),
-      phone:        formatPhone(phoneFromJid(c.remote_jid)),
-      avatarColor:  twColor(c.contact_name || c.remote_jid),
-      contact_type: c.contact_type,
-      lead_id:      c.lead_id,
-      tags:         c.tags || [],
-      status:       c.status || 'waiting',
-      lastTime:     new Date(c.updated_at || Date.now()),
-      lastMessage:  '',
-    }))
-
-    setDrawerConv(conv)
-    setDrawerAllConvs(allDC)
-    setDrawerOpen(true)
-  }
-
-  function handleDrawerUpdate(jid: string, updates: Record<string, any>) {
-    setContacts(prev => prev.map(c => {
-      if (c.remote_jid === jid || c.id === jid) {
-        return {
-          ...c,
-          name:         updates.name         ?? c.name,
-          contact_type: updates.contact_type ?? c.contact_type,
-          lead_id:      updates.lead_id      ?? c.lead_id,
-          has_lead:     updates.lead_id ? true : c.has_lead,
-        }
-      }
-      return c
-    }))
   }
 
   // ── Derived filters ─────────────────────────────────────────
@@ -315,9 +262,9 @@ export default function ContactsModule() {
       (c.email?.toLowerCase().includes(q) ?? false)
     const matchOrigin =
       filterOrigin === 'all' ||
-      (filterOrigin === 'lead'      && c.has_lead  && !c.has_whatsapp) ||
-      (filterOrigin === 'whatsapp'  && !c.has_lead &&  c.has_whatsapp) ||
-      (filterOrigin === 'both'      && c.has_lead  &&  c.has_whatsapp)
+      (filterOrigin === 'lead'     && c.has_lead  && !c.has_whatsapp) ||
+      (filterOrigin === 'whatsapp' && !c.has_lead &&  c.has_whatsapp) ||
+      (filterOrigin === 'both'     && c.has_lead  &&  c.has_whatsapp)
     const matchGrade     = filterGrade     === 'all' || c.grade                === filterGrade
     const matchAttendant = filterAttendant === 'all' || c.assigned_user_name   === filterAttendant
     return matchSearch && matchOrigin && matchGrade && matchAttendant
@@ -325,10 +272,10 @@ export default function ContactsModule() {
 
   // ── KPIs ────────────────────────────────────────────────────
   const kpis = [
-    { label: 'Total de contatos',    value: contacts.length,                                        color: '#3B82F6', bg: '#EFF6FF' },
-    { label: 'Leads ativos',         value: contacts.filter(c => c.has_lead && c.status_lead !== 'lost').length,   color: '#7C3AED', bg: '#EDE9FE' },
-    { label: 'WhatsApp ativo',       value: contacts.filter(c => c.has_whatsapp && c.status_whatsapp !== 'closed').length, color: '#D97706', bg: '#FEF3C7' },
-    { label: 'Lead + WhatsApp',      value: contacts.filter(c => c.has_lead && c.has_whatsapp).length, color: '#065F46', bg: '#D1FAE5' },
+    { label: 'Total de contatos', value: contacts.length,                                                                 color: '#3B82F6', bg: '#EFF6FF' },
+    { label: 'Leads ativos',      value: contacts.filter(c => c.has_lead && c.status_lead !== 'lost').length,             color: '#7C3AED', bg: '#EDE9FE' },
+    { label: 'WhatsApp ativo',    value: contacts.filter(c => c.has_whatsapp && c.status_whatsapp !== 'closed').length,   color: '#D97706', bg: '#FEF3C7' },
+    { label: 'Lead + WhatsApp',   value: contacts.filter(c => c.has_lead && c.has_whatsapp).length,                       color: '#065F46', bg: '#D1FAE5' },
   ]
 
   // ─── Render ────────────────────────────────────────────────
@@ -410,16 +357,17 @@ export default function ContactsModule() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#F8FAFC' }}>
-                {['Contato', 'Telefone', 'Origem', 'Série', 'Atendente', 'Último contato', ''].map(h => (
-                  <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid #E2E8F0' }}>{h}</th>
+                {['Contato', 'Telefone', 'Origem', 'Série', 'Transferência', 'Atendente', 'Último contato', ''].map(h => (
+                  <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.map(c => {
                 const color = hexColor(c.name)
+                const hasActiveTransfer = c.transfer_status && c.transfer_status !== 'cancelled' && c.transfer_status !== 'retained' && c.transfer_status !== 'confirmed'
                 return (
-                  <tr key={c.id} onClick={() => openDrawer(c)}
+                  <tr key={c.id} onClick={() => setProfileContact(c)}
                     style={{ borderBottom: '1px solid #F8FAFC', cursor: 'pointer' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFC')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
@@ -464,6 +412,25 @@ export default function ContactsModule() {
                     {/* Série */}
                     <td style={{ padding: '14px 16px', fontSize: 13, color: '#475569' }}>{c.grade || '—'}</td>
 
+                    {/* Transferência */}
+                    <td style={{ padding: '14px 16px' }}>
+                      {hasActiveTransfer ? (
+                        <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#FEE2E2', color: '#DC2626', whiteSpace: 'nowrap' }}>
+                          Em transferência
+                        </span>
+                      ) : c.transfer_status === 'retained' ? (
+                        <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#DCFCE7', color: '#16A34A', whiteSpace: 'nowrap' }}>
+                          Retido
+                        </span>
+                      ) : c.transfer_status === 'confirmed' ? (
+                        <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#FEE2E2', color: '#DC2626', whiteSpace: 'nowrap' }}>
+                          Transferido
+                        </span>
+                      ) : (
+                        <span style={{ color: '#CBD5E1', fontSize: 13 }}>—</span>
+                      )}
+                    </td>
+
                     {/* Atendente */}
                     <td style={{ padding: '14px 16px', fontSize: 13, color: '#475569' }}>
                       {c.assigned_user_name || <span style={{ color: '#CBD5E1' }}>—</span>}
@@ -490,15 +457,15 @@ export default function ContactsModule() {
 
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
 
-      {/* ContactDrawer */}
-      <ContactDrawer
-        isOpen={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        conversation={drawerConv}
-        allConversations={drawerAllConvs}
-        institutionId={institutionId}
-        onUpdate={handleDrawerUpdate}
-      />
+      {/* ContactProfile */}
+      {profileContact && (
+        <ContactProfile
+          contact={profileContact}
+          institutionId={institutionId}
+          onClose={() => setProfileContact(null)}
+          onUpdate={handleProfileUpdate}
+        />
+      )}
     </div>
   )
 }

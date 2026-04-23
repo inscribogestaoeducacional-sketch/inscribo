@@ -1,0 +1,1 @@
+ALTER TABLE student_transfers ADD COLUMN IF NOT EXISTS lead_id uuid REFERENCES leads(id) ON DELETE SET NULL;
