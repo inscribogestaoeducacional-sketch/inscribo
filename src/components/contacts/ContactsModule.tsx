@@ -1,74 +1,81 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
-import {
-  Users, Search, Plus, X, ChevronLeft, Phone, Mail,
-  MessageCircle, Clock, Tag, Edit3, Check, Trash2,
-  StickyNote, History, GraduationCap, User, Filter
-} from 'lucide-react'
+import { Users, Search, Phone, RefreshCw, Filter } from 'lucide-react'
+import ContactDrawer from '../whatsapp/ContactDrawer'
 
 // ─── Types ────────────────────────────────────────────────────
-type Origin = 'lead' | 'enrollment' | 'transfer'
-
-interface Contact {
-  refId: string          // 'lead:uuid' | 'enrollment:uuid' | 'transfer:uuid'
-  rawId: string
-  origin: Origin
-  originLabel: string
-  originColor: string
-  originBg: string
+interface UnifiedContact {
+  id: string
   name: string
+  student_name: string | null
   phone: string | null
   email: string | null
   grade: string | null
-  status: string | null
-  created_at: string
+  source: string | null
+  status_lead: string | null
+  status_whatsapp: string | null
+  has_lead: boolean
+  has_whatsapp: boolean
+  lead_id: string | null
+  remote_jid: string | null
+  contact_type: string | null
+  assigned_user_name: string | null
+  tags: string[]
+  last_contact: string
+  origin_label: string
+  origin_color: string
+  origin_bg: string
 }
 
-interface Note {
-  id: string
-  content: string
-  author_name: string
-  created_at: string
-}
+// ─── Helpers ─────────────────────────────────────────────────
+const HEX_COLORS = ['#00A896','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
+const TW_COLORS  = ['bg-cyan-500','bg-blue-500','bg-violet-500','bg-orange-500','bg-red-500','bg-emerald-500','bg-amber-500','bg-pink-500']
 
-interface CustomField {
-  id: string
-  label: string
-  type: 'text' | 'number' | 'date' | 'select'
-  options?: string[]
-}
-
-interface FieldValue {
-  field_id: string
-  value: string
-}
-
-// ─── Config ───────────────────────────────────────────────────
-const ORIGIN_CFG: Record<Origin, { label: string; color: string; bg: string }> = {
-  lead:       { label: 'Lead',        color: '#7C3AED', bg: '#EDE9FE' },
-  enrollment: { label: 'Matriculado', color: '#065F46', bg: '#D1FAE5' },
-  transfer:   { label: 'Transferência', color: '#1E40AF', bg: '#DBEAFE' },
-}
-
-const AVATAR_COLORS = ['#00A896','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
-
-function avatarColor(name: string) {
+function nameHash(name: string) {
   let h = 0
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+  return Math.abs(h)
 }
+
+const hexColor = (name: string) => HEX_COLORS[nameHash(name) % HEX_COLORS.length]
+const twColor  = (name: string) => TW_COLORS[nameHash(name) % TW_COLORS.length]
 
 function initials(name: string) {
-  return name.split(' ').slice(0, 2).map(n => n[0] || '').join('').toUpperCase()
+  const parts = name.trim().split(' ').filter(Boolean)
+  if (!parts.length) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
-function fmtDate(d: string) {
-  return new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+function normalizePhone(s: string): string {
+  if (!s) return ''
+  return s.replace(/\D/g, '').slice(-9)
 }
 
-function fmtDateTime(d: string) {
-  return new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+function phoneFromJid(jid: string): string {
+  return jid.split('@')[0]
+}
+
+function formatPhone(digits: string): string {
+  const d = digits.replace(/^55/, '')
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+  return digits
+}
+
+function fmtDate(s: string): string {
+  const d = new Date(s)
+  const diff = Date.now() - d.getTime()
+  if (diff < 86400000) return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  if (diff < 7 * 86400000) return d.toLocaleDateString('pt-BR', { weekday: 'short' })
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+}
+
+function originCfg(hasLead: boolean, hasWa: boolean) {
+  if (hasLead && hasWa) return { label: 'Lead + WhatsApp', color: '#065F46', bg: '#D1FAE5' }
+  if (hasLead)          return { label: 'Lead',            color: '#7C3AED', bg: '#EDE9FE' }
+  return                       { label: 'WhatsApp',        color: '#D97706', bg: '#FEF3C7' }
 }
 
 // ─── Styles ───────────────────────────────────────────────────
@@ -83,506 +90,262 @@ const inp: React.CSSProperties = {
   outline: 'none', boxSizing: 'border-box', background: 'white',
 }
 
-const lbl: React.CSSProperties = {
-  fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 5, display: 'block',
-}
-
-// ─── Main component ───────────────────────────────────────────
+// ─── Component ────────────────────────────────────────────────
 export default function ContactsModule() {
   const { user } = useAuth()
   const institutionId = user?.institution_id!
   const mountedRef = useRef(true)
 
-  const [contacts, setContacts] = useState<Contact[]>([])
+  const [contacts, setContacts] = useState<UnifiedContact[]>([])
+  const [rawConvs, setRawConvs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+
   const [search, setSearch] = useState('')
-  const [filterOrigin, setFilterOrigin] = useState<string>('all')
-  const [selected, setSelected] = useState<Contact | null>(null)
-  const [activeTab, setActiveTab] = useState<'dados' | 'timeline' | 'anotacoes'>('dados')
-  const [showFieldsModal, setShowFieldsModal] = useState(false)
-  const [customFields, setCustomFields] = useState<CustomField[]>([])
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
-  const [editingFields, setEditingFields] = useState(false)
-  const [savingFields, setSavingFields] = useState(false)
-  const [notes, setNotes] = useState<Note[]>([])
-  const [newNote, setNewNote] = useState('')
-  const [savingNote, setSavingNote] = useState(false)
-  const [timeline, setTimeline] = useState<Array<{ id: string; icon: string; title: string; desc: string | null; date: string }>>([])
-  const [toast, setToast] = useState<string | null>(null)
+  const [filterOrigin, setFilterOrigin] = useState('all')
+  const [filterGrade, setFilterGrade] = useState('all')
+  const [filterAttendant, setFilterAttendant] = useState('all')
+
+  // Drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [drawerConv, setDrawerConv] = useState<any>(null)
+  const [drawerAllConvs, setDrawerAllConvs] = useState<any[]>([])
 
   useEffect(() => {
     mountedRef.current = true
-    loadAll()
-    loadCustomFields()
+    load()
     return () => { mountedRef.current = false }
   }, [])
 
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(null), 3000)
-  }
-
-  // ── Load & merge contacts ─────────────────────────────────
-  async function loadAll() {
+  // ── Data loading ────────────────────────────────────────────
+  async function load() {
+    if (!mountedRef.current) return
     setLoading(true)
-    const [leadsRes, enrollRes, transferRes] = await Promise.all([
-      supabase.from('leads')
-        .select('id, student_name, responsible_name, phone, email, status, source, grade_interest, created_at')
-        .eq('institution_id', institutionId)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false }),
-      supabase.from('enrollments')
-        .select('id, student_name, course_grade, created_at')
-        .eq('institution_id', institutionId)
-        .order('created_at', { ascending: false }),
-      supabase.from('student_transfers')
-        .select('id, student_name, course_grade, created_at')
-        .eq('institution_id', institutionId)
-        .order('created_at', { ascending: false }),
-    ])
+    try {
+      const [leadsRes, convsRes] = await Promise.all([
+        supabase.from('leads')
+          .select('id, student_name, responsible_name, phone, email, grade_interest, source, status, created_at')
+          .eq('institution_id', institutionId)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false }),
+        supabase.from('whatsapp_conversations')
+          .select('remote_jid, contact_name, contact_type, assigned_user_name, tags, status, updated_at, lead_id')
+          .eq('institution_id', institutionId)
+          .order('updated_at', { ascending: false }),
+      ])
 
-    const merged: Contact[] = []
+      if (!mountedRef.current) return
 
-    for (const l of leadsRes.data || []) {
-      const cfg = ORIGIN_CFG.lead
-      merged.push({
-        refId: `lead:${l.id}`,
-        rawId: l.id,
-        origin: 'lead',
-        originLabel: cfg.label,
-        originColor: cfg.color,
-        originBg: cfg.bg,
-        name: l.student_name || l.responsible_name || 'Sem nome',
-        phone: l.phone || null,
-        email: l.email || null,
-        grade: l.grade_interest || null,
-        status: l.status || null,
-        created_at: l.created_at,
-      })
-    }
+      const leads = leadsRes.data || []
+      const convs = convsRes.data || []
+      setRawConvs(convs)
 
-    for (const e of enrollRes.data || []) {
-      const cfg = ORIGIN_CFG.enrollment
-      merged.push({
-        refId: `enrollment:${e.id}`,
-        rawId: e.id,
-        origin: 'enrollment',
-        originLabel: cfg.label,
-        originColor: cfg.color,
-        originBg: cfg.bg,
-        name: e.student_name || 'Sem nome',
-        phone: null,
-        email: null,
-        grade: e.course_grade || null,
-        status: null,
-        created_at: e.created_at,
-      })
-    }
+      // Build map keyed by normalized phone (last 9 digits)
+      const map = new Map<string, UnifiedContact>()
 
-    for (const t of transferRes.data || []) {
-      const cfg = ORIGIN_CFG.transfer
-      merged.push({
-        refId: `transfer:${t.id}`,
-        rawId: t.id,
-        origin: 'transfer',
-        originLabel: cfg.label,
-        originColor: cfg.color,
-        originBg: cfg.bg,
-        name: t.student_name || 'Sem nome',
-        phone: null,
-        email: null,
-        grade: t.course_grade || null,
-        status: null,
-        created_at: t.created_at,
-      })
-    }
+      for (const l of leads) {
+        const phoneKey = normalizePhone(l.phone || '')
+        const mapKey   = phoneKey || `lead:${l.id}`
+        const existing = map.get(mapKey)
+        const cfg = originCfg(true, false)
 
-    merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    if (mountedRef.current) {
-      setContacts(merged)
-      setLoading(false)
-    }
-  }
-
-  async function loadCustomFields() {
-    const { data } = await supabase
-      .from('contact_custom_fields')
-      .select('*')
-      .eq('institution_id', institutionId)
-      .order('created_at')
-    if (mountedRef.current && data) setCustomFields(data)
-  }
-
-  async function loadNotes(refId: string) {
-    const { data } = await supabase
-      .from('contact_notes')
-      .select('*')
-      .eq('institution_id', institutionId)
-      .eq('contact_ref_id', refId)
-      .order('created_at', { ascending: false })
-    if (mountedRef.current) setNotes(data || [])
-  }
-
-  async function loadFieldValues(refId: string) {
-    const { data } = await supabase
-      .from('contact_field_values')
-      .select('field_id, value')
-      .eq('institution_id', institutionId)
-      .eq('contact_ref_id', refId)
-    if (mountedRef.current && data) {
-      const map: Record<string, string> = {}
-      for (const r of data) map[r.field_id] = r.value || ''
-      setFieldValues(map)
-    }
-  }
-
-  async function loadTimeline(contact: Contact) {
-    const items: typeof timeline = []
-
-    // entry event
-    items.push({
-      id: 'created',
-      icon: '✅',
-      title: `${contact.originLabel} cadastrado`,
-      desc: contact.grade ? `Série: ${contact.grade}` : null,
-      date: contact.created_at,
-    })
-
-    // notes
-    const { data: noteItems } = await supabase
-      .from('contact_notes')
-      .select('*')
-      .eq('institution_id', institutionId)
-      .eq('contact_ref_id', contact.refId)
-      .order('created_at', { ascending: false })
-
-    for (const n of noteItems || []) {
-      items.push({
-        id: `note-${n.id}`,
-        icon: '📝',
-        title: `Anotação de ${n.author_name}`,
-        desc: n.content.length > 80 ? n.content.slice(0, 80) + '...' : n.content,
-        date: n.created_at,
-      })
-    }
-
-    // if lead, look for linked enrollment by name
-    if (contact.origin === 'lead') {
-      const { data: linked } = await supabase
-        .from('enrollments')
-        .select('id, created_at, course_grade')
-        .eq('institution_id', institutionId)
-        .ilike('student_name', `%${contact.name}%`)
-        .limit(3)
-      for (const e of linked || []) {
-        items.push({
-          id: `enroll-${e.id}`,
-          icon: '🎓',
-          title: 'Matrícula realizada',
-          desc: e.course_grade || null,
-          date: e.created_at,
-        })
+        if (existing) {
+          existing.has_lead      = true
+          existing.lead_id       = l.id
+          existing.student_name  = existing.student_name || l.student_name || null
+          existing.email         = existing.email || l.email || null
+          existing.grade         = existing.grade || l.grade_interest || null
+          existing.source        = existing.source || l.source || null
+          existing.status_lead   = l.status
+          const c2 = originCfg(true, existing.has_whatsapp)
+          existing.origin_label  = c2.label
+          existing.origin_color  = c2.color
+          existing.origin_bg     = c2.bg
+          if (new Date(l.created_at) > new Date(existing.last_contact)) {
+            existing.last_contact = l.created_at
+          }
+        } else {
+          map.set(mapKey, {
+            id:                 l.id,
+            name:               l.responsible_name || l.student_name || 'Sem nome',
+            student_name:       l.student_name || null,
+            phone:              l.phone || null,
+            email:              l.email || null,
+            grade:              l.grade_interest || null,
+            source:             l.source || null,
+            status_lead:        l.status,
+            status_whatsapp:    null,
+            has_lead:           true,
+            has_whatsapp:       false,
+            lead_id:            l.id,
+            remote_jid:         null,
+            contact_type:       null,
+            assigned_user_name: null,
+            tags:               [],
+            last_contact:       l.created_at,
+            origin_label:       cfg.label,
+            origin_color:       cfg.color,
+            origin_bg:          cfg.bg,
+          })
+        }
       }
+
+      for (const c of convs) {
+        const rawPhone = phoneFromJid(c.remote_jid || '')
+        const phoneKey = normalizePhone(rawPhone)
+        const mapKey   = phoneKey || `wa:${c.remote_jid}`
+        const existing = map.get(mapKey)
+
+        if (existing) {
+          existing.has_whatsapp       = true
+          existing.remote_jid         = c.remote_jid
+          existing.status_whatsapp    = c.status
+          existing.contact_type       = existing.contact_type || c.contact_type || null
+          existing.assigned_user_name = existing.assigned_user_name || c.assigned_user_name || null
+          existing.tags               = (c.tags?.length ? c.tags : existing.tags)
+          if (c.lead_id && !existing.lead_id) existing.lead_id = c.lead_id
+          const cfg = originCfg(existing.has_lead, true)
+          existing.origin_label = cfg.label
+          existing.origin_color = cfg.color
+          existing.origin_bg    = cfg.bg
+          if (!existing.name || existing.name === 'Sem nome') {
+            existing.name = c.contact_name || existing.name
+          }
+          if (c.updated_at && new Date(c.updated_at) > new Date(existing.last_contact)) {
+            existing.last_contact = c.updated_at
+          }
+        } else {
+          const cfg = originCfg(false, true)
+          const fmtPhone = formatPhone(rawPhone)
+          map.set(mapKey, {
+            id:                 c.remote_jid,
+            name:               c.contact_name || fmtPhone || 'Desconhecido',
+            student_name:       null,
+            phone:              fmtPhone || null,
+            email:              null,
+            grade:              null,
+            source:             null,
+            status_lead:        null,
+            status_whatsapp:    c.status,
+            has_lead:           false,
+            has_whatsapp:       true,
+            lead_id:            c.lead_id || null,
+            remote_jid:         c.remote_jid,
+            contact_type:       c.contact_type || null,
+            assigned_user_name: c.assigned_user_name || null,
+            tags:               c.tags || [],
+            last_contact:       c.updated_at || new Date().toISOString(),
+            origin_label:       cfg.label,
+            origin_color:       cfg.color,
+            origin_bg:          cfg.bg,
+          })
+        }
+      }
+
+      const list = Array.from(map.values())
+        .sort((a, b) => new Date(b.last_contact).getTime() - new Date(a.last_contact).getTime())
+
+      if (mountedRef.current) {
+        setContacts(list)
+        setLoading(false)
+      }
+    } catch {
+      if (mountedRef.current) setLoading(false)
+    }
+  }
+
+  // ── Open drawer ─────────────────────────────────────────────
+  function openDrawer(contact: UnifiedContact) {
+    const conv = {
+      id:          contact.remote_jid || `${contact.phone?.replace(/\D/g, '')}@s.whatsapp.net`,
+      name:        contact.name,
+      phone:       contact.phone || '',
+      avatarColor: twColor(contact.name),
+      contact_type: contact.contact_type || undefined,
+      lead_id:      contact.lead_id || undefined,
+      tags:         contact.tags,
+      status:       contact.status_whatsapp || 'waiting',
+      lastTime:     new Date(contact.last_contact),
+      lastMessage:  '',
     }
 
-    items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    if (mountedRef.current) setTimeline(items)
+    // All convs as DrawerConversation for "Conversas" tab
+    const allDC = rawConvs.map(c => ({
+      id:           c.remote_jid,
+      name:         c.contact_name || phoneFromJid(c.remote_jid),
+      phone:        formatPhone(phoneFromJid(c.remote_jid)),
+      avatarColor:  twColor(c.contact_name || c.remote_jid),
+      contact_type: c.contact_type,
+      lead_id:      c.lead_id,
+      tags:         c.tags || [],
+      status:       c.status || 'waiting',
+      lastTime:     new Date(c.updated_at || Date.now()),
+      lastMessage:  '',
+    }))
+
+    setDrawerConv(conv)
+    setDrawerAllConvs(allDC)
+    setDrawerOpen(true)
   }
 
-  function openContact(c: Contact) {
-    setSelected(c)
-    setActiveTab('dados')
-    setEditingFields(false)
-    setNotes([])
-    setTimeline([])
-    setFieldValues({})
-    loadNotes(c.refId)
-    loadFieldValues(c.refId)
-    loadTimeline(c)
+  function handleDrawerUpdate(jid: string, updates: Record<string, any>) {
+    setContacts(prev => prev.map(c => {
+      if (c.remote_jid === jid || c.id === jid) {
+        return {
+          ...c,
+          name:         updates.name         ?? c.name,
+          contact_type: updates.contact_type ?? c.contact_type,
+          lead_id:      updates.lead_id      ?? c.lead_id,
+          has_lead:     updates.lead_id ? true : c.has_lead,
+        }
+      }
+      return c
+    }))
   }
 
-  async function saveNote() {
-    if (!newNote.trim() || !selected) return
-    setSavingNote(true)
-    await supabase.from('contact_notes').insert({
-      institution_id: institutionId,
-      contact_ref_id: selected.refId,
-      contact_ref_type: selected.origin,
-      content: newNote.trim(),
-      author_name: user?.full_name || 'Usuário',
-    })
-    setNewNote('')
-    await loadNotes(selected.refId)
-    await loadTimeline(selected)
-    showToast('Anotação salva!')
-    setSavingNote(false)
-  }
+  // ── Derived filters ─────────────────────────────────────────
+  const grades     = [...new Set(contacts.map(c => c.grade).filter(Boolean))] as string[]
+  const attendants = [...new Set(contacts.map(c => c.assigned_user_name).filter(Boolean))] as string[]
 
-  async function deleteNote(id: string) {
-    if (!confirm('Excluir esta anotação?')) return
-    await supabase.from('contact_notes').delete().eq('id', id)
-    if (selected) {
-      await loadNotes(selected.refId)
-      await loadTimeline(selected)
-    }
-  }
-
-  async function saveFieldValues() {
-    if (!selected) return
-    setSavingFields(true)
-    for (const [fieldId, value] of Object.entries(fieldValues)) {
-      await supabase.from('contact_field_values').upsert({
-        institution_id: institutionId,
-        contact_ref_id: selected.refId,
-        field_id: fieldId,
-        value,
-      }, { onConflict: 'contact_ref_id,field_id' })
-    }
-    setSavingFields(false)
-    setEditingFields(false)
-    showToast('Campos salvos!')
-  }
-
-  // ── Filters ───────────────────────────────────────────────
   const filtered = contacts.filter(c => {
     const q = search.toLowerCase()
     const matchSearch = !search ||
       c.name.toLowerCase().includes(q) ||
-      c.phone?.includes(search) ||
-      c.email?.toLowerCase().includes(q)
-    const matchOrigin = filterOrigin === 'all' || c.origin === filterOrigin
-    return matchSearch && matchOrigin
+      (c.student_name?.toLowerCase().includes(q) ?? false) ||
+      (c.phone?.includes(search) ?? false) ||
+      (c.email?.toLowerCase().includes(q) ?? false)
+    const matchOrigin =
+      filterOrigin === 'all' ||
+      (filterOrigin === 'lead'      && c.has_lead  && !c.has_whatsapp) ||
+      (filterOrigin === 'whatsapp'  && !c.has_lead &&  c.has_whatsapp) ||
+      (filterOrigin === 'both'      && c.has_lead  &&  c.has_whatsapp)
+    const matchGrade     = filterGrade     === 'all' || c.grade                === filterGrade
+    const matchAttendant = filterAttendant === 'all' || c.assigned_user_name   === filterAttendant
+    return matchSearch && matchOrigin && matchGrade && matchAttendant
   })
 
+  // ── KPIs ────────────────────────────────────────────────────
   const kpis = [
-    { label: 'Total', value: contacts.length, color: '#3B82F6', bg: '#EFF6FF' },
-    { label: 'Leads', value: contacts.filter(c => c.origin === 'lead').length, color: '#7C3AED', bg: '#EDE9FE' },
-    { label: 'Matriculados', value: contacts.filter(c => c.origin === 'enrollment').length, color: '#065F46', bg: '#D1FAE5' },
-    { label: 'Transferências', value: contacts.filter(c => c.origin === 'transfer').length, color: '#1E40AF', bg: '#DBEAFE' },
+    { label: 'Total de contatos',    value: contacts.length,                                        color: '#3B82F6', bg: '#EFF6FF' },
+    { label: 'Leads ativos',         value: contacts.filter(c => c.has_lead && c.status_lead !== 'lost').length,   color: '#7C3AED', bg: '#EDE9FE' },
+    { label: 'WhatsApp ativo',       value: contacts.filter(c => c.has_whatsapp && c.status_whatsapp !== 'closed').length, color: '#D97706', bg: '#FEF3C7' },
+    { label: 'Lead + WhatsApp',      value: contacts.filter(c => c.has_lead && c.has_whatsapp).length, color: '#065F46', bg: '#D1FAE5' },
   ]
 
-  // ─── CONTACT PROFILE ─────────────────────────────────────
-  if (selected) {
-    const color = avatarColor(selected.name)
-    const waUrl = selected.phone ? `https://wa.me/55${selected.phone.replace(/\D/g, '')}` : null
-
-    return (
-      <div style={{ padding: '24px 32px', maxWidth: 960, margin: '0 auto' }}>
-        {toast && <Toast msg={toast} />}
-
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-          <button onClick={() => setSelected(null)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: '1px solid #E2E8F0', background: 'white', fontSize: 13, color: '#64748B', cursor: 'pointer' }}>
-            <ChevronLeft size={14} /> Voltar
-          </button>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ width: 48, height: 48, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: 'white', flexShrink: 0 }}>
-              {initials(selected.name)}
-            </div>
-            <div>
-              <h1 style={{ fontSize: 20, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>{selected.name}</h1>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: selected.originBg, color: selected.originColor }}>
-                  {selected.originLabel}
-                </span>
-                {selected.grade && <span style={{ fontSize: 12, color: '#94A3B8' }}>{selected.grade}</span>}
-                <span style={{ fontSize: 12, color: '#CBD5E1' }}>desde {fmtDate(selected.created_at)}</span>
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {waUrl && (
-              <a href={waUrl} target="_blank" rel="noopener noreferrer"
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: '#D1FAE5', color: '#065F46', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
-                <MessageCircle size={14} /> WhatsApp
-              </a>
-            )}
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 2, background: 'white', border: '1px solid #E2E8F0', borderRadius: 12, padding: 4, width: 'fit-content', marginBottom: 20 }}>
-          {[
-            { id: 'dados', label: 'Dados', icon: User },
-            { id: 'timeline', label: 'Timeline', icon: History },
-            { id: 'anotacoes', label: 'Anotações', icon: StickyNote },
-          ].map(tab => {
-            const Icon = tab.icon
-            const active = activeTab === tab.id
-            return (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#fff' : '#64748B', background: active ? '#1A2B4A' : 'transparent', border: 'none', cursor: 'pointer' }}>
-                <Icon size={13} />{tab.label}
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Tab: Dados */}
-        {activeTab === 'dados' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-            {/* Informações principais */}
-            <div style={{ ...card, padding: 24, gridColumn: '1 / -1' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-                <User size={16} color="#64748B" />
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Informações do contato</span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
-                {[
-                  { label: 'Nome', value: selected.name },
-                  { label: 'Origem', value: selected.originLabel },
-                  { label: 'Série', value: selected.grade || '—' },
-                  { label: 'Telefone', value: selected.phone || '—' },
-                  { label: 'E-mail', value: selected.email || '—' },
-                  { label: 'Primeiro contato', value: fmtDate(selected.created_at) },
-                ].map(f => (
-                  <div key={f.label}>
-                    <p style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.5, margin: '0 0 4px' }}>{f.label}</p>
-                    <p style={{ fontSize: 14, color: '#1A2B4A', fontWeight: 600, margin: 0 }}>{f.value}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Campos personalizados */}
-            {customFields.length > 0 && (
-              <div style={{ ...card, padding: 24, gridColumn: '1 / -1' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Tag size={16} color="#64748B" />
-                    <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Campos personalizados</span>
-                  </div>
-                  {!editingFields
-                    ? <button onClick={() => setEditingFields(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: '1px solid #E2E8F0', background: 'white', fontSize: 12, color: '#64748B', cursor: 'pointer' }}><Edit3 size={12} /> Editar</button>
-                    : <div style={{ display: 'flex', gap: 8 }}>
-                        <button onClick={() => setEditingFields(false)} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #E2E8F0', background: 'white', fontSize: 12, color: '#64748B', cursor: 'pointer' }}>Cancelar</button>
-                        <button onClick={saveFieldValues} disabled={savingFields} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 14px', borderRadius: 8, background: '#00A896', color: 'white', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                          <Check size={12} /> Salvar
-                        </button>
-                      </div>
-                  }
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-                  {customFields.map(f => (
-                    <div key={f.id}>
-                      <label style={lbl}>{f.label}</label>
-                      {editingFields ? (
-                        f.type === 'select' ? (
-                          <select style={inp} value={fieldValues[f.id] || ''} onChange={e => setFieldValues(v => ({ ...v, [f.id]: e.target.value }))}>
-                            <option value="">Selecione...</option>
-                            {f.options?.map(o => <option key={o} value={o}>{o}</option>)}
-                          </select>
-                        ) : (
-                          <input type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'} style={inp}
-                            value={fieldValues[f.id] || ''}
-                            onChange={e => setFieldValues(v => ({ ...v, [f.id]: e.target.value }))} />
-                        )
-                      ) : (
-                        <p style={{ fontSize: 14, color: '#475569', margin: 0 }}>{fieldValues[f.id] || '—'}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Tab: Timeline */}
-        {activeTab === 'timeline' && (
-          <div style={{ ...card, padding: 24 }}>
-            <p style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: '0 0 20px' }}>Timeline de interações</p>
-            {timeline.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 40 }}>
-                <Clock size={36} color="#E2E8F0" style={{ margin: '0 auto 10px', display: 'block' }} />
-                <p style={{ color: '#94A3B8', fontSize: 14, margin: 0 }}>Nenhum evento registrado.</p>
-              </div>
-            ) : (
-              <div style={{ position: 'relative' }}>
-                <div style={{ position: 'absolute', left: 19, top: 0, bottom: 0, width: 2, background: '#E2E8F0' }} />
-                {timeline.map(item => (
-                  <div key={item.id} style={{ display: 'flex', gap: 16, paddingBottom: 20, position: 'relative' }}>
-                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#F8FAFC', border: '2px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0, zIndex: 1 }}>
-                      {item.icon}
-                    </div>
-                    <div style={{ flex: 1, paddingTop: 8 }}>
-                      <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', margin: '0 0 2px' }}>{item.title}</p>
-                      {item.desc && <p style={{ fontSize: 12, color: '#64748B', margin: '0 0 4px', lineHeight: 1.5 }}>{item.desc}</p>}
-                      <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>{fmtDateTime(item.date)}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Tab: Anotações */}
-        {activeTab === 'anotacoes' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ ...card, padding: 20 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', margin: '0 0 12px' }}>Nova anotação</p>
-              <textarea value={newNote} onChange={e => setNewNote(e.target.value)}
-                placeholder="Registre observações, demandas ou qualquer informação relevante..."
-                rows={4} style={{ ...inp, resize: 'vertical', minHeight: 90, marginBottom: 10 }} />
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button onClick={saveNote} disabled={!newNote.trim() || savingNote}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', borderRadius: 10, background: '#00A896', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: !newNote.trim() ? 0.6 : 1 }}>
-                  {savingNote ? 'Salvando...' : <><Check size={13} /> Salvar</>}
-                </button>
-              </div>
-            </div>
-
-            {notes.length === 0 ? (
-              <div style={{ ...card, padding: 40, textAlign: 'center' }}>
-                <StickyNote size={36} color="#E2E8F0" style={{ margin: '0 auto 10px', display: 'block' }} />
-                <p style={{ color: '#94A3B8', fontSize: 14, margin: 0 }}>Nenhuma anotação ainda.</p>
-              </div>
-            ) : notes.map(note => (
-              <div key={note.id} style={{ ...card, padding: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#00A896' }}>
-                      {initials(note.author_name)}
-                    </div>
-                    <div>
-                      <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{note.author_name}</p>
-                      <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>{fmtDateTime(note.created_at)}</p>
-                    </div>
-                  </div>
-                  <button onClick={() => deleteNote(note.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CBD5E1', padding: 4 }}>
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-                <p style={{ fontSize: 14, color: '#374151', margin: 0, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{note.content}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Fields modal */}
-        {showFieldsModal && (
-          <FieldsModal institutionId={institutionId} fields={customFields} onClose={() => setShowFieldsModal(false)} onChanged={loadCustomFields} />
-        )}
-      </div>
-    )
-  }
-
-  // ─── LIST VIEW ────────────────────────────────────────────
+  // ─── Render ────────────────────────────────────────────────
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 1100, margin: '0 auto' }}>
-      {toast && <Toast msg={toast} />}
+    <div style={{ padding: '24px 32px', maxWidth: 1200, margin: '0 auto' }}>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Contatos</h1>
-          <p style={{ fontSize: 14, color: '#94A3B8', margin: '4px 0 0' }}>Visão unificada de leads, matrículas e transferências</p>
+          <p style={{ fontSize: 14, color: '#94A3B8', margin: '4px 0 0' }}>
+            {contacts.length} contatos únicos — leads e WhatsApp unificados
+          </p>
         </div>
-        <button onClick={() => setShowFieldsModal(true)}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, border: '1px solid #E2E8F0', background: 'white', fontSize: 13, color: '#64748B', cursor: 'pointer' }}>
-          <Tag size={14} /> Campos personalizados
+        <button onClick={load} disabled={loading}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, border: '1px solid #E2E8F0', background: 'white', fontSize: 13, color: '#64748B', cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>
+          <RefreshCw size={14} style={{ animation: loading ? 'spin 0.8s linear infinite' : 'none' }} /> Atualizar
         </button>
       </div>
 
@@ -597,8 +360,8 @@ export default function ContactsModule() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-        <div style={{ position: 'relative', flex: 1 }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
           <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Buscar por nome, telefone ou e-mail..."
@@ -606,10 +369,22 @@ export default function ContactsModule() {
         </div>
         <select value={filterOrigin} onChange={e => setFilterOrigin(e.target.value)} style={{ ...inp, width: 180 }}>
           <option value="all">Todas as origens</option>
-          <option value="lead">Leads</option>
-          <option value="enrollment">Matriculados</option>
-          <option value="transfer">Transferências</option>
+          <option value="lead">Apenas Lead</option>
+          <option value="whatsapp">Apenas WhatsApp</option>
+          <option value="both">Lead + WhatsApp</option>
         </select>
+        {grades.length > 0 && (
+          <select value={filterGrade} onChange={e => setFilterGrade(e.target.value)} style={{ ...inp, width: 160 }}>
+            <option value="all">Todas as séries</option>
+            {grades.map(g => <option key={g} value={g}>{g}</option>)}
+          </select>
+        )}
+        {attendants.length > 0 && (
+          <select value={filterAttendant} onChange={e => setFilterAttendant(e.target.value)} style={{ ...inp, width: 180 }}>
+            <option value="all">Todos os atendentes</option>
+            {attendants.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+        )}
       </div>
 
       {/* Table */}
@@ -625,47 +400,85 @@ export default function ContactsModule() {
             <p style={{ fontSize: 15, fontWeight: 600, color: '#94A3B8', margin: 0 }}>
               {contacts.length === 0 ? 'Nenhum contato ainda' : 'Nenhum resultado encontrado'}
             </p>
+            {contacts.length === 0 && (
+              <p style={{ fontSize: 13, color: '#CBD5E1', margin: '8px 0 0' }}>
+                Os contatos aparecem aqui quando leads ou conversas WhatsApp forem registrados.
+              </p>
+            )}
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#F8FAFC' }}>
-                {['Contato', 'Telefone', 'E-mail', 'Origem', 'Série', 'Desde', ''].map(h => (
+                {['Contato', 'Telefone', 'Origem', 'Série', 'Atendente', 'Último contato', ''].map(h => (
                   <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid #E2E8F0' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.map(c => {
-                const color = avatarColor(c.name)
+                const color = hexColor(c.name)
                 return (
-                  <tr key={c.refId} onClick={() => openContact(c)}
+                  <tr key={c.id} onClick={() => openDrawer(c)}
                     style={{ borderBottom: '1px solid #F8FAFC', cursor: 'pointer' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFC')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
+
+                    {/* Nome + aluno + tags */}
                     <td style={{ padding: '14px 16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ width: 36, height: 36, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: 'white', flexShrink: 0 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: 'white', flexShrink: 0 }}>
                           {initials(c.name)}
                         </div>
-                        <p style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{c.name}</p>
+                        <div>
+                          <p style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{c.name}</p>
+                          {c.student_name && (
+                            <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>{c.student_name}</p>
+                          )}
+                          {c.tags.length > 0 && (
+                            <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                              {c.tags.slice(0, 2).map((t, i) => (
+                                <span key={i} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 10, background: '#F0F9FF', color: '#0369A1', fontWeight: 600 }}>{t}</span>
+                              ))}
+                              {c.tags.length > 2 && <span style={{ fontSize: 10, color: '#94A3B8' }}>+{c.tags.length - 2}</span>}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
-                    <td style={{ padding: '14px 16px', fontSize: 13, color: '#475569' }}>
-                      {c.phone ? <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Phone size={11} />{c.phone}</span> : '—'}
-                    </td>
-                    <td style={{ padding: '14px 16px', fontSize: 12, color: '#94A3B8' }}>
-                      {c.email || '—'}
-                    </td>
+
+                    {/* Telefone */}
                     <td style={{ padding: '14px 16px' }}>
-                      <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: c.originBg, color: c.originColor }}>
-                        {c.originLabel}
+                      {c.phone
+                        ? <span style={{ fontSize: 13, color: '#475569', display: 'flex', alignItems: 'center', gap: 4 }}><Phone size={11} />{c.phone}</span>
+                        : <span style={{ color: '#CBD5E1', fontSize: 13 }}>—</span>}
+                    </td>
+
+                    {/* Origem */}
+                    <td style={{ padding: '14px 16px' }}>
+                      <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: c.origin_bg, color: c.origin_color, whiteSpace: 'nowrap' }}>
+                        {c.origin_label}
                       </span>
                     </td>
+
+                    {/* Série */}
                     <td style={{ padding: '14px 16px', fontSize: 13, color: '#475569' }}>{c.grade || '—'}</td>
-                    <td style={{ padding: '14px 16px', fontSize: 12, color: '#94A3B8' }}>{fmtDate(c.created_at)}</td>
+
+                    {/* Atendente */}
+                    <td style={{ padding: '14px 16px', fontSize: 13, color: '#475569' }}>
+                      {c.assigned_user_name || <span style={{ color: '#CBD5E1' }}>—</span>}
+                    </td>
+
+                    {/* Último contato */}
+                    <td style={{ padding: '14px 16px', fontSize: 12, color: '#94A3B8', whiteSpace: 'nowrap' }}>
+                      {fmtDate(c.last_contact)}
+                    </td>
+
+                    {/* Chevron */}
                     <td style={{ padding: '14px 16px' }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="2">
+                        <polyline points="9 18 15 12 9 6" />
+                      </svg>
                     </td>
                   </tr>
                 )
@@ -677,97 +490,15 @@ export default function ContactsModule() {
 
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
 
-      {showFieldsModal && (
-        <FieldsModal institutionId={institutionId} fields={customFields} onClose={() => setShowFieldsModal(false)} onChanged={loadCustomFields} />
-      )}
-    </div>
-  )
-}
-
-// ─── Toast ────────────────────────────────────────────────────
-function Toast({ msg }: { msg: string }) {
-  return (
-    <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: '#1A2B4A', color: 'white', padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 9999 }}>
-      {msg}
-    </div>
-  )
-}
-
-// ─── Fields Modal ─────────────────────────────────────────────
-function FieldsModal({ institutionId, fields, onClose, onChanged }: {
-  institutionId: string
-  fields: CustomField[]
-  onClose: () => void
-  onChanged: () => void
-}) {
-  const [label, setLabel] = useState('')
-  const [type, setType] = useState<'text' | 'number' | 'date' | 'select'>('text')
-  const [options, setOptions] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  const s: React.CSSProperties = {
-    width: '100%', padding: '9px 12px', borderRadius: 10,
-    border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box',
-  }
-
-  async function addField() {
-    if (!label.trim()) return
-    setSaving(true)
-    await supabase.from('contact_custom_fields').insert({
-      institution_id: institutionId,
-      label: label.trim(),
-      type,
-      options: type === 'select' ? options.split(',').map(o => o.trim()).filter(Boolean) : null,
-    })
-    setSaving(false)
-    setLabel('')
-    setOptions('')
-    onChanged()
-  }
-
-  async function removeField(id: string) {
-    await supabase.from('contact_custom_fields').delete().eq('id', id)
-    onChanged()
-  }
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: 460, maxHeight: '90vh', overflowY: 'auto', padding: 32 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Campos personalizados</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><X size={20} /></button>
-        </div>
-        <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 20px' }}>Campos extras que aparecem no perfil de todos os contatos.</p>
-
-        {fields.map(f => (
-          <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0', marginBottom: 8 }}>
-            <Tag size={13} color="#64748B" />
-            <span style={{ flex: 1, fontSize: 13, color: '#374151', fontWeight: 600 }}>{f.label}</span>
-            <span style={{ fontSize: 11, color: '#94A3B8', background: '#F1F5F9', padding: '2px 8px', borderRadius: 6 }}>{f.type}</span>
-            <button onClick={() => removeField(f.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CBD5E1' }}><X size={13} /></button>
-          </div>
-        ))}
-
-        <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: 16, marginTop: 8 }}>
-          <p style={{ fontSize: 12, fontWeight: 700, color: '#64748B', margin: '0 0 12px', textTransform: 'uppercase' }}>Novo campo</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Nome do campo" style={s} />
-            <select value={type} onChange={e => setType(e.target.value as any)} style={s}>
-              <option value="text">Texto</option>
-              <option value="number">Número</option>
-              <option value="date">Data</option>
-              <option value="select">Seleção</option>
-            </select>
-            {type === 'select' && (
-              <input value={options} onChange={e => setOptions(e.target.value)} placeholder="Opções separadas por vírgula" style={s} />
-            )}
-            <button onClick={addField} disabled={!label.trim() || saving}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', borderRadius: 10, background: '#00A896', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: !label.trim() ? 0.6 : 1 }}>
-              <Plus size={13} /> Adicionar campo
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* ContactDrawer */}
+      <ContactDrawer
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        conversation={drawerConv}
+        allConversations={drawerAllConvs}
+        institutionId={institutionId}
+        onUpdate={handleDrawerUpdate}
+      />
     </div>
   )
 }
