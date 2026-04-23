@@ -31,6 +31,7 @@ import EnrollmentManager from './components/enrollments/EnrollmentManager'
 import WhatsAppHub       from './components/whatsapp/WhatsAppHub'
 import GestorReports     from './components/reports/GestorReports'
 import ClientsModule    from './components/clients/ClientsModule'
+import ContactsModule  from './components/contacts/ContactsModule'
 import UserManagement    from './components/management/UserManagement'
 import SystemSettings    from './components/management/SystemSettings'
 import UserProfile       from './components/management/UserProfile'
@@ -205,8 +206,8 @@ function AppContent() {
   const isAdminArea =
     user.user_type === 'admin_geral' ||
     user.user_type === 'consultant'  ||
-    user.role      === 'super_admin' ||
-    user.role      === 'admin_geral'
+    (user.role as string) === 'super_admin' ||
+    (user.role as string) === 'admin_geral'
 
   if (isAdminArea) {
     const isConsultant = user.user_type === 'consultant'
@@ -266,6 +267,7 @@ function AppContent() {
             <Route path="/dashboard"      element={<Dashboard />} />
             <Route path="/leads"          element={<LeadKanban />} />
             <Route path="/clients"        element={<ClientsModule />} />
+            <Route path="/contacts"       element={<ContactsModule />} />
             <Route path="/visits"         element={<VisitCalendar />} />
             <Route path="/enrollments"    element={<EnrollmentManager />} />
             <Route path="/whatsapp"       element={<WhatsAppHub />} />
