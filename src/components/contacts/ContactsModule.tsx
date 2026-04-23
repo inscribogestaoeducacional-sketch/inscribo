@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { Users, Search, Phone, RefreshCw } from 'lucide-react'
-import ContactProfile, { UnifiedContact } from './ContactProfile'
+import ContactCard from './ContactCard'
+import { UnifiedContact } from './ContactProfile'
 
 // ─── Helpers ─────────────────────────────────────────────────
 const HEX_COLORS = ['#00A896','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
@@ -457,13 +458,25 @@ export default function ContactsModule() {
 
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
 
-      {/* ContactProfile */}
       {profileContact && (
-        <ContactProfile
-          contact={profileContact}
-          institutionId={institutionId}
+        <ContactCard
+          mode="page"
           onClose={() => setProfileContact(null)}
-          onUpdate={handleProfileUpdate}
+          institutionId={institutionId}
+          initialData={{
+            lead_id:            profileContact.lead_id,
+            remote_jid:         profileContact.remote_jid,
+            name:               profileContact.name,
+            phone:              profileContact.phone   ?? undefined,
+            email:              profileContact.email   ?? undefined,
+            student_name:       profileContact.student_name ?? undefined,
+            grade_interest:     profileContact.grade   ?? undefined,
+            contact_type:       profileContact.contact_type ?? undefined,
+            tags:               profileContact.tags,
+            source:             profileContact.source  ?? undefined,
+            assigned_user_name: profileContact.assigned_user_name ?? undefined,
+          }}
+          onUpdate={updates => handleProfileUpdate(profileContact.id, updates)}
         />
       )}
     </div>

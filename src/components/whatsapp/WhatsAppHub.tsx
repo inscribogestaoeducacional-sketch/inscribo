@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import ContactDrawer from './ContactDrawer'
+import ContactCard from '../contacts/ContactCard'
 import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight,
@@ -2898,14 +2898,28 @@ export default function WhatsAppHub() {
         </div>{/* end flex 3-column row */}
       </div>{/* end main outer container */}
 
-      {/* Feature 4: ContactDrawer */}
-      <ContactDrawer
+      {/* Feature 4: ContactCard drawer */}
+      <ContactCard
+        mode="drawer"
         isOpen={showDrawer}
         onClose={() => setShowDrawer(false)}
-        conversation={activeConv}
-        allConversations={conversations}
         institutionId={user?.institution_id || ''}
-        onUpdate={(jid: string, updates: Partial<Conversation>) => setConversations(prev => prev.map(c => c.id === jid ? {...c, ...updates} : c))}
+        initialData={activeConv ? {
+          lead_id:              activeConv.lead_id,
+          remote_jid:           activeConv.id,
+          name:                 activeConv.name,
+          phone:                activeConv.phone,
+          contact_type:         activeConv.contact_type,
+          tags:                 activeConv.tags,
+          profile_picture_url:  activeConv.profile_picture_url,
+          assigned_user_name:   activeConv.assigned_user_name,
+          assigned_user_id:     activeConv.assigned_user_id,
+          status:               activeConv.status,
+        } : {}}
+        allConversations={conversations}
+        onUpdate={updates => {
+          if (activeConv) setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, ...updates } : c))
+        }}
       />
 
       {/* Feature 5: Import Modal */}
