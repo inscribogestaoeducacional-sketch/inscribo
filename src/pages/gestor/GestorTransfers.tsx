@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../hooks/useAudit'
 import AuditModal from '../../components/common/AuditModal'
+import { createNotification } from '../../lib/notifications'
 
 // ─── types ────────────────────────────────────────────────────────────────────
 interface Transfer {
@@ -229,6 +230,14 @@ export default function GestorTransfers() {
           action: 'created',
           new_value: `${form.studentName.trim()} — ${form.grade}`,
           user_id: user!.id, user_name: userName, user_role: userRole,
+        })
+        createNotification({
+          institution_id: institutionId,
+          type: 'weekly_alert',
+          title: 'Nova transferência registrada',
+          message: `${form.studentName.trim()} (${form.grade}) solicitou transferência.`,
+          severity: 'warning',
+          action_url: '/transferencias',
         })
         showToast('Transferência registrada.')
       }

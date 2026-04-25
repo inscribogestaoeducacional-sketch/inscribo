@@ -17,6 +17,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { useAuth } from '../../contexts/AuthContext'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { DatabaseService, Lead, ActivityLog } from '../../lib/supabase'
+import { createNotification } from '../../lib/notifications'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const statusConfig = {
@@ -857,6 +858,14 @@ export default function LeadKanban() {
       const newLead = await DatabaseService.createLead(leadData)
       await DatabaseService.logActivity({ user_id: user!.id, action: 'Lead criado', entity_type: 'lead', entity_id: newLead.id, details: { student_name: newLead.student_name, responsible_name: newLead.responsible_name, source: newLead.source, grade_interest: newLead.grade_interest, phone: newLead.phone || '', email: newLead.email || '', address: newLead.address || '', budget_range: newLead.budget_range || '', notes: newLead.notes || '' }, institution_id: user!.institution_id })
       await logAudit({ institution_id: user!.institution_id, module: 'leads', record_id: newLead.id, action: 'created', new_value: `${newLead.student_name} — ${newLead.grade_interest}`, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
+      createNotification({
+        institution_id: user!.institution_id,
+        type: 'milestone',
+        title: 'Novo lead cadastrado',
+        message: `${data.responsible_name} — ${data.student_name} (${data.grade_interest || 'série não informada'})`,
+        severity: 'info',
+        action_url: '/leads',
+      })
     }
     await loadData()
     setEditingLead(null)
@@ -883,6 +892,16 @@ export default function LeadKanban() {
       if (previousStatus !== newStatus) {
         await DatabaseService.logActivity({ user_id: user!.id, action: 'Status alterado', entity_type: 'lead', entity_id: leadId, details: { previous_status: previousStatus, new_status: newStatus, student_name: currentLead.student_name, responsible_name: currentLead.responsible_name }, institution_id: user!.institution_id })
         await logAudit({ institution_id: user!.institution_id, module: 'leads', record_id: leadId, action: 'status_changed', old_value: previousStatus, new_value: newStatus, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
+        if (newStatus === 'enrolled') {
+          createNotification({
+            institution_id: user!.institution_id,
+            type: 'milestone',
+            title: 'Nova matrícula confirmada!',
+            message: `${currentLead.student_name} foi matriculado(a) com sucesso.`,
+            severity: 'success',
+            action_url: '/leads',
+          })
+        }
       }
       await loadData()
     } catch (err) {

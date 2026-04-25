@@ -18,6 +18,7 @@ import { supabase } from '../../lib/supabase'
 import CampaignGeneratorModal from '../../components/reports/CampaignGeneratorModal'
 import SchoolSetupModal from '../../components/onboarding/SchoolSetupModal'
 import type { FunnelMetrics } from '../../lib/supabase'
+import { createNotification } from '../../lib/notifications'
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 interface HistoricalEntry {
@@ -214,6 +215,12 @@ export default function GestorHome() {
   const [aiInsight, setAiInsight] = useState<string | null>(null)
   const [aiInsightLoading, setAiInsightLoading] = useState(false)
   const aiInsightFetched = useRef(false)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   useEffect(() => { if (!institutionId) return; load() }, [institutionId])
 
@@ -269,6 +276,45 @@ export default function GestorHome() {
           setMarketData(cycleWithLocation.market_data)
         } else {
           fetchMarketData(cycleWithLocation.school_data!.city as string, cycleWithLocation.school_data!.state as string, cycleWithLocation.id)
+        }
+      }
+
+      if (mountedRef.current) {
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+        const recentLeads = (leadsRes.data ?? []).filter((l: { created_at: string }) => l.created_at >= oneDayAgo)
+        if (recentLeads.length > 5) {
+          createNotification({
+            institution_id: institutionId,
+            type: 'milestone',
+            title: 'Alta captação de leads!',
+            message: `${recentLeads.length} novos leads cadastrados nas últimas 24h.`,
+            severity: 'success',
+            action_url: '/leads',
+          })
+        }
+
+        const sortedFunnel = (funnelRes.data ?? []).sort((a: FunnelMetrics, b: FunnelMetrics) => a.period.localeCompare(b.period))
+        const latestF = sortedFunnel[sortedFunnel.length - 1] as FunnelMetrics | undefined
+        if (latestF) {
+          const checks = [
+            { key: 'registrations', val: latestF.registrations, target: latestF.registrations_target, label: 'Cadastros' },
+            { key: 'schedules', val: latestF.schedules, target: latestF.schedules_target, label: 'Agendamentos' },
+            { key: 'visits', val: latestF.visits, target: latestF.visits_target, label: 'Visitas' },
+            { key: 'enrollments', val: latestF.enrollments, target: latestF.enrollments_target, label: 'Matrículas' },
+          ]
+          for (const c of checks) {
+            if ((c.target ?? 0) > 0 && ((c.val ?? 0) / c.target!) * 100 < 60) {
+              createNotification({
+                institution_id: institutionId,
+                type: 'goal_deviation',
+                title: `Meta de ${c.label} abaixo de 60%`,
+                message: `${c.label}: ${c.val ?? 0} de ${c.target} (${Math.round(((c.val ?? 0) / c.target!) * 100)}% da meta).`,
+                severity: 'warning',
+                action_url: '/reports',
+              })
+              break
+            }
+          }
         }
       }
     } finally {

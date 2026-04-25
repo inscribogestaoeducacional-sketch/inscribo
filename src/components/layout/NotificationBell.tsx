@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useNotifications } from '../../hooks/useNotifications'
 
 interface Props {
@@ -26,6 +27,7 @@ const severityConfig = {
 export default function NotificationBell({ institutionId }: Props) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
   const { notifications, unreadCount, markAsRead, markAllRead } = useNotifications(institutionId)
 
   useEffect(() => {
@@ -67,8 +69,8 @@ export default function NotificationBell({ institutionId }: Props) {
       {open && (
         <div style={{
           position: 'absolute', right: 0, top: 'calc(100% + 8px)',
-          width: 340, background: '#fff', borderRadius: 16,
-          border: '0.5px solid #D1FAE5', boxShadow: '0 12px 40px rgba(0,168,150,0.12)',
+          width: 360, background: '#fff', borderRadius: 16,
+          border: '1px solid #e2e8f0', boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
           zIndex: 200, overflow: 'hidden'
         }}>
           {/* Header dropdown */}
@@ -89,7 +91,7 @@ export default function NotificationBell({ institutionId }: Props) {
           </div>
 
           {/* Lista */}
-          <div style={{ maxHeight: 380, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 480, overflowY: 'auto' }}>
             {notifications.length === 0 ? (
               <div style={{ padding: 32, textAlign: 'center' }}>
                 <div style={{ fontSize: 28, marginBottom: 8 }}>🔔</div>
@@ -101,7 +103,7 @@ export default function NotificationBell({ institutionId }: Props) {
               return (
                 <div
                   key={n.id}
-                  onClick={() => { if (isUnread) markAsRead(n.id); if (n.action_url) { window.location.href = n.action_url; setOpen(false) } }}
+                  onClick={() => { if (isUnread) markAsRead(n.id); if (n.action_url) { navigate(n.action_url); setOpen(false) } }}
                   style={{
                     padding: '12px 16px', borderBottom: '0.5px solid #F1F5F9',
                     background: isUnread ? '#FAFFFE' : '#fff',
