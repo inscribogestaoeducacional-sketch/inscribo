@@ -140,6 +140,8 @@ export default function ContactCard({
   const [newNote, setNewNote]           = useState('')
   const [savingNote, setSavingNote]     = useState(false)
   const [history, setHistory]           = useState<{ icon: string; title: string; description: string | null; date: string; color?: string }[]>([])
+  const [surveys, setSurveys]           = useState<{ id: string; title: string; created_at: string; survey_token: string }[]>([])
+  const [respondedSurveyIds, setRespondedSurveyIds] = useState<Set<string>>(new Set())
   const [transfers, setTransfers]       = useState<any[]>([])
   const [loadingT, setLoadingT]         = useState(false)
   const [showTForm, setShowTForm]       = useState(false)
@@ -158,6 +160,8 @@ export default function ContactCard({
     setLoading(true)
     setNotes([])
     setHistory([])
+    setSurveys([])
+    setRespondedSurveyIds(new Set())
     setTransfers([])
     setConvData(null)
     setLastMessages([])
@@ -197,6 +201,7 @@ export default function ContactCard({
         loadHistory(),
         loadTransfers(),
         loadWhatsApp(),
+        loadSurveys(),
       ])
     } finally {
       if (mountedRef.current) setLoading(false)
@@ -385,6 +390,35 @@ export default function ContactCard({
       }
     }
 
+    // Survey responses matched by name
+    const { data: surveyResponses } = await supabase
+      .from('satisfaction_responses')
+      .select('id, created_at, answers, respondent_name, survey_id')
+      .eq('institution_id', institutionId)
+      .order('created_at', { ascending: false })
+      .limit(10)
+    const contactFirstName = (initialData.name || '').toLowerCase().split(' ')[0]
+    const relevantResponses = (surveyResponses || []).filter(r => {
+      if (!contactFirstName) return false
+      const rn = (r.respondent_name || '').toLowerCase()
+      return rn.includes(contactFirstName) || (rn.split(' ')[0] && contactFirstName.includes(rn.split(' ')[0]))
+    })
+    for (const resp of relevantResponses) {
+      const answers = resp.answers || {}
+      const scores = ([answers.general, answers.teaching, answers.communication, answers.infrastructure, answers.cost_benefit] as unknown[])
+        .filter((n): n is number => typeof n === 'number')
+      const avg = scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : null
+      items.push({
+        icon: avg && Number(avg) >= 4 ? '⭐' : avg && Number(avg) >= 3 ? '😐' : '😟',
+        title: 'Pesquisa de satisfação respondida',
+        description: avg
+          ? `Nota média: ${avg}/5${resp.respondent_name ? ` — ${resp.respondent_name}` : ''}`
+          : 'Respondida sem nota',
+        date: resp.created_at,
+        color: avg && Number(avg) >= 4 ? '#16A34A' : avg && Number(avg) >= 3 ? '#F59E0B' : '#DC2626',
+      })
+    }
+
     items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     if (mountedRef.current) setHistory(items)
   }
@@ -398,6 +432,35 @@ export default function ContactCard({
       .ilike('student_name', `%${studentName}%`).is('deleted_at', null)
       .order('transfer_date', { ascending: false })
     if (mountedRef.current) { setTransfers(data || []); setLoadingT(false) }
+  }
+
+  async function loadSurveys() {
+    const [surveysRes, responsesRes] = await Promise.all([
+      supabase.from('satisfaction_surveys')
+        .select('id, title, created_at, survey_token')
+        .eq('institution_id', institutionId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(5),
+      supabase.from('satisfaction_responses')
+        .select('survey_id, respondent_name')
+        .eq('institution_id', institutionId)
+        .order('created_at', { ascending: false })
+        .limit(30),
+    ])
+    if (!mountedRef.current) return
+    const firstName = (initialData.name || '').toLowerCase().split(' ')[0]
+    const answered = new Set(
+      (responsesRes.data || [])
+        .filter(r => {
+          if (!firstName) return false
+          const rn = (r.respondent_name || '').toLowerCase()
+          return rn.includes(firstName) || (rn.split(' ')[0] && firstName.includes(rn.split(' ')[0]))
+        })
+        .map((r: { survey_id: string }) => r.survey_id)
+    )
+    setSurveys(surveysRes.data || [])
+    setRespondedSurveyIds(answered)
   }
 
   async function loadWhatsApp() {
@@ -804,6 +867,49 @@ export default function ContactCard({
               placeholder="Digite e pressione Enter para adicionar tag"
               className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none" />
           </div>
+
+          {/* Pesquisas de satisfação */}
+          {surveys.length > 0 && (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-[#E2E8F0]" />
+                <span className="text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide">Pesquisas</span>
+                <div className="flex-1 h-px bg-[#E2E8F0]" />
+              </div>
+              <div className="space-y-2">
+                {surveys.map(s => {
+                  const responded = respondedSurveyIds.has(s.id)
+                  const surveyUrl = `${window.location.origin}/satisfaction/${s.survey_token}`
+                  const phoneDigits = (form.phone || initialData.phone || '').replace(/\D/g, '')
+                  const waText = encodeURIComponent(`Olá! Gostaríamos de ouvir sua opinião. Responda nossa pesquisa: ${surveyUrl}`)
+                  return (
+                    <div key={s.id} className="flex items-center gap-2 p-3 bg-[#F8FAFB] rounded-xl border border-[#E2E8F0]">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-[#1A2B4A] truncate">{s.title}</p>
+                        <p className="text-[11px] text-[#94A3B8]">{fmtDate(s.created_at)}</p>
+                      </div>
+                      <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        responded ? 'bg-[#D1FAE5] text-[#16A34A]' : 'bg-[#F1F5F9] text-[#64748B]'
+                      }`}>
+                        {responded ? '✓ Respondida' : 'Não respondida'}
+                      </span>
+                      {!responded && phoneDigits && (
+                        <a
+                          href={`https://wa.me/55${phoneDigits}?text=${waText}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Enviar pesquisa por WhatsApp"
+                          className="flex-shrink-0 flex items-center justify-center w-7 h-7 bg-[#25D366] text-white rounded-lg text-xs font-bold hover:bg-[#1da851] transition-colors"
+                        >
+                          💬
+                        </a>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
 

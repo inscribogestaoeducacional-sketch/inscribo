@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import {
@@ -116,6 +117,7 @@ const inputStyle: React.CSSProperties = {
 export default function GestorSurveys() {
   const { user } = useAuth()
   const institutionId = user?.institution_id!
+  const navigate = useNavigate()
   const mountedRef = useRef(true)
 
   const [surveys, setSurveys] = useState<Survey[]>([])
@@ -442,7 +444,7 @@ export default function GestorSurveys() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC' }}>
-                      {['Nome', 'Série', 'Nota geral', 'Rematrícula', 'Data'].map(h => (
+                      {['Nome', 'Série', 'Nota geral', 'Rematrícula', 'Data', ''].map(h => (
                         <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#64748B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -459,6 +461,16 @@ export default function GestorSurveys() {
                           <td style={{ padding: '10px 14px' }}><span style={{ fontWeight: 700, color: nc }}>{note10.toFixed(1)}</span></td>
                           <td style={{ padding: '10px 14px', color: '#374151', maxWidth: 200, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(r.answers.reenrollment as string) || '—'}</td>
                           <td style={{ padding: '10px 14px', color: '#94A3B8', whiteSpace: 'nowrap' }}>{fmt(r.created_at)}</td>
+                          <td style={{ padding: '10px 14px' }}>
+                            {r.respondent_name && (
+                              <button
+                                onClick={() => navigate(`/contacts?search=${encodeURIComponent(r.respondent_name!)}`)}
+                                style={{ padding: '4px 10px', borderRadius: 8, background: '#EFF6FF', color: '#3B82F6', border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                              >
+                                Ver em Contatos
+                              </button>
+                            )}
+                          </td>
                         </tr>
                       )
                     })}

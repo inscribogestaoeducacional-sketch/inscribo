@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { Users, Search, Phone, Download, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
@@ -69,6 +70,12 @@ export default function ContactsModule() {
   const [filterAttendant, setFilterAttendant] = useState('all')
   const [page, setPage] = useState(1)
   const [profileContact, setProfileContact] = useState<UnifiedContact | null>(null)
+
+  const [searchParams] = useSearchParams()
+  useEffect(() => {
+    const q = searchParams.get('search')
+    if (q) setSearch(q)
+  }, [searchParams])
 
   useEffect(() => {
     mountedRef.current = true
