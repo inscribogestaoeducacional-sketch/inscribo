@@ -93,7 +93,7 @@ const QUESTION_TYPES = [
 // ─── estilos ─────────────────────────────────────────────────
 const card: React.CSSProperties = {
   background: 'white', borderRadius: 16, padding: 24,
-  border: '1px solid #F1F5F9', boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+  border: '1px solid #e2e8f0', boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
 }
 
 const btn = (bg: string, color = 'white'): React.CSSProperties => ({
@@ -327,7 +327,7 @@ export default function GestorSurveys() {
     const scoreColor = overallScore10 >= 8 ? '#10B981' : overallScore10 >= 6 ? '#F59E0B' : '#EF4444'
 
     return (
-      <div style={{ padding: '28px 32px', maxWidth: 1100, margin: '0 auto' }}>
+      <div style={{ padding: 24, background: '#f8f9fb', minHeight: '100%' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
           <button onClick={() => setViewingSurvey(null)} style={{ ...btn('#F1F5F9', '#374151'), padding: '8px 14px' }}>
             ← Voltar
@@ -547,7 +547,7 @@ export default function GestorSurveys() {
 
   // ─── LISTA ────────────────────────────────────────────────
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 1100, margin: '0 auto' }}>
+    <div style={{ padding: 24, background: '#f8f9fb', minHeight: '100%' }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
 
       {toast && (
@@ -561,7 +561,7 @@ export default function GestorSurveys() {
           <h1 style={{ fontSize: 24, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Pesquisas de Satisfação</h1>
           <p style={{ fontSize: 14, color: '#94A3B8', margin: '4px 0 0' }}>Entenda o que as famílias pensam e antecipe rematrículas</p>
         </div>
-        <button onClick={() => setShowNewModal(true)} style={btn('#F97316')}>
+        <button onClick={() => setShowNewModal(true)} style={btn('#00A896')}>
           <Plus size={16} /> Nova pesquisa
         </button>
       </div>
@@ -585,14 +585,14 @@ export default function GestorSurveys() {
       <div style={card}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 60, color: '#94A3B8' }}>
-            <div style={{ width: 32, height: 32, border: '3px solid #F97316', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+            <div style={{ width: 32, height: 32, border: '3px solid #00A896', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
             Carregando...
           </div>
         ) : surveys.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 64 }}>
             <ClipboardList size={48} color="#CBD5E1" style={{ margin: '0 auto 16px', display: 'block' }} />
             <p style={{ fontSize: 16, fontWeight: 600, color: '#94A3B8', margin: '0 0 8px' }}>Nenhuma pesquisa criada ainda</p>
-            <button onClick={() => setShowNewModal(true)} style={btn('#F97316')}>
+            <button onClick={() => setShowNewModal(true)} style={btn('#00A896')}>
               <Plus size={15} /> Criar primeira pesquisa
             </button>
           </div>
@@ -682,7 +682,7 @@ export default function GestorSurveys() {
                   <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Formulário pedirá nome e série antes das perguntas</p>
                 </div>
                 <button onClick={() => setForm(f => ({ ...f, askId: !f.askId }))}
-                  style={{ width: 44, height: 24, borderRadius: 999, border: 'none', cursor: 'pointer', background: form.askId ? '#F97316' : '#CBD5E1', position: 'relative', flexShrink: 0 }}>
+                  style={{ width: 44, height: 24, borderRadius: 999, border: 'none', cursor: 'pointer', background: form.askId ? '#00A896' : '#CBD5E1', position: 'relative', flexShrink: 0 }}>
                   <div style={{ position: 'absolute', top: 3, left: form.askId ? 22 : 3, width: 18, height: 18, borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
                 </button>
               </div>
@@ -727,7 +727,7 @@ export default function GestorSurveys() {
 
               <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>
                 <button onClick={() => { setShowNewModal(false); setCustomQuestions([]) }} style={btn('#F1F5F9', '#374151')}>Cancelar</button>
-                <button onClick={createSurvey} disabled={!form.title.trim() || saving} style={{ ...btn('#F97316'), opacity: !form.title.trim() || saving ? 0.6 : 1 }}>
+                <button onClick={createSurvey} disabled={!form.title.trim() || saving} style={{ ...btn('#00A896'), opacity: !form.title.trim() || saving ? 0.6 : 1 }}>
                   {saving ? 'Criando...' : 'Criar pesquisa'}
                 </button>
               </div>
@@ -754,7 +754,7 @@ export default function GestorSurveys() {
                     const active = newQuestion.type === t.type
                     return (
                       <button key={t.type} onClick={() => setNewQuestion(q => ({ ...q, type: t.type as any }))}
-                        style={{ padding: '10px 12px', borderRadius: 10, border: `2px solid ${active ? '#F97316' : '#E2E8F0'}`, background: active ? '#FFF7ED' : '#F8FAFC', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: active ? '#F97316' : '#64748B' }}>
+                        style={{ padding: '10px 12px', borderRadius: 10, border: `2px solid ${active ? '#00A896' : '#E2E8F0'}`, background: active ? '#E6F7F5' : '#F8FAFC', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: active ? '#00A896' : '#64748B' }}>
                         <Icon size={14} /> {t.label}
                       </button>
                     )
@@ -793,7 +793,7 @@ export default function GestorSurveys() {
                       </div>
                     ))}
                     <button onClick={() => setNewQuestion(q => ({ ...q, options: [...(q.options || []), ''] }))}
-                      style={{ fontSize: 12, color: '#F97316', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '4px 0' }}>
+                      style={{ fontSize: 12, color: '#00A896', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '4px 0' }}>
                       + Adicionar opção
                     </button>
                   </div>
@@ -803,14 +803,14 @@ export default function GestorSurveys() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#F8FAFC', borderRadius: 10 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Obrigatória</span>
                 <button onClick={() => setNewQuestion(q => ({ ...q, required: !q.required }))}
-                  style={{ width: 40, height: 22, borderRadius: 999, border: 'none', cursor: 'pointer', background: newQuestion.required ? '#F97316' : '#CBD5E1', position: 'relative', flexShrink: 0 }}>
+                  style={{ width: 40, height: 22, borderRadius: 999, border: 'none', cursor: 'pointer', background: newQuestion.required ? '#00A896' : '#CBD5E1', position: 'relative', flexShrink: 0 }}>
                   <div style={{ position: 'absolute', top: 2, left: newQuestion.required ? 20 : 2, width: 18, height: 18, borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
                 </button>
               </div>
 
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                 <button onClick={() => setShowAddQuestion(false)} style={btn('#F1F5F9', '#374151')}>Cancelar</button>
-                <button onClick={addQuestion} disabled={!newQuestion.label.trim()} style={{ ...btn('#F97316'), opacity: !newQuestion.label.trim() ? 0.6 : 1 }}>
+                <button onClick={addQuestion} disabled={!newQuestion.label.trim()} style={{ ...btn('#00A896'), opacity: !newQuestion.label.trim() ? 0.6 : 1 }}>
                   Adicionar pergunta
                 </button>
               </div>
@@ -834,7 +834,7 @@ export default function GestorSurveys() {
               </span>
             </div>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-              <button onClick={() => { navigator.clipboard.writeText(surveyLink(showLinkModal.survey.survey_token)); showToast('Link copiado!') }} style={btn('#F97316')}>
+              <button onClick={() => { navigator.clipboard.writeText(surveyLink(showLinkModal.survey.survey_token)); showToast('Link copiado!') }} style={btn('#00A896')}>
                 <Copy size={15} /> Copiar link
               </button>
               <button onClick={() => setShowLinkModal(null)} style={btn('#F1F5F9', '#374151')}>Fechar</button>

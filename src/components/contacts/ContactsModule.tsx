@@ -249,7 +249,7 @@ export default function ContactsModule() {
 
   // ─── Render ────────────────────────────────────────────────
   return (
-    <div className="px-8 py-6 max-w-[1280px] mx-auto">
+    <div className="px-8 py-6 max-w-[1280px] mx-auto" style={{ background: '#f8f9fb', minHeight: '100%' }}>
 
       {/* Header */}
       <div className="flex items-center justify-between mb-6">

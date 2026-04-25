@@ -23,6 +23,7 @@ import Dashboard         from './components/dashboard/Dashboard'
 import GestorHome        from './pages/gestor/GestorHome'
 import AttendantHome     from './pages/gestor/AttendantHome'
 import GestorTransfers   from './pages/gestor/GestorTransfers'
+import GestorUpdates     from './pages/gestor/GestorUpdates'
 import GestorSurveys     from './pages/gestor/GestorSurveys'
 import GestorEmbed       from './pages/gestor/GestorEmbed'
 import LeadKanban        from './components/leads/LeadKanban'
@@ -49,6 +50,7 @@ import AdminSettings    from './components/superadmin/AdminSettings'
 import AdminCRM         from './components/superadmin/AdminCRM'
 import AdminOnboarding  from './components/superadmin/AdminOnboarding'
 import AdminConsultants from './components/superadmin/AdminConsultants'
+import AdminUpdates     from './components/superadmin/AdminUpdates'
 import AdminProfile     from './components/superadmin/AdminProfile.tsx'
 import ConsultantDetails from './components/superadmin/ConsultantDetails'
 
@@ -225,6 +227,7 @@ function AppContent() {
         <Route path="/super-admin/financial"          element={<AdminFinancial />} />
         <Route path="/super-admin/contracts"          element={<AdminContracts />} />
         <Route path="/super-admin/settings"           element={<AdminSettings />} />
+        <Route path="/super-admin/updates"           element={<AdminUpdates />} />
         <Route path="/super-admin/profile"            element={<AdminProfile />} />
 
         {/* Legado */}
@@ -272,6 +275,7 @@ function AppContent() {
             <Route path="/enrollments"    element={<EnrollmentManager />} />
             <Route path="/whatsapp"       element={<WhatsAppHub />} />
             <Route path="/transferencias" element={<GestorTransfers />} />
+            <Route path="/updates"        element={<GestorUpdates />} />
             <Route path="/pesquisas"      element={<GestorSurveys />} />
             <Route path="/embed" element={<ProtectedRoute allowedRoles={['admin','manager']}><GestorEmbed /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute allowedRoles={['manager','admin']}><ReportsPage /></ProtectedRoute>} />

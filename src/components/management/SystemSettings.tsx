@@ -920,15 +920,15 @@ export default function SystemSettings() {
   }
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: 'var(--bg-page)' }}>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: '#f8f9fb' }}>
       <style>{`.animate-spin{animation:spin 1s linear infinite}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
 
       {toast && <Toast msg={toast.msg} ok={toast.ok} />}
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 40, height: 40, borderRadius: 12, background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Settings size={20} color="#64748B" />
+        <div style={{ width: 38, height: 38, borderRadius: 12, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Settings size={18} color="#00A896" />
         </div>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Configurações</h1>
@@ -942,7 +942,7 @@ export default function SystemSettings() {
           const Icon = tab.icon
           const active = activeTab === tab.id
           return (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#fff' : '#64748B', background: active ? '#1A2B4A' : 'transparent', border: 'none', cursor: 'pointer', transition: 'all 0.15s' }}>
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#00A896' : '#64748B', background: active ? '#E6F7F5' : 'transparent', border: 'none', cursor: 'pointer', transition: 'all 0.15s' }}>
               <Icon size={14} />{tab.label}
             </button>
           )

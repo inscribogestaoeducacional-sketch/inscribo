@@ -309,7 +309,7 @@ export default function UserManagement() {
   const roleColor = (r: string) => r === 'admin' ? '#DC2626' : r === 'manager' ? '#3B82F6' : '#64748B'
 
   return (
-    <div style={{ padding: 24, minHeight: '100%', background: 'var(--bg-page)', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ padding: 24, minHeight: '100%', background: '#f8f9fb', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <style>{`.animate-spin{animation:spin 1s linear infinite}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
 
       {/* Toast */}
@@ -322,8 +322,8 @@ export default function UserManagement() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 12, background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Users size={20} color="#64748B" />
+          <div style={{ width: 38, height: 38, borderRadius: 12, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Users size={18} color="#3B82F6" />
           </div>
           <div>
             <h1 style={{ fontSize: 20, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Usuários</h1>
@@ -421,7 +421,7 @@ export default function UserManagement() {
                     </span>
                   </td>
                   <td style={{ padding: '12px 16px', color: '#64748B', fontSize: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Building2 size={12} color="#94A3B8" />{user?.institution_name || institutionId}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Building2 size={12} color="#94A3B8" />{user?.institution_name || user?.institution_id || '—'}</div>
                   </td>
                   <td style={{ padding: '12px 16px' }}>
                     <button onClick={() => handleToggle(u.id, u.active)} style={{ padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer', background: u.active ? '#D1FAE5' : '#FEE2E2', color: u.active ? '#16a34a' : '#DC2626', display: 'flex', alignItems: 'center', gap: 4 }}>
