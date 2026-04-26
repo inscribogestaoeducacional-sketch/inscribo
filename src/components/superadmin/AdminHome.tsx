@@ -74,8 +74,9 @@ export default function AdminHome() {
 
   // notif modal
   const [notifModal,  setNotifModal]  = useState(false)
-  const [notifForm,   setNotifForm]   = useState({ title: '', message: '', type: 'info', target: 'all', institutionId: '' })
+  const [notifForm,   setNotifForm]   = useState({ title: '', message: '', target: 'all', institutionId: '' })
   const [sendingNotif, setSendingNotif] = useState(false)
+  const [notifToast,  setNotifToast]  = useState<string | null>(null)
   const [toast,       setToast]       = useState('')
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3500) }
@@ -158,28 +159,25 @@ export default function AdminHome() {
     if (!notifForm.title || !notifForm.message) return
     setSendingNotif(true)
     try {
-      if (notifForm.target === 'all') {
-        await supabase.from('system_notifications').insert(
-          institutions.map(i => ({
-            institution_id: i.id,
-            title: notifForm.title,
-            message: notifForm.message,
-            type: notifForm.type,
-            read: false,
-          }))
-        )
-      } else {
+      const targets = notifForm.target === 'all'
+        ? institutions.map(i => i.id)
+        : [notifForm.institutionId]
+      for (const institutionId of targets) {
         await supabase.from('system_notifications').insert({
-          institution_id: notifForm.institutionId || null,
-          title: notifForm.title,
-          message: notifForm.message,
-          type: notifForm.type,
-          read: false,
+          institution_id: institutionId,
+          type: 'suggestion',
+          title: notifForm.title.trim(),
+          message: notifForm.message.trim(),
+          severity: 'info',
+          action_url: null,
         })
       }
-      showToast('Notificação enviada!')
-      setNotifModal(false)
-      setNotifForm({ title: '', message: '', type: 'info', target: 'all', institutionId: '' })
+      setNotifToast(`Notificação enviada para ${targets.length} escola${targets.length > 1 ? 's' : ''}!`)
+      setTimeout(() => {
+        setNotifToast(null)
+        setNotifModal(false)
+        setNotifForm({ title: '', message: '', target: 'all', institutionId: '' })
+      }, 2000)
     } catch { showToast('Erro ao enviar.') }
     finally { setSendingNotif(false) }
   }
@@ -209,8 +207,8 @@ export default function AdminHome() {
               <RefreshCw className="w-4 h-4" />
             </button>
             <button onClick={() => setNotifModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl font-semibold text-sm hover:bg-gray-50">
-              <Bell className="w-4 h-4" /> Notificação
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#1A2B4A] text-white rounded-xl font-semibold text-sm shadow-sm hover:bg-[#243B60] transition-colors">
+              <Bell className="w-4 h-4" /> Enviar notificação
             </button>
             <Link to="/super-admin/schools"
               className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm shadow-sm hover:from-cyan-600 hover:to-blue-700">
