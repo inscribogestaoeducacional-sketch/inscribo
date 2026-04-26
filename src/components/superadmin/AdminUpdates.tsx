@@ -77,7 +77,7 @@ export default function AdminUpdates() {
             title: `Atualização: ${form.title.trim()}`,
             message: form.content.trim().slice(0, 120) + (form.content.trim().length > 120 ? '…' : ''),
             severity: form.type === 'alert' ? 'warning' : form.type === 'maintenance' ? 'info' : 'success',
-            action_url: '/updates',
+            action_url: null,
           })
         ))
       }

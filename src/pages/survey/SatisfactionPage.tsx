@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { createNotification } from '../../lib/notifications'
 
 // ─── tipos ──────────────────────────────────────────────────
 interface Survey {
@@ -230,6 +231,22 @@ export default function SatisfactionPage() {
         .from('satisfaction_surveys')
         .update({ response_count: (survey.response_count ?? 0) + 1 })
         .eq('id', survey.id)
+
+      const { data: institutionUsers } = await supabase
+        .from('users')
+        .select('id')
+        .eq('institution_id', survey.institution_id)
+        .eq('role', 'user')
+      if (institutionUsers && institutionUsers.length > 0) {
+        await createNotification({
+          institution_id: survey.institution_id,
+          type: 'milestone',
+          title: 'Nova resposta de pesquisa',
+          message: `${idName.trim() || 'Anônimo'} respondeu à pesquisa "${survey.title}"`,
+          severity: 'info',
+          action_url: '/surveys',
+        })
+      }
 
       setStatus('done')
     } catch {
