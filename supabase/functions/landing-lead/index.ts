@@ -12,8 +12,6 @@ const CORS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-const AION_INSTITUTION_ID = '400349ba-872d-4b38-afca-d0eba2baa00a'
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { status: 200, headers: CORS })
@@ -34,31 +32,24 @@ Deno.serve(async (req) => {
       )
     }
 
-    const { error: leadError } = await supabase.from('leads').insert({
-      institution_id: AION_INSTITUTION_ID,
-      responsible_name: nome.trim(),
-      student_name: escola.trim(),
+    const { error: leadError } = await supabase.from('crm_leads').insert({
+      name: nome.trim(),
+      school_name: escola.trim(),
       phone: whatsapp.trim(),
       email: email?.trim() || null,
-      grade_interest: cidade?.trim() ? `Demo - ${cidade.trim()}` : 'Demo pelo site',
-      source: 'Site',
-      status: 'new',
-      notes: `Escola: ${escola}${cidade ? ` | ${cidade}` : ''} | Landing page`,
+      city: cidade?.trim() || null,
+      state: null,
+      stage: 'interesse',
+      origin: 'Site',
+      notes: `Solicitação de demo via landing page${cidade ? ` | Cidade: ${cidade}` : ''}`,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     })
 
     if (leadError) {
       console.error('Lead error:', leadError)
       throw new Error(leadError.message)
     }
-
-    await supabase.from('system_notifications').insert({
-      institution_id: AION_INSTITUTION_ID,
-      type: 'milestone',
-      title: 'Nova solicitação de demo',
-      message: `${nome} da escola ${escola}${cidade ? ` (${cidade})` : ''} — ${whatsapp}`,
-      severity: 'success',
-      action_url: '/leads',
-    })
 
     return new Response(
       JSON.stringify({ ok: true }),
