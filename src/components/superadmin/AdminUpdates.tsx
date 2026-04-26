@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
-import { createNotification } from '../../lib/notifications'
 
 type UpdateType = 'news' | 'feature' | 'alert' | 'maintenance'
 
@@ -64,22 +63,25 @@ export default function AdminUpdates() {
         .single()
       if (insertErr) throw insertErr
 
-      // Broadcast notification to all active institutions
-      const { data: institutions } = await supabase
+      // Broadcast notification to all institutions
+      const { data: institutions, error: instError } = await supabase
         .from('institutions')
-        .select('id')
-        .not('id', 'is', null)
-      if (institutions) {
-        await Promise.all(institutions.map((inst: { id: string }) =>
-          createNotification({
-            institution_id: inst.id,
-            type: 'suggestion',
-            title: `Atualização: ${form.title.trim()}`,
-            message: form.content.trim().slice(0, 120) + (form.content.trim().length > 120 ? '…' : ''),
-            severity: form.type === 'alert' ? 'warning' : form.type === 'maintenance' ? 'info' : 'success',
-            action_url: null,
-          })
-        ))
+        .select('id, name')
+      console.log('Instituições encontradas:', institutions?.length, instError)
+      if (institutions && institutions.length > 0) {
+        for (const inst of institutions) {
+          const { error: notifError } = await supabase
+            .from('system_notifications')
+            .insert({
+              institution_id: inst.id,
+              type: 'suggestion',
+              title: form.title.trim(),
+              message: form.content.trim().slice(0, 200),
+              severity: form.type === 'alert' ? 'warning' : form.type === 'maintenance' ? 'danger' : 'info',
+              action_url: null,
+            })
+          if (notifError) console.error('Erro ao notificar', inst.id, notifError)
+        }
       }
       setUpdates(prev => [inserted, ...prev])
       setModal(false)

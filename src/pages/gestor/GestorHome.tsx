@@ -302,17 +302,25 @@ export default function GestorHome() {
             { key: 'visits', val: latestF.visits, target: latestF.visits_target, label: 'Visitas' },
             { key: 'enrollments', val: latestF.enrollments, target: latestF.enrollments_target, label: 'Matrículas' },
           ]
-          for (const c of checks) {
-            if ((c.target ?? 0) > 0 && ((c.val ?? 0) / c.target!) * 100 < 60) {
+          const underperforming = checks.find(c => (c.target ?? 0) > 0 && ((c.val ?? 0) / c.target!) * 100 < 60)
+          if (underperforming) {
+            const today = new Date(); today.setHours(0, 0, 0, 0)
+            const { data: existing } = await supabase
+              .from('system_notifications')
+              .select('id')
+              .eq('institution_id', institutionId)
+              .eq('type', 'goal_deviation')
+              .gte('created_at', today.toISOString())
+              .limit(1)
+            if (!existing || existing.length === 0) {
               createNotification({
                 institution_id: institutionId,
                 type: 'goal_deviation',
-                title: `Meta de ${c.label} abaixo de 60%`,
-                message: `${c.label}: ${c.val ?? 0} de ${c.target} (${Math.round(((c.val ?? 0) / c.target!) * 100)}% da meta).`,
+                title: `Meta de ${underperforming.label} abaixo de 60%`,
+                message: `${underperforming.label}: ${underperforming.val ?? 0} de ${underperforming.target} (${Math.round(((underperforming.val ?? 0) / underperforming.target!) * 100)}% da meta).`,
                 severity: 'warning',
                 action_url: '/reports',
               })
-              break
             }
           }
         }
