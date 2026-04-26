@@ -4,6 +4,7 @@ import { useNotifications } from '../../hooks/useNotifications'
 
 interface Props {
   institutionId: string | null
+  isSuperAdmin?: boolean
 }
 
 function timeAgo(dateStr: string): string {
@@ -24,11 +25,11 @@ const severityConfig = {
   info: { bg: '#DBEAFE', color: '#1E40AF', icon: 'i', dot: '#3B82F6' }
 }
 
-export default function NotificationBell({ institutionId }: Props) {
+export default function NotificationBell({ institutionId, isSuperAdmin = false }: Props) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
-  const { notifications, unreadCount, markAsRead, markAllRead } = useNotifications(institutionId)
+  const { notifications, unreadCount, markAsRead, markAllRead } = useNotifications(institutionId, isSuperAdmin)
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {

@@ -51,6 +51,15 @@ Deno.serve(async (req) => {
       throw new Error(leadError.message)
     }
 
+    await supabase.from('system_notifications').insert({
+      institution_id: null,
+      type: 'milestone',
+      title: 'Nova solicitação de demo',
+      message: `${nome} da escola ${escola}${cidade ? ` (${cidade})` : ''} — ${whatsapp}`,
+      severity: 'success',
+      action_url: '/super-admin/crm',
+    })
+
     return new Response(
       JSON.stringify({ ok: true }),
       { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } }

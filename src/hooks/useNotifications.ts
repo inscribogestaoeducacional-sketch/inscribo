@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 
 export interface Notification {
   id: string
-  institution_id: string
+  institution_id: string | null
   type: 'weekly_alert' | 'goal_deviation' | 'milestone' | 'suggestion'
   title: string
   message: string
@@ -13,49 +13,70 @@ export interface Notification {
   created_at: string
 }
 
-export function useNotifications(institutionId: string | null) {
+export function useNotifications(institutionId: string | null, isSuperAdmin = false) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
-    if (!institutionId) return
+    if (!isSuperAdmin && !institutionId) return
 
     fetchNotifications()
 
-    const channel = supabase
-      .channel(`notifications_${institutionId}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'system_notifications',
-        filter: `institution_id=eq.${institutionId}`
-      }, (payload) => {
-        const newNotif = payload.new as Notification
-        setNotifications(prev => [newNotif, ...prev])
-        setUnreadCount(prev => prev + 1)
+    const handler = (payload: { new: unknown }) => {
+      const newNotif = payload.new as Notification
+      setNotifications(prev => [newNotif, ...prev])
+      setUnreadCount(prev => prev + 1)
 
-        if (Notification.permission === 'granted') {
-          new Notification(newNotif.title, {
-            body: newNotif.message,
-            icon: '/favicon.ico'
-          })
-        }
-      })
-      .subscribe()
+      if (Notification.permission === 'granted') {
+        new Notification(newNotif.title, {
+          body: newNotif.message,
+          icon: '/favicon.ico'
+        })
+      }
+    }
+
+    let channel
+    if (isSuperAdmin) {
+      channel = supabase
+        .channel('notifications_superadmin')
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'system_notifications',
+          filter: 'institution_id=is.null',
+        }, handler)
+    } else {
+      channel = supabase
+        .channel(`notifications_${institutionId}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'system_notifications',
+          filter: `institution_id=eq.${institutionId}`,
+        }, handler)
+    }
+    channel.subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [institutionId])
+  }, [institutionId, isSuperAdmin])
 
   async function fetchNotifications() {
-    if (!institutionId) return
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('system_notifications')
         .select('*')
-        .eq('institution_id', institutionId)
         .order('created_at', { ascending: false })
         .limit(20)
 
+      if (isSuperAdmin) {
+        query = query.is('institution_id', null)
+      } else if (institutionId) {
+        query = query.eq('institution_id', institutionId)
+      } else {
+        return
+      }
+
+      const { data, error } = await query
       if (error && (error as { code?: string }).code === '42P01') {
         console.warn('Tabela system_notifications não encontrada. Execute as migrations.')
         return
@@ -83,12 +104,20 @@ export function useNotifications(institutionId: string | null) {
   }
 
   async function markAllRead() {
-    if (!institutionId) return
-    await supabase
+    if (!isSuperAdmin && !institutionId) return
+
+    let query = supabase
       .from('system_notifications')
       .update({ read_at: new Date().toISOString() })
-      .eq('institution_id', institutionId)
       .is('read_at', null)
+
+    if (isSuperAdmin) {
+      query = query.is('institution_id', null)
+    } else {
+      query = query.eq('institution_id', institutionId!)
+    }
+
+    await query
 
     setNotifications(prev =>
       prev.map(n => ({ ...n, read_at: n.read_at || new Date().toISOString() }))

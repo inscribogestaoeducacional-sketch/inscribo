@@ -42,7 +42,7 @@ export default function TopBar() {
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
         {/* Bell */}
-        <NotificationBell institutionId={user?.institution_id || null} />
+        <NotificationBell institutionId={user?.institution_id || null} isSuperAdmin={user?.user_type === 'admin_geral'} />
 
         {/* User pill */}
         <div style={{ position: 'relative' }}>
