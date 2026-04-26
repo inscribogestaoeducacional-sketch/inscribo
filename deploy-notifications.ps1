@@ -2,10 +2,13 @@
 # Run from project root: .\deploy-notifications.ps1
 
 Write-Host "Deploying daily-summary function..." -ForegroundColor Cyan
-supabase functions deploy daily-summary --no-verify-jwt
+.\supabase.exe functions deploy daily-summary --no-verify-jwt --project-ref syxxuumxkhhnoqrxporj
 
 Write-Host "Deploying funnel-alert function..." -ForegroundColor Cyan
-supabase functions deploy funnel-alert --no-verify-jwt
+.\supabase.exe functions deploy funnel-alert --no-verify-jwt --project-ref syxxuumxkhhnoqrxporj
+
+Write-Host "Deploying landing-lead function..." -ForegroundColor Cyan
+.\supabase.exe functions deploy landing-lead --no-verify-jwt --project-ref syxxuumxkhhnoqrxporj
 
 Write-Host ""
 Write-Host "Done. Remember to:" -ForegroundColor Green

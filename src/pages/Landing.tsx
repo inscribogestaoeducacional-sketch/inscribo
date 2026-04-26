@@ -823,35 +823,36 @@ function CTAFinal() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.nome || !form.escola || !form.whatsapp) { setErr('Preencha todos os campos obrigatórios.'); return }
-    setSending(true); setErr(null)
+    if (!form.nome || !form.escola || !form.whatsapp) {
+      setErr('Preencha todos os campos obrigatórios.')
+      return
+    }
+    setSending(true)
+    setErr(null)
     try {
-      const AION_INSTITUTION_ID = '400349ba-872d-4b38-afca-d0eba2baa00a'
-
-      await supabase.from('demo_requests').insert({
-        name: form.nome,
-        email: form.email,
-        school_name: form.escola,
-        city: form.cidade,
-        whatsapp: form.whatsapp,
-        type: 'demo',
-      })
-
-      await supabase.from('leads').insert({
-        institution_id: AION_INSTITUTION_ID,
-        responsible_name: form.nome,
-        student_name: form.escola,
-        phone: form.whatsapp,
-        email: form.email,
-        grade_interest: form.cidade || 'Demo solicitada pelo site',
-        source: 'Site',
-        status: 'new',
-        notes: `Escola: ${form.escola}${form.cidade ? ` | Cidade: ${form.cidade}` : ''} | Contato via landing page`,
-      })
-
+      const res = await fetch(
+        'https://syxxuumxkhhnoqrxporj.supabase.co/functions/v1/landing-lead',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nome: form.nome,
+            email: form.email,
+            escola: form.escola,
+            cidade: form.cidade,
+            whatsapp: form.whatsapp,
+          }),
+        }
+      )
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao enviar')
       setSent(true)
-    } catch { setErr('Erro ao enviar. Tente novamente ou fale pelo WhatsApp.') }
-    finally { setSending(false) }
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Erro ao enviar'
+      setErr(message + '. Tente novamente ou fale pelo WhatsApp.')
+    } finally {
+      setSending(false)
+    }
   }
 
   return (

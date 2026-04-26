@@ -68,7 +68,7 @@ export default function AdminUpdates() {
       const { data: institutions } = await supabase
         .from('institutions')
         .select('id')
-        .eq('plan_status', 'active')
+        .not('id', 'is', null)
       if (institutions) {
         await Promise.all(institutions.map((inst: { id: string }) =>
           createNotification({
