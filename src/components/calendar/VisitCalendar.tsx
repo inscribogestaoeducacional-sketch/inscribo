@@ -11,10 +11,10 @@ import AuditModal from '../common/AuditModal'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const visitStatus = {
-  scheduled: { label: 'Agendada',       dot: 'bg-amber-400',  badge: 'bg-amber-100 text-amber-700' },
-  completed: { label: 'Realizada',      dot: 'bg-green-400',  badge: 'bg-green-100 text-green-700' },
-  no_show:   { label: 'Não compareceu', dot: 'bg-gray-400',   badge: 'bg-gray-100 text-gray-600'  },
-  cancelled: { label: 'Cancelada',      dot: 'bg-red-400',    badge: 'bg-red-100 text-red-700'    },
+  scheduled: { label: 'Agendada',       dot: 'bg-amber-400',  badge: 'bg-amber-100 text-amber-700', badgeStyle: { background: '#FEF3C7', color: '#B45309' } },
+  completed: { label: 'Realizada',      dot: 'bg-green-400',  badge: 'bg-green-100 text-green-700', badgeStyle: { background: '#DCFCE7', color: '#15803D' } },
+  no_show:   { label: 'Não compareceu', dot: 'bg-gray-400',   badge: 'bg-gray-100 text-gray-600',   badgeStyle: { background: '#F3F4F6', color: '#4B5563' } },
+  cancelled: { label: 'Cancelada',      dot: 'bg-red-400',    badge: 'bg-red-100 text-red-700',     badgeStyle: { background: '#FEE2E2', color: '#B91C1C' } },
 }
 
 const timeSlots = [
@@ -453,17 +453,17 @@ export default function VisitCalendar() {
         {/* Header */}
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', background: 'linear-gradient(135deg, #FFFFFF, #F0FDFB)', borderBottom: '0.5px solid #D1FAE5', boxShadow: '0 2px 8px rgba(0,168,150,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Calendar style={{ width: 16, height: 16, color: '#F59E0B' }} />
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Calendar style={{ width: 18, height: 18, color: '#F59E0B' }} />
             </div>
             <div>
-              <h2 style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Visitas</h2>
+              <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Visitas</h2>
               <p style={{ fontSize: 11, color: '#94A3B8', margin: 0, textTransform: 'capitalize' }}>{formatSelectedDate(selectedDate)}</p>
             </div>
           </div>
           <button
             onClick={() => setShowModal(true)}
-            style={{ background: '#00A896', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,168,150,0.25)', transition: 'all 0.15s' }}
+            style={{ background: '#00A896', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,168,150,0.25)', transition: 'all 0.15s' }}
             onMouseEnter={e => { e.currentTarget.style.background = '#007A6E' }}
             onMouseLeave={e => { e.currentTarget.style.background = '#00A896' }}
           >
@@ -485,7 +485,7 @@ export default function VisitCalendar() {
               <p className="text-xs text-gray-300 mb-4">Clique em "Nova Visita" para agendar</p>
               <button
                 onClick={() => setShowModal(true)}
-                style={{ background: '#00A896', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                style={{ background: '#00A896', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >
                 <Plus className="w-4 h-4" />
                 Agendar Visita
@@ -499,7 +499,7 @@ export default function VisitCalendar() {
                 const isCompleting = completingId === visit.id
 
                 return (
-                  <div key={visit.id} className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                  <div key={visit.id} className="hover:shadow-md transition-shadow" style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                     <div className="p-4">
                       <div className="flex items-start gap-3">
                         {/* Avatar */}
@@ -514,7 +514,7 @@ export default function VisitCalendar() {
                               <Clock className="w-3 h-3" />
                               {formatTime(visit.scheduled_date)}
                             </span>
-                            <span className={`text-xs px-2 py-1 rounded-full font-medium ${cfg.badge}`}>
+                            <span style={{ ...cfg.badgeStyle, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999 }}>
                               {cfg.label}
                             </span>
                           </div>

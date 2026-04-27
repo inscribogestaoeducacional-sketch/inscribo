@@ -261,12 +261,12 @@ export default function ContactsModule() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#EFF6FF] flex items-center justify-center flex-shrink-0">
-            <Users className="w-5 h-5 text-[#3B82F6]" />
+          <div style={{ width: 38, height: 38, borderRadius: 12, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Users style={{ width: 18, height: 18, color: '#3B82F6' }} />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-extrabold text-[#1A2B4A]">Contatos</h1>
+              <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Contatos</h1>
               <span className="px-2.5 py-0.5 rounded-full bg-[#EFF6FF] text-[#3B82F6] text-xs font-bold">
                 {contacts.length}
               </span>
@@ -289,7 +289,7 @@ export default function ContactsModule() {
       {/* KPI cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         {kpis.map(k => (
-          <div key={k.label} className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-5">
+          <div key={k.label} className="bg-white border border-[#E2E8F0] shadow-sm p-5" style={{ borderRadius: 14 }}>
             <div className={`w-10 h-10 rounded-xl ${k.bg} flex items-center justify-center text-xl mb-3`}>{k.icon}</div>
             <p className={`text-3xl font-extrabold ${k.color} mb-1`}>{k.value}</p>
             <p className="text-xs font-semibold text-[#94A3B8] uppercase tracking-wide">{k.label}</p>
