@@ -211,6 +211,7 @@ export default function VisitCalendar() {
   const [completingId, setCompletingId] = useState<string | null>(null)
   const [completionNotes, setCompletionNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  const [mobileFilter, setMobileFilter] = useState(0)
 
   useEffect(() => {
     if (user?.institution_id) loadData()
@@ -370,7 +371,6 @@ export default function VisitCalendar() {
       { label: 'Amanhã',      fn: (v: Visit) => toLocalDateStr(new Date(v.scheduled_date)) === tomorrowStr },
       { label: 'Essa semana', fn: (v: Visit) => { const d = toLocalDateStr(new Date(v.scheduled_date)); return d >= todayStr2 && d <= weekEndStr } },
     ]
-    const [mobileFilter, setMobileFilter] = React.useState(0)
     const mobileVisits = visits.filter(dateFilters[mobileFilter].fn).sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
 
     return (
