@@ -1345,7 +1345,6 @@ export default function GestorReports({ institutionId, institutionName }: Props)
   const [showCampaignModal, setShowCampaignModal] = useState(false)
   const [isAdjustMode, setIsAdjustMode] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
-  const [mobilePeriod, setMobilePeriod] = useState('total')
 
   useEffect(() => {
     const h = () => setIsMobile(window.innerWidth < 768)
@@ -1416,131 +1415,92 @@ export default function GestorReports({ institutionId, institutionName }: Props)
 
   // ─── MOBILE ───────────────────────────────────────────────
   if (isMobile) {
-    const filteredM = mobilePeriod === 'total' ? metrics : metrics.filter(m => m.period === mobilePeriod)
-    const reg  = filteredM.reduce((s, m) => s + m.registrations, 0)
-    const regT = filteredM.reduce((s, m) => s + m.registrations_target, 0)
-    const sch  = filteredM.reduce((s, m) => s + (m.schedules ?? 0), 0)
-    const schT = filteredM.reduce((s, m) => s + (m.schedules_target ?? 0), 0)
-    const vis  = filteredM.reduce((s, m) => s + m.visits, 0)
-    const visT = filteredM.reduce((s, m) => s + m.visits_target, 0)
-    const enr  = filteredM.reduce((s, m) => s + m.enrollments, 0)
-    const enrT = filteredM.reduce((s, m) => s + m.enrollments_target, 0)
-
-    const mKpis = [
-      { label: 'Cadastros',    real: reg, meta: regT, color: '#3B82F6' },
-      { label: 'Agendamentos', real: sch, meta: schT, color: '#8B5CF6' },
-      { label: 'Visitas',      real: vis, meta: visT, color: '#F59E0B' },
-      { label: 'Matrículas',   real: enr, meta: enrT, color: '#00A896' },
+    const latestFunnel = metrics.length > 0 ? metrics[metrics.length - 1] : null
+    const mMetrics = [
+      { label: 'Cadastros',    val: latestFunnel?.registrations ?? 0,   target: latestFunnel?.registrations_target ?? 0,   color: '#3B82F6' },
+      { label: 'Agendamentos', val: latestFunnel?.schedules ?? 0,        target: latestFunnel?.schedules_target ?? 0,        color: '#8B5CF6' },
+      { label: 'Visitas',      val: latestFunnel?.visits ?? 0,           target: latestFunnel?.visits_target ?? 0,           color: '#F59E0B' },
+      { label: 'Matrículas',   val: latestFunnel?.enrollments ?? 0,      target: latestFunnel?.enrollments_target ?? 0,      color: '#00A896' },
     ]
 
     return (
-      <div style={{ background: '#f8f9fb', minHeight: '100%', paddingBottom: 96 }}>
-        <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}`}</style>
+      <div style={{ padding: 16, background: '#f8f9fb', minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
         {/* Header */}
-        <div style={{ padding: '16px 16px 12px', background: '#fff', borderBottom: '1px solid #E2E8F0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <BarChart3 size={18} color="#3B82F6" />
             </div>
             <div>
-              <p style={{ fontSize: 16, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Relatórios</p>
-              {cycle && <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>{cycle.label}</p>}
+              <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Relatórios</h1>
+              <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>{cycle?.label || 'Campanha atual'}</p>
             </div>
-            {cycle && (
-              <span style={{ marginLeft: 'auto', background: '#E6F7F5', color: '#00A896', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>
-                {cycle.status === 'active' ? 'Ativo' : cycle.status}
-              </span>
-            )}
           </div>
-          {/* Period selector */}
-          {metrics.length > 0 && (
-            <select
-              value={mobilePeriod}
-              onChange={e => setMobilePeriod(e.target.value)}
-              style={{ width: '100%', height: 40, padding: '0 12px', borderRadius: 10, border: '1.5px solid #E2E8F0', fontSize: 14, background: '#F8FAFC', outline: 'none', color: '#1A2B4A' }}
-            >
-              <option value="total">Todo o ciclo</option>
-              {metrics.map(m => (
-                <option key={m.period} value={m.period}>{periodLabel(m.period)}</option>
-              ))}
-            </select>
-          )}
+          <button onClick={() => setShowCampaignModal(true)} style={{ padding: '8px 14px', background: '#00A896', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            + Plano
+          </button>
         </div>
 
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: 60 }}>
-            <Loader2 size={28} color="#00A896" className="animate-spin" style={{ margin: '0 auto 12px' }} />
-            <p style={{ fontSize: 13, color: '#94A3B8' }}>Carregando...</p>
-          </div>
-        ) : !cycle ? (
-          <div style={{ padding: 24 }}>
-            <div style={{ background: 'linear-gradient(135deg,#1A2B4A,#2d4494)', borderRadius: 16, padding: 24, textAlign: 'center' }}>
-              <Rocket size={36} color="#fff" style={{ margin: '0 auto 12px' }} />
-              <p style={{ fontSize: 15, fontWeight: 700, color: '#fff', margin: '0 0 8px' }}>Nenhuma campanha ativa</p>
-              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', margin: '0 0 16px' }}>Configure uma campanha para acompanhar resultados.</p>
-              <button
-                onClick={() => { setIsAdjustMode(false); setShowCampaignModal(true) }}
-                style={{ padding: '12px 24px', borderRadius: 12, background: '#00A896', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, margin: '0 auto' }}
-              >
-                <Sparkles size={15} /> Criar campanha
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ padding: 16 }}>
-
-            {/* KPIs 2x2 */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
-              {mKpis.map(({ label, real, meta, color }) => {
-                const pct = meta > 0 ? Math.min(100, Math.round((real / meta) * 100)) : 0
-                return (
-                  <div key={label} style={{ background: '#fff', borderRadius: 14, border: '1px solid #E2E8F0', padding: '14px 16px' }}>
-                    <p style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 8px' }}>{label}</p>
-                    <p style={{ fontSize: 28, fontWeight: 800, color: '#1e2d6b', margin: '0 0 4px' }}>{real}</p>
-                    <div style={{ height: 4, background: '#E2E8F0', borderRadius: 2, marginBottom: 6, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 2, transition: 'width 0.8s ease' }} />
-                    </div>
-                    <p style={{ fontSize: 12, color, fontWeight: 600, margin: 0 }}>{pct}% da meta ({meta})</p>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Funil */}
-            <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #E2E8F0', padding: '16px', marginBottom: 16 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Funil de captação</p>
-              {[
-                { label: 'Cadastros',    val: reg, target: regT, color: '#3B82F6' },
-                { label: 'Agendamentos', val: sch, target: schT, color: '#8B5CF6' },
-                { label: 'Visitas',      val: vis, target: visT, color: '#F59E0B' },
-                { label: 'Matrículas',   val: enr, target: enrT, color: '#00A896' },
-              ].map(({ label, val, target, color }) => {
-                const pct = target > 0 ? Math.min(100, Math.round((val / target) * 100)) : 0
-                return (
-                  <div key={label} style={{ marginBottom: 16 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#1e2d6b' }}>{label}</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color }}>{val}<span style={{ color: '#94A3B8', fontWeight: 400 }}>/{target}</span></span>
-                    </div>
-                    <div style={{ height: 8, background: '#E2E8F0', borderRadius: 4, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 4, transition: 'width 0.8s ease' }} />
-                    </div>
-                    <p style={{ fontSize: 11, color, fontWeight: 600, margin: '4px 0 0' }}>{pct}% da meta</p>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Botão campanha */}
-            <button
-              onClick={() => { setIsAdjustMode(cycle && cycle.monthly_targets?.length > 0 ? true : false); setShowCampaignModal(true) }}
-              style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: '#00A896', color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 52 }}
-            >
-              <Sparkles size={18} /> Gerar novo plano de campanha
+        {/* Sem campanha */}
+        {!cycle && (
+          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 32, textAlign: 'center' }}>
+            <BarChart3 size={40} color="#E2E8F0" style={{ margin: '0 auto 12px', display: 'block' }} />
+            <p style={{ fontSize: 15, fontWeight: 600, color: '#94A3B8', margin: '0 0 16px' }}>Nenhuma campanha ativa</p>
+            <button onClick={() => setShowCampaignModal(true)} style={{ padding: '12px 24px', background: '#00A896', color: '#fff', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', width: '100%' }}>
+              Gerar plano de campanha
             </button>
           </div>
         )}
+
+        {/* KPIs 2x2 */}
+        {cycle && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {mMetrics.map(({ label, val, target, color }) => {
+              const pct = target > 0 ? Math.min(100, Math.round((val / target) * 100)) : 0
+              const barColor = pct >= 100 ? '#22c55e' : pct >= 70 ? '#f59e0b' : pct >= 40 ? color : '#ef4444'
+              return (
+                <div key={label} style={{ background: '#fff', borderRadius: 14, border: '1px solid #E2E8F0', padding: '14px 16px' }}>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 8px', letterSpacing: '0.04em' }}>{label}</p>
+                  <p style={{ fontSize: 28, fontWeight: 800, color: '#1e2d6b', margin: '0 0 8px', lineHeight: 1 }}>{val}</p>
+                  <div style={{ height: 6, background: '#E2E8F0', borderRadius: 3, marginBottom: 6, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: barColor, borderRadius: 3, transition: 'width 0.8s ease' }} />
+                  </div>
+                  <p style={{ fontSize: 12, color: barColor, fontWeight: 600, margin: 0 }}>{pct}% da meta ({target})</p>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Funil visual */}
+        {cycle && (
+          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 20 }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Funil da campanha</p>
+            {mMetrics.map(({ label, val, target, color }) => {
+              const pct = target > 0 ? Math.min(100, Math.round((val / target) * 100)) : 0
+              return (
+                <div key={label} style={{ marginBottom: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#1e2d6b' }}>{label}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color }}>{val}<span style={{ color: '#94A3B8', fontWeight: 400 }}>/{target}</span></span>
+                  </div>
+                  <div style={{ height: 8, background: '#E2E8F0', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 4, transition: 'width 0.8s ease' }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Botão gerar plano */}
+        <button
+          onClick={() => { setIsAdjustMode(!!cycleIsConfigured); setShowCampaignModal(true) }}
+          style={{ width: '100%', padding: '14px', background: '#00A896', color: '#fff', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+        >
+          <Sparkles size={16} /> Gerar novo plano de campanha
+        </button>
 
         {showCampaignModal && (
           <CampaignGeneratorModal
