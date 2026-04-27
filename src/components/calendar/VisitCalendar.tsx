@@ -190,6 +190,12 @@ function NovaVisitaModal({ isOpen, onClose, onSave, defaultDate, leads }: NovaVi
 export default function VisitCalendar() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [])
   const [visits, setVisits] = useState<Visit[]>([])
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
@@ -347,6 +353,92 @@ export default function VisitCalendar() {
 
   const calDays = getDaysInMonth(calendarMonth)
   const weekLabels = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
+
+  // ── Mobile early return ───────────────────────────────────────────────────
+  if (isMobile) {
+    const now = new Date()
+    const todayStr2 = toLocalDateStr(now)
+    const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1)
+    const tomorrowStr = toLocalDateStr(tomorrow)
+    const weekEnd = new Date(now); weekEnd.setDate(now.getDate() + 6)
+    const weekEndStr = toLocalDateStr(weekEnd)
+
+    const dateFilters = [
+      { label: 'Hoje',        fn: (v: Visit) => toLocalDateStr(new Date(v.scheduled_date)) === todayStr2 },
+      { label: 'Amanhã',      fn: (v: Visit) => toLocalDateStr(new Date(v.scheduled_date)) === tomorrowStr },
+      { label: 'Essa semana', fn: (v: Visit) => { const d = toLocalDateStr(new Date(v.scheduled_date)); return d >= todayStr2 && d <= weekEndStr } },
+    ]
+    const [mobileFilter, setMobileFilter] = React.useState(0)
+    const mobileVisits = visits.filter(dateFilters[mobileFilter].fn).sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8f9fb' }}>
+
+        {/* Header */}
+        <div style={{ padding: '16px 16px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Calendar style={{ width: 16, height: 16, color: '#F59E0B' }} />
+            </div>
+            <h1 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Visitas</h1>
+            <span style={{ background: '#FEF3C7', color: '#B45309', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999 }}>{statsToday} hoje</span>
+          </div>
+          <button onClick={() => { setSelectedDate(new Date()); setShowModal(true) }}
+            style={{ padding: '8px 14px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, minHeight: 44 }}>
+            <Plus style={{ width: 14, height: 14 }} /> Nova
+          </button>
+        </div>
+
+        {/* Date chips */}
+        <div style={{ padding: '12px 16px 0', display: 'flex', gap: 8, flexShrink: 0 }}>
+          {dateFilters.map(({ label }, i) => (
+            <button key={label} onClick={() => setMobileFilter(i)}
+              style={{ padding: '8px 16px', borderRadius: 9999, fontSize: 13, fontWeight: 600, cursor: 'pointer', minHeight: 44,
+                background: mobileFilter === i ? '#00A896' : '#fff',
+                color: mobileFilter === i ? '#fff' : '#64748B',
+                border: `1px solid ${mobileFilter === i ? '#00A896' : '#E2E8F0'}` } as React.CSSProperties}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Visit list */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 0' }}>
+          {mobileVisits.length === 0 ? (
+            <div style={{ padding: '40px 16px', textAlign: 'center' }}>
+              <p style={{ fontSize: 13, color: '#94A3B8' }}>Nenhuma visita para este período</p>
+            </div>
+          ) : mobileVisits.map(v => {
+            const st = visitStatus[v.status as keyof typeof visitStatus]
+            const dt = new Date(v.scheduled_date)
+            const hora = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+            return (
+              <div key={v.id} style={{ padding: '14px 16px', background: '#fff', borderRadius: 14, margin: '0 16px 10px', border: '1px solid #E2E8F0', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{hora}</span>
+                  <span style={{ fontSize: 11, padding: '2px 10px', borderRadius: 999, fontWeight: 600, background: st?.badgeStyle?.background ?? '#F1F5F9', color: st?.badgeStyle?.color ?? '#64748B' }}>{st?.label ?? v.status}</span>
+                </div>
+                <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: '0 0 4px' }}>{v.student_name}</p>
+                {v.notes && <p style={{ fontSize: 12, color: '#94A3B8', marginTop: 6, fontStyle: 'italic', margin: 0 }}>{v.notes}</p>}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Modal */}
+        <NovaVisitaModal isOpen={showModal} onClose={() => setShowModal(false)} leads={leads}
+          defaultDate={toLocalDateStr(selectedDate)}
+          onSave={async ({ lead_id, student_name, date, time, notes }) => {
+            const [y, m, d] = date.split('-').map(Number)
+            const [h, min] = time.split(':').map(Number)
+            const dt = new Date(y, m - 1, d, h, min)
+            await DatabaseService.createVisit({ institution_id: user!.institution_id!, lead_id, student_name, scheduled_date: dt.toISOString(), notes, status: 'scheduled' })
+            await loadData()
+          }}
+        />
+      </div>
+    )
+  }
 
   return (
     <div style={{ display: 'flex', overflow: 'hidden', background: '#f8f9fb', height: '100%' }}>

@@ -205,8 +205,15 @@ export default function UserManagement() {
   const [filterRole, setFilterRole] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
 
   useEffect(() => { loadUsers() }, [user])
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok })
@@ -307,6 +314,134 @@ export default function UserManagement() {
   const roleLabel = (r: string) => r === 'admin' ? 'Administrador' : r === 'manager' ? 'Gestor' : 'Consultor'
   const roleBg = (r: string) => r === 'admin' ? '#FEE2E2' : r === 'manager' ? '#DBEAFE' : '#F1F5F9'
   const roleColor = (r: string) => r === 'admin' ? '#DC2626' : r === 'manager' ? '#3B82F6' : '#64748B'
+
+  // ─── MOBILE ───────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#f8f9fb', paddingBottom: 96 }}>
+        <style>{`.animate-spin{animation:spin 1s linear infinite}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+
+        {toast && (
+          <div style={{ position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', background: toast.ok ? '#1A2B4A' : '#DC2626', color: 'white', padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 9999, display: 'flex', alignItems: 'center', gap: 8 }}>
+            {toast.ok ? <CheckCircle size={14} /> : <AlertTriangle size={14} />}{toast.msg}
+          </div>
+        )}
+
+        {/* Header */}
+        <div style={{ padding: '16px 16px 12px', background: '#fff', borderBottom: '1px solid #E2E8F0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Users size={18} color="#3B82F6" />
+            </div>
+            <div>
+              <p style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Usuários</p>
+              <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>{stats.active} ativo{stats.active !== 1 ? 's' : ''} de {stats.total}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div style={{ padding: '12px 16px', background: '#fff', borderBottom: '1px solid #E2E8F0' }}>
+          <div style={{ position: 'relative' }}>
+            <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+            <input
+              placeholder="Buscar por nome ou email..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ width: '100%', paddingLeft: 36, paddingRight: 12, height: 44, border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 16, outline: 'none', background: '#F8FAFC', boxSizing: 'border-box' }}
+            />
+          </div>
+        </div>
+
+        {/* Stats 2x2 */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '12px 16px' }}>
+          {[
+            { label: 'Total', value: stats.total, color: '#3B82F6', bg: '#DBEAFE', Icon: Users },
+            { label: 'Ativos', value: stats.active, color: '#16a34a', bg: '#D1FAE5', Icon: CheckCircle },
+            { label: 'Admins', value: stats.admins, color: '#DC2626', bg: '#FEE2E2', Icon: Shield },
+            { label: 'Gestores', value: stats.managers, color: '#8B5CF6', bg: '#EDE9FE', Icon: UserCheck },
+          ].map(({ label, value, color, bg, Icon }) => (
+            <div key={label} style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Icon size={15} color={color} />
+              </div>
+              <div>
+                <p style={{ fontSize: 20, fontWeight: 800, color: '#1A2B4A', margin: 0, lineHeight: 1 }}>{value}</p>
+                <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0' }}>{label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* User cards */}
+        <div style={{ flex: 1, padding: '0 0 16px' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 40 }}>
+              <Loader2 size={28} color="#00A896" className="animate-spin" style={{ margin: '0 auto 12px' }} />
+              <p style={{ fontSize: 13, color: '#94A3B8' }}>Carregando...</p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: '40px 16px', textAlign: 'center' }}>
+              <Users size={40} color="#CBD5E1" style={{ marginBottom: 12 }} />
+              <p style={{ color: '#94A3B8', fontSize: 14 }}>{users.length === 0 ? 'Nenhum usuário cadastrado' : 'Nenhum resultado'}</p>
+            </div>
+          ) : filtered.map(u => (
+            <div key={u.id} style={{ margin: '0 16px 10px', background: '#fff', borderRadius: 14, padding: '14px 16px', border: '1px solid #E2E8F0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg,#00A896,#0DD3BF)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                  {u.full_name.charAt(0).toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.full_name}</p>
+                  <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</p>
+                </div>
+                <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: roleBg(u.role), color: roleColor(u.role), flexShrink: 0 }}>
+                  {roleLabel(u.role)}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => handleToggle(u.id, u.active)}
+                  style={{ flex: 1, padding: '9px 0', borderRadius: 10, border: 'none', background: u.active ? '#D1FAE5' : '#FEE2E2', color: u.active ? '#16a34a' : '#DC2626', fontWeight: 600, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 44 }}
+                >
+                  {u.active ? <><CheckCircle size={13} />Ativo</> : <><XCircle size={13} />Inativo</>}
+                </button>
+                <button
+                  onClick={() => { setEditingUser(u); setShowModal(true) }}
+                  style={{ width: 44, height: 44, borderRadius: 10, border: 'none', background: '#EFF6FF', color: '#3B82F6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Edit size={16} />
+                </button>
+                <button
+                  onClick={() => { setPwdUser(u); setShowPwdModal(true) }}
+                  style={{ width: 44, height: 44, borderRadius: 10, border: 'none', background: '#F5F3FF', color: '#8B5CF6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Key size={16} />
+                </button>
+                <button
+                  onClick={() => handleDelete(u)}
+                  style={{ width: 44, height: 44, borderRadius: 10, border: 'none', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* FAB */}
+        <button
+          onClick={() => { setEditingUser(null); setShowModal(true) }}
+          style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#00A896', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', cursor: 'pointer', zIndex: 100 }}
+        >
+          <Plus size={24} />
+        </button>
+
+        <UserModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingUser(null) }} onSave={handleSave} editingUser={editingUser} />
+        <PasswordModal isOpen={showPwdModal} onClose={() => { setShowPwdModal(false); setPwdUser(null) }} targetUser={pwdUser} />
+      </div>
+    )
+  }
 
   return (
     <div style={{ padding: 24, minHeight: '100%', background: '#f8f9fb', display: 'flex', flexDirection: 'column', gap: 20 }}>

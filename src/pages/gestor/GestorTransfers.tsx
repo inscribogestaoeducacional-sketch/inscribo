@@ -109,6 +109,13 @@ export default function GestorTransfers() {
   const userName = user?.full_name || 'Usuário'
   const userRole = user?.role || 'user'
 
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [])
+
   const [transfers, setTransfers]             = useState<Transfer[]>([])
   const [deletedTransfers, setDeletedTransfers] = useState<Transfer[]>([])
   const [activeTab, setActiveTab]             = useState<'active' | 'deleted'>('active')
@@ -387,6 +394,135 @@ export default function GestorTransfers() {
   }).length
 
   // ─── render ──────────────────────────────────────────────────────────────
+
+  // ── Mobile early return ───────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8f9fb' }}>
+
+        {/* Toast */}
+        {toast && (
+          <div style={{ position: 'fixed', bottom: 90, right: 20, zIndex: 9999, background: '#1e2d6b', color: 'white', fontSize: 13, fontWeight: 500, padding: '12px 18px', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Check size={14} /> {toast}
+          </div>
+        )}
+
+        {/* Header */}
+        <div style={{ padding: '16px 16px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <ArrowRightLeft size={16} color="#00A896" />
+            </div>
+            <h1 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Transferências</h1>
+            <span style={{ background: '#E6F7F5', color: '#00A896', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999 }}>{total}</span>
+          </div>
+        </div>
+
+        {/* Transfer list */}
+        <div style={{ flex: 1, overflowY: 'auto', marginTop: 12 }}>
+          {loading ? (
+            <div style={{ padding: 40, textAlign: 'center' }}><p style={{ fontSize: 13, color: '#94A3B8' }}>Carregando...</p></div>
+          ) : transfers.length === 0 ? (
+            <div style={{ padding: 40, textAlign: 'center' }}><p style={{ fontSize: 13, color: '#94A3B8' }}>Nenhuma transferência registrada</p></div>
+          ) : transfers.map(t => {
+            const st = getStatusInfo(t)
+            const reasonCfg = t.reason_category ? REASON_MAP[t.reason_category] : null
+            const diag = parseDiagnosis(t.ai_diagnosis)
+            return (
+              <div key={t.id} style={{ padding: '14px 16px', background: '#fff', borderBottom: '1px solid #F1F5F9' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.student_name}</p>
+                  <span style={{ fontSize: 11, padding: '2px 10px', borderRadius: 999, fontWeight: 600, flexShrink: 0, marginLeft: 8, background: st.bg, color: st.color }}>{st.label}</span>
+                </div>
+                <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 4px' }}>{t.course_grade} · {new Date(t.transfer_date).toLocaleDateString('pt-BR')}</p>
+                {t.stated_reason && <p style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic', margin: '0 0 8px' }}>{t.stated_reason}</p>}
+                {reasonCfg && (
+                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, fontWeight: 600, background: reasonCfg.bg, color: reasonCfg.color, display: 'inline-block', marginBottom: 8 }}>{reasonCfg.label}</span>
+                )}
+                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                  {!t.survey_token && isAdmin && (
+                    <button onClick={() => handleGenerateLink(t)}
+                      style={{ flex: 1, padding: '8px', borderRadius: 8, background: '#EDE9FE', color: '#7C3AED', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}>
+                      Gerar link pesquisa
+                    </button>
+                  )}
+                  {t.survey_token && !t.ai_diagnosis && (
+                    <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/survey/${t.survey_token}`); showToast('Link copiado!') }}
+                      style={{ flex: 1, padding: '8px', borderRadius: 8, background: '#FEF3C7', color: '#D97706', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}>
+                      Copiar link
+                    </button>
+                  )}
+                  {t.ai_diagnosis && (
+                    <button onClick={() => setDiagnosisTransfer(t)}
+                      style={{ flex: 1, padding: '8px', borderRadius: 8, background: '#D1FAE5', color: '#065F46', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 44 }}>
+                      Ver diagnóstico
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* FAB */}
+        {isAdmin && (
+          <button onClick={() => setShowNewModal(true)}
+            style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#00A896', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Plus size={26} />
+          </button>
+        )}
+
+        {/* Modals */}
+        {showNewModal && (
+          <Modal onClose={closeForm} title={editingTransfer ? 'Editar transferência' : 'Registrar transferência'}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={labelStyle}>Nome do aluno <span style={{ color: '#F43F5E' }}>*</span></label>
+                <input style={{ ...inputStyle, fontSize: 16 }} placeholder="Nome completo" value={form.studentName}
+                  onChange={e => setForm(f => ({ ...f, studentName: e.target.value }))} autoFocus />
+              </div>
+              <div>
+                <label style={labelStyle}>Série <span style={{ color: '#F43F5E' }}>*</span></label>
+                <select style={{ ...inputStyle, fontSize: 16 }} value={form.grade} onChange={e => setForm(f => ({ ...f, grade: e.target.value }))}>
+                  <option value="">Selecione a série...</option>
+                  {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Motivo informado pela família</label>
+                <input style={{ ...inputStyle, fontSize: 16 }} placeholder="Opcional" value={form.statedReason}
+                  onChange={e => setForm(f => ({ ...f, statedReason: e.target.value }))} />
+              </div>
+              {formError && <p style={{ margin: 0, fontSize: 13, color: '#DC2626', background: '#FFF5F5', padding: '8px 12px', borderRadius: 8 }}>{formError}</p>}
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={closeForm} style={{ flex: 1, padding: '12px', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: 14, color: '#64748B', cursor: 'pointer', fontWeight: 500, minHeight: 48 }}>Cancelar</button>
+                <button onClick={handleSaveForm} disabled={savingForm}
+                  style={{ flex: 1, padding: '12px', borderRadius: 9, border: 'none', background: '#00A896', color: 'white', fontSize: 14, fontWeight: 600, cursor: savingForm ? 'not-allowed' : 'pointer', minHeight: 48 }}>
+                  {savingForm ? 'Salvando...' : editingTransfer ? 'Salvar' : 'Registrar'}
+                </button>
+              </div>
+            </div>
+          </Modal>
+        )}
+        {diagnosisTransfer && (
+          <Modal onClose={() => setDiagnosisTransfer(null)} title="Diagnóstico IA" wide>
+            <DiagnosisView transfer={diagnosisTransfer} onUpdateStatus={handleUpdateStatus} onGenerateDiagnosis={handleGenerateDiagnosis} isGenerating={generatingId === diagnosisTransfer.id} isAdmin={isAdmin} />
+          </Modal>
+        )}
+        {deleteId && (
+          <Modal onClose={() => setDeleteId(null)} title="Confirmar exclusão">
+            <p style={{ margin: '0 0 16px', fontSize: 14, color: '#334155' }}>Tem certeza? Esta ação não pode ser desfeita.</p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setDeleteId(null)} style={{ flex: 1, padding: '12px', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: 14, color: '#64748B', cursor: 'pointer', minHeight: 48 }}>Cancelar</button>
+              <button onClick={() => handleDelete(deleteId)} style={{ flex: 1, padding: '12px', borderRadius: 9, border: 'none', background: '#DC2626', color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer', minHeight: 48 }}>Excluir</button>
+            </div>
+          </Modal>
+        )}
+        {auditTransferId && <AuditModal recordId={auditTransferId} moduleName="transfers" isOpen={!!auditTransferId} onClose={() => setAuditTransferId(null)} />}
+      </div>
+    )
+  }
+
   return (
     <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#f8f9fb' }}>
 

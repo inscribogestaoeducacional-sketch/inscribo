@@ -475,6 +475,143 @@ export default function GestorHome() {
 
   const avgFee = (setupCycle?.school_data?.avg_monthly_fee as number | null | undefined) || latest?.avg_monthly_fee || latest?.fee || null
 
+  // ── Mobile early return ───────────────────────────────────────────────────
+  if (isMobile) {
+    const quickAccess = [
+      { label: 'Leads', icon: Users, path: '/leads', bg: '#EDE9FE', color: '#7C3AED' },
+      { label: 'Visitas', icon: Calendar, path: '/visits', bg: '#FEF3C7', color: '#D97706' },
+      { label: 'WhatsApp', icon: MessageCircle, path: '/whatsapp', bg: '#D1FAE5', color: '#059669' },
+      { label: 'Relatórios', icon: BarChart3, path: '/reports', bg: '#DBEAFE', color: '#2563EB' },
+      { label: 'Transferências', icon: TrendingDown, path: '/transfers', bg: '#FEE2E2', color: '#DC2626' },
+      { label: 'Pesquisas', icon: Star, path: '/surveys', bg: '#F5F3FF', color: '#7C3AED' },
+    ]
+    const alertColors = { warning: { bg: '#FEF3C7', color: '#B45309', border: '#FDE68A' }, info: { bg: '#DBEAFE', color: '#1D4ED8', border: '#BFDBFE' }, success: { bg: '#D1FAE5', color: '#065F46', border: '#6EE7B7' } }
+
+    return (
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16, minHeight: '100%', background: '#f8f9fb', paddingBottom: 96 }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>Olá,</p>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>{user?.full_name?.split(' ')[0]}</h1>
+          </div>
+          {score > 0 && (
+            <div style={{ textAlign: 'center', background: scoreBg, border: `1px solid ${scoreColor}22`, borderRadius: 14, padding: '8px 16px' }}>
+              <p style={{ fontSize: 22, fontWeight: 800, color: scoreColor, margin: 0 }}>{score}</p>
+              <p style={{ fontSize: 10, fontWeight: 600, color: scoreColor, margin: 0, textTransform: 'uppercase', letterSpacing: '.04em' }}>Score</p>
+            </div>
+          )}
+        </div>
+
+        {/* Alerta mais importante */}
+        {alerts.length > 0 && (() => {
+          const a = alerts[0]
+          const c = alertColors[a.type]
+          return (
+            <div onClick={() => a.path && navigate(a.path)}
+              style={{ padding: '12px 16px', borderRadius: 12, background: c.bg, border: `1px solid ${c.border}`, cursor: a.path ? 'pointer' : 'default' }}>
+              <p style={{ fontSize: 13, color: c.color, margin: 0, fontWeight: 500 }}>{a.msg}</p>
+            </div>
+          )
+        })()}
+
+        {/* KPIs 2x2 */}
+        {!loading && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {[
+              { label: 'Total Alunos', value: totalStudents || 0, icon: GraduationCap, color: '#00A896', bg: '#E6F7F5' },
+              { label: 'Novatos', value: newStudents || 0, icon: TrendingUp, color: '#7C3AED', bg: '#EDE9FE' },
+              { label: 'Market Share', value: marketSharePct !== null ? `${marketSharePct}%` : '—', icon: Target, color: '#2563EB', bg: '#DBEAFE' },
+              { label: 'Próx. Campanha', value: monthsUntil === 0 ? 'Agora' : `${monthsUntil}m`, icon: Bell, color: '#D97706', bg: '#FEF3C7' },
+            ].map(({ label, value, icon: Icon, color, bg }) => (
+              <div key={label} style={{ background: '#fff', borderRadius: 14, border: '1px solid #E2E8F0', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Icon size={18} color={color} />
+                </div>
+                <div>
+                  <p style={{ fontSize: 20, fontWeight: 800, color: '#1A2B4A', margin: 0, lineHeight: 1 }}>{value}</p>
+                  <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0', fontWeight: 500 }}>{label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Campanha ativa */}
+        {activeCycle && funnelHasData && latestFunnel && (
+          <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #E2E8F0', padding: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Campanha ativa</p>
+              <span style={{ fontSize: 11, background: '#D1FAE5', color: '#065F46', borderRadius: 9999, padding: '2px 8px', fontWeight: 600 }}>Em andamento</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+              {[
+                { label: 'Cadastros', val: latestFunnel.registrations ?? 0, target: latestFunnel.registrations_target ?? 0 },
+                { label: 'Agendamentos', val: latestFunnel.schedules ?? 0, target: latestFunnel.schedules_target ?? 0 },
+                { label: 'Visitas', val: latestFunnel.visits ?? 0, target: latestFunnel.visits_target ?? 0 },
+                { label: 'Matrículas', val: latestFunnel.enrollments ?? 0, target: latestFunnel.enrollments_target ?? 0 },
+              ].map(({ label, val, target }) => {
+                const pct = target > 0 ? Math.min(100, Math.round((val / target) * 100)) : 0
+                return (
+                  <div key={label} style={{ padding: '10px 12px', background: '#F8FAFC', borderRadius: 10 }}>
+                    <p style={{ fontSize: 11, color: '#94A3B8', margin: '0 0 4px', fontWeight: 500 }}>{label}</p>
+                    <p style={{ fontSize: 18, fontWeight: 700, color: '#1A2B4A', margin: '0 0 6px' }}>{val}<span style={{ fontSize: 11, color: '#94A3B8' }}>/{target}</span></p>
+                    <div style={{ height: 4, background: '#E2E8F0', borderRadius: 9999 }}>
+                      <div style={{ height: 4, width: `${pct}%`, background: pct >= 80 ? '#00A896' : pct >= 50 ? '#F59E0B' : '#EF4444', borderRadius: 9999 }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <button onClick={() => navigate('/reports')} style={{ width: '100%', padding: '10px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              Ver relatório completo
+            </button>
+          </div>
+        )}
+
+        {/* Acesso rápido */}
+        <div>
+          <p style={{ fontSize: 12, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', margin: '0 0 10px' }}>Acesso rápido</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+            {quickAccess.map(({ label, icon: Icon, path, bg, color }) => (
+              <button key={label} onClick={() => navigate(path)}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: 16, borderRadius: 16, background: '#fff', border: '1px solid #E2E8F0', cursor: 'pointer', minHeight: 80 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon size={18} color={color} />
+                </div>
+                <p style={{ fontSize: 12, fontWeight: 600, color: '#1A2B4A', margin: 0, textAlign: 'center' }}>{label}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Alertas */}
+        {alerts.length > 1 && (
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', margin: '0 0 10px' }}>Alertas</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {alerts.slice(1).map((a, i) => {
+                const c = alertColors[a.type]
+                return (
+                  <div key={i} onClick={() => a.path && navigate(a.path)}
+                    style={{ padding: '12px 14px', borderRadius: 12, background: c.bg, border: `1px solid ${c.border}`, cursor: a.path ? 'pointer' : 'default', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <p style={{ fontSize: 13, color: c.color, margin: 0, fontWeight: 500, flex: 1 }}>{a.msg}</p>
+                    {a.action && <ChevronRight size={14} color={c.color} />}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Modals */}
+        {showModal && <CampaignGeneratorModal isOpen={showModal} onClose={() => setShowModal(false)} onSuccess={() => { load(); setShowModal(false) }} initialStep={showModalAtStep} institutionId={institutionId} />}
+        {showSetup && <SchoolSetupModal institutionId={institutionId} initialStep={setupInitialStep} onComplete={() => { setShowSetup(false); load() }} />}
+      </div>
+    )
+  }
+
   return (
     <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#f8f9fb' }}>
 

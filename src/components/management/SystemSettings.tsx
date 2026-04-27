@@ -911,8 +911,15 @@ export default function SystemSettings() {
   const [activeTab, setActiveTab] = useState('geral')
   const [showSchoolSetup, setShowSchoolSetup] = useState(false)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
 
   const institutionId = user?.institution_id || ''
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok })
@@ -920,49 +927,65 @@ export default function SystemSettings() {
   }
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: '#f8f9fb' }}>
+    <div style={{ padding: isMobile ? 0 : 24, display: 'flex', flexDirection: 'column', gap: isMobile ? 0 : 20, minHeight: '100%', background: '#f8f9fb' }}>
       <style>{`.animate-spin{animation:spin 1s linear infinite}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
 
       {toast && <Toast msg={toast.msg} ok={toast.ok} />}
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: isMobile ? '16px 16px 12px' : 0, background: isMobile ? '#fff' : 'transparent', borderBottom: isMobile ? '1px solid #E2E8F0' : 'none' }}>
         <div style={{ width: 38, height: 38, borderRadius: 12, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Settings size={18} color="#00A896" />
         </div>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Configurações</h1>
+          <h1 style={{ fontSize: isMobile ? 17 : 20, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Configurações</h1>
           <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>Gerencie as configurações da instituição</p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 2, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 4, width: 'fit-content' }}>
-        {TABS.map(tab => {
-          const Icon = tab.icon
-          const active = activeTab === tab.id
-          return (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#00A896' : '#64748B', background: active ? '#E6F7F5' : 'transparent', border: 'none', cursor: 'pointer', transition: 'all 0.15s' }}>
-              <Icon size={14} />{tab.label}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Conteúdo */}
-      {activeTab === 'geral' && <GeralTab institutionId={institutionId} onToast={showToast} />}
-      {activeTab === 'identidade' && <IdentidadeTab institutionId={institutionId} onToast={showToast} />}
-      {activeTab === 'whatsapp' && <WhatsAppTab institutionId={institutionId} />}
-      {activeTab === 'pagamentos' && <PagamentosTab institutionId={institutionId} />}
-      {activeTab === 'escola' && (
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 28, maxWidth: 500 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', marginBottom: 6 }}>Configurações da Escola</h3>
-          <p style={{ fontSize: 13, color: '#64748B', marginBottom: 20, lineHeight: 1.6 }}>Atualize as informações da sua escola, séries oferecidas e mensalidade média.</p>
-          <button onClick={() => setShowSchoolSetup(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            <GraduationCap size={15} />Editar configurações da escola
-          </button>
+      {isMobile ? (
+        <div style={{ overflowX: 'auto', display: 'flex', gap: 8, padding: '12px 16px', background: '#fff', borderBottom: '1px solid #E2E8F0', scrollbarWidth: 'none' }}>
+          {TABS.map(tab => {
+            const Icon = tab.icon
+            const active = activeTab === tab.id
+            return (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '8px 14px', borderRadius: 20, fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#00A896' : '#64748B', background: active ? '#E6F7F5' : '#F1F5F9', border: active ? '1.5px solid #00A896' : '1.5px solid transparent', cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 36, flexShrink: 0 }}>
+                <Icon size={13} />{tab.label}
+              </button>
+            )
+          })}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 2, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 4, width: 'fit-content' }}>
+          {TABS.map(tab => {
+            const Icon = tab.icon
+            const active = activeTab === tab.id
+            return (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#00A896' : '#64748B', background: active ? '#E6F7F5' : 'transparent', border: 'none', cursor: 'pointer', transition: 'all 0.15s' }}>
+                <Icon size={14} />{tab.label}
+              </button>
+            )
+          })}
         </div>
       )}
+
+      {/* Conteúdo */}
+      <div style={{ padding: isMobile ? '16px 0 96px' : 0 }}>
+        {activeTab === 'geral' && <GeralTab institutionId={institutionId} onToast={showToast} />}
+        {activeTab === 'identidade' && <IdentidadeTab institutionId={institutionId} onToast={showToast} />}
+        {activeTab === 'whatsapp' && <WhatsAppTab institutionId={institutionId} />}
+        {activeTab === 'pagamentos' && <PagamentosTab institutionId={institutionId} />}
+        {activeTab === 'escola' && (
+          <div style={{ background: '#fff', borderRadius: isMobile ? 0 : 16, border: isMobile ? 'none' : '1px solid #E2E8F0', padding: isMobile ? '20px 16px' : 28, maxWidth: isMobile ? '100%' : 500 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', marginBottom: 6 }}>Configurações da Escola</h3>
+            <p style={{ fontSize: 13, color: '#64748B', marginBottom: 20, lineHeight: 1.6 }}>Atualize as informações da sua escola, séries oferecidas e mensalidade média.</p>
+            <button onClick={() => setShowSchoolSetup(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', minHeight: 48, width: isMobile ? '100%' : 'auto', justifyContent: 'center' }}>
+              <GraduationCap size={15} />Editar configurações da escola
+            </button>
+          </div>
+        )}
+      </div>
 
       {showSchoolSetup && institutionId && (
         <SchoolSetupModal institutionId={institutionId} initialStep={1} editMode={true} onComplete={() => setShowSchoolSetup(false)} />

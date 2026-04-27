@@ -1163,6 +1163,118 @@ export default function LeadKanban() {
     )
   }
 
+  // ── Mobile early return ───────────────────────────────────────────────────
+  if (isMobile) {
+    const mobileLeads = leads.filter(l =>
+      (filterStatus === '' || l.status === filterStatus) &&
+      (filterSource === '' || l.source === filterSource) &&
+      (searchTerm === '' || l.student_name.toLowerCase().includes(searchTerm.toLowerCase()) || l.responsible_name.toLowerCase().includes(searchTerm.toLowerCase()))
+    )
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8f9fb' }}>
+
+        {/* Header */}
+        <div style={{ padding: '16px 16px 0', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Users style={{ width: 16, height: 16, color: '#8B5CF6' }} />
+          </div>
+          <h1 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Leads</h1>
+          <span style={{ background: '#EDE9FE', color: '#7C3AED', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999 }}>{stats.total}</span>
+        </div>
+
+        {/* Search */}
+        <div style={{ padding: '12px 16px 0', flexShrink: 0 }}>
+          <div style={{ position: 'relative' }}>
+            <Search style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 15, height: 15, color: '#94A3B8' }} />
+            <input
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Buscar por nome..."
+              style={{ width: '100%', paddingLeft: 36, paddingRight: 12, height: 44, background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, fontSize: 16, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}
+            />
+          </div>
+        </div>
+
+        {/* Status chips */}
+        <div style={{ padding: '10px 16px 0', flexShrink: 0, overflowX: 'auto', display: 'flex', gap: 6, scrollbarWidth: 'none' }}>
+          {[{ value: '', label: 'Todos' }, ...Object.entries(statusConfig).map(([v, c]) => ({ value: v, label: c.label }))].map(({ value, label }) => (
+            <button key={value} onClick={() => setFilterStatus(value)}
+              style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 9999, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                background: filterStatus === value ? '#00A896' : '#F0FDFB',
+                color: filterStatus === value ? '#fff' : '#64748B' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Lead list */}
+        <div style={{ flex: 1, overflowY: 'auto', marginTop: 10 }}>
+          {mobileLeads.length === 0 ? (
+            <div style={{ padding: '40px 16px', textAlign: 'center' }}>
+              <p style={{ fontSize: 13, color: '#94A3B8' }}>Nenhum lead encontrado</p>
+            </div>
+          ) : mobileLeads.map(lead => {
+            const cfg = statusConfig[lead.status]
+            return (
+              <div key={lead.id} onClick={() => cardActions.onHistory(lead)}
+                style={{ padding: '14px 16px', background: '#fff', borderBottom: '1px solid #F1F5F9', display: 'flex', gap: 12, cursor: 'pointer' }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: cfg?.accent ?? '#6b7280', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: '#fff' }}>
+                  {lead.student_name.charAt(0).toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.student_name}</p>
+                    <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, flexShrink: 0, marginLeft: 6,
+                      background: cfg?.accent ? `${cfg.accent}22` : '#f1f5f9',
+                      color: cfg?.accent ?? '#64748B' }}>
+                      {cfg?.label ?? lead.status}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 13, color: '#64748B', margin: '2px 0' }}>{lead.responsible_name}</p>
+                  <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
+                    {lead.grade_interest && <span style={{ fontSize: 12, color: '#94A3B8' }}>{lead.grade_interest}</span>}
+                    {lead.source && <span style={{ fontSize: 12, color: '#94A3B8' }}>{lead.source}</span>}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* FAB */}
+        <button onClick={() => { setEditingLead(null); setShowNewLeadModal(true) }}
+          style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#00A896', color: '#fff', border: 'none', fontSize: 28, cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Plus style={{ width: 26, height: 26 }} />
+        </button>
+
+        {/* Modals */}
+        <NewLeadModal isOpen={showNewLeadModal} onClose={() => { setShowNewLeadModal(false); setEditingLead(null) }} onSave={handleSave} editingLead={editingLead} />
+        {showScheduleVisitModal && leadToSchedule && (
+          <ScheduleVisitModal isOpen={showScheduleVisitModal} onClose={() => { setShowScheduleVisitModal(false); setLeadToSchedule(null) }} lead={leadToSchedule} onSchedule={handleScheduleVisit} />
+        )}
+        <HistoryModal isOpen={showHistory} onClose={() => { setShowHistory(false); setSelectedLead(null) }}
+          lead={selectedLead} history={leadHistory} loading={loadingHistory}
+          newAction={newAction} setNewAction={setNewAction} savingAction={savingAction}
+          editingAction={editingAction} setEditingAction={setEditingAction}
+          editingActionText={editingActionText} setEditingActionText={setEditingActionText}
+          onAddAction={handleAddAction} onSaveEditAction={handleSaveEditAction} onDeleteAction={handleDeleteAction}
+          contactForm={contactForm} setContactForm={setContactForm}
+          showContactForm={showContactForm} setShowContactForm={setShowContactForm}
+          savingContact={savingContact} onSaveContact={handleSaveContact}
+          onAudit={(id) => { setShowHistory(false); setSelectedLead(null); setAuditLeadId(id) }}
+        />
+        <LostReasonModal isOpen={lostReasonModal.open} lead={lostReasonModal.lead} onConfirm={handleConfirmLost} onCancel={handleCancelLost} />
+        {auditLeadId && <AuditModal recordId={auditLeadId} moduleName="leads" isOpen={!!auditLeadId} onClose={() => setAuditLeadId(null)} />}
+        {toast && (
+          <div className={`fixed bottom-6 right-6 z-[100] flex items-center gap-3 px-5 py-3 rounded-xl shadow-xl text-sm font-semibold transition-all ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+            {toast.type === 'success' ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> : <X className="w-4 h-4 flex-shrink-0" />}
+            {toast.msg}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16, height: '100%', background: '#f8f9fb' }}>
 
@@ -1212,48 +1324,7 @@ export default function LeadKanban() {
         </div>
       )}
 
-      {/* Kanban Board / Mobile Accordion */}
-      {isMobile ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
-          {visibleStatuses.map(status => {
-            const config = statusConfig[status as keyof typeof statusConfig]
-            const colLeads = getLeadsByStatus(status as Lead['status'])
-            const isOpen = openAccordions.has(status)
-            const toggle = () => setOpenAccordions(prev => {
-              const next = new Set(prev)
-              if (next.has(status)) next.delete(status)
-              else next.add(status)
-              return next
-            })
-            return (
-              <div key={status} style={{ background: '#fff', borderRadius: 12, border: '0.5px solid #e2e8f0', overflow: 'hidden' }}>
-                <div onClick={toggle} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', cursor: 'pointer', borderLeft: `3px solid ${config.accent}` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{config.label}</span>
-                    <span style={{ background: config.accent, color: '#fff', fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 9999 }}>{colLeads.length}</span>
-                  </div>
-                  {isOpen
-                    ? <ChevronDown style={{ width: 16, height: 16, color: '#94A3B8' }} />
-                    : <ChevronRight style={{ width: 16, height: 16, color: '#94A3B8' }} />}
-                </div>
-                {isOpen && (
-                  <div style={{ padding: '0 12px 12px' }}>
-                    {colLeads.length === 0 ? (
-                      <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '16px 0' }}>Nenhum lead</p>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8 }}>
-                        {colLeads.map(lead => (
-                          <CardContent key={lead.id} lead={lead} config={config} isFlashing={flashingLeadId === lead.id} {...cardActions} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      ) : (
+      {/* Kanban Board */}
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-4 min-w-max">
@@ -1295,7 +1366,6 @@ export default function LeadKanban() {
           ) : null}
         </DragOverlay>
       </DndContext>
-      )}
 
       {/* Modals */}
       <NewLeadModal isOpen={showNewLeadModal} onClose={() => { setShowNewLeadModal(false); setEditingLead(null) }} onSave={handleSave} editingLead={editingLead} />

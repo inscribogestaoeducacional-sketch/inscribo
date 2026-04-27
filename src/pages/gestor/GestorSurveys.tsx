@@ -145,10 +145,18 @@ export default function GestorSurveys() {
   const [generatingReport, setGeneratingReport] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
 
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+
   useEffect(() => {
     mountedRef.current = true
     load()
     return () => { mountedRef.current = false }
+  }, [])
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
   }, [])
 
   function showToast(msg: string) {
@@ -551,6 +559,194 @@ export default function GestorSurveys() {
               ) : (
                 <p style={{ textAlign: 'center', color: '#EF4444' }}>Erro ao gerar relatório. Tente novamente.</p>
               )}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ─── MOBILE ───────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#f8f9fb', paddingBottom: 96 }}>
+        {toast && (
+          <div style={{ position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', background: '#1A2B4A', color: 'white', padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 9999, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Check size={14} /> {toast}
+          </div>
+        )}
+
+        {/* Header */}
+        <div style={{ padding: '16px 16px 8px', background: '#fff', borderBottom: '1px solid #E2E8F0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ClipboardList size={18} color="#F97316" />
+              </div>
+              <div>
+                <p style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Pesquisas</p>
+                <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>{active} ativa{active !== 1 ? 's' : ''}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* KPIs 2x2 */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '12px 16px' }}>
+          {kpis.map(k => (
+            <div key={k.label} style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', border: '1px solid #E2E8F0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: k.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <k.Icon size={15} color={k.color} />
+                </div>
+                <div>
+                  <p style={{ fontSize: 20, fontWeight: 800, color: '#1A2B4A', margin: 0, lineHeight: 1 }}>{k.value}</p>
+                  <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0', lineHeight: 1.2 }}>{k.label}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Survey list */}
+        <div style={{ flex: 1, padding: '0 0 16px' }}>
+          {loading ? (
+            <p style={{ textAlign: 'center', color: '#94A3B8', padding: 32, fontSize: 14 }}>Carregando...</p>
+          ) : surveys.length === 0 ? (
+            <div style={{ padding: '40px 16px', textAlign: 'center' }}>
+              <ClipboardList size={40} color="#CBD5E1" style={{ marginBottom: 12 }} />
+              <p style={{ color: '#94A3B8', fontSize: 14 }}>Nenhuma pesquisa criada ainda.</p>
+            </div>
+          ) : surveys.map(s => {
+            const isActive = s.status === 'active'
+            const scoreable = responses.filter(r => typeof r.answers?.satisfaction === 'number')
+            return (
+              <div key={s.id} style={{ padding: '14px 16px', background: '#fff', borderRadius: 14, margin: '0 16px 10px', border: '1px solid #E2E8F0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                  <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, flex: 1, paddingRight: 8 }}>{s.title}</p>
+                  <span style={{
+                    padding: '3px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700, flexShrink: 0,
+                    background: isActive ? '#F0FDF4' : '#F1F5F9',
+                    color: isActive ? '#10B981' : '#94A3B8',
+                  }}>
+                    {isActive ? 'Ativa' : 'Encerrada'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 16, fontSize: 13, color: '#64748B', marginBottom: 10 }}>
+                  <span>📊 {s.response_count ?? 0} respostas</span>
+                  <span>📅 {fmt(s.created_at)}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => openResponses(s)}
+                    style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#EFF6FF', color: '#3B82F6', fontWeight: 600, fontSize: 13, cursor: 'pointer', minHeight: 44 }}
+                  >
+                    Ver respostas
+                  </button>
+                  <button
+                    onClick={() => copyLink(s.survey_token)}
+                    style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#F0FDF4', color: '#10B981', fontWeight: 600, fontSize: 13, cursor: 'pointer', minHeight: 44 }}
+                  >
+                    Copiar link
+                  </button>
+                  {isActive && (
+                    <button
+                      onClick={() => closeSurvey(s.id)}
+                      style={{ padding: '10px 12px', borderRadius: 10, border: 'none', background: '#FEF2F2', color: '#EF4444', fontWeight: 600, fontSize: 13, cursor: 'pointer', minHeight: 44 }}
+                    >
+                      Encerrar
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* FAB */}
+        <button
+          onClick={() => setShowNewModal(true)}
+          style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#00A896', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', cursor: 'pointer', zIndex: 100 }}
+        >
+          <Plus size={24} />
+        </button>
+
+        {/* New Survey Modal */}
+        {showNewModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
+            <div style={{ background: '#fff', borderRadius: '20px 20px 0 0', padding: 20, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <p style={{ fontSize: 17, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Nova Pesquisa</p>
+                <button onClick={() => setShowNewModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><X size={20} /></button>
+              </div>
+              <label style={labelStyle}>Título</label>
+              <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Ex: Pesquisa 2025" style={{ ...inputStyle, fontSize: 16, marginBottom: 12 }} />
+              <label style={labelStyle}>Descrição (opcional)</label>
+              <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Breve descrição..." rows={3} style={{ ...inputStyle, fontSize: 16, resize: 'none', marginBottom: 12 }} />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: '#1A2B4A', marginBottom: 16, cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.askId} onChange={e => setForm(f => ({ ...f, askId: e.target.checked }))} />
+                Solicitar identificação do respondente
+              </label>
+              <button
+                onClick={createSurvey}
+                disabled={saving || !form.title.trim()}
+                style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: saving || !form.title.trim() ? '#94A3B8' : '#00A896', color: 'white', fontWeight: 700, fontSize: 15, cursor: saving || !form.title.trim() ? 'not-allowed' : 'pointer', minHeight: 48 }}
+              >
+                {saving ? 'Criando...' : 'Criar pesquisa'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Link Modal */}
+        {showLinkModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div style={{ background: '#fff', borderRadius: 16, padding: 20, width: '100%', maxWidth: 400 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <p style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Pesquisa criada!</p>
+                <button onClick={() => setShowLinkModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
+              </div>
+              <p style={{ fontSize: 13, color: '#64748B', marginBottom: 12 }}>Compartilhe o link abaixo com as famílias:</p>
+              <div style={{ background: '#F8FAFC', borderRadius: 10, padding: '10px 12px', border: '1px solid #E2E8F0', fontSize: 13, color: '#1A2B4A', wordBreak: 'break-all', marginBottom: 12 }}>
+                {surveyLink(showLinkModal.survey.survey_token)}
+              </div>
+              <button
+                onClick={() => { copyLink(showLinkModal.survey.survey_token); setShowLinkModal(null) }}
+                style={{ width: '100%', padding: '13px', borderRadius: 12, border: 'none', background: '#00A896', color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer', minHeight: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                <Copy size={16} /> Copiar link
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Responses view (reuses viewingSurvey state) */}
+        {viewingSurvey && (
+          <div style={{ position: 'fixed', inset: 0, background: '#fff', zIndex: 300, overflowY: 'auto' }}>
+            <div style={{ padding: '16px 16px 96px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                <button onClick={() => { setViewingSurvey(null); setResponses([]) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: 4 }}>
+                  ← Voltar
+                </button>
+                <p style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{viewingSurvey.title}</p>
+              </div>
+              {loadingResponses ? (
+                <p style={{ textAlign: 'center', color: '#94A3B8', padding: 32 }}>Carregando respostas...</p>
+              ) : responses.length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#94A3B8', padding: 32 }}>Nenhuma resposta ainda.</p>
+              ) : responses.map(r => (
+                <div key={r.id} style={{ background: '#F8FAFC', borderRadius: 12, padding: '12px 14px', marginBottom: 10, border: '1px solid #E2E8F0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#1A2B4A', margin: 0 }}>{r.respondent_name ?? 'Anônimo'}</p>
+                    <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>{fmt(r.created_at)}</p>
+                  </div>
+                  {r.respondent_grade && <p style={{ fontSize: 12, color: '#64748B', margin: '0 0 6px' }}>Turma: {r.respondent_grade}</p>}
+                  {typeof r.answers?.satisfaction === 'number' && (
+                    <p style={{ fontSize: 13, color: '#F97316', margin: '0 0 4px' }}>{'⭐'.repeat(r.answers.satisfaction as number)} ({r.answers.satisfaction}/5)</p>
+                  )}
+                  {r.answers?.comment && <p style={{ fontSize: 13, color: '#374151', margin: 0, fontStyle: 'italic' }}>"{r.answers.comment}"</p>}
+                </div>
+              ))}
             </div>
           </div>
         )}

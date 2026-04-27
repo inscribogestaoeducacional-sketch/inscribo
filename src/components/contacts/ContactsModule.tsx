@@ -286,6 +286,101 @@ export default function ContactsModule() {
     )
   }
 
+  // ── Mobile early return ───────────────────────────────────────────────────
+  if (isMobile) {
+    const originFilters = [
+      { value: 'all',      label: 'Todos' },
+      { value: 'lead',     label: 'Lead' },
+      { value: 'whatsapp', label: 'WhatsApp' },
+      { value: 'both',     label: 'Ambos' },
+    ]
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8f9fb' }}>
+
+        {/* Header */}
+        <div style={{ padding: '16px 16px 0', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <BookUser size={16} color="#3B82F6" />
+          </div>
+          <h1 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Contatos</h1>
+          <span style={{ background: '#EFF6FF', color: '#3B82F6', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999 }}>{contacts.length}</span>
+        </div>
+
+        {/* Search */}
+        <div style={{ padding: '12px 16px 0', flexShrink: 0 }}>
+          <div style={{ position: 'relative' }}>
+            <Search style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 15, height: 15, color: '#94A3B8' }} />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar contato..."
+              style={{ width: '100%', paddingLeft: 36, paddingRight: 12, height: 44, background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, fontSize: 16, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+        </div>
+
+        {/* Origin filter chips */}
+        <div style={{ padding: '10px 16px 0', flexShrink: 0, overflowX: 'auto', display: 'flex', gap: 6, scrollbarWidth: 'none' }}>
+          {originFilters.map(({ value, label }) => (
+            <button key={value} onClick={() => setFilterOrigin(value)}
+              style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 9999, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                background: filterOrigin === value ? '#3B82F6' : '#F0F9FF',
+                color: filterOrigin === value ? '#fff' : '#64748B' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* KPIs 2x2 */}
+        <div style={{ padding: '12px 16px 0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, flexShrink: 0 }}>
+          {kpis.map(k => (
+            <div key={k.label} style={{ background: '#fff', borderRadius: 12, border: '1px solid #E2E8F0', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 22 }}>{k.icon}</span>
+              <div>
+                <p style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0, lineHeight: 1 }}>{k.value}</p>
+                <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0', fontWeight: 500 }}>{k.label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Contact list */}
+        <div style={{ flex: 1, overflowY: 'auto', marginTop: 10, background: '#fff', borderTop: '1px solid #F1F5F9' }}>
+          {loading ? (
+            <div style={{ padding: 40, textAlign: 'center' }}><p style={{ fontSize: 13, color: '#94A3B8' }}>Carregando...</p></div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: 40, textAlign: 'center' }}><p style={{ fontSize: 13, color: '#94A3B8' }}>Nenhum contato encontrado</p></div>
+          ) : filtered.map(c => {
+            const color = hexColor(c.name)
+            const hasLead = c.has_lead
+            const hasWa = c.has_whatsapp
+            const originBg = hasLead && hasWa ? '#D1FAE5' : hasLead ? '#EDE9FE' : '#DBEAFE'
+            const originColor = hasLead && hasWa ? '#065F46' : hasLead ? '#7C3AED' : '#1D4ED8'
+            const originLabel = hasLead && hasWa ? 'Ambos' : hasLead ? 'Lead' : 'WhatsApp'
+            return (
+              <div key={c.id} onClick={() => setProfileContact(c)}
+                style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', background: color, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: '#fff' }}>
+                  {initials(c.name)}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{c.name}</p>
+                    <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: originBg, color: originColor, flexShrink: 0, marginLeft: 6 }}>{originLabel}</span>
+                  </div>
+                  {(c.student_name || c.grade) && (
+                    <p style={{ fontSize: 13, color: '#64748B', margin: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {[c.student_name, c.grade].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
+                  {c.phone && <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>{c.phone}</p>}
+                </div>
+                <ChevronRight size={16} color="#CBD5E1" style={{ flexShrink: 0 }} />
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#f8f9fb' }}>
 
