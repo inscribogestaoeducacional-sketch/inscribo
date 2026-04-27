@@ -79,9 +79,11 @@ function NovaVisitaModal({ isOpen, onClose, onSave, defaultDate, leads }: NovaVi
 
   if (!isOpen) return null
 
+  const isMobileModal = window.innerWidth < 768
+
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,43,74,0.35)', backdropFilter: 'blur(3px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ background: '#FFFFFF', borderRadius: 20, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto', border: '0.5px solid #D1FAE5', boxShadow: '0 20px 60px rgba(0,168,150,0.15)', animation: 'slideUp 0.2s ease' }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: isMobileModal ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobileModal ? 0 : 24 }}>
+      <div style={{ background: '#FFFFFF', borderRadius: isMobileModal ? '20px 20px 0 0' : 20, width: '100%', maxWidth: isMobileModal ? '100%' : 440, maxHeight: '90vh', overflowY: 'auto', border: '0.5px solid #D1FAE5', boxShadow: '0 20px 60px rgba(0,168,150,0.15)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '0.5px solid #E6F7F5' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 30, height: 30, borderRadius: 8, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

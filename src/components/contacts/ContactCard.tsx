@@ -150,6 +150,13 @@ export default function ContactCard({
   const [tError, setTError]             = useState<string | null>(null)
   const [convData, setConvData]         = useState<any | null>(null)
   const [lastMessages, setLastMessages] = useState<any[]>([])
+  const [isMobile, setIsMobile]         = useState(window.innerWidth < 768)
+
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [])
 
   // Load + reset when contact identity changes
   useEffect(() => {
@@ -658,8 +665,11 @@ export default function ContactCard({
       </div>
       <div className="flex-shrink-0 flex flex-col items-end gap-2">
         <button onClick={onClose}
-          className="p-2 text-[#64748B] hover:text-[#1A2B4A] hover:bg-[#F1F5F9] rounded-lg transition-colors">
-          {mode === 'page' ? <ArrowLeft className="w-5 h-5" /> : <X className="w-5 h-5" />}
+          className="p-2 text-[#64748B] hover:text-[#1A2B4A] hover:bg-[#F1F5F9] rounded-lg transition-colors"
+          style={isMobile ? { display: 'flex', alignItems: 'center', gap: 4, fontSize: 14, fontWeight: 600, padding: '6px 10px' } : {}}>
+          {isMobile
+            ? <><ArrowLeft className="w-5 h-5" /><span>Voltar</span></>
+            : mode === 'page' ? <ArrowLeft className="w-5 h-5" /> : <X className="w-5 h-5" />}
         </button>
         <button
           onClick={async () => {
@@ -1138,6 +1148,19 @@ export default function ContactCard({
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (mode === 'drawer') {
+    if (isMobile) {
+      return (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: '#fff', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+            {headerEl}
+            {tabBarEl}
+            {bodyEl}
+            {footerEl}
+          </div>
+          {toastEl}
+        </>
+      )
+    }
     return (
       <>
         <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
