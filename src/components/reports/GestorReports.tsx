@@ -1407,7 +1407,7 @@ export default function GestorReports({ institutionId, institutionName }: Props)
   ]
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: 'var(--bg-page)' }}>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: '#f8f9fb' }}>
       <style>{`
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
         .animate-spin { animation: spin 1s linear infinite }
@@ -1417,12 +1417,12 @@ export default function GestorReports({ institutionId, institutionName }: Props)
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 12, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <BarChart3 style={{ width: 20, height: 20, color: '#00A896' }} />
+          <div style={{ width: 38, height: 38, borderRadius: 12, background: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <BarChart3 style={{ width: 18, height: 18, color: '#3B82F6' }} />
           </div>
           <div>
-            <h1 style={{ fontSize: 20, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Relatórios da Campanha</h1>
-            <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Relatórios da Campanha</h1>
+            <p style={{ fontSize: 13, color: '#94A3B8', margin: '2px 0 0' }}>
               {cycle
                 ? `${cycle.label} · ${new Date(cycle.start_date).toLocaleDateString('pt-BR')} até ${new Date(cycle.end_date).toLocaleDateString('pt-BR')}`
                 : institutionName}

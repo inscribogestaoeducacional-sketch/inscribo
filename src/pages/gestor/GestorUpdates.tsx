@@ -70,20 +70,22 @@ export default function GestorUpdates() {
   const unread = updates.filter(u => !u.read).length
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto', padding: '32px 24px' }}>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#f8f9fb' }}>
       {/* Header */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Central de Atualizações</h1>
-          {unread > 0 && (
-            <span style={{ padding: '3px 10px', background: '#F43F5E', color: '#fff', borderRadius: 999, fontSize: 11, fontWeight: 800 }}>
-              {unread} nova{unread !== 1 ? 's' : ''}
-            </span>
-          )}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Central de Atualizações</h1>
+            {unread > 0 && (
+              <span style={{ padding: '3px 10px', background: '#F43F5E', color: '#fff', borderRadius: 999, fontSize: 11, fontWeight: 700 }}>
+                {unread} nova{unread !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+          <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>
+            Novidades e comunicados da Áion Edu para sua escola.
+          </p>
         </div>
-        <p style={{ fontSize: 13, color: '#64748B', marginTop: 6 }}>
-          Novidades e comunicados da Áion Edu para sua escola.
-        </p>
       </div>
 
       {loading ? (

@@ -122,7 +122,7 @@ export default function AttendantHome() {
   }
 
   return (
-    <div style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 1100 }}>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#f8f9fb' }}>
 
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -156,7 +156,7 @@ export default function AttendantHome() {
             { label: 'WhatsApp 24h',            value: waReceived,       icon: MessageCircle, color: '#10B981', bg: '#d1fae5' },
             { label: 'Transferências pendentes',value: transfersPending, icon: ArrowRightLeft, color: transfersPending > 0 ? '#dc2626' : '#64748b', bg: transfersPending > 0 ? '#fef2f2' : '#f1f5f9' },
           ].map(kpi => (
-            <div key={kpi.label} style={{ background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div key={kpi.label} style={{ background: 'white', borderRadius: 14, border: '1px solid #e2e8f0', padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
               <div style={{ width: 44, height: 44, borderRadius: 12, background: kpi.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <kpi.icon size={20} color={kpi.color} />
               </div>

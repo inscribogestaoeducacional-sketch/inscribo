@@ -104,13 +104,14 @@ const btn = (bg: string, color = 'white'): React.CSSProperties => ({
 })
 
 const labelStyle: React.CSSProperties = {
-  fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, display: 'block',
+  fontSize: 11, fontWeight: 600, color: '#94a3b8', marginBottom: 6, display: 'block',
+  textTransform: 'uppercase', letterSpacing: '0.05em',
 }
 
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '10px 14px', borderRadius: 10,
-  border: '1.5px solid #E2E8F0', fontSize: 14, color: '#1A2B4A',
-  outline: 'none', boxSizing: 'border-box', background: 'white',
+  width: '100%', padding: '9px 12px', borderRadius: 9,
+  border: '1.5px solid #E2E8F0', fontSize: 13, color: '#1A2B4A',
+  outline: 'none', boxSizing: 'border-box', background: '#FAFAFA',
 }
 
 // ─── componente ──────────────────────────────────────────────
@@ -569,9 +570,14 @@ export default function GestorSurveys() {
       )}
 
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Pesquisas de Satisfação</h1>
-          <p style={{ fontSize: 14, color: '#94A3B8', margin: '4px 0 0' }}>Entenda o que as famílias pensam e antecipe rematrículas</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 12, background: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <ClipboardList size={18} color="#F97316" />
+          </div>
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Pesquisas de Satisfação</h1>
+            <p style={{ fontSize: 13, color: '#94a3b8', margin: '2px 0 0' }}>Entenda o que as famílias pensam e antecipe rematrículas</p>
+          </div>
         </div>
         <button onClick={() => setShowNewModal(true)} style={btn('#00A896')}>
           <Plus size={16} /> Nova pesquisa

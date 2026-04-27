@@ -184,7 +184,7 @@ export default function Reports() {
   }
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: 'var(--bg-page)' }}>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: '#f8f9fb' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -192,8 +192,8 @@ export default function Reports() {
             <BarChart3 style={{ width: 18, height: 18, color: '#3B82F6' }} />
           </div>
           <div>
-            <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Relatórios</h1>
-            <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>Análises detalhadas e insights do negócio</p>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Relatórios</h1>
+            <p style={{ fontSize: 13, color: '#94a3b8', margin: '2px 0 0' }}>Análises detalhadas e insights do negócio</p>
           </div>
         </div>
         <button
