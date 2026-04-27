@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { Users, Search, Phone, Download, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import { Users, BookUser, Search, Phone, Download, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
 import ContactCard from './ContactCard'
 import { UnifiedContact } from './ContactProfile'
 
@@ -286,7 +286,7 @@ export default function ContactsModule() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 38, height: 38, borderRadius: 12, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Users size={18} color="#3B82F6" />
+            <BookUser size={18} color="#3B82F6" />
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
