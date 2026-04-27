@@ -1,13 +1,20 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { LogOut, Settings, User } from 'lucide-react'
+import { LogOut, Settings, User, Menu } from 'lucide-react'
 import NotificationBell from './NotificationBell'
 
 export default function TopBar() {
   const { user, signOut } = useAuth()
   const [showMenu, setShowMenu] = useState(false)
   const [search, setSearch] = useState('')
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [])
 
   const initials = (user?.full_name || 'U').split(' ').map((n: string) => n[0]).slice(0, 2).join('')
   const roleLabel = user?.role === 'admin' ? 'Administrador' : user?.role === 'manager' ? 'Gestor' : 'Consultor'
@@ -17,10 +24,20 @@ export default function TopBar() {
       height: 58, background: '#FFFFFF',
       borderBottom: '0.5px solid #D1FAE5',
       display: 'flex', alignItems: 'center',
-      padding: '0 24px', gap: 16, flexShrink: 0,
+      padding: '0 16px', gap: 12, flexShrink: 0,
     }}>
+      {/* Hambúrguer — mobile only */}
+      {isMobile && (
+        <button
+          onClick={() => (window as any).__toggleMobileSidebar?.()}
+          style={{ padding: 8, borderRadius: 8, border: 'none', background: 'none', cursor: 'pointer', color: '#1A2B4A', display: 'flex', alignItems: 'center', flexShrink: 0 }}
+        >
+          <Menu size={22} />
+        </button>
+      )}
+
       {/* Search */}
-      <div style={{ flex: 1, maxWidth: 440, position: 'relative' }}>
+      <div style={{ flex: 1, maxWidth: isMobile ? 'none' : 440, position: 'relative' }}>
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}

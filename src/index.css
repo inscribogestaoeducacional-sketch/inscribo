@@ -195,3 +195,8 @@ h1,h2,h3,h4,h5,h6 { color: var(--color-navy); }
   40% { transform: translateY(-6px); }
 }
 .bounce-dot { animation: bounce-dot 1.2s ease-in-out infinite; }
+
+/* ====== MOBILE ====== */
+* { -webkit-tap-highlight-color: transparent; }
+button, a { touch-action: manipulation; }
+input, select, textarea { font-size: max(16px, 1em); }

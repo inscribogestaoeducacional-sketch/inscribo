@@ -196,6 +196,13 @@ export default function GestorHome() {
   const navigate = useNavigate()
   const institutionId = user?.institution_id!
 
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [])
+
   const [loading, setLoading] = useState(true)
   const [cycles, setCycles] = useState<CampaignCycle[]>([])
   const [funnelData, setFunnelData] = useState<FunnelMetrics[]>([])
@@ -539,7 +546,7 @@ export default function GestorHome() {
 
       {/* ── Score + KPIs ─────────────────────────────────────────────────────── */}
       {!loading && hasHistory && (
-        <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'stretch', flexDirection: isMobile ? 'column' : 'row' }}>
           {/* Score gauge */}
           <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
             <svg width="140" height="140" viewBox="0 0 140 140">
@@ -571,7 +578,7 @@ export default function GestorHome() {
           </div>
 
           {/* 4 KPIs */}
-          <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+          <div style={{ ...(isMobile ? {} : { flex: 1 }), display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 14 }}>
             <KpiCard label={`Alunos ${latestYear ?? ''}`} value={fmt(totalStudents)} icon={<Users size={20} color="#00A896" />} iconBg="#E6F7F5" variation={totalVariation} />
             <KpiCard label="Novatos" value={fmt(newStudents)} icon={<TrendingUp size={20} color="#8B5CF6" />} iconBg="#EDE9FE" variation={newVariation} sub={totalStudents > 0 ? `${Math.round((newStudents / totalStudents) * 100)}% do total` : undefined} />
             <KpiCard label="Market share" value={marketSharePct !== null ? `${marketSharePct}%` : (marketLoading ? '…' : '—')} icon={<BarChart3 size={20} color="#F59E0B" />} iconBg="#FEF3C7" sub={estimatedSchools ? `~${estimatedSchools} escolas na cidade` : undefined} />
@@ -581,14 +588,14 @@ export default function GestorHome() {
       )}
 
       {loading && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 14 }}>
           {[...Array(4)].map((_, i) => <div key={i} style={{ background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '16px 18px', height: 90 }} />)}
         </div>
       )}
 
       {/* ── Linha 2: Histórico + Mercado + Diagnóstico INEP ──────────────────── */}
       {hasHistory && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 380px', gap: 16 }}>
 
           {/* Histórico de alunos */}
           <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
@@ -766,7 +773,7 @@ export default function GestorHome() {
       )}
 
       {/* ── Linha 3: Funil leads + Ranking usuários ──────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
 
         {/* Funil de leads */}
         <SectionCard title="Funil de Leads" subtitle="Conversão atual" icon={<Activity />} iconBg="#EDE9FE" iconColor="#8B5CF6" action={() => navigate('/leads')} actionLabel="Ver leads">
@@ -846,7 +853,7 @@ export default function GestorHome() {
       </div>
 
       {/* ── Linha 4: WhatsApp + Transferências ──────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
 
         {/* WhatsApp */}
         <SectionCard title="WhatsApp" subtitle="Últimos 30 dias" icon={<MessageCircle />} iconBg="#D1FAE5" iconColor="#10B981" action={() => navigate('/whatsapp')} actionLabel="Ver central">

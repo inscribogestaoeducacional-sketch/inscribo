@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import {
   Plus, Phone, Calendar, Edit, Edit2, Trash2, X, Search,
   Clock, Users, Send, CheckCircle, Save,
-  MessageCircle, AlertTriangle
+  MessageCircle, AlertTriangle, ChevronDown, ChevronRight
 } from 'lucide-react'
 import { logAudit } from '../../hooks/useAudit'
 import AuditModal from '../common/AuditModal'
@@ -803,6 +803,14 @@ export default function LeadKanban() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [overColumnId, setOverColumnId] = useState<string | null>(null)
   const [flashingLeadId, setFlashingLeadId] = useState<string | null>(null)
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  const [openAccordions, setOpenAccordions] = useState<Set<string>>(new Set(['new', 'contact']))
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
 
   // ── Estado do modal de motivo de perda ───────────────────────────────────
   const [lostReasonModal, setLostReasonModal] = useState<{
@@ -1204,7 +1212,48 @@ export default function LeadKanban() {
         </div>
       )}
 
-      {/* Kanban Board */}
+      {/* Kanban Board / Mobile Accordion */}
+      {isMobile ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
+          {visibleStatuses.map(status => {
+            const config = statusConfig[status as keyof typeof statusConfig]
+            const colLeads = getLeadsByStatus(status as Lead['status'])
+            const isOpen = openAccordions.has(status)
+            const toggle = () => setOpenAccordions(prev => {
+              const next = new Set(prev)
+              if (next.has(status)) next.delete(status)
+              else next.add(status)
+              return next
+            })
+            return (
+              <div key={status} style={{ background: '#fff', borderRadius: 12, border: '0.5px solid #e2e8f0', overflow: 'hidden' }}>
+                <div onClick={toggle} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', cursor: 'pointer', borderLeft: `3px solid ${config.accent}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{config.label}</span>
+                    <span style={{ background: config.accent, color: '#fff', fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 9999 }}>{colLeads.length}</span>
+                  </div>
+                  {isOpen
+                    ? <ChevronDown style={{ width: 16, height: 16, color: '#94A3B8' }} />
+                    : <ChevronRight style={{ width: 16, height: 16, color: '#94A3B8' }} />}
+                </div>
+                {isOpen && (
+                  <div style={{ padding: '0 12px 12px' }}>
+                    {colLeads.length === 0 ? (
+                      <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '16px 0' }}>Nenhum lead</p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8 }}>
+                        {colLeads.map(lead => (
+                          <CardContent key={lead.id} lead={lead} config={config} isFlashing={flashingLeadId === lead.id} {...cardActions} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      ) : (
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-4 min-w-max">
@@ -1246,6 +1295,7 @@ export default function LeadKanban() {
           ) : null}
         </DragOverlay>
       </DndContext>
+      )}
 
       {/* Modals */}
       <NewLeadModal isOpen={showNewLeadModal} onClose={() => { setShowNewLeadModal(false); setEditingLead(null) }} onSave={handleSave} editingLead={editingLead} />

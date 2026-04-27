@@ -62,6 +62,13 @@ export default function ContactsModule() {
   const institutionId = user?.institution_id!
   const mountedRef = useRef(true)
 
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [])
+
   const [contacts, setContacts] = useState<UnifiedContact[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -309,7 +316,7 @@ export default function ContactsModule() {
       </div>
 
       {/* KPI cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 16 }}>
         {kpis.map(k => (
           <div key={k.label} style={{ background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '16px 18px' }}>
             <p style={{ fontSize: 26, fontWeight: 700, color: '#1e2d6b', margin: '0 0 4px' }}>{k.value}</p>
@@ -368,69 +375,97 @@ export default function ContactsModule() {
           </div>
         ) : (
           <>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  {['Contato', 'Telefone', 'Origem', 'Série', 'Último contato', 'Ações'].map(h => (
-                    <th key={h} style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
+            {isMobile ? (
+              /* ── Mobile: cards ── */
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {pageItems.map(c => {
                   const color  = hexColor(c.name)
                   const origin = originCfg(c.has_lead, c.has_whatsapp)
                   return (
-                    <tr key={c.id} onClick={() => setProfileContact(c)}
-                      style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
-                      onMouseLeave={e => (e.currentTarget.style.background = '')}>
-                      <td style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ width: 36, height: 36, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
-                            {initials(c.name)}
-                          </div>
-                          <div style={{ minWidth: 0 }}>
-                            <p style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</p>
-                            {c.student_name && (
-                              <p style={{ fontSize: 12, color: '#64748b', margin: '1px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.student_name}</p>
-                            )}
-                            {c.tags.length > 0 && (
-                              <div style={{ display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap' }}>
-                                {c.tags.slice(0, 2).map((t, i) => (
-                                  <span key={i} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 999, background: '#F0F9FF', color: '#0369A1', fontWeight: 600 }}>{t}</span>
-                                ))}
-                                {c.tags.length > 2 && <span style={{ fontSize: 10, color: '#94a3b8' }}>+{c.tags.length - 2}</span>}
-                              </div>
-                            )}
-                          </div>
+                    <div key={c.id} onClick={() => setProfileContact(c)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}>
+                      <div style={{ width: 40, height: 40, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
+                        {initials(c.name)}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <p style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>{c.name}</p>
+                          <span style={{ ...origin.badgeStyle, fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 999 }}>{origin.label}</span>
                         </div>
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        {c.phone
-                          ? <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#475569' }}><Phone size={12} />{c.phone}</span>
-                          : <span style={{ color: '#CBD5E1', fontSize: 13 }}>—</span>}
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <span style={{ ...origin.badgeStyle, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, whiteSpace: 'nowrap' }}>
-                          {origin.label}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 16px', fontSize: 13, color: '#475569' }}>{c.grade || <span style={{ color: '#CBD5E1' }}>—</span>}</td>
-                      <td style={{ padding: '12px 16px', fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtDate(c.last_contact)}</td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <button onClick={e => { e.stopPropagation(); setProfileContact(c) }}
-                          style={{ padding: '5px 12px', fontSize: 12, fontWeight: 600, border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', color: '#64748b', cursor: 'pointer' }}>
-                          Ver perfil
-                        </button>
-                      </td>
-                    </tr>
+                        {c.student_name && <p style={{ fontSize: 12, color: '#64748b', margin: '1px 0 0' }}>{c.student_name}</p>}
+                        {c.phone && <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 3 }}><Phone size={11} />{c.phone}</p>}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>{fmtDate(c.last_contact)}</div>
+                    </div>
                   )
                 })}
-              </tbody>
-            </table>
+              </div>
+            ) : (
+              /* ── Desktop: tabela ── */
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    {['Contato', 'Telefone', 'Origem', 'Série', 'Último contato', 'Ações'].map(h => (
+                      <th key={h} style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageItems.map(c => {
+                    const color  = hexColor(c.name)
+                    const origin = originCfg(c.has_lead, c.has_whatsapp)
+                    return (
+                      <tr key={c.id} onClick={() => setProfileContact(c)}
+                        style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
+                        onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{ width: 36, height: 36, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+                              {initials(c.name)}
+                            </div>
+                            <div style={{ minWidth: 0 }}>
+                              <p style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</p>
+                              {c.student_name && (
+                                <p style={{ fontSize: 12, color: '#64748b', margin: '1px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.student_name}</p>
+                              )}
+                              {c.tags.length > 0 && (
+                                <div style={{ display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap' }}>
+                                  {c.tags.slice(0, 2).map((t, i) => (
+                                    <span key={i} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 999, background: '#F0F9FF', color: '#0369A1', fontWeight: 600 }}>{t}</span>
+                                  ))}
+                                  {c.tags.length > 2 && <span style={{ fontSize: 10, color: '#94a3b8' }}>+{c.tags.length - 2}</span>}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          {c.phone
+                            ? <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#475569' }}><Phone size={12} />{c.phone}</span>
+                            : <span style={{ color: '#CBD5E1', fontSize: 13 }}>—</span>}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ ...origin.badgeStyle, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, whiteSpace: 'nowrap' }}>
+                            {origin.label}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: 13, color: '#475569' }}>{c.grade || <span style={{ color: '#CBD5E1' }}>—</span>}</td>
+                        <td style={{ padding: '12px 16px', fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtDate(c.last_contact)}</td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <button onClick={e => { e.stopPropagation(); setProfileContact(c) }}
+                            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 600, border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', color: '#64748b', cursor: 'pointer' }}>
+                            Ver perfil
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
 
             {/* Pagination footer */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderTop: '1px solid #e2e8f0', background: '#fff' }}>

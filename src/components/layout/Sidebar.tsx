@@ -1,10 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useNotifications } from '../../hooks/useNotifications'
 import {
   LayoutDashboard, Users, BookUser, Calendar,
-  MessageCircle, BarChart3, UserCog, Settings, ArrowRightLeft, ClipboardList
+  MessageCircle, BarChart3, UserCog, Settings, ArrowRightLeft, ClipboardList, X
 } from 'lucide-react'
 
 const NAV_CFG = [
@@ -55,6 +55,23 @@ export default function Sidebar() {
   const [expanded, setExpanded] = useState(() => {
     return localStorage.getItem('sidebar-expanded') === 'true'
   })
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  useEffect(() => {
+    const handler = () => {
+      const mobile = window.innerWidth < 768
+      setIsMobile(mobile)
+      if (!mobile) setMobileOpen(false)
+    }
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
+
+  useEffect(() => {
+    ;(window as any).__toggleMobileSidebar = () => setMobileOpen(v => !v)
+    return () => { delete (window as any).__toggleMobileSidebar }
+  }, [])
 
   const toggle = () => {
     const next = !expanded
@@ -66,6 +83,84 @@ export default function Sidebar() {
   const initials = (user?.full_name || 'U').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
   const userName = user?.full_name || 'Usuário'
   const userRole = user?.role === 'admin' ? 'Administrador' : user?.role === 'manager' ? 'Gestor' : 'Usuário'
+
+  // ── Mobile drawer ───────────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <>
+        {mobileOpen && (
+          <div
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 40 }}
+            onClick={() => setMobileOpen(false)}
+          />
+        )}
+        <aside style={{
+          position: 'fixed', left: 0, top: 0, height: '100vh', zIndex: 50,
+          width: 240, background: '#FFFFFF', borderRight: '0.5px solid #D1FAE5',
+          display: 'flex', flexDirection: 'column', alignItems: 'stretch',
+          padding: '12px 10px', gap: 2, overflowY: 'auto', overflowX: 'hidden',
+          transform: mobileOpen ? 'translateX(0)' : 'translateX(-100%)',
+          transition: 'transform 0.25s cubic-bezier(0.4,0,0.2,1)',
+        }}>
+          {/* Logo + fechar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 6px 12px', flexShrink: 0 }}>
+            <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 36, objectFit: 'contain', maxWidth: 150 }} />
+            <button onClick={() => setMobileOpen(false)} style={{
+              width: 28, height: 28, borderRadius: 8,
+              border: '0.5px solid #D1FAE5', background: '#F0FDFB',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', color: '#00A896',
+            }}>
+              <X size={14} />
+            </button>
+          </div>
+
+          {/* Nav */}
+          {navItems.map(item => {
+            const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/')
+            const Icon = item.Icon
+            const showBadge = item.path === '/reports' && unreadCount > 0
+            return (
+              <Link key={item.path} to={item.path} onClick={() => setMobileOpen(false)} style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '9px 10px', width: '100%', height: 44, borderRadius: 12,
+                background: active ? item.iconBg : 'transparent',
+                border: active ? `1.5px solid ${item.iconColor}25` : '1.5px solid transparent',
+                textDecoration: 'none', boxSizing: 'border-box', flexShrink: 0, position: 'relative',
+              }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, background: active ? item.iconColor : item.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon size={14} color={active ? '#FFFFFF' : item.iconColor} strokeWidth={active ? 2.2 : 1.8} />
+                </div>
+                <span style={{ fontSize: 13, fontWeight: active ? 700 : 500, color: active ? item.iconColor : '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', flex: 1 }}>
+                  {item.label}
+                </span>
+                {showBadge && (
+                  <div style={{ minWidth: 16, height: 16, borderRadius: 999, background: '#F43F5E', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: 'white', padding: '0 4px' }}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </div>
+                )}
+              </Link>
+            )
+          })}
+
+          {/* Usuário */}
+          <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '0.5px solid #D1FAE5', flexShrink: 0 }}>
+            <Link to="/profile" onClick={() => setMobileOpen(false)} style={{ textDecoration: 'none' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 12, cursor: 'pointer' }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg, #00A896, #0DD3BF)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white' }}>
+                  {initials}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#1A2B4A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130 }}>{userName}</div>
+                  <div style={{ fontSize: 10, color: '#94A3B8' }}>{userRole}</div>
+                </div>
+              </div>
+            </Link>
+          </div>
+        </aside>
+      </>
+    )
+  }
 
   return (
     <aside style={{

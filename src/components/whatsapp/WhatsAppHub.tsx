@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import ContactCard from '../contacts/ContactCard'
 import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
-  Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight,
+  Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight, ChevronLeft,
   CheckCheck, Check, Zap, Settings, User, Users,
   X, MoreVertical
 } from 'lucide-react'
@@ -609,6 +609,16 @@ export default function WhatsAppHub() {
 
   // Typing indicator
   const [typingConvIds, setTypingConvIds] = useState<Set<string>>(new Set())
+
+  // Mobile responsiveness
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  const [mobilePanel, setMobilePanel] = useState<'list' | 'chat'>('list')
+
+  useEffect(() => {
+    const handler = () => { const m = window.innerWidth < 768; setIsMobile(m); if (!m) setMobilePanel('list') }
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
 
   // Feature 5: Contacts filters
   const [contactSearch, setContactSearch] = useState('')
@@ -1700,7 +1710,7 @@ export default function WhatsAppHub() {
         />
 
         {/* ── Col 1: Conversation List ──────────────────────────────────────────── */}
-        <div style={{ width: 320, flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#FFFFFF', borderRight: '1px solid #D1FAE5', overflow: 'hidden' }}>
+        <div style={{ width: isMobile ? '100%' : 320, flexShrink: 0, display: isMobile && mobilePanel === 'chat' ? 'none' : 'flex', flexDirection: 'column', background: '#FFFFFF', borderRight: '1px solid #D1FAE5', overflow: 'hidden' }}>
 
           {/* Header */}
           <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#FFFFFF', borderBottom: '1px solid #D1FAE5' }}>
@@ -1847,7 +1857,7 @@ export default function WhatsAppHub() {
                 return (
                   <div
                     key={conv.id}
-                    onClick={() => setActiveId(conv.id)}
+                    onClick={() => { setActiveId(conv.id); if (isMobile) setMobilePanel('chat') }}
                     style={{
                       position: 'relative',
                       display: 'flex',
@@ -1965,7 +1975,7 @@ export default function WhatsAppHub() {
         </div>
 
         {/* ── Col 2: Chat ───────────────────────────────────────────────────────── */}
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#FAFFFE' }}>
+        <div style={{ flex: 1, minWidth: 0, display: isMobile && mobilePanel === 'list' ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden', background: '#FAFFFE' }}>
 
           {/* ── Contacts table view ── */}
           {mainView === 'contacts' && (
@@ -2100,6 +2110,14 @@ export default function WhatsAppHub() {
             <div style={{ flexShrink: 0, position: 'relative', background: 'linear-gradient(135deg, #FFFFFF 0%, #F0FDFB 100%)', borderBottom: '1px solid #D1FAE5', minHeight: 64, boxShadow: '0 2px 8px rgba(0,168,150,0.06)' }}>
               {/* Header row */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', height: 64 }}>
+                {isMobile && (
+                  <button
+                    onClick={() => setMobilePanel('list')}
+                    style={{ padding: 6, borderRadius: 8, background: 'none', border: 'none', cursor: 'pointer', color: '#1A2B4A', display: 'flex', alignItems: 'center', flexShrink: 0 }}
+                  >
+                    <ChevronLeft style={{ width: 22, height: 22 }} />
+                  </button>
+                )}
                 <div style={{ position: 'relative' }}>
                   <div className={activeConv.avatarColor} style={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', fontSize: 14, fontWeight: 700, color: '#fff' }}>
                     {activeConv.profile_picture_url ? (
@@ -2456,7 +2474,7 @@ export default function WhatsAppHub() {
         </div>
 
         {/* ── Col 3: Contact Panel ──────────────────────────────────────────────── */}
-        {showContactInfo && (
+        {showContactInfo && !isMobile && (
           <div style={{ width: 280, flexShrink: 0, background: '#FFFFFF', borderLeft: '1px solid #D1FAE5', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {activeConv ? (
             <>
