@@ -29,6 +29,7 @@ interface CampaignCycle {
   base_students: number
   projected_cpa: number
   status: string
+  finished_at?: string
   monthly_targets: MonthlyTarget[]
   market_data: Record<string, unknown>
   school_data: SchoolData
@@ -1099,6 +1100,52 @@ function TabTransferencias({ institutionId }: { institutionId: string }) {
   )
 }
 
+// ─── FinalReportCard ──────────────────────────────────────────────────────────
+function FinalReportCard({ institutionId, cycle }: { institutionId: string; cycle: CampaignCycle }) {
+  const [report, setReport] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.from('ai_monthly_reports')
+      .select('content, created_at')
+      .eq('institution_id', institutionId)
+      .eq('period', `${cycle.year}-final`)
+      .single()
+      .then(({ data }) => {
+        if (data) setReport(data.content)
+        setLoading(false)
+      })
+  }, [])
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 40, color: '#94A3B8' }}>Carregando relatório...</div>
+  if (!report) return null
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+      <div style={{ background: 'linear-gradient(135deg, #1A2B4A, #2D4A7A)', padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Sparkles size={20} color="#fff" />
+          <div>
+            <p style={{ fontSize: 16, fontWeight: 800, color: '#fff', margin: 0 }}>Relatório Final — Campanha {cycle.year}</p>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', margin: 0 }}>Diagnóstico completo gerado pela IA</p>
+          </div>
+        </div>
+        <button
+          onClick={() => window.print()}
+          style={{ padding: '8px 16px', background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+        >
+          📄 Exportar PDF
+        </button>
+      </div>
+      <div style={{ padding: 28 }}>
+        <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.9, whiteSpace: 'pre-wrap' }}>
+          {report}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Aba 6 — Diagnóstico IA ───────────────────────────────────────────────────
 function TabDiagnosticoIA({ institutionId, cycle, metrics, reenrollments }: {
   institutionId: string
@@ -1111,6 +1158,9 @@ function TabDiagnosticoIA({ institutionId, cycle, metrics, reenrollments }: {
   const [selectedReport, setSelectedReport] = useState<AIReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [avgTime, setAvgTime] = useState<number | null>(null)
+  const [showFinishModal, setShowFinishModal] = useState(false)
+  const [finishConfirmed, setFinishConfirmed] = useState(false)
+  const [generatingFinal, setGeneratingFinal] = useState(false)
 
   useEffect(() => { loadReports(); calcAvgTime() }, [])
 
@@ -1128,7 +1178,6 @@ function TabDiagnosticoIA({ institutionId, cycle, metrics, reenrollments }: {
   }
 
   const calcAvgTime = async () => {
-    // Tempo médio entre created_at do lead e enrolled_at da matrícula
     const { data: enrollments } = await supabase
       .from('enrollments')
       .select('lead_id, created_at')
@@ -1160,11 +1209,21 @@ function TabDiagnosticoIA({ institutionId, cycle, metrics, reenrollments }: {
 
   const generateReport = async () => {
     if (!cycle) return
+
+    // Regra: 1 diagnóstico por mês
+    const currentPeriod = new Date().toISOString().slice(0, 7)
+    const alreadyGenerated = reports.some(r => r.period === currentPeriod)
+    if (alreadyGenerated) {
+      const existing = reports.find(r => r.period === currentPeriod)
+      if (existing) setSelectedReport(existing)
+      const nextMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toLocaleDateString('pt-BR')
+      alert(`Já existe um diagnóstico gerado para este mês. O próximo poderá ser gerado em ${nextMonth}`)
+      return
+    }
+
     setGenerating(true)
     try {
-      const period = new Date().toISOString().slice(0, 7)
-
-      // Monta contexto para a IA
+      const period = currentPeriod
       const totalReg = metrics.reduce((s, m) => s + m.registrations, 0)
       const totalRegT = metrics.reduce((s, m) => s + m.registrations_target, 0)
       const totalVis = metrics.reduce((s, m) => s + m.visits, 0)
@@ -1194,7 +1253,6 @@ function TabDiagnosticoIA({ institutionId, cycle, metrics, reenrollments }: {
       const data = await res.json()
       const content = data.result || data.content || 'Relatório gerado.'
 
-      // Salva no banco
       const { data: saved } = await supabase.from('ai_monthly_reports').insert({
         institution_id: institutionId,
         period,
@@ -1212,24 +1270,102 @@ function TabDiagnosticoIA({ institutionId, cycle, metrics, reenrollments }: {
     }
   }
 
+  const handleFinishCampaign = async () => {
+    if (!cycle || !finishConfirmed) return
+    setGeneratingFinal(true)
+    try {
+      const { data: inst } = await supabase
+        .from('institutions')
+        .select('name, city, state')
+        .eq('id', institutionId)
+        .single()
+
+      const totalReg  = metrics.reduce((s, m) => s + m.registrations, 0)
+      const totalRegT = metrics.reduce((s, m) => s + m.registrations_target, 0)
+      const totalVis  = metrics.reduce((s, m) => s + m.visits, 0)
+      const totalVisT = metrics.reduce((s, m) => s + m.visits_target, 0)
+      const totalEnr  = metrics.reduce((s, m) => s + m.enrollments, 0)
+      const totalEnrT = metrics.reduce((s, m) => s + m.enrollments_target, 0)
+      const totalReen  = reenrollments.reduce((s, r) => s + r.confirmed, 0)
+      const totalReenT = reenrollments.reduce((s, r) => s + r.target, 0)
+
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'final_campaign_report',
+          payload: {
+            institutionName: inst?.name || cycle.label,
+            city: inst?.city || '',
+            state: inst?.state || '',
+            year: cycle.year,
+            cycle: { target_new: cycle.target_new_students, target_reenroll: cycle.target_reenrollment_rate, base_students: cycle.base_students, start_date: cycle.start_date, end_date: cycle.end_date },
+            funnel: { registrations: totalReg, registrations_target: totalRegT, visits: totalVis, visits_target: totalVisT, enrollments: totalEnr, enrollments_target: totalEnrT },
+            reenrollments: { confirmed: totalReen, target: totalReenT },
+            avg_time_days: avgTime,
+            monthly_data: metrics.map(m => ({ period: m.period, registrations: m.registrations, visits: m.visits, enrollments: m.enrollments })),
+          }
+        })
+      })
+
+      const data = await res.json()
+      const content = data.result || data.content || 'Relatório final gerado.'
+
+      await supabase.from('ai_monthly_reports').insert({
+        institution_id: institutionId,
+        period: `${cycle.year}-final`,
+        content,
+      })
+
+      await supabase.from('campaign_cycles')
+        .update({ status: 'finished', finished_at: new Date().toISOString() })
+        .eq('id', cycle.id)
+
+      setShowFinishModal(false)
+      setFinishConfirmed(false)
+      setTimeout(() => window.location.reload(), 1500)
+    } catch (e) {
+      console.error('Erro ao finalizar campanha:', e)
+    } finally {
+      setGeneratingFinal(false)
+    }
+  }
+
   const MONTH_NAMES_FULL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+
+  const currentPeriod = new Date().toISOString().slice(0, 7)
+  const alreadyThisMonth = reports.some(r => r.period === currentPeriod)
+  const thisMonthReport = reports.find(r => r.period === currentPeriod)
+
+  function reportLabel(period: string) {
+    if (period.endsWith('-final')) return `Relatório Final ${period.split('-')[0]}`
+    const parts = period.split('-')
+    return `${MONTH_NAMES_FULL[parseInt(parts[1]) - 1]}/${parts[0]}`
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <SectionTitle sub="Análise mensal gerada por IA com ações recomendadas">Diagnóstico IA</SectionTitle>
         <button
-          onClick={generateReport}
-          disabled={generating || !cycle}
+          onClick={alreadyThisMonth ? () => { if (thisMonthReport) setSelectedReport(thisMonthReport) } : generateReport}
+          disabled={generating || !cycle || alreadyThisMonth}
           style={{
             display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px',
-            borderRadius: 12, background: generating ? '#E2E8F0' : 'linear-gradient(135deg, #00A896, #1A2B4A)',
-            color: generating ? '#94A3B8' : '#fff', border: 'none', fontSize: 13, fontWeight: 700,
-            cursor: generating ? 'not-allowed' : 'pointer', boxShadow: generating ? 'none' : '0 4px 14px rgba(0,168,150,0.3)'
+            borderRadius: 12,
+            background: generating ? '#E2E8F0' : alreadyThisMonth ? '#F1F5F9' : 'linear-gradient(135deg, #00A896, #1A2B4A)',
+            color: generating || alreadyThisMonth ? '#94A3B8' : '#fff',
+            border: 'none', fontSize: 13, fontWeight: 700,
+            cursor: generating || alreadyThisMonth ? 'not-allowed' : 'pointer',
+            boxShadow: generating || alreadyThisMonth ? 'none' : '0 4px 14px rgba(0,168,150,0.3)'
           }}
         >
           {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-          {generating ? 'Gerando relatório...' : 'Gerar relatório do mês'}
+          {generating
+            ? 'Gerando relatório...'
+            : alreadyThisMonth && thisMonthReport
+              ? `Diagnóstico gerado em ${new Date(thisMonthReport.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}`
+              : 'Gerar diagnóstico do mês'}
         </button>
       </div>
 
@@ -1251,85 +1387,166 @@ function TabDiagnosticoIA({ institutionId, cycle, metrics, reenrollments }: {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 20 }}>
-        {/* Sidebar de relatórios */}
+      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 20 }}>
+        {/* Coluna esquerda — histórico */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Histórico</span>
           {loading && <div style={{ height: 40, background: '#F1F5F9', borderRadius: 8, animation: 'pulse 1.5s infinite' }} />}
           {!loading && reports.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '20px 12px', color: '#94A3B8', fontSize: 12 }}>
-              <FileText size={24} style={{ margin: '0 auto 8px', opacity: 0.3 }} />
-              Nenhum relatório ainda
+            <div style={{ textAlign: 'center', padding: '28px 12px', color: '#94A3B8', fontSize: 12 }}>
+              <FileText size={28} style={{ margin: '0 auto 10px', opacity: 0.3 }} />
+              <p style={{ margin: 0 }}>Nenhum diagnóstico gerado</p>
             </div>
           )}
           {reports.map(r => {
-            const d = new Date(r.created_at)
             const isSelected = selectedReport?.id === r.id
+            const isCurrent = r.period === currentPeriod
             return (
               <button key={r.id} onClick={() => setSelectedReport(r)} style={{
-                padding: '10px 12px', borderRadius: 10, textAlign: 'left', cursor: 'pointer',
+                padding: '12px 14px', borderRadius: 12, textAlign: 'left', cursor: 'pointer',
                 border: isSelected ? '2px solid #00A896' : '1px solid #E2E8F0',
                 background: isSelected ? '#E6F7F5' : '#fff',
                 transition: 'all 0.15s'
               }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: isSelected ? '#00A896' : '#1A2B4A' }}>
-                  {r.period ? `${MONTH_NAMES_FULL[parseInt(r.period.split('-')[1]) - 1]}/${r.period.split('-')[0]}` : 'Relatório'}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: isSelected ? '#00A896' : '#1A2B4A' }}>
+                    {reportLabel(r.period)}
+                  </span>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: isCurrent ? '#D1FAE5' : '#F1F5F9', color: isCurrent ? '#16A34A' : '#94A3B8' }}>
+                    {isCurrent ? 'Este mês' : 'Anterior'}
+                  </span>
                 </div>
-                <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>
-                  {d.toLocaleDateString('pt-BR')}
+                <div style={{ fontSize: 11, color: '#94A3B8' }}>
+                  {new Date(r.created_at).toLocaleDateString('pt-BR')}
                 </div>
               </button>
             )
           })}
         </div>
 
-        {/* Conteúdo do relatório */}
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 28, minHeight: 300 }}>
+        {/* Coluna direita — conteúdo */}
+        <div style={{ minHeight: 300 }}>
           {generating && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200, gap: 16 }}>
+            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 28, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 240, gap: 16 }}>
               <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Sparkles size={24} color="#00A896" className="animate-spin" />
               </div>
-              <p style={{ fontSize: 14, color: '#475569' }}>Analisando todos os dados da campanha...</p>
-              <p style={{ fontSize: 12, color: '#94A3B8' }}>Isso pode levar até 20 segundos</p>
+              <p style={{ fontSize: 14, color: '#475569', margin: 0 }}>Analisando todos os dados da campanha...</p>
+              <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Isso pode levar até 20 segundos</p>
             </div>
           )}
           {!generating && !selectedReport && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200, gap: 12, color: '#94A3B8' }}>
+            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 28, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 240, gap: 12, color: '#94A3B8' }}>
               <Sparkles size={36} style={{ opacity: 0.3 }} />
-              <p style={{ fontSize: 14, fontWeight: 600 }}>Gere o primeiro relatório do mês</p>
-              <p style={{ fontSize: 12 }}>A IA analisa funil, rematrículas, marketing e gera ações recomendadas</p>
+              <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>Gere o primeiro diagnóstico do mês</p>
+              <p style={{ fontSize: 12, margin: 0 }}>A IA analisa funil, rematrículas, marketing e gera ações recomendadas</p>
             </div>
           )}
           {!generating && selectedReport && (
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>
-                    {selectedReport.period
-                      ? `Relatório ${MONTH_NAMES_FULL[parseInt(selectedReport.period.split('-')[1]) - 1]}/${selectedReport.period.split('-')[0]}`
-                      : 'Relatório IA'}
-                  </h3>
-                  <p style={{ fontSize: 12, color: '#94A3B8', margin: '4px 0 0' }}>
-                    Gerado em {new Date(selectedReport.created_at).toLocaleString('pt-BR')}
-                  </p>
-                </div>
-                <div style={{ width: 32, height: 32, borderRadius: 9, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Sparkles size={15} color="#00A896" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Header do relatório */}
+              <div style={{ background: 'linear-gradient(135deg, #1A2B4A, #2D4A7A)', borderRadius: 16, padding: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Sparkles size={22} color="#fff" />
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 16, fontWeight: 800, color: '#fff', margin: 0 }}>Diagnóstico IA — {reportLabel(selectedReport.period)}</p>
+                    <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', margin: 0 }}>Gerado em {new Date(selectedReport.created_at).toLocaleString('pt-BR')}</p>
+                  </div>
+                  <button onClick={() => window.print()} style={{ marginLeft: 'auto', padding: '8px 16px', background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    📄 Baixar PDF
+                  </button>
                 </div>
               </div>
-              <div style={{
-                fontSize: 13, color: '#374151', lineHeight: 1.8,
-                whiteSpace: 'pre-wrap',
-                background: '#FAFAFA', borderRadius: 12, padding: 20,
-                border: '1px solid #F1F5F9'
-              }}>
-                {selectedReport.content}
+
+              {/* Conteúdo */}
+              <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 28 }}>
+                <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+                  {selectedReport.content}
+                </div>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Card Finalizar Campanha */}
+      {cycle && cycle.status === 'active' && (
+        <div style={{ background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 16, padding: 24, marginTop: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <CheckCircle size={22} color="#F59E0B" />
+            </div>
+            <div>
+              <p style={{ fontSize: 15, fontWeight: 700, color: '#92400E', margin: 0 }}>Encerrar campanha {cycle.year}</p>
+              <p style={{ fontSize: 13, color: '#B45309', margin: '2px 0 0' }}>Gera o relatório final e encerra o ciclo atual</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowFinishModal(true)}
+            style={{ width: '100%', padding: '12px', background: '#F59E0B', color: '#fff', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+          >
+            <CheckCircle size={16} /> Finalizar campanha e gerar relatório final
+          </button>
+        </div>
+      )}
+
+      {/* Modal Finalização */}
+      {showFinishModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto', padding: 32 }}>
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <div style={{ width: 64, height: 64, borderRadius: 20, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <CheckCircle size={32} color="#F59E0B" />
+              </div>
+              <h2 style={{ fontSize: 20, fontWeight: 800, color: '#1A2B4A', margin: '0 0 8px' }}>Finalizar Campanha {cycle?.year}</h2>
+              <p style={{ fontSize: 14, color: '#64748B', margin: 0 }}>Ao finalizar, um relatório completo será gerado e o ciclo será encerrado.</p>
+            </div>
+
+            <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12, padding: 20, marginBottom: 24 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', margin: '0 0 12px' }}>Termo de Ciência</p>
+              <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.7, margin: '0 0 12px' }}>
+                Ao confirmar o encerramento da campanha de matrículas {cycle?.year}, declaro ciência de que:
+              </p>
+              <ul style={{ fontSize: 13, color: '#374151', lineHeight: 1.8, paddingLeft: 20, margin: 0 }}>
+                <li>O ciclo atual será encerrado e não poderá ser reaberto;</li>
+                <li>Um relatório final completo será gerado pela IA com o diagnóstico da campanha;</li>
+                <li>Os dados ficam salvos e serão usados como base para a próxima campanha;</li>
+                <li>O painel de relatórios exibirá apenas o relatório final até o início de um novo ciclo.</li>
+              </ul>
+            </div>
+
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer', marginBottom: 24 }}>
+              <input
+                type="checkbox"
+                checked={finishConfirmed}
+                onChange={e => setFinishConfirmed(e.target.checked)}
+                style={{ width: 18, height: 18, marginTop: 2, accentColor: '#00A896', cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: 13, color: '#374151', lineHeight: 1.6 }}>
+                Li e concordo com os termos acima. Confirmo o encerramento da campanha {cycle?.year}.
+              </span>
+            </label>
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => { setShowFinishModal(false); setFinishConfirmed(false) }}
+                style={{ flex: 1, padding: '12px', borderRadius: 12, border: '1px solid #E2E8F0', background: '#fff', fontSize: 14, color: '#64748B', cursor: 'pointer', fontWeight: 600 }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleFinishCampaign}
+                disabled={!finishConfirmed || generatingFinal}
+                style={{ flex: 2, padding: '12px', borderRadius: 12, background: finishConfirmed ? '#00A896' : '#E2E8F0', color: finishConfirmed ? '#fff' : '#94A3B8', border: 'none', fontSize: 14, fontWeight: 700, cursor: finishConfirmed ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                {generatingFinal ? <><Loader2 size={16} className="animate-spin" /> Gerando relatório...</> : <><Sparkles size={16} /> Confirmar e gerar relatório final</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1361,7 +1578,7 @@ export default function GestorReports({ institutionId, institutionName }: Props)
         .from('campaign_cycles')
         .select('*')
         .eq('institution_id', institutionId)
-        .in('status', ['active', 'released'])
+        .in('status', ['active', 'released', 'finished'])
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
@@ -1412,6 +1629,84 @@ export default function GestorReports({ institutionId, institutionName }: Props)
     { label: 'Transferências', icon: <ArrowUpRight size={15} /> },
     { label: 'Diagnóstico IA', icon: <Sparkles size={15} /> },
   ]
+
+  // ─── CAMPANHA ENCERRADA ────────────────────────────────────
+  if (cycle?.status === 'finished') {
+    return (
+      <div style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#f8f9fb' }}>
+        <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}.animate-spin{animation:spin 1s linear infinite}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 48, height: 48, borderRadius: 14, background: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <CheckCircle size={24} color="#16A34A" />
+          </div>
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Campanha {cycle.year} encerrada</h1>
+            <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>
+              Encerrada em {cycle.finished_at ? new Date(cycle.finished_at).toLocaleDateString('pt-BR') : '—'}
+            </p>
+          </div>
+        </div>
+
+        {/* Métricas finais */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+          {[
+            { label: 'Matrículas',    val: metrics.reduce((s, m) => s + m.enrollments, 0),    target: cycle.target_new_students,                                       color: '#00A896', bg: '#E6F7F5', icon: '🎓' },
+            { label: 'Visitaram',     val: metrics.reduce((s, m) => s + m.visits, 0),          target: metrics.reduce((s, m) => s + m.visits_target, 0),               color: '#F59E0B', bg: '#FEF3C7', icon: '📅' },
+            { label: 'Cadastros',     val: metrics.reduce((s, m) => s + m.registrations, 0),   target: metrics.reduce((s, m) => s + m.registrations_target, 0),        color: '#3B82F6', bg: '#DBEAFE', icon: '👤' },
+            { label: 'Rematrículas',  val: reenrollments.reduce((s, r) => s + r.confirmed, 0), target: reenrollments.reduce((s, r) => s + r.target, 0),                color: '#8B5CF6', bg: '#EDE9FE', icon: '🔄' },
+          ].map(({ label, val, target, color, bg, icon }) => {
+            const pct = target > 0 ? Math.round((val / target) * 100) : 0
+            return (
+              <div key={label} style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <span style={{ fontSize: 22 }}>{icon}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: bg, color }}>{pct}%</span>
+                </div>
+                <p style={{ fontSize: 28, fontWeight: 800, color: '#1A2B4A', margin: '0 0 4px' }}>{val}</p>
+                <p style={{ fontSize: 12, color: '#94A3B8', margin: '0 0 10px' }}>{label} de {target} na meta</p>
+                <div style={{ height: 6, background: '#E2E8F0', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: color, borderRadius: 3 }} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Relatório final da IA */}
+        <FinalReportCard institutionId={institutionId} cycle={cycle} />
+
+        {/* Botão iniciar nova campanha */}
+        <div style={{ background: 'linear-gradient(135deg, #00523C, #00A896)', borderRadius: 16, padding: 28, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
+          <div>
+            <p style={{ fontSize: 18, fontWeight: 800, color: '#fff', margin: '0 0 6px' }}>Pronto para a próxima campanha?</p>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', margin: 0 }}>Os dados desta campanha serão usados como base para gerar o novo plano.</p>
+          </div>
+          <button
+            onClick={() => setShowCampaignModal(true)}
+            style={{ padding: '14px 28px', background: '#fff', color: '#00523C', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', flexShrink: 0 }}
+          >
+            🚀 Iniciar campanha {cycle.year + 1}
+          </button>
+        </div>
+
+        {showCampaignModal && (
+          <CampaignGeneratorModal
+            isOpen={showCampaignModal}
+            onClose={() => setShowCampaignModal(false)}
+            onApply={() => { loadData(); setShowCampaignModal(false) }}
+            existingCycle={cycle as any}
+            institutionId={institutionId}
+            institutionName={institutionName}
+            isAdjustMode={false}
+            currentUserId={user?.id}
+            currentUserName={user?.full_name}
+          />
+        )}
+      </div>
+    )
+  }
 
   // ─── MOBILE ───────────────────────────────────────────────
   if (isMobile) {
