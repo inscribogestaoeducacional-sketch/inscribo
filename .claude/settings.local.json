@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Victor Almeida\\\\AIONEDU\" -Recurse -Force)",
+      "Bash(Select-Object -First 50)"
+    ]
+  }
+}

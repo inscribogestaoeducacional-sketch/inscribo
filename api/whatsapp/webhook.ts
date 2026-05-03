@@ -1,10 +1,26 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
+import * as crypto from 'crypto'
+
+// Desabilita o body-parser automático para que possamos ler o buffer bruto
+// necessário para a validação HMAC-SHA256 da Meta
+export const config = {
+  api: { bodyParser: false },
+}
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+async function readRawBody(req: VercelRequest): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    req.on('data', chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
+    req.on('end', () => resolve(Buffer.concat(chunks)))
+    req.on('error', reject)
+  })
+}
 
 // ── Envia mensagem automática via Cloud API ──────────────────────────────────
 async function sendAutoMessage(institutionId: string, to: string, text: string) {
@@ -18,14 +34,7 @@ async function sendAutoMessage(institutionId: string, to: string, text: string) 
 
     if (!phone?.phone_number_id) return
 
-    // Busca token da instituição
-    const { data: inst } = await supabase
-      .from('institutions')
-      .select('whatsapp_token')
-      .eq('id', institutionId)
-      .single()
-
-    const token = inst?.whatsapp_token || process.env.WA_ACCESS_TOKEN
+    const token = process.env.WA_ACCESS_TOKEN
     if (!token) return
 
     await fetch(`https://graph.facebook.com/v19.0/${phone.phone_number_id}/messages`, {
@@ -63,10 +72,9 @@ async function processFlow(
       return
     }
 
-    // Horário de Fortaleza (UTC-3) — evita erro de fuso UTC
-    const tz       = flow.timezone || 'America/Fortaleza'
-    const now      = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
-    const dayKeys  = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+    const tz             = flow.timezone || 'America/Fortaleza'
+    const now            = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
+    const dayKeys        = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
     const currentDay     = dayKeys[now.getDay()]
     const isWorkingDay   = (flow.working_days as string[])?.includes(currentDay)
 
@@ -86,12 +94,10 @@ async function processFlow(
     console.log('[flow] ação:', action)
 
     if (!isOpen && flow.off_hours_message) {
-      // Fora do horário — envia apenas em conversas novas
       if (isNewConversation) {
         await sendAutoMessage(institutionId, remoteJid, flow.off_hours_message)
       }
     } else if (isOpen && isNewConversation) {
-      // Nova conversa — previne duplicata verificando mensagens automáticas recentes (5 min)
       const { data: recentAuto } = await supabase
         .from('whatsapp_messages')
         .select('id')
@@ -112,7 +118,6 @@ async function processFlow(
         console.log('[flow] boas-vindas suprimidas (mensagem automática recente detectada)')
       }
     } else if (isOpen && menuChoice && flow.menu_enabled) {
-      // Resposta ao menu — atribui atendente
       if (menuChoice.assignee_id) {
         await supabase
           .from('whatsapp_conversations')
@@ -147,24 +152,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ── POST: mensagens e status recebidos ──
   if (req.method === 'POST') {
+    // Lê o body como buffer bruto (necessário para HMAC antes do JSON.parse)
+    const rawBody = await readRawBody(req)
+
+    // Valida assinatura HMAC-SHA256 enviada pela Meta
+    const signature = req.headers['x-hub-signature-256'] as string | undefined
+    if (process.env.WA_APP_SECRET) {
+      if (!signature) {
+        return res.status(401).json({ error: 'Missing x-hub-signature-256' })
+      }
+      const expected = `sha256=${crypto
+        .createHmac('sha256', process.env.WA_APP_SECRET)
+        .update(rawBody)
+        .digest('hex')}`
+      // timingSafeEqual previne timing attacks
+      if (
+        signature.length !== expected.length ||
+        !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+      ) {
+        console.warn('⚠️ Webhook signature inválida — request rejeitado')
+        return res.status(401).json({ error: 'Invalid signature' })
+      }
+    }
+
     try {
-      const value = req.body?.entry?.[0]?.changes?.[0]?.value
+      const body  = JSON.parse(rawBody.toString())
+      const value = body?.entry?.[0]?.changes?.[0]?.value
       if (!value) return res.status(200).end()
 
       const phoneNumberId = value.metadata?.phone_number_id
 
-      // Busca a escola pelo phone_number_id
+      // Busca a escola pelo phone_number_id — aborta se não mapeado
       const { data: phoneRecord } = await supabase
         .from('whatsapp_phone_numbers')
         .select('institution_id')
         .eq('phone_number_id', phoneNumberId)
         .single()
 
-      const institutionId = phoneRecord?.institution_id ?? null
-      if (!institutionId) {
+      if (!phoneRecord?.institution_id) {
         console.log('⚠️ phone_number_id não mapeado:', phoneNumberId)
-        return res.status(200).end()
+        return res.status(200).json({ status: 'ignored', reason: 'phone_number_id not registered' })
       }
+
+      const institutionId = phoneRecord.institution_id
 
       // ── Mensagens recebidas ──
       for (const msg of value.messages || []) {
@@ -173,7 +203,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const timestamp   = new Date(parseInt(msg.timestamp) * 1000).toISOString()
         const contactName = value.contacts?.[0]?.profile?.name || remoteJid
 
-        // Verifica se é conversa nova (antes do upsert)
         const { data: existingConv } = await supabase
           .from('whatsapp_conversations')
           .select('status, last_message_at')
@@ -183,7 +212,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const isNewConversation = !existingConv || existingConv.status === 'closed'
 
-        // Upsert da conversa
         const { error: convErr } = await supabase
           .from('whatsapp_conversations')
           .upsert({
@@ -197,7 +225,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (convErr) console.error('❌ conv upsert error:', convErr.message)
 
-        // Insert da mensagem com campos corretos da tabela
         const { error: msgErr } = await supabase
           .from('whatsapp_messages')
           .insert({
@@ -216,8 +243,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (msgErr) console.error('❌ msg insert error:', msgErr.message)
 
-        // Lógica de fluxo automático
-        await processFlow(institutionId, remoteJid, text, isNewConversation)
+        // Fluxo automático isolado — erro aqui não derruba o processamento da mensagem
+        try {
+          await processFlow(institutionId, remoteJid, text, isNewConversation)
+        } catch (e) {
+          console.error('❌ processFlow call error:', e)
+        }
       }
 
       // ── Atualiza status de entrega (sent/delivered/read/failed) ──
@@ -235,7 +266,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     } catch (err) {
       console.error('❌ Webhook error:', err)
-      // Sempre 200 — a Meta desativa o webhook se receber 5xx
+      // Sempre retorna 200 — a Meta desativa o webhook se receber 5xx consecutivos
     }
 
     return res.status(200).json({ status: 'ok' })

@@ -740,7 +740,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
   const [tab, setTab]         = useState<'info' | 'whatsapp'>('info')
   const [waConfig, setWaConfig] = useState<any>(null)
   const [waLoading, setWaLoading] = useState(false)
-  const [waForm, setWaForm]   = useState({ phone_id: '', token: '', phone_number: '', display_name: '' })
+  const [waForm, setWaForm]   = useState({ phone_id: '', token: '', phone_number: '', display_name: '', waba_id: '' })
   const [waVerifying, setWaVerifying] = useState(false)
   const [waError, setWaError] = useState('')
   const [waSaved, setWaSaved] = useState(false)
@@ -751,17 +751,36 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
   const loadWaConfig = async () => {
     setWaLoading(true)
     try {
-      const { data } = await supabase.from('institutions')
-        .select('whatsapp_phone_id,whatsapp_token,whatsapp_phone_number,whatsapp_display_name,whatsapp_connected')
-        .eq('id', inst.id).single()
-      if (data) {
-        setWaConfig(data)
-        if (data.whatsapp_phone_id) {
-          setWaForm({ phone_id: data.whatsapp_phone_id, token: data.whatsapp_token || '', phone_number: data.whatsapp_phone_number || '', display_name: data.whatsapp_display_name || '' })
-          const monthYear = new Date().toISOString().slice(0, 7)
-          const { data: u } = await supabase.from('whatsapp_usage').select('conversation_count,monthly_limit').eq('institution_id', inst.id).eq('month_year', monthYear).single()
-          if (u) setUsage({ count: (u as any).conversation_count || 0, limit: (u as any).monthly_limit || 1000 })
-        }
+      const [instRes, waRes] = await Promise.all([
+        supabase.from('institutions')
+          .select('whatsapp_phone_id,whatsapp_token,whatsapp_phone_number,whatsapp_display_name,whatsapp_connected')
+          .eq('id', inst.id).single(),
+        supabase.from('whatsapp_phone_numbers')
+          .select('*')
+          .eq('institution_id', inst.id)
+          .maybeSingle(),
+      ])
+      if (instRes.data) setWaConfig(instRes.data)
+      const wa = waRes.data
+      if (wa) {
+        setWaForm({
+          phone_id:     wa.phone_number_id || '',
+          token:        instRes.data?.whatsapp_token || '',
+          phone_number: wa.phone_number || '',
+          display_name: wa.display_name || '',
+          waba_id:      wa.waba_id || '',
+        })
+        const monthYear = new Date().toISOString().slice(0, 7)
+        const { data: u } = await supabase.from('whatsapp_usage').select('conversation_count,monthly_limit').eq('institution_id', inst.id).eq('month_year', monthYear).single()
+        if (u) setUsage({ count: (u as any).conversation_count || 0, limit: (u as any).monthly_limit || 1000 })
+      } else if (instRes.data?.whatsapp_phone_id) {
+        setWaForm({
+          phone_id:     instRes.data.whatsapp_phone_id || '',
+          token:        instRes.data.whatsapp_token || '',
+          phone_number: instRes.data.whatsapp_phone_number || '',
+          display_name: instRes.data.whatsapp_display_name || '',
+          waba_id:      '',
+        })
       }
     } catch {}
     setWaLoading(false)
@@ -785,16 +804,14 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
         whatsapp_display_name: verifiedName,
         whatsapp_connected:    true,
       }).eq('id', inst.id)
-      try {
-        await supabase.from('whatsapp_phone_numbers').upsert({
-          institution_id:  inst.id,
-          phone_number_id: waForm.phone_id,
-          phone_number:    verifiedPhone,
-          display_name:    verifiedName,
-          waba_id:         '1222972209822315',
-          is_active:       true,
-        }, { onConflict: 'phone_number_id' })
-      } catch {}
+      await supabase.from('whatsapp_phone_numbers').upsert({
+        institution_id:  inst.id,
+        phone_number_id: waForm.phone_id,
+        phone_number:    verifiedPhone,
+        display_name:    verifiedName,
+        waba_id:         waForm.waba_id.trim() || null,
+        is_active:       true,
+      }, { onConflict: 'institution_id' })
       setWaSaved(true)
       await loadWaConfig()
     } catch (e) {
@@ -895,10 +912,11 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
                   <div className="space-y-3 pt-2">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Configurar número</p>
                     {[
-                      { label: 'Phone Number ID', key: 'phone_id',     type: 'text',     placeholder: '1007880222413531' },
-                      { label: 'Token de acesso', key: 'token',        type: 'password', placeholder: 'EAAOSNzt...' },
-                      { label: 'Número de telefone', key: 'phone_number', type: 'text', placeholder: '+55 83 99999-9999' },
-                      { label: 'Nome de exibição', key: 'display_name', type: 'text',   placeholder: 'Colégio São João' },
+                      { label: 'Phone Number ID (Meta)',       key: 'phone_id',     type: 'text',     placeholder: '1007880222413531' },
+                      { label: 'Token de acesso',              key: 'token',        type: 'password', placeholder: 'EAAOSNzt...' },
+                      { label: 'Número de telefone',           key: 'phone_number', type: 'text',     placeholder: '5583999990001' },
+                      { label: 'Nome de exibição no WhatsApp', key: 'display_name', type: 'text',     placeholder: 'Colégio São João' },
+                      { label: 'WABA ID',                      key: 'waba_id',      type: 'text',     placeholder: '1222972209822315' },
                     ].map(f => (
                       <div key={f.key}>
                         <label className={lbl}>{f.label}</label>
@@ -949,6 +967,7 @@ export default function AdminSchools() {
   const [institutions, setInstitutions] = useState<any[]>([])
   const [consultants, setConsultants] = useState<any[]>([])
   const [cycles, setCycles] = useState<any[]>([])
+  const [waNumbers, setWaNumbers] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
@@ -969,6 +988,8 @@ export default function AdminSchools() {
     name: '', cnpj: '', city: '', state: '', phone: '',
     plan: '', plan_status: '', consultant_id: '',
     monthly_value: '', implementation_value: '',
+    wa_phone_number_id: '', wa_phone_number: '',
+    wa_display_name: '', wa_waba_id: '', wa_is_active: true,
   })
   const [savingEdit, setSavingEdit] = useState(false)
 
@@ -981,16 +1002,20 @@ export default function AdminSchools() {
 
   const loadData = async () => {
     setLoading(true)
-    const [instRes, consultRes, cycleRes] = await Promise.all([
+    const [instRes, consultRes, cycleRes, waRes] = await Promise.all([
       supabase.from('institutions').select('*').order('name'),
       supabase.from('users').select('id, full_name, email').eq('user_type', 'consultant'),
       supabase.from('campaign_cycles')
         .select('institution_id, status, year, id, start_date, end_date, campaign_start_month, label')
         .order('created_at', { ascending: false }),
+      supabase.from('whatsapp_phone_numbers').select('*'),
     ])
     setInstitutions(instRes.data || [])
     setConsultants(consultRes.data || [])
     setCycles(cycleRes.data || [])
+    const waMap: Record<string, any> = {}
+    for (const r of (waRes.data || [])) waMap[r.institution_id] = r
+    setWaNumbers(waMap)
     setLoading(false)
   }
 
@@ -1045,6 +1070,7 @@ export default function AdminSchools() {
   }
 
   const openEdit = (inst: any) => {
+    const wa = waNumbers[inst.id]
     setEditForm({
       name: inst.name || '', cnpj: inst.cnpj || '',
       city: inst.city || '', state: inst.state || '', phone: inst.phone || '',
@@ -1052,6 +1078,11 @@ export default function AdminSchools() {
       consultant_id: inst.consultant_id || '',
       monthly_value: String(inst.monthly_value || 550),
       implementation_value: String(inst.implementation_value || 550),
+      wa_phone_number_id: wa?.phone_number_id || '',
+      wa_phone_number:    wa?.phone_number    || '',
+      wa_display_name:    wa?.display_name    || '',
+      wa_waba_id:         wa?.waba_id         || '',
+      wa_is_active:       wa?.is_active       ?? true,
     })
     setEditModal(inst)
   }
@@ -1069,6 +1100,21 @@ export default function AdminSchools() {
         implementation_value: Number(editForm.implementation_value),
       }).eq('id', editModal.id)
       if (error) throw error
+
+      if (editForm.wa_phone_number_id.trim()) {
+        const { error: waErr } = await supabase
+          .from('whatsapp_phone_numbers')
+          .upsert({
+            institution_id:  editModal.id,
+            phone_number_id: editForm.wa_phone_number_id.trim(),
+            phone_number:    editForm.wa_phone_number.trim() || null,
+            display_name:    editForm.wa_display_name.trim() || null,
+            waba_id:         editForm.wa_waba_id.trim() || null,
+            is_active:       editForm.wa_is_active,
+          }, { onConflict: 'institution_id' })
+        if (waErr) throw waErr
+      }
+
       showToast('Escola atualizada com sucesso!')
       setEditModal(null)
       loadData()
@@ -1275,13 +1321,17 @@ export default function AdminSchools() {
                         </span>
                       </td>
                       <td className="px-5 py-3.5">
-                        {inst.whatsapp_connected
-                          ? <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full">
-                              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />Conectado
+                        {waNumbers[inst.id]?.is_active
+                          ? <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full" title={waNumbers[inst.id]?.phone_number || ''}>
+                              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />Ativo
                             </span>
-                          : <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-full">
-                              <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />Pendente
-                            </span>
+                          : waNumbers[inst.id]
+                            ? <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-yellow-700 bg-yellow-50 border border-yellow-200 px-2.5 py-1 rounded-full">
+                                <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />Inativo
+                              </span>
+                            : <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-full">
+                                <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />Pendente
+                              </span>
                         }
                       </td>
                       <td className="px-5 py-3.5">
@@ -1413,6 +1463,55 @@ export default function AdminSchools() {
                   <option value="">Sem consultor</option>
                   {consultants.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
                 </select>
+              </div>
+
+              {/* ── WhatsApp ── */}
+              <div className="border-t border-dashed border-gray-200 pt-4 mt-2">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                  <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <label className={lbl}>Phone Number ID (Meta)</label>
+                    <input className={inp} placeholder="1007880222413531"
+                      value={editForm.wa_phone_number_id}
+                      onChange={e => setEditForm(f => ({ ...f, wa_phone_number_id: e.target.value }))} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={lbl}>Número de telefone</label>
+                      <input className={inp} placeholder="5583999990001"
+                        value={editForm.wa_phone_number}
+                        onChange={e => setEditForm(f => ({ ...f, wa_phone_number: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className={lbl}>WABA ID</label>
+                      <input className={inp} placeholder="1222972209822315"
+                        value={editForm.wa_waba_id}
+                        onChange={e => setEditForm(f => ({ ...f, wa_waba_id: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className={lbl}>Nome de exibição no WhatsApp</label>
+                    <input className={inp} placeholder="Colégio São João"
+                      value={editForm.wa_display_name}
+                      onChange={e => setEditForm(f => ({ ...f, wa_display_name: e.target.value }))} />
+                  </div>
+                  <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-700">WhatsApp ativo</p>
+                      <p className="text-xs text-gray-400">Habilita envio e recebimento de mensagens</p>
+                    </div>
+                    <button type="button"
+                      onClick={() => setEditForm(f => ({ ...f, wa_is_active: !f.wa_is_active }))}
+                      className={`relative w-11 h-6 rounded-full transition-colors ${editForm.wa_is_active ? 'bg-green-500' : 'bg-gray-300'}`}>
+                      <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${editForm.wa_is_active ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </button>
+                  </div>
+                  {!editForm.wa_phone_number_id && (
+                    <p className="text-xs text-gray-400">Preencha o Phone Number ID para salvar a configuração WhatsApp.</p>
+                  )}
+                </div>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3 sticky bottom-0 bg-white rounded-b-2xl">

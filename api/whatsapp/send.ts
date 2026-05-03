@@ -11,14 +11,14 @@ const GRAPH_URL = 'https://graph.facebook.com/v19.0'
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end()
 
-  const { institution_id, to, text } = req.body
+  const { institution_id, to, text, conversation_id } = req.body
 
   if (!institution_id || !to || !text) {
     return res.status(400).json({ error: 'institution_id, to e text são obrigatórios' })
   }
 
   try {
-    // Busca o phone_number_id da escola
+    // Busca o phone_number_id ativo da escola
     const { data: phoneRecord, error: phoneErr } = await supabase
       .from('whatsapp_phone_numbers')
       .select('phone_number_id')
@@ -27,10 +27,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .single()
 
     if (phoneErr || !phoneRecord) {
-      return res.status(404).json({ error: 'Número WhatsApp não configurado para esta escola' })
+      return res.status(400).json({ error: 'Número WhatsApp não configurado para esta escola' })
     }
 
-    // Envia via Meta Cloud API
+    // Envia via Meta Cloud API usando token global
     const response = await fetch(`${GRAPH_URL}/${phoneRecord.phone_number_id}/messages`, {
       method: 'POST',
       headers: {
@@ -69,13 +69,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
 
     // Atualiza last_message da conversa
-    await supabase.from('whatsapp_conversations')
+    // Usa conversation_id quando disponível; fallback para institution_id + remote_jid
+    const convUpdate = supabase
+      .from('whatsapp_conversations')
       .update({
         last_message:    text,
         last_message_at: new Date().toISOString(),
       })
-      .eq('institution_id', institution_id)
-      .eq('remote_jid', to)
+
+    if (conversation_id) {
+      await convUpdate.eq('id', conversation_id)
+    } else {
+      await convUpdate.eq('institution_id', institution_id).eq('remote_jid', to)
+    }
 
     return res.status(200).json({ success: true, wamid })
 
