@@ -145,34 +145,38 @@ function tagColor(tag: string): string {
   return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length]
 }
 
+function normalizeJid(jid: string): string {
+  return jid.includes('@') ? jid : `${jid}@s.whatsapp.net`
+}
+
 function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, WhatsappConversation>): Conversation[] {
   const byJid = new Map<string, WhatsappMessage[]>()
   msgs.forEach(m => {
     if (!byJid.has(m.remote_jid)) byJid.set(m.remote_jid, [])
     byJid.get(m.remote_jid)!.push(m)
   })
-  return Array.from(byJid.entries()).map(([jid, jidMsgs]) => {
+
+  const result: Conversation[] = Array.from(byJid.entries()).map(([jid, jidMsgs]) => {
     const sorted = [...jidMsgs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
     const last = sorted[sorted.length - 1]
-    // Normaliza JIDs da Cloud API (número puro) para o formato padrão
-    const normalizedJid = jid.includes('@') ? jid : `${jid}@s.whatsapp.net`
-    const isGroup = normalizedJid.endsWith('@g.us')
-    const convData = convMap?.get(normalizedJid) || convMap?.get(jid)
+    const normJid = normalizeJid(jid)
+    const isGroup = normJid.endsWith('@g.us')
+    const convData = convMap?.get(normJid) || convMap?.get(jid)
 
     let name: string
     if (isGroup) {
-      name = jidMsgs.find(m => m.contact_name)?.contact_name || normalizedJid.replace(/@g\.us$/, '')
+      name = jidMsgs.find(m => m.contact_name)?.contact_name || normJid.replace(/@g\.us$/, '')
     } else {
       name = jidMsgs.find(m => !m.from_me && m.contact_name)?.contact_name
         || convData?.contact_name
-        || formatPhone(normalizedJid)
+        || formatPhone(normJid)
     }
 
     return {
-      id: normalizedJid,
+      id: normJid,
       name,
-      phone: isGroup ? normalizedJid.replace(/@g\.us$/, '') : formatPhone(normalizedJid),
-      avatarColor: jidToColor(normalizedJid),
+      phone: isGroup ? normJid.replace(/@g\.us$/, '') : formatPhone(normJid),
+      avatarColor: jidToColor(normJid),
       lastMessage: last.content,
       lastTime: new Date(last.timestamp),
       unreadCount: convData?.unread_count ?? 0,
@@ -198,7 +202,40 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
           media_url: m.media_url,
         })),
     }
-  }).sort((a, b) => b.lastTime.getTime() - a.lastTime.getTime())
+  })
+
+  // Include conversations that exist in whatsapp_conversations but have no messages loaded
+  if (convMap) {
+    const coveredJids = new Set(result.map(c => c.id))
+    for (const [remoteJid, conv] of convMap.entries()) {
+      const normJid = normalizeJid(remoteJid)
+      if (coveredJids.has(normJid) || coveredJids.has(remoteJid)) continue
+      if (!conv.last_message && !conv.last_message_at) continue
+      const isGroup = normJid.endsWith('@g.us')
+      result.push({
+        id: normJid,
+        name: conv.contact_name || formatPhone(normJid),
+        phone: isGroup ? normJid.replace(/@g\.us$/, '') : formatPhone(normJid),
+        avatarColor: jidToColor(normJid),
+        lastMessage: conv.last_message || '',
+        lastTime: conv.last_message_at ? new Date(conv.last_message_at) : new Date(0),
+        unreadCount: conv.unread_count ?? 0,
+        status: ((conv.status ?? 'waiting') as ConvStatus),
+        online: false,
+        labels: [],
+        isGroup,
+        lead_id: conv.lead_id,
+        assigned_user_id: conv.assigned_user_id,
+        assigned_user_name: conv.assigned_user_name,
+        contact_type: conv.contact_type,
+        tags: conv.tags || [],
+        profile_picture_url: conv.profile_picture_url,
+        messages: [],
+      })
+    }
+  }
+
+  return result.sort((a, b) => b.lastTime.getTime() - a.lastTime.getTime())
 }
 
 // ─── Time helpers ──────────────────────────────────────────────────────────────
@@ -741,9 +778,10 @@ export default function WhatsAppHub() {
   const addMessageToConversations = (newMsg: WhatsappMessage) => {
     // Briefly show typing indicator for incoming messages
     if (!newMsg.from_me) {
-      setTypingConvIds(prev => new Set(prev).add(newMsg.remote_jid))
+      const typingJid = normalizeJid(newMsg.remote_jid)
+      setTypingConvIds(prev => new Set(prev).add(typingJid))
       setTimeout(() => setTypingConvIds(prev => {
-        const next = new Set(prev); next.delete(newMsg.remote_jid); return next
+        const next = new Set(prev); next.delete(typingJid); return next
       }), 1200)
     }
     const isGroup = newMsg.remote_jid.endsWith('@g.us')
@@ -757,13 +795,14 @@ export default function WhatsAppHub() {
       media_url: newMsg.media_url,
     }
     setConversations(prev => {
-      const existing = prev.find(c => c.id === newMsg.remote_jid)
+      const normJid = normalizeJid(newMsg.remote_jid)
+      const existing = prev.find(c => c.id === normJid)
       if (existing) {
         if (existing.messages.some(m => m.id === newMsg.id)) return prev
-        return prev.map(c => c.id === newMsg.remote_jid
+        return prev.map(c => c.id === normJid
           ? {
               ...c,
-              name: (!c.name || c.name === formatPhone(newMsg.remote_jid)) && newMsg.contact_name ? newMsg.contact_name : c.name,
+              name: (!c.name || c.name === formatPhone(normJid)) && newMsg.contact_name ? newMsg.contact_name : c.name,
               messages: [...c.messages, msg],
               lastMessage: newMsg.content,
               lastTime: new Date(newMsg.timestamp),
@@ -773,10 +812,10 @@ export default function WhatsAppHub() {
         ).sort((a, b) => b.lastTime.getTime() - a.lastTime.getTime())
       }
       const conv: Conversation = {
-        id: newMsg.remote_jid,
-        name: newMsg.contact_name || (isGroup ? newMsg.remote_jid.replace(/@g\.us$/, '') : formatPhone(newMsg.remote_jid)),
-        phone: isGroup ? newMsg.remote_jid.replace(/@g\.us$/, '') : formatPhone(newMsg.remote_jid),
-        avatarColor: jidToColor(newMsg.remote_jid),
+        id: normJid,
+        name: newMsg.contact_name || (isGroup ? normJid.replace(/@g\.us$/, '') : formatPhone(normJid)),
+        phone: isGroup ? normJid.replace(/@g\.us$/, '') : formatPhone(normJid),
+        avatarColor: jidToColor(normJid),
         lastMessage: newMsg.content,
         lastTime: new Date(newMsg.timestamp),
         unreadCount: newMsg.from_me ? 0 : 1,

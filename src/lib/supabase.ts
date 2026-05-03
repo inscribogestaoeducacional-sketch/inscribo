@@ -231,6 +231,7 @@ export interface WhatsappConversation {
   contact_name?: string
   lead_id?: string
   status: string
+  last_message?: string
   last_message_at?: string
   unread_count: number
   assigned_user_id?: string
