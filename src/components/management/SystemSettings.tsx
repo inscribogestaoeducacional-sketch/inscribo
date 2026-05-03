@@ -451,6 +451,19 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
           is_active:       true,
         }, { onConflict: 'phone_number_id' })
       } catch {}
+      try {
+        await supabase.from('whatsapp_flows').upsert({
+          institution_id:    institutionId,
+          is_active:         true,
+          welcome_message:   'Olá! Bem-vindo. Em que posso ajudar?',
+          timezone:          'America/Fortaleza',
+          working_days:      ['MON', 'TUE', 'WED', 'THU', 'FRI'],
+          working_start:     '08:00',
+          working_end:       '18:00',
+          off_hours_message: 'Olá! Nosso atendimento é de seg a sex das 8h às 18h. Retornaremos em breve!',
+          menu_enabled:      false,
+        }, { onConflict: 'institution_id', ignoreDuplicates: true })
+      } catch {}
       await loadConfig()
     } catch (e) { setConnectError((e as Error).message) } finally { setConnecting(false) }
   }
