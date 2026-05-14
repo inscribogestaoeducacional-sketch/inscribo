@@ -173,20 +173,163 @@ async function autoLinkLead(institutionId: string, remoteJid: string): Promise<v
   }
 }
 
-// ── Bot flow node processor (simplified sequential) ──────────────────────────
-async function processBotFlow(
-  institutionId: string,
-  remoteJid:     string,
-  _text:         string,
-  nodes:         any[]
+// ── Custom flow state-machine processor ─────────────────────────────────────
+async function processCustomFlow(
+  institutionId:     string,
+  remoteJid:         string,
+  text:              string,
+  flow:              any,
+  isNewConversation: boolean
 ): Promise<void> {
-  // Send the first message-type node. Full state-machine tracking is a future enhancement.
-  for (const node of nodes) {
-    if (node.type === 'message' && node.message) {
-      await sendAutoMessage(institutionId, remoteJid, node.message)
-      break
+  const bf = flow.bot_flow as { nodes: any[]; edges: any[] } | null
+  if (!bf?.nodes?.length) return
+
+  // 1. Fetch conversation state
+  const { data: conv } = await supabase
+    .from('whatsapp_conversations')
+    .select('bot_current_node, bot_variables')
+    .eq('institution_id', institutionId)
+    .eq('remote_jid', remoteJid)
+    .maybeSingle()
+
+  let currentNodeId: string = isNewConversation ? 'start' : (conv?.bot_current_node || 'start')
+  let variables: Record<string, string> = isNewConversation ? {} : (conv?.bot_variables || {})
+
+  const findNode = (id: string) => bf.nodes.find((n: any) => n.id === id)
+  const edgesFrom = (fromId: string, port?: string) =>
+    bf.edges.filter((e: any) => e.from === fromId && (!port || e.fromPort === port))
+
+  function interp(str: string): string {
+    return str.replace(/\{\{(\w+)\}\}/g, (_: string, k: string) => variables[k] ?? `{{${k}}}`)
+  }
+
+  let current = findNode(currentNodeId)
+  if (!current) { current = findNode('start'); currentNodeId = 'start' }
+
+  // 2. Handle user input for the CURRENT node (before advancing)
+  if (current?.type === 'question' && current.data?.variable && text.trim()) {
+    variables[current.data.variable] = text.trim()
+    const nexts = edgesFrom(currentNodeId, 'output')
+    if (nexts.length) { currentNodeId = nexts[0].to; current = findNode(currentNodeId) }
+  } else if (current?.type === 'menu') {
+    const choice = parseInt(text.trim(), 10)
+    const opt = (current.data?.options || []).find((o: any) => o.number === choice)
+    if (opt) {
+      const nexts = edgesFrom(currentNodeId, opt.id)
+      if (nexts.length) { currentNodeId = nexts[0].to; current = findNode(currentNodeId) }
+    } else {
+      // Invalid choice — re-send menu text
+      const menuText = interp(current.data?.menuText || current.data?.text || 'Escolha uma opção válida:')
+      await sendAutoMessage(institutionId, remoteJid, menuText)
+      return
     }
   }
+
+  // 3. Execute nodes until user input required or end reached
+  let guard = 12
+  while (current && guard-- > 0) {
+    const node = current
+
+    if (node.type === 'start') {
+      const nexts = edgesFrom(node.id)
+      if (!nexts.length) break
+      currentNodeId = nexts[0].to; current = findNode(currentNodeId); continue
+    }
+
+    if (node.type === 'message') {
+      const msg = interp(node.data?.text || '')
+      if (msg) await sendAutoMessage(institutionId, remoteJid, msg)
+      const nexts = edgesFrom(node.id, 'output')
+      if (!nexts.length) break
+      currentNodeId = nexts[0].to; current = findNode(currentNodeId); continue
+    }
+
+    if (node.type === 'question') {
+      const q = interp(node.data?.text || '')
+      if (q) await sendAutoMessage(institutionId, remoteJid, q)
+      break  // Wait for answer
+    }
+
+    if (node.type === 'menu') {
+      const menuText = interp(node.data?.menuText || node.data?.text || '')
+      if (menuText) await sendAutoMessage(institutionId, remoteJid, menuText)
+      break  // Wait for choice
+    }
+
+    if (node.type === 'transfer') {
+      if (node.data?.transferMessage) {
+        await sendAutoMessage(institutionId, remoteJid, interp(node.data.transferMessage))
+      }
+      if (node.data?.assigneeId) {
+        await supabase.from('whatsapp_conversations').update({
+          assigned_user_id:   node.data.assigneeId,
+          assigned_user_name: node.data.assigneeName || null,
+          status: 'open', bot_active: false,
+        }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+      }
+      currentNodeId = 'end'; break
+    }
+
+    if (node.type === 'condition') {
+      let result = false
+      if (node.data?.conditionType === 'business_hours') {
+        const tz  = flow.timezone || 'America/Fortaleza'
+        const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
+        const days = ['SUN','MON','TUE','WED','THU','FRI','SAT']
+        const isDay = ((flow.working_days as string[]) ?? []).includes(days[now.getDay()])
+        const [sh, sm] = (flow.working_start || '08:00').split(':').map(Number)
+        const [eh, em] = (flow.working_end   || '18:00').split(':').map(Number)
+        const cur = now.getHours() * 60 + now.getMinutes()
+        result = isDay && cur >= sh * 60 + sm && cur <= eh * 60 + em
+      } else if (node.data?.conditionType === 'keyword') {
+        result = text.toLowerCase().includes((node.data.keyword || '').toLowerCase())
+      } else if (node.data?.conditionType === 'first_message') {
+        result = isNewConversation
+      }
+      const port  = result ? 'true' : 'false'
+      const nexts = edgesFrom(node.id, port)
+      if (!nexts.length) break
+      currentNodeId = nexts[0].to; current = findNode(currentNodeId); continue
+    }
+
+    if (node.type === 'action') {
+      if (node.data?.actionType === 'create_lead') {
+        const phone  = remoteJid.replace(/@.*/, '')
+        const noCode = phone.startsWith('55') ? phone.slice(2) : phone
+        const { data: existing } = await supabase.from('leads').select('id')
+          .eq('institution_id', institutionId)
+          .or(`phone.eq.${phone},phone.eq.55${noCode},phone.eq.+55${noCode}`)
+          .maybeSingle()
+        if (!existing) {
+          await supabase.from('leads').insert({
+            institution_id: institutionId,
+            phone: phone.startsWith('55') ? phone : `55${noCode}`,
+            student_name: variables.nome_aluno || variables.nome || '',
+            status: 'novo',
+          })
+        }
+      }
+      const nexts = edgesFrom(node.id, 'output')
+      if (!nexts.length) break
+      currentNodeId = nexts[0].to; current = findNode(currentNodeId); continue
+    }
+
+    if (node.type === 'wait') {
+      // Serverless: can't truly sleep — skip wait and continue
+      const nexts = edgesFrom(node.id, 'output')
+      if (!nexts.length) break
+      currentNodeId = nexts[0].to; current = findNode(currentNodeId); continue
+    }
+
+    if (node.type === 'end') { currentNodeId = 'end'; break }
+    break
+  }
+
+  // 4. Persist conversation state
+  await supabase.from('whatsapp_conversations').update({
+    bot_current_node: currentNodeId,
+    bot_variables:    variables,
+  }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
 }
 
 // ── Full automated flow processor ───────────────────────────────────────────
@@ -250,7 +393,13 @@ async function processFlow(
       return
     }
 
-    // d) New conversation: send welcome + menu (dedup: skip if bot sent in last 5 min)
+    // d) Custom bot_flow (full state machine) — takes over when defined
+    if (flow.bot_enabled && flow.bot_flow?.nodes?.length) {
+      await processCustomFlow(institutionId, remoteJid, text, flow, isNewConversation)
+      return
+    }
+
+    // e) Standard flow: new conversation → welcome + menu
     if (isNewConversation) {
       const { data: recentAuto } = await supabase
         .from('whatsapp_messages')
@@ -326,10 +475,6 @@ async function processFlow(
       }
     }
 
-    // g) Custom bot_flow nodes
-    if (flow.bot_enabled && Array.isArray(flow.bot_flow) && flow.bot_flow.length > 0) {
-      await processBotFlow(institutionId, remoteJid, text, flow.bot_flow)
-    }
   } catch (e) {
     console.error('❌ processFlow error:', e)
   }

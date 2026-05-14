@@ -3,11 +3,12 @@ import {
   Save, Upload, Building, Mail, Phone, Globe, Palette,
   MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
   Bot, Users, X, Plus, Check, AlertCircle, GraduationCap,
-  MapPin, FileText, DollarSign, Loader2, CheckCircle, Clock
+  MapPin, FileText, DollarSign, Loader2, CheckCircle, Clock, GitBranch
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import SchoolSetupModal from '../onboarding/SchoolSetupModal'
+import FlowEditor from '../whatsapp/FlowEditor'
 
 const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#00A896] focus:border-[#00A896] outline-none transition-all'
 
@@ -391,6 +392,7 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [flowUsers, setFlowUsers]     = useState<any[]>([])
   const [savingFlow, setSavingFlow]   = useState(false)
   const [flowSaved, setFlowSaved]     = useState(false)
+  const [showFlowEditor, setShowFlowEditor] = useState(false)
 
   // Quick replies
   const [quickReplies, setQuickReplies] = useState<{ id: string; title: string; message: string; order_index: number }[]>([])
@@ -656,6 +658,7 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
 
   if (metaConfig?.whatsapp_phone_id) return (
     <>
+      {showFlowEditor && <FlowEditor institutionId={institutionId} onClose={() => setShowFlowEditor(false)} />}
       {showBot && <BotConfigModal institutionId={institutionId} onClose={() => setShowBot(false)} />}
       <div style={{ maxWidth: 600, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
@@ -690,6 +693,7 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
           )}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button onClick={() => setShowBot(true)} style={{ flex: 1, minWidth: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', background: '#E6F7F5', border: '1px solid #99F6E4', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#00A896', cursor: 'pointer' }}><Bot size={15} />Configurar Bot</button>
+            <button onClick={() => setShowFlowEditor(true)} style={{ flex: 1, minWidth: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#4F46E5', cursor: 'pointer' }}><GitBranch size={15} />Editor de Fluxo</button>
             <button onClick={handleTestConnection} disabled={testing} style={{ flex: 1, minWidth: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', background: '#F0FDFB', border: '1px solid #99F6E4', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#00A896', cursor: 'pointer', opacity: testing ? 0.6 : 1 }}>
               {testing ? <><Loader2 size={14} className="animate-spin" />Testando...</> : <><RefreshCw size={14} />Testar conexão</>}
             </button>
