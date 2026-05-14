@@ -385,9 +385,10 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
     menu_message:         '',
     menu_enabled:         false,
     menu_options:            [] as { id: string; label: string; keyword: string; assignee_id: string; assignee_name: string }[],
-    bot_enabled:             false,
-    transfer_after_messages: 5,
-    default_assignee_id:     '',
+    bot_enabled:                 false,
+    transfer_after_messages:     5,
+    default_assignee_id:         '',
+    satisfaction_survey_enabled: false,
   })
   const [flowUsers, setFlowUsers]     = useState<any[]>([])
   const [savingFlow, setSavingFlow]   = useState(false)
@@ -851,6 +852,17 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
           {!flow.bot_enabled && (
             <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Ative o robô para configurar respostas automáticas e distribuição de atendimentos.</p>
           )}
+
+          {/* Satisfaction survey toggle — independent of bot_enabled */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, paddingTop: 16, borderTop: '1px solid #F1F5F9' }}>
+            <div>
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1A2B4A' }}>Pesquisa de satisfação automática</p>
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: '#94A3B8' }}>Envia avaliação de 1 a 5 ao encerrar atendimento</p>
+            </div>
+            <button onClick={() => setFlow(f => ({ ...f, satisfaction_survey_enabled: !f.satisfaction_survey_enabled }))} style={{ width: 44, height: 24, borderRadius: 999, background: flow.satisfaction_survey_enabled ? '#00A896' : '#CBD5E1', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+              <span style={{ position: 'absolute', top: 3, left: flow.satisfaction_survey_enabled ? 22 : 3, width: 18, height: 18, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
+            </button>
+          </div>
         </div>
 
         {/* ── Respostas rápidas ── */}

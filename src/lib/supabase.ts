@@ -246,6 +246,7 @@ export interface WhatsappConversation {
   conversation_history?: any[]
   created_at: string
   bot_active?: boolean
+  satisfaction_score?: number | null
 }
 
 export interface WhatsappConversationEvent {

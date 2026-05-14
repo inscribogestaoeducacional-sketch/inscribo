@@ -211,7 +211,7 @@ export default function GestorHome() {
   const [visits, setVisits] = useState<{ id: string; status: string; created_at: string }[]>([])
   const [waMessages, setWaMessages] = useState<{ id: string; created_at: string; from_me: boolean; remote_jid: string }[]>([])
   const [waPhoneRecord, setWaPhoneRecord] = useState<{ phone_number: string; display_name: string } | null>(null)
-  const [waConvStats, setWaConvStats] = useState<{ total: number; byBot: number; byTeam: number; closed: number; daily: { day: string; count: number }[] } | null>(null)
+  const [waConvStats, setWaConvStats] = useState<{ total: number; byBot: number; byTeam: number; closed: number; daily: { day: string; count: number }[]; avgSatisfaction: number | null } | null>(null)
   const [waTeamRanking, setWaTeamRanking] = useState<{ name: string; count: number }[]>([])
   const [waAvgResponse, setWaAvgResponse] = useState<number | null>(null)
   const [rankingMode, setRankingMode] = useState<'matriculas' | 'whatsapp'>('matriculas')
@@ -250,7 +250,7 @@ export default function GestorHome() {
         supabase.from('enrollments').select('id,user_id,created_at').eq('institution_id', institutionId),
         supabase.from('users').select('id,full_name,role').eq('institution_id', institutionId),
         supabase.from('whatsapp_phone_numbers').select('phone_number,display_name').eq('institution_id', institutionId).limit(1).maybeSingle(),
-        supabase.from('whatsapp_conversations').select('id,created_at,status,assigned_user_name,bot_active').eq('institution_id', institutionId).gte('created_at', thirtyDaysAgo),
+        supabase.from('whatsapp_conversations').select('id,created_at,status,assigned_user_name,bot_active,satisfaction_score').eq('institution_id', institutionId).gte('created_at', thirtyDaysAgo),
       ])
 
       const loadedCycles = (cyclesRes.data ?? []) as CampaignCycle[]
@@ -299,11 +299,13 @@ export default function GestorHome() {
       setWaPhoneRecord((waPhoneRes.data as { phone_number: string; display_name: string } | null) ?? null)
 
       // WA conversation stats (last 30 days)
-      const waConvs = (waConvsRes.data ?? []) as { id: string; created_at: string; status: string; assigned_user_name: string | null; bot_active: boolean | null }[]
+      const waConvs = (waConvsRes.data ?? []) as { id: string; created_at: string; status: string; assigned_user_name: string | null; bot_active: boolean | null; satisfaction_score: number | null }[]
       const waTotal = waConvs.length
       const waByBot = waConvs.filter(c => c.bot_active === true).length
       const waByTeam = waConvs.filter(c => c.bot_active !== true).length
       const waClosed = waConvs.filter(c => c.status === 'closed').length
+      const scores = waConvs.map(c => c.satisfaction_score).filter((s): s is number => s !== null && s > 0)
+      const waAvgSatisfaction = scores.length > 0 ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10 : null
       const now7 = new Date()
       const waDaily: { day: string; count: number }[] = []
       for (let i = 6; i >= 0; i--) {
@@ -312,7 +314,7 @@ export default function GestorHome() {
         const label = d.toLocaleDateString('pt-BR', { weekday: 'short' })
         waDaily.push({ day: label, count: waConvs.filter(c => c.created_at.slice(0, 10) === dayStr).length })
       }
-      setWaConvStats({ total: waTotal, byBot: waByBot, byTeam: waByTeam, closed: waClosed, daily: waDaily })
+      setWaConvStats({ total: waTotal, byBot: waByBot, byTeam: waByTeam, closed: waClosed, daily: waDaily, avgSatisfaction: waAvgSatisfaction })
 
       // WA team ranking by closed conversations
       const waRankMap: Record<string, number> = {}
@@ -1117,14 +1119,20 @@ export default function GestorHome() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                {waAvgResponse !== null ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F0FDF4', borderRadius: 8, padding: '5px 10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {waAvgResponse !== null && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#F0FDF4', borderRadius: 8, padding: '5px 10px' }}>
                     <Clock size={12} color="#10B981" />
                     <p style={{ margin: 0, fontSize: 11, color: '#065f46' }}>Resp. média: <strong>{waAvgResponse < 60 ? `${waAvgResponse}min` : `${Math.round(waAvgResponse / 60)}h`}</strong></p>
                   </div>
-                ) : <span />}
-                <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>{waPhoneRecord.display_name || waPhoneRecord.phone_number}</p>
+                )}
+                {waConvStats.avgSatisfaction !== null && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#FFFBEB', borderRadius: 8, padding: '5px 10px', border: '1px solid #FDE68A' }}>
+                    <span style={{ fontSize: 12 }}>⭐</span>
+                    <p style={{ margin: 0, fontSize: 11, color: '#92400E', fontWeight: 600 }}>{waConvStats.avgSatisfaction}/5 satisfação</p>
+                  </div>
+                )}
+                <p style={{ margin: 0, fontSize: 10, color: '#94a3b8', marginLeft: 'auto' }}>{waPhoneRecord.display_name || waPhoneRecord.phone_number}</p>
               </div>
             </div>
           ) : (

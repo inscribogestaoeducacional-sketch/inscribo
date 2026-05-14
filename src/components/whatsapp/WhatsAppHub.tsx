@@ -56,6 +56,7 @@ interface Conversation {
   tags?: string[]
   profile_picture_url?: string
   bot_active?: boolean
+  satisfaction_score?: number | null
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -190,6 +191,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
       tags: convData?.tags || [],
       profile_picture_url: convData?.profile_picture_url,
       bot_active: (convData as any)?.bot_active ?? false,
+      satisfaction_score: (convData as any)?.satisfaction_score ?? null,
       messages: sorted
         .filter((m, idx, self) => idx === self.findIndex(t => (t.message_id && t.message_id === m.message_id) || t.id === m.id))
         .map(m => ({
@@ -230,6 +232,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
         contact_type: conv.contact_type,
         tags: conv.tags || [],
         profile_picture_url: conv.profile_picture_url,
+        satisfaction_score: (conv as any).satisfaction_score ?? null,
         messages: [],
       })
     }
@@ -632,6 +635,7 @@ export default function WhatsAppHub() {
   const [addingTag, setAddingTag] = useState(false)
   const [newTag, setNewTag] = useState('')
   const [quickReplies, setQuickReplies] = useState<{ id: string; label: string; text: string }[]>([])
+  const [flowConfig, setFlowConfig] = useState<{ satisfaction_survey_enabled: boolean } | null>(null)
 
   // Edit contact inline form
   const [editingContact, setEditingContact] = useState(false)
@@ -1031,6 +1035,18 @@ export default function WhatsAppHub() {
             .eq('institution_id', user.institution_id!)
             .order('order_index', { ascending: true })
           if (data) setQuickReplies(data.map((r: any) => ({ id: r.id, label: r.title, text: r.message })))
+        } catch {}
+      })()
+
+      // Load flow config (satisfaction survey toggle)
+      ;(async () => {
+        try {
+          const { data } = await supabase
+            .from('whatsapp_flows')
+            .select('satisfaction_survey_enabled')
+            .eq('institution_id', user.institution_id!)
+            .maybeSingle()
+          if (data) setFlowConfig({ satisfaction_survey_enabled: !!(data as any).satisfaction_survey_enabled })
         } catch {}
       })()
 
@@ -1671,6 +1687,19 @@ export default function WhatsAppHub() {
     ))
     await supabase.from('whatsapp_conversations').update({ assigned_user_id: null, assigned_user_name: null })
       .eq('institution_id', user.institution_id).eq('remote_jid', rJid)
+
+    // Send satisfaction survey if enabled
+    if (flowConfig?.satisfaction_survey_enabled) {
+      const to = rJid.replace(/@.*/, '').replace(/\D/g, '')
+      const surveyText = 'Como você avalia nosso atendimento hoje?\n\nDigite um número de 1 a 5:\n1️⃣ Péssimo\n2️⃣ Ruim\n3️⃣ Regular\n4️⃣ Bom\n5️⃣ Ótimo 😊'
+      try {
+        await fetch('/api/whatsapp/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ institution_id: user.institution_id, to, type: 'text', message: surveyText }),
+        })
+      } catch {}
+    }
   }
 
   const handleAssignFromClosed = async () => {
@@ -3135,6 +3164,23 @@ export default function WhatsAppHub() {
                     )}
                   </div>
                 </div>
+
+                {/* Avaliação de satisfação — only for closed conversations */}
+                {activeConv.status === 'closed' && (
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #D1FAE5' }}>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                      Avaliação
+                    </label>
+                    {activeConv.satisfaction_score ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#FFFBEB', borderRadius: 8, border: '1px solid #FDE68A' }}>
+                        <span style={{ fontSize: 15 }}>{'⭐'.repeat(activeConv.satisfaction_score)}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#92400E' }}>{activeConv.satisfaction_score}/5</span>
+                      </div>
+                    ) : (
+                      <p style={{ margin: 0, fontSize: 12, color: '#94A3B8', fontStyle: 'italic' }}>Aguardando avaliação...</p>
+                    )}
+                  </div>
+                )}
 
                 {/* Lead linking — only for individual contacts */}
                 {!activeConv.isGroup && (
