@@ -29,6 +29,7 @@ interface Message {
   fileName?: string
   fileSize?: string
   media_url?: string
+  senderName?: string
 }
 
 interface Label { text: string; color: string }
@@ -203,6 +204,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
           ts: new Date(m.timestamp),
           status: (m.status as Message['status']) || 'sent',
           media_url: m.media_url,
+          senderName: m.from_me ? (m.contact_name || undefined) : undefined,
         })),
     }
   })
@@ -544,6 +546,17 @@ function MessageBubble({ msg, onImageClick, instanceName }: { msg: Message; onIm
           : '0 1px 4px rgba(0,168,150,0.08)',
         position: 'relative',
       }}>
+        {isMe && msg.senderName && (
+          <p style={{
+            margin: '0 0 4px',
+            fontSize: 11,
+            fontWeight: 700,
+            color: msg.senderName === '_bot_' ? 'rgba(255,255,255,0.45)' : '#5eead4',
+            lineHeight: 1,
+          }}>
+            {msg.senderName === '_bot_' ? '🤖 Robô:' : `${msg.senderName}:`}
+          </p>
+        )}
         <RenderMessageContent message={msg} fromMe={isMe} instanceName={instanceName} />
         <div style={{
           display: 'flex',
@@ -623,7 +636,11 @@ export default function WhatsAppHub() {
   const [showContactInfo, setShowContactInfo] = useState(true)
   const [collapseHistory, setCollapseHistory] = useState(true)
   const [sendError, setSendError] = useState<string | null>(null)
-  const [isRecording, setIsRecording] = useState(false)
+  const [recorderState, setRecorderState] = useState<'idle' | 'recording' | 'preview'>('idle')
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null)
+  const [waveformBars, setWaveformBars] = useState<number[]>(Array(20).fill(0.2))
   const [linkingLead, setLinkingLead] = useState(false)
   const [leadSearch, setLeadSearch] = useState('')
   const [leadResults, setLeadResults] = useState<any[]>([])
@@ -706,6 +723,11 @@ export default function WhatsAppHub() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const waveformAnimRef = useRef<number | null>(null)
+  const audioStreamRef = useRef<MediaStream | null>(null)
+  const recordingMimeTypeRef = useRef<string>('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const notifAudioRef = useRef<HTMLAudioElement | null>(null)
   const activeIdRef = useRef<string | null>(null)
@@ -739,77 +761,69 @@ export default function WhatsAppHub() {
 
   const startRecording = async () => {
     if (!activeId) return
-
     if (!navigator.mediaDevices?.getUserMedia) {
       setSendError('Seu browser não suporta gravação de áudio.')
       return
     }
-
     try {
-      // Check for audio input device first
       const devices = await navigator.mediaDevices.enumerateDevices().catch(() => [] as MediaDeviceInfo[])
       const hasAudio = devices.some(d => d.kind === 'audioinput')
       if (devices.length > 0 && !hasAudio) {
         setSendError('Nenhum microfone encontrado neste dispositivo.')
         return
       }
-
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+      audioStreamRef.current = stream
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
         : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+      recordingMimeTypeRef.current = mimeType
       const recorder = new MediaRecorder(stream, { mimeType })
       audioChunksRef.current = []
       recorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
-      recorder.onstop = async () => {
+      recorder.onstop = () => {
         const blob = new Blob(audioChunksRef.current, { type: mimeType })
-        stream.getTracks().forEach(t => t.stop())
-        const reader = new FileReader()
-        reader.onloadend = async () => {
-          const base64 = (reader.result as string).split(',')[1]
-          if (!user?.institution_id || !activeId) return
-          try {
-            // Step 1: upload audio to Supabase Storage
-            const uploadRes = await fetch('/api/whatsapp/media', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                institution_id: user.institution_id,
-                base64,
-                mimetype: mimeType,
-                filename: `audio-${Date.now()}.${mimeType.includes('webm') ? 'webm' : 'mp4'}`,
-              }),
-            })
-            if (!uploadRes.ok) throw new Error(`Upload HTTP ${uploadRes.status}`)
-            const { url: mediaUrl } = await uploadRes.json()
-
-            // Step 2: send via Meta Cloud API
-            const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
-            const sendRes = await fetch('/api/whatsapp/send', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                institution_id: user.institution_id,
-                to,
-                type: 'audio',
-                mediaUrl,
-              }),
-            })
-            if (!sendRes.ok) {
-              const err = await sendRes.json().catch(() => ({}))
-              console.error('[send-audio] error:', err)
-              setSendError('Erro ao enviar áudio.')
-            }
-          } catch (e) {
-            console.error('[send-audio] error:', e)
-            setSendError('Erro ao enviar áudio.')
-          }
-        }
-        reader.readAsDataURL(blob)
+        setAudioBlob(blob)
+        const url = URL.createObjectURL(blob)
+        setAudioPreviewUrl(url)
+        if (waveformAnimRef.current) { cancelAnimationFrame(waveformAnimRef.current); waveformAnimRef.current = null }
+        analyserRef.current = null
+        setWaveformBars(Array(20).fill(0.2))
+        setRecorderState('preview')
       }
-      recorder.start(200)
+      recorder.start(100)
       mediaRecorderRef.current = recorder
-      setIsRecording(true)
+
+      // Timer
+      setRecordingSeconds(0)
+      recordingTimerRef.current = setInterval(() => setRecordingSeconds(s => s + 1), 1000)
+
+      // Waveform via AudioContext AnalyserNode
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+        if (AudioCtx) {
+          const ctx = new AudioCtx()
+          const src = ctx.createMediaStreamSource(stream)
+          const analyser = ctx.createAnalyser()
+          analyser.fftSize = 64
+          src.connect(analyser)
+          analyserRef.current = analyser
+          const animate = () => {
+            if (!analyserRef.current) return
+            const data = new Uint8Array(analyserRef.current.frequencyBinCount)
+            analyserRef.current.getByteFrequencyData(data)
+            const bars = Array.from({ length: 20 }, (_, i) => {
+              const idx = Math.floor(i * data.length / 20)
+              return Math.max(0.1, (data[idx] ?? 0) / 255)
+            })
+            setWaveformBars(bars)
+            waveformAnimRef.current = requestAnimationFrame(animate)
+          }
+          waveformAnimRef.current = requestAnimationFrame(animate)
+        }
+      } catch {}
+
+      setRecorderState('recording')
     } catch (err: any) {
       if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
         setSendError('Permissão negada. Clique no 🔒 na barra de endereço e permita o microfone.')
@@ -823,11 +837,84 @@ export default function WhatsAppHub() {
     }
   }
 
-  const stopRecording = () => {
+  const stopRecordingForPreview = () => {
     const recorder = mediaRecorderRef.current
     if (!recorder || recorder.state === 'inactive') return
     recorder.stop()
-    setIsRecording(false)
+    audioStreamRef.current?.getTracks().forEach(t => t.stop())
+    if (recordingTimerRef.current) { clearInterval(recordingTimerRef.current); recordingTimerRef.current = null }
+  }
+
+  const cancelRecording = () => {
+    const recorder = mediaRecorderRef.current
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.onstop = null
+      recorder.stop()
+    }
+    audioStreamRef.current?.getTracks().forEach(t => t.stop())
+    if (recordingTimerRef.current) { clearInterval(recordingTimerRef.current); recordingTimerRef.current = null }
+    if (waveformAnimRef.current) { cancelAnimationFrame(waveformAnimRef.current); waveformAnimRef.current = null }
+    analyserRef.current = null
+    if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl)
+    setAudioBlob(null)
+    setAudioPreviewUrl(null)
+    setRecordingSeconds(0)
+    setWaveformBars(Array(20).fill(0.2))
+    setRecorderState('idle')
+  }
+
+  const discardAudio = () => {
+    if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl)
+    setAudioBlob(null)
+    setAudioPreviewUrl(null)
+    setRecordingSeconds(0)
+    setRecorderState('idle')
+  }
+
+  const sendAudio = async () => {
+    if (!audioBlob || !user?.institution_id || !activeId) return
+    const blob = audioBlob
+    const mimeType = recordingMimeTypeRef.current || blob.type
+    discardAudio()
+    const reader = new FileReader()
+    reader.onloadend = async () => {
+      const base64 = (reader.result as string).split(',')[1]
+      try {
+        const uploadRes = await fetch('/api/whatsapp/media', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            institution_id: user.institution_id,
+            base64,
+            mimetype: mimeType,
+            filename: `audio-${Date.now()}.${mimeType.includes('webm') ? 'webm' : 'mp4'}`,
+          }),
+        })
+        if (!uploadRes.ok) throw new Error(`Upload HTTP ${uploadRes.status}`)
+        const { url: mediaUrl } = await uploadRes.json()
+        const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
+        const sendRes = await fetch('/api/whatsapp/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            institution_id: user.institution_id,
+            to,
+            type: 'audio',
+            mediaUrl,
+            sender_name: user.full_name,
+          }),
+        })
+        if (!sendRes.ok) {
+          const err = await sendRes.json().catch(() => ({}))
+          console.error('[send-audio] error:', err)
+          setSendError('Erro ao enviar áudio.')
+        }
+      } catch (e) {
+        console.error('[send-audio] error:', e)
+        setSendError('Erro ao enviar áudio.')
+      }
+    }
+    reader.readAsDataURL(blob)
   }
 
   const handleLinkLead = async (leadId: string) => {
@@ -1378,6 +1465,7 @@ export default function WhatsAppHub() {
       from: 'me',
       ts: new Date(),
       status: 'sent',
+      senderName: user?.full_name || undefined,
     }
 
     setConversations(prev => prev.map(c =>
@@ -1402,6 +1490,7 @@ export default function WhatsAppHub() {
           to,
           type: 'text',
           message: text,
+          sender_name: user?.full_name,
         }),
       })
 
@@ -2796,94 +2885,111 @@ export default function WhatsAppHub() {
             )}
 
             {/* Input row */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {[
-                { icon: Paperclip, active: showAttach, onClick: () => { setShowAttach(v => !v); setShowQuickReplies(false) }, title: 'Anexar arquivo' },
-                { icon: Zap,       active: showQuickReplies, onClick: () => { setShowQuickReplies(v => !v); setShowAttach(false) }, title: 'Respostas rápidas' },
-                { icon: Smile,     active: showEmojiPicker,  onClick: () => { setShowEmojiPicker(v => !v); setShowAttach(false); setShowQuickReplies(false) }, title: 'Emojis' },
-              ].map(btn => {
-                const IconComp = btn.icon
-                return (
-                  <button key={btn.title} onClick={btn.onClick} title={btn.title}
-                    style={{
-                      padding: 8, borderRadius: 8, flexShrink: 0, background: btn.active ? '#E6F7F5' : 'none',
-                      color: btn.active ? '#00A896' : '#64748B', border: 'none', cursor: 'pointer', transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={e => { if (!btn.active) e.currentTarget.style.background = '#F0FDFB' }}
-                    onMouseLeave={e => { if (!btn.active) e.currentTarget.style.background = 'none' }}
+            {recorderState === 'recording' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* Cancel */}
+                <button onClick={cancelRecording} title="Cancelar"
+                  style={{ width: 40, height: 40, borderRadius: '50%', background: '#F1F5F9', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <X size={16} color="#64748B" />
+                </button>
+                {/* Waveform + Timer */}
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, background: '#F0FDFB', border: '1.5px solid #D1FAE5', borderRadius: 28, padding: '0 16px', height: 46 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#EF4444', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                    {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:{String(recordingSeconds % 60).padStart(2, '0')}
+                  </span>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 2, height: 28 }}>
+                    {waveformBars.map((h, i) => (
+                      <div key={i} style={{ flex: 1, height: `${Math.round(h * 100)}%`, minHeight: 3, background: '#00A896', borderRadius: 2, transition: 'height 0.08s ease' }} />
+                    ))}
+                  </div>
+                </div>
+                {/* Stop → preview */}
+                <button onClick={stopRecordingForPreview} title="Parar e pré-visualizar"
+                  style={{ width: 44, height: 44, borderRadius: '50%', background: '#00A896', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff' }}>
+                  <Check size={20} />
+                </button>
+              </div>
+            ) : recorderState === 'preview' && audioPreviewUrl ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* Discard */}
+                <button onClick={discardAudio} title="Descartar"
+                  style={{ width: 40, height: 40, borderRadius: '50%', background: '#FEE2E2', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <X size={16} color="#EF4444" />
+                </button>
+                {/* Audio player */}
+                <audio src={audioPreviewUrl} controls style={{ flex: 1, height: 36, minWidth: 0 }} />
+                {/* Send */}
+                <button onClick={sendAudio} title="Enviar áudio"
+                  style={{ width: 44, height: 44, borderRadius: '50%', background: '#00A896', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff' }}>
+                  <Send size={18} />
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {[
+                  { icon: Paperclip, active: showAttach, onClick: () => { setShowAttach(v => !v); setShowQuickReplies(false) }, title: 'Anexar arquivo' },
+                  { icon: Zap,       active: showQuickReplies, onClick: () => { setShowQuickReplies(v => !v); setShowAttach(false) }, title: 'Respostas rápidas' },
+                  { icon: Smile,     active: showEmojiPicker,  onClick: () => { setShowEmojiPicker(v => !v); setShowAttach(false); setShowQuickReplies(false) }, title: 'Emojis' },
+                ].map(btn => {
+                  const IconComp = btn.icon
+                  return (
+                    <button key={btn.title} onClick={btn.onClick} title={btn.title}
+                      style={{
+                        padding: 8, borderRadius: 8, flexShrink: 0, background: btn.active ? '#E6F7F5' : 'none',
+                        color: btn.active ? '#00A896' : '#64748B', border: 'none', cursor: 'pointer', transition: 'background 0.15s',
+                      }}
+                      onMouseEnter={e => { if (!btn.active) e.currentTarget.style.background = '#F0FDFB' }}
+                      onMouseLeave={e => { if (!btn.active) e.currentTarget.style.background = 'none' }}
+                    >
+                      <IconComp style={{ width: 20, height: 20 }} />
+                    </button>
+                  )
+                })}
+                <textarea
+                  ref={inputRef}
+                  value={inputText}
+                  onChange={e => {
+                    setInputText(e.target.value)
+                    if (presenceChannelRef.current && user?.id) {
+                      presenceChannelRef.current.track({ userId: user.id, typing: true }).catch(() => {})
+                      if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
+                      typingTimerRef.current = setTimeout(() => {
+                        presenceChannelRef.current?.track({ userId: user.id, typing: false }).catch(() => {})
+                      }, 3000)
+                    }
+                  }}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+                  placeholder="Digite uma mensagem..."
+                  rows={1}
+                  style={{
+                    flex: 1, padding: '10px 18px', fontSize: 14, background: '#F0FDFB',
+                    border: '1.5px solid #D1FAE5', borderRadius: 28, color: '#1A2B4A',
+                    outline: 'none', resize: 'none', minHeight: 42, maxHeight: 100,
+                    fontFamily: 'inherit', lineHeight: 1.5, transition: 'all 0.2s',
+                    boxShadow: '0 1px 4px rgba(0,168,150,0.08) inset',
+                  }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#FFFFFF' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#F0FDFB' }}
+                />
+                {inputText.trim() ? (
+                  <button onClick={handleSend}
+                    style={{ width: 44, height: 44, borderRadius: '50%', background: '#00A896', color: '#fff', border: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s, transform 0.15s' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#007A6E'; e.currentTarget.style.transform = 'scale(1.08)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#00A896'; e.currentTarget.style.transform = 'scale(1)' }}
                   >
-                    <IconComp style={{ width: 20, height: 20 }} />
+                    <Send style={{ width: 18, height: 18 }} />
                   </button>
-                )
-              })}
-              <textarea
-                ref={inputRef}
-                value={inputText}
-                onChange={e => {
-                  setInputText(e.target.value)
-                  // Broadcast typing presence
-                  if (presenceChannelRef.current && user?.id) {
-                    presenceChannelRef.current.track({ userId: user.id, typing: true }).catch(() => {})
-                    if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
-                    typingTimerRef.current = setTimeout(() => {
-                      presenceChannelRef.current?.track({ userId: user.id, typing: false }).catch(() => {})
-                    }, 3000)
-                  }
-                }}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-                placeholder="Digite uma mensagem..."
-                rows={1}
-                style={{
-                  flex: 1,
-                  padding: '10px 18px',
-                  fontSize: 14,
-                  background: '#F0FDFB',
-                  border: '1.5px solid #D1FAE5',
-                  borderRadius: 28,
-                  color: '#1A2B4A',
-                  outline: 'none',
-                  resize: 'none',
-                  minHeight: 42,
-                  maxHeight: 100,
-                  fontFamily: 'inherit',
-                  lineHeight: 1.5,
-                  transition: 'all 0.2s',
-                  boxShadow: '0 1px 4px rgba(0,168,150,0.08) inset',
-                }}
-                onFocus={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#FFFFFF' }}
-                onBlur={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#F0FDFB' }}
-              />
-              {inputText.trim() ? (
-                <button
-                  onClick={handleSend}
-                  style={{
-                    width: 44, height: 44, borderRadius: '50%', background: '#00A896', color: '#fff',
-                    border: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'background 0.15s, transform 0.15s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#007A6E'; e.currentTarget.style.transform = 'scale(1.08)' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#00A896'; e.currentTarget.style.transform = 'scale(1)' }}
-                >
-                  <Send style={{ width: 18, height: 18 }} />
-                </button>
-              ) : (
-                <button
-                  onMouseDown={startRecording}
-                  onMouseUp={stopRecording}
-                  onTouchStart={startRecording}
-                  onTouchEnd={stopRecording}
-                  style={{
-                    width: 44, height: 44, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: isRecording ? '#EF4444' : '#00A896', color: '#fff', border: 'none', cursor: 'pointer',
-                    transition: 'background 0.15s',
-                  }}
-                  className={isRecording ? 'animate-pulse' : ''}
-                  title="Segurar para gravar áudio"
-                >
-                  <Mic style={{ width: 18, height: 18 }} />
-                </button>
-              )}
-            </div>
+                ) : (
+                  <button onClick={startRecording} title="Gravar áudio"
+                    style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00A896', color: '#fff', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#007A6E' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#00A896' }}
+                  >
+                    <Mic style={{ width: 18, height: 18 }} />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
           </>}
         </div>

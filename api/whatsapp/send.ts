@@ -88,6 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     mimetype,              // required when base64 provided
     filename    = '',
     caption     = '',
+    sender_name = '',
     conversation_id,
   } = req.body
 
@@ -157,6 +158,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       message_type:   type,
       media_url:      resolvedMediaUrl || null,
       from_me:        true,
+      contact_name:   sender_name || null,
       status:         'sent',
       direction:      'outbound',
       timestamp:      new Date().toISOString(),

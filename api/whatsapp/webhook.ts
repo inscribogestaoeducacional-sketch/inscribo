@@ -70,6 +70,7 @@ async function sendAutoMessage(
         content:        text,
         message_type:   'text',
         from_me:        true,
+        contact_name:   '_bot_',
         status:         'sent',
         direction:      'outbound',
         timestamp:      new Date().toISOString(),
@@ -423,28 +424,47 @@ async function processFlow(
       return
     }
 
-    // e) Menu choice: user typed an option keyword
-    const menuOptions: any[] = flow.menu_options || []
-    const trimmed            = text.trim()
-    const menuChoice         = menuOptions.find((o: any) => o.keyword === trimmed)
+    // e) Menu choice: user typed a number or keyword
+    if (flow.menu_enabled) {
+      const menuOptions: any[] = flow.menu_options || []
+      const trimmed = text.trim()
+      const num = parseInt(trimmed, 10)
+      const menuChoice = menuOptions.find((o: any) =>
+        (!isNaN(num) && o.number === num) || o.keyword === trimmed
+      )
 
-    if (flow.menu_enabled && menuChoice) {
-      if (menuChoice.response_message) {
-        await sendAutoMessage(institutionId, remoteJid, menuChoice.response_message)
+      if (menuChoice) {
+        const responseMsg = menuChoice.response || menuChoice.response_message
+        if (responseMsg) await sendAutoMessage(institutionId, remoteJid, responseMsg)
+
+        const convUpdates: any = { bot_active: false, status: 'open' }
+        if (menuChoice.assignee_id) {
+          let assigneeName: string | null = menuChoice.assignee_name || null
+          if (!assigneeName) {
+            const { data: u } = await supabase
+              .from('users').select('name').eq('id', menuChoice.assignee_id).maybeSingle()
+            assigneeName = (u as any)?.name || null
+          }
+          convUpdates.assigned_user_id   = menuChoice.assignee_id
+          convUpdates.assigned_user_name = assigneeName
+        }
+        await supabase.from('whatsapp_conversations').update(convUpdates)
+          .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+        await supabase.from('whatsapp_conversation_events').insert({
+          institution_id: institutionId,
+          remote_jid:     remoteJid,
+          event_type:     'transfer',
+          description:    `Robô transferiu para ${convUpdates.assigned_user_name || 'atendente'} via opção ${trimmed}`,
+        }).catch(() => {})
+        console.log('[flow] menu option:', trimmed, '→ assignee:', convUpdates.assigned_user_name)
+        return
       }
-      if (menuChoice.assignee_id) {
-        await supabase
-          .from('whatsapp_conversations')
-          .update({
-            assigned_user_id:   menuChoice.assignee_id,
-            assigned_user_name: menuChoice.assignee_name || null,
-            status:             'open',
-          })
-          .eq('institution_id', institutionId)
-          .eq('remote_jid', remoteJid)
-        console.log('[flow] atendente atribuído via menu:', menuChoice.assignee_name)
+
+      // Invalid number typed — resend menu
+      if (!isNaN(num) && menuOptions.length > 0 && flow.menu_message) {
+        await sendAutoMessage(institutionId, remoteJid, flow.menu_message)
+        return
       }
-      return
     }
 
     // f) Bot message count → transfer to default assignee after threshold
