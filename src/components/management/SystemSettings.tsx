@@ -702,25 +702,25 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const usagePct   = Math.min(100, Math.round((monthlyConvCount / (usage.limit || 1000)) * 100))
   const usageColor = usagePct >= 90 ? '#EF4444' : usagePct >= 70 ? '#F59E0B' : '#10B981'
 
-  const dCard  = { background: '#1a1d27', borderRadius: 12, border: '1px solid #2e3248', padding: 20 }
-  const dInput = { background: '#242736', border: '1px solid #2e3248', color: '#f1f5f9', borderRadius: 8, padding: '9px 12px', fontSize: 13, width: '100%', outline: 'none', boxSizing: 'border-box' as const }
-  const dLabel = { fontSize: 12, fontWeight: 600 as const, color: '#94a3b8', display: 'block' as const, marginBottom: 6 }
+  const dCard  = { background: '#fff', borderRadius: 12, border: '1px solid #E2E8F0', padding: 20 }
+  const dInput = { background: '#fff', border: '1px solid #E2E8F0', color: '#1A2B4A', borderRadius: 8, padding: '9px 12px', fontSize: 13, width: '100%', outline: 'none', boxSizing: 'border-box' as const }
+  const dLabel = { fontSize: 12, fontWeight: 600 as const, color: '#475569', display: 'block' as const, marginBottom: 6 }
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
-      <Loader2 size={28} color="#0d9488" className="animate-spin" />
+      <Loader2 size={28} color="#00A896" className="animate-spin" />
     </div>
   )
 
   if (!metaConfig?.whatsapp_phone_id) return (
-    <div style={{ background: '#0f1117', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+    <div style={{ background: '#F8FAFC', borderRadius: 16, border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
       <div style={{ ...dCard, maxWidth: 480, width: '100%' }}>
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{ width: 64, height: 64, background: 'linear-gradient(135deg,#0d9488,#0ea5a0)', borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+          <div style={{ width: 64, height: 64, background: 'linear-gradient(135deg,#00A896,#007A6E)', borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
             <MessageCircle size={30} color="#fff" />
           </div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#f1f5f9', margin: '0 0 8px' }}>Conectar WhatsApp Business API</h2>
-          <p style={{ fontSize: 13, color: '#94a3b8', margin: 0, lineHeight: 1.6 }}>Use a API Oficial da Meta para atendimento automatizado no Áion Edu.</p>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1A2B4A', margin: '0 0 8px' }}>Conectar WhatsApp Business API</h2>
+          <p style={{ fontSize: 13, color: '#64748B', margin: 0, lineHeight: 1.6 }}>Use a API Oficial da Meta para atendimento automatizado no Áion Edu.</p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {[
@@ -735,12 +735,12 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
             </div>
           ))}
           {connectError && (
-            <div style={{ display: 'flex', gap: 8, padding: '10px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, fontSize: 13, color: '#ef4444' }}>
+            <div style={{ display: 'flex', gap: 8, padding: '10px 14px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, fontSize: 13, color: '#DC2626' }}>
               <AlertCircle size={16} />{connectError}
             </div>
           )}
           <button onClick={handleConnect} disabled={connecting || !form.phone_id || !form.token}
-            style={{ padding: '13px', background: 'linear-gradient(135deg,#0d9488,#0f766e)', color: '#fff', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: (connecting || !form.phone_id || !form.token) ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            style={{ padding: '13px', background: 'linear-gradient(135deg,#00A896,#007A6E)', color: '#fff', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: (connecting || !form.phone_id || !form.token) ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             {connecting ? <><RefreshCw size={16} className="animate-spin" />Verificando...</> : <><Check size={16} />Conectar WhatsApp</>}
           </button>
         </div>
@@ -752,15 +752,15 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
     <>
       {showFlowEditor && <FlowEditor institutionId={institutionId} onClose={() => setShowFlowEditor(false)} />}
       {showBot && <BotConfigModal institutionId={institutionId} onClose={() => setShowBot(false)} />}
-      <div style={{ display: 'flex', background: '#0f1117', borderRadius: 16, border: '1px solid #2e3248', overflow: 'hidden', minHeight: 520 }}>
+      <div style={{ display: 'flex', background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden', minHeight: 520 }}>
 
         {/* Sidebar */}
-        <div style={{ width: 200, flexShrink: 0, background: '#13161f', borderRight: '1px solid #2e3248', padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{ width: 200, flexShrink: 0, background: '#F8FAFC', borderRight: '1px solid #E2E8F0', padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
           {WA_SECTIONS.map(sec => {
             const active = waSection === sec.id
             return (
               <button key={sec.id} onClick={() => setWaSection(sec.id)}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: 'none', background: active ? '#0d9488' : 'transparent', color: active ? '#fff' : '#94a3b8', fontSize: 13, fontWeight: active ? 600 : 400, cursor: 'pointer', textAlign: 'left', width: '100%', position: 'relative' }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: 'none', background: active ? '#00A896' : 'transparent', color: active ? '#fff' : '#64748B', fontSize: 13, fontWeight: active ? 600 : 400, cursor: 'pointer', textAlign: 'left', width: '100%', position: 'relative' }}>
                 <span style={{ fontSize: 14 }}>{sec.icon}</span>
                 <span style={{ flex: 1 }}>{sec.label}</span>
                 {sec.id === 'conexao' && (
@@ -776,49 +776,49 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
 
           {waSection === 'conexao' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#f1f5f9' }}>📡 Conexão WhatsApp</h3>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>📡 Conexão WhatsApp</h3>
               <div style={dCard}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                  <div style={{ width: 44, height: 44, background: 'rgba(16,185,129,0.15)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ width: 44, height: 44, background: '#F0FDF4', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Wifi size={20} color="#10b981" />
                   </div>
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9' }}>WhatsApp conectado</div>
-                    <div style={{ fontSize: 12, color: '#94a3b8' }}>{metaConfig.whatsapp_display_name}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>WhatsApp conectado</div>
+                    <div style={{ fontSize: 12, color: '#64748B' }}>{metaConfig.whatsapp_display_name}</div>
                   </div>
-                  <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px', background: 'rgba(16,185,129,0.12)', borderRadius: 999, fontSize: 11, fontWeight: 600, color: '#10b981' }}>
+                  <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 999, fontSize: 11, fontWeight: 600, color: '#16a34a' }}>
                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />Online
                   </span>
                 </div>
-                <div style={{ padding: '10px 14px', background: '#242736', borderRadius: 8, fontSize: 12, color: '#94a3b8', marginBottom: 16 }}>
-                  <div>Número: <strong style={{ color: '#f1f5f9' }}>{phoneRecord?.phone_number || metaConfig.whatsapp_phone_number || '—'}</strong></div>
-                  {metaConfig.whatsapp_phone_id && <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Phone ID: {metaConfig.whatsapp_phone_id}</div>}
+                <div style={{ padding: '10px 14px', background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 12, color: '#64748B', marginBottom: 16 }}>
+                  <div>Número: <strong style={{ color: '#1A2B4A' }}>{phoneRecord?.phone_number || metaConfig.whatsapp_phone_number || '—'}</strong></div>
+                  {metaConfig.whatsapp_phone_id && <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>Phone ID: {metaConfig.whatsapp_phone_id}</div>}
                 </div>
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, color: '#94a3b8' }}>Conversas este mês</span>
+                    <span style={{ fontSize: 12, color: '#64748B' }}>Conversas este mês</span>
                     <span style={{ fontSize: 12, fontWeight: 700, color: usageColor }}>{monthlyConvCount.toLocaleString('pt-BR')} / {(usage.limit || 1000).toLocaleString('pt-BR')}</span>
                   </div>
-                  <div style={{ height: 6, background: '#242736', borderRadius: 999, overflow: 'hidden' }}>
+                  <div style={{ height: 6, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${usagePct}%`, background: usageColor, borderRadius: 999 }} />
                   </div>
                 </div>
                 {testResult && (
-                  <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: testResult.ok ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${testResult.ok ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, color: testResult.ok ? '#10b981' : '#ef4444' }}>
+                  <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: testResult.ok ? '#F0FDF4' : '#FEF2F2', border: `1px solid ${testResult.ok ? '#BBF7D0' : '#FECACA'}`, color: testResult.ok ? '#16a34a' : '#DC2626' }}>
                     {testResult.msg}
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button onClick={() => setShowFlowEditor(true)}
-                    style={{ flex: 1, minWidth: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', background: '#1a1d27', border: '1px solid #0d9488', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#0d9488', cursor: 'pointer' }}>
+                    style={{ flex: 1, minWidth: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', background: '#E6F7F5', border: '1px solid #00A896', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#00A896', cursor: 'pointer' }}>
                     <GitBranch size={14} />Editor de Fluxo
                   </button>
                   <button onClick={handleTestConnection} disabled={testing}
-                    style={{ flex: 1, minWidth: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', background: '#1a1d27', border: '1px solid #2e3248', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#94a3b8', cursor: 'pointer', opacity: testing ? 0.6 : 1 }}>
+                    style={{ flex: 1, minWidth: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#64748B', cursor: 'pointer', opacity: testing ? 0.6 : 1 }}>
                     {testing ? <><Loader2 size={13} className="animate-spin" />Testando...</> : <><RefreshCw size={13} />Testar conexão</>}
                   </button>
                   <button onClick={handleDisconnect} disabled={disconnecting}
-                    style={{ flex: 1, minWidth: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#ef4444', cursor: 'pointer', opacity: disconnecting ? 0.6 : 1 }}>
+                    style={{ flex: 1, minWidth: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#DC2626', cursor: 'pointer', opacity: disconnecting ? 0.6 : 1 }}>
                     <WifiOff size={14} />{disconnecting ? 'Desconectando...' : 'Desconectar'}
                   </button>
                 </div>
@@ -828,12 +828,12 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
 
           {waSection === 'perfil' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#f1f5f9' }}>👤 Perfil do WhatsApp Business</h3>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>👤 Perfil do WhatsApp Business</h3>
               <div style={dCard}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div>
                     <label style={dLabel}>Descrição da empresa</label>
-                    <textarea rows={3} style={{ ...dInput, resize: 'vertical' }} value={bizProfile.description} onChange={e => setBizProfile(p => ({ ...p, description: e.target.value }))} placeholder="Escola particular com ensino de qualidade..." />
+                    <textarea rows={3} style={{ ...dInput, resize: 'vertical' as const }} value={bizProfile.description} onChange={e => setBizProfile(p => ({ ...p, description: e.target.value }))} placeholder="Escola particular com ensino de qualidade..." />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div>
@@ -855,7 +855,7 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                     <input style={dInput} value={bizProfile.address} onChange={e => setBizProfile(p => ({ ...p, address: e.target.value }))} placeholder="Rua X, 123 - Bairro - Cidade/UF" />
                   </div>
                   <button onClick={handleSaveBizProfile} disabled={savingBiz}
-                    style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: bizSaved ? '#16a34a' : '#0d9488', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingBiz ? 0.7 : 1 }}>
+                    style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: bizSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingBiz ? 0.7 : 1 }}>
                     {bizSaved ? <><Check size={13} />Salvo!</> : savingBiz ? 'Salvando...' : <><Save size={13} />Salvar perfil</>}
                   </button>
                 </div>
@@ -865,14 +865,14 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
 
           {waSection === 'horario' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#f1f5f9' }}>🕐 Horário de Atendimento</h3>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>🕐 Horário de Atendimento</h3>
               <div style={dCard}>
                 <div style={{ marginBottom: 16 }}>
                   <label style={dLabel}>Dias da semana</label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
                     {FLOW_DAYS.map(d => (
                       <button key={d.id} onClick={() => toggleDay(d.id)}
-                        style={{ padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: `2px solid ${flow.working_days.includes(d.id) ? '#0d9488' : '#2e3248'}`, background: flow.working_days.includes(d.id) ? 'rgba(13,148,136,0.15)' : '#242736', color: flow.working_days.includes(d.id) ? '#0d9488' : '#94a3b8' }}>
+                        style={{ padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: `2px solid ${flow.working_days.includes(d.id) ? '#00A896' : '#E2E8F0'}`, background: flow.working_days.includes(d.id) ? '#E6F7F5' : '#fff', color: flow.working_days.includes(d.id) ? '#00A896' : '#64748B' }}>
                         {d.label}
                       </button>
                     ))}
@@ -890,10 +890,10 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                 </div>
                 <div style={{ marginBottom: 16 }}>
                   <label style={dLabel}>Mensagem fora do horário</label>
-                  <textarea rows={3} style={{ ...dInput, resize: 'vertical' }} value={flow.off_hours_message} onChange={e => setFlow(f => ({ ...f, off_hours_message: e.target.value }))} />
+                  <textarea rows={3} style={{ ...dInput, resize: 'vertical' as const }} value={flow.off_hours_message} onChange={e => setFlow(f => ({ ...f, off_hours_message: e.target.value }))} />
                 </div>
                 <button onClick={handleSaveFlow} disabled={savingFlow}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: flowSaved ? '#16a34a' : '#0d9488', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: flowSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
                   {savingFlow ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : flowSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar horário</>}
                 </button>
               </div>
@@ -902,9 +902,9 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
 
           {waSection === 'respostas' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#f1f5f9' }}>⚡ Respostas Rápidas</h3>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>⚡ Respostas Rápidas</h3>
               {quickReplies.length === 0 && (
-                <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>Nenhuma resposta rápida cadastrada.</p>
+                <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Nenhuma resposta rápida cadastrada.</p>
               )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {quickReplies.map(qr => (
@@ -913,37 +913,37 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
                           <input style={dInput} value={editQRData.title} onChange={e => setEditQRData(d => ({ ...d, title: e.target.value }))} placeholder="Título" />
-                          <textarea rows={2} style={{ ...dInput, resize: 'vertical' }} value={editQRData.message} onChange={e => setEditQRData(d => ({ ...d, message: e.target.value }))} placeholder="Mensagem" />
+                          <textarea rows={2} style={{ ...dInput, resize: 'vertical' as const }} value={editQRData.message} onChange={e => setEditQRData(d => ({ ...d, message: e.target.value }))} placeholder="Mensagem" />
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <button onClick={handleUpdateQR} style={{ padding: '7px 10px', background: '#0d9488', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}><Check size={13} /></button>
-                          <button onClick={() => setEditQRId(null)} style={{ padding: '7px 10px', background: '#242736', color: '#94a3b8', border: '1px solid #2e3248', borderRadius: 6, cursor: 'pointer' }}><X size={13} /></button>
+                          <button onClick={handleUpdateQR} style={{ padding: '7px 10px', background: '#00A896', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}><Check size={13} /></button>
+                          <button onClick={() => setEditQRId(null)} style={{ padding: '7px 10px', background: '#F8FAFC', color: '#64748B', border: '1px solid #E2E8F0', borderRadius: 6, cursor: 'pointer' }}><X size={13} /></button>
                         </div>
                       </div>
                     ) : (
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                         <div style={{ flex: 1 }}>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: '#0d9488' }}>/{qr.title}</span>
-                          <p style={{ fontSize: 12, color: '#94a3b8', margin: '4px 0 0', lineHeight: 1.4 }}>{qr.message}</p>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#00A896' }}>/{qr.title}</span>
+                          <p style={{ fontSize: 12, color: '#64748B', margin: '4px 0 0', lineHeight: 1.4 }}>{qr.message}</p>
                         </div>
                         <div style={{ display: 'flex', gap: 4 }}>
                           <button onClick={() => { setEditQRId(qr.id); setEditQRData({ title: qr.title, message: qr.message }) }}
-                            style={{ padding: '5px 8px', background: '#242736', color: '#94a3b8', border: '1px solid #2e3248', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>✏</button>
+                            style={{ padding: '5px 8px', background: '#F8FAFC', color: '#64748B', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>✏</button>
                           <button onClick={() => handleDeleteQR(qr.id)}
-                            style={{ padding: '5px 8px', background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}><X size={12} /></button>
+                            style={{ padding: '5px 8px', background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}><X size={12} /></button>
                         </div>
                       </div>
                     )}
                   </div>
                 ))}
               </div>
-              <div style={{ ...dCard, border: '1px dashed #2e3248' }}>
-                <p style={{ fontSize: 11, fontWeight: 600, color: '#64748b', margin: '0 0 10px', textTransform: 'uppercase' }}>Nova resposta rápida</p>
+              <div style={{ ...dCard, border: '1px dashed #CBD5E1' }}>
+                <p style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', margin: '0 0 10px', textTransform: 'uppercase' as const }}>Nova resposta rápida</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <input style={dInput} value={newQR.title} onChange={e => setNewQR(q => ({ ...q, title: e.target.value }))} placeholder="Título (ex: preco, matricula)" />
-                  <textarea rows={2} style={{ ...dInput, resize: 'vertical' }} value={newQR.message} onChange={e => setNewQR(q => ({ ...q, message: e.target.value }))} placeholder="Mensagem que será enviada..." />
+                  <textarea rows={2} style={{ ...dInput, resize: 'vertical' as const }} value={newQR.message} onChange={e => setNewQR(q => ({ ...q, message: e.target.value }))} placeholder="Mensagem que será enviada..." />
                   <button onClick={handleAddQR} disabled={!newQR.title || !newQR.message || savingQR}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', borderRadius: 8, border: 'none', background: '#0d9488', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (!newQR.title || !newQR.message || savingQR) ? 0.5 : 1 }}>
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', borderRadius: 8, border: 'none', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (!newQR.title || !newQR.message || savingQR) ? 0.5 : 1 }}>
                     <Plus size={14} />{savingQR ? 'Salvando...' : 'Adicionar resposta rápida'}
                   </button>
                 </div>
@@ -953,18 +953,18 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
 
           {waSection === 'equipe' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#f1f5f9' }}>👥 Horário por Atendente</h3>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>👥 Horário por Atendente</h3>
               {attendants.length === 0 ? (
-                <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>Nenhum atendente cadastrado.</p>
+                <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Nenhum atendente cadastrado.</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {attendants.map(att => (
                     <div key={att.id} style={dCard}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9', marginBottom: 12 }}>{att.full_name}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 12 }}>{att.full_name}</div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 12 }}>
                         {FLOW_DAYS.map(d => (
                           <button key={d.id} onClick={() => toggleAttendantDay(att.id, d.id)}
-                            style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: `2px solid ${att.working_days.includes(d.id) ? '#0d9488' : '#2e3248'}`, background: att.working_days.includes(d.id) ? 'rgba(13,148,136,0.15)' : '#242736', color: att.working_days.includes(d.id) ? '#0d9488' : '#94a3b8' }}>
+                            style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: `2px solid ${att.working_days.includes(d.id) ? '#00A896' : '#E2E8F0'}`, background: att.working_days.includes(d.id) ? '#E6F7F5' : '#fff', color: att.working_days.includes(d.id) ? '#00A896' : '#64748B' }}>
                             {d.label}
                           </button>
                         ))}
@@ -979,7 +979,7 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                           <input type="time" style={dInput} value={att.working_hours_end} onChange={e => updateAttendant(att.id, 'working_hours_end', e.target.value)} />
                         </div>
                         <button onClick={() => handleSaveAttendantHours(att)} disabled={savingAtt === att.id}
-                          style={{ padding: '9px 14px', background: '#0d9488', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingAtt === att.id ? 0.6 : 1 }}>
+                          style={{ padding: '9px 14px', background: '#00A896', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingAtt === att.id ? 0.6 : 1 }}>
                           {savingAtt === att.id ? '...' : <Save size={13} />}
                         </button>
                       </div>
@@ -993,14 +993,14 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
           {waSection === 'bloqueios' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#f1f5f9' }}>🚫 Números Bloqueados</h3>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>🚫 Números Bloqueados</h3>
                 <button onClick={() => setShowAddBlock(true)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#ef4444', cursor: 'pointer' }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#DC2626', cursor: 'pointer' }}>
                   <Plus size={13} /> Bloquear número
                 </button>
               </div>
               {showAddBlock && (
-                <div style={{ ...dCard, background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                <div style={{ ...dCard, background: '#FEF2F2', border: '1px solid #FECACA' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <input value={newBlockNum} onChange={e => setNewBlockNum(e.target.value)} placeholder="Número (ex: 5583999999999)" style={dInput} />
                     <input value={newBlockReason} onChange={e => setNewBlockReason(e.target.value)} placeholder="Motivo (opcional)" style={dInput} />
@@ -1010,7 +1010,7 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                         {savingBlock ? 'Bloqueando...' : 'Confirmar bloqueio'}
                       </button>
                       <button onClick={() => { setShowAddBlock(false); setNewBlockNum(''); setNewBlockReason('') }}
-                        style={{ padding: '8px 14px', background: '#242736', border: '1px solid #2e3248', borderRadius: 8, fontSize: 12, color: '#94a3b8', cursor: 'pointer' }}>
+                        style={{ padding: '8px 14px', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 12, color: '#64748B', cursor: 'pointer' }}>
                         Cancelar
                       </button>
                     </div>
@@ -1018,17 +1018,17 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                 </div>
               )}
               {blacklist.length === 0 ? (
-                <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>Nenhum número bloqueado. Mensagens de números bloqueados são ignoradas automaticamente.</p>
+                <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>Nenhum número bloqueado. Mensagens de números bloqueados são ignoradas automaticamente.</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {blacklist.map(b => (
-                    <div key={b.id} style={{ ...dCard, background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px' }}>
+                    <div key={b.id} style={{ ...dCard, background: '#FEF2F2', border: '1px solid #FECACA', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px' }}>
                       <div>
-                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#f1f5f9', fontFamily: 'monospace' }}>{b.phone_number}</p>
-                        {b.reason && <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748b' }}>{b.reason}</p>}
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1A2B4A', fontFamily: 'monospace' }}>{b.phone_number}</p>
+                        {b.reason && <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748B' }}>{b.reason}</p>}
                       </div>
                       <button onClick={() => handleRemoveBlock(b.id)}
-                        style={{ padding: '5px 8px', background: 'transparent', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#ef4444' }}>
+                        style={{ padding: '5px 8px', background: 'transparent', border: '1px solid #FECACA', borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#DC2626' }}>
                         <Trash2 size={12} /> Remover
                       </button>
                     </div>
@@ -1040,28 +1040,28 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
 
           {waSection === 'pesquisa' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#f1f5f9' }}>⭐ Pesquisa de Satisfação</h3>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>⭐ Pesquisa de Satisfação</h3>
               <div style={dCard}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
-                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#f1f5f9' }}>Pesquisa automática</p>
-                    <p style={{ margin: '4px 0 0', fontSize: 12, color: '#94a3b8' }}>Envia avaliação de 1 a 5 ao encerrar atendimento</p>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#1A2B4A' }}>Pesquisa automática</p>
+                    <p style={{ margin: '4px 0 0', fontSize: 12, color: '#64748B' }}>Envia avaliação de 1 a 5 ao encerrar atendimento</p>
                   </div>
                   <button onClick={() => setFlow(f => ({ ...f, satisfaction_survey_enabled: !f.satisfaction_survey_enabled }))}
-                    style={{ width: 44, height: 24, borderRadius: 999, background: flow.satisfaction_survey_enabled ? '#0d9488' : '#2e3248', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
+                    style={{ width: 44, height: 24, borderRadius: 999, background: flow.satisfaction_survey_enabled ? '#00A896' : '#CBD5E1', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
                     <span style={{ position: 'absolute', top: 3, left: flow.satisfaction_survey_enabled ? 22 : 3, width: 18, height: 18, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
                   </button>
                 </div>
                 {flow.satisfaction_survey_enabled && (
-                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #2e3248' }}>
-                    <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
+                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #E2E8F0' }}>
+                    <p style={{ margin: 0, fontSize: 12, color: '#64748B', lineHeight: 1.6 }}>
                       Após o encerramento do atendimento, o sistema enviará automaticamente uma mensagem pedindo que o cliente avalie de 1 a 5 estrelas.
                     </p>
                   </div>
                 )}
                 <div style={{ marginTop: 16 }}>
                   <button onClick={handleSaveFlow} disabled={savingFlow}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: flowSaved ? '#16a34a' : '#0d9488', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: flowSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
                     {savingFlow ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : flowSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar configuração</>}
                   </button>
                 </div>
