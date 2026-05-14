@@ -209,7 +209,12 @@ export default function GestorHome() {
   const [transfers, setTransfers] = useState<StudentTransfer[]>([])
   const [leads, setLeads] = useState<{ id: string; status: string; created_at: string }[]>([])
   const [visits, setVisits] = useState<{ id: string; status: string; created_at: string }[]>([])
-  const [waMessages, setWaMessages] = useState<{ id: string; created_at: string; from_me: boolean }[]>([])
+  const [waMessages, setWaMessages] = useState<{ id: string; created_at: string; from_me: boolean; remote_jid: string }[]>([])
+  const [waPhoneRecord, setWaPhoneRecord] = useState<{ phone_number: string; display_name: string } | null>(null)
+  const [waConvStats, setWaConvStats] = useState<{ total: number; byBot: number; byTeam: number; closed: number; daily: { day: string; count: number }[] } | null>(null)
+  const [waTeamRanking, setWaTeamRanking] = useState<{ name: string; count: number }[]>([])
+  const [waAvgResponse, setWaAvgResponse] = useState<number | null>(null)
+  const [rankingMode, setRankingMode] = useState<'matriculas' | 'whatsapp'>('matriculas')
   const [userRankings, setUserRankings] = useState<UserRanking[]>([])
   const [marketData, setMarketData] = useState<MarketData | null>(null)
   const [marketLoading, setMarketLoading] = useState(false)
@@ -235,15 +240,17 @@ export default function GestorHome() {
     setLoading(true)
     try {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-      const [cyclesRes, funnelRes, transferRes, leadsRes, visitsRes, waRes, enrollRes, usersRes] = await Promise.all([
+      const [cyclesRes, funnelRes, transferRes, leadsRes, visitsRes, waRes, enrollRes, usersRes, waPhoneRes, waConvsRes] = await Promise.all([
         supabase.from('campaign_cycles').select('*').eq('institution_id', institutionId).order('created_at', { ascending: false }),
         supabase.from('funnel_metrics').select('*').eq('institution_id', institutionId).order('created_at', { ascending: true }),
         supabase.from('student_transfers').select('id,student_name,course_grade,transfer_date,reason_category').eq('institution_id', institutionId).is('deleted_at', null).order('transfer_date', { ascending: false }).limit(5),
         supabase.from('leads').select('id,status,created_at').eq('institution_id', institutionId),
         supabase.from('visits').select('id,status,created_at').eq('institution_id', institutionId),
-        supabase.from('whatsapp_messages').select('id,created_at,from_me').eq('institution_id', institutionId).gte('created_at', thirtyDaysAgo),
+        supabase.from('whatsapp_messages').select('id,created_at,from_me,remote_jid').eq('institution_id', institutionId).gte('created_at', thirtyDaysAgo),
         supabase.from('enrollments').select('id,user_id,created_at').eq('institution_id', institutionId),
         supabase.from('users').select('id,full_name,role').eq('institution_id', institutionId),
+        supabase.from('whatsapp_phone_numbers').select('phone_number,display_name').eq('institution_id', institutionId).limit(1).maybeSingle(),
+        supabase.from('whatsapp_conversations').select('id,created_at,status,assigned_user_name,bot_active').eq('institution_id', institutionId).gte('created_at', thirtyDaysAgo),
       ])
 
       const loadedCycles = (cyclesRes.data ?? []) as CampaignCycle[]
@@ -252,7 +259,23 @@ export default function GestorHome() {
       setTransfers((transferRes.data ?? []) as StudentTransfer[])
       setLeads((leadsRes.data ?? []) as { id: string; status: string; created_at: string }[])
       setVisits((visitsRes.data ?? []) as { id: string; status: string; created_at: string }[])
-      setWaMessages((waRes.data ?? []) as { id: string; created_at: string; from_me: boolean }[])
+      const waMsgs = (waRes.data ?? []) as { id: string; created_at: string; from_me: boolean; remote_jid: string }[]
+      setWaMessages(waMsgs)
+
+      // Avg first-response time per conversation (minutes), capped at 24h
+      const byJid: Record<string, { created_at: string; from_me: boolean }[]> = {}
+      waMsgs.forEach(m => { if (!byJid[m.remote_jid]) byJid[m.remote_jid] = []; byJid[m.remote_jid].push(m) })
+      const responseTimes: number[] = []
+      Object.values(byJid).forEach(msgs => {
+        const sorted = [...msgs].sort((a, b) => a.created_at.localeCompare(b.created_at))
+        const firstIn = sorted.find(m => !m.from_me)
+        const firstOut = sorted.find(m => m.from_me && firstIn && m.created_at > firstIn.created_at)
+        if (firstIn && firstOut) {
+          const diff = (new Date(firstOut.created_at).getTime() - new Date(firstIn.created_at).getTime()) / 60000
+          if (diff > 0 && diff < 1440) responseTimes.push(diff)
+        }
+      })
+      setWaAvgResponse(responseTimes.length > 0 ? Math.round(responseTimes.reduce((s, v) => s + v, 0) / responseTimes.length) : null)
 
       // Calcular ranking de usuários
       const enrollments = (enrollRes.data ?? []) as { id: string; user_id: string; created_at: string }[]
@@ -271,6 +294,33 @@ export default function GestorHome() {
       })).sort((a, b) => b.enrollments_count - a.enrollments_count).slice(0, 5)
 
       setUserRankings(rankings)
+
+      // WhatsApp phone record (detection)
+      setWaPhoneRecord((waPhoneRes.data as { phone_number: string; display_name: string } | null) ?? null)
+
+      // WA conversation stats (last 30 days)
+      const waConvs = (waConvsRes.data ?? []) as { id: string; created_at: string; status: string; assigned_user_name: string | null; bot_active: boolean | null }[]
+      const waTotal = waConvs.length
+      const waByBot = waConvs.filter(c => c.bot_active === true).length
+      const waByTeam = waConvs.filter(c => c.bot_active !== true).length
+      const waClosed = waConvs.filter(c => c.status === 'closed').length
+      const now7 = new Date()
+      const waDaily: { day: string; count: number }[] = []
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now7); d.setDate(d.getDate() - i)
+        const dayStr = d.toISOString().slice(0, 10)
+        const label = d.toLocaleDateString('pt-BR', { weekday: 'short' })
+        waDaily.push({ day: label, count: waConvs.filter(c => c.created_at.slice(0, 10) === dayStr).length })
+      }
+      setWaConvStats({ total: waTotal, byBot: waByBot, byTeam: waByTeam, closed: waClosed, daily: waDaily })
+
+      // WA team ranking by closed conversations
+      const waRankMap: Record<string, number> = {}
+      waConvs.filter(c => c.status === 'closed' && c.assigned_user_name).forEach(c => {
+        const name = c.assigned_user_name!
+        waRankMap[name] = (waRankMap[name] || 0) + 1
+      })
+      setWaTeamRanking(Object.entries(waRankMap).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5))
 
       const alreadySetup = loadedCycles.some(c => ['setup','draft','active','completed','released'].includes(c.status ?? ''))
       if (!alreadySetup) setShowSetup(true)
@@ -606,7 +656,7 @@ export default function GestorHome() {
         )}
 
         {/* Modals */}
-        {showModal && <CampaignGeneratorModal isOpen={showModal} onClose={() => setShowModal(false)} onSuccess={() => { load(); setShowModal(false) }} initialStep={showModalAtStep} institutionId={institutionId} />}
+        {showModal && <CampaignGeneratorModal isOpen={showModal} onClose={() => setShowModal(false)} onApply={() => { load(); setShowModal(false) }} institutionId={institutionId} institutionName={user?.institution_name || 'Escola'} openAtStep={showModalAtStep} />}
         {showSetup && <SchoolSetupModal institutionId={institutionId} initialStep={setupInitialStep} onComplete={() => { setShowSetup(false); load() }} />}
       </div>
     )
@@ -955,36 +1005,74 @@ export default function GestorHome() {
         </SectionCard>
 
         {/* Ranking de usuários */}
-        <SectionCard title="Ranking da Equipe" subtitle="Por matrículas confirmadas" icon={<Trophy />} iconBg="#FEF3C7" iconColor="#F59E0B" action={() => navigate('/reports')} actionLabel="Ver relatórios">
+        <SectionCard title="Ranking da Equipe" subtitle={rankingMode === 'matriculas' ? 'Por matrículas confirmadas' : 'Por atendimentos WhatsApp'} icon={<Trophy />} iconBg="#FEF3C7" iconColor="#F59E0B" action={() => navigate('/reports')} actionLabel="Ver relatórios">
+          <div style={{ display: 'flex', gap: 4, marginBottom: 12, background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
+            {(['matriculas', 'whatsapp'] as const).map(mode => (
+              <button key={mode} onClick={() => setRankingMode(mode)} style={{ flex: 1, padding: '5px 0', borderRadius: 6, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', background: rankingMode === mode ? '#fff' : 'transparent', color: rankingMode === mode ? '#1e2d6b' : '#94a3b8', boxShadow: rankingMode === mode ? '0 1px 4px rgba(0,0,0,0.08)' : 'none' }}>
+                {mode === 'matriculas' ? 'Matrículas' : 'WhatsApp'}
+              </button>
+            ))}
+          </div>
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{[...Array(4)].map((_, i) => <div key={i} style={{ height: 44, borderRadius: 8, background: '#f1f5f9' }} />)}</div>
-          ) : userRankings.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '20px 0', color: '#94a3b8' }}>
-              <Users size={28} strokeWidth={1.5} style={{ margin: '0 auto 8px' }} />
-              <p style={{ margin: 0, fontSize: 13 }}>Nenhum dado de equipe disponível</p>
-            </div>
+          ) : rankingMode === 'matriculas' ? (
+            userRankings.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px 0', color: '#94a3b8' }}>
+                <Users size={28} strokeWidth={1.5} style={{ margin: '0 auto 8px' }} />
+                <p style={{ margin: 0, fontSize: 13 }}>Nenhum dado de equipe disponível</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {userRankings.map((u, i) => {
+                  const medalColors = ['#F59E0B', '#94A3B8', '#CD7F32']
+                  const isTop = i < 3
+                  return (
+                    <div key={u.user_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, background: i === 0 ? '#FFFBEB' : '#F8FAFC', border: `1px solid ${i === 0 ? '#FDE68A' : '#F1F5F9'}` }}>
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: isTop ? medalColors[i] : '#E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        {i === 0 ? <Trophy size={13} color="#fff" /> : <span style={{ fontSize: 11, fontWeight: 700, color: isTop ? '#fff' : '#94a3b8' }}>{i + 1}</span>}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1e2d6b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.full_name}</p>
+                        <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>{u.role}</p>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: i === 0 ? '#F59E0B' : '#1e2d6b' }}>{u.enrollments_count}</p>
+                        <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>matrículas</p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {userRankings.map((u, i) => {
-                const medalColors = ['#F59E0B', '#94A3B8', '#CD7F32']
-                const isTop = i < 3
-                return (
-                  <div key={u.user_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, background: i === 0 ? '#FFFBEB' : '#F8FAFC', border: `1px solid ${i === 0 ? '#FDE68A' : '#F1F5F9'}` }}>
-                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: isTop ? medalColors[i] : '#E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      {i === 0 ? <Trophy size={13} color="#fff" /> : <span style={{ fontSize: 11, fontWeight: 700, color: isTop ? '#fff' : '#94a3b8' }}>{i + 1}</span>}
+            waTeamRanking.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px 0', color: '#94a3b8' }}>
+                <MessageCircle size={28} strokeWidth={1.5} style={{ margin: '0 auto 8px' }} />
+                <p style={{ margin: 0, fontSize: 13 }}>Nenhum atendimento fechado ainda</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {waTeamRanking.map(({ name, count }, i) => {
+                  const medalColors = ['#F59E0B', '#94A3B8', '#CD7F32']
+                  const isTop = i < 3
+                  return (
+                    <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, background: i === 0 ? '#FFFBEB' : '#F8FAFC', border: `1px solid ${i === 0 ? '#FDE68A' : '#F1F5F9'}` }}>
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: isTop ? medalColors[i] : '#E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        {i === 0 ? <Trophy size={13} color="#fff" /> : <span style={{ fontSize: 11, fontWeight: 700, color: isTop ? '#fff' : '#94a3b8' }}>{i + 1}</span>}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1e2d6b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</p>
+                        <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>atendente</p>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: i === 0 ? '#F59E0B' : '#1e2d6b' }}>{count}</p>
+                        <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>atendimentos</p>
+                      </div>
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1e2d6b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.full_name}</p>
-                      <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>{u.role}</p>
-                    </div>
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: i === 0 ? '#F59E0B' : '#1e2d6b' }}>{u.enrollments_count}</p>
-                      <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>matrículas</p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
+            )
           )}
         </SectionCard>
       </div>
@@ -995,8 +1083,8 @@ export default function GestorHome() {
         {/* WhatsApp */}
         <SectionCard title="WhatsApp" subtitle="Últimos 30 dias" icon={<MessageCircle />} iconBg="#D1FAE5" iconColor="#10B981" action={() => navigate('/whatsapp')} actionLabel="Ver central">
           {loading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{[...Array(2)].map((_, i) => <div key={i} style={{ height: 48, borderRadius: 10, background: '#f1f5f9' }} />)}</div>
-          ) : totalMessages === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 48, borderRadius: 10, background: '#f1f5f9' }} />)}</div>
+          ) : !waPhoneRecord ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '16px 0', textAlign: 'center' }}>
               <MessageCircle size={28} color="#cbd5e1" strokeWidth={1.5} />
               <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>WhatsApp não configurado ainda.</p>
@@ -1004,29 +1092,45 @@ export default function GestorHome() {
                 <Settings size={12} /> Configurar agora
               </button>
             </div>
-          ) : (
+          ) : waConvStats ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-                {[
-                  { label: 'Total', value: totalMessages, color: '#1e2d6b', bg: '#f8fafc' },
-                  { label: 'Enviadas', value: waSent, color: '#10B981', bg: '#f0fdf4' },
-                  { label: 'Recebidas', value: waReceived, color: '#3B82F6', bg: '#eff6ff' },
-                ].map(({ label, value, color, bg }) => (
-                  <div key={label} style={{ background: bg, borderRadius: 12, padding: 12, textAlign: 'center' }}>
-                    <p style={{ margin: '0 0 4px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
-                    <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color }}>{fmt(value)}</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                {([
+                  { label: 'Conversas', value: waConvStats.total, color: '#1e2d6b', bg: '#f8fafc', pct: null as number | null },
+                  { label: 'Pelo robô', value: waConvStats.byBot, color: '#8B5CF6', bg: '#F5F3FF', pct: waConvStats.total > 0 ? Math.round((waConvStats.byBot / waConvStats.total) * 100) : 0 },
+                  { label: 'Pela equipe', value: waConvStats.byTeam, color: '#3B82F6', bg: '#EFF6FF', pct: waConvStats.total > 0 ? Math.round((waConvStats.byTeam / waConvStats.total) * 100) : 0 },
+                  { label: 'Fechadas', value: waConvStats.closed, color: '#10B981', bg: '#F0FDF4', pct: waConvStats.total > 0 ? Math.round((waConvStats.closed / waConvStats.total) * 100) : 0 },
+                ]).map(({ label, value, color, bg, pct }) => (
+                  <div key={label} style={{ background: bg, borderRadius: 10, padding: '10px 12px' }}>
+                    <p style={{ margin: '0 0 2px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
+                    <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color }}>{value}{pct !== null ? <span style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8', marginLeft: 4 }}>({pct}%)</span> : null}</p>
                   </div>
                 ))}
               </div>
-              <div style={{ background: '#f0fdf4', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Zap size={14} color="#10B981" />
-                <p style={{ margin: 0, fontSize: 12, color: '#065f46' }}>
-                  Taxa de resposta: <strong>{totalMessages > 0 ? ((waReceived / totalMessages) * 100).toFixed(0) : 0}%</strong> das mensagens são inbound
-                </p>
+              <div>
+                <p style={{ margin: '0 0 6px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Conversas — últimos 7 dias</p>
+                <ResponsiveContainer width="100%" height={72}>
+                  <BarChart data={waConvStats.daily} margin={{ top: 0, right: 0, bottom: 0, left: -28 }}>
+                    <XAxis dataKey="day" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ borderRadius: 8, fontSize: 11, border: '1px solid #e2e8f0' }} formatter={(v) => [v, 'Conversas']} />
+                    <Bar dataKey="count" fill="#10B981" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
-              <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>
-                Integração Meta API em breve — dados de atendentes, tempo de resposta e conversões por canal.
-              </p>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                {waAvgResponse !== null ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F0FDF4', borderRadius: 8, padding: '5px 10px' }}>
+                    <Clock size={12} color="#10B981" />
+                    <p style={{ margin: 0, fontSize: 11, color: '#065f46' }}>Resp. média: <strong>{waAvgResponse < 60 ? `${waAvgResponse}min` : `${Math.round(waAvgResponse / 60)}h`}</strong></p>
+                  </div>
+                ) : <span />}
+                <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>{waPhoneRecord.display_name || waPhoneRecord.phone_number}</p>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '16px 0', textAlign: 'center' }}>
+              <MessageCircle size={28} color="#10B981" strokeWidth={1.5} />
+              <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>Nenhuma conversa nos últimos 30 dias.</p>
             </div>
           )}
         </SectionCard>
