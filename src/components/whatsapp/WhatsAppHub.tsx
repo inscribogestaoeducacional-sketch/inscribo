@@ -536,14 +536,14 @@ function MessageBubble({ msg, onImageClick, instanceName }: { msg: Message; onIm
         maxWidth: '100%',
         padding: '9px 13px',
         background: isMe
-          ? 'linear-gradient(135deg, #1A2B4A 0%, #243B60 100%)'
+          ? 'linear-gradient(135deg, #0d9488 0%, #0ea5a0 100%)'
           : '#FFFFFF',
         color: isMe ? '#fff' : '#1A2B4A',
         borderRadius: isMe ? '18px 4px 18px 18px' : '4px 18px 18px 18px',
-        border: isMe ? 'none' : '1px solid #E6F7F5',
+        border: isMe ? 'none' : '1px solid #e2f5f3',
         boxShadow: isMe
-          ? '0 2px 8px rgba(26,43,74,0.25)'
-          : '0 1px 4px rgba(0,168,150,0.08)',
+          ? '0 2px 10px rgba(13,148,136,0.30)'
+          : '0 1px 4px rgba(0,0,0,0.06)',
         position: 'relative',
       }}>
         {isMe && msg.senderName && (
@@ -635,6 +635,10 @@ export default function WhatsAppHub() {
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [showContactInfo, setShowContactInfo] = useState(true)
   const [collapseHistory, setCollapseHistory] = useState(true)
+  const [collapseContact, setCollapseContact] = useState(false)
+  const [collapseAtendimento, setCollapseAtendimento] = useState(false)
+  const [collapseLead, setCollapseLead] = useState(false)
+  const [collapseAvaliacao, setCollapseAvaliacao] = useState(true)
   const [sendError, setSendError] = useState<string | null>(null)
   const [recorderState, setRecorderState] = useState<'idle' | 'recording' | 'preview'>('idle')
   const [recordingSeconds, setRecordingSeconds] = useState(0)
@@ -2025,6 +2029,14 @@ export default function WhatsAppHub() {
 
   return (
     <>
+      <style>{`
+        .wa-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .wa-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .wa-scrollbar::-webkit-scrollbar-thumb { background: #b2e8e2; border-radius: 9999px; }
+        .wa-scrollbar::-webkit-scrollbar-thumb:hover { background: #0d9488; }
+        .wa-scrollbar { scrollbar-width: thin; scrollbar-color: #b2e8e2 transparent; }
+      `}</style>
+
       {/* Lightbox */}
       {lightboxUrl && (
         <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setLightboxUrl(null)}>
@@ -2324,7 +2336,7 @@ export default function WhatsAppHub() {
           </div>
 
           {/* Conversation list */}
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div className="wa-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
             {filteredConvs.length === 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 120, textAlign: 'center', padding: '0 16px' }}>
                 <p style={{ fontSize: 12, color: '#94A3B8' }}>Nenhuma conversa encontrada</p>
@@ -2605,7 +2617,7 @@ export default function WhatsAppHub() {
                   </button>
                 )}
                 <div style={{ position: 'relative' }}>
-                  <div className={activeConv.avatarColor} style={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', fontSize: 14, fontWeight: 700, color: '#fff' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', fontSize: 14, fontWeight: 700, color: '#fff', background: activeConv.profile_picture_url ? 'transparent' : getAvatarBgColor(activeConv.name), boxShadow: '0 2px 8px rgba(13,148,136,0.2)' }}>
                     {activeConv.profile_picture_url ? (
                       <img src={activeConv.profile_picture_url} alt={activeConv.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : activeConv.isGroup ? (
@@ -2710,7 +2722,7 @@ export default function WhatsAppHub() {
 
           {/* Messages area + Composer — hidden in contacts view */}
           {mainView !== 'contacts' && <>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 2, backgroundImage: 'radial-gradient(circle at 1px 1px, #D1FAE5 1px, transparent 0)', backgroundSize: '24px 24px', backgroundColor: '#FAFFFE' }}>
+          <div className="wa-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 2, backgroundImage: 'radial-gradient(circle at 1px 1px, #ccf0ec 1px, transparent 0)', backgroundSize: '24px 24px', backgroundColor: '#f7fefe' }}>
             {!activeConv && conversations.length === 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
                 <div style={{ width: 72, height: 72, background: '#E6F7F5', border: '2px solid #B2E8E2', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
@@ -3030,20 +3042,20 @@ export default function WhatsAppHub() {
 
             {/* ── Detalhes tab ── */}
             {rightPanelTab === 'details' && (
-              <div style={{ flex: 1, overflowY: 'auto' }}>
+              <div className="wa-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
 
                 {/* Concluir / Sair buttons */}
                 {activeConv.status !== 'closed' && (
-                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #D1FAE5', background: '#F0FDFB', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ padding: '10px 12px', borderBottom: '1px solid #e2f5f3', background: '#f0fdfb', display: 'flex', flexDirection: 'column', gap: 7 }}>
                     <button onClick={handleCloseConversation}
-                      style={{ width: '100%', padding: '11px 0', fontSize: 13, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #00A896 0%, #0DD3BF 100%)', border: 'none', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 14px rgba(0,168,150,0.35)', transition: 'all 0.2s' }}
-                      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(0,168,150,0.45)' }}
-                      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,168,150,0.35)' }}>
+                      style={{ width: '100%', padding: '10px 0', fontSize: 13, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 3px 10px rgba(13,148,136,0.35)', transition: 'all 0.2s' }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 5px 16px rgba(13,148,136,0.45)' }}
+                      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 3px 10px rgba(13,148,136,0.35)' }}>
                       ✅ Concluir Atendimento
                     </button>
                     {activeConv.assigned_user_id && (
                       <button onClick={handleLeaveConversation}
-                        style={{ width: '100%', padding: '9px 0', fontSize: 12, fontWeight: 600, color: '#92400E', background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)', border: '1px solid #FCD34D', borderRadius: 12, cursor: 'pointer', transition: 'all 0.2s' }}
+                        style={{ width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, color: '#92400E', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 10, cursor: 'pointer', transition: 'all 0.2s' }}
                         onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
                         onMouseLeave={e => (e.currentTarget.style.opacity = '1')}>
                         🚪 Sair do Atendimento
@@ -3052,363 +3064,400 @@ export default function WhatsAppHub() {
                   </div>
                 )}
 
-                {/* Contact header */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 16px 20px', borderBottom: '1px solid #E6F7F5', background: 'linear-gradient(180deg, #F0FDFB 0%, #FFFFFF 100%)' }}>
-                  <div style={{ width: 68, height: 68, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, overflow: 'hidden', fontSize: 26, fontWeight: 700, color: '#fff', background: activeConv.profile_picture_url ? 'transparent' : getAvatarBgColor(activeConv.name), boxShadow: '0 4px 16px rgba(0,168,150,0.35)', border: '3px solid white' }}>
-                    {activeConv.profile_picture_url ? (
-                      <img src={activeConv.profile_picture_url} alt={activeConv.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : activeConv.isGroup ? (
-                      <Users style={{ width: 28, height: 28, color: 'rgba(255,255,255,0.9)' }} />
-                    ) : (
-                      getInitials(activeConv.name)
-                    )}
-                  </div>
-                  <p style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', textAlign: 'center', margin: 0 }}>{activeConv.name}</p>
-                  <p style={{ fontSize: 12, color: '#64748B', marginTop: 2, textAlign: 'center' }}>
-                    {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
-                  </p>
-                  {activeConv.contact_type && activeConv.contact_type !== 'unknown' && (
-                    <span style={{
-                      marginTop: 8, fontSize: 11, padding: '3px 12px', borderRadius: 9999, fontWeight: 500,
-                      background: activeConv.contact_type === 'lead' ? '#E6F7F5' : activeConv.contact_type === 'client' ? '#D1FAE5' : activeConv.contact_type === 'supplier' ? '#EDE9FE' : '#F1F5F9',
-                      color: activeConv.contact_type === 'lead' ? '#00A896' : activeConv.contact_type === 'client' ? '#059669' : activeConv.contact_type === 'supplier' ? '#7C3AED' : '#64748B',
-                    }}>
-                      {activeConv.contact_type === 'lead' ? 'Lead' : activeConv.contact_type === 'client' ? 'Cliente' : activeConv.contact_type === 'supplier' ? 'Fornecedor' : activeConv.contact_type}
-                    </span>
-                  )}
-                  {activeConv.isGroup && (
-                    <span style={{ marginTop: 8, fontSize: 11, padding: '3px 12px', borderRadius: 9999, fontWeight: 500, background: '#EDE9FE', color: '#7C3AED' }}>Grupo</span>
-                  )}
-                  {activeConv.labels.map(lb => (
-                    <span key={lb.text} className={`mt-1.5 text-xs px-2 py-0.5 rounded-full font-medium ${lb.color}`}>
-                      {lb.text}
-                    </span>
-                  ))}
-                  {!activeConv.isGroup && (
-                    <button
-                      onClick={() => { setShowDrawer(true) }}
-                      style={{ marginTop: 8, fontSize: 12, border: '1px solid #00A896', color: '#00A896', background: 'transparent', padding: '5px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 500, cursor: 'pointer', transition: 'background 0.15s' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#E6F7F5')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      ✏️ Editar
-                    </button>
-                  )}
-                </div>
-
-                {/* Janela de 24h */}
-                {!activeConv.isGroup && (() => {
-                  const lastIncoming = [...activeConv.messages].filter(m => m.from === 'them').slice(-1)[0]
-                  const msElapsed    = lastIncoming ? Date.now() - lastIncoming.ts.getTime() : Infinity
-                  const windowOpen   = msElapsed < 24 * 3600000
-                  const hoursLeft    = Math.max(0, 24 - msElapsed / 3600000)
-                  const hh           = Math.floor(hoursLeft)
-                  const mm           = Math.round((hoursLeft - hh) * 60)
-                  return (
-                    <div style={{ margin: '10px 12px 0', padding: '8px 12px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 8,
-                      background: windowOpen ? '#D1FAE5' : '#FEE2E2',
-                      border: `1px solid ${windowOpen ? '#A7F3D0' : '#FECACA'}` }}>
-                      <span style={{ fontSize: 14 }}>{windowOpen ? '🟢' : '🔴'}</span>
-                      <div style={{ flex: 1 }}>
-                        <p style={{ fontSize: 12, fontWeight: 700, color: windowOpen ? '#059669' : '#DC2626', margin: 0 }}>
-                          {windowOpen ? 'Janela aberta' : 'Janela expirada'}
+                {/* ── SEÇÃO: CONTATO ─────────────────────────────────────────── */}
+                <div style={{ borderBottom: '1px solid #e2f5f3' }}>
+                  <button onClick={() => setCollapseContact(v => !v)}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fefd', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#edfaf8')}
+                    onMouseLeave={e => (e.currentTarget.style.background = '#f8fefd')}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Contato</span>
+                    {collapseContact
+                      ? <ChevronRight style={{ width: 14, height: 14, color: '#0d9488' }} />
+                      : <ChevronDown style={{ width: 14, height: 14, color: '#0d9488' }} />}
+                  </button>
+                  {!collapseContact && (
+                    <div style={{ padding: '0 0 12px' }}>
+                      {/* Avatar + name + phone */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 16px 12px', background: 'linear-gradient(180deg, #f0fdfb 0%, #ffffff 100%)' }}>
+                        <div style={{ width: 64, height: 64, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10, overflow: 'hidden', fontSize: 24, fontWeight: 700, color: '#fff', background: activeConv.profile_picture_url ? 'transparent' : getAvatarBgColor(activeConv.name), boxShadow: '0 3px 12px rgba(13,148,136,0.3)', border: '2.5px solid white' }}>
+                          {activeConv.profile_picture_url
+                            ? <img src={activeConv.profile_picture_url} alt={activeConv.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            : activeConv.isGroup
+                            ? <Users style={{ width: 26, height: 26, color: 'rgba(255,255,255,0.9)' }} />
+                            : getInitials(activeConv.name)}
+                        </div>
+                        <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', textAlign: 'center', margin: 0 }}>{activeConv.name}</p>
+                        <p style={{ fontSize: 12, color: '#64748B', marginTop: 2, textAlign: 'center' }}>
+                          {activeConv.isGroup ? 'Grupo WhatsApp' : activeConv.phone}
                         </p>
-                        <p style={{ fontSize: 11, color: windowOpen ? '#065F46' : '#991B1B', margin: 0 }}>
-                          {windowOpen
-                            ? `Expira em ${hh}h ${mm}min`
-                            : 'Use template para iniciar'}
-                        </p>
+                        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                          {activeConv.contact_type && activeConv.contact_type !== 'unknown' && (
+                            <span style={{
+                              fontSize: 11, padding: '2px 10px', borderRadius: 9999, fontWeight: 600,
+                              background: activeConv.contact_type === 'lead' ? '#e6f7f5' : activeConv.contact_type === 'client' ? '#d1fae5' : activeConv.contact_type === 'supplier' ? '#ede9fe' : '#f1f5f9',
+                              color: activeConv.contact_type === 'lead' ? '#0d9488' : activeConv.contact_type === 'client' ? '#059669' : activeConv.contact_type === 'supplier' ? '#7C3AED' : '#64748B',
+                            }}>
+                              {activeConv.contact_type === 'lead' ? 'Nova Família' : activeConv.contact_type === 'client' ? 'Cliente' : activeConv.contact_type === 'supplier' ? 'Fornecedor' : activeConv.contact_type}
+                            </span>
+                          )}
+                          {activeConv.isGroup && (
+                            <span style={{ fontSize: 11, padding: '2px 10px', borderRadius: 9999, fontWeight: 600, background: '#ede9fe', color: '#7C3AED' }}>Grupo</span>
+                          )}
+                          {activeConv.labels.map(lb => (
+                            <span key={lb.text} className={`text-xs px-2 py-0.5 rounded-full font-medium ${lb.color}`}>{lb.text}</span>
+                          ))}
+                        </div>
+                        {!activeConv.isGroup && (
+                          <button onClick={() => { setEditingContact(v => !v); if (!editingContact) setEditForm({ name: activeConv.name, contact_type: activeConv.contact_type || '', notes: '' }) }}
+                            style={{ marginTop: 8, fontSize: 11, border: '1px solid #d1fae5', color: '#0d9488', background: 'transparent', padding: '4px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s' }}
+                            onMouseEnter={e => (e.currentTarget.style.background = '#e6f7f5')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                            ✏️ Editar contato
+                          </button>
+                        )}
                       </div>
-                      {!windowOpen && (
-                        <button
-                          onClick={() => setShowTemplateModal(true)}
-                          style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 8, background: '#DC2626', color: '#fff', border: 'none', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}
-                        >
-                          Enviar template
-                        </button>
+
+                      {/* Inline edit form */}
+                      {editingContact && (
+                        <div style={{ padding: '0 12px 12px' }}>
+                          <div style={{ background: '#f0fdfb', borderRadius: 10, padding: '10px 12px', border: '1px solid #d1fae5', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 3 }}>Nome</label>
+                              <input value={editForm.name} onChange={e => setEditForm(f => ({...f, name: e.target.value}))}
+                                style={{ width: '100%', padding: '7px 9px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 3 }}>Tipo</label>
+                              <select value={editForm.contact_type} onChange={e => setEditForm(f => ({...f, contact_type: e.target.value}))}
+                                style={{ width: '100%', padding: '7px 9px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}>
+                                <option value="">Desconhecido</option>
+                                <option value="lead">Nova Família</option>
+                                <option value="client">Cliente</option>
+                                <option value="supplier">Fornecedor</option>
+                                <option value="other">Outro</option>
+                              </select>
+                            </div>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button onClick={async () => {
+                                if (!activeId || !user?.institution_id) return
+                                if (editForm.name && editForm.name !== activeConv.name) {
+                                  setConversations(prev => prev.map(c => c.id === activeId ? {...c, name: editForm.name} : c))
+                                  await supabase.from('whatsapp_conversations').update({ contact_name: editForm.name })
+                                    .eq('institution_id', user.institution_id).eq('remote_jid', rawJid(activeId))
+                                }
+                                if (editForm.contact_type && editForm.contact_type !== (activeConv.contact_type || '')) {
+                                  await DatabaseService.setConversationContactType(user.institution_id, rawJid(activeId), editForm.contact_type)
+                                  setConversations(prev => prev.map(c => c.id === activeId ? {...c, contact_type: editForm.contact_type} : c))
+                                }
+                                setEditingContact(false)
+                              }}
+                                style={{ flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600, color: '#fff', background: '#0d9488', border: 'none', borderRadius: 7, cursor: 'pointer' }}>
+                                Salvar
+                              </button>
+                              <button onClick={() => setEditingContact(false)}
+                                style={{ padding: '6px 10px', fontSize: 12, color: '#64748B', border: '1px solid #d1fae5', borderRadius: 7, background: '#fff', cursor: 'pointer' }}>
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Who is this contact? */}
+                      {!activeConv.isGroup && (!activeConv.contact_type || activeConv.contact_type === 'unknown') && !activeConv.lead_id && (
+                        <div style={{ margin: '0 12px', padding: '10px 12px', background: '#fffbeb', borderRadius: 10, border: '1px solid #fde68a' }}>
+                          <p style={{ fontSize: 12, fontWeight: 600, color: '#d97706', margin: '0 0 8px' }}>Quem é esse contato?</p>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+                            {[
+                              { key: 'lead',     label: '🎓 Nova Família', bg: '#0d9488', color: '#fff',    onClick: () => { setLeadForm(prev => ({ ...prev, responsible_name: activeConv.name !== formatPhone(activeConv.id) ? activeConv.name : '', phone: activeConv.phone })); setShowLeadModal(true) } },
+                              { key: 'client',   label: '✅ Família',       bg: '#d1fae5', color: '#059669', onClick: () => setShowClientModal(true) },
+                              { key: 'supplier', label: '🏢 Fornecedor',    bg: '#ede9fe', color: '#7C3AED', onClick: () => handleContactType('supplier') },
+                              { key: 'other',    label: 'Outro',            bg: '#f1f5f9', color: '#64748B', onClick: () => handleContactType('other') },
+                            ].map(opt => (
+                              <button key={opt.key} onClick={opt.onClick}
+                                style={{ padding: '7px 5px', fontSize: 11, fontWeight: 500, background: '#fff', color: '#64748B', border: '1px solid #e2f5f3', borderRadius: 7, cursor: 'pointer', transition: 'all 0.15s', textAlign: 'center' }}
+                                onMouseEnter={e => { e.currentTarget.style.background = opt.bg; e.currentTarget.style.color = opt.color; e.currentTarget.style.borderColor = opt.bg }}
+                                onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = '#64748B'; e.currentTarget.style.borderColor = '#e2f5f3' }}>
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
-                  )
-                })()}
-
-                {/* Inline edit form */}
-                {editingContact && (
-                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #D1FAE5', background: '#F0FDFB' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 4 }}>Nome</label>
-                        <input value={editForm.name} onChange={e => setEditForm(f => ({...f, name: e.target.value}))}
-                          style={{ width: '100%', padding: '8px 10px', fontSize: 12, background: '#FFFFFF', border: '1px solid #D1FAE5', borderRadius: 8, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 4 }}>Tipo</label>
-                        <select value={editForm.contact_type} onChange={e => setEditForm(f => ({...f, contact_type: e.target.value}))}
-                          style={{ width: '100%', padding: '8px 10px', fontSize: 12, background: '#FFFFFF', border: '1px solid #D1FAE5', borderRadius: 8, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}>
-                          <option value="">Desconhecido</option>
-                          <option value="lead">Lead</option>
-                          <option value="client">Cliente</option>
-                          <option value="supplier">Fornecedor</option>
-                          <option value="other">Outro</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-                      <button onClick={async () => {
-                        if (!activeId || !user?.institution_id) return
-                        if (editForm.name && editForm.name !== activeConv.name) {
-                          setConversations(prev => prev.map(c => c.id === activeId ? {...c, name: editForm.name} : c))
-                          await supabase.from('whatsapp_conversations').update({ contact_name: editForm.name })
-                            .eq('institution_id', user.institution_id).eq('remote_jid', rawJid(activeId))
-                        }
-                        if (editForm.contact_type && editForm.contact_type !== (activeConv.contact_type || '')) {
-                          await DatabaseService.setConversationContactType(user.institution_id, rawJid(activeId), editForm.contact_type)
-                          setConversations(prev => prev.map(c => c.id === activeId ? {...c, contact_type: editForm.contact_type} : c))
-                        }
-                        setEditingContact(false)
-                      }}
-                        style={{ flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600, color: '#fff', background: '#00A896', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
-                        Salvar
-                      </button>
-                      <button onClick={() => setEditingContact(false)}
-                        style={{ padding: '6px 12px', fontSize: 12, color: '#64748B', border: '1px solid #D1FAE5', borderRadius: 8, background: '#fff', cursor: 'pointer' }}>
-                        Cancelar
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Who is this contact? — only for unknown non-group, non-linked contacts */}
-                {!activeConv.isGroup && (!activeConv.contact_type || activeConv.contact_type === 'unknown') && !activeConv.lead_id && (
-                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #D1FAE5', background: '#FFFBEB' }}>
-                    <p style={{ fontSize: 12, fontWeight: 600, color: '#D97706', margin: '0 0 8px' }}>Quem é esse contato?</p>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                      {[
-                        { key: 'lead',     label: '🎓 Nova Família',      bg: '#00A896', color: '#fff',    border: 'none',        onClick: () => { setLeadForm(prev => ({ ...prev, responsible_name: activeConv.name !== formatPhone(activeConv.id) ? activeConv.name : '', phone: activeConv.phone })); setShowLeadModal(true) } },
-                        { key: 'client',   label: '✅ Família da Casa',    bg: '#D1FAE5', color: '#059669', border: 'none',        onClick: () => setShowClientModal(true) },
-                        { key: 'supplier', label: '🏢 Fornecedor',         bg: '#EDE9FE', color: '#7C3AED', border: 'none',        onClick: () => handleContactType('supplier') },
-                        { key: 'other',    label: 'Outro',                 bg: '#F1F5F9', color: '#64748B', border: 'none',        onClick: () => handleContactType('other') },
-                      ].map(opt => (
-                        <button key={opt.key} onClick={opt.onClick}
-                          style={{ padding: '8px 6px', fontSize: 12, fontWeight: activeConv.contact_type === opt.key ? 700 : 500, background: activeConv.contact_type === opt.key ? opt.bg : '#FFFFFF', color: activeConv.contact_type === opt.key ? opt.color : '#64748B', border: `1px solid ${activeConv.contact_type === opt.key ? opt.bg : '#D1FAE5'}`, borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s', textAlign: 'center' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = opt.bg; e.currentTarget.style.color = opt.color; e.currentTarget.style.borderColor = opt.bg }}
-                          onMouseLeave={e => { if (activeConv.contact_type !== opt.key) { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.color = '#64748B'; e.currentTarget.style.borderColor = '#D1FAE5' } }}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Status select */}
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #D1FAE5' }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
-                    Status do atendimento
-                  </label>
-                  <select
-                    value={activeConv.status}
-                    onChange={e => handleStatusChange(e.target.value as ConvStatus)}
-                    style={{ width: '100%', padding: '8px 10px', fontSize: 12, background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 8, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}
-                  >
-                    <option value="waiting">Aguardando</option>
-                    <option value="open">Em Atendimento</option>
-                    <option value="closed">Concluído</option>
-                  </select>
-                </div>
-
-                {/* Attendant section */}
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #D1FAE5' }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
-                    Atendente
-                  </label>
-                  {transferring ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <select value={transferTarget} onChange={e => setTransferTarget(e.target.value)}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 12, background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 8, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}>
-                        <option value="">Selecionar atendente...</option>
-                        {users.filter(u => u.id !== activeConv.assigned_user_id).map(u => (
-                          <option key={u.id} value={u.id}>{u.full_name}</option>
-                        ))}
-                      </select>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button
-                          onClick={activeConv.status === 'closed' ? handleAssignFromClosed : handleTransfer}
-                          disabled={!transferTarget}
-                          style={{ flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, color: '#fff', background: '#00A896', border: 'none', borderRadius: 8, cursor: 'pointer', opacity: !transferTarget ? 0.4 : 1, transition: 'background 0.15s' }}>
-                          {activeConv.status === 'closed' ? 'Atribuir' : 'Transferir'}
-                        </button>
-                        <button onClick={() => { setTransferring(false); setTransferTarget('') }}
-                          style={{ padding: '7px 12px', fontSize: 12, color: '#64748B', border: '1px solid #D1FAE5', borderRadius: 8, background: '#fff', cursor: 'pointer' }}>
-                          Cancelar
-                        </button>
-                      </div>
-                    </div>
-                  ) : activeConv.status === 'closed' ? (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: 12, color: '#94A3B8' }}>—</span>
-                      <button onClick={() => setTransferring(true)}
-                        style={{ fontSize: 12, border: '1px solid #00A896', color: '#00A896', background: 'transparent', padding: '3px 10px', borderRadius: 8, fontWeight: 500, cursor: 'pointer', transition: 'background 0.15s' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = '#E6F7F5')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                        Atribuir
-                      </button>
-                    </div>
-                  ) : activeConv.assigned_user_id ? (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: 12, color: '#1A2B4A', fontWeight: 500 }}>{activeConv.assigned_user_name}</span>
-                      <button onClick={() => setTransferring(true)}
-                        style={{ fontSize: 12, color: '#00A896', background: 'none', border: 'none', fontWeight: 500, cursor: 'pointer', transition: 'color 0.15s' }}
-                        onMouseEnter={e => (e.currentTarget.style.color = '#007A6E')}
-                        onMouseLeave={e => (e.currentTarget.style.color = '#00A896')}>
-                        Transferir
-                      </button>
-                    </div>
-                  ) : (
-                    <button onClick={() => setTransferring(true)}
-                      style={{ width: '100%', padding: '8px 0', fontSize: 12, color: '#64748B', background: 'transparent', border: '1px dashed #D1FAE5', borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s' }}
-                      onMouseEnter={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.color = '#00A896'; e.currentTarget.style.background = '#E6F7F5' }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.color = '#64748B'; e.currentTarget.style.background = 'transparent' }}>
-                      + Atribuir atendente
-                    </button>
                   )}
                 </div>
 
-                {/* Etiquetas */}
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #D1FAE5' }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                    Etiquetas
-                  </label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {(activeConv.tags || []).map(tag => (
-                      <span key={tag} className={tagColor(tag)} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 11, padding: '3px 8px', borderRadius: 9999, fontWeight: 500, color: '#fff' }}>
-                        {tag}
-                        <button onClick={() => handleRemoveTag(tag)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)', padding: '0 0 0 2px', lineHeight: 1 }}>×</button>
-                      </span>
-                    ))}
-                    {addingTag ? (
-                      <input
-                        autoFocus
-                        value={newTag}
-                        onChange={e => setNewTag(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') handleAddTag(newTag); if (e.key === 'Escape') { setAddingTag(false); setNewTag('') } }}
-                        onBlur={() => { if (newTag.trim()) handleAddTag(newTag); else { setAddingTag(false); setNewTag('') } }}
-                        placeholder="Nova etiqueta..."
-                        style={{ fontSize: 11, padding: '3px 8px', borderRadius: 9999, border: '1px dashed #D1FAE5', background: 'transparent', color: '#1A2B4A', outline: 'none', width: 110 }}
-                        maxLength={20}
-                      />
-                    ) : (
-                      <button onClick={() => setAddingTag(true)}
-                        style={{ fontSize: 11, padding: '3px 10px', borderRadius: 9999, border: '1px dashed #D1FAE5', color: '#00A896', background: 'transparent', cursor: 'pointer', transition: 'all 0.15s' }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#E6F7F5' }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = 'transparent' }}>
-                        + Etiqueta
-                      </button>
-                    )}
-                  </div>
+                {/* ── SEÇÃO: ATENDIMENTO ─────────────────────────────────────── */}
+                <div style={{ borderBottom: '1px solid #e2f5f3' }}>
+                  <button onClick={() => setCollapseAtendimento(v => !v)}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fefd', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#edfaf8')}
+                    onMouseLeave={e => (e.currentTarget.style.background = '#f8fefd')}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Atendimento</span>
+                    {collapseAtendimento
+                      ? <ChevronRight style={{ width: 14, height: 14, color: '#0d9488' }} />
+                      : <ChevronDown style={{ width: 14, height: 14, color: '#0d9488' }} />}
+                  </button>
+                  {!collapseAtendimento && (
+                    <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+                      {/* 24h window */}
+                      {!activeConv.isGroup && (() => {
+                        const lastIncoming = [...activeConv.messages].filter(m => m.from === 'them').slice(-1)[0]
+                        const msElapsed    = lastIncoming ? Date.now() - lastIncoming.ts.getTime() : Infinity
+                        const windowOpen   = msElapsed < 24 * 3600000
+                        const hoursLeft    = Math.max(0, 24 - msElapsed / 3600000)
+                        const hh           = Math.floor(hoursLeft)
+                        const mm           = Math.round((hoursLeft - hh) * 60)
+                        return (
+                          <div style={{ padding: '8px 10px', borderRadius: 9, display: 'flex', alignItems: 'center', gap: 8, background: windowOpen ? '#d1fae5' : '#fee2e2', border: `1px solid ${windowOpen ? '#a7f3d0' : '#fecaca'}` }}>
+                            <span style={{ fontSize: 13 }}>{windowOpen ? '🟢' : '🔴'}</span>
+                            <div style={{ flex: 1 }}>
+                              <p style={{ fontSize: 11, fontWeight: 700, color: windowOpen ? '#059669' : '#dc2626', margin: 0 }}>
+                                {windowOpen ? 'Janela aberta' : 'Janela expirada'}
+                              </p>
+                              <p style={{ fontSize: 11, color: windowOpen ? '#065f46' : '#991b1b', margin: 0 }}>
+                                {windowOpen ? `Expira em ${hh}h ${mm}min` : 'Use template para iniciar'}
+                              </p>
+                            </div>
+                            {!windowOpen && (
+                              <button onClick={() => setShowTemplateModal(true)}
+                                style={{ fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 7, background: '#dc2626', color: '#fff', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
+                                Template
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })()}
+
+                      {/* Status */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Status</label>
+                        <select value={activeConv.status} onChange={e => handleStatusChange(e.target.value as ConvStatus)}
+                          style={{ width: '100%', padding: '7px 9px', fontSize: 12, background: '#f0fdfb', border: '1px solid #d1fae5', borderRadius: 8, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}>
+                          <option value="waiting">Aguardando</option>
+                          <option value="open">Em Atendimento</option>
+                          <option value="closed">Concluído</option>
+                        </select>
+                      </div>
+
+                      {/* Attendant */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Atendente</label>
+                        {transferring ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                            <select value={transferTarget} onChange={e => setTransferTarget(e.target.value)}
+                              style={{ width: '100%', padding: '7px 9px', fontSize: 12, background: '#f0fdfb', border: '1px solid #d1fae5', borderRadius: 8, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}>
+                              <option value="">Selecionar atendente...</option>
+                              {users.filter(u => u.id !== activeConv.assigned_user_id).map(u => (
+                                <option key={u.id} value={u.id}>{u.full_name}</option>
+                              ))}
+                            </select>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button onClick={activeConv.status === 'closed' ? handleAssignFromClosed : handleTransfer} disabled={!transferTarget}
+                                style={{ flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600, color: '#fff', background: '#0d9488', border: 'none', borderRadius: 7, cursor: 'pointer', opacity: !transferTarget ? 0.4 : 1 }}>
+                                {activeConv.status === 'closed' ? 'Atribuir' : 'Transferir'}
+                              </button>
+                              <button onClick={() => { setTransferring(false); setTransferTarget('') }}
+                                style={{ padding: '6px 10px', fontSize: 12, color: '#64748B', border: '1px solid #d1fae5', borderRadius: 7, background: '#fff', cursor: 'pointer' }}>
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        ) : activeConv.status === 'closed' ? (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: 12, color: '#94A3B8' }}>—</span>
+                            <button onClick={() => setTransferring(true)}
+                              style={{ fontSize: 11, border: '1px solid #0d9488', color: '#0d9488', background: 'transparent', padding: '3px 9px', borderRadius: 7, fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s' }}
+                              onMouseEnter={e => (e.currentTarget.style.background = '#e6f7f5')}
+                              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                              Atribuir
+                            </button>
+                          </div>
+                        ) : activeConv.assigned_user_id ? (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#f0fdfb', borderRadius: 8, border: '1px solid #d1fae5' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                              <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#0d9488', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                                {getInitials(activeConv.assigned_user_name || '').slice(0, 1)}
+                              </div>
+                              <span style={{ fontSize: 12, color: '#1A2B4A', fontWeight: 500 }}>{activeConv.assigned_user_name}</span>
+                            </div>
+                            <button onClick={() => setTransferring(true)}
+                              style={{ fontSize: 11, color: '#0d9488', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer' }}>
+                              Trocar
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setTransferring(true)}
+                            style={{ width: '100%', padding: '7px 0', fontSize: 12, color: '#64748B', background: 'transparent', border: '1px dashed #d1fae5', borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s' }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = '#0d9488'; e.currentTarget.style.color = '#0d9488'; e.currentTarget.style.background = '#e6f7f5' }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = '#d1fae5'; e.currentTarget.style.color = '#64748B'; e.currentTarget.style.background = 'transparent' }}>
+                            + Atribuir atendente
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Tags */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Etiquetas</label>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                          {(activeConv.tags || []).map(tag => (
+                            <span key={tag} className={tagColor(tag)} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 11, padding: '2px 7px', borderRadius: 9999, fontWeight: 500, color: '#fff' }}>
+                              {tag}
+                              <button onClick={() => handleRemoveTag(tag)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)', padding: '0 0 0 2px', lineHeight: 1 }}>×</button>
+                            </span>
+                          ))}
+                          {addingTag ? (
+                            <input autoFocus value={newTag} onChange={e => setNewTag(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') handleAddTag(newTag); if (e.key === 'Escape') { setAddingTag(false); setNewTag('') } }}
+                              onBlur={() => { if (newTag.trim()) handleAddTag(newTag); else { setAddingTag(false); setNewTag('') } }}
+                              placeholder="Nova etiqueta..."
+                              style={{ fontSize: 11, padding: '2px 7px', borderRadius: 9999, border: '1px dashed #d1fae5', background: 'transparent', color: '#1A2B4A', outline: 'none', width: 110 }}
+                              maxLength={20} />
+                          ) : (
+                            <button onClick={() => setAddingTag(true)}
+                              style={{ fontSize: 11, padding: '2px 9px', borderRadius: 9999, border: '1px dashed #d1fae5', color: '#0d9488', background: 'transparent', cursor: 'pointer', transition: 'all 0.15s' }}
+                              onMouseEnter={e => { e.currentTarget.style.borderColor = '#0d9488'; e.currentTarget.style.background = '#e6f7f5' }}
+                              onMouseLeave={e => { e.currentTarget.style.borderColor = '#d1fae5'; e.currentTarget.style.background = 'transparent' }}>
+                              + Etiqueta
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Avaliação de satisfação — only for closed conversations */}
-                {activeConv.status === 'closed' && (
-                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #D1FAE5' }}>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                      Avaliação
-                    </label>
-                    {activeConv.satisfaction_score ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#FFFBEB', borderRadius: 8, border: '1px solid #FDE68A' }}>
-                        <span style={{ fontSize: 15 }}>{'⭐'.repeat(activeConv.satisfaction_score)}</span>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: '#92400E' }}>{activeConv.satisfaction_score}/5</span>
-                      </div>
-                    ) : (
-                      <p style={{ margin: 0, fontSize: 12, color: '#94A3B8', fontStyle: 'italic' }}>Aguardando avaliação...</p>
-                    )}
-                  </div>
-                )}
-
-                {/* Lead linking — only for individual contacts */}
+                {/* ── SEÇÃO: LEAD VINCULADO ───────────────────────────────────── */}
                 {!activeConv.isGroup && (
-                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #D1FAE5' }}>
-                    {activeConv.lead_id ? (
-                      <button
-                        onClick={() => navigate(`/leads?highlight=${activeConv.lead_id}`)}
-                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 10, cursor: 'pointer', fontSize: 13, color: '#1A2B4A', fontWeight: 500, transition: 'all 0.15s' }}
-                        onMouseEnter={e => { e.currentTarget.style.background = '#E6F7F5'; e.currentTarget.style.borderColor = '#00A896' }}
-                        onMouseLeave={e => { e.currentTarget.style.background = '#F0FDFB'; e.currentTarget.style.borderColor = '#D1FAE5' }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <User style={{ width: 14, height: 14, color: '#00A896' }} />
-                          <span>Vincular a um Lead</span>
-                        </div>
-                        <ChevronRight style={{ width: 14, height: 14, color: '#94A3B8' }} />
-                      </button>
-                    ) : linkingLead ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <input
-                          autoFocus
-                          value={leadSearch}
-                          onChange={e => searchLeads(e.target.value)}
-                          placeholder="Buscar lead por nome ou tel..."
-                          style={{ width: '100%', padding: '8px 10px', fontSize: 12, background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 8, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}
-                        />
-                        {leadResults.map(l => (
-                          <button key={l.id} onClick={() => handleLinkLead(l.id)}
-                            style={{ width: '100%', textAlign: 'left', padding: '8px 10px', fontSize: 12, background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 8, cursor: 'pointer', transition: 'background 0.15s' }}
-                            onMouseEnter={e => (e.currentTarget.style.background = '#E6F7F5')}
-                            onMouseLeave={e => (e.currentTarget.style.background = '#F0FDFB')}>
-                            <p style={{ fontWeight: 600, color: '#1A2B4A', margin: 0 }}>{l.responsible_name}</p>
-                            <p style={{ color: '#64748B', margin: 0 }}>{l.student_name} · {l.grade_interest}</p>
+                  <div style={{ borderBottom: '1px solid #e2f5f3' }}>
+                    <button onClick={() => setCollapseLead(v => !v)}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fefd', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#edfaf8')}
+                      onMouseLeave={e => (e.currentTarget.style.background = '#f8fefd')}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Lead Vinculado</span>
+                      {collapseLead
+                        ? <ChevronRight style={{ width: 14, height: 14, color: '#0d9488' }} />
+                        : <ChevronDown style={{ width: 14, height: 14, color: '#0d9488' }} />}
+                    </button>
+                    {!collapseLead && (
+                      <div style={{ padding: '0 12px 12px' }}>
+                        {activeConv.lead_id ? (
+                          <button onClick={() => navigate(`/leads?highlight=${activeConv.lead_id}`)}
+                            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: '#f0fdfb', border: '1px solid #d1fae5', borderRadius: 9, cursor: 'pointer', fontSize: 12, color: '#1A2B4A', fontWeight: 500, transition: 'all 0.15s' }}
+                            onMouseEnter={e => { e.currentTarget.style.background = '#e6f7f5'; e.currentTarget.style.borderColor = '#0d9488' }}
+                            onMouseLeave={e => { e.currentTarget.style.background = '#f0fdfb'; e.currentTarget.style.borderColor = '#d1fae5' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <User style={{ width: 14, height: 14, color: '#0d9488' }} />
+                              <span>Ver Lead no CRM</span>
+                            </div>
+                            <ChevronRight style={{ width: 13, height: 13, color: '#94A3B8' }} />
                           </button>
-                        ))}
-                        <button onClick={() => { setLinkingLead(false); setLeadSearch(''); setLeadResults([]) }}
-                          style={{ fontSize: 12, color: '#64748B', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
-                          Cancelar
-                        </button>
+                        ) : linkingLead ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                            <input autoFocus value={leadSearch} onChange={e => searchLeads(e.target.value)}
+                              placeholder="Buscar lead por nome ou tel..."
+                              style={{ width: '100%', padding: '7px 9px', fontSize: 12, background: '#f0fdfb', border: '1px solid #d1fae5', borderRadius: 8, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
+                            {leadResults.map(l => (
+                              <button key={l.id} onClick={() => handleLinkLead(l.id)}
+                                style={{ width: '100%', textAlign: 'left', padding: '7px 9px', fontSize: 12, background: '#f0fdfb', border: '1px solid #d1fae5', borderRadius: 8, cursor: 'pointer', transition: 'background 0.15s' }}
+                                onMouseEnter={e => (e.currentTarget.style.background = '#e6f7f5')}
+                                onMouseLeave={e => (e.currentTarget.style.background = '#f0fdfb')}>
+                                <p style={{ fontWeight: 600, color: '#1A2B4A', margin: 0 }}>{l.responsible_name}</p>
+                                <p style={{ color: '#64748B', margin: 0 }}>{l.student_name} · {l.grade_interest}</p>
+                              </button>
+                            ))}
+                            <button onClick={() => { setLinkingLead(false); setLeadSearch(''); setLeadResults([]) }}
+                              style={{ fontSize: 12, color: '#64748B', background: 'none', border: 'none', cursor: 'pointer', padding: '3px 0' }}>
+                              Cancelar
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <button onClick={() => setLinkingLead(true)}
+                              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: '#f0fdfb', border: '1px solid #d1fae5', borderRadius: 9, cursor: 'pointer', fontSize: 12, color: '#1A2B4A', fontWeight: 500, transition: 'all 0.15s' }}
+                              onMouseEnter={e => { e.currentTarget.style.background = '#e6f7f5'; e.currentTarget.style.borderColor = '#0d9488' }}
+                              onMouseLeave={e => { e.currentTarget.style.background = '#f0fdfb'; e.currentTarget.style.borderColor = '#d1fae5' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <User style={{ width: 13, height: 13, color: '#0d9488' }} />
+                                <span>Vincular a um Lead</span>
+                              </div>
+                              <ChevronRight style={{ width: 13, height: 13, color: '#94A3B8' }} />
+                            </button>
+                            {(!activeConv.contact_type || activeConv.contact_type === 'unknown') && (
+                              <button onClick={() => { setLeadForm(prev => ({ ...prev, responsible_name: activeConv.name !== formatPhone(activeConv.id) ? activeConv.name : '', phone: activeConv.phone })); setShowLeadModal(true) }}
+                                style={{ width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, color: '#0d9488', background: 'transparent', border: '1px dashed #d1fae5', borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s' }}
+                                onMouseEnter={e => { e.currentTarget.style.background = '#e6f7f5'; e.currentTarget.style.borderColor = '#0d9488' }}
+                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#d1fae5' }}>
+                                + Criar Lead
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <button onClick={() => setLinkingLead(true)}
-                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 10, cursor: 'pointer', fontSize: 13, color: '#1A2B4A', fontWeight: 500, transition: 'all 0.15s' }}
-                        onMouseEnter={e => { e.currentTarget.style.background = '#E6F7F5'; e.currentTarget.style.borderColor = '#00A896' }}
-                        onMouseLeave={e => { e.currentTarget.style.background = '#F0FDFB'; e.currentTarget.style.borderColor = '#D1FAE5' }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <User style={{ width: 14, height: 14, color: '#00A896' }} />
-                          <span>Vincular a um Lead</span>
-                        </div>
-                        <ChevronRight style={{ width: 14, height: 14, color: '#94A3B8' }} />
-                      </button>
                     )}
                   </div>
                 )}
 
-                {/* Histórico CRM — colapsável */}
-                <div style={{ padding: '12px 16px' }}>
+                {/* ── SEÇÃO: AVALIAÇÃO ────────────────────────────────────────── */}
+                <div style={{ borderBottom: '1px solid #e2f5f3' }}>
+                  <button onClick={() => setCollapseAvaliacao(v => !v)}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fefd', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#edfaf8')}
+                    onMouseLeave={e => (e.currentTarget.style.background = '#f8fefd')}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Avaliação</span>
+                    {collapseAvaliacao
+                      ? <ChevronRight style={{ width: 14, height: 14, color: '#0d9488' }} />
+                      : <ChevronDown style={{ width: 14, height: 14, color: '#0d9488' }} />}
+                  </button>
+                  {!collapseAvaliacao && (
+                    <div style={{ padding: '0 12px 12px' }}>
+                      {activeConv.satisfaction_score ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#fffbeb', borderRadius: 8, border: '1px solid #fde68a' }}>
+                          <span style={{ fontSize: 16 }}>{'⭐'.repeat(activeConv.satisfaction_score)}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#92400E' }}>{activeConv.satisfaction_score}/5</span>
+                        </div>
+                      ) : (
+                        <p style={{ margin: 0, fontSize: 12, color: '#94A3B8', fontStyle: 'italic' }}>Sem avaliação registrada</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── SEÇÃO: HISTÓRICO CRM ────────────────────────────────────── */}
+                <div>
                   <button
                     onClick={() => {
                       const next = !collapseHistory
-                      setCollapseHistory(next ? true : false)
+                      setCollapseHistory(next)
                       if (!next && activeConv?.lead_id) loadLeadCrmEvents(activeConv.lead_id)
                     }}
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.15s' }}
-                  >
-                    <span>Histórico CRM</span>
-                    {collapseHistory ? <ChevronRight style={{ width: 14, height: 14 }} /> : <ChevronDown style={{ width: 14, height: 14 }} />}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fefd', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#edfaf8')}
+                    onMouseLeave={e => (e.currentTarget.style.background = '#f8fefd')}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Histórico CRM</span>
+                    {collapseHistory
+                      ? <ChevronRight style={{ width: 14, height: 14, color: '#0d9488' }} />
+                      : <ChevronDown style={{ width: 14, height: 14, color: '#0d9488' }} />}
                   </button>
                   {!collapseHistory && (
-                    <div style={{ marginTop: 8 }}>
+                    <div style={{ padding: '0 12px 12px' }}>
                       {!activeConv?.lead_id ? (
-                        <p style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic', textAlign: 'center', padding: '8px 0' }}>
-                          Vincular a um lead para ver histórico
+                        <p style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic', textAlign: 'center', padding: '6px 0' }}>
+                          Vincule a um lead para ver histórico
                         </p>
                       ) : leadCrmLoading ? (
-                        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0' }}>
-                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#00A896] border-t-transparent" />
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0' }}>
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#0d9488] border-t-transparent" />
                         </div>
                       ) : leadCrmEvents.length === 0 ? (
-                        <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '8px 0' }}>Sem eventos registrados</p>
+                        <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '6px 0' }}>Sem eventos registrados</p>
                       ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                           {leadCrmEvents.map((ev, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px', borderRadius: 8 }}
-                              onMouseEnter={e => (e.currentTarget.style.background = '#F0FDFB')}
+                            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '5px 7px', borderRadius: 7, cursor: 'default', transition: 'background 0.1s' }}
+                              onMouseEnter={e => (e.currentTarget.style.background = '#f0fdfb')}
                               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                               <div style={{ width: 6, height: 6, borderRadius: '50%', background: ev.color, marginTop: 5, flexShrink: 0 }} />
                               <div>
