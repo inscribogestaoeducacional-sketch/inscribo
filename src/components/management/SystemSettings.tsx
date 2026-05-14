@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import {
   Save, Upload, Building, Mail, Phone, Globe, Palette,
   MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
-  Bot, X, Plus, Check, AlertCircle, GraduationCap,
+  Bot, Users, X, Plus, Check, AlertCircle, GraduationCap,
   MapPin, FileText, DollarSign, Loader2, CheckCircle, Clock
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
@@ -383,11 +383,30 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
     off_hours_message:    'Olá! Nosso atendimento é de seg a sex das 7h às 17h. Sua mensagem foi registrada e retornaremos em breve! 👋',
     menu_message:         '',
     menu_enabled:         false,
-    menu_options:         [] as { id: string; label: string; keyword: string; assignee_id: string; assignee_name: string }[],
+    menu_options:            [] as { id: string; label: string; keyword: string; assignee_id: string; assignee_name: string }[],
+    bot_enabled:             false,
+    transfer_after_messages: 5,
+    default_assignee_id:     '',
   })
   const [flowUsers, setFlowUsers]     = useState<any[]>([])
   const [savingFlow, setSavingFlow]   = useState(false)
   const [flowSaved, setFlowSaved]     = useState(false)
+
+  // Quick replies
+  const [quickReplies, setQuickReplies] = useState<{ id: string; title: string; message: string; order_index: number }[]>([])
+  const [newQR, setNewQR]               = useState({ title: '', message: '' })
+  const [savingQR, setSavingQR]         = useState(false)
+  const [editQRId, setEditQRId]         = useState<string | null>(null)
+  const [editQRData, setEditQRData]     = useState({ title: '', message: '' })
+  // Attendants
+  const [attendants, setAttendants]     = useState<{ id: string; full_name: string; working_hours_start: string; working_hours_end: string; working_days: string[] }[]>([])
+  const [savingAtt, setSavingAtt]       = useState<string | null>(null)
+  // Business profile
+  const [bizProfile, setBizProfile]     = useState({ description: '', website: '', address: '', vertical: 'EDUCATION' })
+  const [savingBiz, setSavingBiz]       = useState(false)
+  const [bizSaved, setBizSaved]         = useState(false)
+  // Real monthly count
+  const [monthlyConvCount, setMonthlyConvCount] = useState(0)
 
   const waMountedRef = useRef(true)
   useEffect(() => {
@@ -424,6 +443,34 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
     try {
       const { data: users } = await supabase.from('users').select('id,full_name').eq('institution_id', institutionId)
       if (waMountedRef.current) setFlowUsers(users || [])
+    } catch {}
+    try {
+      const { data: qr } = await supabase.from('whatsapp_quick_replies')
+        .select('id,title,message,order_index')
+        .eq('institution_id', institutionId)
+        .order('order_index', { ascending: true })
+      if (waMountedRef.current) setQuickReplies(qr || [])
+    } catch {}
+    try {
+      const { data: atts } = await supabase.from('users')
+        .select('id,full_name,working_hours_start,working_hours_end,working_days')
+        .eq('institution_id', institutionId)
+      if (waMountedRef.current) setAttendants((atts || []).map((a: any) => ({
+        id: a.id,
+        full_name: a.full_name,
+        working_hours_start: a.working_hours_start || '08:00',
+        working_hours_end:   a.working_hours_end   || '18:00',
+        working_days:        a.working_days        || ['MON','TUE','WED','THU','FRI'],
+      })))
+    } catch {}
+    try {
+      const startOfMonth = new Date()
+      startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0)
+      const { count } = await supabase.from('whatsapp_conversations')
+        .select('id', { count: 'exact', head: true })
+        .eq('institution_id', institutionId)
+        .gte('created_at', startOfMonth.toISOString())
+      if (waMountedRef.current) setMonthlyConvCount(count || 0)
     } catch {}
     if (waMountedRef.current) setLoading(false)
   }
@@ -509,6 +556,82 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
     }
   }
 
+  const handleSaveBizProfile = async () => {
+    const phoneId = metaConfig?.whatsapp_phone_id || phoneRecord?.phone_number_id
+    const token   = metaConfig?.whatsapp_token
+    if (!phoneId || !token) return
+    setSavingBiz(true)
+    try {
+      const body: Record<string, any> = { messaging_product: 'whatsapp' }
+      if (bizProfile.description) body.description = bizProfile.description
+      if (bizProfile.website)     body.websites     = [bizProfile.website]
+      if (bizProfile.address)     body.address      = bizProfile.address
+      if (bizProfile.vertical)    body.vertical     = bizProfile.vertical
+      await fetch(`https://graph.facebook.com/v19.0/${phoneId}/whatsapp_business_profile`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      setBizSaved(true); setTimeout(() => setBizSaved(false), 2500)
+    } catch (e) { console.error(e) } finally { setSavingBiz(false) }
+  }
+
+  const handleAddQR = async () => {
+    if (!newQR.title || !newQR.message) return
+    setSavingQR(true)
+    try {
+      const { data } = await supabase.from('whatsapp_quick_replies').insert({
+        institution_id: institutionId,
+        title:       newQR.title.trim(),
+        message:     newQR.message.trim(),
+        order_index: quickReplies.length,
+      }).select().single()
+      if (data) setQuickReplies(prev => [...prev, data as any])
+      setNewQR({ title: '', message: '' })
+    } catch (e) { console.error(e) } finally { setSavingQR(false) }
+  }
+
+  const handleDeleteQR = async (id: string) => {
+    try {
+      await supabase.from('whatsapp_quick_replies').delete().eq('id', id)
+      setQuickReplies(prev => prev.filter(q => q.id !== id))
+    } catch (e) { console.error(e) }
+  }
+
+  const handleUpdateQR = async () => {
+    if (!editQRId) return
+    try {
+      await supabase.from('whatsapp_quick_replies').update({ title: editQRData.title, message: editQRData.message }).eq('id', editQRId)
+      setQuickReplies(prev => prev.map(q => q.id === editQRId ? { ...q, ...editQRData } : q))
+      setEditQRId(null)
+    } catch (e) { console.error(e) }
+  }
+
+  const toggleAttendantDay = (id: string, day: string) => {
+    setAttendants(prev => prev.map(a => {
+      if (a.id !== id) return a
+      const days = a.working_days.includes(day)
+        ? a.working_days.filter(d => d !== day)
+        : [...a.working_days, day]
+      return { ...a, working_days: days }
+    }))
+  }
+
+  const updateAttendant = (id: string, key: string, value: string) => {
+    setAttendants(prev => prev.map(a => a.id === id ? { ...a, [key]: value } : a))
+  }
+
+  const handleSaveAttendantHours = async (att: typeof attendants[0]) => {
+    setSavingAtt(att.id)
+    try {
+      await supabase.from('users').update({
+        working_hours_start: att.working_hours_start,
+        working_hours_end:   att.working_hours_end,
+        working_days:        att.working_days,
+      }).eq('id', att.id)
+    } catch (e) { console.error(e) } finally { setSavingAtt(null) }
+  }
+
   const toggleDay = (d: string) => setFlow(f => ({
     ...f, working_days: f.working_days.includes(d) ? f.working_days.filter(x => x !== d) : [...f.working_days, d]
   }))
@@ -525,8 +648,9 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
       : o)
   }))
 
-  const usagePct  = Math.min(100, Math.round((usage.count / usage.limit) * 100))
+  const usagePct   = Math.min(100, Math.round((monthlyConvCount / (usage.limit || 1000)) * 100))
   const usageColor = usagePct >= 90 ? '#EF4444' : usagePct >= 70 ? '#F59E0B' : '#10B981'
+  const estimatedCost = (monthlyConvCount * 0.05).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Loader2 size={28} color="#00A896" className="animate-spin" /></div>
 
@@ -547,9 +671,17 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
             {metaConfig.whatsapp_phone_id && <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>Phone ID: {metaConfig.whatsapp_phone_id}</div>}
           </div>
           <div style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}><span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Conversas este mês</span><span style={{ fontSize: 12, fontWeight: 700, color: usageColor }}>{usage.count} / {usage.limit.toLocaleString('pt-BR')}</span></div>
-            <div style={{ height: 8, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden' }}><div style={{ height: '100%', width: `${usagePct}%`, background: usageColor, borderRadius: 999 }} /></div>
-            {usagePct >= 90 && <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: '#DC2626' }}><AlertCircle size={14} />Limite quase atingido.</div>}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Conversas este mês</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: usageColor }}>{monthlyConvCount.toLocaleString('pt-BR')} / {(usage.limit || 1000).toLocaleString('pt-BR')}</span>
+            </div>
+            <div style={{ height: 8, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${usagePct}%`, background: usageColor, borderRadius: 999 }} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+              <span style={{ fontSize: 11, color: '#94A3B8' }}>Custo estimado: <strong style={{ color: '#475569' }}>{estimatedCost}</strong> (R$ 0,05/conversa)</span>
+              {usagePct >= 90 && <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#DC2626' }}><AlertCircle size={12} />Limite quase atingido</span>}
+            </div>
           </div>
           {testResult && (
             <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 10, fontSize: 12, fontWeight: 600, background: testResult.ok ? '#F0FDF4' : '#FFF1F2', border: `1px solid ${testResult.ok ? '#BBF7D0' : '#FECDD3'}`, color: testResult.ok ? '#166534' : '#BE123C' }}>
@@ -562,6 +694,42 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
               {testing ? <><Loader2 size={14} className="animate-spin" />Testando...</> : <><RefreshCw size={14} />Testar conexão</>}
             </button>
             <button onClick={handleDisconnect} disabled={disconnecting} style={{ flex: 1, minWidth: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', background: '#FFF1F2', border: '1px solid #FECDD3', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#E11D48', cursor: 'pointer', opacity: disconnecting ? 0.6 : 1 }}><WifiOff size={15} />{disconnecting ? 'Desconectando...' : 'Desconectar'}</button>
+          </div>
+        </div>
+
+        {/* ── Perfil do WhatsApp Business ── */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+            <Building size={16} color="#64748B" />
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>🏢 Perfil do WhatsApp Business</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Descrição da empresa</label>
+              <textarea rows={2} className={inputCls} style={{ resize: 'vertical' }} value={bizProfile.description} onChange={e => setBizProfile(p => ({ ...p, description: e.target.value }))} placeholder="Escola particular com ensino de qualidade..." />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Website</label>
+                <input className={inputCls} value={bizProfile.website} onChange={e => setBizProfile(p => ({ ...p, website: e.target.value }))} placeholder="https://escola.com.br" />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Categoria</label>
+                <select className={inputCls} value={bizProfile.vertical} onChange={e => setBizProfile(p => ({ ...p, vertical: e.target.value }))}>
+                  <option value="EDUCATION">Educação</option>
+                  <option value="SCHOOL">Escola</option>
+                  <option value="EDU">Educação Geral</option>
+                  <option value="OTHER">Outro</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Endereço</label>
+              <input className={inputCls} value={bizProfile.address} onChange={e => setBizProfile(p => ({ ...p, address: e.target.value }))} placeholder="Rua X, 123 - Bairro - Cidade/UF" />
+            </div>
+            <button onClick={handleSaveBizProfile} disabled={savingBiz} style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 10, border: 'none', background: bizSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: savingBiz ? 0.7 : 1 }}>
+              {bizSaved ? <><Check size={13} />Salvo!</> : savingBiz ? 'Salvando...' : <><Save size={13} />Salvar perfil</>}
+            </button>
           </div>
         </div>
 
@@ -648,6 +816,123 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
             </>
           )}
         </div>
+
+        {/* ── Robô de atendimento ── */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Bot size={16} color="#64748B" />
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>🤖 Robô de Atendimento</span>
+            </div>
+            <button onClick={() => setFlow(f => ({ ...f, bot_enabled: !f.bot_enabled }))} style={{ width: 44, height: 24, borderRadius: 999, background: flow.bot_enabled ? '#00A896' : '#CBD5E1', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s' }}>
+              <span style={{ position: 'absolute', top: 3, left: flow.bot_enabled ? 22 : 3, width: 18, height: 18, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
+            </button>
+          </div>
+          {flow.bot_enabled && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Transferir após N mensagens</label>
+                <input type="number" min={1} max={50} className={inputCls} value={flow.transfer_after_messages} onChange={e => setFlow(f => ({ ...f, transfer_after_messages: Number(e.target.value) }))} />
+                <span style={{ fontSize: 11, color: '#94A3B8', marginTop: 4, display: 'block' }}>Mensagens sem resposta antes de transferir</span>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>Atendente padrão</label>
+                <select className={inputCls} value={flow.default_assignee_id} onChange={e => setFlow(f => ({ ...f, default_assignee_id: e.target.value }))}>
+                  <option value="">Nenhum (distribuição automática)</option>
+                  {flowUsers.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
+          {!flow.bot_enabled && (
+            <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Ative o robô para configurar respostas automáticas e distribuição de atendimentos.</p>
+          )}
+        </div>
+
+        {/* ── Respostas rápidas ── */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+            <MessageCircle size={16} color="#64748B" />
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>⚡ Respostas Rápidas</span>
+          </div>
+          {quickReplies.length === 0 && editQRId === null && (
+            <p style={{ fontSize: 12, color: '#94A3B8', marginBottom: 14 }}>Nenhuma resposta rápida cadastrada. Adicione abaixo.</p>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+            {quickReplies.map(qr => (
+              <div key={qr.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#F8FAFC', borderRadius: 10, padding: '10px 12px', border: '1px solid #E2E8F0' }}>
+                {editQRId === qr.id ? (
+                  <>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <input className={inputCls} value={editQRData.title} onChange={e => setEditQRData(d => ({ ...d, title: e.target.value }))} placeholder="Título" />
+                      <textarea rows={2} className={inputCls} style={{ resize: 'vertical' }} value={editQRData.message} onChange={e => setEditQRData(d => ({ ...d, message: e.target.value }))} placeholder="Mensagem" />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <button onClick={handleUpdateQR} style={{ padding: '5px 10px', background: '#00A896', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}><Check size={13} /></button>
+                      <button onClick={() => setEditQRId(null)} style={{ padding: '5px 10px', background: '#F1F5F9', color: '#64748B', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}><X size={13} /></button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#00A896' }}>/{qr.title}</span>
+                      <p style={{ fontSize: 12, color: '#64748B', margin: '4px 0 0', lineHeight: 1.4 }}>{qr.message}</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                      <button onClick={() => { setEditQRId(qr.id); setEditQRData({ title: qr.title, message: qr.message }) }} style={{ padding: '5px 8px', background: '#F1F5F9', color: '#64748B', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>✏</button>
+                      <button onClick={() => handleDeleteQR(qr.id)} style={{ padding: '5px 8px', background: '#FFF1F2', color: '#E11D48', border: '1px solid #FECDD3', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}><X size={12} /></button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: 14, border: '1px dashed #CBD5E1', borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase' }}>Nova resposta rápida</p>
+            <input className={inputCls} value={newQR.title} onChange={e => setNewQR(q => ({ ...q, title: e.target.value }))} placeholder="Título (ex: preco, matricula)" />
+            <textarea rows={2} className={inputCls} style={{ resize: 'vertical' }} value={newQR.message} onChange={e => setNewQR(q => ({ ...q, message: e.target.value }))} placeholder="Mensagem que será enviada..." />
+            <button onClick={handleAddQR} disabled={!newQR.title || !newQR.message || savingQR} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', borderRadius: 8, border: 'none', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (!newQR.title || !newQR.message || savingQR) ? 0.5 : 1 }}>
+              <Plus size={14} />{savingQR ? 'Salvando...' : 'Adicionar resposta rápida'}
+            </button>
+          </div>
+        </div>
+
+        {/* ── Horário por atendente ── */}
+        {attendants.length > 0 && (
+          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+              <Users size={16} color="#64748B" />
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>👤 Horário por Atendente</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {attendants.map(att => (
+                <div key={att.id} style={{ padding: 14, background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 10 }}>{att.full_name}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 10 }}>
+                    {FLOW_DAYS.map(d => (
+                      <button key={d.id} onClick={() => toggleAttendantDay(att.id, d.id)} style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: `2px solid ${att.working_days.includes(d.id) ? '#00A896' : '#E2E8F0'}`, background: att.working_days.includes(d.id) ? '#E6F7F5' : '#fff', color: att.working_days.includes(d.id) ? '#00A896' : '#94A3B8' }}>
+                        {d.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'flex-end' }}>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Início</label>
+                      <input type="time" className={inputCls} value={att.working_hours_start} onChange={e => updateAttendant(att.id, 'working_hours_start', e.target.value)} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Fim</label>
+                      <input type="time" className={inputCls} value={att.working_hours_end} onChange={e => updateAttendant(att.id, 'working_hours_end', e.target.value)} />
+                    </div>
+                    <button onClick={() => handleSaveAttendantHours(att)} disabled={savingAtt === att.id} style={{ padding: '8px 14px', background: '#00A896', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingAtt === att.id ? 0.6 : 1 }}>
+                      {savingAtt === att.id ? '...' : <Save size={13} />}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Salvar fluxo ── */}
         <button onClick={handleSaveFlow} disabled={savingFlow}
