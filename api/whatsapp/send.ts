@@ -8,17 +8,97 @@ const supabase = createClient(
 
 const GRAPH_URL = 'https://graph.facebook.com/v19.0'
 
+type MsgType = 'text' | 'image' | 'video' | 'audio' | 'document'
+
+// ── Upload base64 to Supabase Storage → return public URL ────────────────────
+async function uploadToStorage(
+  base64: string,
+  mimetype: string,
+  filename: string,
+  institutionId: string
+): Promise<string> {
+  const buffer   = Buffer.from(base64, 'base64')
+  const ext      = mimetype.split('/')[1]?.split(';')[0]?.replace('jpeg', 'jpg') || 'bin'
+  const safeName = (filename || `upload.${ext}`).replace(/[^a-zA-Z0-9._-]/g, '_')
+  const path     = `${institutionId}/${Date.now()}_${safeName}`
+
+  const { error } = await supabase.storage
+    .from('whatsapp-media')
+    .upload(path, buffer, { contentType: mimetype, upsert: false })
+
+  if (error) throw new Error(`Storage upload falhou: ${error.message}`)
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('whatsapp-media')
+    .getPublicUrl(path)
+
+  return publicUrl
+}
+
+// ── Build Meta Cloud API payload per message type ────────────────────────────
+function buildPayload(
+  to: string,
+  type: MsgType,
+  opts: { message?: string; mediaUrl?: string; caption?: string; filename?: string }
+): object {
+  const base = { messaging_product: 'whatsapp', recipient_type: 'individual', to, type }
+
+  switch (type) {
+    case 'text':
+      return { ...base, text: { body: opts.message!, preview_url: false } }
+    case 'image':
+      return { ...base, image: { link: opts.mediaUrl!, ...(opts.caption ? { caption: opts.caption } : {}) } }
+    case 'video':
+      return { ...base, video: { link: opts.mediaUrl!, ...(opts.caption ? { caption: opts.caption } : {}) } }
+    case 'audio':
+      return { ...base, audio: { link: opts.mediaUrl! } }
+    case 'document':
+      return {
+        ...base,
+        document: {
+          link: opts.mediaUrl!,
+          filename: opts.filename || 'documento',
+          ...(opts.caption ? { caption: opts.caption } : {}),
+        },
+      }
+  }
+}
+
+// ── Content preview for last_message ────────────────────────────────────────
+function contentPreview(type: MsgType, message?: string, caption?: string, filename?: string): string {
+  if (type === 'text')     return message!
+  if (type === 'image')    return caption || '[Imagem]'
+  if (type === 'video')    return caption || '[Vídeo]'
+  if (type === 'audio')    return '[Áudio]'
+  if (type === 'document') return filename ? `[Documento] ${filename}` : '[Documento]'
+  return '[Mídia]'
+}
+
+// ── Handler ──────────────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end()
 
-  const { institution_id, to, text, conversation_id } = req.body
+  const {
+    institution_id,
+    to,
+    type         = 'text' as MsgType,
+    message,               // text only
+    mediaUrl,              // pre-uploaded public URL (image/video/audio/document)
+    base64,                // alternative: raw base64 file (frontend sends this)
+    mimetype,              // required when base64 provided
+    filename    = '',
+    caption     = '',
+    conversation_id,
+  } = req.body
 
-  if (!institution_id || !to || !text) {
-    return res.status(400).json({ error: 'institution_id, to e text são obrigatórios' })
-  }
+  // ── Validation ──
+  if (!institution_id || !to)              return res.status(400).json({ error: 'institution_id e to são obrigatórios' })
+  if (type === 'text' && !message)         return res.status(400).json({ error: 'message é obrigatório para type=text' })
+  if (type !== 'text' && !mediaUrl && !base64)
+    return res.status(400).json({ error: `mediaUrl ou base64 é obrigatório para type=${type}` })
 
   try {
-    // Busca o phone_number_id ativo da escola
+    // ── Fetch phone_number_id ──
     const { data: phoneRecord, error: phoneErr } = await supabase
       .from('whatsapp_phone_numbers')
       .select('phone_number_id')
@@ -30,63 +110,72 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Número WhatsApp não configurado para esta escola' })
     }
 
-    // Envia via Meta Cloud API usando token global
-    const response = await fetch(`${GRAPH_URL}/${phoneRecord.phone_number_id}/messages`, {
-      method: 'POST',
+    // ── Resolve media URL (upload if base64 provided) ──
+    let resolvedMediaUrl: string | undefined = mediaUrl
+    if (type !== 'text' && !resolvedMediaUrl && base64 && mimetype) {
+      resolvedMediaUrl = await uploadToStorage(
+        base64,
+        mimetype,
+        filename || `media.${mimetype.split('/')[1] || 'bin'}`,
+        institution_id
+      )
+    }
+
+    // ── Send via Meta Cloud API ──
+    const payload = buildPayload(to, type as MsgType, {
+      message,
+      mediaUrl: resolvedMediaUrl,
+      caption:  caption || undefined,
+      filename: filename || undefined,
+    })
+
+    const metaRes = await fetch(`${GRAPH_URL}/${phoneRecord.phone_number_id}/messages`, {
+      method:  'POST',
       headers: {
         'Authorization': `Bearer ${process.env.WA_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
+        'Content-Type':  'application/json',
       },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to,
-        type: 'text',
-        text: { body: text, preview_url: false }
-      })
+      body: JSON.stringify(payload),
     })
 
-    const data = await response.json()
-
-    if (!response.ok) {
-      console.error('❌ Meta API error:', data)
-      return res.status(500).json({ error: data.error?.message || 'Erro ao enviar mensagem' })
+    const metaData = await metaRes.json()
+    if (!metaRes.ok) {
+      console.error('❌ Meta API error:', metaData)
+      return res.status(500).json({ error: metaData.error?.message || 'Erro ao enviar mensagem' })
     }
 
-    const wamid = data.messages?.[0]?.id
+    const wamid   = metaData.messages?.[0]?.id
+    const preview = contentPreview(type as MsgType, message, caption, filename)
 
-    // Salva a mensagem enviada no Supabase
+    // ── Persist message ──
     await supabase.from('whatsapp_messages').insert({
       institution_id,
-      remote_jid:    to,
-      message_id:    wamid,
-      instance_name: 'cloud-api',
-      content:       text,
-      message_type:  'text',
-      from_me:       true,
-      status:        'sent',
-      timestamp:     new Date().toISOString(),
+      remote_jid:     to,
+      message_id:     wamid,
+      instance_name:  'cloud-api',
+      content:        type === 'text' ? message : (caption || preview),
+      message_type:   type,
+      media_url:      resolvedMediaUrl || null,
+      from_me:        true,
+      status:         'sent',
+      direction:      'outbound',
+      timestamp:      new Date().toISOString(),
+      ...(conversation_id ? { conversation_id } : {}),
     })
 
-    // Atualiza last_message da conversa
-    // Usa conversation_id quando disponível; fallback para institution_id + remote_jid
+    // ── Update conversation last_message ──
     const convUpdate = supabase
       .from('whatsapp_conversations')
-      .update({
-        last_message:    text,
-        last_message_at: new Date().toISOString(),
-      })
+      .update({ last_message: preview, last_message_at: new Date().toISOString() })
 
-    if (conversation_id) {
-      await convUpdate.eq('id', conversation_id)
-    } else {
-      await convUpdate.eq('institution_id', institution_id).eq('remote_jid', to)
-    }
+    await (conversation_id
+      ? convUpdate.eq('id', conversation_id)
+      : convUpdate.eq('institution_id', institution_id).eq('remote_jid', to))
 
     return res.status(200).json({ success: true, wamid })
 
-  } catch (err) {
+  } catch (err: any) {
     console.error('❌ Send error:', err)
-    return res.status(500).json({ error: 'Erro interno' })
+    return res.status(500).json({ error: err.message || 'Erro interno' })
   }
 }

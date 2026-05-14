@@ -1,0 +1,124 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+const GRAPH_URL = 'https://graph.facebook.com/v19.0'
+
+/**
+ * POST /api/whatsapp/send-template
+ *
+ * Body:
+ *   institution_id  UUID
+ *   to              string  — destination phone (digits only, e.g. "5583991110001")
+ *   template_name   string  — approved template name in Meta Business Manager
+ *   language        string  — BCP-47 code, default "pt_BR"
+ *   components      array   — Meta template components with variable parameters
+ *   conversation_id UUID?   — optional, used for conversation update
+ *
+ * components example (BODY with variables):
+ *   [{ type: "body", parameters: [{ type: "text", text: "João" }] }]
+ *
+ * components example (HEADER image + BODY):
+ *   [
+ *     { type: "header", parameters: [{ type: "image", image: { link: "https://..." } }] },
+ *     { type: "body",   parameters: [{ type: "text", text: "João" }] }
+ *   ]
+ */
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).end()
+
+  const {
+    institution_id,
+    to,
+    template_name,
+    language       = 'pt_BR',
+    components     = [],
+    conversation_id,
+  } = req.body
+
+  if (!institution_id || !to || !template_name) {
+    return res.status(400).json({ error: 'institution_id, to e template_name são obrigatórios' })
+  }
+
+  try {
+    // ── Fetch phone_number_id ──
+    const { data: phoneRecord, error: phoneErr } = await supabase
+      .from('whatsapp_phone_numbers')
+      .select('phone_number_id')
+      .eq('institution_id', institution_id)
+      .eq('is_active', true)
+      .single()
+
+    if (phoneErr || !phoneRecord) {
+      return res.status(400).json({ error: 'Número WhatsApp não configurado para esta escola' })
+    }
+
+    // ── Build template payload ──
+    const templatePayload: any = {
+      name:     template_name,
+      language: { code: language },
+    }
+    if (Array.isArray(components) && components.length > 0) {
+      templatePayload.components = components
+    }
+
+    // ── Send via Meta Cloud API ──
+    const metaRes = await fetch(`${GRAPH_URL}/${phoneRecord.phone_number_id}/messages`, {
+      method:  'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.WA_ACCESS_TOKEN}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type:    'individual',
+        to,
+        type:              'template',
+        template:          templatePayload,
+      }),
+    })
+
+    const metaData = await metaRes.json()
+    if (!metaRes.ok) {
+      console.error('❌ Meta template error:', metaData)
+      return res.status(500).json({ error: metaData.error?.message || 'Erro ao enviar template' })
+    }
+
+    const wamid   = metaData.messages?.[0]?.id
+    const preview = `[Template: ${template_name}]`
+
+    // ── Persist message ──
+    await supabase.from('whatsapp_messages').insert({
+      institution_id,
+      remote_jid:    to,
+      message_id:    wamid,
+      instance_name: 'cloud-api',
+      content:       preview,
+      message_type:  'template',
+      from_me:       true,
+      status:        'sent',
+      direction:     'outbound',
+      timestamp:     new Date().toISOString(),
+      ...(conversation_id ? { conversation_id } : {}),
+    })
+
+    // ── Update conversation last_message ──
+    const convUpdate = supabase
+      .from('whatsapp_conversations')
+      .update({ last_message: preview, last_message_at: new Date().toISOString() })
+
+    await (conversation_id
+      ? convUpdate.eq('id', conversation_id)
+      : convUpdate.eq('institution_id', institution_id).eq('remote_jid', to))
+
+    return res.status(200).json({ success: true, wamid })
+
+  } catch (err: any) {
+    console.error('❌ Template send error:', err)
+    return res.status(500).json({ error: err.message || 'Erro interno' })
+  }
+}

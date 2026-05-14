@@ -2,8 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
 import * as crypto from 'crypto'
 
-// Desabilita o body-parser automático para que possamos ler o buffer bruto
-// necessário para a validação HMAC-SHA256 da Meta
+// Disable body-parser — raw buffer needed for HMAC-SHA256 validation
 export const config = {
   api: { bodyParser: false },
 }
@@ -13,17 +12,29 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+const GRAPH_URL = 'https://graph.facebook.com/v19.0'
+
+const MEDIA_TYPES = ['image', 'video', 'audio', 'document', 'sticker', 'voice'] as const
+type MediaType = (typeof MEDIA_TYPES)[number]
+
+// ── Read raw body buffer (required for HMAC before JSON.parse) ───────────────
 async function readRawBody(req: VercelRequest): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
-    req.on('data', chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
-    req.on('end', () => resolve(Buffer.concat(chunks)))
+    req.on('data', (chunk) =>
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    )
+    req.on('end',   () => resolve(Buffer.concat(chunks)))
     req.on('error', reject)
   })
 }
 
-// ── Envia mensagem automática via Cloud API ──────────────────────────────────
-async function sendAutoMessage(institutionId: string, to: string, text: string) {
+// ── Send automatic text message via Meta Cloud API ───────────────────────────
+async function sendAutoMessage(
+  institutionId: string,
+  to:            string,
+  text:          string
+): Promise<void> {
   try {
     const { data: phone } = await supabase
       .from('whatsapp_phone_numbers')
@@ -32,14 +43,14 @@ async function sendAutoMessage(institutionId: string, to: string, text: string) 
       .eq('is_active', true)
       .single()
 
-    if (!phone?.phone_number_id) return
+    if (!phone?.phone_number_id || !process.env.WA_ACCESS_TOKEN) return
 
-    const token = process.env.WA_ACCESS_TOKEN
-    if (!token) return
-
-    await fetch(`https://graph.facebook.com/v19.0/${phone.phone_number_id}/messages`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    const resp = await fetch(`${GRAPH_URL}/${phone.phone_number_id}/messages`, {
+      method:  'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.WA_ACCESS_TOKEN}`,
+        'Content-Type':  'application/json',
+      },
       body: JSON.stringify({
         messaging_product: 'whatsapp',
         to,
@@ -47,64 +58,207 @@ async function sendAutoMessage(institutionId: string, to: string, text: string) 
         text: { body: text },
       }),
     })
+
+    if (resp.ok) {
+      const d    = await resp.json()
+      const wamid = d.messages?.[0]?.id
+      await supabase.from('whatsapp_messages').insert({
+        institution_id: institutionId,
+        remote_jid:     to,
+        message_id:     wamid,
+        instance_name:  'cloud-api',
+        content:        text,
+        message_type:   'text',
+        from_me:        true,
+        status:         'sent',
+        direction:      'outbound',
+        timestamp:      new Date().toISOString(),
+      })
+    }
   } catch (e) {
     console.error('❌ sendAutoMessage error:', e)
   }
 }
 
-// ── Lógica de fluxo automático ───────────────────────────────────────────────
-async function processFlow(
+// ── Fetch media from Meta, upload to Supabase Storage, return public URL ─────
+// Falls back to the temporary Meta URL if download/upload fails.
+async function resolveMediaUrl(
+  mediaId:       string,
   institutionId: string,
-  remoteJid: string,
-  text: string,
-  isNewConversation: boolean
-) {
-  console.log('[flow] iniciando para:', { institutionId, remoteJid, isNewConversation, text: text.slice(0, 80) })
+  mimeType:      string
+): Promise<string | null> {
+  if (!process.env.WA_ACCESS_TOKEN || !mediaId) return null
+
   try {
+    // 1. Get media metadata (temporary download URL)
+    const metaRes = await fetch(`${GRAPH_URL}/${mediaId}`, {
+      headers: { 'Authorization': `Bearer ${process.env.WA_ACCESS_TOKEN}` },
+      signal:  AbortSignal.timeout(5_000),
+    })
+    if (!metaRes.ok) return null
+
+    const meta    = await metaRes.json()
+    const tempUrl = meta.url as string | undefined
+    if (!tempUrl) return null
+
+    // 2. Download binary (skip files > 10 MB to stay within function timeout)
+    const dlRes = await fetch(tempUrl, {
+      headers: { 'Authorization': `Bearer ${process.env.WA_ACCESS_TOKEN}` },
+      signal:  AbortSignal.timeout(20_000),
+    })
+    if (!dlRes.ok) return tempUrl
+
+    const buffer = Buffer.from(await dlRes.arrayBuffer())
+    if (buffer.length > 10 * 1024 * 1024) {
+      // Too large for inline processing — return temporary URL as fallback
+      return tempUrl
+    }
+
+    // 3. Upload to Supabase Storage (permanent URL)
+    const ext         = mimeType.split('/')[1]?.split(';')[0]?.replace('jpeg', 'jpg') || 'bin'
+    const storagePath = `${institutionId}/${Date.now()}_${mediaId}.${ext}`
+
+    const { error: uploadErr } = await supabase.storage
+      .from('whatsapp-media')
+      .upload(storagePath, buffer, { contentType: mimeType, upsert: false })
+
+    if (uploadErr) {
+      console.error('❌ Storage upload error:', uploadErr.message)
+      return tempUrl // fallback
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('whatsapp-media')
+      .getPublicUrl(storagePath)
+
+    return publicUrl
+  } catch (e) {
+    console.error('❌ resolveMediaUrl error:', e)
+    return null
+  }
+}
+
+// ── Auto-link lead by phone number ───────────────────────────────────────────
+async function autoLinkLead(institutionId: string, remoteJid: string): Promise<void> {
+  try {
+    const phone   = remoteJid.replace(/@.*/, '')           // strip @s.whatsapp.net
+    const noCode  = phone.startsWith('55') ? phone.slice(2) : phone
+
+    // Try phone variants: raw, with 55, with +55, without country code
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('institution_id', institutionId)
+      .or(
+        [
+          `phone.eq.${phone}`,
+          `phone.eq.55${noCode}`,
+          `phone.eq.+55${noCode}`,
+          `phone.eq.${noCode}`,
+        ].join(',')
+      )
+      .limit(1)
+      .maybeSingle()
+
+    if (lead?.id) {
+      await supabase
+        .from('whatsapp_conversations')
+        .update({ lead_id: lead.id })
+        .eq('institution_id', institutionId)
+        .eq('remote_jid', remoteJid)
+        .is('lead_id', null) // only update if not yet linked
+    }
+  } catch (e) {
+    console.error('❌ autoLinkLead error:', e)
+  }
+}
+
+// ── Bot flow node processor (simplified sequential) ──────────────────────────
+async function processBotFlow(
+  institutionId: string,
+  remoteJid:     string,
+  _text:         string,
+  nodes:         any[]
+): Promise<void> {
+  // Send the first message-type node. Full state-machine tracking is a future enhancement.
+  for (const node of nodes) {
+    if (node.type === 'message' && node.message) {
+      await sendAutoMessage(institutionId, remoteJid, node.message)
+      break
+    }
+  }
+}
+
+// ── Full automated flow processor ───────────────────────────────────────────
+async function processFlow(
+  institutionId:     string,
+  remoteJid:         string,
+  text:              string,
+  isNewConversation: boolean
+): Promise<void> {
+  try {
+    // a) Blacklist check
+    const { data: blocked } = await supabase
+      .from('whatsapp_blacklist')
+      .select('id')
+      .eq('institution_id', institutionId)
+      .eq('phone_number', remoteJid)
+      .maybeSingle()
+
+    if (blocked) {
+      console.log('[flow] número em blacklist, ignorando:', remoteJid)
+      return
+    }
+
+    // b) Fetch flow configuration
     const { data: flow } = await supabase
       .from('whatsapp_flows')
       .select('*')
       .eq('institution_id', institutionId)
-      .single()
+      .maybeSingle()
 
     if (!flow || !flow.is_active) {
-      console.log('[flow] sem fluxo ativo, pulando')
+      console.log('[flow] sem fluxo ativo')
       return
     }
 
+    // c) Working hours check
     const tz             = flow.timezone || 'America/Fortaleza'
     const now            = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
     const dayKeys        = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
     const currentDay     = dayKeys[now.getDay()]
-    const isWorkingDay   = (flow.working_days as string[])?.includes(currentDay)
+    const isWorkingDay   = ((flow.working_days as string[]) ?? []).includes(currentDay)
+    const [startH, startM] = (flow.working_start || '08:00').split(':').map(Number)
+    const [endH,   endM  ] = (flow.working_end   || '18:00').split(':').map(Number)
+    const currentMin     = now.getHours() * 60 + now.getMinutes()
+    const isWorkingHours = currentMin >= startH * 60 + startM && currentMin <= endH * 60 + endM
+    const isOpen         = isWorkingDay && isWorkingHours
 
-    const [startH, startM] = (flow.working_start || '07:00').split(':').map(Number)
-    const [endH, endM]     = (flow.working_end   || '17:00').split(':').map(Number)
-    const currentMinutes   = now.getHours() * 60 + now.getMinutes()
-    const isWorkingHours   = currentMinutes >= startH * 60 + startM && currentMinutes <= endH * 60 + endM
-    const isOpen           = isWorkingDay && isWorkingHours
+    console.log('[flow]', {
+      isOpen, isWorkingDay, isWorkingHours,
+      day: currentDay,
+      time: `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`,
+      isNewConversation,
+      text: text.slice(0, 60),
+    })
 
-    console.log('[flow] isOpen:', isOpen, '| isWorkingDay:', isWorkingDay, '| isWorkingHours:', isWorkingHours, '| day:', currentDay, '| time:', `${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`)
-
-    const menuOptions: any[] = flow.menu_options || []
-    const trimmedText = text.trim()
-    const menuChoice  = menuOptions.find((opt: any) => opt.keyword === trimmedText)
-
-    const action = !isOpen ? 'off-hours' : isNewConversation ? 'new-conv' : menuChoice ? 'menu-choice' : 'none'
-    console.log('[flow] ação:', action)
-
-    if (!isOpen && flow.off_hours_message) {
-      if (isNewConversation) {
+    // Off-hours: only notify on new conversations
+    if (!isOpen) {
+      if (isNewConversation && flow.off_hours_message) {
         await sendAutoMessage(institutionId, remoteJid, flow.off_hours_message)
       }
-    } else if (isOpen && isNewConversation) {
+      return
+    }
+
+    // d) New conversation: send welcome + menu (dedup: skip if bot sent in last 5 min)
+    if (isNewConversation) {
       const { data: recentAuto } = await supabase
         .from('whatsapp_messages')
         .select('id')
         .eq('institution_id', institutionId)
         .eq('remote_jid', remoteJid)
         .eq('from_me', true)
-        .gte('timestamp', new Date(Date.now() - 5 * 60 * 1000).toISOString())
+        .gte('timestamp', new Date(Date.now() - 5 * 60_000).toISOString())
         .maybeSingle()
 
       if (!recentAuto) {
@@ -115,34 +269,80 @@ async function processFlow(
           await sendAutoMessage(institutionId, remoteJid, flow.menu_message)
         }
       } else {
-        console.log('[flow] boas-vindas suprimidas (mensagem automática recente detectada)')
+        console.log('[flow] boas-vindas suprimidas (mensagem automática recente)')
       }
-    } else if (isOpen && menuChoice && flow.menu_enabled) {
+      return
+    }
+
+    // e) Menu choice: user typed an option keyword
+    const menuOptions: any[] = flow.menu_options || []
+    const trimmed            = text.trim()
+    const menuChoice         = menuOptions.find((o: any) => o.keyword === trimmed)
+
+    if (flow.menu_enabled && menuChoice) {
+      if (menuChoice.response_message) {
+        await sendAutoMessage(institutionId, remoteJid, menuChoice.response_message)
+      }
       if (menuChoice.assignee_id) {
         await supabase
           .from('whatsapp_conversations')
           .update({
             assigned_user_id:   menuChoice.assignee_id,
-            assigned_user_name: menuChoice.assignee_name,
+            assigned_user_name: menuChoice.assignee_name || null,
             status:             'open',
           })
           .eq('institution_id', institutionId)
           .eq('remote_jid', remoteJid)
-        console.log('[flow] atendente atribuído:', menuChoice.assignee_name)
+        console.log('[flow] atendente atribuído via menu:', menuChoice.assignee_name)
       }
+      return
+    }
+
+    // f) Bot message count → transfer to default assignee after threshold
+    if ((flow.transfer_after_messages ?? 0) > 0 && flow.default_assignee_id) {
+      const { count } = await supabase
+        .from('whatsapp_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('institution_id', institutionId)
+        .eq('remote_jid', remoteJid)
+        .eq('from_me', true)
+
+      if ((count ?? 0) >= flow.transfer_after_messages) {
+        const { data: conv } = await supabase
+          .from('whatsapp_conversations')
+          .select('assigned_user_id')
+          .eq('institution_id', institutionId)
+          .eq('remote_jid', remoteJid)
+          .maybeSingle()
+
+        if (!conv?.assigned_user_id) {
+          await supabase
+            .from('whatsapp_conversations')
+            .update({ assigned_user_id: flow.default_assignee_id, status: 'open' })
+            .eq('institution_id', institutionId)
+            .eq('remote_jid', remoteJid)
+          console.log('[flow] transferido para atendente padrão após', count, 'msg do bot')
+        }
+      }
+    }
+
+    // g) Custom bot_flow nodes
+    if (flow.bot_enabled && Array.isArray(flow.bot_flow) && flow.bot_flow.length > 0) {
+      await processBotFlow(institutionId, remoteJid, text, flow.bot_flow)
     }
   } catch (e) {
     console.error('❌ processFlow error:', e)
   }
 }
 
+// ── Main handler ─────────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // ── GET: verificação do webhook pela Meta ──
+
+  // ── GET: Meta webhook verification ──
   if (req.method === 'GET') {
     const mode      = req.query['hub.mode']
     const token     = req.query['hub.verify_token']
     const challenge = req.query['hub.challenge']
-
     if (mode === 'subscribe' && token === process.env.WA_VERIFY_TOKEN) {
       console.log('✅ Webhook verificado')
       return res.status(200).send(challenge)
@@ -150,27 +350,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(403).json({ error: 'Token inválido' })
   }
 
-  // ── POST: mensagens e status recebidos ──
+  // ── POST: incoming messages + delivery status updates ──
   if (req.method === 'POST') {
-    // Lê o body como buffer bruto (necessário para HMAC antes do JSON.parse)
     const rawBody = await readRawBody(req)
 
-    // Valida assinatura HMAC-SHA256 enviada pela Meta
+    // HMAC-SHA256 validation (timing-safe)
     const signature = req.headers['x-hub-signature-256'] as string | undefined
     if (process.env.WA_APP_SECRET) {
-      if (!signature) {
-        return res.status(401).json({ error: 'Missing x-hub-signature-256' })
-      }
+      if (!signature) return res.status(401).json({ error: 'Missing x-hub-signature-256' })
+
       const expected = `sha256=${crypto
         .createHmac('sha256', process.env.WA_APP_SECRET)
         .update(rawBody)
         .digest('hex')}`
-      // timingSafeEqual previne timing attacks
+
       if (
         signature.length !== expected.length ||
         !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
       ) {
-        console.warn('⚠️ Webhook signature inválida — request rejeitado')
+        console.warn('⚠️ Webhook signature inválida')
         return res.status(401).json({ error: 'Invalid signature' })
       }
     }
@@ -182,7 +380,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const phoneNumberId = value.metadata?.phone_number_id
 
-      // Busca a escola pelo phone_number_id — aborta se não mapeado
+      // Map phone_number_id → institution
       const { data: phoneRecord } = await supabase
         .from('whatsapp_phone_numbers')
         .select('institution_id')
@@ -196,35 +394,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const institutionId = phoneRecord.institution_id
 
-      // ── Mensagens recebidas ──
+      // ── Process incoming messages ──────────────────────────────────────────
       for (const msg of value.messages || []) {
-        const remoteJid   = msg.from
-        const text        = msg.text?.body || ''
+        const remoteJid   = msg.from as string
         const timestamp   = new Date(parseInt(msg.timestamp) * 1000).toISOString()
-        const contactName = value.contacts?.[0]?.profile?.name || remoteJid
+        const contactName = (value.contacts?.[0]?.profile?.name as string | undefined) || remoteJid
+        const msgType     = (msg.type as string) || 'text'
 
+        // Extract text body
+        const text =
+          msg.text?.body         ||
+          msg.image?.caption     ||
+          msg.video?.caption     ||
+          msg.document?.caption  ||
+          ''
+
+        // ── Resolve media URL (download + re-upload to Storage) ──
+        let mediaUrl: string | null = null
+
+        if (MEDIA_TYPES.includes(msgType as MediaType)) {
+          const mediaObj = msg[msgType as keyof typeof msg] as any
+          if (mediaObj?.id) {
+            const mimeType = (mediaObj.mime_type as string) || 'application/octet-stream'
+            mediaUrl = await resolveMediaUrl(mediaObj.id, institutionId, mimeType)
+          }
+        }
+
+        // ── Check existing conversation ──
         const { data: existingConv } = await supabase
           .from('whatsapp_conversations')
-          .select('status, last_message_at')
+          .select('status, lead_id')
           .eq('institution_id', institutionId)
           .eq('remote_jid', remoteJid)
           .maybeSingle()
 
         const isNewConversation = !existingConv || existingConv.status === 'closed'
+        const contentPreview    = text || `[${msgType}]`
 
+        // ── Upsert conversation ──
         const { error: convErr } = await supabase
           .from('whatsapp_conversations')
-          .upsert({
-            institution_id:  institutionId,
-            remote_jid:      remoteJid,
-            contact_name:    contactName,
-            last_message:    text,
-            last_message_at: timestamp,
-            status:          'waiting',
-          }, { onConflict: 'institution_id,remote_jid' })
+          .upsert(
+            {
+              institution_id:  institutionId,
+              remote_jid:      remoteJid,
+              contact_name:    contactName,
+              last_message:    contentPreview,
+              last_message_at: timestamp,
+              // Re-open closed conversations; keep status of active ones
+              status: isNewConversation ? 'waiting' : (existingConv?.status ?? 'waiting'),
+            },
+            { onConflict: 'institution_id,remote_jid' }
+          )
 
         if (convErr) console.error('❌ conv upsert error:', convErr.message)
 
+        // ── Increment unread count (notification badge) ──
+        await supabase
+          .rpc('increment_conversation_unread', {
+            p_institution_id: institutionId,
+            p_remote_jid:     remoteJid,
+          })
+          .catch((e: any) => console.error('❌ unread increment error:', e))
+
+        // ── Insert message ──
         const { error: msgErr } = await supabase
           .from('whatsapp_messages')
           .insert({
@@ -232,26 +465,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             remote_jid:     remoteJid,
             message_id:     msg.id,
             instance_name:  'cloud-api',
-            content:        text,
-            message_type:   msg.type || 'conversation',
+            content:        text || contentPreview,
+            message_type:   msgType,
+            media_url:      mediaUrl,
             from_me:        false,
             contact_name:   contactName,
-            timestamp:      timestamp,
+            timestamp,
             status:         'received',
+            direction:      'inbound',
             raw_data:       msg,
           })
 
         if (msgErr) console.error('❌ msg insert error:', msgErr.message)
 
-        // Fluxo automático isolado — erro aqui não derruba o processamento da mensagem
-        try {
-          await processFlow(institutionId, remoteJid, text, isNewConversation)
-        } catch (e) {
-          console.error('❌ processFlow call error:', e)
+        // ── Auto-link lead by phone (skip if already linked) ──
+        if (!existingConv?.lead_id) {
+          await autoLinkLead(institutionId, remoteJid)
         }
+
+        // ── Automated flow ──
+        await processFlow(institutionId, remoteJid, text, isNewConversation)
       }
 
-      // ── Atualiza status de entrega (sent/delivered/read/failed) ──
+      // ── Process delivery/read status updates ──────────────────────────────
       for (const status of value.statuses || []) {
         const { error: statusErr } = await supabase
           .from('whatsapp_messages')
@@ -266,7 +502,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     } catch (err) {
       console.error('❌ Webhook error:', err)
-      // Sempre retorna 200 — a Meta desativa o webhook se receber 5xx consecutivos
+      // Always return 200 — Meta disables webhooks on consecutive 5xx responses
     }
 
     return res.status(200).json({ status: 'ok' })
