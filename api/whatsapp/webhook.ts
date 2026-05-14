@@ -542,6 +542,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // ── Process incoming messages ──────────────────────────────────────────
       for (const msg of value.messages || []) {
         const remoteJid   = msg.from as string
+        const rawPhone    = remoteJid.replace(/@.*/, '')
+
+        // ── Early blacklist check ──
+        const { data: isBlocked } = await supabase
+          .from('whatsapp_blacklist')
+          .select('id')
+          .eq('institution_id', institutionId)
+          .eq('phone_number', rawPhone)
+          .maybeSingle()
+        if (isBlocked) {
+          console.log('[webhook] número em blacklist, ignorando:', rawPhone)
+          continue
+        }
+
+        // ── Deleted message (unsupported type from Meta) ──
+        if ((msg.type as string) === 'unsupported') {
+          const originalId = msg.context?.id as string | undefined
+          if (originalId) {
+            await supabase.from('whatsapp_messages')
+              .update({ content: '🚫 Mensagem apagada', message_type: 'deleted' })
+              .eq('message_id', originalId)
+              .eq('institution_id', institutionId)
+          }
+          continue
+        }
         const timestamp   = new Date(parseInt(msg.timestamp) * 1000).toISOString()
         const contactName = (value.contacts?.[0]?.profile?.name as string | undefined) || remoteJid
         const msgType     = (msg.type as string) || 'text'
@@ -658,6 +683,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // ── Process delivery/read status updates ──────────────────────────────
       for (const status of value.statuses || []) {
+        if (status.status === 'deleted') {
+          await supabase.from('whatsapp_messages')
+            .update({ content: '🚫 Mensagem apagada', message_type: 'deleted' })
+            .eq('message_id', status.id)
+            .eq('institution_id', institutionId)
+          continue
+        }
         const { error: statusErr } = await supabase
           .from('whatsapp_messages')
           .update({

@@ -5,7 +5,7 @@ import ContactCard from '../contacts/ContactCard'
 import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight, ChevronLeft,
-  CheckCheck, Check, Zap, Settings, User, Users,
+  CheckCheck, Check, Zap, Settings, User, Users, Download,
   X, MoreVertical
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -13,7 +13,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConversationEvent, User as UserType, supabase } from '../../lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type MsgType = 'text' | 'audio' | 'image' | 'video' | 'document' | 'sticker'
+type MsgType = 'text' | 'audio' | 'image' | 'video' | 'document' | 'sticker' | 'deleted'
 type ConvStatus = 'waiting' | 'open' | 'closed'
 type RightPanelTab = 'details' | 'history'
 type MainView = 'conversations' | 'contacts'
@@ -98,6 +98,7 @@ function mapMsgType(messageType: string): MsgType {
     case 'documentMessage':     return 'document'
     case 'stickerMessage':      return 'sticker'
     case 'extendedTextMessage': return 'text'
+    case 'deleted':             return 'deleted'
     default:                    return 'text'
   }
 }
@@ -426,6 +427,10 @@ function RenderMessageContent({ message, fromMe, instanceName }: { message: any;
     (message.message?.documentMessage ? 'document' : '') ||
     'text'
   ).toLowerCase().replace('message', '')
+
+  if (msgType === 'deleted') {
+    return <p style={{ margin: 0, fontSize: 13, fontStyle: 'italic', color: fromMe ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)' }}>🚫 Mensagem apagada</p>
+  }
 
   const mediaUrl = getMediaUrl(message, instanceName)
   const caption  = message.caption || message.message?.imageMessage?.caption || ''
@@ -1702,6 +1707,30 @@ export default function WhatsAppHub() {
     }
   }
 
+  const exportConversation = () => {
+    if (!activeConv) return
+    const BOM = '﻿'
+    const header = 'Data,Hora,De,Mensagem,Tipo,Status'
+    const rows = activeConv.messages.map(m => {
+      const d = m.ts
+      const date = d.toLocaleDateString('pt-BR')
+      const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      const from = m.from === 'me' ? 'Atendente' : (activeConv.name || activeConv.phone)
+      const content = (m.content || '').replace(/\n/g, ' ')
+      return [date, time, from, content, m.type, m.status || '']
+        .map(v => `"${String(v).replace(/"/g, '""')}"`)
+        .join(',')
+    })
+    const csv = BOM + [header, ...rows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url
+    a.download = `conversa-${activeConv.phone || activeConv.name}-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const handleAssignFromClosed = async () => {
     if (!activeId || !user?.institution_id || !transferTarget) return
     const targetUser = users.find(u => u.id === transferTarget)
@@ -2865,7 +2894,7 @@ export default function WhatsAppHub() {
             {activeConv ? (
             <>
             {/* Tab bar */}
-            <div style={{ flexShrink: 0, display: 'flex', background: '#FFFFFF', borderBottom: '1px solid #D1FAE5' }}>
+            <div style={{ flexShrink: 0, display: 'flex', background: '#FFFFFF', borderBottom: '1px solid #D1FAE5', alignItems: 'center' }}>
               {([
                 { key: 'details', label: 'Detalhes' },
                 { key: 'history', label: 'Histórico' },
@@ -2884,6 +2913,13 @@ export default function WhatsAppHub() {
                   {tab.label}
                 </button>
               ))}
+              <button onClick={exportConversation} title="Exportar conversa"
+                style={{ padding: '8px 10px', background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', flexShrink: 0, transition: 'color 0.15s' }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#00A896')}
+                onMouseLeave={e => (e.currentTarget.style.color = '#94A3B8')}
+              >
+                <Download size={14} />
+              </button>
             </div>
 
             {/* ── Detalhes tab ── */}

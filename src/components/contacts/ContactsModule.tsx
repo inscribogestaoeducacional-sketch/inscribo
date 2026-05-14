@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { Users, BookUser, Search, Phone, Download, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import { Users, BookUser, Search, Phone, Download, Upload, FileText, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
 import ContactCard from './ContactCard'
 import { UnifiedContact } from './ContactProfile'
 
@@ -77,6 +77,12 @@ export default function ContactsModule() {
   const [filterAttendant, setFilterAttendant] = useState('all')
   const [page, setPage] = useState(1)
   const [profileContact, setProfileContact] = useState<UnifiedContact | null>(null)
+
+  const [showImport, setShowImport] = useState(false)
+  const [importRows, setImportRows] = useState<{ nome: string; telefone: string; email: string; endereco: string }[]>([])
+  const [importErrors, setImportErrors] = useState<string[]>([])
+  const [importResult, setImportResult] = useState<{ imported: number; duplicates: number } | null>(null)
+  const [importLoading, setImportLoading] = useState(false)
 
   const [searchParams] = useSearchParams()
   useEffect(() => {
@@ -213,6 +219,93 @@ export default function ContactsModule() {
     if (profileContact?.id === id) setProfileContact(prev => prev ? { ...prev, ...updates } : prev)
   }
 
+  function downloadTemplate() {
+    const BOM = '﻿'
+    const csv = BOM + 'nome,telefone,email,endereco\nJoão Silva,11999998888,joao@email.com,"Rua das Flores, 123"\n'
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = 'template-contatos.csv'; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function parseCSVLine(line: string): string[] {
+    const result: string[] = []
+    let cur = ''; let inQ = false
+    for (let i = 0; i < line.length; i++) {
+      if (line[i] === '"') { if (inQ && line[i + 1] === '"') { cur += '"'; i++ } else inQ = !inQ }
+      else if (line[i] === ',' && !inQ) { result.push(cur.trim()); cur = '' }
+      else cur += line[i]
+    }
+    result.push(cur.trim())
+    return result
+  }
+
+  function parseCSV(text: string): { nome: string; telefone: string; email: string; endereco: string }[] {
+    const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim())
+    if (lines.length < 2) return []
+    const header = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''))
+    const idx = (col: string) => header.indexOf(col)
+    const [ni, ti, ei, endi] = [idx('nome'), idx('telefone'), idx('email'), idx('endereco')]
+    return lines.slice(1).map(line => {
+      const cols = parseCSVLine(line)
+      return {
+        nome: ni >= 0 ? cols[ni] || '' : '',
+        telefone: ti >= 0 ? cols[ti] || '' : '',
+        email: ei >= 0 ? cols[ei] || '' : '',
+        endereco: endi >= 0 ? cols[endi] || '' : '',
+      }
+    })
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => {
+      const text = ev.target?.result as string
+      const all = parseCSV(text)
+      const errors: string[] = []
+      const valid = all.filter(r => r.telefone.replace(/\D/g, '').length >= 8)
+      const skipped = all.length - valid.length
+      if (all.length === 0) errors.push('Nenhuma linha encontrada. Verifique se o arquivo tem a coluna "telefone".')
+      if (skipped > 0) errors.push(`${skipped} linha(s) sem telefone válido serão ignoradas.`)
+      setImportRows(valid)
+      setImportErrors(errors)
+      setImportResult(null)
+    }
+    reader.readAsText(file, 'utf-8')
+  }
+
+  async function handleImport() {
+    if (!importRows.length) return
+    setImportLoading(true)
+    try {
+      const { data: existingLeads } = await supabase.from('leads').select('phone').eq('institution_id', institutionId).is('deleted_at', null)
+      const existingPhones = new Set((existingLeads || []).map(l => (l.phone || '').replace(/\D/g, '')))
+      const seen = new Set<string>()
+      let duplicates = 0
+      const toInsert: object[] = []
+      for (const r of importRows) {
+        const phone = r.telefone.replace(/\D/g, '')
+        if (!phone || seen.has(phone) || existingPhones.has(phone)) { duplicates++; continue }
+        seen.add(phone)
+        toInsert.push({ institution_id: institutionId, student_name: r.nome || null, responsible_name: r.nome || null, phone, email: r.email || null, status: 'novo' })
+      }
+      let imported = 0
+      if (toInsert.length > 0) {
+        const { data, error } = await supabase.from('leads').insert(toInsert).select('id')
+        if (error) { setImportErrors([error.message]); setImportLoading(false); return }
+        imported = data?.length || 0
+      }
+      setImportResult({ imported, duplicates })
+      if (imported > 0) load()
+    } catch (e: any) {
+      setImportErrors([e.message || 'Erro desconhecido'])
+    } finally {
+      setImportLoading(false)
+    }
+  }
+
   function exportCSV() {
     const BOM = '\uFEFF'
     const header = 'Nome,Telefone,E-mail,Aluno,Série,Origem,Último contato'
@@ -261,6 +354,85 @@ export default function ContactsModule() {
     { label: 'Unificados',   value: contacts.filter(c => c.has_lead && c.has_whatsapp).length,                     icon: '🔗', color: 'text-[#065F46]', bg: 'bg-[#D1FAE5]' },
   ]
 
+  const openImport = () => { setShowImport(true); setImportRows([]); setImportErrors([]); setImportResult(null) }
+
+  const importModal = showImport ? (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      onClick={e => { if (e.target === e.currentTarget) setShowImport(false) }}>
+      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 620, maxHeight: '90vh', overflowY: 'auto', padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1A2B4A' }}>Importar contatos</h2>
+          <button onClick={() => setShowImport(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 22, lineHeight: 1 }}>✕</button>
+        </div>
+
+        <button onClick={downloadTemplate}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, border: '1.5px dashed #CBD5E1', background: '#F8FAFC', color: '#475569', fontSize: 13, cursor: 'pointer', marginBottom: 16, width: '100%', boxSizing: 'border-box' }}>
+          <FileText size={16} color="#3B82F6" /> Download template CSV (nome, telefone, email, endereco)
+        </button>
+
+        <label style={{ display: 'block', marginBottom: 16, cursor: 'pointer' }}>
+          <div style={{ border: '2px dashed #CBD5E1', borderRadius: 10, padding: '24px', textAlign: 'center', background: '#F8FAFC' }}>
+            <Upload size={24} color="#94A3B8" style={{ display: 'block', margin: '0 auto 8px' }} />
+            <p style={{ margin: 0, fontSize: 13, color: '#64748B', fontWeight: 500 }}>Clique para selecionar arquivo CSV</p>
+            <p style={{ margin: '4px 0 0', fontSize: 11, color: '#CBD5E1' }}>Formato: .csv com cabeçalho na primeira linha</p>
+          </div>
+          <input type="file" accept=".csv" onChange={handleFileChange} style={{ display: 'none' }} />
+        </label>
+
+        {importErrors.length > 0 && (
+          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
+            {importErrors.map((err, i) => <p key={i} style={{ margin: i > 0 ? '4px 0 0' : 0, fontSize: 12, color: '#DC2626' }}>{err}</p>)}
+          </div>
+        )}
+
+        {importRows.length > 0 && !importResult && (
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A', margin: '0 0 8px' }}>{importRows.length} contato(s) válido(s) — pré-visualização:</p>
+            <div style={{ border: '1px solid #E2E8F0', borderRadius: 8, maxHeight: 220, overflowY: 'auto', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ background: '#F8FAFC', position: 'sticky', top: 0 }}>
+                    {['Nome', 'Telefone', 'E-mail', 'Endereço'].map(h => (
+                      <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#94A3B8', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {importRows.slice(0, 10).map((r, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                      <td style={{ padding: '7px 12px', color: '#1A2B4A' }}>{r.nome || <span style={{ color: '#CBD5E1' }}>—</span>}</td>
+                      <td style={{ padding: '7px 12px', color: '#475569' }}>{r.telefone}</td>
+                      <td style={{ padding: '7px 12px', color: '#475569' }}>{r.email || <span style={{ color: '#CBD5E1' }}>—</span>}</td>
+                      <td style={{ padding: '7px 12px', color: '#475569' }}>{r.endereco || <span style={{ color: '#CBD5E1' }}>—</span>}</td>
+                    </tr>
+                  ))}
+                  {importRows.length > 10 && (
+                    <tr><td colSpan={4} style={{ padding: '8px 12px', color: '#94A3B8', fontSize: 12, textAlign: 'center' }}>...e mais {importRows.length - 10} linha(s)</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <button onClick={handleImport} disabled={importLoading}
+              style={{ marginTop: 12, width: '100%', padding: '12px', background: '#00A896', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: importLoading ? 'not-allowed' : 'pointer', opacity: importLoading ? 0.7 : 1 }}>
+              {importLoading ? 'Importando...' : `Importar ${importRows.length} contatos`}
+            </button>
+          </div>
+        )}
+
+        {importResult && (
+          <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '20px', textAlign: 'center' }}>
+            <p style={{ margin: '0 0 4px', fontSize: 28, fontWeight: 800, color: '#065F46' }}>✅ {importResult.imported} importado(s)</p>
+            {importResult.duplicates > 0 && <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6B7280' }}>{importResult.duplicates} duplicata(s) ignorada(s)</p>}
+            <button onClick={() => setShowImport(false)}
+              style={{ marginTop: 16, padding: '9px 24px', background: '#065F46', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              Fechar
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  ) : null
+
   // ─── Render ────────────────────────────────────────────────
   if (profileContact) {
     return (
@@ -295,6 +467,7 @@ export default function ContactsModule() {
       { value: 'both',     label: 'Ambos' },
     ]
     return (
+      <>
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8f9fb' }}>
 
         {/* Header */}
@@ -304,6 +477,10 @@ export default function ContactsModule() {
           </div>
           <h1 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Contatos</h1>
           <span style={{ background: '#EFF6FF', color: '#3B82F6', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999 }}>{contacts.length}</span>
+          <button onClick={openImport}
+            style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', padding: '6px 12px', borderRadius: 9, fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+            <Upload size={13} /> Importar
+          </button>
         </div>
 
         {/* Search */}
@@ -378,10 +555,13 @@ export default function ContactsModule() {
           })}
         </div>
       </div>
+      {importModal}
+      </>
     )
   }
 
   return (
+    <>
     <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#f8f9fb' }}>
 
       {/* Header */}
@@ -399,6 +579,10 @@ export default function ContactsModule() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={openImport}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>
+            <Upload size={14} /> Importar CSV
+          </button>
           <button onClick={exportCSV} disabled={loading || filtered.length === 0}
             style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer', opacity: (loading || filtered.length === 0) ? 0.5 : 1 }}>
             <Download size={14} /> Exportar CSV
@@ -582,5 +766,7 @@ export default function ContactsModule() {
         )}
       </div>
     </div>
+    {importModal}
+    </>
   )
 }

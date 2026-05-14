@@ -3,7 +3,7 @@ import {
   Save, Upload, Building, Mail, Phone, Globe, Palette,
   MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
   Bot, Users, X, Plus, Check, AlertCircle, GraduationCap,
-  MapPin, FileText, DollarSign, Loader2, CheckCircle, Clock, GitBranch
+  MapPin, FileText, DollarSign, Loader2, CheckCircle, Clock, GitBranch, ShieldOff, Trash2
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -410,6 +410,12 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [bizSaved, setBizSaved]         = useState(false)
   // Real monthly count
   const [monthlyConvCount, setMonthlyConvCount] = useState(0)
+  // Blacklist
+  const [blacklist, setBlacklist] = useState<{ id: string; phone_number: string; reason: string | null; created_at: string }[]>([])
+  const [showAddBlock, setShowAddBlock] = useState(false)
+  const [newBlockNum, setNewBlockNum] = useState('')
+  const [newBlockReason, setNewBlockReason] = useState('')
+  const [savingBlock, setSavingBlock] = useState(false)
 
   const waMountedRef = useRef(true)
   useEffect(() => {
@@ -475,7 +481,38 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
         .gte('created_at', startOfMonth.toISOString())
       if (waMountedRef.current) setMonthlyConvCount(count || 0)
     } catch {}
+    try {
+      const { data: bl } = await supabase.from('whatsapp_blacklist')
+        .select('id,phone_number,reason,created_at')
+        .eq('institution_id', institutionId)
+        .order('created_at', { ascending: false })
+      if (waMountedRef.current) setBlacklist((bl || []) as { id: string; phone_number: string; reason: string | null; created_at: string }[])
+    } catch {}
     if (waMountedRef.current) setLoading(false)
+  }
+
+  const handleAddBlock = async () => {
+    if (!newBlockNum.trim()) return
+    setSavingBlock(true)
+    try {
+      const phone = newBlockNum.trim().replace(/\D/g, '')
+      const { data, error } = await supabase.from('whatsapp_blacklist').insert({
+        institution_id: institutionId,
+        phone_number:   phone,
+        reason:         newBlockReason.trim() || null,
+      }).select('id,phone_number,reason,created_at').single()
+      if (!error && data) {
+        setBlacklist(prev => [data as { id: string; phone_number: string; reason: string | null; created_at: string }, ...prev])
+        setNewBlockNum(''); setNewBlockReason(''); setShowAddBlock(false)
+      }
+    } catch {}
+    setSavingBlock(false)
+  }
+
+  const handleRemoveBlock = async (id: string) => {
+    if (!confirm('Remover número da blacklist?')) return
+    await supabase.from('whatsapp_blacklist').delete().eq('id', id).eq('institution_id', institutionId)
+    setBlacklist(prev => prev.filter(b => b.id !== id))
   }
 
   const handleConnect = async () => {
@@ -949,6 +986,67 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
             </div>
           </div>
         )}
+
+        {/* ── Números Bloqueados ── */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <ShieldOff size={16} color="#EF4444" />
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>🚫 Números Bloqueados</span>
+            </div>
+            <button onClick={() => setShowAddBlock(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#DC2626', cursor: 'pointer' }}>
+              <Plus size={13} /> Bloquear número
+            </button>
+          </div>
+
+          {/* Add block form */}
+          {showAddBlock && (
+            <div style={{ background: '#FEF2F2', borderRadius: 10, padding: 14, marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input
+                value={newBlockNum}
+                onChange={e => setNewBlockNum(e.target.value)}
+                placeholder="Número (ex: 5583999999999)"
+                className={inputCls}
+              />
+              <input
+                value={newBlockReason}
+                onChange={e => setNewBlockReason(e.target.value)}
+                placeholder="Motivo (opcional)"
+                className={inputCls}
+              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={handleAddBlock} disabled={savingBlock || !newBlockNum.trim()}
+                  style={{ flex: 1, padding: '8px 0', background: '#DC2626', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (!newBlockNum.trim() || savingBlock) ? 0.5 : 1 }}>
+                  {savingBlock ? 'Bloqueando...' : 'Confirmar bloqueio'}
+                </button>
+                <button onClick={() => { setShowAddBlock(false); setNewBlockNum(''); setNewBlockReason('') }}
+                  style={{ padding: '8px 14px', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {blacklist.length === 0 ? (
+            <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Nenhum número bloqueado. Mensagens de números bloqueados são ignoradas automaticamente.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {blacklist.map(b => (
+                <div key={b.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#FEF2F2', borderRadius: 8, padding: '10px 12px', border: '1px solid #FECACA' }}>
+                  <div>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1A2B4A', fontFamily: 'monospace' }}>{b.phone_number}</p>
+                    {b.reason && <p style={{ margin: '2px 0 0', fontSize: 11, color: '#94A3B8' }}>{b.reason}</p>}
+                  </div>
+                  <button onClick={() => handleRemoveBlock(b.id)}
+                    style={{ padding: '5px 8px', background: 'transparent', border: '1px solid #FECACA', borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#DC2626' }}>
+                    <Trash2 size={12} /> Remover
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* ── Salvar fluxo ── */}
         <button onClick={handleSaveFlow} disabled={savingFlow}
