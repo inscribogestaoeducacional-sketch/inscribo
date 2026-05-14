@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(findstr /i \"supabase project db\")",
+      "Bash(findstr /i \"SUPABASE_URL SUPABASE_SERVICE DATABASE_URL PROJECT\" .env.local)",
+      "Bash(findstr /i \"SUPABASE PROJECT DATABASE\")"
+    ]
+  }
+}
