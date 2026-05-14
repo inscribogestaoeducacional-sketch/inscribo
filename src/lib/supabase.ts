@@ -222,6 +222,8 @@ export interface WhatsappMessage {
   lead_id?: string
   timestamp: string
   created_at: string
+  status?: string
+  direction?: string
 }
 
 export interface WhatsappConversation {
@@ -243,6 +245,7 @@ export interface WhatsappConversation {
   profile_picture_url?: string
   conversation_history?: any[]
   created_at: string
+  bot_active?: boolean
 }
 
 export interface WhatsappConversationEvent {

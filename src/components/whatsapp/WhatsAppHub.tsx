@@ -1,4 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import EmojiPicker from '@emoji-mart/react'
+import emojiData from '@emoji-mart/data'
 import ContactCard from '../contacts/ContactCard'
 import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
@@ -22,7 +24,7 @@ interface Message {
   content: string
   from: 'me' | 'them'
   ts: Date
-  status: 'sent' | 'delivered' | 'read'
+  status: 'sent' | 'delivered' | 'read' | 'failed'
   duration?: number
   fileName?: string
   fileSize?: string
@@ -53,6 +55,7 @@ interface Conversation {
   contact_type?: string
   tags?: string[]
   profile_picture_url?: string
+  bot_active?: boolean
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -62,14 +65,6 @@ const STATUS_CFG: Record<ConvStatus, { label: string; badge: string; dot: string
   closed:  { label: 'Concluído',      badge: 'bg-[#E2E8F0] text-[#64748B]',   dot: 'bg-[#94A3B8]' },
 }
 
-const QUICK_REPLIES = [
-  { id: 'bv',  label: 'Boas-vindas',     text: 'Olá! Seja bem-vindo(a)! 🎓 Estou aqui para ajudar. Como posso te auxiliar?' },
-  { id: 'cv',  label: 'Confirmar visita', text: 'Sua visita está confirmada! Estaremos te esperando no horário combinado. 📅' },
-  { id: 'pr',  label: 'Enviar proposta',  text: 'Preparei uma proposta especial para vocês! Vou encaminhar agora. 📋' },
-  { id: 'vl',  label: 'Valores',          text: 'Sobre os valores: temos planos de pagamento flexíveis e condições especiais. Posso te passar mais detalhes?' },
-  { id: 'dc',  label: 'Documentos',       text: 'Para a matrícula precisamos de: RG/CPF dos responsáveis, certidão de nascimento, histórico escolar e comprovante de residência. 📄' },
-  { id: 'enc', label: 'Encerramento',     text: 'Foi um prazer te atender! Se surgir qualquer dúvida, estarei sempre aqui. Tenha um ótimo dia! 😊' },
-]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function safeStatusCfg(status: string) {
@@ -194,6 +189,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
       contact_type: convData?.contact_type,
       tags: convData?.tags || [],
       profile_picture_url: convData?.profile_picture_url,
+      bot_active: (convData as any)?.bot_active ?? false,
       messages: sorted
         .filter((m, idx, self) => idx === self.findIndex(t => (t.message_id && t.message_id === m.message_id) || t.id === m.id))
         .map(m => ({
@@ -202,7 +198,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
           content: m.content,
           from: m.from_me ? 'me' : 'them' as 'me' | 'them',
           ts: new Date(m.timestamp),
-          status: 'delivered' as const,
+          status: (m.status as Message['status']) || 'sent',
           media_url: m.media_url,
         })),
     }
@@ -390,6 +386,8 @@ function AudioPlayer({ duration = 15, mediaUrl, isDark = true }: { duration?: nu
 }
 
 // ─── getMediaUrl ──────────────────────────────────────────────────────────────
+// Supabase Storage public URLs and data: URLs are returned directly.
+// Legacy Evolution API ephemeral URLs still go through the proxy.
 function getMediaUrl(message: any, instanceName?: string): string | null {
   const raw =
     message.media_url ||
@@ -402,7 +400,11 @@ function getMediaUrl(message: any, instanceName?: string): string | null {
     message.message?.stickerMessage?.url ||
     null
   if (!raw) return null
+  // data: URLs and already-proxied paths are used as-is
   if (raw.startsWith('data:') || raw.startsWith('/api/')) return raw
+  // Supabase Storage public URLs: use directly (no proxy needed)
+  if (raw.includes('.supabase.co/storage/')) return raw
+  // Evolution API ephemeral URLs: route through proxy
   const msgId = message.key?.id || message.message_id || message.id || ''
   const idParam = msgId ? `&messageId=${encodeURIComponent(msgId)}` : ''
   const instParam = instanceName ? `&instanceName=${encodeURIComponent(instanceName)}` : ''
@@ -548,16 +550,23 @@ function MessageBubble({ msg, onImageClick, instanceName }: { msg: Message; onIm
           }}>
             {fmtTime(msg.ts)}
           </span>
-          {isMe && (
-            <svg width="16" height="11" viewBox="0 0 16 11" fill="none">
-              <path d="M1 5.5L5 9.5L15 1.5"
-                stroke={msg.status === 'read' ? '#0DD3BF' : 'rgba(255,255,255,0.4)'}
-                strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M5 5.5L9 9.5"
-                stroke={msg.status === 'read' ? '#0DD3BF' : 'rgba(255,255,255,0.4)'}
-                strokeWidth="1.8" strokeLinecap="round"/>
-            </svg>
-          )}
+          {isMe && (() => {
+            if (msg.status === 'failed') {
+              return <span style={{ fontSize: 12, color: '#EF4444' }} title="Falha ao enviar">⚠</span>
+            }
+            const color = msg.status === 'read' ? '#0DD3BF' : 'rgba(255,255,255,0.45)'
+            const showDouble = msg.status === 'delivered' || msg.status === 'read'
+            return (
+              <svg width={showDouble ? 18 : 12} height="11" viewBox={showDouble ? '0 0 18 11' : '0 0 12 11'} fill="none">
+                <path d={showDouble ? 'M1 5.5L5 9.5L15 1.5' : 'M1 5.5L5 9.5L11 1.5'}
+                  stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                {showDouble && (
+                  <path d="M6 5.5L10 9.5L18 1.5"
+                    stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                )}
+              </svg>
+            )
+          })()}
         </div>
       </div>
     </div>
@@ -622,10 +631,18 @@ export default function WhatsAppHub() {
   const [uploadProgress, setUploadProgress] = useState(0)
   const [addingTag, setAddingTag] = useState(false)
   const [newTag, setNewTag] = useState('')
+  const [quickReplies, setQuickReplies] = useState<{ id: string; label: string; text: string }[]>([])
 
   // Edit contact inline form
   const [editingContact, setEditingContact] = useState(false)
   const [editForm, setEditForm] = useState({ name: '', contact_type: '', notes: '' })
+  const [leadCrmEvents, setLeadCrmEvents] = useState<{ label: string; time: string; color: string }[]>([])
+  const [leadCrmLoading, setLeadCrmLoading] = useState(false)
+  const [showTemplateModal, setShowTemplateModal] = useState(false)
+  const [templates, setTemplates] = useState<{ id: string; name: string; language: string; components: any[] }[]>([])
+  const [selectedTemplate, setSelectedTemplate] = useState('')
+  const [templateVars, setTemplateVars] = useState<Record<string, string>>({})
+  const [sendingTemplate, setSendingTemplate] = useState(false)
 
   // New feature states
   const [mainView, setMainView] = useState<MainView>('conversations')
@@ -650,6 +667,8 @@ export default function WhatsAppHub() {
 
   // Typing indicator
   const [typingConvIds, setTypingConvIds] = useState<Set<string>>(new Set())
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const presenceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   // Mobile responsiveness
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -672,11 +691,42 @@ export default function WhatsAppHub() {
   const [importPreview, setImportPreview] = useState<any[]>([])
   const [importing, setImporting] = useState(false)
 
+  const emojiPickerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const moreMenuRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const notifAudioRef = useRef<HTMLAudioElement | null>(null)
+  const activeIdRef = useRef<string | null>(null)
+
+  // Keep activeIdRef in sync so notification handler can read the latest value
+  useEffect(() => { activeIdRef.current = activeId }, [activeId])
+
+  // Request browser notification permission on first load
+  useEffect(() => {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {})
+    }
+    // Create a short beep via Web Audio API (no external file needed)
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+      if (AudioCtx) {
+        const ctx = new AudioCtx()
+        const buf = ctx.createBuffer(1, ctx.sampleRate * 0.12, ctx.sampleRate)
+        const data = buf.getChannelData(0)
+        for (let i = 0; i < data.length; i++) {
+          data[i] = Math.sin(2 * Math.PI * 880 * i / ctx.sampleRate) * Math.exp(-i / (ctx.sampleRate * 0.05))
+        }
+        const src = ctx.createBufferSource()
+        src.buffer = buf
+        src.connect(ctx.destination)
+        // Only create the AudioContext, don't play yet
+        notifAudioRef.current = { ctx, buf } as any
+      }
+    } catch {}
+  }, [])
 
   const startRecording = async () => {
     if (!activeId) return
@@ -708,24 +758,43 @@ export default function WhatsAppHub() {
         const reader = new FileReader()
         reader.onloadend = async () => {
           const base64 = (reader.result as string).split(',')[1]
+          if (!user?.institution_id || !activeId) return
           try {
-            const res = await fetch('/api/evolution/send-media', {
+            // Step 1: upload audio to Supabase Storage
+            const uploadRes = await fetch('/api/whatsapp/media', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                instanceName: instance,
-                remoteJid: activeId,
-                mediatype: 'audio',
-                media: base64,
+                institution_id: user.institution_id,
+                base64,
                 mimetype: mimeType,
-              })
+                filename: `audio-${Date.now()}.${mimeType.includes('webm') ? 'webm' : 'mp4'}`,
+              }),
             })
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({}))
+            if (!uploadRes.ok) throw new Error(`Upload HTTP ${uploadRes.status}`)
+            const { url: mediaUrl } = await uploadRes.json()
+
+            // Step 2: send via Meta Cloud API
+            const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
+            const sendRes = await fetch('/api/whatsapp/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                institution_id: user.institution_id,
+                to,
+                type: 'audio',
+                mediaUrl,
+              }),
+            })
+            if (!sendRes.ok) {
+              const err = await sendRes.json().catch(() => ({}))
               console.error('[send-audio] error:', err)
               setSendError('Erro ao enviar áudio.')
             }
-          } catch { setSendError('Erro ao enviar áudio.') }
+          } catch (e) {
+            console.error('[send-audio] error:', e)
+            setSendError('Erro ao enviar áudio.')
+          }
         }
         reader.readAsDataURL(blob)
       }
@@ -788,6 +857,37 @@ export default function WhatsAppHub() {
       setTimeout(() => setTypingConvIds(prev => {
         const next = new Set(prev); next.delete(typingJid); return next
       }), 1200)
+
+      // Browser notification + beep when this conversation is not the active one
+      if (activeIdRef.current !== typingJid) {
+        // Beep via Web Audio API
+        try {
+          const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+          const ctx = new AudioCtx()
+          const buf = ctx.createBuffer(1, ctx.sampleRate * 0.12, ctx.sampleRate)
+          const data = buf.getChannelData(0)
+          for (let i = 0; i < data.length; i++) {
+            data[i] = Math.sin(2 * Math.PI * 880 * i / ctx.sampleRate) * Math.exp(-i / (ctx.sampleRate * 0.05))
+          }
+          const src = ctx.createBufferSource()
+          src.buffer = buf
+          src.connect(ctx.destination)
+          src.start()
+        } catch {}
+
+        // Browser Notification
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          const contactName = newMsg.contact_name || formatPhone(typingJid)
+          const preview = newMsg.content?.slice(0, 60) || '[mídia]'
+          try {
+            new Notification(contactName, {
+              body: preview,
+              icon: '/favicon.ico',
+              tag: typingJid,
+            })
+          } catch {}
+        }
+      }
     }
     const isGroup = newMsg.remote_jid.endsWith('@g.us')
     const msg: Message = {
@@ -796,7 +896,7 @@ export default function WhatsAppHub() {
       content: newMsg.content,
       from: newMsg.from_me ? 'me' : 'them',
       ts: new Date(newMsg.timestamp),
-      status: 'delivered',
+      status: (newMsg.status as Message['status']) || 'sent',
       media_url: newMsg.media_url,
     }
     setConversations(prev => {
@@ -831,6 +931,39 @@ export default function WhatsAppHub() {
       }
       return [conv, ...prev]
     })
+  }
+
+  const loadLeadCrmEvents = async (leadId: string) => {
+    setLeadCrmLoading(true)
+    try {
+      const [{ data: lead }, { data: visits }] = await Promise.all([
+        supabase.from('leads').select('status, created_at, responsible_name, student_name').eq('id', leadId).single(),
+        supabase.from('visits').select('scheduled_date, status').eq('lead_id', leadId).order('scheduled_date', { ascending: true }),
+      ])
+      const fmtDate = (d: string) =>
+        new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+      const STATUS_LABEL: Record<string, string> = {
+        new: 'Lead criado', contact: 'Contato realizado', scheduled: 'Visita agendada',
+        visit: 'Visita realizada', proposal: 'Proposta enviada', enrolled: 'Matriculado', lost: 'Lead perdido',
+      }
+      const STATUS_COLOR: Record<string, string> = {
+        new: '#60A5FA', contact: '#2DD4BF', scheduled: '#FBBF24',
+        visit: '#A78BFA', proposal: '#F97316', enrolled: '#34D399', lost: '#F87171',
+      }
+      const events = []
+      if (lead) {
+        events.push({ label: `Lead criado (${lead.responsible_name || lead.student_name})`, time: fmtDate(lead.created_at), color: '#60A5FA' })
+        if (lead.status !== 'new') events.push({ label: STATUS_LABEL[lead.status] || lead.status, time: fmtDate(lead.created_at), color: STATUS_COLOR[lead.status] || '#94A3B8' })
+      }
+      ;(visits || []).forEach(v => {
+        events.push({ label: `Visita ${v.status === 'completed' ? 'realizada' : 'agendada'}`, time: fmtDate(v.scheduled_date), color: '#FBBF24' })
+      })
+      setLeadCrmEvents(events)
+    } catch {
+      setLeadCrmEvents([])
+    } finally {
+      setLeadCrmLoading(false)
+    }
   }
 
   const loadHistory = async (jid: string) => {
@@ -876,6 +1009,31 @@ export default function WhatsAppHub() {
 
       await loadMessages()
       DatabaseService.getUsers(user.institution_id!).then(setUsers).catch(() => {})
+
+      // Load approved templates
+      ;(async () => {
+        try {
+          const { data } = await supabase
+            .from('whatsapp_templates')
+            .select('id, name, language, components')
+            .eq('institution_id', user.institution_id!)
+            .eq('status', 'approved')
+          if (data) setTemplates(data)
+        } catch {}
+      })()
+
+      // Load quick replies from DB
+      ;(async () => {
+        try {
+          const { data } = await supabase
+            .from('whatsapp_quick_replies')
+            .select('id, title, message, order_index')
+            .eq('institution_id', user.institution_id!)
+            .order('order_index', { ascending: true })
+          if (data) setQuickReplies(data.map((r: any) => ({ id: r.id, label: r.title, text: r.message })))
+        } catch {}
+      })()
+
       setLoading(false)
     }
     init()
@@ -886,6 +1044,24 @@ export default function WhatsAppHub() {
         event: 'INSERT', schema: 'public', table: 'whatsapp_messages',
         filter: `institution_id=eq.${user.institution_id}`
       }, (payload) => addMessageToConversations(payload.new as WhatsappMessage))
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'whatsapp_messages',
+        filter: `institution_id=eq.${user.institution_id}`
+      }, (payload) => {
+        const updated = payload.new as WhatsappMessage
+        setConversations(prev => prev.map(conv => {
+          const normJid = normalizeJid(updated.remote_jid)
+          if (conv.id !== normJid) return conv
+          return {
+            ...conv,
+            messages: conv.messages.map(m =>
+              m.id === updated.id || m.id === updated.message_id
+                ? { ...m, status: (updated.status as Message['status']) || m.status }
+                : m
+            ),
+          }
+        }))
+      })
       .subscribe()
 
     const convChannel = supabase
@@ -1034,6 +1210,34 @@ export default function WhatsAppHub() {
     if (rightPanelTab === 'history' && activeId) loadHistory(rawJid(activeId))
   }, [rightPanelTab, activeId])
 
+  // Presence channel for typing indicator — subscribe per active conversation
+  useEffect(() => {
+    if (presenceChannelRef.current) {
+      supabase.removeChannel(presenceChannelRef.current)
+      presenceChannelRef.current = null
+    }
+    if (!activeId || !user?.id) return
+
+    const ch = supabase.channel(`typing-${activeId}`, { config: { presence: { key: user.id } } })
+    ch
+      .on('presence', { event: 'sync' }, () => {
+        const state = ch.presenceState<{ typing: boolean; userId: string }>()
+        const othersTyping = Object.values(state)
+          .flat()
+          .some((p: any) => p.userId !== user.id && p.typing)
+        setTypingConvIds(prev => {
+          const next = new Set(prev)
+          if (othersTyping) next.add(activeId)
+          else next.delete(activeId)
+          return next
+        })
+      })
+      .subscribe()
+
+    presenceChannelRef.current = ch
+    return () => { supabase.removeChannel(ch); presenceChannelRef.current = null }
+  }, [activeId, user?.id])
+
   // Handle incoming phone param from LeadKanban
   useEffect(() => {
     if (!phoneParam) return
@@ -1085,19 +1289,52 @@ export default function WhatsAppHub() {
     return () => document.removeEventListener('mousedown', handler)
   }, [showMoreMenu])
 
+  // Close emoji picker on outside click
+  useEffect(() => {
+    if (!showEmojiPicker) return
+    const handler = (e: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showEmojiPicker])
+
+  const handleEmojiSelect = useCallback((emoji: any) => {
+    const native = emoji.native as string
+    const el = inputRef.current
+    if (el) {
+      const start = el.selectionStart ?? inputText.length
+      const end   = el.selectionEnd   ?? inputText.length
+      const next  = inputText.slice(0, start) + native + inputText.slice(end)
+      setInputText(next)
+      // Restore cursor position after state update
+      requestAnimationFrame(() => {
+        el.selectionStart = el.selectionEnd = start + native.length
+        el.focus()
+      })
+    } else {
+      setInputText(t => t + native)
+    }
+    setShowEmojiPicker(false)
+  }, [inputText])
+
   const activeConv = conversations.find(c => c.id === activeId) ?? null
   const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0)
 
-  const iniciadas  = conversations.filter(c => !c.isGroup && c.status !== 'closed').length
-  const encerradas = conversations.filter(c => !c.isGroup && c.status === 'closed').length
-  const naoLidas   = conversations.filter(c => !c.isGroup && (c.unreadCount || 0) > 0).length
+  const iniciadas   = conversations.filter(c => !c.isGroup && c.status !== 'closed').length
+  const encerradas  = conversations.filter(c => !c.isGroup && c.status === 'closed').length
+  const naoLidas    = conversations.filter(c => !c.isGroup && (c.unreadCount || 0) > 0).length
+  const automaticos = conversations.filter(c => !c.isGroup && c.bot_active).length
 
   const filteredConvs = conversations.filter(c => {
     if (c.isGroup) return false
     if (!search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search)) {
       // tab filter
-      if (tabFilter === 'iniciada'  && c.status === 'closed') return false
-      if (tabFilter === 'encerrada' && c.status !== 'closed') return false
+      if (tabFilter === 'iniciada'   && c.status === 'closed') return false
+      if (tabFilter === 'encerrada'  && c.status !== 'closed') return false
+      if (tabFilter === 'automatico' && !c.bot_active) return false
       // read filter
       if (readFilter === 'read'   && (c.unreadCount || 0) > 0) return false
       if (readFilter === 'unread' && (c.unreadCount || 0) === 0) return false
@@ -1142,7 +1379,8 @@ export default function WhatsAppHub() {
         body: JSON.stringify({
           institution_id: user?.institution_id,
           to,
-          text,
+          type: 'text',
+          message: text,
         }),
       })
 
@@ -1169,6 +1407,40 @@ export default function WhatsAppHub() {
           : c
       ))
       setSendError(err.message || 'Erro ao enviar mensagem.')
+    }
+  }
+
+  const handleSendTemplate = async () => {
+    if (!activeId || !user?.institution_id || !selectedTemplate) return
+    const tmpl = templates.find(t => t.id === selectedTemplate) ||
+      { id: '', name: selectedTemplate, language: 'pt_BR', components: [] }
+    const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
+    const varKeys = Object.keys(templateVars)
+    const components = varKeys.length > 0
+      ? [{ type: 'body', parameters: varKeys.map(k => ({ type: 'text', text: templateVars[k] })) }]
+      : tmpl.components ?? []
+
+    setSendingTemplate(true)
+    try {
+      const res = await fetch('/api/whatsapp/send-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          institution_id: user.institution_id,
+          to,
+          template_name: tmpl.name,
+          language: tmpl.language || 'pt_BR',
+          components,
+        }),
+      })
+      if (!res.ok) throw new Error('Erro ao enviar template')
+      setShowTemplateModal(false)
+      setSelectedTemplate('')
+      setTemplateVars({})
+    } catch (err: any) {
+      setSendError(err.message || 'Erro ao enviar template')
+    } finally {
+      setSendingTemplate(false)
     }
   }
 
@@ -1255,7 +1527,7 @@ export default function WhatsAppHub() {
   }
 
   const sendPendingFile = async () => {
-    if (!pendingFile || !activeId) return
+    if (!pendingFile || !activeId || !user?.institution_id) return
     setUploadProgress(10)
 
     const mediatype = pendingFile.type.startsWith('image/') ? 'image'
@@ -1263,7 +1535,6 @@ export default function WhatsAppHub() {
       : pendingFile.type.startsWith('audio/') ? 'audio'
       : 'document'
 
-    // Compute base64 first so we can use data: URL for preview (avoids CSP blob: violation)
     const fileToSend = mediatype === 'image' ? await compressImage(pendingFile) : pendingFile
     const base64 = await toBase64(fileToSend)
     setUploadProgress(30)
@@ -1286,30 +1557,48 @@ export default function WhatsAppHub() {
     ))
 
     try {
-      const res = await fetch('/api/evolution/send-media', {
+      // Step 1: upload to Supabase Storage via /api/whatsapp/media
+      const uploadRes = await fetch('/api/whatsapp/media', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          instanceName: instance,
-          remoteJid: activeId,
-          mediatype,
+          institution_id: user.institution_id,
+          base64,
           mimetype: fileToSend.type || pendingFile.type,
-          media: base64,
-          fileName: pendingFile.name,
+          filename: pendingFile.name,
+        }),
+      })
+      setUploadProgress(65)
+      if (!uploadRes.ok) throw new Error(`Upload HTTP ${uploadRes.status}`)
+      const { url: mediaUrl } = await uploadRes.json()
+
+      // Step 2: send via Meta Cloud API with the permanent URL
+      const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
+      const sendRes = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          institution_id: user.institution_id,
+          to,
+          type: mediatype,
+          mediaUrl,
+          filename: pendingFile.name,
           caption: '',
-        })
+          conversation_id: undefined,
+        }),
       })
       setUploadProgress(100)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      // Update status to delivered
+      if (!sendRes.ok) throw new Error(`Send HTTP ${sendRes.status}`)
+
       setConversations(prev => prev.map(c =>
-        c.id === activeId ? { ...c, messages: c.messages.map(m => m.id === tempId ? { ...m, status: 'delivered' as const } : m) } : c
+        c.id === activeId
+          ? { ...c, messages: c.messages.map(m => m.id === tempId ? { ...m, status: 'sent' as const, media_url: mediaUrl } : m) }
+          : c
       ))
       setTimeout(() => { setPendingFile(null); setPendingFilePreview(null); setUploadProgress(0) }, 800)
     } catch (err) {
       console.error('[sendPendingFile] error:', err)
       setSendError('Erro ao enviar arquivo.')
-      // Remove optimistic message on error
       setConversations(prev => prev.map(c =>
         c.id === activeId ? { ...c, messages: c.messages.filter(m => m.id !== tempId) } : c
       ))
@@ -1551,8 +1840,6 @@ export default function WhatsAppHub() {
   const msgGroups = filteredMessages.length > 0 || (activeConv && !msgSearchText.trim())
     ? (activeConv ? groupByDate(filteredMessages) : [])
     : []
-
-  const COMMON_EMOJIS = ['😊','😂','❤️','👍','🙏','😍','🎉','😢','😮','👏','🔥','✅','🤔','😅','💪','🙌','😭','🥰','😎','🤩','💯','✨','🎓','📚','👋','🤝','📞','💬','⭐','🏫']
 
   // ── Loading ──
   if (loading) {
@@ -1827,9 +2114,9 @@ export default function WhatsAppHub() {
             {/* Row 1: Tab tabs with counters */}
             <div style={{ display: 'flex', padding: '0 12px', gap: 0 }}>
               {([
-                { key: 'iniciada',   label: 'Iniciada',   count: iniciadas  },
-                { key: 'encerrada',  label: 'Encerrada',  count: encerradas },
-                { key: 'automatico', label: 'Automático', count: 0          },
+                { key: 'iniciada',   label: 'Iniciada',   count: iniciadas   },
+                { key: 'encerrada',  label: 'Encerrada',  count: encerradas  },
+                { key: 'automatico', label: 'Automático', count: automaticos },
               ] as { key: typeof tabFilter; label: string; count: number }[]).map(tab => (
                 <button key={tab.key} onClick={() => setTabFilter(tab.key)} style={{
                   flex: 1, padding: '10px 4px', border: 'none', background: 'transparent',
@@ -2356,20 +2643,29 @@ export default function WhatsAppHub() {
                     <X style={{ width: 14, height: 14 }} />
                   </button>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                  {QUICK_REPLIES.map(qr => (
-                    <button
-                      key={qr.id}
-                      onClick={() => { setInputText(qr.text); setShowQuickReplies(false) }}
-                      style={{ textAlign: 'left', padding: '8px 12px', background: '#FFFFFF', border: '1px solid #D1FAE5', borderRadius: 8, cursor: 'pointer' }}
-                      onMouseEnter={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#E6F7F5' }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#FFFFFF' }}
-                    >
-                      <p style={{ fontSize: 12, fontWeight: 600, color: '#1A2B4A', margin: 0 }}>{qr.label}</p>
-                      <p style={{ fontSize: 11, color: '#64748B', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{qr.text}</p>
-                    </button>
-                  ))}
-                </div>
+                {quickReplies.length === 0 ? (
+                  <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '12px 0' }}>
+                    Nenhuma resposta rápida cadastrada.<br />
+                    <span style={{ color: '#00A896', cursor: 'pointer' }} onClick={() => navigate('/settings?tab=whatsapp')}>
+                      Configure em Configurações → WhatsApp
+                    </span>
+                  </p>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    {quickReplies.map(qr => (
+                      <button
+                        key={qr.id}
+                        onClick={() => { setInputText(qr.text); setShowQuickReplies(false) }}
+                        style={{ textAlign: 'left', padding: '8px 12px', background: '#FFFFFF', border: '1px solid #D1FAE5', borderRadius: 8, cursor: 'pointer' }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#E6F7F5' }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#FFFFFF' }}
+                      >
+                        <p style={{ fontSize: 12, fontWeight: 600, color: '#1A2B4A', margin: 0 }}>{qr.label}</p>
+                        <p style={{ fontSize: 11, color: '#64748B', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{qr.text}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -2429,17 +2725,15 @@ export default function WhatsAppHub() {
 
             {/* Emoji picker */}
             {showEmojiPicker && (
-              <div style={{ marginBottom: 8, background: '#FFFFFF', borderRadius: 12, border: '1px solid #D1FAE5', padding: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 4 }}>
-                  {COMMON_EMOJIS.map(e => (
-                    <button key={e} onClick={() => { setInputText(t => t + e); setShowEmojiPicker(false) }}
-                      style={{ width: 28, height: 28, fontSize: 16, background: 'none', border: 'none', borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      onMouseEnter={ev => (ev.currentTarget.style.background = '#F0FDFB')}
-                      onMouseLeave={ev => (ev.currentTarget.style.background = 'none')}>
-                      {e}
-                    </button>
-                  ))}
-                </div>
+              <div ref={emojiPickerRef} style={{ position: 'absolute', bottom: 72, left: 0, zIndex: 40 }}>
+                <EmojiPicker
+                  data={emojiData}
+                  onEmojiSelect={handleEmojiSelect}
+                  locale="pt"
+                  theme="light"
+                  previewPosition="none"
+                  skinTonePosition="none"
+                />
               </div>
             )}
 
@@ -2465,8 +2759,19 @@ export default function WhatsAppHub() {
                 )
               })}
               <textarea
+                ref={inputRef}
                 value={inputText}
-                onChange={e => setInputText(e.target.value)}
+                onChange={e => {
+                  setInputText(e.target.value)
+                  // Broadcast typing presence
+                  if (presenceChannelRef.current && user?.id) {
+                    presenceChannelRef.current.track({ userId: user.id, typing: true }).catch(() => {})
+                    if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
+                    typingTimerRef.current = setTimeout(() => {
+                      presenceChannelRef.current?.track({ userId: user.id, typing: false }).catch(() => {})
+                    }, 3000)
+                  }
+                }}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
                 placeholder="Digite uma mensagem..."
                 rows={1}
@@ -2633,7 +2938,7 @@ export default function WhatsAppHub() {
                       background: windowOpen ? '#D1FAE5' : '#FEE2E2',
                       border: `1px solid ${windowOpen ? '#A7F3D0' : '#FECACA'}` }}>
                       <span style={{ fontSize: 14 }}>{windowOpen ? '🟢' : '🔴'}</span>
-                      <div>
+                      <div style={{ flex: 1 }}>
                         <p style={{ fontSize: 12, fontWeight: 700, color: windowOpen ? '#059669' : '#DC2626', margin: 0 }}>
                           {windowOpen ? 'Janela aberta' : 'Janela expirada'}
                         </p>
@@ -2643,6 +2948,14 @@ export default function WhatsAppHub() {
                             : 'Use template para iniciar'}
                         </p>
                       </div>
+                      {!windowOpen && (
+                        <button
+                          onClick={() => setShowTemplateModal(true)}
+                          style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 8, background: '#DC2626', color: '#fff', border: 'none', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}
+                        >
+                          Enviar template
+                        </button>
+                      )}
                     </div>
                   )
                 })()}
@@ -2881,29 +3194,43 @@ export default function WhatsAppHub() {
                 {/* Histórico CRM — colapsável */}
                 <div style={{ padding: '12px 16px' }}>
                   <button
-                    onClick={() => setCollapseHistory(v => !v)}
+                    onClick={() => {
+                      const next = !collapseHistory
+                      setCollapseHistory(next ? true : false)
+                      if (!next && activeConv?.lead_id) loadLeadCrmEvents(activeConv.lead_id)
+                    }}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.15s' }}
                   >
                     <span>Histórico CRM</span>
                     {collapseHistory ? <ChevronRight style={{ width: 14, height: 14 }} /> : <ChevronDown style={{ width: 14, height: 14 }} />}
                   </button>
                   {!collapseHistory && (
-                    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {[
-                        { action: 'Lead criado',      time: '2 dias atrás', color: '#60A5FA' },
-                        { action: 'Contato realizado', time: '1 dia atrás',  color: '#2DD4BF' },
-                        { action: 'Visita agendada',   time: 'Hoje',         color: '#FBBF24' },
-                      ].map((ev, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px', borderRadius: 8, cursor: 'pointer' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = '#F0FDFB')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                          <div style={{ width: 6, height: 6, borderRadius: '50%', background: ev.color, marginTop: 5, flexShrink: 0 }} />
-                          <div>
-                            <p style={{ fontSize: 12, fontWeight: 500, color: '#1A2B4A', margin: 0 }}>{ev.action}</p>
-                            <p style={{ fontSize: 11, color: '#64748B', margin: 0 }}>{ev.time}</p>
-                          </div>
+                    <div style={{ marginTop: 8 }}>
+                      {!activeConv?.lead_id ? (
+                        <p style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic', textAlign: 'center', padding: '8px 0' }}>
+                          Vincular a um lead para ver histórico
+                        </p>
+                      ) : leadCrmLoading ? (
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0' }}>
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#00A896] border-t-transparent" />
                         </div>
-                      ))}
+                      ) : leadCrmEvents.length === 0 ? (
+                        <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '8px 0' }}>Sem eventos registrados</p>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {leadCrmEvents.map((ev, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px', borderRadius: 8 }}
+                              onMouseEnter={e => (e.currentTarget.style.background = '#F0FDFB')}
+                              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                              <div style={{ width: 6, height: 6, borderRadius: '50%', background: ev.color, marginTop: 5, flexShrink: 0 }} />
+                              <div>
+                                <p style={{ fontSize: 12, fontWeight: 500, color: '#1A2B4A', margin: 0 }}>{ev.label}</p>
+                                <p style={{ fontSize: 11, color: '#64748B', margin: 0 }}>{ev.time}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2991,6 +3318,75 @@ export default function WhatsAppHub() {
           if (activeConv) setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, ...updates } : c))
         }}
       />
+
+      {/* Template Modal */}
+      {showTemplateModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-96 shadow-2xl border border-[#E2E8F0] max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-[#1A2B4A]">Enviar Template WhatsApp</h3>
+              <button onClick={() => { setShowTemplateModal(false); setSelectedTemplate(''); setTemplateVars({}) }}
+                className="p-1 text-[#64748B] hover:text-[#1A2B4A]"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-[#64748B] mb-1">Template</label>
+                <select value={selectedTemplate} onChange={e => { setSelectedTemplate(e.target.value); setTemplateVars({}) }}
+                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
+                  <option value="">Selecionar template...</option>
+                  {templates.length === 0 && (
+                    <option value="hello_world">hello_world (padrão Meta)</option>
+                  )}
+                  {templates.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+              {selectedTemplate && (() => {
+                const tmpl = templates.find(t => t.id === selectedTemplate)
+                if (!tmpl) return null
+                const bodyComp = tmpl.components?.find((c: any) => c.type === 'BODY')
+                if (!bodyComp?.text) return null
+                const matches = [...bodyComp.text.matchAll(/\{\{(\d+)\}\}/g)]
+                if (matches.length === 0) return null
+                return (
+                  <div>
+                    <label className="block text-xs font-medium text-[#64748B] mb-2">Variáveis</label>
+                    <div className="space-y-2">
+                      {matches.map(([, n]) => (
+                        <div key={n}>
+                          <label className="block text-xs text-[#94A3B8] mb-0.5">{`{{${n}}}`}</label>
+                          <input
+                            value={templateVars[n] || ''}
+                            onChange={e => setTemplateVars(v => ({ ...v, [n]: e.target.value }))}
+                            placeholder={`Variável ${n}`}
+                            className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
+              {templates.length === 0 && (
+                <p className="text-xs text-[#64748B] bg-[#FEF3C7] p-3 rounded-lg">
+                  Nenhum template aprovado cadastrado. Será enviado o template "hello_world" padrão da Meta.
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => { setShowTemplateModal(false); setSelectedTemplate(''); setTemplateVars({}) }}
+                className="flex-1 py-2.5 text-xs font-medium text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
+                Cancelar
+              </button>
+              <button onClick={handleSendTemplate} disabled={sendingTemplate || (!selectedTemplate && templates.length > 0)}
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
+                {sendingTemplate ? 'Enviando...' : 'Enviar Template'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Feature 5: Import Modal */}
       {showImportModal && (
