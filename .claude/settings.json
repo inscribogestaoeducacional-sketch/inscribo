@@ -12,7 +12,9 @@
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}, indent=2\\)\\)\")",
       "Bash(xargs grep -l \"survey\\\\|pesquisa\")",
       "Bash(node -e \"require\\('papaparse'\\)\")",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(python3 -c ' *)",
+      "Bash(Select-String \"FlowEditor\")"
     ]
   }
 }
