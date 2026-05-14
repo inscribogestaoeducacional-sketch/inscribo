@@ -3,7 +3,12 @@
     "allow": [
       "Bash(findstr /i \"supabase project db\")",
       "Bash(findstr /i \"SUPABASE_URL SUPABASE_SERVICE DATABASE_URL PROJECT\" .env.local)",
-      "Bash(findstr /i \"SUPABASE PROJECT DATABASE\")"
+      "Bash(findstr /i \"SUPABASE PROJECT DATABASE\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\({deps:Object.keys\\(p.dependencies||{}\\), devDeps:Object.keys\\(p.devDependencies||{}\\)},null,2\\)\\)\")",
+      "Bash(npm install *)"
     ]
   }
 }
