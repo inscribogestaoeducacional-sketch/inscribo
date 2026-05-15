@@ -1,6 +1,5 @@
 // @ts-nocheck
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const AUTENTIQUE_KEY = Deno.env.get('AUTENTIQUE_API_KEY')
 const AUTENTIQUE_URL = 'https://api.autentique.com.br/v2/graphql'
@@ -8,6 +7,24 @@ const AUTENTIQUE_URL = 'https://api.autentique.com.br/v2/graphql'
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+async function dbFetch(path: string, method: string, body?: object, prefer?: string) {
+  const url = Deno.env.get('SUPABASE_URL')!
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'apikey': key,
+    'Authorization': `Bearer ${key}`,
+  }
+  if (prefer) headers['Prefer'] = prefer
+  const res = await fetch(`${url}/rest/v1/${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  const data = await res.json()
+  return { data, status: res.status }
 }
 
 serve(async (req) => {
@@ -25,44 +42,32 @@ serve(async (req) => {
     if (!AUTENTIQUE_KEY) throw new Error('AUTENTIQUE_API_KEY não configurada')
     if (!signer_email || !signer_name) throw new Error('Nome e e-mail do signatário são obrigatórios')
 
-    const secretKeys = Deno.env.get('SUPABASE_SECRET_KEYS')
-    const serviceKey = (() => {
-      if (secretKeys) {
-        try {
-          const parsed = JSON.parse(secretKeys)
-          return parsed.service_role || parsed.serviceRole || ''
-        } catch {
-          return secretKeys // já é string simples
-        }
-      }
-      return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-    })()
-
-    const sb = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      serviceKey
+    // 1. Buscar configurações da plataforma
+    const { data: cfgData } = await dbFetch(
+      `platform_settings?key=in.(billing_due_day,platform_name,platform_cnpj,platform_address,platform_email)&select=key,value`,
+      'GET'
     )
-
-    // 1. Buscar template e configurações
-    const { data: cfg } = await sb.from('platform_settings').select('key, value')
-      .in('key', ['billing_due_day', 'platform_name', 'platform_cnpj', 'platform_address', 'platform_email'])
     const settings: Record<string, string> = {}
-    for (const row of cfg || []) settings[row.key] = row.value
+    for (const row of cfgData || []) settings[row.key] = row.value
 
     // 2. Buscar dados da instituição
-    const { data: inst } = await sb.from('institutions')
-      .select('name, cnpj, city, state, email, address, phone, billing_due_day')
-      .eq('id', institution_id)
-      .single()
+    const { data: instData } = await dbFetch(
+      `institutions?id=eq.${institution_id}&select=name,cnpj,city,state,email,address,phone,billing_due_day`,
+      'GET'
+    )
+    const inst = Array.isArray(instData) ? instData[0] : null
 
-    // Buscar nome do consultor
+    // 3. Buscar nome do consultor
     let consultorName = 'Equipe Áion Edu'
     if (consultant_id) {
-      const { data: cons } = await sb.from('users').select('full_name').eq('id', consultant_id).single()
-      if (cons?.full_name) consultorName = cons.full_name
+      const { data: userData } = await dbFetch(
+        `users?id=eq.${consultant_id}&select=full_name`,
+        'GET'
+      )
+      if (userData?.[0]?.full_name) consultorName = userData[0].full_name
     }
 
-    // 3. Montar variáveis
+    // 4. Montar variáveis
     const fmtBRL = (n: number) => n?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) || 'R$ 0,00'
     const startDate = contract_start_date
       ? new Date(contract_start_date + 'T12:00:00').toLocaleDateString('pt-BR')
@@ -86,7 +91,7 @@ serve(async (req) => {
       consultor:         consultorName,
     }
 
-    // 4. HTML completo do contrato Áion Edu com identidade visual
+    // 5. HTML completo do contrato Áion Edu com identidade visual
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
     const htmlContent = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -265,7 +270,7 @@ serve(async (req) => {
 </body>
 </html>`
 
-    // 5. Montar mutation GraphQL com 2 signatários
+    // 6. Montar mutation GraphQL com 2 signatários
     const VICTOR_EMAIL = 'contato@aionedu.com.br'
     const VICTOR_NAME  = 'Jose Victor de Almeida Araujo'
 
@@ -316,7 +321,7 @@ serve(async (req) => {
     let offset = 0
     for (const part of parts) { bodyBytes.set(part, offset); offset += part.length }
 
-    // 6. Chamar API Autentique
+    // 7. Chamar API Autentique
     const autRes = await fetch(AUTENTIQUE_URL, {
       method: 'POST',
       headers: {
@@ -336,38 +341,31 @@ serve(async (req) => {
 
     if (!documentId) throw new Error('Autentique não retornou document ID')
 
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-
     const signersInitial = [
       { name: signer_name, email: signer_email, role: signer_role || 'Diretor', signed: false, signed_at: null },
       { name: VICTOR_NAME, email: VICTOR_EMAIL, role: 'Áion Edu', signed: false, signed_at: null },
     ]
 
-    // 7. IMEDIATAMENTE salvar o contrato — sem esperar o link de assinatura
+    // 8. IMEDIATAMENTE salvar o contrato — sem esperar o link de assinatura
     let contractId: string | null = null
 
     if (contract_id) {
       // Reenvio: atualizar contrato existente
-      await sb.from('contracts').update({
+      await dbFetch(`contracts?id=eq.${contract_id}`, 'PATCH', {
         status: 'sent',
         sign_url: null,
         autentique_document_id: documentId,
         signer_name,
         signer_email,
         signers: signersInitial,
-      }).eq('id', contract_id)
+      })
       contractId = contract_id
     } else if (institution_id) {
-      // Novo contrato: INSERT via REST API com service role
-      const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/contracts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': serviceKey,
-          'Authorization': `Bearer ${serviceKey}`,
-          'Prefer': 'return=representation',
-        },
-        body: JSON.stringify({
+      // Novo contrato
+      const { data: contractData, status: insertStatus } = await dbFetch(
+        'contracts',
+        'POST',
+        {
           institution_id,
           status: 'sent',
           sign_url: null,
@@ -377,22 +375,22 @@ serve(async (req) => {
           signers: signersInitial,
           plan: 'escola',
           monthly_value: monthly_value || 0,
-        }),
-      })
-      const insertData = await insertRes.json()
-      console.log('[autentique] contract insert status:', insertRes.status, JSON.stringify(insertData))
-      contractId = Array.isArray(insertData) ? insertData[0]?.id : insertData?.id || null
+        },
+        'return=representation'
+      )
+      console.log('[autentique] contract insert status:', insertStatus, JSON.stringify(contractData))
+      contractId = Array.isArray(contractData) ? contractData[0]?.id : contractData?.id || null
     }
 
-    // 8. Atualizar status da instituição
+    // 9. Atualizar status da instituição
     if (institution_id) {
-      await sb.from('institutions')
-        .update({ plan_status: 'pending_contract' })
-        .eq('id', institution_id)
+      await dbFetch(`institutions?id=eq.${institution_id}`, 'PATCH', {
+        plan_status: 'pending_contract',
+      })
     }
 
-    // 9. Notificação para o super admin
-    await sb.from('system_notifications').insert({
+    // 10. Notificação para o super admin
+    await dbFetch('system_notifications', 'POST', {
       institution_id: null,
       type: 'milestone',
       title: `Contrato enviado — ${inst?.name || school_name}`,
@@ -401,7 +399,7 @@ serve(async (req) => {
       action_url: '/super-admin/contracts',
     })
 
-    // 10. Tentar buscar o link de assinatura — não bloqueia o retorno se falhar
+    // 11. Tentar buscar o link de assinatura — não bloqueia o retorno se falhar
     let signUrl: string | null = null
 
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -442,11 +440,10 @@ serve(async (req) => {
 
       if (signUrl) {
         console.log('[autentique] signUrl encontrado:', signUrl)
-        // UPDATE contrato com o link
         if (contractId) {
-          await sb.from('contracts').update({ sign_url: signUrl }).eq('id', contractId)
+          await dbFetch(`contracts?id=eq.${contractId}`, 'PATCH', { sign_url: signUrl })
         } else {
-          await sb.from('contracts').update({ sign_url: signUrl }).eq('autentique_document_id', documentId)
+          await dbFetch(`contracts?autentique_document_id=eq.${documentId}`, 'PATCH', { sign_url: signUrl })
         }
         break
       }
