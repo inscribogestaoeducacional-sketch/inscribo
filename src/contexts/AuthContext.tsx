@@ -61,33 +61,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const initAuth = async () => {
     try {
-      // 1. Cache válido?
-      const cachedSession = localStorage.getItem(CACHE_SESSION)
-      const cachedUser    = localStorage.getItem(CACHE_USER)
-      if (cachedSession && cachedUser) {
-        try {
-          const sess = JSON.parse(cachedSession)
-          const usr  = JSON.parse(cachedUser)
-          if (sess.expires_at * 1000 > Date.now()) {
-            setSession(sess)
-            setUser(usr)
-            setInitializing(false)
-            // Recarrega em background para garantir dados frescos
-            loadUserProfile(usr.id).catch(() => {})
-            return
-          }
-        } catch {}
-        clearCache()
-      }
-
-      // 2. Sessão do Supabase
+      // SDK é a fonte de verdade — nunca ler sessão do localStorage diretamente
       const { data: { session: current } } = await supabase.auth.getSession()
       if (current?.user) {
         setSession(current)
+        // Restaura perfil do cache instantaneamente enquanto busca dados frescos
+        const cached = localStorage.getItem(CACHE_USER)
+        if (cached) { try { setUser(JSON.parse(cached)) } catch {} }
         await loadUserProfile(current.user.id)
       }
 
-      // 3. Listener
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
         if (event === 'SIGNED_IN' && newSession?.user) {
           setSession(newSession)
@@ -165,6 +148,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw new Error(error.message)
       if (data.session) {
+        // Garantir que o SDK persiste a sessão corretamente
+        await supabase.auth.setSession({
+          access_token:  data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        })
         setSession(data.session)
         await loadUserProfile(data.user!.id)
       }
