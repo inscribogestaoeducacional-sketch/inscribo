@@ -25,9 +25,18 @@ serve(async (req) => {
     if (!AUTENTIQUE_KEY) throw new Error('AUTENTIQUE_API_KEY não configurada')
     if (!signer_email || !signer_name) throw new Error('Nome e e-mail do signatário são obrigatórios')
 
-    const serviceKey = Deno.env.get('SUPABASE_SECRET_KEYS')
-      || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-      || ''
+    const secretKeys = Deno.env.get('SUPABASE_SECRET_KEYS')
+    const serviceKey = (() => {
+      if (secretKeys) {
+        try {
+          const parsed = JSON.parse(secretKeys)
+          return parsed.service_role || parsed.serviceRole || ''
+        } catch {
+          return secretKeys // já é string simples
+        }
+      }
+      return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+    })()
 
     const sb = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -283,7 +292,7 @@ serve(async (req) => {
     const operations = JSON.stringify({
       query: mutation,
       variables: {
-        document: { name: `Contrato — ${inst?.name || school_name}` },
+        document: { name: `Contrato — ${inst?.name || school_name || institution_id}` },
         signers: [
           { email: signer_email, name: signer_name, action: 'SIGN' },
           { email: VICTOR_EMAIL, name: VICTOR_NAME,  action: 'SIGN' },
