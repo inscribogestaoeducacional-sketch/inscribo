@@ -52,7 +52,7 @@ serve(async (req) => {
 
     // 2. Buscar dados da instituição
     const { data: instData } = await dbFetch(
-      `institutions?id=eq.${institution_id}&select=name,cnpj,city,state,email,address,phone,billing_due_day`,
+      `institutions?id=eq.${institution_id}&select=name,cnpj,city,state,email,address,phone,billing_due_day,monthly_value,implementation_value`,
       'GET'
     )
     const inst = Array.isArray(instData) ? instData[0] : null
@@ -83,8 +83,8 @@ serve(async (req) => {
       cpf_gestor:        signer_cpf || '',
       email_gestor:      signer_email,
       telefone_gestor:   signer_phone || inst?.phone || '',
-      valor_implantacao: implementation_value ? fmtBRL(Number(implementation_value)) : 'R$ 0,00',
-      valor_mensal:      monthly_value ? fmtBRL(Number(monthly_value)) : 'R$ 0,00',
+      valor_implantacao: fmtBRL(Number(implementation_value || inst?.implementation_value || 0)),
+      valor_mensal:      fmtBRL(Number(monthly_value || inst?.monthly_value || 0)),
       dia_vencimento:    inst?.billing_due_day || settings.billing_due_day || '10',
       data_inicio:       startDate,
       data_hoje:         new Date().toLocaleDateString('pt-BR'),
