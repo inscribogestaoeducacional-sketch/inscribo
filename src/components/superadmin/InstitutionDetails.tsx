@@ -93,7 +93,7 @@ const months = [
   { v: 10, l: 'Out' }, { v: 11, l: 'Nov' }, { v: 12, l: 'Dez' },
 ]
 
-function getCurrentPhase(institution: any, contract: any, onboardingProcess: any): TimelinePhaseId {
+function getCurrentPhase(institution: any, contract: any, onboardingProcess: any, tasks: any[] = []): TimelinePhaseId {
   if (!institution) return 'contract'
   const status = institution.plan_status
   if (!contract || contract.status === 'draft') return 'contract'
@@ -103,9 +103,21 @@ function getCurrentPhase(institution: any, contract: any, onboardingProcess: any
   if (!onboardingProcess) return 'kickoff'
   const phase = onboardingProcess.current_phase
   if (phase === 'contract') return 'kickoff'
-  if (phase === 'implementation') return 'implementation'
-  if (phase === 'training') return 'training'
-  if (phase === 'campaign') return 'campaign'
+  if (phase === 'implementation') {
+    const implTasks = tasks.filter(t => t.phase === 'implementation')
+    if (implTasks.length > 0 && implTasks.every(t => t.done)) return 'training'
+    return 'implementation'
+  }
+  if (phase === 'training') {
+    const trainTasks = tasks.filter(t => t.phase === 'training')
+    if (trainTasks.length > 0 && trainTasks.every(t => t.done)) return 'campaign'
+    return 'training'
+  }
+  if (phase === 'campaign') {
+    const campTasks = tasks.filter(t => t.phase === 'campaign')
+    if (campTasks.length > 0 && campTasks.every(t => t.done)) return 'active'
+    return 'campaign'
+  }
   return 'active'
 }
 
@@ -663,7 +675,9 @@ export default function InstitutionDetails() {
   const monthlyPayments = payments.filter(p => p.payment_type === 'monthly')
   const contractSt     = contract ? (CONTRACT_STATUS[contract.status] || CONTRACT_STATUS.draft) : null
   const usagePct       = Math.min(100, Math.round((waUsage.count / waUsage.limit) * 100))
-  const currentPhase   = getCurrentPhase(institution, contract, onboardingProcess)
+  console.log('[InstitutionDetails] tasks:', onboardingTasks)
+  const currentPhase   = getCurrentPhase(institution, contract, onboardingProcess, onboardingTasks)
+  console.log('[InstitutionDetails] currentPhase:', currentPhase, 'onboardingProcess.current_phase:', onboardingProcess?.current_phase)
   const currentPhaseIdx = TIMELINE_PHASES.findIndex(p => p.id === currentPhase)
 
   const phaseState = (phaseId: TimelinePhaseId): 'done' | 'active' | 'pending' => {
