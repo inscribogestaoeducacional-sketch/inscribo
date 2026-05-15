@@ -1,5 +1,5 @@
 // src/components/superadmin/AdminHome.tsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
@@ -81,7 +81,13 @@ export default function AdminHome() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3500) }
 
-  useEffect(() => { loadData() }, [])
+  const cancelledRef = useRef(false)
+
+  useEffect(() => {
+    cancelledRef.current = false
+    loadData()
+    return () => { cancelledRef.current = true }
+  }, [])
 
   const loadData = async () => {
     setLoading(true)
@@ -92,6 +98,7 @@ export default function AdminHome() {
       supabase.from('onboarding_meetings').select('id, title, scheduled_at, status, type, institution_id, institutions(name)').eq('status', 'scheduled').gte('scheduled_at', new Date().toISOString()).order('scheduled_at').limit(10),
       supabase.from('contracts').select('id, status, created_at, institution_id, monthly_value, institutions(name)').order('created_at', { ascending: false }).limit(8),
     ])
+    if (cancelledRef.current) return
     setInstitutions(instRes.data || [])
     setPayments(payRes.data || [])
     setLeads(leadRes.data || [])

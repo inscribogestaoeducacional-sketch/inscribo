@@ -33,7 +33,7 @@ serve(async (req) => {
 
     const { data: contract } = await supabase
       .from('contracts')
-      .select('*, institutions(id, name, email, phone)')
+      .select('*, institutions(id, name, email, phone, cnpj, implementation_value)')
       .eq('autentique_document_id', documentId)
       .maybeSingle()
 
@@ -86,16 +86,65 @@ serve(async (req) => {
         read: false,
       })
 
-      const { data: payment } = await supabase
+      const inst = contract.institutions
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+
+      // Verificar se já existe cobrança de implantação pendente
+      const { data: existingPayment } = await supabase
         .from('payments')
-        .select('asaas_charge_url, amount, due_date')
+        .select('id, asaas_charge_url, amount, due_date')
         .eq('institution_id', contract.institution_id)
         .eq('payment_type', 'implementation')
         .eq('status', 'pending')
         .maybeSingle()
 
-      if (payment?.asaas_charge_url && contract.institutions?.email) {
-        await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-email`, {
+      if (!existingPayment) {
+        // Cobrança ainda não existe — criar agora que o contrato foi assinado
+        const dueDate = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
+        const chargeRes = await fetch(`${supabaseUrl}/functions/v1/asaas-create-charge`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          },
+          body: JSON.stringify({
+            institution_id: contract.institution_id,
+            name:           inst?.name,
+            email:          inst?.email,
+            cpfCnpj:        inst?.cnpj || null,
+            value:          inst?.implementation_value || 0,
+            description:    `Taxa de implantação — ${inst?.name}`,
+            dueDate,
+            payment_type:   'implementation',
+          }),
+        })
+
+        const chargeData = await chargeRes.json()
+        console.log('[autentique-webhook] asaas charge created:', JSON.stringify(chargeData))
+
+        if (chargeData?.paymentLink && inst?.email) {
+          await fetch(`${supabaseUrl}/functions/v1/send-email`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+            },
+            body: JSON.stringify({
+              type: 'payment_link',
+              to:   inst.email,
+              data: {
+                institution_name: inst.name,
+                value:            new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(inst.implementation_value || 0),
+                due_date:         new Date(dueDate + 'T12:00:00').toLocaleDateString('pt-BR'),
+                billing_type:     'PIX/Boleto',
+                payment_link:     chargeData.paymentLink,
+              },
+            }),
+          })
+        }
+      } else if (existingPayment.asaas_charge_url && inst?.email) {
+        // Cobrança já existia (criada manualmente) — só reenviar o email com o link existente
+        await fetch(`${supabaseUrl}/functions/v1/send-email`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -103,15 +152,15 @@ serve(async (req) => {
           },
           body: JSON.stringify({
             type: 'payment_link',
-            to: contract.institutions.email,
+            to:   inst.email,
             data: {
-              institution_name: contract.institutions.name,
-              value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(payment.amount),
-              due_date: payment.due_date ? new Date(payment.due_date + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
-              billing_type: 'PIX/Boleto',
-              payment_link: payment.asaas_charge_url,
-            }
-          })
+              institution_name: inst.name,
+              value:            new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(existingPayment.amount),
+              due_date:         existingPayment.due_date ? new Date(existingPayment.due_date + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
+              billing_type:     'PIX/Boleto',
+              payment_link:     existingPayment.asaas_charge_url,
+            },
+          }),
         })
       }
 

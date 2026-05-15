@@ -1,5 +1,5 @@
 // src/components/superadmin/AdminSchools.tsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
@@ -1018,7 +1018,14 @@ export default function AdminSchools() {
   })
   const [savingEdit, setSavingEdit] = useState(false)
 
-  useEffect(() => { loadData() }, [])
+  const cancelledRef = useRef(false)
+  const cacheRef = useRef<any[]>([])
+
+  useEffect(() => {
+    cancelledRef.current = false
+    loadData()
+    return () => { cancelledRef.current = true }
+  }, [])
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok })
@@ -1035,8 +1042,10 @@ export default function AdminSchools() {
         .order('created_at', { ascending: false }),
       supabase.from('whatsapp_phone_numbers').select('*'),
     ])
+    if (cancelledRef.current) return
     if (instRes.error) console.error('institutions error:', instRes.error)
-    setInstitutions(instRes.data || [])
+    setInstitutions(instRes.data || cacheRef.current)
+    if (instRes.data) cacheRef.current = instRes.data
     setConsultants(consultRes.data || [])
     setCycles(cycleRes.data || [])
     const waMap: Record<string, any> = {}

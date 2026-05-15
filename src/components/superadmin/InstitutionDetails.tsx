@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
@@ -67,6 +67,7 @@ const months = [
 export default function InstitutionDetails() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const cancelledRef = useRef(false)
 
   const [institution, setInstitution] = useState<any>(null)
   const [users, setUsers] = useState<any[]>([])
@@ -129,9 +130,9 @@ export default function InstitutionDetails() {
   useEffect(() => {
     console.log('[InstitutionDetails] useEffect id=', id)
     if (!id) return
-    let isMounted = true
-    loadAll(isMounted)
-    return () => { isMounted = false }
+    cancelledRef.current = false
+    loadAll()
+    return () => { cancelledRef.current = true }
   }, [id])
 
   const loadContractData = async () => {
@@ -149,7 +150,7 @@ export default function InstitutionDetails() {
     setLoadingContract(false)
   }
 
-  const loadAll = async (isMounted = true) => {
+  const loadAll = async () => {
     if (!id) return
     console.log('[InstitutionDetails] loadAll start, id=', id)
     setLoading(true)
@@ -165,7 +166,7 @@ export default function InstitutionDetails() {
         supabase.from('users').select('id, full_name').eq('user_type', 'consultant').order('full_name'),
       ])
 
-      if (!isMounted) return
+      if (cancelledRef.current) return
 
       console.log('[InstitutionDetails] payments=', paymentsRes.data, 'error=', paymentsRes.error)
       console.log('[InstitutionDetails] contract=', contractRes.data, 'error=', contractRes.error)
@@ -210,7 +211,7 @@ export default function InstitutionDetails() {
           .select('*')
           .eq('process_id', processRes.data.id)
           .order('sort_order')
-        if (isMounted) setOnboardingTasks(tasks || [])
+        if (!cancelledRef.current) setOnboardingTasks(tasks || [])
       }
 
       // WhatsApp usage — contagem via whatsapp_conversations
@@ -220,12 +221,12 @@ export default function InstitutionDetails() {
         .select('id', { count: 'exact', head: true })
         .eq('institution_id', id)
         .gte('created_at', monthStart.toISOString())
-      if (isMounted && waCount !== null) setWaUsage({ count: waCount, limit: 1000 })
+      if (!cancelledRef.current && waCount !== null) setWaUsage({ count: waCount, limit: 1000 })
 
     } catch (e: any) {
-      if (isMounted) showToast('Erro ao carregar dados.', false)
+      if (!cancelledRef.current) showToast('Erro ao carregar dados.', false)
     }
-    if (isMounted) setLoading(false)
+    if (!cancelledRef.current) setLoading(false)
   }
 
   // ── Ações ─────────────────────────────────────────────

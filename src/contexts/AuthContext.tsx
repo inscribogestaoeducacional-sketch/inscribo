@@ -35,18 +35,6 @@ export function useAuth() {
   return ctx
 }
 
-// ─── helpers ──────────────────────────────────────────────────────────────
-const CACHE_SESSION = 'inscribo-auth-token'
-const CACHE_USER    = 'inscribo-user'
-
-function saveUserCache(u: AppUser) {
-  try { localStorage.setItem(CACHE_USER, JSON.stringify(u)) } catch {}
-}
-function clearCache() {
-  localStorage.removeItem(CACHE_SESSION)
-  localStorage.removeItem(CACHE_USER)
-}
-
 // ─── PROVIDER ─────────────────────────────────────────────────────────────
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user,         setUser]         = useState<AppUser | null>(null)
@@ -56,42 +44,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ── init ─────────────────────────────────────────────
   useEffect(() => {
-    initAuth()
-  }, [])
-
-  const initAuth = async () => {
-    try {
-      // SDK é a fonte de verdade — nunca ler sessão do localStorage diretamente
-      const { data: { session: current } } = await supabase.auth.getSession()
-      if (current?.user) {
-        setSession(current)
-        // Restaura perfil do cache instantaneamente enquanto busca dados frescos
-        const cached = localStorage.getItem(CACHE_USER)
-        if (cached) { try { setUser(JSON.parse(cached)) } catch {} }
-        await loadUserProfile(current.user.id)
-      }
-
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-        if (event === 'SIGNED_IN' && newSession?.user) {
-          setSession(newSession)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, newSession) => {
+        setSession(newSession)
+        if (newSession?.user) {
           await loadUserProfile(newSession.user.id)
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null)
+          setLoading(false)
+        } else {
+          setLoading(false)
         }
-        if (event === 'SIGNED_OUT') {
-          setUser(null); setSession(null); clearCache()
-        }
-        if (event === 'TOKEN_REFRESHED' && newSession) {
-          setSession(newSession)
-        }
-      })
-
-      return () => subscription.unsubscribe()
-    } catch (e) {
-      console.error('Auth init error:', e)
-      setUser(null); setSession(null)
-    } finally {
-      setInitializing(false)
-    }
-  }
+        setInitializing(false)
+      }
+    )
+    return () => subscription.unsubscribe()
+  }, [])
 
   // ── loadUserProfile ───────────────────────────────────
   // REGRA: busca SEMPRE na tabela users primeiro.
@@ -129,15 +97,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           is_super_admin:   data.user_type === 'admin_geral',
         }
         setUser(appUser)
-        saveUserCache(appUser)
       }
     } catch (e) {
       console.error('loadUserProfile error:', e)
-      // Fallback: usa cache se disponível
-      const cached = localStorage.getItem(CACHE_USER)
-      if (cached) {
-        try { setUser(JSON.parse(cached)) } catch {}
-      }
     }
   }
 
@@ -147,9 +109,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw new Error(error.message)
-      if (data.session) {
-        setSession(data.session)
-        await loadUserProfile(data.user!.id)
+      if (data.user) {
+        await loadUserProfile(data.user.id)
       }
     } finally {
       setLoading(false)
@@ -160,7 +121,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     setLoading(true)
     try {
-      clearCache()
       setUser(null)
       setSession(null)
       await supabase.auth.signOut()

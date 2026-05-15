@@ -729,7 +729,7 @@ function maskCpf(v: string) {
 }
 
 function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
-  lead: Lead; consultants: any[]; onClose: () => void; onSuccess: (institutionId: string) => void
+  lead: Lead; consultants: any[]; onClose: () => void; onSuccess: (institutionId: string, warning?: string) => void
 }) {
   const [step, setStep] = useState(1)
   const [form, setForm] = useState({
@@ -812,6 +812,8 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
         throw new Error(fnData?.error || 'Erro ao criar usuário')
       }
 
+      // 3. Enviar contrato (não bloqueia criação se falhar)
+      let contractWarning: string | undefined
       if (!form.isFree) {
         try {
           const consultantName = consultants.find(c => c.id === form.consultantId)?.full_name
@@ -826,33 +828,12 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
               consultant_name: consultantName || null,
             },
           })
-        } catch {}
-
-        try {
-          const { data: asaasData } = await supabase.functions.invoke('asaas-create-charge', {
-            body: {
-              institution_id: institution.id, name: form.name.trim(),
-              email: form.email.trim().toLowerCase(), cpfCnpj: form.cnpj.replace(/\D/g, '') || null,
-              value: Number(form.implementationValue),
-              description: `Taxa de implantação — ${form.name.trim()}`,
-              dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-            },
-          })
-          if (asaasData?.paymentLink) {
-            await supabase.functions.invoke('send-email', {
-              body: {
-                type: 'payment_link', to: form.email.trim().toLowerCase(),
-                data: {
-                  institution_name: form.name.trim(),
-                  value: Number(form.implementationValue).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
-                  due_date: new Date(Date.now() + 7 * 86400000).toLocaleDateString('pt-BR'),
-                  billing_type: 'PIX/Boleto', payment_link: asaasData.paymentLink,
-                },
-              },
-            })
-          }
-        } catch {}
+        } catch (e: any) {
+          contractWarning = 'Escola criada mas houve erro ao enviar contrato. Acesse a aba Contrato para reenviar.'
+          console.error('[handleCreate] autentique error:', e?.message)
+        }
       } else {
+        // Escola gratuita — sem contrato, envia boas-vindas direto
         try {
           await supabase.functions.invoke('send-email', {
             body: { type: 'new_institution', to: form.email.trim().toLowerCase(), data: { institution_name: form.name.trim(), login_url: 'https://aionedu.com.br/login' } },
@@ -861,7 +842,7 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
       }
 
       await supabase.from('crm_leads').update({ stage: 'cliente', converted_institution_id: institution.id, updated_at: new Date().toISOString() }).eq('id', lead.id)
-      onSuccess(institution.id)
+      onSuccess(institution.id, contractWarning)
     } catch (e: any) {
       setErrors({ _global: e?.message || 'Erro ao criar escola.' })
     } finally {
@@ -1128,7 +1109,13 @@ export default function AdminCRM() {
 
   const showToast = (msg: string, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 4000) }
 
-  useEffect(() => { loadData() }, [])
+  const cancelledRef = useRef(false)
+
+  useEffect(() => {
+    cancelledRef.current = false
+    loadData()
+    return () => { cancelledRef.current = true }
+  }, [])
 
   const loadData = async () => {
     setLoading(true)
@@ -1137,6 +1124,7 @@ export default function AdminCRM() {
       supabase.from('users').select('id, full_name').eq('user_type', 'consultant'),
       supabase.from('crm_meetings').select('lead_id').eq('status', 'scheduled'),
     ])
+    if (cancelledRef.current) return
     setLeads(leadsRes.data || [])
     setConsultants(consultRes.data || [])
 
@@ -1189,9 +1177,13 @@ export default function AdminCRM() {
     loadData()
   }
 
-  const handleOnboardingSuccess = (institutionId: string) => {
+  const handleOnboardingSuccess = (institutionId: string, warning?: string) => {
     setOnboardingLead(null)
-    showToast('🎉 Escola criada! Lead convertido.')
+    if (warning) {
+      showToast(warning, false)
+    } else {
+      showToast('🎉 Escola criada! Contrato enviado para assinatura.')
+    }
     loadData()
     navigate('/super-admin/onboarding')
   }

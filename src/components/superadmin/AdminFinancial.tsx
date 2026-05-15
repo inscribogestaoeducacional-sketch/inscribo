@@ -1,5 +1,5 @@
 // src/components/superadmin/AdminFinancial.tsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -367,7 +367,13 @@ export default function AdminFinancial() {
 
   const showToast = (msg: string, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 4000) }
 
-  useEffect(() => { loadData() }, [])
+  const cancelledRef = useRef(false)
+
+  useEffect(() => {
+    cancelledRef.current = false
+    loadData()
+    return () => { cancelledRef.current = true }
+  }, [])
 
   const loadData = async () => {
     setLoading(true)
@@ -377,6 +383,7 @@ export default function AdminFinancial() {
       supabase.from('platform_settings').select('key, value'),
       supabase.from('platform_costs').select('*').order('name'),
     ])
+    if (cancelledRef.current) return
     setInstitutions(instRes.data || [])
     setPayments(payRes.data || [])
     setCosts(costRes.data || [])
