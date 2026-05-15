@@ -109,8 +109,16 @@ serve(async (req) => {
 
       const inst = contract.institutions
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
+      const rawKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+      const serviceKey = (() => {
+        try {
+          const parsed = JSON.parse(rawKey)
+          return parsed.service_role || rawKey
+        } catch {
+          return rawKey
+        }
+      })()
 
       // 7. Verificar se já existe cobrança de implantação pendente
       const { data: paymentRows } = await dbFetch(
