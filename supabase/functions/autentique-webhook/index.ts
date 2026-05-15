@@ -1,24 +1,34 @@
 // @ts-nocheck
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+async function dbFetch(path: string, method: string, body?: object, prefer?: string) {
+  const url = Deno.env.get('SUPABASE_URL')!
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'apikey': key,
+    'Authorization': `Bearer ${key}`,
+  }
+  if (prefer) headers['Prefer'] = prefer
+  const res = await fetch(`${url}/rest/v1/${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (res.status === 204) return { data: null, status: res.status }
+  const data = await res.json()
+  return { data, status: res.status }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
-  // Webhook externo — não valida JWT do Supabase
-  // Valida apenas pelo token da Autentique se configurado
-
   try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    )
-
     const body = await req.json()
     console.log('[autentique-webhook] payload:', JSON.stringify(body))
 
@@ -27,85 +37,88 @@ serve(async (req) => {
 
     if (!documentId) {
       return new Response(JSON.stringify({ ok: true, msg: 'no document id' }), {
-        headers: { ...CORS, 'Content-Type': 'application/json' }
+        headers: { ...CORS, 'Content-Type': 'application/json' },
       })
     }
 
-    const { data: contract } = await supabase
-      .from('contracts')
-      .select('*, institutions(id, name, email, phone, cnpj, implementation_value)')
-      .eq('autentique_document_id', documentId)
-      .maybeSingle()
+    // 1. Buscar contrato com dados da instituição (join via PostgREST)
+    const { data: contractRows } = await dbFetch(
+      `contracts?autentique_document_id=eq.${documentId}&select=*,institutions(id,name,email,phone,cnpj,implementation_value)`,
+      'GET'
+    )
+    const contract = Array.isArray(contractRows) ? contractRows[0] : null
 
     if (!contract) {
       console.log('[autentique-webhook] contrato não encontrado para document:', documentId)
       return new Response(JSON.stringify({ ok: true, msg: 'contract not found' }), {
-        headers: { ...CORS, 'Content-Type': 'application/json' }
+        headers: { ...CORS, 'Content-Type': 'application/json' },
       })
     }
 
-    // Identify which signer just signed from the webhook payload
+    // 2. Identificar qual signatário acabou de assinar
     const signerEmail: string | null =
       body?.email ||
       body?.signer?.email ||
       body?.document?.signatures?.find((s: any) => s?.signed_at)?.email ||
       null
 
-    // Update per-signer status in signers JSONB
+    // 3. Atualizar status por signatário no JSONB signers
     if (signerEmail && Array.isArray(contract.signers) && contract.signers.length > 0) {
       const signedAt = body?.signed_at || body?.signer?.signed_at || new Date().toISOString()
       const updatedSigners = contract.signers.map((s: any) =>
         s.email === signerEmail ? { ...s, signed: true, signed_at: signedAt } : s
       )
-      await supabase.from('contracts')
-        .update({ signers: updatedSigners })
-        .eq('id', contract.id)
-      // Refresh contract.signers for the all-signed check below
+      await dbFetch(`contracts?id=eq.${contract.id}`, 'PATCH', { signers: updatedSigners })
       contract.signers = updatedSigners
     }
 
-    const isSigned = status === 'SIGNED' || status === 'signed' ||
+    const isSigned =
+      status === 'SIGNED' || status === 'signed' ||
       (Array.isArray(contract.signers) && contract.signers.length > 0 && contract.signers.every((s: any) => s.signed)) ||
       body?.document?.signatures?.every((s: any) => s?.signed_at) ||
       body?.signed === true
 
     if (isSigned) {
-      await supabase.from('contracts')
-        .update({ status: 'signed' })
-        .eq('id', contract.id)
+      // 4. Marcar contrato como assinado
+      await dbFetch(`contracts?id=eq.${contract.id}`, 'PATCH', {
+        status: 'signed',
+        signed_at: new Date().toISOString(),
+      })
 
-      await supabase.from('institutions')
-        .update({ plan_status: 'pending_payment' })
-        .eq('id', contract.institution_id)
+      // 5. Atualizar status da instituição
+      await dbFetch(`institutions?id=eq.${contract.institution_id}`, 'PATCH', {
+        plan_status: 'pending_payment',
+      })
 
-      await supabase.from('system_notifications').insert({
+      // 6. Notificação para o super admin
+      await dbFetch('system_notifications', 'POST', {
         institution_id: null,
         title: `Contrato assinado — ${contract.institutions?.name}`,
         message: `O gestor assinou o contrato. Escola aguardando pagamento da implantação.`,
         type: 'info',
         read: false,
-      })
+      }, 'return=minimal')
 
       const inst = contract.institutions
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
 
-      // Verificar se já existe cobrança de implantação pendente
-      const { data: existingPayment } = await supabase
-        .from('payments')
-        .select('id, asaas_charge_url, amount, due_date')
-        .eq('institution_id', contract.institution_id)
-        .eq('payment_type', 'implementation')
-        .eq('status', 'pending')
-        .maybeSingle()
+      // 7. Verificar se já existe cobrança de implantação pendente
+      const { data: paymentRows } = await dbFetch(
+        `payments?institution_id=eq.${contract.institution_id}&payment_type=eq.implementation&status=eq.pending&select=id,asaas_charge_url,amount,due_date`,
+        'GET'
+      )
+      const existingPayment = Array.isArray(paymentRows) ? paymentRows[0] : null
 
       if (!existingPayment) {
-        // Cobrança ainda não existe — criar agora que o contrato foi assinado
+        // Cobrança não existe — criar agora que o contrato foi assinado
         const dueDate = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
         const chargeRes = await fetch(`${supabaseUrl}/functions/v1/asaas-create-charge`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            'Authorization': `Bearer ${serviceKey}`,
           },
           body: JSON.stringify({
             institution_id: contract.institution_id,
@@ -127,7 +140,7 @@ serve(async (req) => {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+              'Authorization': `Bearer ${anonKey}`,
             },
             body: JSON.stringify({
               type: 'payment_link',
@@ -143,12 +156,12 @@ serve(async (req) => {
           })
         }
       } else if (existingPayment.asaas_charge_url && inst?.email) {
-        // Cobrança já existia (criada manualmente) — só reenviar o email com o link existente
+        // Cobrança já existia — reenviar email com o link existente
         await fetch(`${supabaseUrl}/functions/v1/send-email`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+            'Authorization': `Bearer ${anonKey}`,
           },
           body: JSON.stringify({
             type: 'payment_link',
@@ -168,13 +181,13 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ ok: true }), {
-      headers: { ...CORS, 'Content-Type': 'application/json' }
+      headers: { ...CORS, 'Content-Type': 'application/json' },
     })
 
   } catch (err) {
     console.error('[autentique-webhook] erro:', String(err))
     return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500, headers: CORS
+      status: 500, headers: CORS,
     })
   }
 })
