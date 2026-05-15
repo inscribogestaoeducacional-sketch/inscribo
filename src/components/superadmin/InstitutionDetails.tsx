@@ -296,9 +296,9 @@ export default function InstitutionDetails() {
     return () => { cancelledRef.current = true }
   }, [id])
 
-  const loadAll = async () => {
+  const loadAll = async (quiet = false) => {
     if (!id) return
-    setLoading(true)
+    if (!quiet) setLoading(true)
     try {
       const [instRes, usersRes, paymentsRes, contractRes, processRes, cycleRes, consultantsRes] = await Promise.all([
         supabase.from('institutions').select('*').eq('id', id).single(),
@@ -361,7 +361,7 @@ export default function InstitutionDetails() {
     } catch {
       if (!cancelledRef.current) showToast('Erro ao carregar dados.', false)
     }
-    if (!cancelledRef.current) setLoading(false)
+    if (!cancelledRef.current && !quiet) setLoading(false)
   }
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -421,7 +421,7 @@ export default function InstitutionDetails() {
       })
       if (error) throw error
       showToast('Contrato enviado para assinatura!')
-      loadAll()
+      await loadAll()
     } catch (e: any) { showToast(e.message || 'Erro ao enviar contrato.', false) }
     finally { setSendingContract(false) }
   }
@@ -598,6 +598,7 @@ export default function InstitutionDetails() {
   const handleToggleTask = async (taskId: string, done: boolean) => {
     await supabase.from('onboarding_tasks').update({ done, done_at: done ? new Date().toISOString() : null }).eq('id', taskId)
     setOnboardingTasks(prev => prev.map(t => t.id === taskId ? { ...t, done, done_at: done ? new Date().toISOString() : null } : t))
+    loadAll(true)
   }
 
   const handleMarkMeetingDone = async (meetingId: string) => {

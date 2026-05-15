@@ -253,7 +253,7 @@ serve(async (req) => {
 </html>`
 
     // 5. Montar mutation GraphQL com 2 signatários
-    const VICTOR_EMAIL = 'victor@agapepatos.com.br'
+    const VICTOR_EMAIL = 'contato@aionedu.com.br'
     const VICTOR_NAME  = 'Jose Victor de Almeida Araujo'
 
     const mutation = `
