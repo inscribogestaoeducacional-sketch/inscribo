@@ -225,16 +225,18 @@ serve(async (req) => {
 
     <div class="assin-grid">
       <div class="assin-box">
-        <div class="assin-line"></div>
-        <div class="assin-name">${vars.gestor}</div>
-        <div class="assin-role">${vars.cargo_gestor} – ${vars.escola}</div>
-        <div class="assin-cpf">CPF: ${vars.cpf_gestor}</div>
-      </div>
-      <div class="assin-box">
+        <div class="assin-role" style="font-weight:700;color:#00523C;margin-bottom:40px;">CONTRATADA — ÁION SOLUÇÕES TECNOLÓGICAS LTDA</div>
         <div class="assin-line"></div>
         <div class="assin-name">JOSE VICTOR DE ALMEIDA ARAUJO</div>
-        <div class="assin-role">Representante Legal – Áion Edu</div>
+        <div class="assin-role">Sócio</div>
         <div class="assin-cpf">CPF: 092.820.714-56</div>
+      </div>
+      <div class="assin-box">
+        <div class="assin-role" style="font-weight:700;color:#374151;margin-bottom:40px;">CONTRATANTE</div>
+        <div class="assin-line"></div>
+        <div class="assin-name">${vars.gestor}</div>
+        <div class="assin-role">${vars.cargo_gestor}</div>
+        <div class="assin-cpf">CPF: ${vars.cpf_gestor}</div>
       </div>
     </div>
   </div>
