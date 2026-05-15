@@ -44,21 +44,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ── init ─────────────────────────────────────────────
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
-        setSession(newSession)
-        if (newSession?.user) {
-          await loadUserProfile(newSession.user.id)
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null)
-          setLoading(false)
-        } else {
-          setLoading(false)
-        }
+    let mounted = true
+
+    // Verificar sessão existente primeiro — garante que loading sempre termina
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return
+      if (session) setSession(session)
+      if (session?.user) {
+        loadUserProfile(session.user.id) // chama setLoading(false) no finally
+      } else {
+        setLoading(false)
         setInitializing(false)
       }
+    })
+
+    // Ouvir mudanças subsequentes (login, logout, refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (!mounted) return
+        if (session) setSession(session)
+        if (event === 'SIGNED_IN' && session?.user) {
+          await loadUserProfile(session.user.id)
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null)
+          setSession(null)
+          setLoading(false)
+          setInitializing(false)
+        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+          loadUserProfile(session.user.id)
+        }
+      }
     )
-    return () => subscription.unsubscribe()
+
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
   }, [])
 
   // ── loadUserProfile ───────────────────────────────────
@@ -100,6 +121,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (e) {
       console.error('loadUserProfile error:', e)
+    } finally {
+      setLoading(false)
+      setInitializing(false)
     }
   }
 
@@ -151,7 +175,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshSession = async () => {
     try {
       const { data: { session: refreshed }, error } = await supabase.auth.refreshSession()
-      if (error) { clearCache(); setUser(null); setSession(null); return }
+      if (error) { setUser(null); setSession(null); return }
       if (refreshed) {
         setSession(refreshed)
         if (refreshed.user) await loadUserProfile(refreshed.user.id)
