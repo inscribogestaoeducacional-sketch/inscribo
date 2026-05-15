@@ -14,8 +14,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     storage: {
       getItem: (key: string) => {
         if (typeof window !== 'undefined') {
-          const item = localStorage.getItem(key)
-          return item
+          return localStorage.getItem(key)
         }
         return null
       },
@@ -32,7 +31,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     },
     autoRefreshToken: true,
     detectSessionInUrl: false,
-    flowType: 'pkce'
   }
 })
 
