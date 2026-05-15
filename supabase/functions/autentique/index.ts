@@ -32,7 +32,7 @@ serve(async (req) => {
 
     // 1. Buscar template e configurações
     const { data: cfg } = await sb.from('platform_settings').select('key, value')
-      .in('key', ['billing_due_day', 'platform_name', 'platform_cnpj', 'platform_address', 'platform_email', 'platform_signer_email', 'platform_signer_name'])
+      .in('key', ['billing_due_day', 'platform_name', 'platform_cnpj', 'platform_address', 'platform_email'])
     const settings: Record<string, string> = {}
     for (const row of cfg || []) settings[row.key] = row.value
 
@@ -223,29 +223,18 @@ serve(async (req) => {
   <div class="assinaturas">
     <h3>Patos – PB, ${hoje}</h3>
 
-    <p style="text-align:center;font-size:12px;color:#374151;font-weight:700;margin-bottom:24px;">CONTRATADA – ÁION SOLUÇÕES TECNOLÓGICAS LTDA</p>
     <div class="assin-grid">
       <div class="assin-box">
         <div class="assin-line"></div>
-        <div class="assin-name">FÁBIO FRANCISCO DOS SANTOS</div>
-        <div class="assin-role">Sócio Administrador</div>
-        <div class="assin-cpf">CPF: 058.009.844-33</div>
+        <div class="assin-name">${vars.gestor}</div>
+        <div class="assin-role">${vars.cargo_gestor} – ${vars.escola}</div>
+        <div class="assin-cpf">CPF: ${vars.cpf_gestor}</div>
       </div>
       <div class="assin-box">
         <div class="assin-line"></div>
         <div class="assin-name">JOSE VICTOR DE ALMEIDA ARAUJO</div>
-        <div class="assin-role">Sócio</div>
+        <div class="assin-role">Representante Legal – Áion Edu</div>
         <div class="assin-cpf">CPF: 092.820.714-56</div>
-      </div>
-    </div>
-
-    <p style="text-align:center;font-size:12px;color:#374151;font-weight:700;margin-bottom:24px;">CONTRATANTE</p>
-    <div class="assin-grid" style="grid-template-columns:1fr;">
-      <div class="assin-box">
-        <div class="assin-line" style="margin:0 80px 8px;"></div>
-        <div class="assin-name">${vars.gestor}</div>
-        <div class="assin-role">${vars.cargo_gestor} – ${vars.escola}</div>
-        <div class="assin-cpf">CPF: ${vars.cpf_gestor}</div>
       </div>
     </div>
   </div>
@@ -261,11 +250,10 @@ serve(async (req) => {
 </body>
 </html>`
 
-    // 4a. Signatários fixos da Áion Edu (configuráveis em platform_settings)
-    const platformSignerEmail = settings.platform_signer_email || 'fabio@agapepatos.com.br'
-    const platformSignerName  = settings.platform_signer_name  || 'Fábio Francisco dos Santos'
+    // 5. Montar mutation GraphQL com 2 signatários
+    const VICTOR_EMAIL = 'victor@agapepatos.com.br'
+    const VICTOR_NAME  = 'Jose Victor de Almeida Araujo'
 
-    // 5. Montar mutation GraphQL com 3 signatários
     const mutation = `
       mutation CreateDocument($document: DocumentInput!, $signers: [SignerInput!]!, $file: Upload!) {
         createDocument(document: $document, signers: $signers, file: $file) {
@@ -291,9 +279,8 @@ serve(async (req) => {
       variables: {
         document: { name: `Contrato — ${inst?.name || school_name}` },
         signers: [
-          { email: signer_email,             name: signer_name,                     action: 'SIGN' },
-          { email: platformSignerEmail,      name: platformSignerName,              action: 'SIGN' },
-          { email: 'contato@aionedu.com.br', name: 'Jose Victor de Almeida Araujo', action: 'SIGN' },
+          { email: signer_email, name: signer_name, action: 'SIGN' },
+          { email: VICTOR_EMAIL, name: VICTOR_NAME,  action: 'SIGN' },
         ],
         file: null,
       },
@@ -366,12 +353,9 @@ serve(async (req) => {
         console.log(`[autentique] attempt ${attempt} fetch:`, JSON.stringify(fetchData))
 
         const sigs = fetchData?.data?.document?.signatures || []
-        // Busca o link do gestor da escola (não os da Áion)
+        // Busca o link do gestor da escola (não o da Áion)
         const signerSig = sigs.find((s: any) => s.email === signer_email)
-          || sigs.find((s: any) =>
-              s.email !== 'contato@aionedu.com.br' &&
-              s.email !== platformSignerEmail
-            )
+          || sigs.find((s: any) => s.email !== VICTOR_EMAIL)
           || sigs[0]
 
         signUrl = signerSig?.link?.short_link || null
