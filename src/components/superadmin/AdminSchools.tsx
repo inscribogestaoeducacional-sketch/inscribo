@@ -43,19 +43,9 @@ const PIPELINE_STAGES = [
 ]
 
 function getPipelineStep(inst: any): number {
-  // 1 = Cadastro, 2 = Contrato, 3 = Assinado, 4 = Pagamento, 5 = Implantação, 6 = Ativo
-  if (inst.plan_status === 'active') {
-    const hasOnboarding = (inst.onboarding_processes?.length ?? 0) > 0
-    return hasOnboarding ? 5 : 6
-  }
-  if (inst.plan_status === 'pending_payment') {
-    const contractSigned = inst.contracts?.some((c: any) => c.status === 'signed')
-    return contractSigned ? 4 : 3
-  }
-  if (inst.plan_status === 'pending_contract') {
-    const hasContract = (inst.contracts?.length ?? 0) > 0
-    return hasContract ? 2 : 2
-  }
+  if (inst.plan_status === 'active') return 6
+  if (inst.plan_status === 'pending_payment') return 3
+  if (inst.plan_status === 'pending_contract') return 2
   if (inst.plan === 'gratuito') return 6
   return 1
 }
@@ -1038,13 +1028,14 @@ export default function AdminSchools() {
   const loadData = async () => {
     setLoading(true)
     const [instRes, consultRes, cycleRes, waRes] = await Promise.all([
-      supabase.from('institutions').select('*, contracts(id,status), onboarding_processes(id,status)').order('name'),
+      supabase.from('institutions').select('id, name, city, state, email, phone, plan, plan_status, monthly_value, consultant_id, evolution_instance, created_at, address, cnpj').order('name'),
       supabase.from('users').select('id, full_name, email').eq('user_type', 'consultant'),
       supabase.from('campaign_cycles')
         .select('institution_id, status, year, id, start_date, end_date, campaign_start_month, label')
         .order('created_at', { ascending: false }),
       supabase.from('whatsapp_phone_numbers').select('*'),
     ])
+    if (instRes.error) console.error('institutions error:', instRes.error)
     setInstitutions(instRes.data || [])
     setConsultants(consultRes.data || [])
     setCycles(cycleRes.data || [])
