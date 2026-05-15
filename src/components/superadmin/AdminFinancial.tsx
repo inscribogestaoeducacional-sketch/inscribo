@@ -21,7 +21,7 @@ function daysLate(dueDate: string) {
   return Math.max(0, Math.floor((Date.now() - new Date(dueDate + 'T12:00:00').getTime()) / 86400000))
 }
 
-type Tab = 'overview' | 'payments' | 'overdue'
+type Tab = 'overview' | 'payments' | 'overdue' | 'costs'
 
 const STATUS_MAP: Record<string, { l: string; c: string; bg: string }> = {
   pending:   { l: 'Pendente',  c: '#6b7280', bg: '#f3f4f6' },
@@ -259,10 +259,102 @@ function PaymentDetailModal({ payment, onClose, onAction }: {
   )
 }
 
+// ─── Modal Custo ──────────────────────────────────────────────────────────
+function CostModal({ cost, onClose, onSuccess, showToast }: {
+  cost?: any; onClose: () => void; onSuccess: () => void; showToast: (m: string, ok?: boolean) => void
+}) {
+  const isNew = !cost?.id
+  const [form, setForm] = useState({
+    name:       cost?.name       || '',
+    amount:     String(cost?.amount || ''),
+    recurrence: cost?.recurrence || 'monthly',
+    category:   cost?.category   || 'infrastructure',
+    active:     cost?.active     ?? true,
+    notes:      cost?.notes      || '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleSave = async () => {
+    if (!form.name || !form.amount) { showToast('Preencha nome e valor.', false); return }
+    setSaving(true)
+    const payload = { name: form.name.trim(), amount: Number(form.amount), recurrence: form.recurrence, category: form.category, active: form.active, notes: form.notes || null }
+    const { error } = isNew
+      ? await supabase.from('platform_costs').insert(payload)
+      : await supabase.from('platform_costs').update(payload).eq('id', cost.id)
+    if (error) { showToast('Erro ao salvar: ' + error.message, false) }
+    else { showToast(isNew ? 'Custo adicionado!' : 'Custo atualizado!'); onSuccess(); onClose() }
+    setSaving(false)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-gray-900">{isNew ? 'Adicionar custo' : 'Editar custo'}</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className={lbl}>Nome do custo *</label>
+            <input className={inp} placeholder="Ex: Hostinger, Brevo, Servidor..." value={form.name} onChange={e => set('name', e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Valor (R$) *</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
+                <input type="number" step="0.01" className={inp + ' pl-9'} value={form.amount} onChange={e => set('amount', e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <label className={lbl}>Recorrência</label>
+              <select className={inp} value={form.recurrence} onChange={e => set('recurrence', e.target.value)}>
+                <option value="monthly">Mensal</option>
+                <option value="yearly">Anual</option>
+                <option value="one_time">Avulso</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className={lbl}>Categoria</label>
+            <select className={inp} value={form.category} onChange={e => set('category', e.target.value)}>
+              <option value="infrastructure">Infraestrutura</option>
+              <option value="tools">Ferramentas/SaaS</option>
+              <option value="services">Serviços</option>
+              <option value="other">Outros</option>
+            </select>
+          </div>
+          <div>
+            <label className={lbl}>Observações</label>
+            <input className={inp} placeholder="Detalhes opcionais..." value={form.notes} onChange={e => set('notes', e.target.value)} />
+          </div>
+          <div className="flex items-center justify-between bg-gray-50 rounded-xl p-3 border border-gray-100">
+            <span className="text-sm font-semibold text-gray-700">Custo ativo</span>
+            <button onClick={() => set('active', !form.active)}
+              className={`relative w-10 h-5 rounded-full transition-colors ${form.active ? 'bg-cyan-500' : 'bg-gray-300'}`}>
+              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.active ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+        </div>
+        <div className="flex gap-3 mt-5">
+          <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">Cancelar</button>
+          <button onClick={handleSave} disabled={saving}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
+            {saving ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Salvando...</> : <><CheckCircle2 className="w-4 h-4" />Salvar</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────
 export default function AdminFinancial() {
   const [institutions, setInstitutions] = useState<any[]>([])
   const [payments,     setPayments]     = useState<any[]>([])
+  const [costs,        setCosts]        = useState<any[]>([])
   const [settings,     setSettings]     = useState<Record<string, string>>({})
   const [loading,      setLoading]      = useState(true)
   const [tab,          setTab]          = useState<Tab>('overview')
@@ -271,6 +363,7 @@ export default function AdminFinancial() {
   const [toast,        setToast]        = useState<{ msg: string; ok: boolean } | null>(null)
   const [showNewCharge, setShowNewCharge] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState<any | null>(null)
+  const [costModal, setCostModal] = useState<any | null | 'new'>(null)
 
   const showToast = (msg: string, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 4000) }
 
@@ -278,13 +371,15 @@ export default function AdminFinancial() {
 
   const loadData = async () => {
     setLoading(true)
-    const [instRes, payRes, cfgRes] = await Promise.all([
+    const [instRes, payRes, cfgRes, costRes] = await Promise.all([
       supabase.from('institutions').select('id, name, city, plan, plan_status, asaas_customer_id, monthly_value, email, cnpj, phone').order('name'),
       supabase.from('payments').select('*, institutions(name)').order('created_at', { ascending: false }),
       supabase.from('platform_settings').select('key, value'),
+      supabase.from('platform_costs').select('*').order('name'),
     ])
     setInstitutions(instRes.data || [])
     setPayments(payRes.data || [])
+    setCosts(costRes.data || [])
     const cfg: Record<string, string> = {}
     for (const s of cfgRes.data || []) cfg[s.key] = s.value
     setSettings(cfg)
@@ -466,17 +561,18 @@ export default function AdminFinancial() {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-200">
+        <div className="flex border-b border-gray-200 overflow-x-auto">
           {[
             { id: 'overview' as Tab, label: 'Visão geral' },
             { id: 'payments' as Tab, label: `Histórico (${payments.length})` },
             { id: 'overdue'  as Tab, label: `Inadimplência${overdueGroups.length > 0 ? ` (${overdueGroups.length})` : ''}`, alert: overdueGroups.length > 0 },
+            { id: 'costs'    as Tab, label: `Custos (${costs.length})` },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors
+              className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap
                 ${tab === t.id ? 'border-cyan-500 text-cyan-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
               {t.label}
-              {t.alert && <span className="w-2 h-2 rounded-full bg-red-500" />}
+              {(t as any).alert && <span className="w-2 h-2 rounded-full bg-red-500" />}
             </button>
           ))}
         </div>
@@ -758,6 +854,112 @@ export default function AdminFinancial() {
           </div>
         )}
 
+        {/* ── TAB: Custos ── */}
+        {tab === 'costs' && (() => {
+          const activeCosts    = costs.filter(c => c.active)
+          const monthlyTotal   = activeCosts.reduce((s, c) => {
+            if (c.recurrence === 'monthly') return s + (c.amount || 0)
+            if (c.recurrence === 'yearly')  return s + (c.amount || 0) / 12
+            return s
+          }, 0)
+          const yearlyTotal    = monthlyTotal * 12
+          const grossProfit    = mrrProjected - monthlyTotal
+          const margin         = mrrProjected > 0 ? Math.round((grossProfit / mrrProjected) * 100) : 0
+          const CATS: Record<string, string> = { infrastructure: 'Infraestrutura', tools: 'Ferramentas/SaaS', services: 'Serviços', other: 'Outros' }
+          const REC:  Record<string, string> = { monthly: 'Mensal', yearly: 'Anual', one_time: 'Avulso' }
+
+          return (
+            <div className="space-y-6">
+              {/* KPIs */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { label: 'Custos/mês',   value: fmtBRL(monthlyTotal), sub: 'custos ativos',          grad: 'from-red-500 to-rose-600',    icon: DollarSign   },
+                  { label: 'Projeção anual', value: fmtBRL(yearlyTotal), sub: 'estimativa 12 meses',    grad: 'from-orange-500 to-red-500',  icon: AlertTriangle },
+                  { label: 'Lucro bruto/mês', value: fmtBRL(grossProfit), sub: `MRR - custos`,          grad: grossProfit > 0 ? 'from-green-500 to-emerald-600' : 'from-red-500 to-rose-600', icon: CheckCircle2 },
+                  { label: 'Margem bruta',  value: `${margin}%`,          sub: `de ${fmtBRL(mrrProjected)} MRR`, grad: margin > 50 ? 'from-cyan-500 to-blue-600' : 'from-amber-500 to-orange-500', icon: Clock },
+                ].map(k => {
+                  const Icon = k.icon
+                  return (
+                    <div key={k.label} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{k.label}</p>
+                          <p className="text-xl font-bold text-gray-900">{k.value}</p>
+                          <p className="text-xs text-gray-400 mt-1">{k.sub}</p>
+                        </div>
+                        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${k.grad} flex items-center justify-center flex-shrink-0`}>
+                          <Icon className="w-5 h-5 text-white" />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Table */}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                  <h2 className="font-bold text-gray-900">Custos operacionais</h2>
+                  <button onClick={() => setCostModal('new')}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm">
+                    <Plus className="w-4 h-4" /> Adicionar custo
+                  </button>
+                </div>
+                {costs.length === 0 ? (
+                  <div className="p-12 text-center text-gray-400">
+                    <DollarSign className="w-10 h-10 mx-auto mb-2 text-gray-200" />
+                    <p className="text-sm">Nenhum custo cadastrado</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-100">
+                          {['Nome','Valor','Recorrência','Categoria','Status','Ações'].map(h => (
+                            <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {costs.map(c => (
+                          <tr key={c.id} className="hover:bg-gray-50">
+                            <td className="px-5 py-3">
+                              <p className="font-semibold text-gray-900 text-sm">{c.name}</p>
+                              {c.notes && <p className="text-xs text-gray-400 mt-0.5">{c.notes}</p>}
+                            </td>
+                            <td className="px-5 py-3 font-bold text-gray-800 text-sm">{fmtBRL(c.amount)}</td>
+                            <td className="px-5 py-3 text-sm text-gray-500">{REC[c.recurrence] || c.recurrence}</td>
+                            <td className="px-5 py-3 text-sm text-gray-500">{CATS[c.category] || c.category}</td>
+                            <td className="px-5 py-3">
+                              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${c.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                                {c.active ? 'Ativo' : 'Inativo'}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3">
+                              <div className="flex gap-1">
+                                <button onClick={() => setCostModal(c)} className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg">
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={async () => {
+                                  if (!confirm(`Excluir "${c.name}"?`)) return
+                                  await supabase.from('platform_costs').delete().eq('id', c.id)
+                                  showToast('Custo excluído.'); loadData()
+                                }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                                  <Ban className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })()}
+
       </div>
 
       {showNewCharge && (
@@ -774,6 +976,15 @@ export default function AdminFinancial() {
           payment={selectedPayment}
           onClose={() => setSelectedPayment(null)}
           onAction={handlePaymentAction}
+        />
+      )}
+
+      {costModal !== null && (
+        <CostModal
+          cost={costModal === 'new' ? undefined : costModal}
+          onClose={() => setCostModal(null)}
+          onSuccess={loadData}
+          showToast={showToast}
         />
       )}
 

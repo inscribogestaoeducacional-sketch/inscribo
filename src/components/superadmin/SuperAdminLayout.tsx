@@ -7,7 +7,7 @@ import {
   Home, Building2, DollarSign, FileText, Settings,
   Bell, LogOut, UserCog, ChevronDown, X, Menu,
   TrendingUp, AlertCircle, CheckCircle2,
-  AlertTriangle, Info, BookOpen, Users
+  AlertTriangle, Info, BookOpen, Users, MessageCircle
 } from 'lucide-react'
 
 // ─── tipos ────────────────────────────────────────────────────────────────
@@ -28,11 +28,13 @@ const ADMIN_MENU = [
   { path: '/super-admin/schools',     label: 'Escolas',       icon: Building2              },
   { path: '/super-admin/financial',   label: 'Financeiro',    icon: DollarSign             },
   { path: '/super-admin/contracts',   label: 'Contratos',     icon: FileText               },
+  { path: '/super-admin/whatsapp',    label: 'WhatsApp',      icon: MessageCircle          },
   { path: '/super-admin/settings',    label: 'Configurações', icon: Settings               },
 ]
 
 const CONSULTANT_MENU = [
   { path: '/super-admin/consultant',           label: 'Dashboard',      icon: Home,      exact: true },
+  { path: '/super-admin/crm',                  label: 'CRM Comercial',  icon: TrendingUp            },
   { path: '/super-admin/consultant/schools',   label: 'Minhas Escolas', icon: Building2             },
   { path: '/super-admin/consultant/contracts', label: 'Contratos',      icon: FileText              },
 ]

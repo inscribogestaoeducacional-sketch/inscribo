@@ -14,7 +14,11 @@
       "Bash(node -e \"require\\('papaparse'\\)\")",
       "Bash(git commit *)",
       "Bash(python3 -c ' *)",
-      "Bash(Select-String \"FlowEditor\")"
+      "Bash(Select-String \"FlowEditor\")",
+      "Bash(supabase --version)",
+      "Bash(Remove-Item \"c:/Users/Victor Almeida/AIONEDU/src/components/superadmin/SuperAdminInstitutions.tsx\" -ErrorAction SilentlyContinue)",
+      "Bash(Write-Host \"Done\")",
+      "Bash(npm run *)"
     ]
   }
 }

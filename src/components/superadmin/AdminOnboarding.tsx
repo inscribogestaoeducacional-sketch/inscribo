@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
+import { createGoogleMeet, buildEndDatetime } from '../../lib/googleMeet'
 import {
   Building2, Calendar, CheckCircle2, Clock, Plus, X,
   ChevronRight, ChevronDown, AlertCircle, Edit2, Trash2,
@@ -26,7 +27,7 @@ interface Process {
   contract_status?: string; payment_status?: string
 }
 interface Task { id: string; process_id: string; phase: Phase; title: string; description: string | null; done: boolean; done_at: string | null; sort_order: number }
-interface Meeting { id: string; process_id: string; institution_id: string; type: MeetingType; title: string; scheduled_at: string; duration_min: number; meet_link: string | null; notes: string | null; status: MeetingStatus; institution?: Institution }
+interface Meeting { id: string; process_id: string; institution_id: string; type: MeetingType; title: string; scheduled_at: string; duration_min: number; meet_link: string | null; notes: string | null; status: MeetingStatus; institution?: Institution; attendees?: string[] | null; google_event_id?: string | null; calendar_link?: string | null }
 
 // ─── constantes ───────────────────────────────────────────────────────────
 const PHASES: { id: Phase; label: string; icon: any; color: string; bg: string }[] = [
@@ -572,7 +573,10 @@ function MeetingModal({ meeting, process, onClose, onSave }: {
     type: 'kickoff', status: 'scheduled', duration_min: 60,
     institution_id: process.institution_id, process_id: process.id,
   })
-  const [saving, setSaving] = useState(false)
+  const [attendees, setAttendees] = useState((meeting?.attendees || []).join(', '))
+  const [saving, setSaving]       = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [meetErr, setMeetErr]     = useState('')
   const set = (k: keyof Meeting, v: any) => setForm(f => ({ ...f, [k]: v }))
 
   const handleTypeChange = (type: MeetingType) => {
@@ -580,6 +584,33 @@ function MeetingModal({ meeting, process, onClose, onSave }: {
     set('type', type)
     if (!form.title || MEETING_TYPES.some(t => t.defaultTitle === form.title)) set('title', mt.defaultTitle)
     set('duration_min', mt.defaultDuration)
+  }
+
+  const handleGenerateMeet = async () => {
+    if (!form.scheduled_at) { setMeetErr('Defina a data/hora antes de gerar o link.'); return }
+    setGenerating(true); setMeetErr('')
+    const start = new Date(form.scheduled_at).toISOString()
+    const end   = buildEndDatetime(start, form.duration_min || 60)
+    const result = await createGoogleMeet({
+      title:          form.title || 'Reunião Áion Edu',
+      start_datetime: start,
+      end_datetime:   end,
+      attendees:      attendees.split(',').map(s => s.trim()).filter(Boolean),
+    })
+    if (result.meet_link) {
+      set('meet_link', result.meet_link)
+      if (result.google_event_id) set('google_event_id', result.google_event_id)
+      if (result.calendar_link)   set('calendar_link',   result.calendar_link)
+    } else {
+      setMeetErr(result.error || 'Não foi possível gerar o link. Configure o Google Meet nas Configurações ou insira manualmente.')
+    }
+    setGenerating(false)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    await onSave({ ...form, attendees: attendees.split(',').map(s => s.trim()).filter(Boolean) })
+    setSaving(false)
   }
 
   return (
@@ -590,6 +621,11 @@ function MeetingModal({ meeting, process, onClose, onSave }: {
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><X className="w-5 h-5 text-gray-400" /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          {meetErr && (
+            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />{meetErr}
+            </div>
+          )}
           <div>
             <label className={lbl}>Escola</label>
             <p className="text-sm font-semibold text-gray-700 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">{process.institution?.name}</p>
@@ -625,10 +661,22 @@ function MeetingModal({ meeting, process, onClose, onSave }: {
           </div>
           <div>
             <label className={lbl}>Link (Meet, Zoom...)</label>
-            <div className="relative">
-              <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input className={inp + ' pl-9'} type="url" value={form.meet_link || ''} onChange={e => set('meet_link', e.target.value)} placeholder="https://meet.google.com/..." />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input className={inp + ' pl-9'} type="url" value={form.meet_link || ''} onChange={e => set('meet_link', e.target.value)} placeholder="https://meet.google.com/..." />
+              </div>
+              <button onClick={handleGenerateMeet} disabled={generating}
+                className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg text-xs font-semibold border border-blue-200 hover:bg-blue-100 disabled:opacity-50 whitespace-nowrap">
+                {generating ? <div className="w-3.5 h-3.5 border-2 border-blue-700 border-t-transparent rounded-full animate-spin" /> : <Video className="w-3.5 h-3.5" />}
+                Gerar Meet
+              </button>
             </div>
+          </div>
+          <div>
+            <label className={lbl}>Participantes (e-mails separados por vírgula)</label>
+            <input className={inp} placeholder="diretor@escola.com.br, contato@aionedu.com.br"
+              value={attendees} onChange={e => setAttendees(e.target.value)} />
           </div>
           {!isNew && (
             <div>
@@ -655,7 +703,7 @@ function MeetingModal({ meeting, process, onClose, onSave }: {
         </div>
         <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
           <button onClick={onClose} className="px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">Cancelar</button>
-          <button onClick={async () => { setSaving(true); await onSave(form); setSaving(false) }}
+          <button onClick={handleSave}
             disabled={saving || !form.scheduled_at || !form.title}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
             {saving ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Salvando...</> : <><Calendar className="w-4 h-4" />{isNew ? 'Agendar' : 'Salvar'}</>}

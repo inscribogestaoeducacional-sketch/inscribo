@@ -6,7 +6,7 @@ import {
   Settings, Save, Eye, EyeOff, CheckCircle2, AlertTriangle,
   DollarSign, FileText, Mail, MessageCircle, Building2,
   Bell, Shield, ChevronDown, ChevronRight, Copy, ExternalLink,
-  Zap, AlertCircle, Info, RefreshCw, Plus, Trash2, X
+  Zap, AlertCircle, Info, RefreshCw, Plus, Trash2, X, Video
 } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -273,6 +273,9 @@ const DEFAULTS: Settings = {
   email_template_reactivated: '',
   // Template do contrato
   contract_template_text: '',
+  // Google Meet
+  google_calendar_id:          '',
+  google_service_account_json: '',
 }
 
 const DEFAULT_EMAIL_WELCOME_PENDING = `<h2>Olá, {{gestor}}! 👋</h2>
@@ -658,7 +661,45 @@ export default function AdminSettings() {
           </div>
         </Section>
 
-        {/* ── 8. Templates de e-mail ── */}
+        {/* ── 8. Google Meet ── */}
+        <Section icon={Video} title="Google Meet — Videoconferências" subtitle="Integração com Google Calendar para geração automática de links" color="cyan">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3 text-sm text-blue-800">
+            <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold">Como configurar</p>
+              <p className="text-xs mt-1">
+                1. Crie uma <strong>Conta de Serviço</strong> no Google Cloud Console com permissão na API Google Calendar.<br />
+                2. Compartilhe o calendário desejado com o e-mail da conta de serviço (<code>...@...iam.gserviceaccount.com</code>).<br />
+                3. Para maior segurança, configure o JSON como secret <code>GOOGLE_SERVICE_ACCOUNT_JSON</code> no painel do Supabase
+                (<span className="font-medium">Edge Functions → Manage secrets</span>).
+              </p>
+            </div>
+          </div>
+          <div>
+            <label className={lbl}>Google Calendar ID</label>
+            <input className={inp} value={settings.google_calendar_id}
+              onChange={e => set('google_calendar_id', e.target.value)}
+              placeholder="primary  ou  seuemail@gmail.com" />
+            <p className={hint}>Use <code>primary</code> para o calendário padrão da conta de serviço.</p>
+          </div>
+          <div>
+            <label className={lbl}>Service Account JSON</label>
+            <SecretInput
+              value={settings.google_service_account_json}
+              onChange={v => set('google_service_account_json', v)}
+              placeholder='{"type":"service_account","project_id":"..."}' />
+            <p className={hint}>JSON completo gerado ao criar a conta de serviço. Armazenado de forma segura no banco.</p>
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2 text-xs text-amber-800">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            <span>Se o secret de ambiente estiver configurado no Supabase, ele tem prioridade sobre o valor salvo aqui. Quando nenhum dos dois está presente, os modais de reunião permitem inserir o link do Meet manualmente.</span>
+          </div>
+          <div className="flex justify-end pt-2">
+            <SaveBtn keys={['google_calendar_id', 'google_service_account_json']} id="google_meet" />
+          </div>
+        </Section>
+
+        {/* ── 9. Templates de e-mail ── */}
         <Section icon={Mail} title="Templates de e-mail" subtitle="Personalize cada e-mail automático do sistema" color="cyan">
           {[
             {

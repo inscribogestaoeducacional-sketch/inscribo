@@ -19,7 +19,7 @@ serve(async (req) => {
       institution_id, contract_id,
       school_name, school_cnpj, school_address, school_city, school_state,
       signer_name, signer_email, signer_phone, signer_cpf, signer_role,
-      monthly_value, implementation_value, contract_start_date,
+      monthly_value, implementation_value, contract_start_date, consultant_id,
     } = body
 
     if (!AUTENTIQUE_KEY) throw new Error('AUTENTIQUE_API_KEY não configurada')
@@ -32,15 +32,22 @@ serve(async (req) => {
 
     // 1. Buscar template e configurações
     const { data: cfg } = await sb.from('platform_settings').select('key, value')
-      .in('key', ['billing_due_day', 'platform_name', 'platform_cnpj', 'platform_address', 'platform_email'])
+      .in('key', ['billing_due_day', 'platform_name', 'platform_cnpj', 'platform_address', 'platform_email', 'platform_signer_email', 'platform_signer_name'])
     const settings: Record<string, string> = {}
     for (const row of cfg || []) settings[row.key] = row.value
 
     // 2. Buscar dados da instituição
     const { data: inst } = await sb.from('institutions')
-      .select('name, cnpj, city, state, email, address, phone')
+      .select('name, cnpj, city, state, email, address, phone, billing_due_day')
       .eq('id', institution_id)
       .single()
+
+    // Buscar nome do consultor
+    let consultorName = 'Equipe Áion Edu'
+    if (consultant_id) {
+      const { data: cons } = await sb.from('users').select('full_name').eq('id', consultant_id).single()
+      if (cons?.full_name) consultorName = cons.full_name
+    }
 
     // 3. Montar variáveis
     const fmtBRL = (n: number) => n?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) || 'R$ 0,00'
@@ -60,9 +67,10 @@ serve(async (req) => {
       telefone_gestor:   signer_phone || inst?.phone || '',
       valor_implantacao: implementation_value ? fmtBRL(Number(implementation_value)) : 'R$ 0,00',
       valor_mensal:      monthly_value ? fmtBRL(Number(monthly_value)) : 'R$ 0,00',
-      dia_vencimento:    settings.billing_due_day || '10',
+      dia_vencimento:    inst?.billing_due_day || settings.billing_due_day || '10',
       data_inicio:       startDate,
       data_hoje:         new Date().toLocaleDateString('pt-BR'),
+      consultor:         consultorName,
     }
 
     // 4. HTML completo do contrato Áion Edu com identidade visual
@@ -253,6 +261,10 @@ serve(async (req) => {
 </body>
 </html>`
 
+    // 4a. Signatários fixos da Áion Edu (configuráveis em platform_settings)
+    const platformSignerEmail = settings.platform_signer_email || 'fabio@agapepatos.com.br'
+    const platformSignerName  = settings.platform_signer_name  || 'Fábio Francisco dos Santos'
+
     // 5. Montar mutation GraphQL com 3 signatários
     const mutation = `
       mutation CreateDocument($document: DocumentInput!, $signers: [SignerInput!]!, $file: Upload!) {
@@ -279,9 +291,9 @@ serve(async (req) => {
       variables: {
         document: { name: `Contrato — ${inst?.name || school_name}` },
         signers: [
-          { email: signer_email,               name: signer_name,                       action: 'SIGN' },
-          { email: 'contato@aionedu.com.br',   name: 'Jose Victor de Almeida Araujo',   action: 'SIGN' },
-          { email: 'fabio-machao@hotmail.com', name: 'Fábio Francisco dos Santos',       action: 'SIGN' },
+          { email: signer_email,             name: signer_name,                     action: 'SIGN' },
+          { email: platformSignerEmail,      name: platformSignerName,              action: 'SIGN' },
+          { email: 'contato@aionedu.com.br', name: 'Jose Victor de Almeida Araujo', action: 'SIGN' },
         ],
         file: null,
       },
@@ -358,7 +370,7 @@ serve(async (req) => {
         const signerSig = sigs.find((s: any) => s.email === signer_email)
           || sigs.find((s: any) =>
               s.email !== 'contato@aionedu.com.br' &&
-              s.email !== 'fabio-machao@hotmail.com'
+              s.email !== platformSignerEmail
             )
           || sigs[0]
 

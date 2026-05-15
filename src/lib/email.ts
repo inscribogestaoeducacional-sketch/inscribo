@@ -1,11 +1,15 @@
 import { supabase } from './supabase'
 
 export type EmailType =
-  | 'welcome'
-  | 'campaign_ready'
   | 'new_institution'
-  | 'user_welcome'
-  | 'password_reset'
+  | 'payment_link'
+  | 'monthly_payment'
+  | 'contract_sign'
+  | 'suspended'
+  | 'reactivated'
+  | 'overdue_1'
+  | 'overdue_2'
+  | 'overdue_3'
 
 export const sendEmail = async (
   type: EmailType,

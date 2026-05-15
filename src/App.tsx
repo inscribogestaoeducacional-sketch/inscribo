@@ -52,13 +52,13 @@ import AdminOnboarding  from './components/superadmin/AdminOnboarding'
 import AdminConsultants from './components/superadmin/AdminConsultants'
 import AdminUpdates     from './components/superadmin/AdminUpdates'
 import AdminProfile     from './components/superadmin/AdminProfile.tsx'
+import AdminWhatsApp    from './components/superadmin/AdminWhatsApp'
 import ConsultantDetails from './components/superadmin/ConsultantDetails'
 
 // ── Pending screen ────────────────────────────────────────────────────────
 import PendingScreen from './components/PendingScreen'
 
 // ── Legado ────────────────────────────────────────────────────────────────
-import SuperAdminInstitutions from './components/superadmin/SuperAdminInstitutions'
 import InstitutionDetails     from './components/superadmin/InstitutionDetails'
 import ConsultantHome         from './components/superadmin/ConsultantHome'
 import ConsultantSchools      from './components/superadmin/ConsultantSchools'
@@ -228,10 +228,10 @@ function AppContent() {
         <Route path="/super-admin/contracts"          element={<AdminContracts />} />
         <Route path="/super-admin/settings"           element={<AdminSettings />} />
         <Route path="/super-admin/updates"           element={<AdminUpdates />} />
+        <Route path="/super-admin/whatsapp"          element={<AdminWhatsApp />} />
         <Route path="/super-admin/profile"            element={<AdminProfile />} />
 
         {/* Legado */}
-        <Route path="/super-admin/institutions"       element={<SuperAdminInstitutions />} />
         <Route path="/super-admin/institutions/:id"   element={<InstitutionDetails />} />
 
         {/* Consultor */}

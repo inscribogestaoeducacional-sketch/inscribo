@@ -6,3 +6,9 @@ verify_jwt = false
 
 [functions.asaas-generate-monthly]
 verify_jwt = false
+
+[functions.asaas-create-charge]
+verify_jwt = true
+
+[functions.create-google-meet]
+verify_jwt = true

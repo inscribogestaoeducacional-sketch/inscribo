@@ -354,6 +354,8 @@ export default function AdminContracts() {
               signer_phone:         form.signer_phone || null,
               monthly_value:        form.monthly_value,
               implementation_value: inst?.implementation_value,
+              consultant_id:        form.consultant_id  || null,
+              contract_start_date:  form.start_date     || null,
             },
           })
           if (autErr) throw new Error(autErr.message)

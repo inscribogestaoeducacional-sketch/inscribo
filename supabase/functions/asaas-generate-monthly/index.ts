@@ -3,7 +3,6 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const ASAAS_KEY = Deno.env.get('ASAAS_API_KEY')
-const ASAAS_URL = 'https://api.asaas.com/v3'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -18,6 +17,18 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
+
+    // Busca configurações (api key + ambiente)
+    const { data: cfgData } = await sb.from('platform_settings')
+      .select('key, value')
+      .in('key', ['asaas_api_key', 'asaas_environment'])
+    const cfg: Record<string, string> = {}
+    cfgData?.forEach((r: any) => { cfg[r.key] = r.value })
+
+    const ASAAS_KEY_EFF = cfg.asaas_api_key || ASAAS_KEY || ''
+    const ASAAS_URL = (cfg.asaas_environment || 'production') === 'sandbox'
+      ? 'https://sandbox.asaas.com/api/v3'
+      : 'https://www.asaas.com/api/v3'
 
     // Forca geracao manual se vier payment_id no body
     let forcePaymentId: string | null = null
@@ -71,7 +82,7 @@ serve(async (req) => {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'access_token': ASAAS_KEY!,
+              'access_token': ASAAS_KEY_EFF,
             },
             body: JSON.stringify({
               name: inst.name,
@@ -100,7 +111,7 @@ serve(async (req) => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'access_token': ASAAS_KEY!,
+            'access_token': ASAAS_KEY_EFF,
           },
           body: JSON.stringify({
             customer: customerId,
