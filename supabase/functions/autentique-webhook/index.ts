@@ -109,15 +109,12 @@ serve(async (req) => {
 
       const inst = contract.institutions
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-      const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
       const rawKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
       const serviceKey = (() => {
         try {
           const parsed = JSON.parse(rawKey)
           return parsed.service_role || rawKey
-        } catch {
-          return rawKey
-        }
+        } catch { return rawKey }
       })()
 
       // 7. Verificar se já existe cobrança de implantação pendente
@@ -128,56 +125,130 @@ serve(async (req) => {
       const existingPayment = Array.isArray(paymentRows) ? paymentRows[0] : null
 
       if (!existingPayment) {
-        // Cobrança não existe — criar agora que o contrato foi assinado
-        const dueDate = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
-        const chargeRes = await fetch(`${supabaseUrl}/functions/v1/asaas-create-charge`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${serviceKey}`,
-          },
-          body: JSON.stringify({
-            institution_id: contract.institution_id,
-            name:           inst?.name,
-            email:          inst?.email,
-            cpfCnpj:        inst?.cnpj || null,
-            value:          inst?.implementation_value || 0,
-            description:    `Taxa de implantação — ${inst?.name}`,
-            dueDate,
-            payment_type:   'implementation',
-          }),
-        })
+        // 7a. Buscar config do Asaas
+        const { data: cfgRows } = await dbFetch(
+          'platform_settings?key=in.(asaas_api_key,asaas_environment)&select=key,value',
+          'GET'
+        )
+        const asaasCfg: Record<string, string> = {}
+        for (const row of cfgRows || []) asaasCfg[row.key] = row.value
 
-        const chargeData = await chargeRes.json()
-        console.log('[autentique-webhook] asaas charge created:', JSON.stringify(chargeData))
+        const asaasKey = asaasCfg.asaas_api_key || Deno.env.get('ASAAS_API_KEY') || ''
+        const ASAAS_URL = (asaasCfg.asaas_environment || 'production') === 'sandbox'
+          ? 'https://sandbox.asaas.com/api/v3'
+          : 'https://www.asaas.com/api/v3'
 
-        if (chargeData?.paymentLink && inst?.email) {
-          await fetch(`${supabaseUrl}/functions/v1/send-email`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${anonKey}`,
-            },
-            body: JSON.stringify({
-              type: 'payment_link',
-              to:   inst.email,
-              data: {
-                institution_name: inst.name,
-                value:            new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(inst.implementation_value || 0),
-                due_date:         new Date(dueDate + 'T12:00:00').toLocaleDateString('pt-BR'),
-                billing_type:     'PIX/Boleto',
-                payment_link:     chargeData.paymentLink,
-              },
-            }),
-          })
+        if (!asaasKey) {
+          console.warn('[autentique-webhook] Asaas API key não configurada — cobrança não criada')
+        } else {
+          // 7b. Buscar institution para asaas_customer_id e implementation_value
+          const { data: instRows } = await dbFetch(
+            `institutions?id=eq.${contract.institution_id}&select=asaas_customer_id,cnpj,name,email,phone,implementation_value`,
+            'GET'
+          )
+          const institution = Array.isArray(instRows) ? instRows[0] : null
+
+          let customerId = institution?.asaas_customer_id
+
+          // 7c. Criar cliente no Asaas se não existir
+          if (!customerId) {
+            const rawCnpj = (institution?.cnpj || inst?.cnpj || '').replace(/\D/g, '')
+            const customerRes = await fetch(`${ASAAS_URL}/customers`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'access_token': asaasKey },
+              body: JSON.stringify({
+                name:              institution?.name || inst?.name,
+                email:             institution?.email || inst?.email,
+                cpfCnpj:           rawCnpj || undefined,
+                externalReference: contract.institution_id,
+              }),
+            })
+            const customerData = await customerRes.json()
+            console.log('[autentique-webhook] asaas customer:', JSON.stringify(customerData))
+
+            if (customerRes.ok && customerData.id) {
+              customerId = customerData.id
+              await dbFetch(`institutions?id=eq.${contract.institution_id}`, 'PATCH', {
+                asaas_customer_id: customerId,
+              })
+            }
+          }
+
+          if (customerId) {
+            const dueDate = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
+            const implValue = Number(institution?.implementation_value || inst?.implementation_value || 0)
+            const desc = `Taxa de implantação — ${institution?.name || inst?.name}`
+
+            // 7d. Inserir payment no banco primeiro (para externalReference)
+            const { data: newPaymentRows } = await dbFetch('payments', 'POST', {
+              institution_id: contract.institution_id,
+              payment_type:   'implementation',
+              amount:         implValue,
+              status:         'pending',
+              due_date:       dueDate,
+              description:    desc,
+            }, 'return=representation')
+            const paymentId = Array.isArray(newPaymentRows) ? newPaymentRows[0]?.id : newPaymentRows?.id || null
+
+            // 7e. Criar cobrança no Asaas
+            const chargeRes = await fetch(`${ASAAS_URL}/payments`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'access_token': asaasKey },
+              body: JSON.stringify({
+                customer:          customerId,
+                billingType:       'UNDEFINED',
+                value:             implValue,
+                dueDate,
+                description:       desc,
+                externalReference: paymentId ? `${contract.institution_id}:${paymentId}` : contract.institution_id,
+              }),
+            })
+            const chargeData = await chargeRes.json()
+            console.log('[autentique-webhook] asaas charge:', JSON.stringify(chargeData))
+
+            const paymentLink = chargeData.invoiceUrl
+              || (chargeData.id ? `https://www.asaas.com/i/${chargeData.id}` : null)
+
+            // 7f. Atualizar payment com IDs do Asaas
+            if (paymentId && chargeData.id) {
+              await dbFetch(`payments?id=eq.${paymentId}`, 'PATCH', {
+                asaas_payment_id: chargeData.id,
+                asaas_charge_url: paymentLink,
+                asaas_id:         chargeData.id,
+              })
+            }
+
+            // 7g. Enviar email com link de pagamento
+            const emailTo = institution?.email || inst?.email
+            if (paymentLink && emailTo) {
+              await fetch(`${supabaseUrl}/functions/v1/send-email`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${serviceKey}`,
+                },
+                body: JSON.stringify({
+                  type: 'payment_link',
+                  to:   emailTo,
+                  data: {
+                    institution_name: institution?.name || inst?.name,
+                    value:            new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(implValue),
+                    due_date:         new Date(dueDate + 'T12:00:00').toLocaleDateString('pt-BR'),
+                    billing_type:     'PIX/Boleto',
+                    payment_link:     paymentLink,
+                  },
+                }),
+              })
+            }
+          }
         }
-      } else if (existingPayment.asaas_charge_url && inst?.email) {
+      } else if (existingPayment.asaas_charge_url && (inst?.email)) {
         // Cobrança já existia — reenviar email com o link existente
         await fetch(`${supabaseUrl}/functions/v1/send-email`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${anonKey}`,
+            'Authorization': `Bearer ${serviceKey}`,
           },
           body: JSON.stringify({
             type: 'payment_link',
