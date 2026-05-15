@@ -312,12 +312,14 @@ export default function InstitutionDetails() {
 
       if (cancelledRef.current) return
 
+      console.log('[loadAll] contract:', contractRes.data, 'error:', contractRes.error)
+
       const inst = instRes.data
       setInstitution(inst)
       setUsers(usersRes.data || [])
       setPayments(paymentsRes.data || [])
-      setContract(contractRes.data)
-      setCycle(cycleRes.data)
+      setContract(contractRes.data ?? null)
+      setCycle(cycleRes.data ?? null)
       setConsultants(consultantsRes.data || [])
 
       if (inst) {
@@ -340,8 +342,8 @@ export default function InstitutionDetails() {
         }))
       }
 
+      setOnboardingProcess(processRes.data ?? null)
       if (processRes.data) {
-        setOnboardingProcess(processRes.data)
         const [tasksRes, meetingsRes] = await Promise.all([
           supabase.from('onboarding_tasks').select('*').eq('process_id', processRes.data.id).order('sort_order'),
           supabase.from('onboarding_meetings').select('*').eq('process_id', processRes.data.id).order('scheduled_at'),
@@ -350,6 +352,9 @@ export default function InstitutionDetails() {
           setOnboardingTasks(tasksRes.data || [])
           setMeetings(meetingsRes.data || [])
         }
+      } else {
+        setOnboardingTasks([])
+        setMeetings([])
       }
 
       const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0)
