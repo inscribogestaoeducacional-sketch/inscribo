@@ -321,80 +321,58 @@ serve(async (req) => {
     const document = autData.data?.createDocument
     const documentId = document?.id
 
-    // 7. Buscar link de assinatura do gestor da escola com retry
-    let signUrl: string | null = null
+    if (!documentId) throw new Error('Autentique não retornou document ID')
 
-    if (documentId) {
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        await new Promise(r => setTimeout(r, 2000))
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+    const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-        const fetchQuery = `
-          query {
-            document(id: "${documentId}") {
-              id
-              signatures {
-                public_id
-                name
-                email
-                link { short_link }
-              }
-            }
-          }
-        `
+    const signersInitial = [
+      { name: signer_name, email: signer_email, role: signer_role || 'Diretor', signed: false, signed_at: null },
+      { name: VICTOR_NAME, email: VICTOR_EMAIL, role: 'Áion Edu', signed: false, signed_at: null },
+    ]
 
-        const fetchRes = await fetch(AUTENTIQUE_URL, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${AUTENTIQUE_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ query: fetchQuery }),
-        })
-
-        const fetchData = await fetchRes.json()
-        console.log(`[autentique] attempt ${attempt} fetch:`, JSON.stringify(fetchData))
-
-        const sigs = fetchData?.data?.document?.signatures || []
-        // Busca o link do gestor da escola (não o da Áion)
-        const signerSig = sigs.find((s: any) => s.email === signer_email)
-          || sigs.find((s: any) => s.email !== VICTOR_EMAIL)
-          || sigs[0]
-
-        signUrl = signerSig?.link?.short_link || null
-
-        if (signUrl) {
-          console.log('[autentique] signUrl encontrado:', signUrl)
-          break
-        }
-
-        console.log(`[autentique] attempt ${attempt}: link ainda null, tentando novamente...`)
-      }
-    }
-
-    // 8. Salvar no banco
-    const contractData = {
-      status: 'sent',
-      sign_url: signUrl,
-      autentique_document_id: documentId,
-      signer_name,
-      signer_email,
-      signers: [
-        { name: signer_name, email: signer_email, role: signer_role || 'Diretor', signed: false, signed_at: null },
-        { name: VICTOR_NAME, email: VICTOR_EMAIL, role: 'Áion Edu', signed: false, signed_at: null },
-      ],
-    }
+    // 7. IMEDIATAMENTE salvar o contrato — sem esperar o link de assinatura
+    let contractId: string | null = null
 
     if (contract_id) {
-      await sb.from('contracts').update(contractData).eq('id', contract_id)
+      // Reenvio: atualizar contrato existente
+      await sb.from('contracts').update({
+        status: 'sent',
+        sign_url: null,
+        autentique_document_id: documentId,
+        signer_name,
+        signer_email,
+        signers: signersInitial,
+      }).eq('id', contract_id)
+      contractId = contract_id
     } else if (institution_id) {
-      await sb.from('contracts').insert({
-        institution_id,
-        ...contractData,
-        plan: 'escola',
-        monthly_value: monthly_value || 0,
+      // Novo contrato: INSERT via REST API com service role
+      const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/contracts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SERVICE_KEY,
+          'Authorization': `Bearer ${SERVICE_KEY}`,
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify({
+          institution_id,
+          status: 'sent',
+          sign_url: null,
+          autentique_document_id: documentId,
+          signer_name,
+          signer_email,
+          signers: signersInitial,
+          plan: 'escola',
+          monthly_value: monthly_value || 0,
+        }),
       })
+      const insertData = await insertRes.json()
+      console.log('[autentique] contract insert status:', insertRes.status, JSON.stringify(insertData))
+      contractId = Array.isArray(insertData) ? insertData[0]?.id : insertData?.id || null
     }
 
+    // 8. Atualizar status da instituição
     if (institution_id) {
       await sb.from('institutions')
         .update({ plan_status: 'pending_contract' })
@@ -411,8 +389,61 @@ serve(async (req) => {
       action_url: '/super-admin/contracts',
     })
 
+    // 10. Tentar buscar o link de assinatura — não bloqueia o retorno se falhar
+    let signUrl: string | null = null
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await new Promise(r => setTimeout(r, 2000))
+
+      const fetchQuery = `
+        query {
+          document(id: "${documentId}") {
+            id
+            signatures {
+              public_id
+              name
+              email
+              link { short_link }
+            }
+          }
+        }
+      `
+
+      const fetchRes = await fetch(AUTENTIQUE_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${AUTENTIQUE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: fetchQuery }),
+      })
+
+      const fetchData = await fetchRes.json()
+      console.log(`[autentique] attempt ${attempt} link fetch:`, JSON.stringify(fetchData))
+
+      const sigs = fetchData?.data?.document?.signatures || []
+      const signerSig = sigs.find((s: any) => s.email === signer_email)
+        || sigs.find((s: any) => s.email !== VICTOR_EMAIL)
+        || sigs[0]
+
+      signUrl = signerSig?.link?.short_link || null
+
+      if (signUrl) {
+        console.log('[autentique] signUrl encontrado:', signUrl)
+        // UPDATE contrato com o link
+        if (contractId) {
+          await sb.from('contracts').update({ sign_url: signUrl }).eq('id', contractId)
+        } else {
+          await sb.from('contracts').update({ sign_url: signUrl }).eq('autentique_document_id', documentId)
+        }
+        break
+      }
+
+      console.log(`[autentique] attempt ${attempt}: link null, continuando...`)
+    }
+
     return new Response(
-      JSON.stringify({ ok: true, signUrl, documentId }),
+      JSON.stringify({ ok: true, contractId, documentId, signUrl }),
       { headers: { ...CORS, 'Content-Type': 'application/json' } }
     )
 
