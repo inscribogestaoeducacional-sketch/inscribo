@@ -25,9 +25,13 @@ serve(async (req) => {
     if (!AUTENTIQUE_KEY) throw new Error('AUTENTIQUE_API_KEY não configurada')
     if (!signer_email || !signer_name) throw new Error('Nome e e-mail do signatário são obrigatórios')
 
+    const serviceKey = Deno.env.get('SUPABASE_SECRET_KEYS')
+      || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+      || ''
+
     const sb = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      serviceKey
     )
 
     // 1. Buscar template e configurações
@@ -324,7 +328,6 @@ serve(async (req) => {
     if (!documentId) throw new Error('Autentique não retornou document ID')
 
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-    const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
     const signersInitial = [
       { name: signer_name, email: signer_email, role: signer_role || 'Diretor', signed: false, signed_at: null },
@@ -351,8 +354,8 @@ serve(async (req) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': SERVICE_KEY,
-          'Authorization': `Bearer ${SERVICE_KEY}`,
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`,
           'Prefer': 'return=representation',
         },
         body: JSON.stringify({
