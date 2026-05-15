@@ -32,8 +32,11 @@ serve(async (req) => {
     const body = await req.json()
     console.log('[autentique-webhook] payload:', JSON.stringify(body))
 
-    const documentId = body?.document?.id || body?.id
-    const status = body?.event || body?.status
+    const documentId =
+      body?.event?.data?.document ||
+      body?.document?.id ||
+      body?.id ||
+      null
 
     if (!documentId) {
       return new Response(JSON.stringify({ ok: true, msg: 'no document id' }), {
@@ -57,24 +60,29 @@ serve(async (req) => {
 
     // 2. Identificar qual signatário acabou de assinar
     const signerEmail: string | null =
+      body?.event?.data?.user?.email ||
       body?.email ||
       body?.signer?.email ||
       body?.document?.signatures?.find((s: any) => s?.signed_at)?.email ||
       null
 
+    console.log('[autentique-webhook] documentId:', documentId, 'signerEmail:', signerEmail)
+
     // 3. Atualizar status por signatário no JSONB signers
+    let updatedSigners = contract.signers
     if (signerEmail && Array.isArray(contract.signers) && contract.signers.length > 0) {
-      const signedAt = body?.signed_at || body?.signer?.signed_at || new Date().toISOString()
-      const updatedSigners = contract.signers.map((s: any) =>
+      const signedAt = body?.event?.data?.signed_at || body?.signed_at || body?.signer?.signed_at || new Date().toISOString()
+      updatedSigners = contract.signers.map((s: any) =>
         s.email === signerEmail ? { ...s, signed: true, signed_at: signedAt } : s
       )
       await dbFetch(`contracts?id=eq.${contract.id}`, 'PATCH', { signers: updatedSigners })
       contract.signers = updatedSigners
     }
 
+    // Cada webhook é disparado por uma assinatura individual.
+    // Considera o contrato totalmente assinado quando todos os signers têm signed: true.
     const isSigned =
-      status === 'SIGNED' || status === 'signed' ||
-      (Array.isArray(contract.signers) && contract.signers.length > 0 && contract.signers.every((s: any) => s.signed)) ||
+      (Array.isArray(updatedSigners) && updatedSigners.length > 0 && updatedSigners.every((s: any) => s.signed)) ||
       body?.document?.signatures?.every((s: any) => s?.signed_at) ||
       body?.signed === true
 
