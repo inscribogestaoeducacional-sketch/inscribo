@@ -376,6 +376,10 @@ serve(async (req) => {
       autentique_document_id: documentId,
       signer_name,
       signer_email,
+      signers: [
+        { name: signer_name, email: signer_email, role: signer_role || 'Diretor', signed: false, signed_at: null },
+        { name: VICTOR_NAME, email: VICTOR_EMAIL, role: 'Áion Edu', signed: false, signed_at: null },
+      ],
     }
 
     if (contract_id) {

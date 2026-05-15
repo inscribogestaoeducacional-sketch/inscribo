@@ -79,7 +79,9 @@ export default function InstitutionDetails() {
   const [consultants, setConsultants] = useState<any[]>([])
   const [waUsage, setWaUsage] = useState({ count: 0, limit: 1000 })
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState('info')
+  const [loadingContract, setLoadingContract] = useState(true)
+  const [loadingPayments, setLoadingPayments] = useState(true)
+  const [tab, setTab] = useState(() => localStorage.getItem(`tab-inst-${id}`) || 'info')
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
 
@@ -119,9 +121,37 @@ export default function InstitutionDetails() {
     setTimeout(() => setToast(null), 4000)
   }
 
-  useEffect(() => { if (id) loadAll() }, [id])
+  const handleTabChange = (newTab: string) => {
+    setTab(newTab)
+    if (id) localStorage.setItem(`tab-inst-${id}`, newTab)
+  }
 
-  const loadAll = async () => {
+  useEffect(() => {
+    console.log('[InstitutionDetails] useEffect id=', id)
+    if (!id) return
+    let isMounted = true
+    loadAll(isMounted)
+    return () => { isMounted = false }
+  }, [id])
+
+  const loadContractData = async () => {
+    if (!id) return
+    setLoadingContract(true)
+    const { data, error } = await supabase
+      .from('contracts')
+      .select('*')
+      .eq('institution_id', id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    console.log('[loadContractData] data=', data, 'error=', error)
+    setContract(data)
+    setLoadingContract(false)
+  }
+
+  const loadAll = async (isMounted = true) => {
+    if (!id) return
+    console.log('[InstitutionDetails] loadAll start, id=', id)
     setLoading(true)
     try {
       const [instRes, usersRes, paymentsRes, contractRes, notifsRes, processRes, cycleRes, consultantsRes] = await Promise.all([
@@ -135,11 +165,19 @@ export default function InstitutionDetails() {
         supabase.from('users').select('id, full_name').eq('user_type', 'consultant').order('full_name'),
       ])
 
+      if (!isMounted) return
+
+      console.log('[InstitutionDetails] payments=', paymentsRes.data, 'error=', paymentsRes.error)
+      console.log('[InstitutionDetails] contract=', contractRes.data, 'error=', contractRes.error)
+      console.log('[InstitutionDetails] institution=', instRes.data, 'error=', instRes.error)
+
       const inst = instRes.data
       setInstitution(inst)
       setUsers(usersRes.data || [])
       setPayments(paymentsRes.data || [])
+      setLoadingPayments(false)
       setContract(contractRes.data)
+      setLoadingContract(false)
       setNotifications(notifsRes.data || [])
       setCycle(cycleRes.data)
       setConsultants(consultantsRes.data || [])
@@ -172,7 +210,7 @@ export default function InstitutionDetails() {
           .select('*')
           .eq('process_id', processRes.data.id)
           .order('sort_order')
-        setOnboardingTasks(tasks || [])
+        if (isMounted) setOnboardingTasks(tasks || [])
       }
 
       // WhatsApp usage — contagem via whatsapp_conversations
@@ -182,12 +220,12 @@ export default function InstitutionDetails() {
         .select('id', { count: 'exact', head: true })
         .eq('institution_id', id)
         .gte('created_at', monthStart.toISOString())
-      if (waCount !== null) setWaUsage({ count: waCount, limit: 1000 })
+      if (isMounted && waCount !== null) setWaUsage({ count: waCount, limit: 1000 })
 
     } catch (e: any) {
-      showToast('Erro ao carregar dados.', false)
+      if (isMounted) showToast('Erro ao carregar dados.', false)
     }
-    setLoading(false)
+    if (isMounted) setLoading(false)
   }
 
   // ── Ações ─────────────────────────────────────────────
@@ -635,7 +673,7 @@ export default function InstitutionDetails() {
           {TABS.map(t => {
             const Icon = t.icon
             return (
-              <button key={t.id} onClick={() => setTab(t.id)}
+              <button key={t.id} onClick={() => handleTabChange(t.id)}
                 className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 whitespace-nowrap transition-colors
                   ${tab === t.id ? 'border-cyan-500 text-cyan-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
                 <Icon className="w-4 h-4" />
@@ -724,6 +762,12 @@ export default function InstitutionDetails() {
         {/* ── TAB: CONTRATO ── */}
         {tab === 'contract' && (
           <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-gray-900">Contrato</h2>
+              <button onClick={loadContractData} className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold text-gray-500 hover:bg-gray-50">
+                <RefreshCw className="w-3.5 h-3.5" /> Atualizar
+              </button>
+            </div>
             {!contract ? (
               <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
                 <FileText className="w-12 h-12 mx-auto mb-3 text-gray-200" />
@@ -756,10 +800,8 @@ export default function InstitutionDetails() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4 pb-2 border-b border-gray-100">
                   {[
-                    ['Signatário', contract.signer_name || '—'],
-                    ['E-mail', contract.signer_email || '—'],
                     ['Plano', contract.plan || '—'],
                     ['Mensalidade', contract.monthly_value ? fmtBRL(contract.monthly_value) : '—'],
                   ].map(([k, v]) => (
@@ -768,6 +810,56 @@ export default function InstitutionDetails() {
                       <span className="text-sm text-gray-900 font-semibold">{v}</span>
                     </div>
                   ))}
+                </div>
+
+                {/* Per-signer status cards */}
+                <div>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Signatários</p>
+                  <div className="space-y-2">
+                    {Array.isArray(contract.signers) && contract.signers.length > 0 ? (
+                      contract.signers.map((s: any, i: number) => (
+                        <div key={i} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${s.signed ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">{s.name}</p>
+                            <p className="text-xs text-gray-500">{s.role} · {s.email}</p>
+                          </div>
+                          <div className="text-right">
+                            {s.signed ? (
+                              <>
+                                <span className="flex items-center gap-1 text-xs font-bold text-green-700">
+                                  <CheckCircle2 className="w-3.5 h-3.5" /> Assinou
+                                </span>
+                                {s.signed_at && <p className="text-xs text-gray-400 mt-0.5">{fmtDate(s.signed_at)}</p>}
+                              </>
+                            ) : (
+                              <span className="flex items-center gap-1 text-xs font-bold text-yellow-700">
+                                <Clock className="w-3.5 h-3.5" /> Aguardando
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      /* Fallback for contracts created before signers column */
+                      <div className={`flex items-center justify-between rounded-xl border px-4 py-3 ${contract.status === 'signed' ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{contract.signer_name || '—'}</p>
+                          <p className="text-xs text-gray-500">{contract.signer_email || ''}</p>
+                        </div>
+                        <div className="text-right">
+                          {contract.status === 'signed' ? (
+                            <span className="flex items-center gap-1 text-xs font-bold text-green-700">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Assinou
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 text-xs font-bold text-yellow-700">
+                              <Clock className="w-3.5 h-3.5" /> Aguardando
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {contract.sign_url && (

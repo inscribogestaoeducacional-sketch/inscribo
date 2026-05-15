@@ -44,7 +44,28 @@ serve(async (req) => {
       })
     }
 
+    // Identify which signer just signed from the webhook payload
+    const signerEmail: string | null =
+      body?.email ||
+      body?.signer?.email ||
+      body?.document?.signatures?.find((s: any) => s?.signed_at)?.email ||
+      null
+
+    // Update per-signer status in signers JSONB
+    if (signerEmail && Array.isArray(contract.signers) && contract.signers.length > 0) {
+      const signedAt = body?.signed_at || body?.signer?.signed_at || new Date().toISOString()
+      const updatedSigners = contract.signers.map((s: any) =>
+        s.email === signerEmail ? { ...s, signed: true, signed_at: signedAt } : s
+      )
+      await supabase.from('contracts')
+        .update({ signers: updatedSigners })
+        .eq('id', contract.id)
+      // Refresh contract.signers for the all-signed check below
+      contract.signers = updatedSigners
+    }
+
     const isSigned = status === 'SIGNED' || status === 'signed' ||
+      (Array.isArray(contract.signers) && contract.signers.length > 0 && contract.signers.every((s: any) => s.signed)) ||
       body?.document?.signatures?.every((s: any) => s?.signed_at) ||
       body?.signed === true
 
