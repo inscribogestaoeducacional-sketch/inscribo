@@ -49,14 +49,12 @@ const CONTRACT_STATUS: Record<string, { l: string; c: string; bg: string }> = {
 }
 
 const TABS = [
-  { id: 'info',          label: 'Dados',         icon: Building2   },
-  { id: 'contract',      label: 'Contrato',       icon: FileText    },
-  { id: 'financial',     label: 'Financeiro',     icon: DollarSign  },
-  { id: 'whatsapp',      label: 'WhatsApp',       icon: MessageCircle },
-  { id: 'campaign',      label: 'Campanha',       icon: Megaphone   },
-  { id: 'users',         label: 'Usuários',       icon: Users       },
-  { id: 'notifications', label: 'Notificações',   icon: Bell        },
-  { id: 'onboarding',    label: 'Onboarding',     icon: Zap         },
+  { id: 'info',       label: 'Visão Geral', icon: Building2    },
+  { id: 'contract',   label: 'Contrato',    icon: FileText     },
+  { id: 'financial',  label: 'Financeiro',  icon: DollarSign   },
+  { id: 'onboarding', label: 'Onboarding',  icon: Zap          },
+  { id: 'whatsapp',   label: 'WhatsApp',    icon: MessageCircle },
+  { id: 'users',      label: 'Usuários',    icon: Users        },
 ]
 
 const months = [
@@ -177,15 +175,14 @@ export default function InstitutionDetails() {
         setOnboardingTasks(tasks || [])
       }
 
-      // WhatsApp usage
-      const monthYear = new Date().toISOString().slice(0, 7)
-      const { data: usage } = await supabase
-        .from('whatsapp_usage')
-        .select('conversation_count, monthly_limit')
+      // WhatsApp usage — contagem via whatsapp_conversations
+      const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0)
+      const { count: waCount } = await supabase
+        .from('whatsapp_conversations')
+        .select('id', { count: 'exact', head: true })
         .eq('institution_id', id)
-        .eq('month_year', monthYear)
-        .maybeSingle()
-      if (usage) setWaUsage({ count: usage.conversation_count || 0, limit: usage.monthly_limit || 1000 })
+        .gte('created_at', monthStart.toISOString())
+      if (waCount !== null) setWaUsage({ count: waCount, limit: 1000 })
 
     } catch (e: any) {
       showToast('Erro ao carregar dados.', false)
@@ -363,21 +360,15 @@ export default function InstitutionDetails() {
 
   const handleGenerateLink = async (paymentId: string) => {
     try {
-      const res = await fetch('https://syxxuumxkhhnoqrxporj.supabase.co/functions/v1/asaas-generate-monthly', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5eHh1dW14a2hobm9xcnhwb3JqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM4NzYwNTMsImV4cCI6MjA1OTQ1MjA1M30.tOCAoMTeAzwHJFmXbzvBbKFIQLNpvFNIwfBRNmhHXP0',
-          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5eHh1dW14a2hobm9xcnhwb3JqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM4NzYwNTMsImV4cCI6MjA1OTQ1MjA1M30.tOCAoMTeAzwHJFmXbzvBbKFIQLNpvFNIwfBRNmhHXP0',
-        },
-        body: JSON.stringify({ payment_id: paymentId })
+      const { data, error } = await supabase.functions.invoke('asaas-generate-monthly', {
+        body: { payment_id: paymentId }
       })
-      const data = await res.json()
-      if (data.ok && data.generated > 0) {
+      if (error) throw error
+      if (data?.ok && data?.generated > 0) {
         showToast('Link gerado com sucesso!')
         await loadAll()
       } else {
-        showToast('Erro ao gerar link: ' + (data.error || 'Tente novamente'), false)
+        showToast('Erro ao gerar link: ' + (data?.error || 'Tente novamente'), false)
       }
     } catch { showToast('Erro ao gerar link.', false) }
   }

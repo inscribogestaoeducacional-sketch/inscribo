@@ -30,7 +30,7 @@ export default function ConsultantHome() {
         supabase.from('crm_leads')
           .select('id, school_name, stage, next_followup, updated_at')
           .eq('consultant_id', user?.id || '')
-          .not('stage', 'in', '("cliente")')
+          .not('stage', 'in', '(cliente)')
           .order('updated_at', { ascending: false })
           .limit(10),
       ])

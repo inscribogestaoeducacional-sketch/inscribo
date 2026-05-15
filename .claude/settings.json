@@ -18,7 +18,9 @@
       "Bash(supabase --version)",
       "Bash(Remove-Item \"c:/Users/Victor Almeida/AIONEDU/src/components/superadmin/SuperAdminInstitutions.tsx\" -ErrorAction SilentlyContinue)",
       "Bash(Write-Host \"Done\")",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(Get-Content \"C:\\\\Users\\\\Victor Almeida\\\\AIONEDU\\\\supabase\\\\config.toml\")",
+      "Read(//c/Users/Victor Almeida/.config/**)"
     ]
   }
 }

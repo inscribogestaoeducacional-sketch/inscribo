@@ -32,6 +32,51 @@ function ToastBar({ toast, onClose }: { toast: ToastT; onClose: () => void }) {
 const inp = 'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all bg-white'
 const lbl = 'block text-xs font-semibold text-gray-600 mb-1.5'
 
+// ─── Pipeline ─────────────────────────────────────────────────────────────
+const PIPELINE_STAGES = [
+  { key: 'cadastro',    label: 'Cadastro'    },
+  { key: 'contrato',    label: 'Contrato'    },
+  { key: 'assinado',    label: 'Assinado'    },
+  { key: 'pagamento',   label: 'Pagamento'   },
+  { key: 'implantacao', label: 'Implantação' },
+  { key: 'ativo',       label: 'Ativo'       },
+]
+
+function getPipelineStep(inst: any): number {
+  // 1 = Cadastro, 2 = Contrato, 3 = Assinado, 4 = Pagamento, 5 = Implantação, 6 = Ativo
+  if (inst.plan_status === 'active') {
+    const hasOnboarding = (inst.onboarding_processes?.length ?? 0) > 0
+    return hasOnboarding ? 5 : 6
+  }
+  if (inst.plan_status === 'pending_payment') {
+    const contractSigned = inst.contracts?.some((c: any) => c.status === 'signed')
+    return contractSigned ? 4 : 3
+  }
+  if (inst.plan_status === 'pending_contract') {
+    const hasContract = (inst.contracts?.length ?? 0) > 0
+    return hasContract ? 2 : 2
+  }
+  if (inst.plan === 'gratuito') return 6
+  return 1
+}
+
+function PipelineBar({ inst }: { inst: any }) {
+  const step = getPipelineStep(inst)
+  return (
+    <div className="flex items-center gap-0.5" title={`Etapa ${step}/6: ${PIPELINE_STAGES[step - 1]?.label}`}>
+      {PIPELINE_STAGES.map((s, i) => (
+        <div key={s.key}
+          className={`h-1.5 rounded-full transition-all ${i === 0 ? 'w-4' : 'w-3'} ${
+            i < step ? 'bg-cyan-500' : i === step ? 'bg-cyan-200' : 'bg-gray-100'
+          }`}
+          title={s.label}
+        />
+      ))}
+      <span className="ml-1.5 text-[10px] text-gray-400 font-medium">{step}/6</span>
+    </div>
+  )
+}
+
 const PLANS = [
   { value: 'escola', label: 'Escola Padrão' },
   { value: 'rede', label: 'Rede de Escolas' },
@@ -198,17 +243,7 @@ function NewSchoolWizard({
       let paymentLink: string | undefined
 
       if (!form.isFree) {
-        // 3. Criar registro de cobrança de implantação (pendente)
-        await supabase.from('payments').insert({
-          institution_id: institution.id,
-          amount: Number(form.implementationValue),
-          status: 'pending',
-          payment_type: 'implementation',
-          due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          description: `Implantação — ${form.name.trim()}`,
-        })
-
-        // 4. Tentar criar cobrança no Asaas via Edge Function (se configurado)
+        // 3. Criar cobrança no Asaas via Edge Function (cria o registro no DB também)
         try {
           const { data: asaasData } = await supabase.functions.invoke('asaas-create-charge', {
             body: {
@@ -1003,7 +1038,7 @@ export default function AdminSchools() {
   const loadData = async () => {
     setLoading(true)
     const [instRes, consultRes, cycleRes, waRes] = await Promise.all([
-      supabase.from('institutions').select('*').order('name'),
+      supabase.from('institutions').select('*, contracts(id,status), onboarding_processes(id,status)').order('name'),
       supabase.from('users').select('id, full_name, email').eq('user_type', 'consultant'),
       supabase.from('campaign_cycles')
         .select('institution_id, status, year, id, start_date, end_date, campaign_start_month, label')
@@ -1267,7 +1302,7 @@ export default function AdminSchools() {
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {['Escola','Localização','Consultor','Status / Plano','Campanha','WhatsApp','Financeiro','Ações'].map(h => (
+                  {['Escola','Localização','Consultor','Status / Plano','Pipeline','Campanha','WhatsApp','Financeiro','Ações'].map(h => (
                     <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -1275,11 +1310,11 @@ export default function AdminSchools() {
               <tbody className="divide-y divide-gray-50">
                 {loading ? (
                   Array(5).fill(0).map((_, i) => (
-                    <tr key={i}>{Array(8).fill(0).map((_, j) => <td key={j} className="px-5 py-4"><Skeleton h="h-4" w="w-20" /></td>)}</tr>
+                    <tr key={i}>{Array(9).fill(0).map((_, j) => <td key={j} className="px-5 py-4"><Skeleton h="h-4" w="w-20" /></td>)}</tr>
                   ))
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-5 py-16 text-center">
+                    <td colSpan={9} className="px-5 py-16 text-center">
                       <Building2 className="w-10 h-10 mx-auto mb-2 text-gray-200" />
                       <p className="text-sm text-gray-400">{search ? 'Nenhuma escola encontrada' : 'Nenhuma escola cadastrada'}</p>
                       {!search && <button onClick={() => setShowWizard(true)} className="mt-2 text-sm text-cyan-600 font-semibold">+ Criar primeira escola</button>}
@@ -1314,6 +1349,9 @@ export default function AdminSchools() {
                         <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: planBadge.color, background: planBadge.bg }}>
                           {planBadge.label}
                         </span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <PipelineBar inst={inst} />
                       </td>
                       <td className="px-5 py-3.5">
                         <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: cycleBadge.color, background: cycleBadge.bg }}>

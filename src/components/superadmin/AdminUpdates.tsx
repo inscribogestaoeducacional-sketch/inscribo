@@ -67,21 +67,17 @@ export default function AdminUpdates() {
       const { data: institutions, error: instError } = await supabase
         .from('institutions')
         .select('id, name')
-      console.log('Instituições encontradas:', institutions?.length, instError)
       if (institutions && institutions.length > 0) {
-        for (const inst of institutions) {
-          const { error: notifError } = await supabase
-            .from('system_notifications')
-            .insert({
-              institution_id: inst.id,
-              type: 'suggestion',
-              title: form.title.trim(),
-              message: form.content.trim().slice(0, 200),
-              severity: form.type === 'alert' ? 'warning' : form.type === 'maintenance' ? 'danger' : 'info',
-              action_url: null,
-            })
-          if (notifError) console.error('Erro ao notificar', inst.id, notifError)
-        }
+        await Promise.all(institutions.map(inst =>
+          supabase.from('system_notifications').insert({
+            institution_id: inst.id,
+            type: 'suggestion',
+            title: form.title.trim(),
+            message: form.content.trim().slice(0, 200),
+            severity: form.type === 'alert' ? 'warning' : form.type === 'maintenance' ? 'danger' : 'info',
+            action_url: null,
+          })
+        ))
       }
       setUpdates(prev => [inserted, ...prev])
       setModal(false)

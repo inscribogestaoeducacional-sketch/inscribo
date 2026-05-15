@@ -201,17 +201,17 @@ export default function ConsultantContracts() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
-                          {c.zapsign_sign_url && (
+                          {c.sign_url && (
                             <>
                               <button
-                                onClick={() => copyToClipboard(c.zapsign_sign_url)}
+                                onClick={() => copyToClipboard(c.sign_url)}
                                 className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100 font-medium"
                                 title="Copiar link de assinatura"
                               >
                                 <Copy className="w-3 h-3" /> Copiar link
                               </button>
                               <a
-                                href={c.zapsign_sign_url}
+                                href={c.sign_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"

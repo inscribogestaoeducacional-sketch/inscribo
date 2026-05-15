@@ -22,14 +22,13 @@ interface Notification {
 
 // ─── menus ────────────────────────────────────────────────────────────────
 const ADMIN_MENU = [
-  { path: '/super-admin',             label: 'Dashboard',     icon: Home,      exact: true },
-  { path: '/super-admin/crm',         label: 'CRM Comercial', icon: TrendingUp             },
-  { path: '/super-admin/onboarding',  label: 'Implantação',   icon: BookOpen               },
-  { path: '/super-admin/schools',     label: 'Escolas',       icon: Building2              },
-  { path: '/super-admin/financial',   label: 'Financeiro',    icon: DollarSign             },
-  { path: '/super-admin/contracts',   label: 'Contratos',     icon: FileText               },
-  { path: '/super-admin/whatsapp',    label: 'WhatsApp',      icon: MessageCircle          },
-  { path: '/super-admin/settings',    label: 'Configurações', icon: Settings               },
+  { path: '/super-admin',              label: 'Dashboard',     icon: Home,        exact: true },
+  { path: '/super-admin/crm',          label: 'CRM Comercial', icon: TrendingUp               },
+  { path: '/super-admin/schools',      label: 'Escolas',       icon: Building2                },
+  { path: '/super-admin/financial',    label: 'Financeiro',    icon: DollarSign               },
+  { path: '/super-admin/whatsapp',     label: 'WhatsApp',      icon: MessageCircle            },
+  { path: '/super-admin/consultants',  label: 'Consultores',   icon: Users                    },
+  { path: '/super-admin/settings',     label: 'Configurações', icon: Settings                 },
 ]
 
 const CONSULTANT_MENU = [
@@ -113,7 +112,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
         .from('crm_leads')
         .select('id', { count: 'exact', head: true })
         .lt('next_followup', new Date().toISOString())
-        .not('stage', 'in', '("fechado","cliente")')
+        .not('stage', 'in', '(fechado,cliente)')
       setOverdueFollowups(count || 0)
     } catch { /* tabela pode não existir ainda */ }
   }
@@ -186,13 +185,11 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
         {/* Nav */}
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
           {menuItems.map(item => {
-            const active  = isActive(item.path, item.exact)
-            const Icon    = item.icon
-            const isCRM   = item.path === '/super-admin/crm'
-            const isOnb   = item.path === '/super-admin/onboarding'
+            const active = isActive(item.path, item.exact)
+            const Icon   = item.icon
 
             // badge por item
-            const badge = isCRM ? overdueFollowups : isOnb ? todayMeetings : 0
+            const badge = item.path === '/super-admin/crm' ? overdueFollowups : 0
 
             return (
               <Link key={item.path} to={item.path}

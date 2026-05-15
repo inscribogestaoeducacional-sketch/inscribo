@@ -97,7 +97,7 @@ export default function AdminConsultants() {
               email: form.email.trim().toLowerCase(),
               password: form.password,
               full_name: form.full_name.trim(),
-              role: 'admin',
+              role: 'consultant',
               user_type: 'consultant',
               phone: form.phone || null,
             }),
@@ -117,13 +117,12 @@ export default function AdminConsultants() {
   }
 
   const handleDelete = async (c: any) => {
-    if (!confirm(`Excluir o consultor "${c.full_name}"?\nAs escolas vinculadas ficarão sem consultor.`)) return
-    // Desvincula escolas
+    if (!confirm(`Desativar o consultor "${c.full_name}"?\nEle perderá acesso ao painel. As escolas vinculadas ficarão sem consultor.`)) return
+    const { error } = await supabase.from('users').update({ active: false }).eq('id', c.id)
+    if (error) { showToast('Erro ao desativar.', false); return }
     await supabase.from('institutions').update({ consultant_id: null }).eq('consultant_id', c.id)
-    // Deleta usuário
-    const { error } = await supabase.from('users').delete().eq('id', c.id)
-    if (error) showToast('Erro ao excluir.', false)
-    else { showToast('Consultor excluído.'); loadData() }
+    showToast('Consultor desativado.')
+    loadData()
   }
 
   const filtered = consultants.filter(c =>

@@ -86,7 +86,7 @@ export default function AdminHome() {
   const loadData = async () => {
     setLoading(true)
     const [instRes, payRes, leadRes, meetRes, contRes] = await Promise.all([
-      supabase.from('institutions').select('id, name, plan, plan_status, created_at, city, state'),
+      supabase.from('institutions').select('id, name, plan, plan_status, created_at, city, state, monthly_value'),
       supabase.from('payments').select('id, status, amount, paid_at, due_date, institution_id, payment_type').order('created_at', { ascending: false }),
       supabase.from('crm_leads').select('id, school_name, stage, next_followup, monthly_value, updated_at').order('updated_at', { ascending: false }),
       supabase.from('onboarding_meetings').select('id, title, scheduled_at, status, type, institution_id, institutions(name)').eq('status', 'scheduled').gte('scheduled_at', new Date().toISOString()).order('scheduled_at').limit(10),
