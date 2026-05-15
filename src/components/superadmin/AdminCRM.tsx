@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
 import { useNavigate } from 'react-router-dom'
 import { createGoogleMeet, buildEndDatetime } from '../../lib/googleMeet'
+import { buildContractVars, renderContractHtml } from '../../lib/contractPreview'
 import {
   Plus, X, Search, Phone, Mail, MapPin,
   Calendar, Clock, ChevronRight, AlertCircle, CheckCircle2,
@@ -719,27 +720,40 @@ function LeadModal({ lead: initialLead, consultants, onClose, onSave, onStartOnb
 }
 
 // ─── Onboarding Modal — 3-step wizard ────────────────────────────────────
+function maskCpf(v: string) {
+  const d = v.replace(/\D/g, '').slice(0, 11)
+  if (d.length <= 3) return d
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`
+  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
+}
+
 function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
   lead: Lead; consultants: any[]; onClose: () => void; onSuccess: (institutionId: string) => void
 }) {
   const [step, setStep] = useState(1)
   const [form, setForm] = useState({
-    name:               lead.school_name || '',
-    cnpj:               '',
-    city:               lead.city  || '',
-    state:              lead.state || '',
-    phone:              lead.phone || '',
-    plan:               'escola',
-    consultantId:       lead.consultant_id || '',
-    isFree:             false,
+    name:                lead.school_name || '',
+    cnpj:                '',
+    address:             '',
+    city:                lead.city  || '',
+    state:               lead.state || '',
+    phone:               lead.phone || '',
+    plan:                'escola',
+    consultantId:        lead.consultant_id || '',
+    isFree:              false,
     implementationValue: String(lead.implementation_value || 550),
-    monthlyValue:       String(lead.monthly_value || 550),
-    billingDueDay:      '10',
-    managerName:        lead.name  || '',
-    email:              lead.email || '',
-    password:           '',
+    monthlyValue:        String(lead.monthly_value || 550),
+    billingDueDay:       '10',
+    managerName:         lead.name  || '',
+    managerCpf:          '',
+    managerRole:         'Diretor',
+    signerPhone:         '',
+    email:               lead.email || '',
+    password:            '',
   })
   const [showPw, setShowPw] = useState(false)
+  const [showContractPreview, setShowContractPreview] = useState(false)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -752,10 +766,11 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
       if (!form.city.trim())  e.city  = 'Obrigatório'
       if (!form.state.trim()) e.state = 'Obrigatório'
     }
-    if (s === 3) {
+    if (s === 2) {
       if (!form.managerName.trim()) e.managerName = 'Obrigatório'
-      if (!form.email.trim())       e.email       = 'Obrigatório'
-      if (form.password.length < 8) e.password    = 'Mínimo 8 caracteres'
+      if (form.managerCpf.replace(/\D/g, '').length !== 11) e.managerCpf = 'CPF inválido (11 dígitos)'
+      if (!form.email.includes('@')) e.email = 'E-mail inválido'
+      if (form.password.length < 8) e.password = 'Mínimo 8 caracteres'
     }
     setErrors(e)
     return Object.keys(e).length === 0
@@ -764,7 +779,6 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
   const nextStep = () => { if (validateStep(step)) setStep(s => s + 1) }
 
   const handleCreate = async () => {
-    if (!validateStep(3)) return
     setSaving(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -773,6 +787,7 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
       const { data: institution, error: instErr } = await supabase.from('institutions').insert({
         name:                 form.name.trim(),
         cnpj:                 form.cnpj.trim() || null,
+        address:              form.address.trim() || null,
         city:                 form.city.trim(),
         state:                form.state.trim().toUpperCase(),
         phone:                form.phone.trim() || null,
@@ -782,6 +797,7 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
         plan_status:          form.isFree ? 'active' : 'pending_contract',
         monthly_value:        form.isFree ? 0 : Number(form.monthlyValue),
         implementation_value: form.isFree ? 0 : Number(form.implementationValue),
+        billing_due_day:      Number(form.billingDueDay),
       }).select().single()
       if (instErr) throw new Error(instErr.message)
 
@@ -797,6 +813,21 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
       }
 
       if (!form.isFree) {
+        try {
+          const consultantName = consultants.find(c => c.id === form.consultantId)?.full_name
+          await supabase.functions.invoke('autentique', {
+            body: {
+              institution_id:  institution.id,
+              signer_name:     form.managerName.trim(),
+              signer_email:    form.email.trim().toLowerCase(),
+              signer_cpf:      form.managerCpf.replace(/\D/g, ''),
+              signer_phone:    form.signerPhone.trim() || null,
+              consultant_id:   form.consultantId || null,
+              consultant_name: consultantName || null,
+            },
+          })
+        } catch {}
+
         try {
           const { data: asaasData } = await supabase.functions.invoke('asaas-create-charge', {
             body: {
@@ -840,7 +871,15 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
 
   const inp2 = (err?: string) => `${inp} ${err ? 'border-red-400' : ''}`
 
-  const STEPS = ['Dados da escola', 'Plano e financeiro', 'Acesso do gestor']
+  const STEPS = ['Dados da escola', 'Gestor e contrato', 'Plano e pagamento']
+
+  const contractHtml = showContractPreview ? renderContractHtml(buildContractVars({
+    institution: { name: form.name, cnpj: form.cnpj, address: form.address, city: form.city, state: form.state, billing_due_day: form.billingDueDay },
+    signer: { name: form.managerName, role: form.managerRole, cpf: form.managerCpf, email: form.email, phone: form.signerPhone },
+    monthly_value: Number(form.monthlyValue),
+    implementation_value: Number(form.implementationValue),
+    consultant_name: consultants.find(c => c.id === form.consultantId)?.full_name,
+  })) : ''
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[200] p-4">
@@ -883,6 +922,10 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
                 <input className={inp2(errors.name)} value={form.name} onChange={e => set('name', e.target.value)} />
                 {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
               </div>
+              <div>
+                <label className={lbl}>Endereço completo</label>
+                <input className={inp} value={form.address} onChange={e => set('address', e.target.value)} placeholder="Rua, número, bairro" />
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className={lbl}>CNPJ</label>
@@ -906,8 +949,60 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
             </div>
           )}
 
-          {/* ── Step 2: Plano e financeiro ── */}
+          {/* ── Step 2: Gestor e contrato ── */}
           {step === 2 && (
+            <div className="space-y-4">
+              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 space-y-3">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Dados do gestor / signatário</p>
+                <div>
+                  <label className={lbl}>Nome do gestor *</label>
+                  <input className={inp2(errors.managerName)} value={form.managerName} onChange={e => set('managerName', e.target.value)} />
+                  {errors.managerName && <p className="text-xs text-red-500 mt-1">{errors.managerName}</p>}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={lbl}>CPF do gestor *</label>
+                    <input className={inp2(errors.managerCpf)} placeholder="000.000.000-00"
+                      value={form.managerCpf} onChange={e => set('managerCpf', maskCpf(e.target.value))} />
+                    {errors.managerCpf && <p className="text-xs text-red-500 mt-1">{errors.managerCpf}</p>}
+                  </div>
+                  <div>
+                    <label className={lbl}>Cargo</label>
+                    <input className={inp} value={form.managerRole} onChange={e => set('managerRole', e.target.value)} placeholder="Diretor" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={lbl}>E-mail *</label>
+                    <input type="email" className={inp2(errors.email)} value={form.email} onChange={e => set('email', e.target.value)} />
+                    {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
+                  </div>
+                  <div>
+                    <label className={lbl}>WhatsApp do gestor</label>
+                    <input className={inp} placeholder="(83) 99999-9999" value={form.signerPhone} onChange={e => set('signerPhone', e.target.value)} />
+                  </div>
+                </div>
+                <div>
+                  <label className={lbl}>Senha inicial *</label>
+                  <div className="relative">
+                    <input type={showPw ? 'text' : 'password'} className={inp2(errors.password) + ' pr-10'}
+                      placeholder="Mínimo 8 caracteres" value={form.password} onChange={e => set('password', e.target.value)} />
+                    <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                      {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password}</p>}
+                </div>
+              </div>
+              <button onClick={() => setShowContractPreview(true)}
+                className="w-full flex items-center justify-center gap-2 py-2.5 border border-cyan-300 text-cyan-700 rounded-xl font-semibold text-sm hover:bg-cyan-50 transition-colors">
+                <Eye className="w-4 h-4" /> Visualizar contrato
+              </button>
+            </div>
+          )}
+
+          {/* ── Step 3: Plano e pagamento ── */}
+          {step === 3 && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -956,42 +1051,13 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
                   </div>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* ── Step 3: Acesso do gestor ── */}
-          {step === 3 && (
-            <div className="space-y-4">
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 space-y-3">
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Acesso do gestor</p>
-                <div>
-                  <label className={lbl}>Nome do gestor *</label>
-                  <input className={inp2(errors.managerName)} value={form.managerName} onChange={e => set('managerName', e.target.value)} />
-                  {errors.managerName && <p className="text-xs text-red-500 mt-1">{errors.managerName}</p>}
-                </div>
-                <div>
-                  <label className={lbl}>E-mail *</label>
-                  <input type="email" className={inp2(errors.email)} value={form.email} onChange={e => set('email', e.target.value)} />
-                  {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
-                </div>
-                <div>
-                  <label className={lbl}>Senha inicial *</label>
-                  <div className="relative">
-                    <input type={showPw ? 'text' : 'password'} className={inp2(errors.password) + ' pr-10'}
-                      placeholder="Mínimo 8 caracteres" value={form.password} onChange={e => set('password', e.target.value)} />
-                    <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                      {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password}</p>}
-                </div>
-              </div>
 
               <div className="bg-cyan-50 border border-cyan-100 rounded-xl p-4">
                 <p className="text-xs font-bold text-cyan-700 uppercase tracking-wide mb-2">Resumo — o que será feito</p>
                 <div className="space-y-1.5">
                   <p className="text-xs text-cyan-700">✅ Criar escola <strong>{form.name}</strong> ({form.city}/{form.state})</p>
                   <p className="text-xs text-cyan-700">✅ Criar usuário gestor para <strong>{form.email}</strong></p>
+                  {!form.isFree && <p className="text-xs text-cyan-700">✅ Enviar contrato digital via Autentique para assinatura</p>}
                   {!form.isFree && <p className="text-xs text-cyan-700">✅ Gerar cobrança de implantação no Asaas (R$ {form.implementationValue})</p>}
                   {!form.isFree && <p className="text-xs text-cyan-700">✅ Enviar e-mail com link de pagamento ao gestor</p>}
                   {form.isFree && <p className="text-xs text-cyan-700">✅ Enviar e-mail de acesso imediato ao gestor</p>}
@@ -1020,6 +1086,25 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
           )}
         </div>
       </div>
+
+      {/* Contract preview modal */}
+      {showContractPreview && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[300] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-base font-bold text-gray-900">Pré-visualização do contrato</h3>
+              <button onClick={() => setShowContractPreview(false)} className="p-2 hover:bg-gray-100 rounded-xl">
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <div dangerouslySetInnerHTML={{ __html: contractHtml }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
