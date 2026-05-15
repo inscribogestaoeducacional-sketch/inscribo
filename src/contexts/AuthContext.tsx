@@ -84,7 +84,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data: { session: current } } = await supabase.auth.getSession()
       if (current?.user) {
         setSession(current)
-        localStorage.setItem(CACHE_SESSION, JSON.stringify(current))
         await loadUserProfile(current.user.id)
       }
 
@@ -92,7 +91,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
         if (event === 'SIGNED_IN' && newSession?.user) {
           setSession(newSession)
-          localStorage.setItem(CACHE_SESSION, JSON.stringify(newSession))
           await loadUserProfile(newSession.user.id)
         }
         if (event === 'SIGNED_OUT') {
@@ -100,7 +98,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         if (event === 'TOKEN_REFRESHED' && newSession) {
           setSession(newSession)
-          localStorage.setItem(CACHE_SESSION, JSON.stringify(newSession))
         }
       })
 
@@ -169,7 +166,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw new Error(error.message)
       if (data.session) {
         setSession(data.session)
-        localStorage.setItem(CACHE_SESSION, JSON.stringify(data.session))
         await loadUserProfile(data.user!.id)
       }
     } finally {
@@ -215,7 +211,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) { clearCache(); setUser(null); setSession(null); return }
       if (refreshed) {
         setSession(refreshed)
-        localStorage.setItem(CACHE_SESSION, JSON.stringify(refreshed))
         if (refreshed.user) await loadUserProfile(refreshed.user.id)
       }
     } catch (e) {
