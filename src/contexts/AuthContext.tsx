@@ -44,42 +44,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ── init ─────────────────────────────────────────────
   useEffect(() => {
-    let mounted = true
-
-    // Verificar sessão existente primeiro — garante que loading sempre termina
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return
-      if (session) setSession(session)
-      if (session?.user) {
-        loadUserProfile(session.user.id) // chama setLoading(false) no finally
-      } else {
+    const init = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session) setSession(session)
+        if (session?.user) {
+          await loadUserProfile(session.user.id)
+        }
+      } catch (e) {
+        console.error('Auth init error:', e)
+      } finally {
         setLoading(false)
         setInitializing(false)
       }
-    })
-
-    // Ouvir mudanças subsequentes (login, logout, refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!mounted) return
-        if (session) setSession(session)
-        if (event === 'SIGNED_IN' && session?.user) {
-          await loadUserProfile(session.user.id)
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null)
-          setSession(null)
-          setLoading(false)
-          setInitializing(false)
-        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-          loadUserProfile(session.user.id)
-        }
-      }
-    )
-
-    return () => {
-      mounted = false
-      subscription.unsubscribe()
     }
+
+    init()
   }, [])
 
   // ── loadUserProfile ───────────────────────────────────
