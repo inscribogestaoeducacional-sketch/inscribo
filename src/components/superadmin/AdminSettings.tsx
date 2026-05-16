@@ -235,6 +235,11 @@ function RichTextEditor({ value, onChange, vars }: {
 type Settings = Record<string, string>
 
 const DEFAULTS: Settings = {
+  // WhatsApp global
+  wa_access_token: '',
+  wa_verify_token: '',
+  wa_app_secret:   '',
+  wa_waba_id:      '',
   // Financeiro
   default_implementation_value: '550',
   default_monthly_value: '550',
@@ -672,6 +677,44 @@ export default function AdminSettings() {
                 : <><Save className="w-3.5 h-3.5" /> Salvar credenciais</>
               }
             </button>
+          </div>
+        </Section>
+
+        {/* ── WhatsApp Global (escolas) ── */}
+        <Section icon={MessageCircle} title="WhatsApp & API — Global" subtitle="Token e credenciais Meta usados por todas as escolas" color="cyan">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3 text-sm text-blue-800">
+            <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold">Token centralizado</p>
+              <p className="text-xs mt-1">Estas credenciais são usadas pelo backend para envio e recebimento de mensagens de todas as escolas. O sistema lê aqui primeiro e usa as variáveis de ambiente como fallback.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={lbl}>Access Token (permanente)</label>
+              <SecretInput value={settings.wa_access_token} onChange={v => set('wa_access_token', v)} placeholder="EAAxxxxxxx..." />
+              <p className={hint}>Token de sistema com permissão whatsapp_business_messaging</p>
+            </div>
+            <div>
+              <label className={lbl}>WABA ID</label>
+              <input className={inp} value={settings.wa_waba_id} onChange={e => set('wa_waba_id', e.target.value)} placeholder="1222972209822315" />
+              <p className={hint}>WhatsApp Business Account ID</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={lbl}>Verify Token (webhook)</label>
+              <SecretInput value={settings.wa_verify_token} onChange={v => set('wa_verify_token', v)} placeholder="meu_token_verificacao" />
+              <p className={hint}>Token configurado no painel Meta para verificar o webhook</p>
+            </div>
+            <div>
+              <label className={lbl}>App Secret</label>
+              <SecretInput value={settings.wa_app_secret} onChange={v => set('wa_app_secret', v)} placeholder="abc123..." />
+              <p className={hint}>Segredo do App Meta para validar assinatura HMAC do webhook</p>
+            </div>
+          </div>
+          <div className="flex justify-end pt-2">
+            <SaveBtn keys={['wa_access_token', 'wa_waba_id', 'wa_verify_token', 'wa_app_secret']} id="wa_global" />
           </div>
         </Section>
 

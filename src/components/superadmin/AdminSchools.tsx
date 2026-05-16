@@ -765,7 +765,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
   const [tab, setTab]         = useState<'info' | 'whatsapp'>('info')
   const [waConfig, setWaConfig] = useState<any>(null)
   const [waLoading, setWaLoading] = useState(false)
-  const [waForm, setWaForm]   = useState({ phone_id: '', token: '', phone_number: '', display_name: '', waba_id: '' })
+  const [waForm, setWaForm]   = useState({ phone_id: '', phone_number: '', display_name: '', waba_id: '' })
   const [waVerifying, setWaVerifying] = useState(false)
   const [waError, setWaError] = useState('')
   const [waSaved, setWaSaved] = useState(false)
@@ -790,7 +790,6 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
       if (wa) {
         setWaForm({
           phone_id:     wa.phone_number_id || '',
-          token:        instRes.data?.whatsapp_token || '',
           phone_number: wa.phone_number || '',
           display_name: wa.display_name || '',
           waba_id:      wa.waba_id || '',
@@ -801,7 +800,6 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
       } else if (instRes.data?.whatsapp_phone_id) {
         setWaForm({
           phone_id:     instRes.data.whatsapp_phone_id || '',
-          token:        instRes.data.whatsapp_token || '',
           phone_number: instRes.data.whatsapp_phone_number || '',
           display_name: instRes.data.whatsapp_display_name || '',
           waba_id:      '',
@@ -812,19 +810,27 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
   }
 
   const handleSaveWa = async () => {
-    if (!waForm.phone_id || !waForm.token) { setWaError('Phone ID e Token são obrigatórios.'); return }
+    if (!waForm.phone_id) { setWaError('Phone Number ID é obrigatório.'); return }
     setWaVerifying(true); setWaError(''); setWaSaved(false)
     try {
+      // Fetch global access token from platform_settings
+      const { data: tokenRow } = await supabase
+        .from('platform_settings')
+        .select('value')
+        .eq('key', 'wa_access_token')
+        .maybeSingle()
+      const globalToken = tokenRow?.value || ''
+      if (!globalToken) throw new Error('Token global do WhatsApp não configurado. Configure em Configurações → WhatsApp & API.')
+
       const testRes = await fetch(`https://graph.facebook.com/v19.0/${waForm.phone_id}?fields=display_phone_number,verified_name`, {
-        headers: { Authorization: `Bearer ${waForm.token}` },
+        headers: { Authorization: `Bearer ${globalToken}` },
       })
-      if (!testRes.ok) { const err = await testRes.json(); throw new Error((err as any)?.error?.message || 'Token ou Phone ID inválido') }
+      if (!testRes.ok) { const err = await testRes.json(); throw new Error((err as any)?.error?.message || 'Phone ID inválido ou token sem permissão') }
       const testData = await testRes.json()
       const verifiedName  = (testData as any).verified_name || waForm.display_name
       const verifiedPhone = waForm.phone_number || (testData as any).display_phone_number || ''
       await supabase.from('institutions').update({
         whatsapp_phone_id:     waForm.phone_id,
-        whatsapp_token:        waForm.token,
         whatsapp_phone_number: verifiedPhone,
         whatsapp_display_name: verifiedName,
         whatsapp_connected:    true,
@@ -937,11 +943,10 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
                   <div className="space-y-3 pt-2">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Configurar número</p>
                     {[
-                      { label: 'Phone Number ID (Meta)',       key: 'phone_id',     type: 'text',     placeholder: '1007880222413531' },
-                      { label: 'Token de acesso',              key: 'token',        type: 'password', placeholder: 'EAAOSNzt...' },
-                      { label: 'Número de telefone',           key: 'phone_number', type: 'text',     placeholder: '5583999990001' },
-                      { label: 'Nome de exibição no WhatsApp', key: 'display_name', type: 'text',     placeholder: 'Colégio São João' },
-                      { label: 'WABA ID',                      key: 'waba_id',      type: 'text',     placeholder: '1222972209822315' },
+                      { label: 'Phone Number ID (Meta)',       key: 'phone_id',     type: 'text', placeholder: '1007880222413531' },
+                      { label: 'Número de telefone',           key: 'phone_number', type: 'text', placeholder: '5583999990001' },
+                      { label: 'Nome de exibição no WhatsApp', key: 'display_name', type: 'text', placeholder: 'Colégio São João' },
+                      { label: 'WABA ID',                      key: 'waba_id',      type: 'text', placeholder: '1222972209822315' },
                     ].map(f => (
                       <div key={f.key}>
                         <label className={lbl}>{f.label}</label>
@@ -962,7 +967,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
                       </div>
                     )}
 
-                    <button onClick={handleSaveWa} disabled={waVerifying || !waForm.phone_id || !waForm.token}
+                    <button onClick={handleSaveWa} disabled={waVerifying || !waForm.phone_id}
                       className="w-full flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
                       {waVerifying
                         ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Verificando...</>

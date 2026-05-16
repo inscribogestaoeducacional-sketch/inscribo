@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
 import * as crypto from 'crypto'
+import { getWAConfig } from './_helpers'
 
 // Disable body-parser — raw buffer needed for HMAC-SHA256 validation
 export const config = {
@@ -43,12 +44,13 @@ async function sendAutoMessage(
       .eq('is_active', true)
       .single()
 
-    if (!phone?.phone_number_id || !process.env.WA_ACCESS_TOKEN) return
+    const waConfig = await getWAConfig()
+    if (!phone?.phone_number_id || !waConfig.accessToken) return
 
     const resp = await fetch(`${GRAPH_URL}/${phone.phone_number_id}/messages`, {
       method:  'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.WA_ACCESS_TOKEN}`,
+        'Authorization': `Bearer ${waConfig.accessToken}`,
         'Content-Type':  'application/json',
       },
       body: JSON.stringify({
@@ -88,12 +90,13 @@ async function resolveMediaUrl(
   institutionId: string,
   mimeType:      string
 ): Promise<string | null> {
-  if (!process.env.WA_ACCESS_TOKEN || !mediaId) return null
+  const waConfig = await getWAConfig()
+  if (!waConfig.accessToken || !mediaId) return null
 
   try {
     // 1. Get media metadata (temporary download URL)
     const metaRes = await fetch(`${GRAPH_URL}/${mediaId}`, {
-      headers: { 'Authorization': `Bearer ${process.env.WA_ACCESS_TOKEN}` },
+      headers: { 'Authorization': `Bearer ${waConfig.accessToken}` },
       signal:  AbortSignal.timeout(5_000),
     })
     if (!metaRes.ok) return null
@@ -104,7 +107,7 @@ async function resolveMediaUrl(
 
     // 2. Download binary (skip files > 10 MB to stay within function timeout)
     const dlRes = await fetch(tempUrl, {
-      headers: { 'Authorization': `Bearer ${process.env.WA_ACCESS_TOKEN}` },
+      headers: { 'Authorization': `Bearer ${waConfig.accessToken}` },
       signal:  AbortSignal.timeout(20_000),
     })
     if (!dlRes.ok) return tempUrl
@@ -640,12 +643,14 @@ async function processAionMessage({
 // ── Main handler ─────────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
 
+  const waConfig = await getWAConfig()
+
   // ── GET: Meta webhook verification ──
   if (req.method === 'GET') {
     const mode      = req.query['hub.mode']
     const token     = req.query['hub.verify_token']
     const challenge = req.query['hub.challenge']
-    if (mode === 'subscribe' && token === process.env.WA_VERIFY_TOKEN) {
+    if (mode === 'subscribe' && token === waConfig.verifyToken) {
       console.log('✅ Webhook verificado')
       return res.status(200).send(challenge)
     }
@@ -658,11 +663,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // HMAC-SHA256 validation (timing-safe)
     const signature = req.headers['x-hub-signature-256'] as string | undefined
-    if (process.env.WA_APP_SECRET) {
+    if (waConfig.appSecret) {
       if (!signature) return res.status(401).json({ error: 'Missing x-hub-signature-256' })
 
       const expected = `sha256=${crypto
-        .createHmac('sha256', process.env.WA_APP_SECRET)
+        .createHmac('sha256', waConfig.appSecret)
         .update(rawBody)
         .digest('hex')}`
 

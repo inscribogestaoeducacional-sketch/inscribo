@@ -375,11 +375,8 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [loading, setLoading]             = useState(true)
   const [showBot, setShowBot]             = useState(false)
   const [usage, setUsage]                 = useState({ count: 0, limit: 1000 })
-  const [form, setForm]                   = useState({ phone_id: '', token: '', phone_number: '', display_name: '' })
-  const [connecting, setConnecting]       = useState(false)
-  const [connectError, setConnectError]   = useState<string | null>(null)
-  const [disconnecting, setDisconnecting] = useState(false)
   const [phoneRecord, setPhoneRecord]     = useState<any>(null)
+  const [globalToken, setGlobalToken]     = useState('')
   const [testing, setTesting]             = useState(false)
   const [testResult, setTestResult]       = useState<{ ok: boolean; msg: string } | null>(null)
 
@@ -438,8 +435,14 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const loadConfig = async () => {
     setLoading(true)
     try {
+      // Fetch global WA token from platform_settings
+      const { data: tokenRow } = await supabase
+        .from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
+      if (waMountedRef.current) setGlobalToken(tokenRow?.value || '')
+    } catch {}
+    try {
       const { data } = await supabase.from('institutions')
-        .select('whatsapp_phone_id,whatsapp_token,whatsapp_phone_number,whatsapp_display_name,whatsapp_connected')
+        .select('whatsapp_phone_id,whatsapp_phone_number,whatsapp_display_name,whatsapp_connected')
         .eq('id', institutionId).single()
       if (waMountedRef.current && data?.whatsapp_phone_id) {
         setMetaConfig(data)
@@ -526,55 +529,6 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
     setBlacklist(prev => prev.filter(b => b.id !== id))
   }
 
-  const handleConnect = async () => {
-    if (!form.phone_id || !form.token) { setConnectError('Phone ID e Token são obrigatórios.'); return }
-    setConnecting(true); setConnectError(null)
-    try {
-      const testRes = await fetch(`https://graph.facebook.com/v19.0/${form.phone_id}?fields=display_phone_number,verified_name`, { headers: { Authorization: `Bearer ${form.token}` } })
-      if (!testRes.ok) { const err = await testRes.json(); throw new Error((err as any)?.error?.message || 'Token ou Phone ID inválido') }
-      const testData = await testRes.json()
-      await supabase.from('institutions').update({
-        whatsapp_phone_id: form.phone_id, whatsapp_token: form.token,
-        whatsapp_phone_number: form.phone_number || (testData as any).display_phone_number || '',
-        whatsapp_display_name: (testData as any).verified_name || form.display_name,
-        whatsapp_connected: true,
-      }).eq('id', institutionId)
-      try {
-        await supabase.from('whatsapp_phone_numbers').upsert({
-          institution_id:  institutionId,
-          phone_number_id: form.phone_id,
-          phone_number:    form.phone_number || (testData as any).display_phone_number || '',
-          display_name:    (testData as any).verified_name || form.display_name,
-          waba_id:         '1222972209822315',
-          is_active:       true,
-        }, { onConflict: 'phone_number_id' })
-      } catch {}
-      try {
-        await supabase.from('whatsapp_flows').upsert({
-          institution_id:    institutionId,
-          is_active:         true,
-          welcome_message:   'Olá! Bem-vindo. Em que posso ajudar?',
-          timezone:          'America/Fortaleza',
-          working_days:      ['MON', 'TUE', 'WED', 'THU', 'FRI'],
-          working_start:     '08:00',
-          working_end:       '18:00',
-          off_hours_message: 'Olá! Nosso atendimento é de seg a sex das 8h às 18h. Retornaremos em breve!',
-          menu_enabled:      false,
-        }, { onConflict: 'institution_id', ignoreDuplicates: true })
-      } catch {}
-      await loadConfig()
-    } catch (e) { setConnectError((e as Error).message) } finally { setConnecting(false) }
-  }
-
-  const handleDisconnect = async () => {
-    if (!confirm('Desconectar o WhatsApp? O bot deixará de funcionar.')) return
-    setDisconnecting(true)
-    try {
-      await supabase.from('institutions').update({ whatsapp_phone_id: null, whatsapp_token: null, whatsapp_phone_number: null, whatsapp_display_name: null, whatsapp_connected: false }).eq('id', institutionId)
-    } catch {}
-    setMetaConfig(null); setForm({ phone_id: '', token: '', phone_number: '', display_name: '' }); setDisconnecting(false)
-  }
-
   const handleSaveFlow = async () => {
     setSavingFlow(true)
     try {
@@ -588,8 +542,8 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
 
   const handleTestConnection = async () => {
     const phoneId = metaConfig?.whatsapp_phone_id || phoneRecord?.phone_number_id
-    const token   = metaConfig?.whatsapp_token
-    if (!phoneId || !token) { setTestResult({ ok: false, msg: 'Phone ID ou token não encontrado.' }); return }
+    const token   = globalToken
+    if (!phoneId || !token) { setTestResult({ ok: false, msg: 'Phone ID ou token não configurado.' }); return }
     setTesting(true); setTestResult(null)
     try {
       const res  = await fetch(`https://graph.facebook.com/v19.0/${phoneId}?fields=display_phone_number,verified_name`, { headers: { Authorization: `Bearer ${token}` } })
@@ -609,7 +563,7 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
 
   const handleSaveBizProfile = async () => {
     const phoneId = metaConfig?.whatsapp_phone_id || phoneRecord?.phone_number_id
-    const token   = metaConfig?.whatsapp_token
+    const token   = globalToken
     if (!phoneId || !token) return
     setSavingBiz(true)
     try {
@@ -714,36 +668,15 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
 
   if (!metaConfig?.whatsapp_phone_id) return (
     <div style={{ background: '#F8FAFC', borderRadius: 16, border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-      <div style={{ ...dCard, maxWidth: 480, width: '100%' }}>
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{ width: 64, height: 64, background: 'linear-gradient(135deg,#00A896,#007A6E)', borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-            <MessageCircle size={30} color="#fff" />
-          </div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1A2B4A', margin: '0 0 8px' }}>Conectar WhatsApp Business API</h2>
-          <p style={{ fontSize: 13, color: '#64748B', margin: 0, lineHeight: 1.6 }}>Use a API Oficial da Meta para atendimento automatizado no Áion Edu.</p>
+      <div style={{ ...dCard, maxWidth: 480, width: '100%', textAlign: 'center' }}>
+        <div style={{ width: 56, height: 56, background: '#E2E8F0', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+          <WifiOff size={26} color="#94A3B8" />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {[
-            { label: 'Phone ID *', key: 'phone_id', placeholder: 'Ex: 1007880222413531', type: 'text' },
-            { label: 'Token de acesso permanente *', key: 'token', placeholder: 'EAAOSNzt...', type: 'password' },
-            { label: 'Número de telefone', key: 'phone_number', placeholder: '+55 83 99999-9999', type: 'text' },
-            { label: 'Nome de exibição', key: 'display_name', placeholder: 'Colégio São João', type: 'text' },
-          ].map(f => (
-            <div key={f.key}>
-              <label style={dLabel}>{f.label}</label>
-              <input type={f.type} value={(form as any)[f.key]} onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))} style={dInput} placeholder={f.placeholder} />
-            </div>
-          ))}
-          {connectError && (
-            <div style={{ display: 'flex', gap: 8, padding: '10px 14px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, fontSize: 13, color: '#DC2626' }}>
-              <AlertCircle size={16} />{connectError}
-            </div>
-          )}
-          <button onClick={handleConnect} disabled={connecting || !form.phone_id || !form.token}
-            style={{ padding: '13px', background: 'linear-gradient(135deg,#00A896,#007A6E)', color: '#fff', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: (connecting || !form.phone_id || !form.token) ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            {connecting ? <><RefreshCw size={16} className="animate-spin" />Verificando...</> : <><Check size={16} />Conectar WhatsApp</>}
-          </button>
-        </div>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: '0 0 8px' }}>WhatsApp não configurado</h2>
+        <p style={{ fontSize: 13, color: '#64748B', margin: 0, lineHeight: 1.6 }}>
+          O número de WhatsApp desta escola ainda não foi configurado.<br />
+          Entre em contato com o administrador da plataforma para ativar o WhatsApp.
+        </p>
       </div>
     </div>
   )
@@ -816,10 +749,6 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                   <button onClick={handleTestConnection} disabled={testing}
                     style={{ flex: 1, minWidth: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#64748B', cursor: 'pointer', opacity: testing ? 0.6 : 1 }}>
                     {testing ? <><Loader2 size={13} className="animate-spin" />Testando...</> : <><RefreshCw size={13} />Testar conexão</>}
-                  </button>
-                  <button onClick={handleDisconnect} disabled={disconnecting}
-                    style={{ flex: 1, minWidth: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#DC2626', cursor: 'pointer', opacity: disconnecting ? 0.6 : 1 }}>
-                    <WifiOff size={14} />{disconnecting ? 'Desconectando...' : 'Desconectar'}
                   </button>
                 </div>
               </div>

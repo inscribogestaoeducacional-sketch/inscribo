@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
+import { getWAConfig } from './_helpers'
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -132,7 +133,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       phoneNumberId = phoneRecord.phone_number_id
-      accessToken   = process.env.WA_ACCESS_TOKEN || ''
+      accessToken   = (await getWAConfig()).accessToken
     }
 
     // ── Resolve media URL (upload if base64 provided) ──
