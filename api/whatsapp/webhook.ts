@@ -197,31 +197,52 @@ async function processCustomFlow(
   let variables: Record<string, string> = isNewConversation ? {} : (conv?.bot_variables || {})
 
   const findNode = (id: string) => bf.nodes.find((n: any) => n.id === id)
-  const edgesFrom = (fromId: string, port?: string) =>
-    bf.edges.filter((e: any) => e.from === fromId && (!port || e.fromPort === port))
+
+  // Support both old format (from/fromPort/to) and new format (fromNodeId/fromPortId/toNodeId)
+  const PORT_ALIASES: Record<string, string> = {
+    output: 'out', input: 'in', true: 'yes', false: 'no',
+  }
+  const normalizePort = (p: string) => PORT_ALIASES[p] ?? p
+
+  const edgesFrom = (fromId: string, port?: string): any[] => {
+    const normPort = port ? normalizePort(port) : undefined
+    return bf.edges.filter((e: any) => {
+      const eFrom = e.fromNodeId ?? e.from
+      const ePort = normalizePort(e.fromPortId ?? e.fromPort ?? '')
+      return eFrom === fromId && (!normPort || ePort === normPort)
+    })
+  }
+  const nextId = (e: any): string => e.toNodeId ?? e.to
 
   function interp(str: string): string {
     return str.replace(/\{\{(\w+)\}\}/g, (_: string, k: string) => variables[k] ?? `{{${k}}}`)
   }
 
   let current = findNode(currentNodeId)
-  if (!current) { current = findNode('start'); currentNodeId = 'start' }
+  // Fall back to first start node if stored id not found
+  if (!current) {
+    current = bf.nodes.find((n: any) => n.type === 'start')
+    currentNodeId = current?.id ?? 'start'
+  }
 
   // 2. Handle user input for the CURRENT node (before advancing)
   if (current?.type === 'question' && current.data?.variable && text.trim()) {
     variables[current.data.variable] = text.trim()
-    const nexts = edgesFrom(currentNodeId, 'output')
-    if (nexts.length) { currentNodeId = nexts[0].to; current = findNode(currentNodeId) }
+    const nexts = edgesFrom(currentNodeId, 'out')
+    if (nexts.length) { currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId) }
   } else if (current?.type === 'menu') {
-    const choice = parseInt(text.trim(), 10)
-    const opt = (current.data?.options || []).find((o: any) => o.number === choice)
-    if (opt) {
-      const nexts = edgesFrom(currentNodeId, opt.id)
-      if (nexts.length) { currentNodeId = nexts[0].to; current = findNode(currentNodeId) }
+    const choice  = parseInt(text.trim(), 10)
+    const options = current.data?.options || []
+    // Match by explicit number field (old) or implicit position (new)
+    const optIdx  = options.findIndex((o: any, i: number) => (o.number ?? i + 1) === choice)
+    if (optIdx >= 0) {
+      const opt = options[optIdx]
+      // Try new format (opt-{idx}) then old format (opt.id)
+      let nexts = edgesFrom(currentNodeId, `opt-${optIdx}`)
+      if (!nexts.length && opt.id) nexts = edgesFrom(currentNodeId, opt.id)
+      if (nexts.length) { currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId) }
     } else {
-      // Invalid choice — re-send menu text
-      const menuText = interp(current.data?.menuText || current.data?.text || 'Escolha uma opção válida:')
-      await sendAutoMessage(institutionId, remoteJid, menuText)
+      await sendAutoMessage(institutionId, remoteJid, interp(current.data?.menuText || current.data?.text || 'Escolha uma opção válida:'))
       return
     }
   }
@@ -234,15 +255,15 @@ async function processCustomFlow(
     if (node.type === 'start') {
       const nexts = edgesFrom(node.id)
       if (!nexts.length) break
-      currentNodeId = nexts[0].to; current = findNode(currentNodeId); continue
+      currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId); continue
     }
 
     if (node.type === 'message') {
       const msg = interp(node.data?.text || '')
       if (msg) await sendAutoMessage(institutionId, remoteJid, msg)
-      const nexts = edgesFrom(node.id, 'output')
+      const nexts = edgesFrom(node.id, 'out')
       if (!nexts.length) break
-      currentNodeId = nexts[0].to; current = findNode(currentNodeId); continue
+      currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId); continue
     }
 
     if (node.type === 'question') {
@@ -258,13 +279,13 @@ async function processCustomFlow(
     }
 
     if (node.type === 'transfer') {
-      if (node.data?.transferMessage) {
-        await sendAutoMessage(institutionId, remoteJid, interp(node.data.transferMessage))
-      }
-      if (node.data?.assigneeId) {
+      const transferMsg = node.data?.message || node.data?.transferMessage
+      if (transferMsg) await sendAutoMessage(institutionId, remoteJid, interp(transferMsg))
+      const assigneeId = node.data?.assignee_id || node.data?.assigneeId
+      if (assigneeId) {
         await supabase.from('whatsapp_conversations').update({
-          assigned_user_id:   node.data.assigneeId,
-          assigned_user_name: node.data.assigneeName || null,
+          assigned_user_id:   assigneeId,
+          assigned_user_name: node.data.assignee_name || node.data.assigneeName || null,
           status: 'open', bot_active: false,
         }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
       }
@@ -287,13 +308,13 @@ async function processCustomFlow(
       } else if (node.data?.conditionType === 'first_message') {
         result = isNewConversation
       }
-      const port  = result ? 'true' : 'false'
-      const nexts = edgesFrom(node.id, port)
+      // 'yes'/'no' (new) and 'true'/'false' (old) both resolved by normalizePort
+      const nexts = edgesFrom(node.id, result ? 'yes' : 'no')
       if (!nexts.length) break
-      currentNodeId = nexts[0].to; current = findNode(currentNodeId); continue
+      currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId); continue
     }
 
-    if (node.type === 'action') {
+    if (node.type === 'action' || node.type === 'lead') {
       if (node.data?.actionType === 'create_lead') {
         const phone  = remoteJid.replace(/@.*/, '')
         const noCode = phone.startsWith('55') ? phone.slice(2) : phone
@@ -310,16 +331,29 @@ async function processCustomFlow(
           })
         }
       }
-      const nexts = edgesFrom(node.id, 'output')
+      const nexts = edgesFrom(node.id, 'out')
       if (!nexts.length) break
-      currentNodeId = nexts[0].to; current = findNode(currentNodeId); continue
+      currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId); continue
     }
 
     if (node.type === 'wait') {
-      // Serverless: can't truly sleep — skip wait and continue
-      const nexts = edgesFrom(node.id, 'output')
+      // Serverless: can't truly sleep — advance immediately
+      const nexts = edgesFrom(node.id, 'out')
       if (!nexts.length) break
-      currentNodeId = nexts[0].to; current = findNode(currentNodeId); continue
+      currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId); continue
+    }
+
+    if (node.type === 'media') {
+      // Sending media via bot flow is informational only in this context
+      const nexts = edgesFrom(node.id, 'out')
+      if (!nexts.length) break
+      currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId); continue
+    }
+
+    if (node.type === 'distribute') {
+      const nexts = edgesFrom(node.id, 'out')
+      if (!nexts.length) break
+      currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId); continue
     }
 
     if (node.type === 'end') { currentNodeId = 'end'; break }
