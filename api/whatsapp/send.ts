@@ -80,6 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const {
     institution_id,
+    isAionSend   = false,
     to,
     type         = 'text' as MsgType,
     message,               // text only
@@ -93,22 +94,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } = req.body
 
   // ── Validation ──
-  if (!institution_id || !to)              return res.status(400).json({ error: 'institution_id e to são obrigatórios' })
+  if (!to)                                 return res.status(400).json({ error: 'to é obrigatório' })
+  if (!isAionSend && !institution_id)      return res.status(400).json({ error: 'institution_id é obrigatório para envio de escola' })
   if (type === 'text' && !message)         return res.status(400).json({ error: 'message é obrigatório para type=text' })
   if (type !== 'text' && !mediaUrl && !base64)
     return res.status(400).json({ error: `mediaUrl ou base64 é obrigatório para type=${type}` })
 
   try {
-    // ── Fetch phone_number_id ──
-    const { data: phoneRecord, error: phoneErr } = await supabase
-      .from('whatsapp_phone_numbers')
-      .select('phone_number_id')
-      .eq('institution_id', institution_id)
-      .eq('is_active', true)
-      .single()
+    let phoneNumberId: string
+    let accessToken: string
 
-    if (phoneErr || !phoneRecord) {
-      return res.status(400).json({ error: 'Número WhatsApp não configurado para esta escola' })
+    if (isAionSend) {
+      // ── Áion corporate inbox: fetch credentials from platform_whatsapp ──
+      const { data: platformWA, error: platformErr } = await supabase
+        .from('platform_whatsapp')
+        .select('phone_number_id, access_token')
+        .eq('connected', true)
+        .single()
+
+      if (platformErr || !platformWA) {
+        return res.status(400).json({ error: 'WhatsApp da Áion não configurado ou desconectado' })
+      }
+
+      phoneNumberId = platformWA.phone_number_id
+      accessToken   = platformWA.access_token
+    } else {
+      // ── School inbox: fetch from whatsapp_phone_numbers ──
+      const { data: phoneRecord, error: phoneErr } = await supabase
+        .from('whatsapp_phone_numbers')
+        .select('phone_number_id')
+        .eq('institution_id', institution_id)
+        .eq('is_active', true)
+        .single()
+
+      if (phoneErr || !phoneRecord) {
+        return res.status(400).json({ error: 'Número WhatsApp não configurado para esta escola' })
+      }
+
+      phoneNumberId = phoneRecord.phone_number_id
+      accessToken   = process.env.WA_ACCESS_TOKEN || ''
     }
 
     // ── Resolve media URL (upload if base64 provided) ──
@@ -130,10 +154,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       filename: filename || undefined,
     })
 
-    const metaRes = await fetch(`${GRAPH_URL}/${phoneRecord.phone_number_id}/messages`, {
+    const metaRes = await fetch(`${GRAPH_URL}/${phoneNumberId}/messages`, {
       method:  'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.WA_ACCESS_TOKEN}`,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type':  'application/json',
       },
       body: JSON.stringify(payload),
@@ -150,18 +174,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── Persist message ──
     await supabase.from('whatsapp_messages').insert({
-      institution_id,
-      remote_jid:     to,
-      message_id:     wamid,
-      instance_name:  'cloud-api',
-      content:        type === 'text' ? message : (caption || preview),
-      message_type:   type,
-      media_url:      resolvedMediaUrl || null,
-      from_me:        true,
-      contact_name:   sender_name || null,
-      status:         'sent',
-      direction:      'outbound',
-      timestamp:      new Date().toISOString(),
+      institution_id:  isAionSend ? null : institution_id,
+      remote_jid:      to,
+      message_id:      wamid,
+      instance_name:   'cloud-api',
+      content:         type === 'text' ? message : (caption || preview),
+      message_type:    type,
+      media_url:       resolvedMediaUrl || null,
+      from_me:         true,
+      contact_name:    sender_name || null,
+      status:          'sent',
+      direction:       'outbound',
+      is_aion_inbox:   isAionSend,
+      timestamp:       new Date().toISOString(),
       ...(conversation_id ? { conversation_id } : {}),
     })
 
@@ -170,9 +195,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .from('whatsapp_conversations')
       .update({ last_message: preview, last_message_at: new Date().toISOString() })
 
-    await (conversation_id
-      ? convUpdate.eq('id', conversation_id)
-      : convUpdate.eq('institution_id', institution_id).eq('remote_jid', to))
+    if (conversation_id) {
+      await convUpdate.eq('id', conversation_id)
+    } else if (isAionSend) {
+      await convUpdate.eq('is_aion_inbox', true).eq('remote_jid', to)
+    } else {
+      await convUpdate.eq('institution_id', institution_id).eq('remote_jid', to)
+    }
 
     return res.status(200).json({ success: true, wamid })
 

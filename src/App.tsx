@@ -53,6 +53,7 @@ import AdminConsultants from './components/superadmin/AdminConsultants'
 import AdminUpdates     from './components/superadmin/AdminUpdates'
 import AdminProfile     from './components/superadmin/AdminProfile.tsx'
 import AdminWhatsApp    from './components/superadmin/AdminWhatsApp'
+import AdminAionInbox   from './components/superadmin/AdminAionInbox'
 import ConsultantDetails from './components/superadmin/ConsultantDetails'
 
 // ── Pending screen ────────────────────────────────────────────────────────
@@ -229,6 +230,7 @@ function AppContent() {
         <Route path="/super-admin/settings"           element={<AdminSettings />} />
         <Route path="/super-admin/updates"           element={<AdminUpdates />} />
         <Route path="/super-admin/whatsapp"          element={<AdminWhatsApp />} />
+        <Route path="/super-admin/aion-inbox"         element={<AdminAionInbox />} />
         <Route path="/super-admin/profile"            element={<AdminProfile />} />
 
         {/* Legado */}

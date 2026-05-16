@@ -7,7 +7,7 @@ import {
   Home, Building2, DollarSign, FileText, Settings,
   Bell, LogOut, UserCog, ChevronDown, X, Menu,
   TrendingUp, AlertCircle, CheckCircle2,
-  AlertTriangle, Info, BookOpen, Users, MessageCircle
+  AlertTriangle, Info, BookOpen, Users, MessageCircle, Inbox
 } from 'lucide-react'
 
 // ─── tipos ────────────────────────────────────────────────────────────────
@@ -27,6 +27,7 @@ const ADMIN_MENU = [
   { path: '/super-admin/schools',      label: 'Escolas',       icon: Building2                },
   { path: '/super-admin/financial',    label: 'Financeiro',    icon: DollarSign               },
   { path: '/super-admin/whatsapp',     label: 'WhatsApp',      icon: MessageCircle            },
+  { path: '/super-admin/aion-inbox',   label: 'Inbox Áion',    icon: Inbox                    },
   { path: '/super-admin/consultants',  label: 'Consultores',   icon: Users                    },
   { path: '/super-admin/settings',     label: 'Configurações', icon: Settings                 },
 ]

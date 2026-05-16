@@ -347,6 +347,15 @@ Data: {{data_hoje}}
 ___________________________        ___________________________
 Contratante                        Contratada — Áion Edu`
 
+interface AionWAConfig {
+  id?: string
+  phone_number_id: string
+  access_token: string
+  phone_number: string
+  display_name: string
+  connected: boolean
+}
+
 export default function AdminSettings() {
   const [settings, setSettings] = useState<Settings>(DEFAULTS)
   const [loading, setLoading] = useState(true)
@@ -354,7 +363,11 @@ export default function AdminSettings() {
   const [saved, setSaved] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
 
-  useEffect(() => { loadSettings() }, [])
+  const [aionWA, setAionWA]           = useState<AionWAConfig>({ phone_number_id: '', access_token: '', phone_number: '', display_name: '', connected: false })
+  const [aionSaving, setAionSaving]   = useState(false)
+  const [aionTesting, setAionTesting] = useState(false)
+
+  useEffect(() => { loadSettings(); loadAionWA() }, [])
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok })
@@ -407,6 +420,75 @@ export default function AdminSettings() {
         }
       </button>
     )
+  }
+
+  const loadAionWA = async () => {
+    const { data } = await supabase.from('platform_whatsapp').select('*').maybeSingle()
+    if (data) setAionWA(data as AionWAConfig)
+  }
+
+  const testAndSaveAionWA = async () => {
+    if (!aionWA.phone_number_id || !aionWA.access_token) {
+      showToast('Phone Number ID e Access Token são obrigatórios.', false); return
+    }
+    setAionTesting(true)
+    try {
+      const res = await fetch(
+        `https://graph.facebook.com/v19.0/${aionWA.phone_number_id}?fields=display_phone_number,verified_name`,
+        { headers: { Authorization: `Bearer ${aionWA.access_token}` } }
+      )
+      const data = await res.json()
+      if (!res.ok || !data.display_phone_number) throw new Error(data.error?.message || 'Credenciais inválidas')
+
+      const updated: AionWAConfig = {
+        ...aionWA,
+        phone_number: data.display_phone_number,
+        display_name: data.verified_name || '',
+        connected: true,
+      }
+      if (aionWA.id) {
+        await supabase.from('platform_whatsapp').update(updated).eq('id', aionWA.id)
+      } else {
+        await supabase.from('platform_whatsapp').insert(updated)
+      }
+      setAionWA(updated)
+      showToast(`WhatsApp Áion conectado: ${data.verified_name} (${data.display_phone_number})`)
+    } catch (e: any) {
+      showToast(e.message || 'Erro ao verificar credenciais.', false)
+    } finally {
+      setAionTesting(false)
+    }
+  }
+
+  const saveAionWA = async () => {
+    setAionSaving(true)
+    try {
+      if (aionWA.id) {
+        await supabase.from('platform_whatsapp').update({
+          phone_number_id: aionWA.phone_number_id,
+          access_token: aionWA.access_token,
+        }).eq('id', aionWA.id)
+      } else {
+        const { data } = await supabase.from('platform_whatsapp').insert({
+          phone_number_id: aionWA.phone_number_id,
+          access_token: aionWA.access_token,
+          connected: false,
+        }).select().single()
+        if (data) setAionWA(prev => ({ ...prev, id: data.id }))
+      }
+      showToast('Credenciais salvas!')
+    } catch (e: any) {
+      showToast(e.message || 'Erro ao salvar.', false)
+    } finally {
+      setAionSaving(false)
+    }
+  }
+
+  const disconnectAionWA = async () => {
+    if (!aionWA.id) return
+    await supabase.from('platform_whatsapp').update({ connected: false }).eq('id', aionWA.id)
+    setAionWA(prev => ({ ...prev, connected: false }))
+    showToast('WhatsApp Áion desconectado.')
   }
 
   const webhookUrl = `https://syxxuumxkhhnoqrxporj.supabase.co/functions/v1/asaas-webhook`
@@ -523,6 +605,73 @@ export default function AdminSettings() {
           </div>
           <div className="flex justify-end pt-2">
             <SaveBtn keys={['default_implementation_value','default_monthly_value','billing_due_day','whatsapp_conversation_limit','whatsapp_extra_conversation_price']} id="financial" />
+          </div>
+        </Section>
+
+        {/* ── WhatsApp Áion ── */}
+        <Section icon={MessageCircle} title="WhatsApp Áion — Inbox Corporativo" subtitle="Número oficial da Áion para atendimento aos clientes" color="teal">
+          {/* Status */}
+          <div className={`flex items-center gap-3 p-4 rounded-xl border ${aionWA.connected ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+            {aionWA.connected
+              ? <><div className="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-green-700">Conectado</p>
+                    <p className="text-xs text-green-600">{aionWA.display_name} · {aionWA.phone_number}</p>
+                  </div>
+                  <button onClick={disconnectAionWA} className="ml-auto text-xs text-red-500 hover:text-red-700 font-medium">Desconectar</button>
+                </>
+              : <><div className="w-2.5 h-2.5 rounded-full bg-gray-300 flex-shrink-0" />
+                  <p className="text-sm text-gray-500">Não configurado — preencha as credenciais abaixo</p>
+                </>
+            }
+          </div>
+          {/* Campos */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={lbl}>Phone Number ID</label>
+              <input className={inp} placeholder="123456789012345"
+                value={aionWA.phone_number_id}
+                onChange={e => setAionWA(p => ({ ...p, phone_number_id: e.target.value }))} />
+              <p className={hint}>Obtido no Meta for Developers → WhatsApp → Phone numbers</p>
+            </div>
+            <div>
+              <label className={lbl}>Access Token (permanente)</label>
+              <SecretInput
+                value={aionWA.access_token}
+                onChange={v => setAionWA(p => ({ ...p, access_token: v }))}
+                placeholder="EAAxxxxxxx..."
+              />
+              <p className={hint}>Token de sistema com permissão whatsapp_business_messaging</p>
+            </div>
+          </div>
+          {/* URL do webhook */}
+          <div>
+            <label className={lbl}>URL do Webhook (configurar no Meta)</label>
+            <CopyInput value={`${window.location.origin}/api/whatsapp/webhook`} />
+            <p className={hint}>Configure esta URL no Meta for Developers → Webhooks. Token de verificação: definido em WA_VERIFY_TOKEN</p>
+          </div>
+          {/* Ações */}
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              onClick={testAndSaveAionWA}
+              disabled={aionTesting}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-500 to-cyan-600 text-white rounded-lg font-semibold text-sm hover:from-teal-600 hover:to-cyan-700 disabled:opacity-60 transition-all"
+            >
+              {aionTesting
+                ? <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Verificando...</>
+                : <><Zap className="w-3.5 h-3.5" /> Testar e conectar</>
+              }
+            </button>
+            <button
+              onClick={saveAionWA}
+              disabled={aionSaving}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg font-semibold text-sm hover:bg-gray-50 disabled:opacity-60 transition-all"
+            >
+              {aionSaving
+                ? <><div className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> Salvando...</>
+                : <><Save className="w-3.5 h-3.5" /> Salvar credenciais</>
+              }
+            </button>
           </div>
         </Section>
 

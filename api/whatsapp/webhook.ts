@@ -534,6 +534,109 @@ async function processFlow(
   }
 }
 
+// ── Áion corporate inbox processor ──────────────────────────────────────────
+async function detectAionQueue(rawPhone: string, supabase: ReturnType<typeof createClient>): Promise<string> {
+  const phone = rawPhone.replace(/\D/g, '').replace(/^55/, '')
+
+  const { data: lead } = await supabase
+    .from('crm_leads')
+    .select('id, stage')
+    .or(`phone.ilike.%${phone}%`)
+    .maybeSingle()
+  if (lead && lead.stage !== 'cliente') return 'leads'
+
+  const { data: inst } = await supabase
+    .from('institutions')
+    .select('id')
+    .or(`phone.ilike.%${phone}%`)
+    .eq('plan_status', 'active')
+    .maybeSingle()
+  if (inst) return 'schools'
+
+  return 'general'
+}
+
+async function processAionMessage({
+  msg,
+  value,
+  supabase,
+}: {
+  msg: any
+  value: any
+  supabase: ReturnType<typeof createClient>
+}): Promise<void> {
+  try {
+    const remoteJid   = msg.from as string
+    const rawPhone    = remoteJid.replace(/@.*/, '')
+    const contactName = (value.contacts?.[0]?.profile?.name as string | undefined) || remoteJid
+    const msgType     = (msg.type as string) || 'text'
+    const timestamp   = new Date(parseInt(msg.timestamp) * 1000).toISOString()
+
+    const text =
+      msg.text?.body        ||
+      msg.image?.caption    ||
+      msg.video?.caption    ||
+      msg.document?.caption ||
+      ''
+
+    const queue = await detectAionQueue(rawPhone, supabase)
+
+    // Upsert conversation
+    const { data: conv, error: convErr } = await supabase
+      .from('whatsapp_conversations')
+      .upsert(
+        {
+          remote_jid:      remoteJid,
+          institution_id:  null,
+          is_aion_inbox:   true,
+          queue,
+          contact_name:    contactName,
+          status:          'waiting',
+          last_message:    text || `[${msgType}]`,
+          last_message_at: timestamp,
+        },
+        { onConflict: 'remote_jid,institution_id' }
+      )
+      .select('id')
+      .maybeSingle()
+
+    if (convErr) {
+      console.error('❌ [aion] conv upsert error:', convErr.message)
+      return
+    }
+
+    // Increment unread
+    await supabase
+      .rpc('increment_conversation_unread', {
+        p_institution_id: null,
+        p_remote_jid:     remoteJid,
+      })
+      .catch(() => {})
+
+    // Insert message
+    await supabase.from('whatsapp_messages').insert({
+      institution_id: null,
+      conversation_id: conv?.id || null,
+      remote_jid:     remoteJid,
+      message_id:     msg.id,
+      instance_name:  'cloud-api',
+      content:        text || `[${msgType}]`,
+      message_type:   msgType,
+      from_me:        false,
+      contact_name:   contactName,
+      timestamp,
+      status:         'received',
+      direction:      'inbound',
+      is_aion_inbox:  true,
+      raw_data:       msg,
+    })
+
+    console.log('[aion] mensagem recebida de', rawPhone, '→ fila:', queue)
+  } catch (e) {
+    console.error('❌ [aion] processAionMessage error:', e)
+  }
+}
+
 // ── Main handler ─────────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
 
@@ -579,7 +682,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const phoneNumberId = value.metadata?.phone_number_id
 
-      // Map phone_number_id → institution
+      // Check if this is the Áion platform inbox number
+      const { data: platformWA } = await supabase
+        .from('platform_whatsapp')
+        .select('phone_number_id')
+        .eq('connected', true)
+        .maybeSingle()
+
+      if (platformWA?.phone_number_id && platformWA.phone_number_id === phoneNumberId) {
+        // Process messages for the Áion corporate inbox
+        for (const msg of value.messages || []) {
+          await processAionMessage({ msg, value, supabase })
+        }
+        for (const status of value.statuses || []) {
+          await supabase.from('whatsapp_messages')
+            .update({ status: status.status, status_updated_at: new Date().toISOString() })
+            .eq('message_id', status.id)
+            .eq('is_aion_inbox', true)
+        }
+        return res.status(200).json({ status: 'ok' })
+      }
+
+      // Map phone_number_id → institution (school inbox)
       const { data: phoneRecord } = await supabase
         .from('whatsapp_phone_numbers')
         .select('institution_id')
