@@ -1,34 +1,44 @@
 // @ts-nocheck
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-const ASAAS_KEY = Deno.env.get('ASAAS_API_KEY')
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+async function dbFetch(path: string, method: string, body?: object, prefer?: string) {
+  const url = Deno.env.get('SUPABASE_URL')!
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'apikey': key,
+    'Authorization': `Bearer ${key}`,
+  }
+  if (prefer) headers['Prefer'] = prefer
+  const res = await fetch(`${url}/rest/v1/${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (res.status === 204) return { data: null, status: res.status }
+  const data = await res.json()
+  return { data, status: res.status }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
   try {
-    const sb = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    )
-
     // Busca configurações (api key + ambiente)
-    const { data: cfgData } = await sb.from('platform_settings')
-      .select('key, value')
-      .in('key', ['asaas_api_key', 'asaas_environment'])
-    const cfg: Record<string, string> = {}
-    cfgData?.forEach((r: any) => { cfg[r.key] = r.value })
-
-    const ASAAS_KEY_EFF = cfg.asaas_api_key || ASAAS_KEY || ''
+    const { data: cfgRows } = await dbFetch(
+      'platform_settings?key=in.(asaas_api_key,asaas_environment)&select=key,value',
+      'GET'
+    )
+    const cfg = Object.fromEntries(cfgRows?.map((r: any) => [r.key, r.value]) || [])
+    const ASAAS_KEY_EFF = cfg.asaas_api_key || Deno.env.get('ASAAS_API_KEY') || ''
     const ASAAS_URL = (cfg.asaas_environment || 'production') === 'sandbox'
       ? 'https://sandbox.asaas.com/api/v3'
-      : 'https://www.asaas.com/api/v3'
+      : 'https://api.asaas.com/v3'
 
     // Forca geracao manual se vier payment_id no body
     let forcePaymentId: string | null = null
@@ -40,24 +50,20 @@ serve(async (req) => {
     // Busca pagamentos pendentes sem link que vencem em 10 dias
     const tenDaysFromNow = new Date()
     tenDaysFromNow.setDate(tenDaysFromNow.getDate() + 10)
+    const dueDateLimit = tenDaysFromNow.toISOString().split('T')[0]
 
-    let query = sb.from('payments')
-      .select(`
-        id, institution_id, amount, due_date, description, payment_type,
-        institutions (id, name, email, cnpj, asaas_customer_id)
-      `)
-      .eq('status', 'pending')
-      .is('asaas_charge_url', null)
-      .eq('payment_type', 'monthly')
+    const selectFields = 'id,institution_id,amount,due_date,description,payment_type,institutions!inner(id,name,email,cnpj,asaas_customer_id,plan_status)'
+
+    let paymentsPath = `payments?payment_type=eq.monthly&status=eq.pending&asaas_charge_url=is.null&select=${selectFields}&institutions.plan_status=eq.active`
 
     if (forcePaymentId) {
-      query = query.eq('id', forcePaymentId)
+      paymentsPath += `&id=eq.${forcePaymentId}`
     } else {
-      query = query.lte('due_date', tenDaysFromNow.toISOString().split('T')[0])
+      paymentsPath += `&due_date=lte.${dueDateLimit}`
     }
 
-    const { data: payments, error: paymentsErr } = await query
-    if (paymentsErr) throw paymentsErr
+    const { data: payments, status: paymentsStatus } = await dbFetch(paymentsPath, 'GET')
+    if (!Array.isArray(payments)) throw new Error(`Erro ao buscar pagamentos: status ${paymentsStatus}`)
 
     console.log(`[asaas-generate-monthly] ${payments?.length || 0} pagamentos para processar`)
 
@@ -95,9 +101,12 @@ serve(async (req) => {
           customerId = customerData.id
 
           if (customerId) {
-            await sb.from('institutions')
-              .update({ asaas_customer_id: customerId })
-              .eq('id', payment.institution_id)
+            await dbFetch(
+              `institutions?id=eq.${payment.institution_id}`,
+              'PATCH',
+              { asaas_customer_id: customerId },
+              'return=minimal'
+            )
           }
         }
 
@@ -134,11 +143,16 @@ serve(async (req) => {
         const paymentLink = charge.invoiceUrl || `https://www.asaas.com/i/${charge.id}`
 
         // Atualiza pagamento com link
-        await sb.from('payments').update({
-          asaas_payment_id: charge.id,
-          asaas_charge_url: paymentLink,
-          asaas_id: charge.id,
-        }).eq('id', payment.id)
+        await dbFetch(
+          `payments?id=eq.${payment.id}`,
+          'PATCH',
+          {
+            asaas_payment_id: charge.id,
+            asaas_charge_url: paymentLink,
+            asaas_id: charge.id,
+          },
+          'return=minimal'
+        )
 
         // Envia email via Brevo
         if (inst.email) {
