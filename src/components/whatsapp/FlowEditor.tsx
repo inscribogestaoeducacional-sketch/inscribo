@@ -579,6 +579,7 @@ export default function FlowEditor({
 
   // ── Load ─────────────────────────────────────────────────────────────────
   useEffect(() => {
+    console.log('[FlowEditor] mount — institutionId:', institutionId)
     ;(async () => {
       const [{ data: fl }, { data: us }] = await Promise.all([
         supabase.from('whatsapp_flows')
@@ -742,17 +743,49 @@ export default function FlowEditor({
 
   // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = async () => {
+    if (!institutionId) {
+      console.error('[FlowEditor] institutionId vazio — não é possível salvar')
+      return
+    }
     setSaving(true)
-    try {
-      await supabase.from('whatsapp_flows').upsert({
-        institution_id: institutionId,
-        bot_flow: { nodes, edges },
-        bot_enabled: isActive,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'institution_id' })
+    const payload = { bot_flow: { nodes, edges }, bot_enabled: isActive }
+    console.log('[FlowEditor] salvando para institution_id:', institutionId, 'nodes:', nodes.length, 'edges:', edges.length)
+
+    // Verifica se já existe registro para usar UPDATE em vez de INSERT
+    const { data: existing, error: selectErr } = await supabase
+      .from('whatsapp_flows')
+      .select('id')
+      .eq('institution_id', institutionId)
+      .maybeSingle()
+
+    if (selectErr) {
+      console.error('[FlowEditor] erro ao verificar registro existente:', selectErr)
+      setSaving(false)
+      return
+    }
+
+    let saveError: any = null
+    if (existing) {
+      const { error } = await supabase
+        .from('whatsapp_flows')
+        .update(payload)
+        .eq('institution_id', institutionId)
+      saveError = error
+    } else {
+      const { error } = await supabase
+        .from('whatsapp_flows')
+        .insert({ institution_id: institutionId, ...payload })
+      saveError = error
+    }
+
+    if (saveError) {
+      console.error('[FlowEditor] erro ao salvar:', saveError.message, saveError.details, saveError.hint)
+      alert(`Erro ao salvar fluxo: ${saveError.message}`)
+    } else {
+      console.log('[FlowEditor] salvo com sucesso')
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
-    } catch (err) { console.error(err) }
+    }
     setSaving(false)
   }
 
