@@ -451,7 +451,7 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
         const monthYear = new Date().toISOString().slice(0, 7)
         const { data: u } = await supabase.from('whatsapp_usage')
           .select('conversation_count,monthly_limit')
-          .eq('institution_id', institutionId).eq('month_year', monthYear).single()
+          .eq('institution_id', institutionId).eq('month_year', monthYear).maybeSingle()
         if (waMountedRef.current && u) setUsage({ count: (u as any).conversation_count || 0, limit: (u as any).monthly_limit || 1000 })
         const { data: pr } = await supabase.from('whatsapp_phone_numbers')
           .select('phone_number,display_name,phone_number_id')

@@ -2,39 +2,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
 import { getWAConfig } from './_helpers'
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 const GRAPH_URL = 'https://graph.facebook.com/v19.0'
 
 type MsgType = 'text' | 'image' | 'video' | 'audio' | 'document'
-
-// ── Upload base64 to Supabase Storage → return public URL ────────────────────
-async function uploadToStorage(
-  base64: string,
-  mimetype: string,
-  filename: string,
-  institutionId: string
-): Promise<string> {
-  const buffer   = Buffer.from(base64, 'base64')
-  const ext      = mimetype.split('/')[1]?.split(';')[0]?.replace('jpeg', 'jpg') || 'bin'
-  const safeName = (filename || `upload.${ext}`).replace(/[^a-zA-Z0-9._-]/g, '_')
-  const path     = `${institutionId}/${Date.now()}_${safeName}`
-
-  const { error } = await supabase.storage
-    .from('whatsapp-media')
-    .upload(path, buffer, { contentType: mimetype, upsert: false })
-
-  if (error) throw new Error(`Storage upload falhou: ${error.message}`)
-
-  const { data: { publicUrl } } = supabase.storage
-    .from('whatsapp-media')
-    .getPublicUrl(path)
-
-  return publicUrl
-}
 
 // ── Build Meta Cloud API payload per message type ────────────────────────────
 function buildPayload(
@@ -62,6 +32,8 @@ function buildPayload(
           ...(opts.caption ? { caption: opts.caption } : {}),
         },
       }
+    default:
+      return { ...base, text: { body: '[unsupported type]', preview_url: false } }
   }
 }
 
@@ -75,29 +47,82 @@ function contentPreview(type: MsgType, message?: string, caption?: string, filen
   return '[Mídia]'
 }
 
+// ── Upload base64 to Supabase Storage → return public URL ────────────────────
+async function uploadToStorage(
+  supabase: ReturnType<typeof createClient>,
+  base64: string,
+  mimetype: string,
+  filename: string,
+  institutionId: string
+): Promise<string> {
+  const buffer   = Buffer.from(base64, 'base64')
+  const ext      = mimetype.split('/')[1]?.split(';')[0]?.replace('jpeg', 'jpg') || 'bin'
+  const safeName = (filename || `upload.${ext}`).replace(/[^a-zA-Z0-9._-]/g, '_')
+  const path     = `${institutionId}/${Date.now()}_${safeName}`
+
+  const { error } = await supabase.storage
+    .from('whatsapp-media')
+    .upload(path, buffer, { contentType: mimetype, upsert: false })
+
+  if (error) throw new Error(`Storage upload falhou: ${error.message}`)
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('whatsapp-media')
+    .getPublicUrl(path)
+
+  return publicUrl
+}
+
 // ── Handler ──────────────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Always return JSON — catch anything that leaks past the inner try/catch
+  try {
+    return await handleSend(req, res)
+  } catch (fatal: any) {
+    console.error('❌ [send.ts] fatal error:', fatal)
+    return res.status(500).json({ error: fatal?.message || 'Erro interno fatal' })
+  }
+}
+
+async function handleSend(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end()
+
+  console.log('send.ts - início', {
+    hasSupabaseUrl:  !!process.env.SUPABASE_URL,
+    hasServiceKey:   !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+  })
+
+  // Create client lazily inside the handler so module-level crashes cannot
+  // produce an HTML 500 response instead of JSON
+  const supabaseUrl = process.env.SUPABASE_URL
+  const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceKey) {
+    console.error('send.ts - env vars missing', { supabaseUrl: !!supabaseUrl, serviceKey: !!serviceKey })
+    return res.status(500).json({ error: 'Server misconfiguration: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY' })
+  }
+
+  const supabase = createClient(supabaseUrl, serviceKey)
 
   const {
     institution_id,
     isAionSend   = false,
     to,
     type         = 'text' as MsgType,
-    message,               // text only
-    mediaUrl,              // pre-uploaded public URL (image/video/audio/document)
-    base64,                // alternative: raw base64 file (frontend sends this)
-    mimetype,              // required when base64 provided
+    message,
+    mediaUrl,
+    base64,
+    mimetype,
     filename    = '',
     caption     = '',
     sender_name = '',
     conversation_id,
-  } = req.body
+  } = req.body ?? {}
 
   // ── Validation ──
-  if (!to)                                 return res.status(400).json({ error: 'to é obrigatório' })
-  if (!isAionSend && !institution_id)      return res.status(400).json({ error: 'institution_id é obrigatório para envio de escola' })
-  if (type === 'text' && !message)         return res.status(400).json({ error: 'message é obrigatório para type=text' })
+  if (!to)                            return res.status(400).json({ error: 'to é obrigatório' })
+  if (!isAionSend && !institution_id) return res.status(400).json({ error: 'institution_id é obrigatório para envio de escola' })
+  if (type === 'text' && !message)    return res.status(400).json({ error: 'message é obrigatório para type=text' })
   if (type !== 'text' && !mediaUrl && !base64)
     return res.status(400).json({ error: `mediaUrl ou base64 é obrigatório para type=${type}` })
 
@@ -106,7 +131,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let accessToken: string
 
     if (isAionSend) {
-      // ── Áion corporate inbox: fetch credentials from platform_whatsapp ──
       const { data: platformWA, error: platformErr } = await supabase
         .from('platform_whatsapp')
         .select('phone_number_id, access_token')
@@ -120,7 +144,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       phoneNumberId = platformWA.phone_number_id
       accessToken   = platformWA.access_token
     } else {
-      // ── School inbox: fetch from whatsapp_phone_numbers ──
       const { data: phoneRecord, error: phoneErr } = await supabase
         .from('whatsapp_phone_numbers')
         .select('phone_number_id')
@@ -136,12 +159,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       accessToken   = (await getWAConfig()).accessToken
     }
 
+    console.log('send.ts - token:', !!accessToken, '| phoneNumberId:', phoneNumberId)
+
     // ── Resolve media URL (upload if base64 provided) ──
     let resolvedMediaUrl: string | undefined = mediaUrl
     if (type !== 'text' && !resolvedMediaUrl && base64 && mimetype) {
-      resolvedMediaUrl = await uploadToStorage(
-        base64,
-        mimetype,
+      resolvedMediaUrl = await uploadToStorage(supabase, base64, mimetype,
         filename || `media.${mimetype.split('/')[1] || 'bin'}`,
         institution_id
       )
@@ -155,6 +178,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       filename: filename || undefined,
     })
 
+    console.log('send.ts - payload:', JSON.stringify(payload))
+
     const metaRes = await fetch(`${GRAPH_URL}/${phoneNumberId}/messages`, {
       method:  'POST',
       headers: {
@@ -163,6 +188,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       body: JSON.stringify(payload),
     })
+
+    console.log('send.ts - meta response:', metaRes.status)
 
     const metaData = await metaRes.json()
     if (!metaRes.ok) {

@@ -795,7 +795,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
           waba_id:      wa.waba_id || '',
         })
         const monthYear = new Date().toISOString().slice(0, 7)
-        const { data: u } = await supabase.from('whatsapp_usage').select('conversation_count,monthly_limit').eq('institution_id', inst.id).eq('month_year', monthYear).single()
+        const { data: u } = await supabase.from('whatsapp_usage').select('conversation_count,monthly_limit').eq('institution_id', inst.id).eq('month_year', monthYear).maybeSingle()
         if (u) setUsage({ count: (u as any).conversation_count || 0, limit: (u as any).monthly_limit || 1000 })
       } else if (instRes.data?.whatsapp_phone_id) {
         setWaForm({
