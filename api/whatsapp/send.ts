@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
-import { getWAConfig } from './_helpers'
+import { getWAConfig } from './helpers'
 
 const GRAPH_URL = 'https://graph.facebook.com/v19.0'
 

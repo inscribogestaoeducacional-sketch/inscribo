@@ -7,7 +7,7 @@ import {
   getInstanceForInstitution,
   APP_URL,
   errorResponse,
-} from './_config.js'
+} from './config.js'
 
 // ─── router ──────────────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {

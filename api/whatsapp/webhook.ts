@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
 import * as crypto from 'crypto'
-import { getWAConfig } from './_helpers'
+import { getWAConfig } from './helpers'
 
 // Disable body-parser — raw buffer needed for HMAC-SHA256 validation
 export const config = {
