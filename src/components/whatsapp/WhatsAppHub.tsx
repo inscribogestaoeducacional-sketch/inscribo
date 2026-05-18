@@ -614,7 +614,7 @@ interface WhatsAppHubProps {
 
 export default function WhatsAppHub({ institutionId: propInstitutionId, isAionInbox = false }: WhatsAppHubProps = {}) {
   const { user } = useAuth()
-  const effectiveInstitutionId = propInstitutionId ?? effectiveInstitutionId ?? ''
+  const effectiveInstitutionId = propInstitutionId ?? user?.institution_id ?? ''
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const phoneParam = searchParams.get('phone')

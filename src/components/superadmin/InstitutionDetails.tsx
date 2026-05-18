@@ -283,7 +283,7 @@ export default function InstitutionDetails() {
   const [sendingContract, setSendingContract] = useState(false)
 
   // WhatsApp form
-  const [waForm,   setWaForm]   = useState({ phone_id: '', token: '', phone_number: '', display_name: '' })
+  const [waForm,   setWaForm]   = useState({ phone_id: '', phone_number: '', display_name: '' })
   const [savingWa, setSavingWa] = useState(false)
 
   // Campaign form
@@ -347,8 +347,9 @@ export default function InstitutionDetails() {
           implementation_value: String(inst.implementation_value || 550),
         })
         setWaForm({
-          phone_id: inst.whatsapp_phone_id || '', token: inst.whatsapp_token || '',
-          phone_number: inst.whatsapp_phone_number || '', display_name: inst.whatsapp_display_name || '',
+          phone_id: inst.whatsapp_phone_id || '',
+          phone_number: inst.whatsapp_phone_number || '',
+          display_name: inst.whatsapp_display_name || '',
         })
         setContractForm(p => ({
           ...p,
@@ -573,18 +574,29 @@ export default function InstitutionDetails() {
   }
 
   const handleSaveWhatsApp = async () => {
-    if (!waForm.phone_id || !waForm.token) { showToast('Phone ID e Token são obrigatórios.', false); return }
+    if (!waForm.phone_id) { showToast('Phone Number ID é obrigatório.', false); return }
     setSavingWa(true)
     try {
-      const testRes = await fetch(`https://graph.facebook.com/v19.0/${waForm.phone_id}?fields=display_phone_number,verified_name`, { headers: { Authorization: `Bearer ${waForm.token}` } })
-      if (!testRes.ok) throw new Error('Token ou Phone ID inválido')
+      const { data: tokenRow } = await supabase
+        .from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
+      const globalToken = tokenRow?.value || ''
+      if (!globalToken) throw new Error('Token de acesso não encontrado. Vá em Admin → Configurações → WhatsApp e salve o Access Token.')
+      const testRes = await fetch(`https://graph.facebook.com/v19.0/${waForm.phone_id}?fields=display_phone_number,verified_name`, { headers: { Authorization: `Bearer ${globalToken}` } })
+      if (!testRes.ok) { const err = await testRes.json(); throw new Error((err as any)?.error?.message || 'Phone ID inválido ou token sem permissão') }
       const testData = await testRes.json()
       await supabase.from('institutions').update({
-        whatsapp_phone_id: waForm.phone_id, whatsapp_token: waForm.token,
+        whatsapp_phone_id: waForm.phone_id,
         whatsapp_phone_number: waForm.phone_number || testData.display_phone_number || '',
         whatsapp_display_name: waForm.display_name || testData.verified_name || '',
         whatsapp_connected: true,
       }).eq('id', id)
+      await supabase.from('whatsapp_phone_numbers').upsert({
+        institution_id:  id,
+        phone_number_id: waForm.phone_id,
+        phone_number:    waForm.phone_number || testData.display_phone_number || '',
+        display_name:    waForm.display_name || testData.verified_name || '',
+        is_active:       true,
+      }, { onConflict: 'institution_id' })
       showToast('WhatsApp configurado e verificado!')
       loadAll()
     } catch (e: any) { showToast(e.message || 'Erro ao verificar.', false) }
@@ -1203,7 +1215,6 @@ export default function InstitutionDetails() {
                             <div className="mt-3 space-y-3">
                               {[
                                 { k: 'phone_id', l: 'Phone Number ID', placeholder: '1007880222413531' },
-                                { k: 'token', l: 'Token de acesso', placeholder: 'EAAOSNzt...' },
                                 { k: 'phone_number', l: 'Número', placeholder: '+55 83 99999-9999' },
                                 { k: 'display_name', l: 'Nome de exibição', placeholder: 'Colégio São João' },
                               ].map(f => (
@@ -1397,7 +1408,6 @@ export default function InstitutionDetails() {
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {[
                         { k: 'phone_id',     label: 'Phone ID',     placeholder: 'ID do número (Meta)' },
-                        { k: 'token',        label: 'Token',        placeholder: 'Token permanente' },
                         { k: 'phone_number', label: 'Telefone',     placeholder: '+55 (00) 00000-0000' },
                         { k: 'display_name', label: 'Nome exibido', placeholder: 'Nome da conta WA' },
                       ].map(f => (
@@ -1408,7 +1418,6 @@ export default function InstitutionDetails() {
                             placeholder={f.placeholder}
                             value={(waForm as any)[f.k]}
                             onChange={e => setWaForm(p => ({ ...p, [f.k]: e.target.value }))}
-                            type={f.k === 'token' ? 'password' : 'text'}
                           />
                         </div>
                       ))}

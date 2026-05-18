@@ -436,12 +436,12 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
     setLoading(true)
     try {
       // Fetch global WA token from platform_settings
-      const { data: tokenRow } = await supabase
-        .from('platform_settings').select('value').eq('key', 'wa_access_token').single()
+      const { data: tokenRow, error: tokenErr } = await supabase
+        .from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
+      console.log('[SystemSettings] token query →', { value: tokenRow?.value?.slice(0, 10), error: tokenErr?.message })
       const loadedToken = tokenRow?.value || ''
-      console.log('globalToken length:', loadedToken?.length)
       if (waMountedRef.current) setGlobalToken(loadedToken)
-    } catch {}
+    } catch (e) { console.error('[SystemSettings] token fetch error:', e) }
     try {
       const { data } = await supabase.from('institutions')
         .select('whatsapp_phone_id,whatsapp_phone_number,whatsapp_display_name,whatsapp_connected')
