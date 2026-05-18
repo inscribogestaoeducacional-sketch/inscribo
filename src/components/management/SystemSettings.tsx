@@ -437,8 +437,10 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
     try {
       // Fetch global WA token from platform_settings
       const { data: tokenRow } = await supabase
-        .from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
-      if (waMountedRef.current) setGlobalToken(tokenRow?.value || '')
+        .from('platform_settings').select('value').eq('key', 'wa_access_token').single()
+      const loadedToken = tokenRow?.value || ''
+      console.log('globalToken length:', loadedToken?.length)
+      if (waMountedRef.current) setGlobalToken(loadedToken)
     } catch {}
     try {
       const { data } = await supabase.from('institutions')

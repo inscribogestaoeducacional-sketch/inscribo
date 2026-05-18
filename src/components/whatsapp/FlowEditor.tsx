@@ -748,7 +748,7 @@ export default function FlowEditor({
       return
     }
     setSaving(true)
-    const payload = { bot_flow: { nodes, edges }, bot_enabled: isActive }
+    const botFlow = { nodes, edges }
     console.log('[FlowEditor] salvando para institution_id:', institutionId, 'nodes:', nodes.length, 'edges:', edges.length)
 
     // Verifica se já existe registro para usar UPDATE em vez de INSERT
@@ -768,13 +768,13 @@ export default function FlowEditor({
     if (existing) {
       const { error } = await supabase
         .from('whatsapp_flows')
-        .update(payload)
+        .update({ bot_flow: botFlow })
         .eq('institution_id', institutionId)
       saveError = error
     } else {
       const { error } = await supabase
         .from('whatsapp_flows')
-        .insert({ institution_id: institutionId, ...payload })
+        .insert({ institution_id: institutionId, bot_flow: botFlow })
       saveError = error
     }
 
