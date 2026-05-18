@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 import {
   X, Save, Download, Send, MessageCircle, Eye,
   CheckCircle2, AlertCircle, Loader2, ExternalLink, Copy
@@ -255,6 +256,7 @@ function ProposalPreview({ form, previewRef }: { form: ProposalForm; previewRef:
 
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function ProposalGenerator({ lead, consultant, onClose, onSave }: ProposalGeneratorProps) {
+  const { user } = useAuth()
   const today = new Date().toISOString().slice(0, 10)
   const defaultDeadline = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
@@ -270,9 +272,9 @@ export default function ProposalGenerator({ lead, consultant, onClose, onSave }:
     monthly_special:         570,
     special_deadline:        defaultDeadline,
     validity_days:           7,
-    consultant_name:         consultant?.full_name || consultant?.name || '',
+    consultant_name:         consultant?.full_name || consultant?.name || user?.full_name || '',
     consultant_phone:        consultant?.phone || '',
-    consultant_email:        consultant?.email || '',
+    consultant_email:        consultant?.email || user?.email || '',
     consultant_site:         'aionedu.com.br',
   })
 
@@ -372,11 +374,12 @@ export default function ProposalGenerator({ lead, consultant, onClose, onSave }:
       }
 
       const pdfBlob = pdf.output('blob')
-      const fileName = `${id}.pdf`
-      const { error: upErr } = await supabase.storage.from('proposals').upload(fileName, pdfBlob, { contentType: 'application/pdf', upsert: true })
+      const safeName = form.school_name.replace(/[^a-zA-Z0-9À-ÿ\s]/g, '').replace(/\s+/g, '_') || id
+      const storagePath = `${id}/${safeName}.pdf`
+      const { error: upErr } = await supabase.storage.from('proposals').upload(storagePath, pdfBlob, { contentType: 'application/pdf', upsert: true })
       if (upErr) throw new Error(`Upload falhou: ${upErr.message}`)
 
-      const { data: { publicUrl } } = supabase.storage.from('proposals').getPublicUrl(fileName)
+      const { data: { publicUrl } } = supabase.storage.from('proposals').getPublicUrl(storagePath)
       setPdfUrl(publicUrl)
       await supabase.from('proposals').update({ pdf_url: publicUrl }).eq('id', id)
       pdf.save(`Proposta_${form.school_name.replace(/\s+/g, '_')}.pdf`)
