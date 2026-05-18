@@ -820,7 +820,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
         .eq('key', 'wa_access_token')
         .maybeSingle()
       const globalToken = tokenRow?.value || ''
-      if (!globalToken) throw new Error('Token global do WhatsApp não configurado. Configure em Configurações → WhatsApp & API.')
+      if (!globalToken) throw new Error('Token de acesso não encontrado. Vá em Admin → Configurações → WhatsApp e salve o Access Token.')
 
       const testRes = await fetch(`https://graph.facebook.com/v19.0/${waForm.phone_id}?fields=display_phone_number,verified_name`, {
         headers: { Authorization: `Bearer ${globalToken}` },
@@ -840,7 +840,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
         phone_number_id: waForm.phone_id,
         phone_number:    verifiedPhone,
         display_name:    verifiedName,
-        waba_id:         waForm.waba_id.trim() || null,
+        waba_id:         null,
         is_active:       true,
       }, { onConflict: 'institution_id' })
       setWaSaved(true)
@@ -946,7 +946,6 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
                       { label: 'Phone Number ID (Meta)',       key: 'phone_id',     type: 'text', placeholder: '1007880222413531' },
                       { label: 'Número de telefone',           key: 'phone_number', type: 'text', placeholder: '5583999990001' },
                       { label: 'Nome de exibição no WhatsApp', key: 'display_name', type: 'text', placeholder: 'Colégio São João' },
-                      { label: 'WABA ID',                      key: 'waba_id',      type: 'text', placeholder: '1222972209822315' },
                     ].map(f => (
                       <div key={f.key}>
                         <label className={lbl}>{f.label}</label>
@@ -1149,7 +1148,7 @@ export default function AdminSchools() {
             phone_number_id: editForm.wa_phone_number_id.trim(),
             phone_number:    editForm.wa_phone_number.trim() || null,
             display_name:    editForm.wa_display_name.trim() || null,
-            waba_id:         editForm.wa_waba_id.trim() || null,
+            waba_id:         null,
             is_active:       editForm.wa_is_active,
           }, { onConflict: 'institution_id' })
         if (waErr) throw waErr
@@ -1520,19 +1519,11 @@ export default function AdminSchools() {
                       value={editForm.wa_phone_number_id}
                       onChange={e => setEditForm(f => ({ ...f, wa_phone_number_id: e.target.value }))} />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className={lbl}>Número de telefone</label>
-                      <input className={inp} placeholder="5583999990001"
-                        value={editForm.wa_phone_number}
-                        onChange={e => setEditForm(f => ({ ...f, wa_phone_number: e.target.value }))} />
-                    </div>
-                    <div>
-                      <label className={lbl}>WABA ID</label>
-                      <input className={inp} placeholder="1222972209822315"
-                        value={editForm.wa_waba_id}
-                        onChange={e => setEditForm(f => ({ ...f, wa_waba_id: e.target.value }))} />
-                    </div>
+                  <div>
+                    <label className={lbl}>Número de telefone</label>
+                    <input className={inp} placeholder="5583999990001"
+                      value={editForm.wa_phone_number}
+                      onChange={e => setEditForm(f => ({ ...f, wa_phone_number: e.target.value }))} />
                   </div>
                   <div>
                     <label className={lbl}>Nome de exibição no WhatsApp</label>

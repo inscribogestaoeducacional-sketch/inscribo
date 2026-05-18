@@ -33,6 +33,12 @@ export async function getWAConfig(): Promise<WAConfig> {
     wabaId:      map['wa_waba_id']      || process.env.WA_WABA_ID      || '',
   }
 
+  console.log('WA Config loaded:', {
+    hasToken: !!config.accessToken,
+    tokenLength: config.accessToken?.length,
+    hasWabaId: !!config.wabaId,
+  })
+
   cache = { config, at: Date.now() }
   return config
 }
