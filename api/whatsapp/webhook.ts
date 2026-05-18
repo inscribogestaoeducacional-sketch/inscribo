@@ -1,11 +1,28 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
 import * as crypto from 'crypto'
-import { getWAConfig } from './helpers'
-
 // Disable body-parser — raw buffer needed for HMAC-SHA256 validation
 export const config = {
   api: { bodyParser: false },
+}
+
+async function getWAConfig() {
+  const supabase = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+  const { data } = await supabase
+    .from('platform_settings')
+    .select('key, value')
+    .in('key', ['wa_access_token', 'wa_verify_token', 'wa_app_secret', 'wa_waba_id'])
+  const cfg: Record<string, string> = {}
+  data?.forEach((r: any) => { cfg[r.key] = r.value })
+  return {
+    accessToken:  cfg['wa_access_token']  || process.env.WA_ACCESS_TOKEN  || '',
+    verifyToken:  cfg['wa_verify_token']  || process.env.WA_VERIFY_TOKEN  || '',
+    appSecret:    cfg['wa_app_secret']    || process.env.WA_APP_SECRET    || '',
+    wabaId:       cfg['wa_waba_id']       || '',
+  }
 }
 
 const supabase = createClient(
