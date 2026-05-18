@@ -504,12 +504,13 @@ async function processFlow(
         }
         await supabase.from('whatsapp_conversations').update(convUpdates)
           .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
-        await supabase.from('whatsapp_conversation_events').insert({
+        const { error: evtErr } = await supabase.from('whatsapp_conversation_events').insert({
           institution_id: institutionId,
           remote_jid:     remoteJid,
           event_type:     'transfer',
           description:    `Robô transferiu para ${convUpdates.assigned_user_name || 'atendente'} via opção ${trimmed}`,
-        }).catch(() => {})
+        })
+        if (evtErr) console.error('❌ event insert error:', evtErr.message)
         console.log('[flow] menu option:', trimmed, '→ assignee:', convUpdates.assigned_user_name)
         return
       }
@@ -626,12 +627,12 @@ async function processAionMessage({
     }
 
     // Increment unread
-    await supabase
+    const { error: rpcErr1 } = await supabase
       .rpc('increment_conversation_unread', {
         p_institution_id: null,
         p_remote_jid:     remoteJid,
       })
-      .catch(() => {})
+    if (rpcErr1) console.error('❌ rpc error:', rpcErr1.message)
 
     // Insert message
     await supabase.from('whatsapp_messages').insert({
@@ -844,12 +845,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (convErr) console.error('❌ conv upsert error:', convErr.message)
 
         // ── Increment unread count (notification badge) ──
-        await supabase
+        const { error: rpcErr } = await supabase
           .rpc('increment_conversation_unread', {
             p_institution_id: institutionId,
             p_remote_jid:     remoteJid,
           })
-          .catch((e: any) => console.error('❌ unread increment error:', e))
+        if (rpcErr) console.error('❌ unread increment error:', rpcErr.message)
 
         // ── Insert message ──
         const { error: msgErr } = await supabase

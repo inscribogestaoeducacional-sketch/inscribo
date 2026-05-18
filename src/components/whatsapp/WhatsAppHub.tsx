@@ -1101,7 +1101,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const convMap = new Map(convs.map((c: any) => [c.remote_jid, c]))
     const built = buildConversations(msgs, convMap)
     setConversations(built)
-    setActiveId(id => id ?? (built[0]?.id ?? null))
+    return built
   }
 
   // Load on mount + check connected + realtime
@@ -1136,7 +1136,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         }
       }
 
-      await loadMessages()
+      const initialConvs = await loadMessages()
+      setActiveId(prev => prev ?? (initialConvs?.[0]?.id ?? null))
       if (!isAionInbox) DatabaseService.getUsers(effectiveInstitutionId).then(setUsers).catch(() => {})
 
       if (!isAionInbox) {
@@ -1820,6 +1821,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       ? { ...c, status: 'closed' as ConvStatus, assigned_user_id: undefined, assigned_user_name: undefined }
       : c
     ))
+    setActiveId(null)
     await supabase.from('whatsapp_conversations').update({ assigned_user_id: null, assigned_user_name: null })
       .eq('institution_id', effectiveInstitutionId).eq('remote_jid', rJid)
 
