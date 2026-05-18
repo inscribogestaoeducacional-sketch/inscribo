@@ -725,9 +725,15 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />Online
                   </span>
                 </div>
-                <div style={{ padding: '10px 14px', background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 12, color: '#64748B', marginBottom: 16 }}>
+                <div style={{ padding: '10px 14px', background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 12, color: '#64748B', marginBottom: 12 }}>
                   <div>Número: <strong style={{ color: '#1A2B4A' }}>{phoneRecord?.phone_number || metaConfig.whatsapp_phone_number || '—'}</strong></div>
                   {metaConfig.whatsapp_phone_id && <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>Phone ID: {metaConfig.whatsapp_phone_id}</div>}
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  {flow.bot_enabled
+                    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 12px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 999, fontSize: 11, fontWeight: 600, color: '#16a34a' }}>🤖 Robô ativo</span>
+                    : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 12px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 999, fontSize: 11, fontWeight: 600, color: '#64748B' }}>👤 Atendimento manual</span>
+                  }
                 </div>
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>

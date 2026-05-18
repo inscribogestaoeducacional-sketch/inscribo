@@ -768,13 +768,13 @@ export default function FlowEditor({
     if (existing) {
       const { error } = await supabase
         .from('whatsapp_flows')
-        .update({ bot_flow: botFlow })
+        .update({ bot_flow: botFlow, bot_enabled: isActive })
         .eq('institution_id', institutionId)
       saveError = error
     } else {
       const { error } = await supabase
         .from('whatsapp_flows')
-        .insert({ institution_id: institutionId, bot_flow: botFlow })
+        .insert({ institution_id: institutionId, bot_flow: botFlow, bot_enabled: isActive })
       saveError = error
     }
 
@@ -844,7 +844,7 @@ export default function FlowEditor({
             border: `1px solid ${isActive ? '#bbf7d0' : '#e2e8f0'}`,
             cursor: 'pointer', fontWeight: 600,
           }} onClick={() => setIsActive(a => !a)}>
-            {isActive ? '● Ativo' : '○ Inativo'}
+            {isActive ? '🤖 Robô ativo' : '👤 Robô inativo'}
           </span>
           <span style={{ fontSize: 11, color: '#94a3b8' }}>
             {nodes.length} blocos · {edges.length} conexões

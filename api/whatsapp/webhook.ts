@@ -450,6 +450,30 @@ async function processFlow(
 
     // d) Custom bot_flow (full state machine) — takes over when defined
     if (flow.bot_enabled && flow.bot_flow?.nodes?.length) {
+      // Fetch current bot/assignee state
+      const { data: convState } = await supabase
+        .from('whatsapp_conversations')
+        .select('bot_active, assigned_user_id')
+        .eq('institution_id', institutionId)
+        .eq('remote_jid', remoteJid)
+        .maybeSingle()
+
+      // Human agent is actively attending — don't run the bot
+      if (!isNewConversation && convState?.bot_active === false && convState?.assigned_user_id) {
+        console.log('[flow] humano atendendo, robô pausado')
+        return
+      }
+
+      // New or reopened conversation → activate bot and reset state
+      if (isNewConversation) {
+        const { error: botErr } = await supabase.from('whatsapp_conversations').update({
+          bot_active:       true,
+          bot_current_node: null,
+          bot_variables:    {},
+        }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+        if (botErr) console.error('❌ bot activation error:', botErr.message)
+      }
+
       await processCustomFlow(institutionId, remoteJid, text, flow, isNewConversation)
       return
     }
@@ -843,6 +867,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           )
 
         if (convErr) console.error('❌ conv upsert error:', convErr.message)
+
+        // ── Re-open: clear previous assignee so bot restarts clean ──
+        if (isNewConversation && existingConv) {
+          await supabase.from('whatsapp_conversations')
+            .update({ assigned_user_id: null, assigned_user_name: null })
+            .eq('institution_id', institutionId)
+            .eq('remote_jid', remoteJid)
+        }
 
         // ── Increment unread count (notification badge) ──
         const { error: rpcErr } = await supabase
