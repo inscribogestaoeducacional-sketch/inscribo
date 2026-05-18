@@ -423,7 +423,6 @@ async function processFlow(
     // c) Custom bot_flow — highest priority, bypasses working-hours gate entirely.
     //    The flow itself can handle off-hours via condition nodes.
     if (flow.bot_enabled && flow.bot_flow?.nodes?.length) {
-      // Fetch current bot/assignee state
       const { data: convState } = await supabase
         .from('whatsapp_conversations')
         .select('bot_active, assigned_user_id')
@@ -431,23 +430,40 @@ async function processFlow(
         .eq('remote_jid', remoteJid)
         .maybeSingle()
 
-      // Human agent is actively attending — don't run the bot
-      if (!isNewConversation && convState?.bot_active === false && convState?.assigned_user_id) {
+      // Bot already running — continue flow from current node
+      if (convState?.bot_active === true) {
+        await processCustomFlow(institutionId, remoteJid, text, flow, false)
+        return
+      }
+
+      // Human agent attending — skip bot entirely
+      if (convState?.bot_active === false && convState?.assigned_user_id) {
         console.log('[flow] humano atendendo, robô pausado')
         return
       }
 
-      // New or reopened conversation → activate bot and reset state
+      // bot_active=false + no assignee: only activate for truly first messages
       if (isNewConversation) {
-        const { error: botErr } = await supabase.from('whatsapp_conversations').update({
-          bot_active:       true,
-          bot_current_node: null,
-          bot_variables:    {},
-        }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
-        if (botErr) console.error('❌ bot activation error:', botErr.message)
+        const { count } = await supabase
+          .from('whatsapp_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('remote_jid', remoteJid)
+          .eq('institution_id', institutionId)
+
+        if ((count ?? 0) <= 1) {
+          const { error: botErr } = await supabase.from('whatsapp_conversations').update({
+            bot_active: true, bot_current_node: null, bot_variables: {},
+          }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+          if (botErr) console.error('❌ bot activation error:', botErr.message)
+          await processCustomFlow(institutionId, remoteJid, text, flow, true)
+        } else {
+          console.log('[flow] conversa reaberta com histórico, robô não ativado')
+        }
+        return
       }
 
-      await processCustomFlow(institutionId, remoteJid, text, flow, isNewConversation)
+      // Not new + bot_active=false + no assignee → bot finished, skip
+      console.log('[flow] robô inativo e sem atendente, ignorando')
       return
     }
 

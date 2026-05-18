@@ -462,6 +462,10 @@ function RenderMessageContent({ message, fromMe, instanceName }: { message: any;
     )
   }
 
+  if (msgType === 'image' && !mediaUrl) {
+    return <span style={{ fontSize: 13, color: fromMe ? 'rgba(255,255,255,0.7)' : '#64748B' }}>📷 Imagem</span>
+  }
+
   if (msgType === 'video' && mediaUrl) {
     return (
       <div style={{ maxWidth: 260, borderRadius: 10, overflow: 'hidden' }}>
@@ -626,7 +630,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [loading, setLoading] = useState(true)
   const [isConnected, setIsConnected] = useState<boolean | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [tabFilter, setTabFilter] = useState<'iniciada' | 'encerrada' | 'automatico'>('iniciada')
+  const [statusFilter, setStatusFilter] = useState<'abertos' | 'concluido' | 'ambos'>('abertos')
   const [readFilter, setReadFilter] = useState<'all' | 'read' | 'unread'>('all')
   const [assignFilter, setAssignFilter] = useState<'all' | 'mine' | 'none'>('all')
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('details')
@@ -740,10 +744,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const recordingMimeTypeRef = useRef<string>('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const notifAudioRef = useRef<HTMLAudioElement | null>(null)
-  const activeIdRef = useRef<string | null>(null)
+  const activeIdRef       = useRef<string | null>(null)
+  const conversationsRef  = useRef<typeof conversations>([])
 
-  // Keep activeIdRef in sync so notification handler can read the latest value
+  // Keep refs in sync so realtime handlers can read the latest values
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
+  useEffect(() => { conversationsRef.current = conversations }, [conversations])
 
   // Request browser notification permission on first load
   useEffect(() => {
@@ -1218,18 +1224,16 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         event: '*', schema: 'public', table: 'whatsapp_conversations',
         filter: convFilter
       }, (payload: any) => {
-        // Close events: update in-place instead of a full reload.
-        // A full reload races against the optimistic local status update in
-        // handleCloseConversation and can flip the conversation back to 'iniciada'.
         if (payload.eventType === 'UPDATE' && payload.new?.status === 'closed') {
           const jid = normalizeJid(payload.new.remote_jid)
-          setConversations(prev => prev.map(c =>
-            c.id === jid
-              ? { ...c, status: 'closed' as ConvStatus, assigned_user_id: undefined, assigned_user_name: undefined }
-              : c
-          ))
+          setConversations(prev => prev.filter(c => c.id !== jid))
+          if (activeIdRef.current === jid) setActiveId(null)
           return
         }
+        // Ignore updates for conversations already locally marked as closed
+        const updJid = normalizeJid(payload.new?.remote_jid || '')
+        const local = conversationsRef.current.find(c => c.id === updJid)
+        if (local?.status === 'closed') return
         loadMessages()
       })
       .subscribe()
@@ -1485,18 +1489,14 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const activeConv = conversations.find(c => c.id === activeId) ?? null
   const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0)
 
-  const iniciadas   = conversations.filter(c => !c.isGroup && c.status !== 'closed').length
-  const encerradas  = conversations.filter(c => !c.isGroup && c.status === 'closed').length
-  const naoLidas    = conversations.filter(c => !c.isGroup && (c.unreadCount || 0) > 0).length
-  const automaticos = conversations.filter(c => !c.isGroup && c.bot_active).length
+  const naoLidas = conversations.filter(c => !c.isGroup && (c.unreadCount || 0) > 0).length
 
   const filteredConvs = conversations.filter(c => {
     if (c.isGroup) return false
     if (!search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search)) {
-      // tab filter
-      if (tabFilter === 'iniciada'   && c.status === 'closed') return false
-      if (tabFilter === 'encerrada'  && c.status !== 'closed') return false
-      if (tabFilter === 'automatico' && !c.bot_active) return false
+      // status filter
+      if (statusFilter === 'abertos'  && c.status === 'closed') return false
+      if (statusFilter === 'concluido' && c.status !== 'closed') return false
       // read filter
       if (readFilter === 'read'   && (c.unreadCount || 0) > 0) return false
       if (readFilter === 'unread' && (c.unreadCount || 0) === 0) return false
@@ -1831,10 +1831,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       user_id: user.id,
       user_name: user.full_name || user.email,
     })
-    setConversations(prev => prev.map(c => c.id === activeId
-      ? { ...c, status: 'closed' as ConvStatus, assigned_user_id: undefined, assigned_user_name: undefined }
-      : c
-    ))
+    setConversations(prev => prev.filter(c => c.id !== activeId))
     setActiveId(null)
     await supabase.from('whatsapp_conversations').update({ assigned_user_id: null, assigned_user_name: null })
       .eq('institution_id', effectiveInstitutionId).eq('remote_jid', rJid)
@@ -2323,34 +2320,35 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
           {/* Filters — Botconversa style */}
           <div style={{ borderBottom: '1px solid #D1FAE5' }}>
-            {/* Row 1: Tab tabs with counters */}
-            <div style={{ display: 'flex', padding: '0 12px', gap: 0 }}>
-              {([
-                { key: 'iniciada',   label: 'Iniciada',   count: iniciadas   },
-                { key: 'encerrada',  label: 'Encerrada',  count: encerradas  },
-                { key: 'automatico', label: 'Automático', count: automaticos },
-              ] as { key: typeof tabFilter; label: string; count: number }[]).map(tab => (
-                <button key={tab.key} onClick={() => setTabFilter(tab.key)} style={{
-                  flex: 1, padding: '10px 4px', border: 'none', background: 'transparent',
-                  cursor: 'pointer', fontSize: 13, fontWeight: tabFilter === tab.key ? 700 : 500,
-                  color: tabFilter === tab.key ? '#1A2B4A' : '#94A3B8',
-                  borderBottom: tabFilter === tab.key ? '2px solid #00A896' : '2px solid transparent',
-                  transition: 'all 0.15s', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', gap: 6,
-                }}>
-                  {tab.label}
-                  {tab.count > 0 && (
-                    <span style={{
-                      background: tabFilter === tab.key ? '#00A896' : '#D1FAE5',
-                      color: tabFilter === tab.key ? '#fff' : '#007A6E',
-                      borderRadius: 9999, padding: '1px 6px', fontSize: 10, fontWeight: 700,
-                    }}>{tab.count}</span>
-                  )}
-                </button>
-              ))}
+            {/* Row 1: Status + Atribuição dropdowns */}
+            <div style={{ display: 'flex', padding: '8px 12px', gap: 8 }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</span>
+                <select
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}
+                  style={{ width: '100%', padding: '5px 8px', fontSize: 12, border: '1px solid #D1FAE5', borderRadius: 8, background: '#F0FDFB', color: '#1A2B4A', cursor: 'pointer', outline: 'none' }}
+                >
+                  <option value="abertos">Abertos</option>
+                  <option value="concluido">Concluídos</option>
+                  <option value="ambos">Ambos</option>
+                </select>
+              </div>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Atribuição</span>
+                <select
+                  value={assignFilter}
+                  onChange={e => setAssignFilter(e.target.value as typeof assignFilter)}
+                  style={{ width: '100%', padding: '5px 8px', fontSize: 12, border: '1px solid #D1FAE5', borderRadius: 8, background: '#F0FDFB', color: '#1A2B4A', cursor: 'pointer', outline: 'none' }}
+                >
+                  <option value="all">Todos</option>
+                  <option value="mine">Meus chats</option>
+                  <option value="none">Não atribuídos</option>
+                </select>
+              </div>
             </div>
-            {/* Row 2: Read + assign sub-filters */}
-            <div style={{ display: 'flex', padding: '8px 12px', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            {/* Row 2: Read sub-filter pills */}
+            <div style={{ display: 'flex', padding: '0 12px 8px', gap: 6, alignItems: 'center' }}>
               {([
                 { key: 'all',    label: 'Tudo',     count: 0        },
                 { key: 'read',   label: 'Lida',     count: 0        },
@@ -2367,22 +2365,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   {f.count > 0 && (
                     <span style={{ background: '#7C3AED', color: '#fff', borderRadius: 9999, padding: '0px 5px', fontSize: 10, fontWeight: 700 }}>{f.count}</span>
                   )}
-                </button>
-              ))}
-              <div style={{ width: 1, height: 16, background: '#D1FAE5', margin: '0 2px' }} />
-              {([
-                { key: 'all',  label: 'Todos'    },
-                { key: 'mine', label: 'Meus'     },
-                { key: 'none', label: 'Sem dono' },
-              ] as { key: typeof assignFilter; label: string }[]).map(f => (
-                <button key={f.key} onClick={() => setAssignFilter(f.key)} style={{
-                  padding: '3px 10px', borderRadius: 9999, fontSize: 12, border: 'none',
-                  cursor: 'pointer', fontWeight: assignFilter === f.key ? 600 : 400,
-                  background: assignFilter === f.key ? '#1A2B4A' : '#F0FDFB',
-                  color: assignFilter === f.key ? '#fff' : '#64748B',
-                  transition: 'all 0.15s',
-                }}>
-                  {f.label}
                 </button>
               ))}
             </div>
