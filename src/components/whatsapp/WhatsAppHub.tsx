@@ -1217,7 +1217,21 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'whatsapp_conversations',
         filter: convFilter
-      }, () => loadMessages())
+      }, (payload: any) => {
+        // Close events: update in-place instead of a full reload.
+        // A full reload races against the optimistic local status update in
+        // handleCloseConversation and can flip the conversation back to 'iniciada'.
+        if (payload.eventType === 'UPDATE' && payload.new?.status === 'closed') {
+          const jid = normalizeJid(payload.new.remote_jid)
+          setConversations(prev => prev.map(c =>
+            c.id === jid
+              ? { ...c, status: 'closed' as ConvStatus, assigned_user_id: undefined, assigned_user_name: undefined }
+              : c
+          ))
+          return
+        }
+        loadMessages()
+      })
       .subscribe()
 
     const interval = setInterval(loadMessages, 10000)

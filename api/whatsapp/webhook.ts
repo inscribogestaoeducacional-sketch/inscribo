@@ -420,35 +420,8 @@ async function processFlow(
       return
     }
 
-    // c) Working hours check
-    const tz             = flow.timezone || 'America/Fortaleza'
-    const now            = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
-    const dayKeys        = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
-    const currentDay     = dayKeys[now.getDay()]
-    const isWorkingDay   = ((flow.working_days as string[]) ?? []).includes(currentDay)
-    const [startH, startM] = (flow.working_start || '08:00').split(':').map(Number)
-    const [endH,   endM  ] = (flow.working_end   || '18:00').split(':').map(Number)
-    const currentMin     = now.getHours() * 60 + now.getMinutes()
-    const isWorkingHours = currentMin >= startH * 60 + startM && currentMin <= endH * 60 + endM
-    const isOpen         = isWorkingDay && isWorkingHours
-
-    console.log('[flow]', {
-      isOpen, isWorkingDay, isWorkingHours,
-      day: currentDay,
-      time: `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`,
-      isNewConversation,
-      text: text.slice(0, 60),
-    })
-
-    // Off-hours: only notify on new conversations
-    if (!isOpen) {
-      if (isNewConversation && flow.off_hours_message) {
-        await sendAutoMessage(institutionId, remoteJid, flow.off_hours_message)
-      }
-      return
-    }
-
-    // d) Custom bot_flow (full state machine) — takes over when defined
+    // c) Custom bot_flow — highest priority, bypasses working-hours gate entirely.
+    //    The flow itself can handle off-hours via condition nodes.
     if (flow.bot_enabled && flow.bot_flow?.nodes?.length) {
       // Fetch current bot/assignee state
       const { data: convState } = await supabase
@@ -475,6 +448,34 @@ async function processFlow(
       }
 
       await processCustomFlow(institutionId, remoteJid, text, flow, isNewConversation)
+      return
+    }
+
+    // d) Standard flow: working hours check (only reached when no custom bot_flow)
+    const tz             = flow.timezone || 'America/Fortaleza'
+    const now            = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
+    const dayKeys        = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+    const currentDay     = dayKeys[now.getDay()]
+    const isWorkingDay   = ((flow.working_days as string[]) ?? []).includes(currentDay)
+    const [startH, startM] = (flow.working_start || '08:00').split(':').map(Number)
+    const [endH,   endM  ] = (flow.working_end   || '18:00').split(':').map(Number)
+    const currentMin     = now.getHours() * 60 + now.getMinutes()
+    const isWorkingHours = currentMin >= startH * 60 + startM && currentMin <= endH * 60 + endM
+    const isOpen         = isWorkingDay && isWorkingHours
+
+    console.log('[flow]', {
+      isOpen, isWorkingDay, isWorkingHours,
+      day: currentDay,
+      time: `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`,
+      isNewConversation,
+      text: text.slice(0, 60),
+    })
+
+    // Off-hours: only notify on new conversations
+    if (!isOpen) {
+      if (isNewConversation && flow.off_hours_message) {
+        await sendAutoMessage(institutionId, remoteJid, flow.off_hours_message)
+      }
       return
     }
 
