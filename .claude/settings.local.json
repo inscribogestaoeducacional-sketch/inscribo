@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Victor Almeida\\\\AIONEDU\" -Recurse -Force)",
-      "Bash(Select-Object -First 50)"
+      "Bash(Select-Object -First 50)",
+      "Bash(findstr /i \"html2canvas\\\\|jspdf\\\\|react-router\")",
+      "Bash(Get-Content package.json)",
+      "Bash(Select-String -Pattern \"html2canvas|jspdf|react-router\")",
+      "Bash(npm list *)"
     ]
   }
 }

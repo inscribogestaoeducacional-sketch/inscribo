@@ -11,8 +11,9 @@ import {
   MessageCircle, Edit2, Trash2, Building2, DollarSign,
   RefreshCw, Eye, Star, TrendingUp,
   Bell, ChevronDown, StickyNote, Send, Zap, EyeOff,
-  Video, Users, ExternalLink, Link2,
+  Video, Users, ExternalLink, Link2, FileText,
 } from 'lucide-react'
+import ProposalGenerator from './ProposalGenerator'
 
 type Stage = 'interesse' | 'qualificacao' | 'proposta' | 'negociacao' | 'fechado' | 'cliente'
 
@@ -21,7 +22,8 @@ interface Lead {
   phone: string; email: string; stage: Stage; origin: string
   monthly_value?: number; implementation_value?: number
   consultant_id?: string; notes?: string; next_followup?: string
-  converted_institution_id?: string; created_at: string; updated_at: string
+  converted_institution_id?: string; has_proposal?: boolean
+  created_at: string; updated_at: string
 }
 
 interface Interaction {
@@ -254,10 +256,11 @@ function CRMeetingModal({ lead, meeting, onClose, onSave }: {
 }
 
 // ─── Lead Card ────────────────────────────────────────────────────────────
-function LeadCard({ lead, stage, consultants, meetingCount, onClick, onMoveStage, onDelete }: {
+function LeadCard({ lead, stage, consultants, meetingCount, onClick, onMoveStage, onDelete, onGenerateProposal }: {
   lead: Lead; stage: typeof STAGES[0]; consultants: any[]
   meetingCount: number
   onClick: () => void; onMoveStage: (to: Stage) => void; onDelete: () => void
+  onGenerateProposal: () => void
 }) {
   const [menu, setMenu] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -278,6 +281,9 @@ function LeadCard({ lead, stage, consultants, meetingCount, onClick, onMoveStage
           <p className="text-xs text-gray-400 mt-0.5 truncate">{lead.name}</p>
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+          <button onClick={onGenerateProposal} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50" title="Gerar Proposta">
+            <FileText size={14} />
+          </button>
           <div className="relative" ref={menuRef}>
             <button onClick={() => setMenu(!menu)} className="p-1 hover:bg-gray-100 rounded">
               <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
@@ -332,6 +338,9 @@ function LeadCard({ lead, stage, consultants, meetingCount, onClick, onMoveStage
           <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-50 text-emerald-600 border border-emerald-100">
             <Building2 className="w-3 h-3" />Escola
           </span>
+        )}
+        {lead.has_proposal && (
+          <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">Proposta</span>
         )}
       </div>
 
@@ -1105,6 +1114,7 @@ export default function AdminCRM() {
   const [view, setView]                 = useState<'kanban' | 'list'>('kanban')
   const [selectedLead, setSelectedLead] = useState<Lead | null | 'new'>(null)
   const [onboardingLead, setOnboardingLead] = useState<Lead | null>(null)
+  const [proposalLead, setProposalLead] = useState<Lead | null>(null)
   const [toast, setToast]               = useState<{ msg: string; ok: boolean } | null>(null)
 
   const showToast = (msg: string, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 4000) }
@@ -1300,6 +1310,7 @@ export default function AdminCRM() {
                         onClick={() => setSelectedLead(lead)}
                         onMoveStage={to => handleMoveStage(lead, to)}
                         onDelete={() => handleDelete(lead.id)}
+                        onGenerateProposal={() => setProposalLead(lead)}
                       />
                     ))}
                     {stageLeads.length === 0 && (
@@ -1368,6 +1379,9 @@ export default function AdminCRM() {
                         </td>
                         <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
+                            <button onClick={() => setProposalLead(lead)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="Gerar Proposta">
+                              <FileText className="w-3.5 h-3.5" />
+                            </button>
                             {(lead.stage === 'fechado' || lead.stage === 'cliente') && !lead.converted_institution_id && (
                               <button onClick={() => setOnboardingLead(lead)} className="text-xs px-2 py-1 bg-green-50 text-green-700 rounded-lg font-bold hover:bg-green-100">🏫</button>
                             )}
@@ -1402,6 +1416,14 @@ export default function AdminCRM() {
           consultants={consultants}
           onClose={() => setOnboardingLead(null)}
           onSuccess={handleOnboardingSuccess}
+        />
+      )}
+
+      {proposalLead && (
+        <ProposalGenerator
+          lead={proposalLead}
+          onClose={() => setProposalLead(null)}
+          onSave={() => { setProposalLead(null); loadData() }}
         />
       )}
 
