@@ -1579,34 +1579,22 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           : c
       ))
 
-      // Promote waiting → open on first send by atendente
+      // Promote to open + assign on first send by atendente
       const conv = conversationsRef.current.find(c => c.id === activeId)
-      if (conv && conv.status === 'waiting' && effectiveInstitutionId && user?.id) {
+      if (conv && (conv.status === 'waiting' || !conv.assigned_user_id) && effectiveInstitutionId && user?.id) {
         const rJid = rawJid(activeId)
-        DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, 'open')
-          .then(() => {
-            const assignNeeded = !conv.assigned_user_id
-            setConversations(prev => prev.map(c => c.id === activeId
-              ? {
-                  ...c,
-                  status: 'open' as ConvStatus,
-                  ...(assignNeeded ? { assigned_user_id: user!.id, assigned_user_name: user!.full_name || user!.email } : {}),
-                }
-              : c
-            ))
-            DatabaseService.logConversationEvent({
-              institution_id: effectiveInstitutionId,
-              remote_jid: rJid,
-              event_type: 'status_change',
-              description: 'Em atendimento',
-              user_id: user!.id,
-              user_name: user!.full_name || user!.email,
-            }).catch(() => {})
-            if (assignNeeded) {
-              DatabaseService.assignConversation(effectiveInstitutionId, rJid, user!.id, user!.full_name || user!.email).catch(() => {})
-            }
+        await supabase.from('whatsapp_conversations')
+          .update({
+            status: 'open',
+            assigned_user_id:   user!.id,
+            assigned_user_name: user!.full_name || user!.email,
           })
-          .catch(() => {})
+          .eq('institution_id', effectiveInstitutionId)
+          .eq('remote_jid', rJid)
+        setConversations(prev => prev.map(c => c.id === activeId
+          ? { ...c, status: 'open' as ConvStatus, assigned_user_id: user!.id, assigned_user_name: user!.full_name || user!.email }
+          : c
+        ))
       }
 
     } catch (err: any) {
@@ -1913,12 +1901,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }).catch(() => {})
     console.log('[CLOSE 6] concluído — aguardando Realtime (guard 5s)')
 
-    // 4. Release guard after 5s (long enough for all Realtime events to arrive)
+    // 4. Release guard after 10s (long enough for all Realtime events to arrive)
     setTimeout(() => {
       console.log('[CLOSE 7] limpando CLOSING_IDS para', rJid)
       CLOSING_IDS.delete(rJid)
       CLOSING_IDS.delete(convId)
-    }, 5000)
+    }, 10000)
 
     // 5. Send satisfaction survey if enabled
     if (flowConfig?.satisfaction_survey_enabled) {
