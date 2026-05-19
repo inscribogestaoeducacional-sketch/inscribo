@@ -823,6 +823,23 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   const startRecording = async () => {
     if (!activeId) return
+
+    // Dispara o popup de permissão do browser explicitamente
+    try {
+      const permStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      permStream.getTracks().forEach(t => t.stop())
+    } catch (err: any) {
+      if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+        setSendError('Permissão de microfone negada. Clique no 🔒 na barra de endereço e permita o microfone.')
+        return
+      }
+      if (err?.name === 'NotFoundError' || err?.name === 'DevicesNotFoundError') {
+        setSendError('Microfone não encontrado.')
+        return
+      }
+      // outros erros: deixa o bloco principal tratar
+    }
+
     if (!navigator.mediaDevices?.getUserMedia) {
       setSendError('Seu browser não suporta gravação de áudio.')
       return
