@@ -1838,9 +1838,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     CLOSING_IDS.add(convId)
     console.log('[CLOSE 2] CLOSING_IDS agora:', [...CLOSING_IDS])
 
-    // 2. Remove from local state immediately (optimistic)
-    console.log('[CLOSE 3] removendo do estado local')
-    setConversations(prev => prev.filter(c => c.id !== convId))
+    // 2. Mark as closed locally (filter hides it for 'abertos', keeps it for 'ambos')
+    console.log('[CLOSE 3] marcando como closed no estado local')
+    setConversations(prev => prev.map(c =>
+      c.id === convId
+        ? { ...c, status: 'closed' as ConvStatus, bot_active: false, assigned_user_id: undefined, assigned_user_name: undefined }
+        : c
+    ))
     console.log('[CLOSE 4] setActiveId null')
     setActiveId(null)
 
