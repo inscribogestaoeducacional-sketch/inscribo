@@ -252,6 +252,7 @@ async function processCustomFlow(
     if (nexts.length) { currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId) }
   } else if (current?.type === 'menu' && variables[`__menu_sent_${currentNodeId}`]) {
     // Menu was already displayed — process user's choice
+    console.log('[MENU S2] processando resposta do menu, texto:', text, '| options:', JSON.stringify(current.data?.options))
     const choice  = parseInt(text.trim(), 10)
     const options = current.data?.options || []
     const menuHeader = interp(current.data?.menuText || current.data?.text || 'Escolha uma opção:')
@@ -316,6 +317,10 @@ async function processCustomFlow(
       const options     = node.data?.options || []
       const optionsText = options.map((o: any, i: number) => `${i + 1}. ${o.text}`).join('\n')
       const fullText    = [menuHeader, optionsText].filter(Boolean).join('\n\n')
+      console.log('[MENU] options:', JSON.stringify(options))
+      console.log('[MENU] menuText:', menuHeader)
+      console.log('[MENU] fullText:', fullText)
+      console.log('[MENU] __menu_sent flag:', variables[`__menu_sent_${node.id}`])
       if (fullText.trim()) await sendAutoMessage(institutionId, remoteJid, fullText)
       variables[`__menu_sent_${node.id}`] = 'true'
       break  // Section 4 saves currentNodeId and variables

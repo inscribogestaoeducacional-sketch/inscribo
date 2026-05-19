@@ -616,6 +616,9 @@ interface WhatsAppHubProps {
   isAionInbox?: boolean
 }
 
+// Module-level set so it survives re-renders and StrictMode double-mounts
+const CLOSING_IDS = new Set<string>()
+
 export default function WhatsAppHub({ institutionId: propInstitutionId, isAionInbox = false }: WhatsAppHubProps = {}) {
   const { user } = useAuth()
   const effectiveInstitutionId = propInstitutionId ?? user?.institution_id ?? ''
@@ -746,7 +749,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const notifAudioRef = useRef<HTMLAudioElement | null>(null)
   const activeIdRef       = useRef<string | null>(null)
   const conversationsRef  = useRef<typeof conversations>([])
-  const closingIdsRef     = useRef<Set<string>>(new Set())
+  // closingIdsRef replaced by module-level CLOSING_IDS
 
   // Keep refs in sync so realtime handlers can read the latest values
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
@@ -1202,9 +1205,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         event: 'INSERT', schema: 'public', table: 'whatsapp_messages',
         filter: msgFilter
       }, (payload) => {
-        const msg = payload.new as WhatsappMessage
+        const msg    = payload.new as WhatsappMessage
         const msgJid = msg.remote_jid || ''
-        if (closingIdsRef.current.has(msgJid) || closingIdsRef.current.has(normalizeJid(msgJid))) return
+        console.log('[REALTIME MSG] INSERT', msgJid, '| CLOSING_IDS tem?', CLOSING_IDS.has(msgJid), CLOSING_IDS.has(normalizeJid(msgJid)))
+        if (CLOSING_IDS.has(msgJid) || CLOSING_IDS.has(normalizeJid(msgJid))) {
+          console.log('[REALTIME MSG] ignorado — está em CLOSING_IDS')
+          return
+        }
         addMessageToConversations(msg)
       })
       .on('postgres_changes', {
@@ -1234,10 +1241,15 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         event: '*', schema: 'public', table: 'whatsapp_conversations',
         filter: convFilter
       }, (payload: any) => {
-        const rawJidFromPayload = payload.new?.remote_jid || ''
+        const rawJidFromPayload  = payload.new?.remote_jid || ''
         const normJidFromPayload = normalizeJid(rawJidFromPayload)
+        console.log('[REALTIME CONV] evento recebido', payload.eventType, rawJidFromPayload, payload.new?.status)
+        console.log('[REALTIME CONV] CLOSING_IDS tem raw?', CLOSING_IDS.has(rawJidFromPayload), '| norm?', CLOSING_IDS.has(normJidFromPayload), '| set:', [...CLOSING_IDS])
         // Ignore ALL events for conversations that are being closed locally
-        if (closingIdsRef.current.has(rawJidFromPayload) || closingIdsRef.current.has(normJidFromPayload)) return
+        if (CLOSING_IDS.has(rawJidFromPayload) || CLOSING_IDS.has(normJidFromPayload)) {
+          console.log('[REALTIME CONV] ignorado — está em CLOSING_IDS')
+          return
+        }
         if (payload.eventType === 'UPDATE' && payload.new?.status === 'closed') {
           setConversations(prev => prev.filter(c => c.id !== normJidFromPayload))
           if (activeIdRef.current === normJidFromPayload) setActiveId(null)
@@ -1850,15 +1862,22 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const convId = activeId
     const rJid   = rawJid(convId)
 
+    console.log('[CLOSE 1] iniciando fechamento', rJid, '| convId:', convId)
+
     // 1. Guard all Realtime events for this JID before any async operation
-    closingIdsRef.current.add(rJid)
-    closingIdsRef.current.add(convId)
+    console.log('[CLOSE 2] adicionando ao CLOSING_IDS', rJid, convId)
+    CLOSING_IDS.add(rJid)
+    CLOSING_IDS.add(convId)
+    console.log('[CLOSE 2] CLOSING_IDS agora:', [...CLOSING_IDS])
 
     // 2. Remove from local state immediately (optimistic)
+    console.log('[CLOSE 3] removendo do estado local')
     setConversations(prev => prev.filter(c => c.id !== convId))
+    console.log('[CLOSE 4] setActiveId null')
     setActiveId(null)
 
     // 3. Persist to DB (triggers Realtime — guarded above)
+    console.log('[CLOSE 5] salvando no banco')
     await DatabaseService.closeConversation(effectiveInstitutionId, rJid)
     DatabaseService.logConversationEvent({
       institution_id: effectiveInstitutionId,
@@ -1868,11 +1887,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       user_id: user!.id,
       user_name: user!.full_name || user!.email,
     }).catch(() => {})
+    console.log('[CLOSE 6] concluído — aguardando Realtime (guard 5s)')
 
     // 4. Release guard after 5s (long enough for all Realtime events to arrive)
     setTimeout(() => {
-      closingIdsRef.current.delete(rJid)
-      closingIdsRef.current.delete(convId)
+      console.log('[CLOSE 7] limpando CLOSING_IDS para', rJid)
+      CLOSING_IDS.delete(rJid)
+      CLOSING_IDS.delete(convId)
     }, 5000)
 
     // 5. Send satisfaction survey if enabled

@@ -759,6 +759,7 @@ export default function FlowEditor({
     setSaving(true)
     const botFlow = { nodes, edges }
     console.log('[FlowEditor] salvando para institution_id:', institutionId, 'nodes:', nodes.length, 'edges:', edges.length)
+    console.log('[SAVE] nodes:', JSON.stringify(nodes.map(n => ({ type: n.type, data: n.data })), null, 2))
 
     // Verifica se já existe registro para usar UPDATE em vez de INSERT
     const { data: existing, error: selectErr } = await supabase
