@@ -854,28 +854,32 @@ export class DatabaseService {
       .eq('remote_jid', remoteJid)
   }
 
-  static async closeConversation(institutionId: string, remoteJid: string): Promise<{ count: number | null; error: any }> {
-    // Strip any @-suffix so we match both stored formats (raw phone AND @s.whatsapp.net)
-    const raw  = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
-    const norm = raw.includes('@') ? raw : `${raw}@s.whatsapp.net`
+  static async closeConversation(institutionId: string, remoteJid: string): Promise<{ count: number; error: any }> {
+    const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
 
-    const { data, error } = await supabase
+    const { data: data1, error: error1 } = await supabase
       .from('whatsapp_conversations')
-      .update({
-        status: 'closed',
-        bot_active: false,
-        assigned_user_id: null,
-        assigned_user_name: null,
-      })
+      .update({ status: 'closed', bot_active: false, assigned_user_id: null, assigned_user_name: null })
       .eq('institution_id', institutionId)
-      .or(`remote_jid.eq.${raw},remote_jid.eq.${norm}`)
+      .eq('remote_jid', raw)
       .select('id')
 
-    const count = data?.length ?? null
-    console.log('[DB CLOSE] raw:', raw, '| norm:', norm, '| rows updated:', count, '| error:', error?.message)
-    if (error) console.error('[DB CLOSE] ERRO completo:', error)
+    console.log('[DB CLOSE] tentativa 1 (raw):', { rows: data1?.length, error: error1?.message })
 
-    return { count, error }
+    if (!error1 && (!data1 || data1.length === 0)) {
+      const norm = `${raw}@s.whatsapp.net`
+      const { data: data2, error: error2 } = await supabase
+        .from('whatsapp_conversations')
+        .update({ status: 'closed', bot_active: false, assigned_user_id: null, assigned_user_name: null })
+        .eq('institution_id', institutionId)
+        .eq('remote_jid', norm)
+        .select('id')
+
+      console.log('[DB CLOSE] tentativa 2 (norm):', { rows: data2?.length, error: error2?.message })
+      return { count: data2?.length ?? 0, error: error2 }
+    }
+
+    return { count: data1?.length ?? 0, error: error1 }
   }
 
   static async updateProfilePicture(institutionId: string, remoteJid: string, url: string): Promise<void> {
