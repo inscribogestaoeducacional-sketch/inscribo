@@ -1080,26 +1080,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq('remote_jid', remoteJid)
           .maybeSingle()
 
-        // ── Satisfaction survey response (closed conversation, score 1-5) ──
-        if (existingConv?.status === 'closed' && /^[1-5]$/.test(text.trim())) {
+        // ── Satisfaction survey response (button survey_1/2/3 or text 1-5 fallback) ──
+        const isSurveyReply =
+          (existingConv?.status === 'closed') && (
+            (msgType === 'interactive' &&
+             msg.interactive?.type === 'button_reply' &&
+             ['survey_1','survey_2','survey_3'].includes(msg.interactive.button_reply?.id || '')) ||
+            (msgType !== 'interactive' && /^[1-5]$/.test(text.trim()))
+          )
+
+        if (isSurveyReply) {
           const { data: sf } = await supabase
             .from('whatsapp_flows')
             .select('satisfaction_survey_enabled')
             .eq('institution_id', institutionId)
             .maybeSingle()
+
           if (sf?.satisfaction_survey_enabled) {
-            const score = parseInt(text.trim(), 10)
-            await supabase.from('whatsapp_conversations')
-              .update({ satisfaction_score: score, last_message: text.trim(), last_message_at: timestamp })
-              .eq('institution_id', institutionId)
-              .eq('remote_jid', remoteJid)
-            await supabase.from('whatsapp_messages').insert({
-              institution_id: institutionId, remote_jid: remoteJid, message_id: msg.id,
-              instance_name: 'cloud-api', content: text, message_type: 'text',
-              from_me: false, contact_name: contactName, timestamp,
-              status: 'received', direction: 'inbound', raw_data: msg,
-            })
-            await sendAutoMessage(institutionId, remoteJid, 'Obrigado pelo seu feedback! 🙏')
+            let score = 0
+            if (msgType === 'interactive') {
+              const btnId = msg.interactive?.button_reply?.id
+              if (btnId === 'survey_1') score = 1
+              if (btnId === 'survey_2') score = 2
+              if (btnId === 'survey_3') score = 3
+            } else {
+              score = parseInt(text.trim(), 10)
+            }
+
+            if (score > 0) {
+              const scoreLabel = interactiveTitle || text.trim() || `Avaliação: ${score}`
+              await supabase.from('whatsapp_conversations')
+                .update({ satisfaction_score: score, last_message: scoreLabel, last_message_at: timestamp })
+                .eq('institution_id', institutionId)
+                .eq('remote_jid', remoteJid)
+              await supabase.from('whatsapp_messages').insert({
+                institution_id: institutionId, remote_jid: remoteJid, message_id: msg.id,
+                instance_name: 'cloud-api', content: scoreLabel,
+                message_type: msgType,
+                from_me: false, contact_name: contactName, timestamp,
+                status: 'received', direction: 'inbound', raw_data: msg,
+              })
+              await sendAutoMessage(institutionId, remoteJid, 'Obrigado pelo seu feedback! 🙏 Estamos sempre buscando melhorar nosso atendimento.')
+            }
             continue
           }
         }

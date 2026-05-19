@@ -214,6 +214,7 @@ export default function GestorHome() {
   const [waConvStats, setWaConvStats] = useState<{ total: number; byBot: number; byTeam: number; closed: number; daily: { day: string; count: number }[]; avgSatisfaction: number | null } | null>(null)
   const [waTeamRanking, setWaTeamRanking] = useState<{ name: string; count: number }[]>([])
   const [waAvgResponse, setWaAvgResponse] = useState<number | null>(null)
+  const [waSatisfStats, setWaSatisfStats] = useState<{ total: number; ruim: number; regular: number; otimo: number; avgScore: number; byAttendant: { name: string; total: number; sum: number }[] } | null>(null)
   const [rankingMode, setRankingMode] = useState<'matriculas' | 'whatsapp'>('matriculas')
   const [userRankings, setUserRankings] = useState<UserRanking[]>([])
   const [marketData, setMarketData] = useState<MarketData | null>(null)
@@ -315,6 +316,27 @@ export default function GestorHome() {
         waDaily.push({ day: label, count: waConvs.filter(c => c.created_at.slice(0, 10) === dayStr).length })
       }
       setWaConvStats({ total: waTotal, byBot: waByBot, byTeam: waByTeam, closed: waClosed, daily: waDaily, avgSatisfaction: waAvgSatisfaction })
+
+      // Satisfaction breakdown
+      const surveyScores = waConvs.filter(c => c.satisfaction_score !== null && c.satisfaction_score > 0)
+      if (surveyScores.length > 0) {
+        const ruim    = surveyScores.filter(c => c.satisfaction_score === 1).length
+        const regular = surveyScores.filter(c => c.satisfaction_score === 2).length
+        const otimo   = surveyScores.filter(c => c.satisfaction_score === 3).length
+        const avgScore = surveyScores.reduce((s, c) => s + (c.satisfaction_score || 0), 0) / surveyScores.length
+        const attMap: Record<string, { total: number; sum: number }> = {}
+        surveyScores.forEach(c => {
+          const name = c.assigned_user_name || 'Sem atendente'
+          if (!attMap[name]) attMap[name] = { total: 0, sum: 0 }
+          attMap[name].total++
+          attMap[name].sum += c.satisfaction_score || 0
+        })
+        const byAttendant = Object.entries(attMap)
+          .map(([name, d]) => ({ name, ...d }))
+          .sort((a, b) => (b.sum / b.total) - (a.sum / a.total))
+          .slice(0, 5)
+        setWaSatisfStats({ total: surveyScores.length, ruim, regular, otimo, avgScore, byAttendant })
+      }
 
       // WA team ranking by closed conversations
       const waRankMap: Record<string, number> = {}
@@ -1126,10 +1148,10 @@ export default function GestorHome() {
                     <p style={{ margin: 0, fontSize: 11, color: '#065f46' }}>Resp. média: <strong>{waAvgResponse < 60 ? `${waAvgResponse}min` : `${Math.round(waAvgResponse / 60)}h`}</strong></p>
                   </div>
                 )}
-                {waConvStats.avgSatisfaction !== null && (
+                {waSatisfStats && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#FFFBEB', borderRadius: 8, padding: '5px 10px', border: '1px solid #FDE68A' }}>
                     <span style={{ fontSize: 12 }}>⭐</span>
-                    <p style={{ margin: 0, fontSize: 11, color: '#92400E', fontWeight: 600 }}>{waConvStats.avgSatisfaction}/5 satisfação</p>
+                    <p style={{ margin: 0, fontSize: 11, color: '#92400E', fontWeight: 600 }}>{waSatisfStats.avgScore.toFixed(1)}/3 satisfação</p>
                   </div>
                 )}
                 <p style={{ margin: 0, fontSize: 10, color: '#94a3b8', marginLeft: 'auto' }}>{waPhoneRecord.display_name || waPhoneRecord.phone_number}</p>
@@ -1142,6 +1164,55 @@ export default function GestorHome() {
             </div>
           )}
         </SectionCard>
+
+        {/* Satisfação */}
+        {waSatisfStats && (
+          <SectionCard title="Satisfação dos Atendimentos" subtitle="Últimos 30 dias" icon={<Star />} iconBg="#FEF3C7" iconColor="#F59E0B" action={() => navigate('/surveys')} actionLabel="Ver pesquisas">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 16 }}>
+              <div style={{ textAlign: 'center', flexShrink: 0 }}>
+                <div style={{ fontSize: 40, fontWeight: 800, color: waSatisfStats.avgScore >= 2.5 ? '#10b981' : waSatisfStats.avgScore >= 1.5 ? '#f59e0b' : '#ef4444', lineHeight: 1 }}>
+                  {waSatisfStats.avgScore.toFixed(1)}
+                </div>
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>score médio</div>
+                <div style={{ fontSize: 10, color: '#94a3b8' }}>{waSatisfStats.total} av.</div>
+              </div>
+              <div style={{ flex: 1 }}>
+                {[
+                  { label: '😊 Ótimo',   count: waSatisfStats.otimo,   color: '#10b981' },
+                  { label: '😐 Regular', count: waSatisfStats.regular, color: '#f59e0b' },
+                  { label: '😞 Ruim',    count: waSatisfStats.ruim,    color: '#ef4444' },
+                ].map(item => (
+                  <div key={item.label} style={{ marginBottom: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
+                      <span style={{ color: '#64748b' }}>{item.label}</span>
+                      <span style={{ color: '#1e2d6b', fontWeight: 600 }}>{waSatisfStats.total > 0 ? Math.round(item.count / waSatisfStats.total * 100) : 0}%</span>
+                    </div>
+                    <div style={{ height: 7, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', background: item.color, width: `${waSatisfStats.total > 0 ? item.count / waSatisfStats.total * 100 : 0}%`, borderRadius: 99 }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {waSatisfStats.byAttendant.length > 0 && (
+              <div>
+                <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Ranking por atendente</p>
+                {waSatisfStats.byAttendant.map(({ name, total: t, sum }, i) => (
+                  <div key={name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f1f5f9' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: i === 0 ? '#f59e0b' : '#94a3b8' }}>#{i + 1}</span>
+                      <span style={{ fontSize: 12, color: '#1e2d6b', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#10b981' }}>{(sum / t).toFixed(1)}</span>
+                      <span style={{ fontSize: 10, color: '#94a3b8' }}>({t} av.)</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </SectionCard>
+        )}
 
         {/* Transferências */}
         <SectionCard title="Transferências recentes" subtitle="Saídas registradas" icon={<AlertTriangle />} iconBg="#FFE4E6" iconColor="#F43F5E" action={() => navigate('/reports')} actionLabel="Ver todas">

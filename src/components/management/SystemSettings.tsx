@@ -396,6 +396,7 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
     transfer_after_messages:     5,
     default_assignee_id:         '',
     satisfaction_survey_enabled: false,
+    satisfaction_message: 'Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊',
   })
   const [flowUsers, setFlowUsers]     = useState<any[]>([])
   const [savingFlow, setSavingFlow]   = useState(false)
@@ -991,9 +992,19 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                 </div>
                 {flow.satisfaction_survey_enabled && (
                   <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #E2E8F0' }}>
-                    <p style={{ margin: 0, fontSize: 12, color: '#64748B', lineHeight: 1.6 }}>
-                      Após o encerramento do atendimento, o sistema enviará automaticamente uma mensagem pedindo que o cliente avalie de 1 a 5 estrelas.
+                    <p style={{ margin: '0 0 4px', fontSize: 12, color: '#64748B', lineHeight: 1.6 }}>
+                      Envia botões interativos (😞 Ruim / 😐 Regular / 😊 Ótimo) ao encerrar o atendimento.
                     </p>
+                    <div style={{ marginTop: 10 }}>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 6 }}>Mensagem da pesquisa</label>
+                      <textarea
+                        rows={3}
+                        value={flow.satisfaction_message}
+                        onChange={e => setFlow(f => ({ ...f, satisfaction_message: e.target.value }))}
+                        placeholder="Como você avalia nosso atendimento hoje?..."
+                        style={{ width: '100%', padding: '8px 12px', fontSize: 13, borderRadius: 8, border: '1px solid #D1FAE5', background: '#F0FDFB', color: '#1A2B4A', resize: 'none' as const, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' }}
+                      />
+                    </div>
                   </div>
                 )}
                 <div style={{ marginTop: 16 }}>

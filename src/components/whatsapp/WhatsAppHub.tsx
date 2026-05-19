@@ -683,7 +683,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [addingTag, setAddingTag] = useState(false)
   const [newTag, setNewTag] = useState('')
   const [quickReplies, setQuickReplies] = useState<{ id: string; label: string; text: string }[]>([])
-  const [flowConfig, setFlowConfig] = useState<{ satisfaction_survey_enabled: boolean } | null>(null)
+  const [flowConfig, setFlowConfig] = useState<{ satisfaction_survey_enabled: boolean; satisfaction_message: string } | null>(null)
 
   // Edit contact inline form
   const [editingContact, setEditingContact] = useState(false)
@@ -1194,10 +1194,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           try {
             const { data } = await supabase
               .from('whatsapp_flows')
-              .select('satisfaction_survey_enabled')
+              .select('satisfaction_survey_enabled, satisfaction_message')
               .eq('institution_id', effectiveInstitutionId)
               .maybeSingle()
-            if (data) setFlowConfig({ satisfaction_survey_enabled: !!(data as any).satisfaction_survey_enabled })
+            if (data) setFlowConfig({
+              satisfaction_survey_enabled: !!(data as any).satisfaction_survey_enabled,
+              satisfaction_message: (data as any).satisfaction_message || 'Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊',
+            })
           } catch {}
         })()
       }
@@ -1884,14 +1887,59 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     // 5. Send satisfaction survey if enabled
     if (flowConfig?.satisfaction_survey_enabled) {
       const to = rJid.replace(/@.*/, '').replace(/\D/g, '')
-      const surveyText = 'Como você avalia nosso atendimento hoje?\n\nDigite um número de 1 a 5:\n1️⃣ Péssimo\n2️⃣ Ruim\n3️⃣ Regular\n4️⃣ Bom\n5️⃣ Ótimo 😊'
+      const surveyMsg = flowConfig.satisfaction_message || 'Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊'
       try {
-        await fetch('/api/whatsapp/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ institution_id: effectiveInstitutionId || undefined, isAionSend: isAionInbox, to, type: 'text', message: surveyText }),
-        })
-      } catch {}
+        const { data: phoneData } = await supabase
+          .from('whatsapp_phone_numbers')
+          .select('phone_number_id')
+          .eq('institution_id', effectiveInstitutionId)
+          .eq('is_active', true)
+          .maybeSingle()
+
+        const { data: settings } = await supabase
+          .from('platform_settings')
+          .select('key, value')
+          .in('key', ['wa_access_token'])
+
+        const token = settings?.find((s: any) => s.key === 'wa_access_token')?.value
+
+        if (phoneData?.phone_number_id && token) {
+          await fetch(`https://graph.facebook.com/v19.0/${phoneData.phone_number_id}/messages`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messaging_product: 'whatsapp',
+              to,
+              type: 'interactive',
+              interactive: {
+                type: 'button',
+                body: { text: surveyMsg },
+                action: {
+                  buttons: [
+                    { type: 'reply', reply: { id: 'survey_1', title: '😞 Ruim' } },
+                    { type: 'reply', reply: { id: 'survey_2', title: '😐 Regular' } },
+                    { type: 'reply', reply: { id: 'survey_3', title: '😊 Ótimo' } },
+                  ],
+                },
+              },
+            }),
+          })
+        } else {
+          await fetch('/api/whatsapp/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              institution_id: effectiveInstitutionId || undefined,
+              isAionSend: isAionInbox,
+              to,
+              type: 'text',
+              message: surveyMsg + '\n\n1 - Ruim\n2 - Regular\n3 - Ótimo',
+            }),
+          })
+        }
+      } catch (e) {
+        console.error('[survey] erro ao enviar pesquisa:', e)
+      }
     }
   }
 
