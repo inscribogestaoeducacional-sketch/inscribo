@@ -268,8 +268,9 @@ async function processCustomFlow(
   }
 
   // 3. Execute nodes until user input required or end reached
-  let guard = 12
+  let guard = 25
   while (current && guard-- > 0) {
+    if (guard === 0) console.warn('[flow] guard limit reached — possible infinite loop in bot flow')
     const node = current
 
     if (node.type === 'start') {
@@ -308,6 +309,11 @@ async function processCustomFlow(
           assigned_user_name: node.data.assignee_name || node.data.assigneeName || null,
           status: 'open', bot_active: false,
         }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+      } else {
+        console.warn('[flow] transfer node has no assigneeId — deactivating bot without assigning')
+        await supabase.from('whatsapp_conversations').update({
+          bot_active: false,
+        }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
       }
       currentNodeId = 'end'; break
     }
@@ -323,6 +329,13 @@ async function processCustomFlow(
         const [eh, em] = (flow.working_end   || '18:00').split(':').map(Number)
         const cur = now.getHours() * 60 + now.getMinutes()
         result = isDay && cur >= sh * 60 + sm && cur <= eh * 60 + em
+      } else if (node.data?.conditionType === 'lunch_break') {
+        const tz  = flow.timezone || 'America/Fortaleza'
+        const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
+        const [lsh, lsm] = (flow.lunch_start || '12:00').split(':').map(Number)
+        const [leh, lem] = (flow.lunch_end   || '13:00').split(':').map(Number)
+        const cur = now.getHours() * 60 + now.getMinutes()
+        result = cur >= lsh * 60 + lsm && cur <= leh * 60 + lem
       } else if (node.data?.conditionType === 'keyword') {
         result = text.toLowerCase().includes((node.data.keyword || '').toLowerCase())
       } else if (node.data?.conditionType === 'first_message') {
@@ -350,6 +363,22 @@ async function processCustomFlow(
             status: 'novo',
           })
         }
+      } else if (node.data?.actionType === 'add_tag') {
+        const tag = node.data.tag?.trim()
+        if (tag) {
+          const { data: conv } = await supabase.from('whatsapp_conversations')
+            .select('tags').eq('institution_id', institutionId).eq('remote_jid', remoteJid).maybeSingle()
+          const tags: string[] = conv?.tags || []
+          if (!tags.includes(tag)) {
+            await supabase.from('whatsapp_conversations')
+              .update({ tags: [...tags, tag] })
+              .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+          }
+        }
+      } else if (node.data?.actionType === 'close_conversation') {
+        await supabase.from('whatsapp_conversations')
+          .update({ status: 'closed', bot_active: false })
+          .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
       }
       const nexts = edgesFrom(node.id, 'out')
       if (!nexts.length) break
@@ -364,7 +393,52 @@ async function processCustomFlow(
     }
 
     if (node.type === 'media') {
-      // Sending media via bot flow is informational only in this context
+      const mediaUrl = node.data?.url || node.data?.mediaUrl
+      if (mediaUrl) {
+        const rawType = (node.data?.mediaType || 'image') as string
+        const metaType = rawType === 'audio' ? 'audio'
+          : rawType === 'video' ? 'video'
+          : rawType === 'document' ? 'document'
+          : 'image'
+        try {
+          const { data: phone } = await supabase
+            .from('whatsapp_phone_numbers')
+            .select('phone_number_id')
+            .eq('institution_id', institutionId)
+            .eq('is_active', true)
+            .single()
+          const waConfig = await getWAConfig()
+          if (phone?.phone_number_id && waConfig.accessToken) {
+            const mediaBody: Record<string, any> = { link: mediaUrl }
+            if (node.data?.caption) mediaBody.caption = interp(node.data.caption)
+            if (metaType === 'document' && node.data?.filename) mediaBody.filename = node.data.filename
+            const payload: Record<string, any> = {
+              messaging_product: 'whatsapp', recipient_type: 'individual',
+              to: remoteJid, type: metaType, [metaType]: mediaBody,
+            }
+            const resp = await fetch(`${GRAPH_URL}/${phone.phone_number_id}/messages`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${waConfig.accessToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            })
+            if (resp.ok) {
+              const d = await resp.json()
+              await supabase.from('whatsapp_messages').insert({
+                institution_id: institutionId, remote_jid: remoteJid,
+                message_id: d.messages?.[0]?.id, instance_name: 'cloud-api',
+                content: node.data?.caption || `[${metaType}]`,
+                message_type: metaType, media_url: mediaUrl,
+                from_me: true, contact_name: '_bot_', status: 'sent',
+                direction: 'outbound', timestamp: new Date().toISOString(),
+              })
+            } else {
+              console.error('[flow] media send failed:', await resp.text())
+            }
+          }
+        } catch (e) {
+          console.error('[flow] media node send error:', e)
+        }
+      }
       const nexts = edgesFrom(node.id, 'out')
       if (!nexts.length) break
       currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId); continue

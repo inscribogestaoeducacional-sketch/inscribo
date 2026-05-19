@@ -326,19 +326,24 @@ function NodeBody({
 
     case 'wait':
       return (
-        <div style={{ padding: 12, display: 'flex', gap: 8 }}>
-          <input type="number" min={1} max={300}
-            style={{ ...inputSt, width: 70 }}
-            value={d.seconds || 5}
-            onChange={e => onChange({ ...d, seconds: parseInt(e.target.value) })}
-            onMouseDown={stop} />
-          <select style={{ ...inputSt, flex: 1 }}
-            value={d.unit || 'seconds'}
-            onChange={e => onChange({ ...d, unit: e.target.value })}
-            onMouseDown={stop}>
-            <option value="seconds">Segundos</option>
-            <option value="minutes">Minutos</option>
-          </select>
+        <div style={{ padding: 12 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input type="number" min={1} max={300}
+              style={{ ...inputSt, width: 70 }}
+              value={d.seconds || 5}
+              onChange={e => onChange({ ...d, seconds: parseInt(e.target.value) })}
+              onMouseDown={stop} />
+            <select style={{ ...inputSt, flex: 1 }}
+              value={d.unit || 'seconds'}
+              onChange={e => onChange({ ...d, unit: e.target.value })}
+              onMouseDown={stop}>
+              <option value="seconds">Segundos</option>
+              <option value="minutes">Minutos</option>
+            </select>
+          </div>
+          <p style={{ margin: '6px 0 0', fontSize: 10, color: '#f59e0b', lineHeight: 1.4 }}>
+            ⚠️ Em ambiente serverless o atraso é ignorado e o fluxo avança imediatamente.
+          </p>
         </div>
       )
 
@@ -468,6 +473,9 @@ function FlowNodeCard({
       }}>
         <span style={{ fontSize: 15 }}>{cfg.icon}</span>
         <span style={{ color: 'white', fontWeight: 700, fontSize: 12, flex: 1 }}>{cfg.label}</span>
+        {(node.type === 'distribute' || node.type === 'lead') && (
+          <span style={{ background: 'rgba(255,255,255,0.25)', color: 'white', fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 4, letterSpacing: '0.03em' }}>EM BREVE</span>
+        )}
         {node.type !== 'start' && (
           <button
             onMouseDown={e => e.stopPropagation()}
@@ -774,7 +782,7 @@ export default function FlowEditor({
     } else {
       const { error } = await supabase
         .from('whatsapp_flows')
-        .insert({ institution_id: institutionId, bot_flow: botFlow, bot_enabled: isActive })
+        .insert({ institution_id: institutionId, bot_flow: botFlow, bot_enabled: isActive, is_active: true })
       saveError = error
     }
 

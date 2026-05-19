@@ -418,7 +418,7 @@ function getMediaUrl(message: any, instanceName?: string): string | null {
 }
 
 // ─── RenderMessageContent ─────────────────────────────────────────────────────
-function RenderMessageContent({ message, fromMe, instanceName }: { message: any; fromMe: boolean; instanceName?: string }) {
+function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: { message: any; fromMe: boolean; instanceName?: string; onImageClick?: (url: string) => void }) {
   const msgType = (
     message.type ||
     message.messageType ||
@@ -446,7 +446,7 @@ function RenderMessageContent({ message, fromMe, instanceName }: { message: any;
           src={mediaUrl}
           alt="imagem"
           style={{ maxWidth: 260, maxHeight: 320, width: '100%', borderRadius: 10, display: 'block', cursor: 'pointer', objectFit: 'cover' }}
-          onClick={() => window.open(mediaUrl, '_blank')}
+          onClick={() => onImageClick ? onImageClick(mediaUrl) : window.open(mediaUrl, '_blank')}
           onError={(e) => {
             const t = e.currentTarget
             t.style.display = 'none'
@@ -561,7 +561,7 @@ function MessageBubble({ msg, onImageClick, instanceName }: { msg: Message; onIm
             {msg.senderName === '_bot_' ? '🤖 Robô:' : `${msg.senderName}:`}
           </p>
         )}
-        <RenderMessageContent message={msg} fromMe={isMe} instanceName={instanceName} />
+        <RenderMessageContent message={msg} fromMe={isMe} instanceName={instanceName} onImageClick={onImageClick} />
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -1016,7 +1016,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       const normJid = normalizeJid(newMsg.remote_jid)
       const existing = prev.find(c => c.id === normJid)
       if (existing) {
-        if (existing.messages.some(m => m.id === newMsg.id)) return prev
+        if (existing.messages.some(m =>
+          m.id === newMsg.id ||
+          m.id === newMsg.message_id ||
+          (newMsg.message_id && m.id === newMsg.message_id)
+        )) return prev
         return prev.map(c => c.id === normJid
           ? {
               ...c,
@@ -1238,7 +1242,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       })
       .subscribe()
 
-    const interval = setInterval(loadMessages, 10000)
+    const interval = setInterval(loadMessages, 60000)
     return () => {
       supabase.removeChannel(msgChannel)
       supabase.removeChannel(convChannel)
@@ -1599,6 +1603,20 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         }),
       })
       if (!res.ok) throw new Error('Erro ao enviar template')
+      const optimistic: Message = {
+        id: `temp-tmpl-${Date.now()}`,
+        type: 'text',
+        content: `[Template] ${tmpl.name}`,
+        from: 'me',
+        ts: new Date(),
+        status: 'sent',
+        senderName: user?.full_name || undefined,
+      }
+      setConversations(prev => prev.map(c =>
+        c.id === activeId
+          ? { ...c, messages: [...c.messages, optimistic], lastMessage: optimistic.content, lastTime: optimistic.ts }
+          : c
+      ))
       setShowTemplateModal(false)
       setSelectedTemplate('')
       setTemplateVars({})
@@ -2867,16 +2885,20 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             {showAttach && (
               <div style={{ marginBottom: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {[
-                  { icon: Image,    label: 'Imagem',    bg: '#EDE9FE', color: '#7C3AED' },
-                  { icon: Video,    label: 'Vídeo',     bg: '#DBEAFE', color: '#2563EB' },
-                  { icon: FileText, label: 'Documento', bg: '#FEF3C7', color: '#D97706' },
-                  { icon: Mic,      label: 'Áudio',     bg: '#D1FAE5', color: '#059669' },
+                  { icon: Image,    label: 'Imagem',    bg: '#EDE9FE', color: '#7C3AED', accept: 'image/*' },
+                  { icon: Video,    label: 'Vídeo',     bg: '#DBEAFE', color: '#2563EB', accept: 'video/*' },
+                  { icon: FileText, label: 'Documento', bg: '#FEF3C7', color: '#D97706', accept: '.pdf,.doc,.docx,.xlsx,.xls' },
+                  { icon: Mic,      label: 'Áudio',     bg: '#D1FAE5', color: '#059669', accept: 'audio/*' },
                 ].map(item => {
                   const IconComp = item.icon
                   return (
                     <button
                       key={item.label}
-                      onClick={() => { fileInputRef.current?.click(); setShowAttach(false) }}
+                      onClick={() => {
+                        if (fileInputRef.current) fileInputRef.current.accept = item.accept
+                        fileInputRef.current?.click()
+                        setShowAttach(false)
+                      }}
                       style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '8px 12px', borderRadius: 8, background: item.bg, color: item.color, fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer' }}
                     >
                       <IconComp style={{ width: 16, height: 16 }} />
