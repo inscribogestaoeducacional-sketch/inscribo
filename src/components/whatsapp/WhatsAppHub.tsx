@@ -1258,19 +1258,20 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         // UPDATE
         const newStatus = payload.new?.status
         if (newStatus === 'closed') {
-          const localConv = conversationsRef.current.find(c => c.id === normJid)
-          if (!localConv) return
-          if (localConv.status === 'closed') {
-            // Already closed locally — just patch fields (e.g. unread reset), don't remove
-            setConversations(prev => prev.map(c => {
-              if (c.id !== normJid) return c
-              return { ...c, unreadCount: payload.new?.unread_count ?? c.unreadCount }
-            }))
-            return
-          }
-          // Transitioned open/waiting → closed: remove from list
-          setConversations(prev => prev.filter(c => c.id !== normJid))
-          if (activeIdRef.current === normJid) setActiveId(null)
+          setConversations(prev => {
+            const localConv = prev.find(c => c.id === normJid)
+            if (!localConv) return prev
+            if (localConv.status === 'closed') {
+              // Already closed — only update unreadCount, never remove
+              return prev.map(c => c.id !== normJid ? c : {
+                ...c,
+                unreadCount: payload.new?.unread_count ?? c.unreadCount,
+              })
+            }
+            // Transitioned open/waiting → closed: remove
+            if (activeIdRef.current === normJid) setActiveId(null)
+            return prev.filter(c => c.id !== normJid)
+          })
           return
         }
         // waiting/open: patch locally without removing
