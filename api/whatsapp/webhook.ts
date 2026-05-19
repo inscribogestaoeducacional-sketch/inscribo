@@ -510,14 +510,25 @@ async function processFlow(
     }
 
     // b) Fetch flow configuration
-    const { data: flow } = await supabase
+    const { data: flow, error: flowErr } = await supabase
       .from('whatsapp_flows')
       .select('*')
       .eq('institution_id', institutionId)
       .maybeSingle()
 
+    console.log('[FLOW] iniciando processFlow', {
+      institutionId,
+      remoteJid,
+      isNewConversation,
+      flowFound:      !!flow,
+      flowErr:        flowErr?.message,
+      is_active:      flow?.is_active,
+      bot_enabled:    flow?.bot_enabled,
+      botFlowNodes:   flow?.bot_flow?.nodes?.length ?? 0,
+    })
+
     if (!flow || !flow.is_active) {
-      console.log('[flow] sem fluxo ativo')
+      console.log('[FLOW] sem fluxo ativo — is_active:', flow?.is_active, '| flow null?', !flow)
       return
     }
 
@@ -530,6 +541,8 @@ async function processFlow(
         .eq('institution_id', institutionId)
         .eq('remote_jid', remoteJid)
         .maybeSingle()
+
+      console.log('[FLOW] convState:', { bot_active: convState?.bot_active, assigned_user_id: convState?.assigned_user_id })
 
       // Bot already running — continue flow from current node
       if (convState?.bot_active === true) {
