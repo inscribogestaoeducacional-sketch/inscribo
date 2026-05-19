@@ -855,31 +855,24 @@ export class DatabaseService {
   }
 
   static async closeConversation(institutionId: string, remoteJid: string): Promise<{ count: number; error: any }> {
-    const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
+    const raw  = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
+    const norm = `${raw}@s.whatsapp.net`
+    const payload = { status: 'closed', bot_active: false, assigned_user_id: null, assigned_user_name: null }
 
-    const { data: data1, error: error1 } = await supabase
-      .from('whatsapp_conversations')
-      .update({ status: 'closed', bot_active: false, assigned_user_id: null, assigned_user_name: null })
-      .eq('institution_id', institutionId)
-      .eq('remote_jid', raw)
-      .select('id')
+    // Always update both formats in parallel — DB may have either form (legacy + current)
+    const [r1, r2] = await Promise.all([
+      supabase.from('whatsapp_conversations').update(payload)
+        .eq('institution_id', institutionId).eq('remote_jid', raw).select('id'),
+      supabase.from('whatsapp_conversations').update(payload)
+        .eq('institution_id', institutionId).eq('remote_jid', norm).select('id'),
+    ])
 
-    console.log('[DB CLOSE] tentativa 1 (raw):', { rows: data1?.length, error: error1?.message })
+    const count = (r1.data?.length ?? 0) + (r2.data?.length ?? 0)
+    console.log('[DB CLOSE] raw rows:', r1.data?.length ?? 0, '| norm rows:', r2.data?.length ?? 0, '| total:', count)
+    if (r1.error) console.error('[DB CLOSE] erro raw:', r1.error.message)
+    if (r2.error) console.error('[DB CLOSE] erro norm:', r2.error.message)
 
-    if (!error1 && (!data1 || data1.length === 0)) {
-      const norm = `${raw}@s.whatsapp.net`
-      const { data: data2, error: error2 } = await supabase
-        .from('whatsapp_conversations')
-        .update({ status: 'closed', bot_active: false, assigned_user_id: null, assigned_user_name: null })
-        .eq('institution_id', institutionId)
-        .eq('remote_jid', norm)
-        .select('id')
-
-      console.log('[DB CLOSE] tentativa 2 (norm):', { rows: data2?.length, error: error2?.message })
-      return { count: data2?.length ?? 0, error: error2 }
-    }
-
-    return { count: data1?.length ?? 0, error: error1 }
+    return { count, error: r1.error || r2.error }
   }
 
   static async updateProfilePicture(institutionId: string, remoteJid: string, url: string): Promise<void> {

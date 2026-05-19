@@ -884,7 +884,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // ── Process incoming messages ──────────────────────────────────────────
       for (const msg of value.messages || []) {
-        const remoteJid   = msg.from as string
+        // Always store remote_jid without @-suffix to avoid duplicate rows
+        const remoteJid   = (msg.from as string).replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
         const rawPhone    = remoteJid.replace(/@.*/, '')
 
         // ── Early blacklist check ──
