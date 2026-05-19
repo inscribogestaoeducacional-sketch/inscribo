@@ -432,6 +432,12 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [editingGroup, setEditingGroup] = useState<any>(null)
   const [groupForm, setGroupForm] = useState({ name: '', emoji: '👥', member_ids: [] as string[] })
 
+  // Timeout inactivity
+  const [timeoutMinutes, setTimeoutMinutes]     = useState(15)
+  const [timeoutGroupId, setTimeoutGroupId]     = useState('')
+  const [timeoutAssigneeId, setTimeoutAssigneeId] = useState('')
+  const [timeoutMessage, setTimeoutMessage]     = useState('Um momento, estou te conectando com um atendente! 👋')
+
   const waMountedRef = useRef(true)
   useEffect(() => {
     waMountedRef.current = true
@@ -470,7 +476,13 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
     } catch {}
     try {
       const { data: flowData } = await supabase.from('whatsapp_flows').select('*').eq('institution_id', institutionId).maybeSingle()
-      if (waMountedRef.current && flowData) setFlow(f => ({ ...f, ...flowData }))
+      if (waMountedRef.current && flowData) {
+        setFlow(f => ({ ...f, ...flowData }))
+        if (flowData.timeout_minutes)    setTimeoutMinutes(flowData.timeout_minutes)
+        if (flowData.timeout_group_id)   setTimeoutGroupId(flowData.timeout_group_id)
+        if (flowData.timeout_assignee_id) setTimeoutAssigneeId(flowData.timeout_assignee_id)
+        if (flowData.timeout_message)    setTimeoutMessage(flowData.timeout_message)
+      }
     } catch {}
     try {
       const { data: users } = await supabase.from('users').select('id,full_name').eq('institution_id', institutionId)
@@ -565,6 +577,13 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
         menu_options:                flow.menu_options,
         satisfaction_survey_enabled: flow.satisfaction_survey_enabled,
         satisfaction_message:        flow.satisfaction_message,
+        timeout_minutes:             timeoutMinutes,
+        timeout_group_id:            timeoutGroupId || null,
+        timeout_assignee_id:         timeoutAssigneeId || null,
+        timeout_assignee_name:       timeoutAssigneeId
+          ? (flowUsers.find(u => u.id === timeoutAssigneeId)?.full_name || null)
+          : null,
+        timeout_message:             timeoutMessage,
       }
 
       console.log('[SAVE FLOW] dados:', JSON.stringify(saveData))
@@ -1055,6 +1074,46 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                   </div>
                 </div>
               )}
+
+              {/* Timeout de Inatividade */}
+              <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #E2F5F3' }}>
+                <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 16 }}>⏱ Timeout de Inatividade</h4>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#64748B' }}>Tempo sem resposta:</label>
+                  <input type="number" min={5} max={120} value={timeoutMinutes}
+                    onChange={e => setTimeoutMinutes(Number(e.target.value))}
+                    style={{ width: 70, padding: '7px 10px', fontSize: 13, border: '1px solid #D1FAE5', borderRadius: 8, outline: 'none', textAlign: 'center' }} />
+                  <span style={{ fontSize: 13, color: '#64748B' }}>minutos</span>
+                </div>
+
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 4 }}>Transferir para</label>
+                  <select
+                    value={timeoutGroupId ? `group:${timeoutGroupId}` : timeoutAssigneeId ? `user:${timeoutAssigneeId}` : ''}
+                    onChange={e => {
+                      const val = e.target.value
+                      if (!val) { setTimeoutGroupId(''); setTimeoutAssigneeId('') }
+                      else if (val.startsWith('group:')) { setTimeoutGroupId(val.replace('group:', '')); setTimeoutAssigneeId('') }
+                      else { setTimeoutAssigneeId(val.replace('user:', '')); setTimeoutGroupId('') }
+                    }}
+                    style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #D1FAE5', borderRadius: 8, background: '#F0FDFB', color: '#1A2B4A', outline: 'none' }}>
+                    <option value="">Ninguém (só desativar bot)</option>
+                    <optgroup label="Grupos">
+                      {groups.map(g => <option key={g.id} value={`group:${g.id}`}>{g.emoji} {g.name}</option>)}
+                    </optgroup>
+                    <optgroup label="Atendentes">
+                      {flowUsers.map(u => <option key={u.id} value={`user:${u.id}`}>{u.full_name}</option>)}
+                    </optgroup>
+                  </select>
+                </div>
+
+                <div style={{ marginBottom: 4 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 4 }}>Mensagem ao transferir</label>
+                  <textarea rows={2} value={timeoutMessage} onChange={e => setTimeoutMessage(e.target.value)}
+                    style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #D1FAE5', borderRadius: 8, background: '#F0FDFB', color: '#1A2B4A', resize: 'none' as const, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }} />
+                </div>
+              </div>
             </div>
           )}
 

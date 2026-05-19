@@ -1,4 +1,10 @@
 {
+  "crons": [
+    {
+      "path": "/api/whatsapp/timeout-check",
+      "schedule": "*/5 * * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",
