@@ -100,6 +100,105 @@ async function sendAutoMessage(
   }
 }
 
+// ── Send interactive menu (buttons ≤3 / list 4-10) via Meta Cloud API ────────
+async function sendInteractiveMenu(
+  institutionId: string,
+  to:            string,
+  headerText:    string,
+  bodyText:      string,
+  options:       Array<{ text: string }>
+): Promise<void> {
+  const fallbackText = [headerText, options.map((o, i) => `${i + 1}. ${o.text}`).join('\n')]
+    .filter(Boolean).join('\n\n')
+  try {
+    const { data: phone } = await supabase
+      .from('whatsapp_phone_numbers')
+      .select('phone_number_id')
+      .eq('institution_id', institutionId)
+      .eq('is_active', true)
+      .single()
+
+    const waConfig = await getWAConfig()
+    if (!phone?.phone_number_id || !waConfig.accessToken) {
+      if (fallbackText.trim()) await sendAutoMessage(institutionId, to, fallbackText)
+      return
+    }
+
+    const count = Math.min(options.length, 10)
+    let interactive: any
+
+    if (count <= 3) {
+      interactive = {
+        type: 'button',
+        body: { text: (bodyText || headerText).slice(0, 1024) },
+        action: {
+          buttons: options.slice(0, 3).map((o, i) => ({
+            type: 'reply',
+            reply: { id: `opt_${i}`, title: o.text.slice(0, 20) },
+          })),
+        },
+      }
+      if (headerText && bodyText && headerText !== bodyText) {
+        interactive.header = { type: 'text', text: headerText.slice(0, 60) }
+      }
+    } else {
+      interactive = {
+        type: 'list',
+        body: { text: (bodyText || headerText).slice(0, 1024) },
+        action: {
+          button: 'Ver opções',
+          sections: [{
+            title: 'Opções',
+            rows: options.slice(0, 10).map((o, i) => ({
+              id: `opt_${i}`,
+              title: o.text.slice(0, 24),
+            })),
+          }],
+        },
+      }
+      if (headerText && bodyText && headerText !== bodyText) {
+        interactive.header = { type: 'text', text: headerText.slice(0, 60) }
+      }
+    }
+
+    const resp = await fetch(`${GRAPH_URL}/${phone.phone_number_id}/messages`, {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${waConfig.accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type:    'individual',
+        to,
+        type:              'interactive',
+        interactive,
+      }),
+    })
+
+    if (resp.ok) {
+      const d     = await resp.json()
+      const wamid = d.messages?.[0]?.id
+      await supabase.from('whatsapp_messages').insert({
+        institution_id: institutionId,
+        remote_jid:     to,
+        message_id:     wamid,
+        instance_name:  'cloud-api',
+        content:        fallbackText,
+        message_type:   'interactive',
+        from_me:        true,
+        contact_name:   '_bot_',
+        status:         'sent',
+        direction:      'outbound',
+        timestamp:      new Date().toISOString(),
+      })
+    } else {
+      console.error('[sendInteractiveMenu] Meta error:', await resp.text())
+      if (fallbackText.trim()) await sendAutoMessage(institutionId, to, fallbackText)
+    }
+  } catch (e) {
+    console.error('❌ sendInteractiveMenu error:', e)
+    try { if (fallbackText.trim()) await sendAutoMessage(institutionId, to, fallbackText) } catch {}
+  }
+}
+
 // ── Fetch media from Meta, upload to Supabase Storage, return public URL ─────
 // Falls back to the temporary Meta URL if download/upload fails.
 async function resolveMediaUrl(
@@ -321,7 +420,11 @@ async function processCustomFlow(
       console.log('[MENU] menuText:', menuHeader)
       console.log('[MENU] fullText:', fullText)
       console.log('[MENU] __menu_sent flag:', variables[`__menu_sent_${node.id}`])
-      if (fullText.trim()) await sendAutoMessage(institutionId, remoteJid, fullText)
+      if (options.length > 0) {
+        await sendInteractiveMenu(institutionId, remoteJid, menuHeader, menuHeader, options)
+      } else if (fullText.trim()) {
+        await sendAutoMessage(institutionId, remoteJid, fullText)
+      }
       variables[`__menu_sent_${node.id}`] = 'true'
       break  // Section 4 saves currentNodeId and variables
     }
@@ -943,6 +1046,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           msg.document?.caption  ||
           ''
 
+        // Detect interactive button/list reply and map to option number
+        let interactiveReply = ''
+        let interactiveTitle = ''
+        if (msgType === 'interactive') {
+          const ia = msg.interactive
+          if (ia?.type === 'button_reply') {
+            const idx = parseInt((ia.button_reply?.id as string || '').replace('opt_', ''))
+            if (!isNaN(idx)) { interactiveReply = String(idx + 1); interactiveTitle = ia.button_reply?.title || '' }
+          } else if (ia?.type === 'list_reply') {
+            const idx = parseInt((ia.list_reply?.id as string || '').replace('opt_', ''))
+            if (!isNaN(idx)) { interactiveReply = String(idx + 1); interactiveTitle = ia.list_reply?.title || '' }
+          }
+        }
+        const effectiveText = interactiveReply || text
+
         // ── Resolve media URL (download + re-upload to Storage) ──
         let mediaUrl: string | null = null
 
@@ -987,7 +1105,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         const isNewConversation = !existingConv || existingConv.status === 'closed'
-        const contentPreview    = text || `[${msgType}]`
+        const contentPreview    = interactiveTitle || effectiveText || `[${msgType}]`
         const upsertStatus      = isNewConversation ? 'waiting' : (existingConv?.status ?? 'waiting')
 
         console.log('[WEBHOOK UPSERT]', {
@@ -1044,7 +1162,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             remote_jid:     remoteJid,
             message_id:     msg.id,
             instance_name:  'cloud-api',
-            content:        text || contentPreview,
+            content:        interactiveTitle || text || contentPreview,
             message_type:   msgType,
             media_url:      mediaUrl,
             from_me:        false,
@@ -1063,7 +1181,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // ── Automated flow ──
-        await processFlow(institutionId, remoteJid, text, isNewConversation)
+        await processFlow(institutionId, remoteJid, effectiveText, isNewConversation)
       }
 
       // ── Process delivery/read status updates ──────────────────────────────

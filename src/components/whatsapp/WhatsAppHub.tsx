@@ -434,6 +434,15 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
     return <p style={{ margin: 0, fontSize: 13, fontStyle: 'italic', color: fromMe ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)' }}>🚫 Mensagem apagada</p>
   }
 
+  if (msgType === 'interactive') {
+    const body2 = message.body || message.content || ''
+    return (
+      <span style={{ fontSize: 13, color: fromMe ? 'rgba(255,255,255,0.85)' : '#64748B', fontStyle: body2 ? 'normal' : 'italic', whiteSpace: 'pre-wrap' }}>
+        {body2 || 'Menu interativo'}
+      </span>
+    )
+  }
+
   const mediaUrl = getMediaUrl(message, instanceName)
   const caption  = message.caption || message.message?.imageMessage?.caption || ''
   const body     = message.body || message.content || message.conversation ||

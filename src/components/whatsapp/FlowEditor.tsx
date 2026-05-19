@@ -261,6 +261,9 @@ function NodeBody({
               border: '1px dashed #f59e0b', borderRadius: 6,
               background: 'none', color: '#f59e0b', fontSize: 11, cursor: 'pointer',
             }}>+ Adicionar opção</button>
+          <p style={{ fontSize: 10, color: '#64748b', marginTop: 6, lineHeight: 1.4, marginBottom: 0 }}>
+            {(d.options?.length || 0) <= 3 ? '🔘 Botões interativos' : '📋 Lista interativa'}
+          </p>
         </div>
       )
 
