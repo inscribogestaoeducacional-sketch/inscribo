@@ -631,7 +631,11 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const handleSaveBizProfile = async () => {
     const phoneId = metaConfig?.whatsapp_phone_id || phoneRecord?.phone_number_id
     const token   = globalToken
-    if (!phoneId || !token) return
+    console.log('[BIZ] phoneId:', phoneId, '| token:', token ? token.slice(0, 12) + '...' : 'missing')
+    if (!phoneId || !token) {
+      alert('Token ou Phone ID não configurado.')
+      return
+    }
     setSavingBiz(true)
     try {
       const body: Record<string, any> = { messaging_product: 'whatsapp' }
@@ -639,13 +643,24 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
       if (bizProfile.website)     body.websites     = [bizProfile.website]
       if (bizProfile.address)     body.address      = bizProfile.address
       if (bizProfile.vertical)    body.vertical     = bizProfile.vertical
-      await fetch(`https://graph.facebook.com/v19.0/${phoneId}/whatsapp_business_profile`, {
+      console.log('[BIZ] sending payload:', JSON.stringify(body))
+      const res = await fetch(`https://graph.facebook.com/v19.0/${phoneId}/whatsapp_business_profile`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
+      const resJson = await res.json().catch(() => ({}))
+      console.log('[BIZ] response status:', res.status, '| body:', JSON.stringify(resJson))
+      if (!res.ok) {
+        const errMsg = resJson?.error?.message || `HTTP ${res.status}`
+        alert('Erro ao salvar perfil: ' + errMsg)
+        return
+      }
       setBizSaved(true); setTimeout(() => setBizSaved(false), 2500)
-    } catch (e) { console.error(e) } finally { setSavingBiz(false) }
+    } catch (e: any) {
+      console.error('[BIZ] exception:', e?.message, e)
+      alert('Erro ao salvar perfil: ' + (e?.message || 'desconhecido'))
+    } finally { setSavingBiz(false) }
   }
 
   const handleAddQR = async () => {

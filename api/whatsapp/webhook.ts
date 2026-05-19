@@ -733,12 +733,16 @@ async function processFlow(
     const isWorkingHours = currentMin >= startH * 60 + startM && currentMin <= endH * 60 + endM
     const isOpen         = isWorkingDay && isWorkingHours
 
-    console.log('[flow]', {
-      isOpen, isWorkingDay, isWorkingHours,
-      day: currentDay,
-      time: `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`,
-      isNewConversation,
-      text: text.slice(0, 60),
+    console.log('[HORARIO]', {
+      timezone:       flow.timezone,
+      currentDay,
+      isWorkingDay,
+      working_days:   flow.working_days,
+      currentTime:    `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`,
+      working_start:  flow.working_start,
+      working_end:    flow.working_end,
+      isWorkingHours,
+      isOpen,
     })
 
     // Off-hours: only notify on new conversations
@@ -1057,8 +1061,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if ((msg.type as string) === 'unsupported') {
           const originalId = msg.context?.id as string | undefined
           if (originalId) {
+            const { data: originalMsg } = await supabase
+              .from('whatsapp_messages')
+              .select('content')
+              .eq('message_id', originalId)
+              .eq('institution_id', institutionId)
+              .maybeSingle()
             await supabase.from('whatsapp_messages')
-              .update({ content: '🚫 Mensagem apagada', message_type: 'deleted' })
+              .update({
+                content: originalMsg?.content
+                  ? `~~${originalMsg.content}~~ 🚫 Apagada`
+                  : '🚫 Mensagem apagada',
+                message_type: 'deleted',
+              })
               .eq('message_id', originalId)
               .eq('institution_id', institutionId)
           }

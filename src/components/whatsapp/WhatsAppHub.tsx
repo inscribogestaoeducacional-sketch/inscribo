@@ -431,7 +431,22 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
   ).toLowerCase().replace('message', '')
 
   if (msgType === 'deleted') {
-    return <p style={{ margin: 0, fontSize: 13, fontStyle: 'italic', color: fromMe ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)' }}>🚫 Mensagem apagada</p>
+    const rawBody = message.body || message.content || message.conversation || ''
+    const hasOriginal = rawBody.includes('~~') && rawBody.includes('🚫 Apagada')
+    const originalText = hasOriginal ? rawBody.replace(/~~(.+?)~~ 🚫 Apagada/, '$1') : ''
+    return (
+      <div>
+        {hasOriginal && (
+          <span style={{ display: 'block', fontSize: 13, color: fromMe ? 'rgba(255,255,255,0.5)' : '#94A3B8', textDecoration: 'line-through', fontStyle: 'italic' }}>
+            {originalText}
+          </span>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: hasOriginal ? 2 : 0 }}>
+          <span style={{ fontSize: 11 }}>🚫</span>
+          <span style={{ fontSize: 11, color: fromMe ? 'rgba(255,255,255,0.5)' : '#94A3B8', fontStyle: 'italic' }}>Mensagem apagada</span>
+        </div>
+      </div>
+    )
   }
 
   if (msgType === 'interactive') {
@@ -447,6 +462,8 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
   const caption  = message.caption || message.message?.imageMessage?.caption || ''
   const body     = message.body || message.content || message.conversation ||
                    message.message?.conversation || ''
+
+  console.log('[MEDIA]', message.message_type || message.messageType || msgType, '| media_url:', message.media_url, '| mediaUrl resolved:', mediaUrl, '| content:', (message.content || '').slice(0, 60))
 
   if (msgType === 'image' && mediaUrl) {
     return (
@@ -807,6 +824,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         ? 'audio/webm;codecs=opus'
         : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
       recordingMimeTypeRef.current = mimeType
+      console.log('[AUDIO] startRecording mimeType:', mimeType)
       const recorder = new MediaRecorder(stream, { mimeType })
       audioChunksRef.current = []
       recorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
@@ -904,6 +922,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (!audioBlob || (!effectiveInstitutionId && !isAionInbox) || !activeId) return
     const blob = audioBlob
     const mimeType = recordingMimeTypeRef.current || blob.type
+    console.log('[AUDIO] sendAudio blob.size:', blob.size, 'mimeType:', mimeType)
     discardAudio()
     const reader = new FileReader()
     reader.onloadend = async () => {
@@ -921,6 +940,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         })
         if (!uploadRes.ok) throw new Error(`Upload HTTP ${uploadRes.status}`)
         const { url: mediaUrl } = await uploadRes.json()
+        console.log('[AUDIO] upload ok, mediaUrl:', mediaUrl)
         const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
         const sendRes = await fetch('/api/whatsapp/send', {
           method: 'POST',
