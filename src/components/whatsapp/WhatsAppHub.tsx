@@ -1033,6 +1033,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               lastMessage: newMsg.content,
               lastTime: new Date(newMsg.timestamp),
               unreadCount: c.unreadCount + (newMsg.from_me ? 0 : 1),
+              status: c.status === 'closed' ? 'waiting' as ConvStatus : c.status,
             }
           : c
         ).sort((a, b) => b.lastTime.getTime() - a.lastTime.getTime())
@@ -1250,14 +1251,26 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           console.log('[REALTIME CONV] ignorado — está em CLOSING_IDS')
           return
         }
-        if (payload.eventType === 'UPDATE' && payload.new?.status === 'closed') {
-          setConversations(prev => prev.filter(c => c.id !== normJidFromPayload))
-          if (activeIdRef.current === normJidFromPayload) setActiveId(null)
+        if (payload.eventType === 'UPDATE') {
+          if (payload.new?.status === 'closed') {
+            setConversations(prev => prev.filter(c => c.id !== normJidFromPayload))
+            if (activeIdRef.current === normJidFromPayload) setActiveId(null)
+            return
+          }
+          // Non-closed update: patch locally, no full reload (avoids flicker)
+          setConversations(prev => prev.map(c => {
+            if (c.id !== normJidFromPayload) return c
+            return {
+              ...c,
+              status: payload.new.status as ConvStatus,
+              assigned_user_id: payload.new.assigned_user_id,
+              assigned_user_name: payload.new.assigned_user_name,
+              bot_active: payload.new.bot_active,
+            }
+          }))
           return
         }
-        // Ignore updates for conversations already locally marked as closed
-        const local = conversationsRef.current.find(c => c.id === normJidFromPayload)
-        if (local?.status === 'closed') return
+        // INSERT (new conversation): reload to get full data
         loadMessages()
       })
       .subscribe()

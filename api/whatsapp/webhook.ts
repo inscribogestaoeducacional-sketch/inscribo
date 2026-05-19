@@ -331,10 +331,17 @@ async function processCustomFlow(
       if (transferMsg) await sendAutoMessage(institutionId, remoteJid, interp(transferMsg))
       const assigneeId = node.data?.assignee_id || node.data?.assigneeId
       if (assigneeId) {
+        let assigneeName: string | null = node.data.assignee_name || node.data.assigneeName || null
+        if (!assigneeName) {
+          const { data: u } = await supabase
+            .from('users').select('full_name').eq('id', assigneeId).maybeSingle()
+          assigneeName = (u as any)?.full_name || null
+        }
         await supabase.from('whatsapp_conversations').update({
           assigned_user_id:   assigneeId,
-          assigned_user_name: node.data.assignee_name || node.data.assigneeName || null,
+          assigned_user_name: assigneeName,
           bot_active: false,
+          status: 'open',
         }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
       } else {
         console.warn('[flow] transfer node has no assigneeId — deactivating bot without assigning')
