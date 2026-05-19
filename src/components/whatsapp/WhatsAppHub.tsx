@@ -94,11 +94,17 @@ function formatPhone(jid: string): string {
 
 function mapMsgType(messageType: string): MsgType {
   switch (messageType) {
-    case 'imageMessage':        return 'image'
-    case 'audioMessage':        return 'audio'
-    case 'videoMessage':        return 'video'
-    case 'documentMessage':     return 'document'
-    case 'stickerMessage':      return 'sticker'
+    case 'imageMessage':
+    case 'image':               return 'image'
+    case 'audioMessage':
+    case 'audio':
+    case 'ptt':                 return 'audio'
+    case 'videoMessage':
+    case 'video':               return 'video'
+    case 'documentMessage':
+    case 'document':            return 'document'
+    case 'stickerMessage':
+    case 'sticker':             return 'sticker'
     case 'extendedTextMessage': return 'text'
     case 'deleted':             return 'deleted'
     default:                    return 'text'
@@ -197,17 +203,20 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
       satisfaction_score: (convData as any)?.satisfaction_score ?? null,
       messages: sorted
         .filter((m, idx, self) => idx === self.findIndex(t => (t.message_id && t.message_id === m.message_id) || t.id === m.id))
-        .map(m => ({
-          id: m.id,
-          type: mapMsgType(m.message_type),
-          content: m.content,
-          from: m.from_me ? 'me' : 'them' as 'me' | 'them',
-          ts: new Date(m.timestamp),
-          status: (m.status as Message['status']) || 'sent',
-          media_url: m.media_url,
-          message_id: m.message_id,
-          senderName: m.from_me ? (m.contact_name || undefined) : undefined,
-        })),
+        .map(m => {
+          console.log('[BUILD] msg type:', m.message_type, '| media_url:', m.media_url?.slice(0, 50))
+          return {
+            id: m.id,
+            type: mapMsgType(m.message_type),
+            content: m.content,
+            from: m.from_me ? 'me' : 'them' as 'me' | 'them',
+            ts: new Date(m.timestamp),
+            status: (m.status as Message['status']) || 'sent',
+            media_url: m.media_url,
+            message_id: m.message_id,
+            senderName: m.from_me ? (m.contact_name || undefined) : undefined,
+          }
+        }),
     }
   })
 
@@ -1743,6 +1752,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   const sendPendingFile = async () => {
     if (!pendingFile || !activeId || (!effectiveInstitutionId && !isAionInbox)) return
+    if (pendingFile.size > 15 * 1024 * 1024) {
+      setSendError('Arquivo muito grande. Máximo 15MB.')
+      setPendingFile(null)
+      setPendingFilePreview(null)
+      return
+    }
     setUploadProgress(10)
 
     const mediatype = pendingFile.type.startsWith('image/') ? 'image'

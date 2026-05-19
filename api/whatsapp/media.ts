@@ -27,6 +27,14 @@ const supabase = createClient(
  *   2. POST to /api/whatsapp/media → get url
  *   3. POST to /api/whatsapp/send  with { type, mediaUrl: url, ... }
  */
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '10mb',
+    },
+  },
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end()
 
