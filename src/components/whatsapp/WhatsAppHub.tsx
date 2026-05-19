@@ -29,6 +29,7 @@ interface Message {
   fileName?: string
   fileSize?: string
   media_url?: string
+  message_id?: string
   senderName?: string
 }
 
@@ -204,6 +205,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
           ts: new Date(m.timestamp),
           status: (m.status as Message['status']) || 'sent',
           media_url: m.media_url,
+          message_id: m.message_id,
           senderName: m.from_me ? (m.contact_name || undefined) : undefined,
         })),
     }
@@ -421,6 +423,7 @@ function getMediaUrl(message: any, instanceName?: string): string | null {
 function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: { message: any; fromMe: boolean; instanceName?: string; onImageClick?: (url: string) => void }) {
   const msgType = (
     message.type ||
+    message.message_type ||
     message.messageType ||
     (message.message?.imageMessage    ? 'image'    : '') ||
     (message.message?.videoMessage    ? 'video'    : '') ||
@@ -521,23 +524,27 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
     )
   }
 
-  if (msgType === 'document' && mediaUrl) {
-    const filename = message.fileName || message.message?.documentMessage?.fileName || 'Documento'
-    return (
-      <div
-        onClick={() => window.open(mediaUrl, '_blank')}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
-          borderRadius: 10, cursor: 'pointer',
-          background: fromMe ? 'rgba(255,255,255,0.1)' : '#F8FAFB',
-          border: '1px solid ' + (fromMe ? 'rgba(255,255,255,0.15)' : '#E2E8F0'),
-        }}
-      >
-        <span style={{ fontSize: 22 }}>📄</span>
-        <span style={{ fontSize: 13, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: fromMe ? '#fff' : '#1A2B4A' }}>{filename}</span>
-        <span style={{ fontSize: 18, color: '#00A896' }}>↓</span>
-      </div>
-    )
+  if (msgType === 'document') {
+    const filename = message.fileName || message.message?.documentMessage?.fileName || body || 'Documento'
+    const docUrl = mediaUrl || (body?.startsWith('http') ? body : null)
+    if (docUrl) {
+      return (
+        <div
+          onClick={() => window.open(docUrl, '_blank')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+            borderRadius: 10, cursor: 'pointer',
+            background: fromMe ? 'rgba(255,255,255,0.1)' : '#F8FAFB',
+            border: '1px solid ' + (fromMe ? 'rgba(255,255,255,0.15)' : '#E2E8F0'),
+          }}
+        >
+          <span style={{ fontSize: 22 }}>📄</span>
+          <span style={{ fontSize: 13, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: fromMe ? '#fff' : '#1A2B4A' }}>{filename}</span>
+          <span style={{ fontSize: 18, color: '#00A896' }}>↓</span>
+        </div>
+      )
+    }
+    return <span style={{ fontSize: 13, color: fromMe ? 'rgba(255,255,255,0.7)' : '#64748B' }}>📄 {filename}</span>
   }
 
   if (msgType === 'sticker' && mediaUrl) {
@@ -923,7 +930,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const blob = audioBlob
     const mimeType = recordingMimeTypeRef.current || blob.type
     console.log('[AUDIO] sendAudio blob.size:', blob.size, 'mimeType:', mimeType)
-    discardAudio()
     const reader = new FileReader()
     reader.onloadend = async () => {
       const base64 = (reader.result as string).split(',')[1]
@@ -932,7 +938,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            institution_id: effectiveInstitutionId,
+            institution_id: effectiveInstitutionId || undefined,
             base64,
             mimetype: mimeType,
             filename: `audio-${Date.now()}.${mimeType.includes('webm') ? 'webm' : 'mp4'}`,
@@ -941,7 +947,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         if (!uploadRes.ok) throw new Error(`Upload HTTP ${uploadRes.status}`)
         const { url: mediaUrl } = await uploadRes.json()
         console.log('[AUDIO] upload ok, mediaUrl:', mediaUrl)
-        const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
+        discardAudio()
+        const to = activeId
+          .replace(/@s\.whatsapp\.net$/, '')
+          .replace(/@.*/, '')
+          .replace(/\D/g, '')
         const sendRes = await fetch('/api/whatsapp/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -951,7 +961,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             to,
             type: 'audio',
             mediaUrl,
-            sender_name: user.full_name,
+            sender_name: user?.full_name,
           }),
         })
         if (!sendRes.ok) {
@@ -962,6 +972,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       } catch (e) {
         console.error('[send-audio] error:', e)
         setSendError('Erro ao enviar áudio.')
+        discardAudio()
       }
     }
     reader.readAsDataURL(blob)
@@ -1044,6 +1055,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       ts: new Date(newMsg.timestamp),
       status: (newMsg.status as Message['status']) || 'sent',
       media_url: newMsg.media_url,
+      message_id: newMsg.message_id,
     }
     setConversations(prev => {
       const normJid = normalizeJid(newMsg.remote_jid)
