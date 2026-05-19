@@ -250,19 +250,36 @@ async function processCustomFlow(
     variables[current.data.variable] = text.trim()
     const nexts = edgesFrom(currentNodeId, 'out')
     if (nexts.length) { currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId) }
-  } else if (current?.type === 'menu') {
+  } else if (current?.type === 'menu' && variables[`__menu_sent_${currentNodeId}`]) {
+    // Menu was already displayed — process user's choice
     const choice  = parseInt(text.trim(), 10)
     const options = current.data?.options || []
-    // Match by explicit number field (old) or implicit position (new)
+    const menuHeader = interp(current.data?.menuText || current.data?.text || 'Escolha uma opção:')
+    const optionsText = options.map((o: any, i: number) => `${i + 1}. ${o.text}`).join('\n')
     const optIdx  = options.findIndex((o: any, i: number) => (o.number ?? i + 1) === choice)
     if (optIdx >= 0) {
       const opt = options[optIdx]
-      // Try new format (opt-{idx}) then old format (opt.id)
       let nexts = edgesFrom(currentNodeId, `opt-${optIdx}`)
       if (!nexts.length && opt.id) nexts = edgesFrom(currentNodeId, opt.id)
-      if (nexts.length) { currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId) }
+      if (nexts.length) {
+        delete variables[`__menu_sent_${currentNodeId}`]
+        currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId)
+      } else {
+        // Valid choice but no connecting edge — keep waiting
+        const msg = `Opção inválida. Por favor escolha:\n\n${menuHeader}\n\n${optionsText}`
+        await sendAutoMessage(institutionId, remoteJid, msg)
+        await supabase.from('whatsapp_conversations')
+          .update({ bot_current_node: currentNodeId, bot_variables: variables })
+          .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+        return
+      }
     } else {
-      await sendAutoMessage(institutionId, remoteJid, interp(current.data?.menuText || current.data?.text || 'Escolha uma opção válida:'))
+      // Invalid choice — re-display full menu
+      const msg = `Opção inválida. Por favor escolha:\n\n${menuHeader}\n\n${optionsText}`
+      await sendAutoMessage(institutionId, remoteJid, msg)
+      await supabase.from('whatsapp_conversations')
+        .update({ bot_current_node: currentNodeId, bot_variables: variables })
+        .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
       return
     }
   }
@@ -272,6 +289,7 @@ async function processCustomFlow(
   while (current && guard-- > 0) {
     if (guard === 0) console.warn('[flow] guard limit reached — possible infinite loop in bot flow')
     const node = current
+    console.log('[flow] nó:', node.id, 'tipo:', node.type, 'texto:', text)
 
     if (node.type === 'start') {
       const nexts = edgesFrom(node.id)
@@ -294,9 +312,13 @@ async function processCustomFlow(
     }
 
     if (node.type === 'menu') {
-      const menuText = interp(node.data?.menuText || node.data?.text || '')
-      if (menuText) await sendAutoMessage(institutionId, remoteJid, menuText)
-      break  // Wait for choice
+      const menuHeader  = interp(node.data?.menuText || node.data?.text || '')
+      const options     = node.data?.options || []
+      const optionsText = options.map((o: any, i: number) => `${i + 1}. ${o.text}`).join('\n')
+      const fullText    = [menuHeader, optionsText].filter(Boolean).join('\n\n')
+      if (fullText.trim()) await sendAutoMessage(institutionId, remoteJid, fullText)
+      variables[`__menu_sent_${node.id}`] = 'true'
+      break  // Section 4 saves currentNodeId and variables
     }
 
     if (node.type === 'transfer') {

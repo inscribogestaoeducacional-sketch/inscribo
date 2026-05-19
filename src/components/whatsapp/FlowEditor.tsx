@@ -602,6 +602,7 @@ export default function FlowEditor({
       if (fl?.bot_enabled != null) setIsActive(fl.bot_enabled)
 
       const bf = fl?.bot_flow as { nodes?: any[]; edges?: any[] } | null
+      console.log('[FlowEditor] nodes loaded:', JSON.stringify(bf?.nodes ?? [], null, 2))
       if (bf?.nodes?.length) {
         const loadedNodes: FlowNode[] = bf.nodes.map((n: any) => ({
           ...n, width: NW, height: nodeH(n),

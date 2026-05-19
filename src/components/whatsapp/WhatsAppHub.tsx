@@ -746,6 +746,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const notifAudioRef = useRef<HTMLAudioElement | null>(null)
   const activeIdRef       = useRef<string | null>(null)
   const conversationsRef  = useRef<typeof conversations>([])
+  const closingIdsRef     = useRef<Set<string>>(new Set())
 
   // Keep refs in sync so realtime handlers can read the latest values
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
@@ -1200,7 +1201,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'whatsapp_messages',
         filter: msgFilter
-      }, (payload) => addMessageToConversations(payload.new as WhatsappMessage))
+      }, (payload) => {
+        const msg = payload.new as WhatsappMessage
+        const msgJid = msg.remote_jid || ''
+        if (closingIdsRef.current.has(msgJid) || closingIdsRef.current.has(normalizeJid(msgJid))) return
+        addMessageToConversations(msg)
+      })
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'whatsapp_messages',
         filter: msgFilter
@@ -1228,15 +1234,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         event: '*', schema: 'public', table: 'whatsapp_conversations',
         filter: convFilter
       }, (payload: any) => {
+        const rawJidFromPayload = payload.new?.remote_jid || ''
+        const normJidFromPayload = normalizeJid(rawJidFromPayload)
+        // Ignore ALL events for conversations that are being closed locally
+        if (closingIdsRef.current.has(rawJidFromPayload) || closingIdsRef.current.has(normJidFromPayload)) return
         if (payload.eventType === 'UPDATE' && payload.new?.status === 'closed') {
-          const jid = normalizeJid(payload.new.remote_jid)
-          setConversations(prev => prev.filter(c => c.id !== jid))
-          if (activeIdRef.current === jid) setActiveId(null)
+          setConversations(prev => prev.filter(c => c.id !== normJidFromPayload))
+          if (activeIdRef.current === normJidFromPayload) setActiveId(null)
           return
         }
         // Ignore updates for conversations already locally marked as closed
-        const updJid = normalizeJid(payload.new?.remote_jid || '')
-        const local = conversationsRef.current.find(c => c.id === updJid)
+        const local = conversationsRef.current.find(c => c.id === normJidFromPayload)
         if (local?.status === 'closed') return
         loadMessages()
       })
@@ -1839,22 +1847,35 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   const handleCloseConversation = async () => {
     if (!activeId || !effectiveInstitutionId) return
-    const rJid = rawJid(activeId)
+    const convId = activeId
+    const rJid   = rawJid(convId)
+
+    // 1. Guard all Realtime events for this JID before any async operation
+    closingIdsRef.current.add(rJid)
+    closingIdsRef.current.add(convId)
+
+    // 2. Remove from local state immediately (optimistic)
+    setConversations(prev => prev.filter(c => c.id !== convId))
+    setActiveId(null)
+
+    // 3. Persist to DB (triggers Realtime — guarded above)
     await DatabaseService.closeConversation(effectiveInstitutionId, rJid)
-    await DatabaseService.logConversationEvent({
+    DatabaseService.logConversationEvent({
       institution_id: effectiveInstitutionId,
       remote_jid: rJid,
       event_type: 'status_change',
       description: 'Conversa concluída',
-      user_id: user.id,
-      user_name: user.full_name || user.email,
-    })
-    setConversations(prev => prev.filter(c => c.id !== activeId))
-    setActiveId(null)
-    await supabase.from('whatsapp_conversations').update({ assigned_user_id: null, assigned_user_name: null })
-      .eq('institution_id', effectiveInstitutionId).eq('remote_jid', rJid)
+      user_id: user!.id,
+      user_name: user!.full_name || user!.email,
+    }).catch(() => {})
 
-    // Send satisfaction survey if enabled
+    // 4. Release guard after 5s (long enough for all Realtime events to arrive)
+    setTimeout(() => {
+      closingIdsRef.current.delete(rJid)
+      closingIdsRef.current.delete(convId)
+    }, 5000)
+
+    // 5. Send satisfaction survey if enabled
     if (flowConfig?.satisfaction_survey_enabled) {
       const to = rJid.replace(/@.*/, '').replace(/\D/g, '')
       const surveyText = 'Como você avalia nosso atendimento hoje?\n\nDigite um número de 1 a 5:\n1️⃣ Péssimo\n2️⃣ Ruim\n3️⃣ Regular\n4️⃣ Bom\n5️⃣ Ótimo 😊'
