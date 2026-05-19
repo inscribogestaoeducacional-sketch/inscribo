@@ -716,36 +716,40 @@ export class DatabaseService {
   }
 
   static async upsertConversationStatus(institutionId: string, remoteJid: string, status: string, leadId?: string): Promise<void> {
+    const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     const updates: any = { status }
     if (leadId) updates.lead_id = leadId
     const { error } = await supabase
       .from('whatsapp_conversations')
-      .upsert({ institution_id: institutionId, remote_jid: remoteJid, ...updates }, { onConflict: 'institution_id,remote_jid' })
+      .upsert({ institution_id: institutionId, remote_jid: raw, ...updates }, { onConflict: 'institution_id,remote_jid' })
     if (error) throw error
   }
 
   static async linkConversationLead(institutionId: string, remoteJid: string, leadId: string): Promise<void> {
+    const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     await supabase
       .from('whatsapp_conversations')
       .update({ lead_id: leadId })
       .eq('institution_id', institutionId)
-      .eq('remote_jid', remoteJid)
+      .eq('remote_jid', raw)
   }
 
   static async resetConversationUnread(institutionId: string, remoteJid: string): Promise<void> {
+    const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     await supabase
       .from('whatsapp_conversations')
       .update({ unread_count: 0 })
       .eq('institution_id', institutionId)
-      .eq('remote_jid', remoteJid)
+      .eq('remote_jid', raw)
   }
 
   static async updateWhatsappMessageLead(remoteJid: string, institutionId: string, leadId: string): Promise<void> {
+    const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     const { error } = await supabase
       .from('whatsapp_messages')
       .update({ lead_id: leadId })
       .eq('institution_id', institutionId)
-      .eq('remote_jid', remoteJid)
+      .eq('remote_jid', raw)
     if (error) throw error
   }
 
@@ -815,11 +819,12 @@ export class DatabaseService {
   }
 
   static async getConversationEvents(institutionId: string, remoteJid: string): Promise<WhatsappConversationEvent[]> {
+    const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     const { data, error } = await supabase
       .from('whatsapp_conversation_events')
       .select('*')
       .eq('institution_id', institutionId)
-      .eq('remote_jid', remoteJid)
+      .eq('remote_jid', raw)
       .order('created_at', { ascending: false })
       .limit(30)
     if (error) return []
@@ -835,31 +840,38 @@ export class DatabaseService {
     user_name?: string
     metadata?: any
   }): Promise<void> {
-    await supabase.from('whatsapp_conversation_events').insert(event)
+    await supabase.from('whatsapp_conversation_events').insert({
+      ...event,
+      remote_jid: event.remote_jid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, ''),
+    })
   }
 
   static async assignConversation(institutionId: string, remoteJid: string, userId: string, userName: string): Promise<void> {
+    const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     await supabase.from('whatsapp_conversations')
-      .upsert({ institution_id: institutionId, remote_jid: remoteJid, assigned_user_id: userId, assigned_user_name: userName }, { onConflict: 'institution_id,remote_jid' })
+      .upsert({ institution_id: institutionId, remote_jid: raw, assigned_user_id: userId, assigned_user_name: userName }, { onConflict: 'institution_id,remote_jid' })
   }
 
   static async transferConversation(institutionId: string, remoteJid: string, newUserId: string, newUserName: string, fromUserName: string): Promise<void> {
+    const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     await supabase.from('whatsapp_conversations')
       .update({ assigned_user_id: newUserId, assigned_user_name: newUserName, transferred_from: fromUserName, transferred_at: new Date().toISOString() })
       .eq('institution_id', institutionId)
-      .eq('remote_jid', remoteJid)
+      .eq('remote_jid', raw)
   }
 
   static async setConversationContactType(institutionId: string, remoteJid: string, contactType: string): Promise<void> {
+    const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     await supabase.from('whatsapp_conversations')
-      .upsert({ institution_id: institutionId, remote_jid: remoteJid, contact_type: contactType }, { onConflict: 'institution_id,remote_jid' })
+      .upsert({ institution_id: institutionId, remote_jid: raw, contact_type: contactType }, { onConflict: 'institution_id,remote_jid' })
   }
 
   static async updateConversationTags(institutionId: string, remoteJid: string, tags: string[]): Promise<void> {
+    const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     await supabase.from('whatsapp_conversations')
       .update({ tags })
       .eq('institution_id', institutionId)
-      .eq('remote_jid', remoteJid)
+      .eq('remote_jid', raw)
   }
 
   static async closeConversation(institutionId: string, remoteJid: string): Promise<{ count: number; error: any }> {
@@ -884,8 +896,9 @@ export class DatabaseService {
   }
 
   static async updateProfilePicture(institutionId: string, remoteJid: string, url: string): Promise<void> {
+    const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     await supabase.from('whatsapp_conversations')
-      .upsert({ institution_id: institutionId, remote_jid: remoteJid, profile_picture_url: url }, { onConflict: 'institution_id,remote_jid' })
+      .upsert({ institution_id: institutionId, remote_jid: raw, profile_picture_url: url }, { onConflict: 'institution_id,remote_jid' })
   }
 
   static async updateSaasMetrics(): Promise<void> {
