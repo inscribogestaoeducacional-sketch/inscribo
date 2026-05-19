@@ -1877,8 +1877,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     setActiveId(null)
 
     // 3. Persist to DB (triggers Realtime — guarded above)
-    console.log('[CLOSE 5] salvando no banco')
-    await DatabaseService.closeConversation(effectiveInstitutionId, rJid)
+    console.log('[CLOSE 5] salvando no banco | institutionId:', effectiveInstitutionId, '| rJid:', rJid)
+    const closeResult = await DatabaseService.closeConversation(effectiveInstitutionId, rJid)
+    console.log('[CLOSE 5] resultado banco:', JSON.stringify(closeResult))
+    if (closeResult.count === 0) {
+      console.warn('[CLOSE 5] AVISO: 0 linhas atualizadas — possível problema de RLS ou formato do JID')
+    }
     DatabaseService.logConversationEvent({
       institution_id: effectiveInstitutionId,
       remote_jid: rJid,

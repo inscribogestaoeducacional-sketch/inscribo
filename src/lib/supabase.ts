@@ -854,11 +854,28 @@ export class DatabaseService {
       .eq('remote_jid', remoteJid)
   }
 
-  static async closeConversation(institutionId: string, remoteJid: string): Promise<void> {
-    await supabase.from('whatsapp_conversations')
-      .update({ status: 'closed', assigned_user_id: null, assigned_user_name: null })
+  static async closeConversation(institutionId: string, remoteJid: string): Promise<{ count: number | null; error: any }> {
+    // Strip any @-suffix so we match both stored formats (raw phone AND @s.whatsapp.net)
+    const raw  = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
+    const norm = raw.includes('@') ? raw : `${raw}@s.whatsapp.net`
+
+    const { data, error } = await supabase
+      .from('whatsapp_conversations')
+      .update({
+        status: 'closed',
+        bot_active: false,
+        assigned_user_id: null,
+        assigned_user_name: null,
+      })
       .eq('institution_id', institutionId)
-      .eq('remote_jid', remoteJid)
+      .or(`remote_jid.eq.${raw},remote_jid.eq.${norm}`)
+      .select('id')
+
+    const count = data?.length ?? null
+    console.log('[DB CLOSE] raw:', raw, '| norm:', norm, '| rows updated:', count, '| error:', error?.message)
+    if (error) console.error('[DB CLOSE] ERRO completo:', error)
+
+    return { count, error }
   }
 
   static async updateProfilePicture(institutionId: string, remoteJid: string, url: string): Promise<void> {
