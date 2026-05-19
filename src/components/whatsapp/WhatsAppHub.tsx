@@ -1242,51 +1242,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         event: '*', schema: 'public', table: 'whatsapp_conversations',
         filter: convFilter
       }, (payload: any) => {
-        const rawJidFromPayload = payload.new?.remote_jid || ''
-        const normJid = normalizeJid(rawJidFromPayload)
-        console.log('[REALTIME CONV] evento recebido', payload.eventType, rawJidFromPayload, payload.new?.status)
-        // Ignore ALL events for conversations being closed locally
-        if (CLOSING_IDS.has(rawJidFromPayload) || CLOSING_IDS.has(normJid)) {
-          console.log('[REALTIME CONV] ignorado — está em CLOSING_IDS')
-          return
-        }
-        if (payload.eventType === 'DELETE') return
-        if (payload.eventType === 'INSERT') {
-          loadMessages()
-          return
-        }
-        // UPDATE
-        const newStatus = payload.new?.status
-        if (newStatus === 'closed') {
-          setConversations(prev => {
-            const localConv = prev.find(c => c.id === normJid)
-            if (!localConv) return prev
-            if (localConv.status === 'closed') {
-              // Already closed — only update unreadCount, never remove
-              return prev.map(c => c.id !== normJid ? c : {
-                ...c,
-                unreadCount: payload.new?.unread_count ?? c.unreadCount,
-              })
-            }
-            // Transitioned open/waiting → closed: remove
-            if (activeIdRef.current === normJid) setActiveId(null)
-            return prev.filter(c => c.id !== normJid)
-          })
-          return
-        }
-        // waiting/open: patch locally without removing
-        setConversations(prev => prev.map(c => {
-          if (c.id !== normJid) return c
-          return {
-            ...c,
-            status: (newStatus || c.status) as ConvStatus,
-            assigned_user_id:   payload.new?.assigned_user_id   ?? c.assigned_user_id,
-            assigned_user_name: payload.new?.assigned_user_name ?? c.assigned_user_name,
-            bot_active:         payload.new?.bot_active         ?? c.bot_active,
-            unreadCount:        payload.new?.unread_count       ?? c.unreadCount,
-            lastMessage:        payload.new?.last_message       ?? c.lastMessage,
-          }
-        }))
+        const rJid = payload.new?.remote_jid || payload.old?.remote_jid || ''
+        const nJid = normalizeJid(rJid)
+        if (CLOSING_IDS.has(rJid) || CLOSING_IDS.has(nJid)) return
+        loadMessages()
       })
       .subscribe()
 
