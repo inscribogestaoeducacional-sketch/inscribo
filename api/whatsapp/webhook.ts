@@ -334,7 +334,7 @@ async function processCustomFlow(
         await supabase.from('whatsapp_conversations').update({
           assigned_user_id:   assigneeId,
           assigned_user_name: node.data.assignee_name || node.data.assigneeName || null,
-          status: 'open', bot_active: false,
+          bot_active: false,
         }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
       } else {
         console.warn('[flow] transfer node has no assigneeId — deactivating bot without assigning')
@@ -646,7 +646,7 @@ async function processFlow(
         const responseMsg = menuChoice.response || menuChoice.response_message
         if (responseMsg) await sendAutoMessage(institutionId, remoteJid, responseMsg)
 
-        const convUpdates: any = { bot_active: false, status: 'open' }
+        const convUpdates: any = { bot_active: false }
         if (menuChoice.assignee_id) {
           let assigneeName: string | null = menuChoice.assignee_name || null
           if (!assigneeName) {
@@ -697,7 +697,7 @@ async function processFlow(
         if (!conv?.assigned_user_id) {
           await supabase
             .from('whatsapp_conversations')
-            .update({ assigned_user_id: flow.default_assignee_id, status: 'open' })
+            .update({ assigned_user_id: flow.default_assignee_id })
             .eq('institution_id', institutionId)
             .eq('remote_jid', remoteJid)
           console.log('[flow] transferido para atendente padrão após', count, 'msg do bot')

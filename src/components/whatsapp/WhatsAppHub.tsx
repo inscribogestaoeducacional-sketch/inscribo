@@ -942,7 +942,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (!activeId || !effectiveInstitutionId) return
     const rJid = rawJid(activeId)
     await DatabaseService.updateWhatsappMessageLead(rJid, effectiveInstitutionId, leadId)
-    await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, 'open', leadId)
+    await DatabaseService.linkConversationLead(effectiveInstitutionId, rJid, leadId)
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, lead_id: leadId } : c))
     const found = leadResults.find(l => l.id === leadId)
     if (found) setConversations(prev => prev.map(c =>
@@ -2004,7 +2004,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       if (activeId) {
         const rJid = rawJid(activeId)
         await DatabaseService.updateWhatsappMessageLead(rJid, effectiveInstitutionId, lead.id)
-        await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, activeConv?.status || 'open', lead.id)
+        await DatabaseService.linkConversationLead(effectiveInstitutionId, rJid, lead.id)
         await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, 'lead')
         setConversations(prev => prev.map(c => c.id === activeId
           ? { ...c, lead_id: lead.id, contact_type: 'lead', name: leadForm.responsible_name || c.name }
