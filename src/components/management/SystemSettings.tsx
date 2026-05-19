@@ -535,12 +535,44 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const handleSaveFlow = async () => {
     setSavingFlow(true)
     try {
-      await supabase.from('whatsapp_flows').upsert(
-        { ...flow, institution_id: institutionId, updated_at: new Date().toISOString() },
-        { onConflict: 'institution_id' }
-      )
-      setFlowSaved(true); setTimeout(() => setFlowSaved(false), 2500)
-    } catch (e) { console.error(e) } finally { setSavingFlow(false) }
+      const saveData = {
+        institution_id:              institutionId,
+        bot_enabled:                 flow.bot_enabled,
+        is_active:                   true,
+        working_days:                flow.working_days,
+        working_start:               flow.working_start,
+        working_end:                 flow.working_end,
+        lunch_start:                 (flow as any).lunch_start,
+        lunch_end:                   (flow as any).lunch_end,
+        timezone:                    flow.timezone,
+        welcome_message:             flow.welcome_message,
+        off_hours_message:           flow.off_hours_message,
+        menu_enabled:                flow.menu_enabled,
+        menu_message:                flow.menu_message,
+        menu_options:                flow.menu_options,
+        satisfaction_survey_enabled: flow.satisfaction_survey_enabled,
+        satisfaction_message:        flow.satisfaction_message,
+      }
+
+      console.log('[SAVE FLOW] dados:', JSON.stringify(saveData))
+
+      const { error } = await supabase
+        .from('whatsapp_flows')
+        .upsert(saveData, { onConflict: 'institution_id' })
+
+      if (error) {
+        console.error('[SAVE FLOW] erro:', JSON.stringify(error))
+        alert('Erro ao salvar: ' + error.message)
+        return
+      }
+
+      setFlowSaved(true)
+      setTimeout(() => setFlowSaved(false), 2500)
+    } catch (e) {
+      console.error('[SAVE FLOW] exception:', e)
+    } finally {
+      setSavingFlow(false)
+    }
   }
 
   const handleTestConnection = async () => {
