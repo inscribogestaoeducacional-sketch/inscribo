@@ -1339,26 +1339,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
     const conv = conversations.find(c => c.id === activeId)
 
-    // Auto-assign to current user if unassigned
-    if (conv && !conv.assigned_user_id && user.id) {
-      DatabaseService.assignConversation(effectiveInstitutionId, rJid, user.id, user.full_name || user.email)
-        .then(() => {
-          setConversations(prev => prev.map(c => c.id === activeId
-            ? { ...c, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email }
-            : c
-          ))
-          DatabaseService.logConversationEvent({
-            institution_id: effectiveInstitutionId,
-            remote_jid: rJid,
-            event_type: 'assignment',
-            description: `Atribuído para ${user.full_name || user.email}`,
-            user_id: user.id,
-            user_name: user.full_name || user.email,
-          }).catch(() => {})
-        })
-        .catch(() => {})
-    }
-
     // Auto-link lead if not linked
     if (conv && !conv.lead_id && !conv.isGroup && effectiveInstitutionId) {
       DatabaseService.searchLeadsByPhone(effectiveInstitutionId, conv.phone)

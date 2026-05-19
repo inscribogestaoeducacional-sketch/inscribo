@@ -292,7 +292,10 @@ function NodeBody({
       return (
         <div style={{ padding: 12 }}>
           <select style={inputSt} value={d.assignee_id || ''}
-            onChange={e => onChange({ ...d, assignee_id: e.target.value })}
+            onChange={e => {
+              const selected = users.find(u => u.id === e.target.value)
+              onChange({ ...d, assignee_id: e.target.value, assignee_name: selected?.full_name || '' })
+            }}
             onMouseDown={stop}>
             <option value="">Selecionar atendente...</option>
             {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
