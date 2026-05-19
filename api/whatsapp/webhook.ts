@@ -981,6 +981,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const isNewConversation = !existingConv || existingConv.status === 'closed'
         const contentPreview    = text || `[${msgType}]`
+        const upsertStatus      = isNewConversation ? 'waiting' : (existingConv?.status ?? 'waiting')
+
+        console.log('[WEBHOOK UPSERT]', {
+          remoteJid,
+          existingStatus: existingConv?.status ?? null,
+          newStatus: upsertStatus,
+          isNewConversation,
+        })
 
         // ── Upsert conversation ──
         const { error: convErr } = await supabase
@@ -992,8 +1000,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               contact_name:    contactName,
               last_message:    contentPreview,
               last_message_at: timestamp,
-              // Re-open closed conversations; keep status of active ones
-              status: isNewConversation ? 'waiting' : (existingConv?.status ?? 'waiting'),
+              status:          upsertStatus,
             },
             { onConflict: 'institution_id,remote_jid' }
           )

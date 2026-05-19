@@ -724,6 +724,14 @@ export class DatabaseService {
     if (error) throw error
   }
 
+  static async linkConversationLead(institutionId: string, remoteJid: string, leadId: string): Promise<void> {
+    await supabase
+      .from('whatsapp_conversations')
+      .update({ lead_id: leadId })
+      .eq('institution_id', institutionId)
+      .eq('remote_jid', remoteJid)
+  }
+
   static async resetConversationUnread(institutionId: string, remoteJid: string): Promise<void> {
     await supabase
       .from('whatsapp_conversations')

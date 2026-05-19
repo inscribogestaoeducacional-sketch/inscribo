@@ -1366,7 +1366,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           if (leads.length > 0) {
             const lead = leads[0]
             DatabaseService.updateWhatsappMessageLead(rJid, effectiveInstitutionId, lead.id)
-            DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, conv.status, lead.id)
+            DatabaseService.linkConversationLead(effectiveInstitutionId, rJid, lead.id)
             setConversations(prev => prev.map(c => c.id === activeId
               ? { ...c, lead_id: lead.id, name: c.name === formatPhone(activeId) ? (lead.responsible_name || lead.student_name || c.name) : c.name }
               : c
