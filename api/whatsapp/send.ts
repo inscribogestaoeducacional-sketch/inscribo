@@ -105,7 +105,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 async function handleSend(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end()
 
-  console.log('send.ts - início', {
+  console.log('[SEND] method:', req.method)
+  console.log('[SEND] body:', JSON.stringify(req.body))
+  console.log('[SEND] início', {
     hasSupabaseUrl:  !!process.env.SUPABASE_URL,
     hasServiceKey:   !!process.env.SUPABASE_SERVICE_ROLE_KEY,
   })
@@ -174,10 +176,13 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
       }
 
       phoneNumberId = phoneRecord.phone_number_id
-      accessToken   = (await getWAConfig()).accessToken
+      const waConfig = await getWAConfig()
+      console.log('[SEND] waConfig:', { hasToken: !!waConfig.accessToken, tokenLength: waConfig.accessToken?.length })
+      accessToken   = waConfig.accessToken
     }
 
-    console.log('send.ts - token:', !!accessToken, '| phoneNumberId:', phoneNumberId)
+    console.log('[SEND] phoneRecord:', JSON.stringify({ phoneNumberId }))
+    console.log('[SEND] token ok:', !!accessToken, '| phoneNumberId:', phoneNumberId)
 
     // ── Resolve media URL (upload if base64 provided) ──
     let resolvedMediaUrl: string | undefined = mediaUrl
@@ -252,7 +257,7 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ success: true, wamid })
 
   } catch (err: any) {
-    console.error('❌ Send error:', err)
-    return res.status(500).json({ error: err.message || 'Erro interno' })
+    console.error('[SEND] ERRO:', err?.message, err?.stack)
+    return res.status(500).json({ error: err?.message || 'Erro interno' })
   }
 }
