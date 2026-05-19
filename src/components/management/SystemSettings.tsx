@@ -426,6 +426,12 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [savingBlock, setSavingBlock] = useState(false)
   const [waSection, setWaSection] = useState('conexao')
 
+  // Groups
+  const [groups, setGroups] = useState<{ id: string; name: string; emoji: string; member_ids: string[] }[]>([])
+  const [showGroupForm, setShowGroupForm] = useState(false)
+  const [editingGroup, setEditingGroup] = useState<any>(null)
+  const [groupForm, setGroupForm] = useState({ name: '', emoji: '👥', member_ids: [] as string[] })
+
   const waMountedRef = useRef(true)
   useEffect(() => {
     waMountedRef.current = true
@@ -504,6 +510,13 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
         .eq('institution_id', institutionId)
         .order('created_at', { ascending: false })
       if (waMountedRef.current) setBlacklist((bl || []) as { id: string; phone_number: string; reason: string | null; created_at: string }[])
+    } catch {}
+    try {
+      const { data: groupsData } = await supabase.from('whatsapp_groups')
+        .select('id, name, emoji, member_ids')
+        .eq('institution_id', institutionId)
+        .order('created_at')
+      if (waMountedRef.current) setGroups((groupsData || []) as { id: string; name: string; emoji: string; member_ids: string[] }[])
     } catch {}
     if (waMountedRef.current) setLoading(false)
   }
@@ -955,6 +968,91 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Grupos de Atendimento */}
+              <div style={{ marginTop: 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Grupos de Atendimento</h4>
+                  <button
+                    onClick={() => { setGroupForm({ name: '', emoji: '👥', member_ids: [] }); setEditingGroup(null); setShowGroupForm(true) }}
+                    style={{ fontSize: 12, fontWeight: 600, color: '#00A896', background: '#E6F7F5', border: '1px solid #B2E8E2', borderRadius: 8, padding: '5px 12px', cursor: 'pointer' }}
+                  >+ Novo grupo</button>
+                </div>
+                {groups.length === 0 && (
+                  <p style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic' }}>Nenhum grupo criado ainda</p>
+                )}
+                {groups.map(group => (
+                  <div key={group.id} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #D1FAE5', background: '#F0FDFB', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A' }}>{group.emoji} {group.name}</div>
+                      <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+                        {group.member_ids.length} membro(s): {group.member_ids.map(id => flowUsers.find(u => u.id === id)?.full_name || id).join(', ')}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        onClick={() => { setGroupForm({ name: group.name, emoji: group.emoji, member_ids: group.member_ids }); setEditingGroup(group); setShowGroupForm(true) }}
+                        style={{ fontSize: 11, color: '#00A896', background: 'none', border: '1px solid #B2E8E2', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}
+                      >Editar</button>
+                      <button
+                        onClick={async () => { if (!confirm('Excluir este grupo?')) return; await supabase.from('whatsapp_groups').delete().eq('id', group.id); setGroups(prev => prev.filter(g => g.id !== group.id)) }}
+                        style={{ fontSize: 11, color: '#EF4444', background: 'none', border: '1px solid #FCA5A5', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}
+                      >Excluir</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Modal criar/editar grupo */}
+              {showGroupForm && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ background: 'white', borderRadius: 16, padding: 24, width: 400, boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 16 }}>{editingGroup ? 'Editar grupo' : 'Novo grupo'}</h3>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                      <input value={groupForm.emoji} onChange={e => setGroupForm(f => ({ ...f, emoji: e.target.value }))}
+                        style={{ width: 50, padding: 8, fontSize: 20, border: '1px solid #D1FAE5', borderRadius: 8, textAlign: 'center', outline: 'none' }} maxLength={2} />
+                      <input value={groupForm.name} onChange={e => setGroupForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder="Nome do grupo (ex: Secretaria)"
+                        style={{ flex: 1, padding: '8px 12px', fontSize: 13, border: '1px solid #D1FAE5', borderRadius: 8, outline: 'none', color: '#1A2B4A' }} />
+                    </div>
+                    <div style={{ marginBottom: 16 }}>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 8 }}>Membros do grupo</label>
+                      {flowUsers.map(user => (
+                        <label key={user.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer', fontSize: 13, color: '#1A2B4A' }}>
+                          <input type="checkbox" checked={groupForm.member_ids.includes(user.id)}
+                            onChange={e => setGroupForm(f => ({ ...f, member_ids: e.target.checked ? [...f.member_ids, user.id] : f.member_ids.filter(id => id !== user.id) }))} />
+                          {user.full_name}
+                        </label>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => setShowGroupForm(false)}
+                        style={{ flex: 1, padding: 10, fontSize: 13, border: '1px solid #D1FAE5', borderRadius: 8, background: 'white', cursor: 'pointer', color: '#64748B' }}>
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!groupForm.name.trim()) return
+                          if (editingGroup) {
+                            const { data } = await supabase.from('whatsapp_groups')
+                              .update({ name: groupForm.name, emoji: groupForm.emoji, member_ids: groupForm.member_ids })
+                              .eq('id', editingGroup.id).select().single()
+                            if (data) setGroups(prev => prev.map(g => g.id === editingGroup.id ? (data as any) : g))
+                          } else {
+                            const { data } = await supabase.from('whatsapp_groups')
+                              .insert({ institution_id: institutionId, name: groupForm.name, emoji: groupForm.emoji, member_ids: groupForm.member_ids })
+                              .select().single()
+                            if (data) setGroups(prev => [...prev, data as any])
+                          }
+                          setShowGroupForm(false)
+                        }}
+                        style={{ flex: 1, padding: 10, fontSize: 13, fontWeight: 700, background: '#00A896', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                        {editingGroup ? 'Salvar' : 'Criar'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

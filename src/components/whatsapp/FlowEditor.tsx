@@ -57,7 +57,7 @@ function nodeH(node: { type: NodeType; data: Record<string, any> }): number {
     case 'question':   return 136
     case 'menu':       return 110 + (node.data.options?.length || 1) * 38
     case 'condition':  return 120
-    case 'transfer':   return 144
+    case 'transfer':   return 180
     case 'wait':       return 82
     case 'media':      return 160
     case 'distribute': return 82
@@ -190,10 +190,12 @@ const inputSt: React.CSSProperties = {
 function NodeBody({
   node,
   users,
+  groups,
   onChange,
 }: {
   node: FlowNode
   users: { id: string; full_name: string }[]
+  groups: { id: string; name: string; emoji: string }[]
   onChange: (data: Record<string, any>) => void
 }) {
   const stop = (e: React.MouseEvent) => e.stopPropagation()
@@ -291,24 +293,47 @@ function NodeBody({
         </div>
       )
 
-    case 'transfer':
+    case 'transfer': {
+      const tType = d.transferType || 'attendant'
       return (
         <div style={{ padding: 12 }}>
-          <select style={inputSt} value={d.assignee_id || ''}
-            onChange={e => {
-              const selected = users.find(u => u.id === e.target.value)
-              onChange({ ...d, assignee_id: e.target.value, assignee_name: selected?.full_name || '' })
-            }}
-            onMouseDown={stop}>
-            <option value="">Selecionar atendente...</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-          </select>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            {(['attendant', 'group'] as const).map(opt => (
+              <button key={opt} onMouseDown={e => e.stopPropagation()}
+                onClick={() => onChange({ ...d, transferType: opt, assignee_id: '', assignee_name: '', group_id: '', group_name: '' })}
+                style={{ flex: 1, padding: '4px 0', fontSize: 11, fontWeight: 600, borderRadius: 6, cursor: 'pointer', border: '1px solid', background: tType === opt ? '#0d9488' : 'white', color: tType === opt ? 'white' : '#64748b', borderColor: tType === opt ? '#0d9488' : '#e2e8f0' }}>
+                {opt === 'attendant' ? '👤 Atendente' : '👥 Grupo'}
+              </button>
+            ))}
+          </div>
+          {tType !== 'group' ? (
+            <select style={inputSt} value={d.assignee_id || ''}
+              onChange={e => {
+                const selected = users.find(u => u.id === e.target.value)
+                onChange({ ...d, assignee_id: e.target.value, assignee_name: selected?.full_name || '' })
+              }}
+              onMouseDown={stop}>
+              <option value="">Selecionar atendente...</option>
+              {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+            </select>
+          ) : (
+            <select style={inputSt} value={d.group_id || ''}
+              onChange={e => {
+                const g = groups.find(g => g.id === e.target.value)
+                onChange({ ...d, group_id: e.target.value, group_name: g ? `${g.emoji} ${g.name}` : '' })
+              }}
+              onMouseDown={stop}>
+              <option value="">Selecionar grupo...</option>
+              {groups.map(g => <option key={g.id} value={g.id}>{g.emoji} {g.name}</option>)}
+            </select>
+          )}
           <input style={{ ...inputSt, marginTop: 6 }}
             value={d.message || ''} placeholder="Mensagem antes de transferir (opcional)"
             onChange={e => onChange({ ...d, message: e.target.value })}
             onMouseDown={stop} />
         </div>
       )
+    }
 
     case 'media':
       return (
@@ -417,7 +442,7 @@ function NodeBody({
 // ── FlowNodeCard ──────────────────────────────────────────────────────────────
 function FlowNodeCard({
   node, selected, zoom, pan, dragging,
-  users,
+  users, groups,
   onSelect, onDragStart, onPortMouseDown, onPortMouseUp, onChange, onDelete,
 }: {
   node: FlowNode
@@ -426,6 +451,7 @@ function FlowNodeCard({
   pan: { x: number; y: number }
   dragging: boolean
   users: { id: string; full_name: string }[]
+  groups: { id: string; name: string; emoji: string }[]
   onSelect: () => void
   onDragStart: (e: React.MouseEvent) => void
   onPortMouseDown: (portId: string) => void
@@ -493,7 +519,7 @@ function FlowNodeCard({
       </div>
 
       {/* Body */}
-      <NodeBody node={node} users={users} onChange={onChange} />
+      <NodeBody node={node} users={users} groups={groups} onChange={onChange} />
 
       {/* Output ports */}
       <div style={{ position: 'relative', height: 0 }}>
@@ -584,6 +610,7 @@ export default function FlowEditor({
   const [saving, setSaving]         = useState(false)
   const [saved, setSaved]           = useState(false)
   const [users, setUsers]           = useState<{ id: string; full_name: string }[]>([])
+  const [groups, setGroups]         = useState<{ id: string; name: string; emoji: string }[]>([])
 
   const canvasRef = useRef<HTMLDivElement>(null)
   const zoomRef   = useRef(zoom)
@@ -595,7 +622,7 @@ export default function FlowEditor({
   useEffect(() => {
     console.log('[FlowEditor] mount — institutionId:', institutionId)
     ;(async () => {
-      const [{ data: fl }, { data: us }] = await Promise.all([
+      const [{ data: fl }, { data: us }, { data: grp }] = await Promise.all([
         supabase.from('whatsapp_flows')
           .select('bot_flow, bot_enabled')
           .eq('institution_id', institutionId)
@@ -603,8 +630,12 @@ export default function FlowEditor({
         supabase.from('users')
           .select('id, full_name')
           .eq('institution_id', institutionId),
+        supabase.from('whatsapp_groups')
+          .select('id, name, emoji')
+          .eq('institution_id', institutionId),
       ])
       if (us) setUsers(us)
+      if (grp) setGroups(grp as { id: string; name: string; emoji: string }[])
       if (fl?.bot_enabled != null) setIsActive(fl.bot_enabled)
 
       const bf = fl?.bot_flow as { nodes?: any[]; edges?: any[] } | null
@@ -964,6 +995,7 @@ export default function FlowEditor({
               pan={pan}
               dragging={dragNodeId === node.id}
               users={users}
+              groups={groups}
               onSelect={() => setSelected(node.id)}
               onDragStart={e => startDragNode(e, node.id)}
               onPortMouseDown={portId => handlePortMouseDown(node.id, portId)}

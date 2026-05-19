@@ -430,27 +430,57 @@ async function processCustomFlow(
     }
 
     if (node.type === 'transfer') {
-      const transferMsg = node.data?.message || node.data?.transferMessage
-      if (transferMsg) await sendAutoMessage(institutionId, remoteJid, interp(transferMsg))
-      const assigneeId = node.data?.assignee_id || node.data?.assigneeId
-      if (assigneeId) {
-        let assigneeName: string | null = node.data.assignee_name || node.data.assigneeName || null
-        if (!assigneeName) {
+      const transferMsg  = node.data?.message || node.data?.transferMessage
+      const transferType = node.data?.transferType || 'attendant'
+      const groupId      = node.data?.group_id
+
+      if (transferType === 'group' && groupId) {
+        // Round-robin distribution across group members
+        const { data: group } = await supabase
+          .from('whatsapp_groups').select('*').eq('id', groupId).maybeSingle()
+
+        if (group && group.member_ids?.length > 0) {
+          const nextIndex  = (group.last_assigned_index + 1) % group.member_ids.length
+          const assigneeId = group.member_ids[nextIndex]
           const { data: u } = await supabase
             .from('users').select('full_name').eq('id', assigneeId).maybeSingle()
-          assigneeName = (u as any)?.full_name || null
+          const assigneeName = (u as any)?.full_name || null
+
+          if (transferMsg) await sendAutoMessage(institutionId, remoteJid, interp(transferMsg))
+          await supabase.from('whatsapp_conversations').update({
+            assigned_user_id: assigneeId, assigned_user_name: assigneeName,
+            bot_active: false, status: 'open',
+          }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+          await supabase.from('whatsapp_groups')
+            .update({ last_assigned_index: nextIndex }).eq('id', groupId)
+          console.log('[flow] grupo round-robin:', group.name, '→', assigneeName, `(índice ${nextIndex})`)
+        } else {
+          console.warn('[flow] grupo sem membros:', groupId)
+          await supabase.from('whatsapp_conversations')
+            .update({ bot_active: false })
+            .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
         }
-        await supabase.from('whatsapp_conversations').update({
-          assigned_user_id:   assigneeId,
-          assigned_user_name: assigneeName,
-          bot_active: false,
-          status: 'open',
-        }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
       } else {
-        console.warn('[flow] transfer node has no assigneeId — deactivating bot without assigning')
-        await supabase.from('whatsapp_conversations').update({
-          bot_active: false,
-        }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+        // Specific attendant
+        if (transferMsg) await sendAutoMessage(institutionId, remoteJid, interp(transferMsg))
+        const assigneeId = node.data?.assignee_id || node.data?.assigneeId
+        if (assigneeId) {
+          let assigneeName: string | null = node.data.assignee_name || node.data.assigneeName || null
+          if (!assigneeName) {
+            const { data: u } = await supabase
+              .from('users').select('full_name').eq('id', assigneeId).maybeSingle()
+            assigneeName = (u as any)?.full_name || null
+          }
+          await supabase.from('whatsapp_conversations').update({
+            assigned_user_id: assigneeId, assigned_user_name: assigneeName,
+            bot_active: false, status: 'open',
+          }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+        } else {
+          console.warn('[flow] transfer node has no assigneeId — deactivating bot without assigning')
+          await supabase.from('whatsapp_conversations')
+            .update({ bot_active: false })
+            .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+        }
       }
       currentNodeId = 'end'; break
     }
