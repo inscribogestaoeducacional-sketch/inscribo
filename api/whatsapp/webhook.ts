@@ -1000,10 +1000,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (convErr) console.error('❌ conv upsert error:', convErr.message)
 
-        // ── Re-open: clear previous assignee so bot restarts clean ──
+        // ── Re-open: clear assignee and reset bot so flow restarts clean ──
         if (isNewConversation && existingConv) {
           await supabase.from('whatsapp_conversations')
-            .update({ assigned_user_id: null, assigned_user_name: null })
+            .update({
+              assigned_user_id: null,
+              assigned_user_name: null,
+              bot_active: true,
+              bot_current_node: null,
+              bot_variables: {},
+            })
             .eq('institution_id', institutionId)
             .eq('remote_jid', remoteJid)
         }

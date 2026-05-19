@@ -1339,23 +1339,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
     const conv = conversations.find(c => c.id === activeId)
 
-    // Auto-transition: waiting → open
-    if (conv && conv.status === 'waiting' && user.id) {
-      DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, 'open')
-        .then(() => {
-          setConversations(prev => prev.map(c => c.id === activeId ? { ...c, status: 'open' as ConvStatus } : c))
-          DatabaseService.logConversationEvent({
-            institution_id: effectiveInstitutionId,
-            remote_jid: rJid,
-            event_type: 'status_change',
-            description: 'Em atendimento',
-            user_id: user.id,
-            user_name: user.full_name || user.email,
-          }).catch(() => {})
-        })
-        .catch(() => {})
-    }
-
     // Auto-assign to current user if unassigned
     if (conv && !conv.assigned_user_id && user.id) {
       DatabaseService.assignConversation(effectiveInstitutionId, rJid, user.id, user.full_name || user.email)
@@ -1588,6 +1571,36 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             }
           : c
       ))
+
+      // Promote waiting → open on first send by atendente
+      const conv = conversationsRef.current.find(c => c.id === activeId)
+      if (conv && conv.status === 'waiting' && effectiveInstitutionId && user?.id) {
+        const rJid = rawJid(activeId)
+        DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, 'open')
+          .then(() => {
+            const assignNeeded = !conv.assigned_user_id
+            setConversations(prev => prev.map(c => c.id === activeId
+              ? {
+                  ...c,
+                  status: 'open' as ConvStatus,
+                  ...(assignNeeded ? { assigned_user_id: user!.id, assigned_user_name: user!.full_name || user!.email } : {}),
+                }
+              : c
+            ))
+            DatabaseService.logConversationEvent({
+              institution_id: effectiveInstitutionId,
+              remote_jid: rJid,
+              event_type: 'status_change',
+              description: 'Em atendimento',
+              user_id: user!.id,
+              user_name: user!.full_name || user!.email,
+            }).catch(() => {})
+            if (assignNeeded) {
+              DatabaseService.assignConversation(effectiveInstitutionId, rJid, user!.id, user!.full_name || user!.email).catch(() => {})
+            }
+          })
+          .catch(() => {})
+      }
 
     } catch (err: any) {
       setConversations(prev => prev.map(c =>
