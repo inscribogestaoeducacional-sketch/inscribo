@@ -1242,36 +1242,39 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         event: '*', schema: 'public', table: 'whatsapp_conversations',
         filter: convFilter
       }, (payload: any) => {
-        const rawJidFromPayload  = payload.new?.remote_jid || ''
-        const normJidFromPayload = normalizeJid(rawJidFromPayload)
+        const rawJidFromPayload = payload.new?.remote_jid || ''
+        const normJid = normalizeJid(rawJidFromPayload)
         console.log('[REALTIME CONV] evento recebido', payload.eventType, rawJidFromPayload, payload.new?.status)
-        console.log('[REALTIME CONV] CLOSING_IDS tem raw?', CLOSING_IDS.has(rawJidFromPayload), '| norm?', CLOSING_IDS.has(normJidFromPayload), '| set:', [...CLOSING_IDS])
-        // Ignore ALL events for conversations that are being closed locally
-        if (CLOSING_IDS.has(rawJidFromPayload) || CLOSING_IDS.has(normJidFromPayload)) {
+        // Ignore ALL events for conversations being closed locally
+        if (CLOSING_IDS.has(rawJidFromPayload) || CLOSING_IDS.has(normJid)) {
           console.log('[REALTIME CONV] ignorado — está em CLOSING_IDS')
           return
         }
-        if (payload.eventType === 'UPDATE') {
-          if (payload.new?.status === 'closed') {
-            setConversations(prev => prev.filter(c => c.id !== normJidFromPayload))
-            if (activeIdRef.current === normJidFromPayload) setActiveId(null)
-            return
-          }
-          // Non-closed update: patch locally, no full reload (avoids flicker)
-          setConversations(prev => prev.map(c => {
-            if (c.id !== normJidFromPayload) return c
-            return {
-              ...c,
-              status: payload.new.status as ConvStatus,
-              assigned_user_id: payload.new.assigned_user_id,
-              assigned_user_name: payload.new.assigned_user_name,
-              bot_active: payload.new.bot_active,
-            }
-          }))
+        if (payload.eventType === 'DELETE') return
+        if (payload.eventType === 'INSERT') {
+          loadMessages()
           return
         }
-        // INSERT (new conversation): reload to get full data
-        loadMessages()
+        // UPDATE
+        const newStatus = payload.new?.status
+        if (newStatus === 'closed') {
+          setConversations(prev => prev.filter(c => c.id !== normJid))
+          if (activeIdRef.current === normJid) setActiveId(null)
+          return
+        }
+        // waiting/open: patch locally without removing
+        setConversations(prev => prev.map(c => {
+          if (c.id !== normJid) return c
+          return {
+            ...c,
+            status: (newStatus || c.status) as ConvStatus,
+            assigned_user_id:   payload.new?.assigned_user_id   ?? c.assigned_user_id,
+            assigned_user_name: payload.new?.assigned_user_name ?? c.assigned_user_name,
+            bot_active:         payload.new?.bot_active         ?? c.bot_active,
+            unreadCount:        payload.new?.unread_count       ?? c.unreadCount,
+            lastMessage:        payload.new?.last_message       ?? c.lastMessage,
+          }
+        }))
       })
       .subscribe()
 
