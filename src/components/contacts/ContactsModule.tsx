@@ -54,6 +54,13 @@ function originCfg(hasLead: boolean, hasWa: boolean) {
   return                       { label: 'WhatsApp',        color: 'bg-[#FEF3C7] text-[#D97706]', badgeStyle: { background: '#FEF3C7', color: '#D97706' } }
 }
 
+// Usa o campo `type` de whatsapp_contacts como fonte única de verdade
+function typeCfg(type: string | null) {
+  if (type === 'lead')   return { label: 'Lead',     color: 'bg-[#EDE9FE] text-[#7C3AED]', badgeStyle: { background: '#EDE9FE', color: '#7C3AED' } }
+  if (type === 'client') return { label: 'Cliente',  color: 'bg-[#D1FAE5] text-[#065F46]', badgeStyle: { background: '#D1FAE5', color: '#065F46' } }
+  return                        { label: 'WhatsApp', color: 'bg-[#FEF3C7] text-[#D97706]', badgeStyle: { background: '#FEF3C7', color: '#D97706' } }
+}
+
 const PAGE_SIZE = 20
 
 // ─── Component ────────────────────────────────────────────────
@@ -126,10 +133,9 @@ export default function ContactsModule() {
       const list: UnifiedContact[] = (data || []).map((c: any) => {
         const lead     = c.leads || null
         const hasLead  = !!c.lead_id
-        // Todo contato nesta tabela veio do WhatsApp
         const rawPhone = (c.phone || '').replace(/\D/g, '')
         const fmtPhone = rawPhone ? formatPhone(rawPhone) : (c.phone || null)
-        const cfg      = originCfg(hasLead, true)
+        const cfg      = typeCfg(c.type)
         return {
           id:                 c.id,
           name:               c.name || fmtPhone || 'Desconhecido',
@@ -301,10 +307,10 @@ export default function ContactsModule() {
 
   // KPIs
   const kpis = [
-    { label: 'Total',    value: contacts.length,                                              icon: '👥', color: 'text-[#3B82F6]', bg: 'bg-[#EFF6FF]' },
-    { label: 'Leads',    value: contacts.filter(c => c.has_lead).length,                     icon: '🎯', color: 'text-[#7C3AED]', bg: 'bg-[#EDE9FE]' },
-    { label: 'Clientes', value: contacts.filter(c => c.contact_type === 'client').length,    icon: '🏫', color: 'text-[#065F46]', bg: 'bg-[#D1FAE5]' },
-    { label: 'WhatsApp', value: contacts.filter(c => c.has_whatsapp).length,                 icon: '💬', color: 'text-[#D97706]', bg: 'bg-[#FEF3C7]' },
+    { label: 'Total',    value: contacts.length,                                                    icon: '👥', color: 'text-[#3B82F6]', bg: 'bg-[#EFF6FF]' },
+    { label: 'Leads',    value: contacts.filter(c => c.contact_type === 'lead').length,             icon: '🎯', color: 'text-[#7C3AED]', bg: 'bg-[#EDE9FE]' },
+    { label: 'Clientes', value: contacts.filter(c => c.contact_type === 'client').length,           icon: '🏫', color: 'text-[#065F46]', bg: 'bg-[#D1FAE5]' },
+    { label: 'WhatsApp', value: contacts.filter(c => !c.contact_type).length,                      icon: '💬', color: 'text-[#D97706]', bg: 'bg-[#FEF3C7]' },
   ]
 
   const openImport = () => { setShowImport(true); setImportRows([]); setImportErrors([]); setImportResult(null) }
@@ -612,7 +618,7 @@ export default function ContactsModule() {
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {pageItems.map(c => {
                   const color  = hexColor(c.name)
-                  const origin = originCfg(c.has_lead, c.has_whatsapp)
+                  const origin = typeCfg(c.contact_type)
                   return (
                     <div key={c.id} onClick={() => setProfileContact(c)}
                       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}>
@@ -647,7 +653,7 @@ export default function ContactsModule() {
                 <tbody>
                   {pageItems.map(c => {
                     const color  = hexColor(c.name)
-                    const origin = originCfg(c.has_lead, c.has_whatsapp)
+                    const origin = typeCfg(c.contact_type)
                     return (
                       <tr key={c.id} onClick={() => setProfileContact(c)}
                         style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}
