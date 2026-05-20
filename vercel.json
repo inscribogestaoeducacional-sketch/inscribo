@@ -26,7 +26,8 @@
         { "key": "X-XSS-Protection",          "value": "1; mode=block" },
         { "key": "Referrer-Policy",           "value": "strict-origin-when-cross-origin" },
         { "key": "Permissions-Policy",        "value": "microphone=(self)" },
-        { "key": "Feature-Policy",            "value": "microphone 'self'" }
+        { "key": "Feature-Policy",            "value": "microphone 'self'" },
+        { "key": "Content-Security-Policy",   "value": "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;" }
       ]
     }
   ]

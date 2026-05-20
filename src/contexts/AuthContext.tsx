@@ -123,15 +123,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ── signOut ───────────────────────────────────────────
   const signOut = async () => {
-    setLoading(true)
     try {
-      setUser(null)
-      setSession(null)
-      await supabase.auth.signOut()
+      await supabase.auth.signOut({ scope: 'local' })
     } catch (e) {
-      console.error('signOut error:', e)
+      // ignora erro do servidor (ex: 403 com token já inválido)
     } finally {
-      setLoading(false)
+      localStorage.clear()
+      sessionStorage.clear()
       window.location.href = '/login'
     }
   }
