@@ -116,14 +116,15 @@ export default function ContactsModule() {
       // Colunas reais da tabela whatsapp_contacts:
       // id, institution_id, phone, name, type, lead_id,
       // profile_picture_url, last_seen_at, created_at, updated_at
+      // FK explícita evita 400 quando o PostgREST não resolve o join automaticamente
       const { data, error } = await supabase
         .from('whatsapp_contacts')
-        .select('id, phone, name, profile_picture_url, type, lead_id, last_seen_at, created_at, leads(id, student_name, responsible_name, email, grade_interest, source, status)')
+        .select('id, phone, name, profile_picture_url, type, lead_id, last_seen_at, created_at, leads!lead_id(id, student_name, responsible_name, email, grade_interest, source, status)')
         .eq('institution_id', institutionId)
-        .order('last_seen_at', { ascending: false })
+        .order('last_seen_at', { ascending: false, nullsFirst: false })
 
       if (error) {
-        console.error('Contacts query error:', error)
+        console.error('Contacts query error:', JSON.stringify(error))
         if (mountedRef.current) setLoading(false)
         return
       }
@@ -138,7 +139,8 @@ export default function ContactsModule() {
         const cfg      = typeCfg(c.type)
         return {
           id:                 c.id,
-          name:               c.name || fmtPhone || 'Desconhecido',
+          // Prioridade: nome WhatsApp → responsável → aluno → telefone
+          name:               c.name || lead?.responsible_name || lead?.student_name || fmtPhone || 'Desconhecido',
           student_name:       lead?.student_name || null,
           phone:              fmtPhone,
           email:              lead?.email || null,
