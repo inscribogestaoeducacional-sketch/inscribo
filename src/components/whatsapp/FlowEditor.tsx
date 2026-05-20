@@ -42,7 +42,7 @@ const CFG: Record<NodeType, { color: string; label: string; icon: string }> = {
   end:       { color: '#374151', label: 'Fim',        icon: '■' },
 }
 
-const SIDEBAR_TYPES: NodeType[] = ['message','question','menu','transfer','condition','action','wait','media','distribute','lead','end']
+const SIDEBAR_TYPES: NodeType[] = ['message','question','menu','transfer','condition','action','wait','media','end']
 
 const NW = 240
 
@@ -57,7 +57,7 @@ function nodeH(node: { type: NodeType; data: Record<string, any> }): number {
     case 'question':   return 136
     case 'menu':       return 110 + (node.data.options?.length || 1) * 38
     case 'condition':  return 120
-    case 'transfer':   return 180
+    case 'transfer':   return node.data.transferType === 'group' ? 220 : 180
     case 'wait':       return 82
     case 'media':      return 160
     case 'distribute': return 82
@@ -236,26 +236,28 @@ function NodeBody({
             value={d.menuText || ''} placeholder="Texto do menu..."
             onChange={e => onChange({ ...d, menuText: e.target.value })}
             onMouseDown={stop} />
-          {(d.options || []).map((opt: any, i: number) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, paddingBottom: 5 }}>
-              <span style={{
-                background: '#f59e0b', color: 'white', borderRadius: '50%',
-                width: 18, height: 18, fontSize: 10, display: 'flex',
-                alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-              }}>{i + 1}</span>
-              <input style={{ ...inputSt, flex: 1 }}
-                value={opt.text || ''} placeholder={`Opção ${i + 1}`}
-                onChange={e => {
-                  const opts = [...(d.options || [])]
-                  opts[i] = { ...opts[i], text: e.target.value }
-                  onChange({ ...d, options: opts })
-                }}
-                onMouseDown={stop} />
-              <button onMouseDown={stop}
-                onClick={() => onChange({ ...d, options: (d.options || []).filter((_: any, j: number) => j !== i) })}
-                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 15, padding: 0 }}>×</button>
-            </div>
-          ))}
+          <div style={{ maxHeight: 160, overflowY: 'auto' }}>
+            {(d.options || []).map((opt: any, i: number) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, paddingBottom: 5 }}>
+                <span style={{
+                  background: '#f59e0b', color: 'white', borderRadius: '50%',
+                  width: 18, height: 18, fontSize: 10, display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}>{i + 1}</span>
+                <input style={{ ...inputSt, flex: 1 }}
+                  value={opt.text || ''} placeholder={`Opção ${i + 1}`}
+                  onChange={e => {
+                    const opts = [...(d.options || [])]
+                    opts[i] = { ...opts[i], text: e.target.value }
+                    onChange({ ...d, options: opts })
+                  }}
+                  onMouseDown={stop} />
+                <button onMouseDown={stop}
+                  onClick={() => onChange({ ...d, options: (d.options || []).filter((_: any, j: number) => j !== i) })}
+                  style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 15, padding: 0 }}>×</button>
+              </div>
+            ))}
+          </div>
           <button onMouseDown={stop}
             onClick={() => onChange({ ...d, options: [...(d.options || []), { text: '' }] })}
             style={{
@@ -548,6 +550,11 @@ function EdgePath({
   const d    = bezier(from.x, from.y, to.x, to.y)
   const midX = (from.x + to.x) / 2
   const midY = (from.y + to.y) / 2
+  const isCondEdge = fromNode.type === 'condition' && (edge.fromPortId === 'yes' || edge.fromPortId === 'no')
+  const condLabel  = edge.fromPortId === 'yes' ? 'Sim' : 'Não'
+  const condColor  = edge.fromPortId === 'yes' ? '#10b981' : '#ef4444'
+  const labelX = from.x * 0.7 + to.x * 0.3
+  const labelY = from.y * 0.7 + to.y * 0.3
   return (
     <g>
       <path d={d} stroke="transparent" strokeWidth={14} fill="none"
@@ -560,6 +567,12 @@ function EdgePath({
         fill="none"
         strokeDasharray={hov ? '6 3' : undefined}
         style={{ pointerEvents: 'none' }} />
+      {isCondEdge && !hov && (
+        <g style={{ pointerEvents: 'none' }}>
+          <rect x={labelX - 14} y={labelY - 9} width={28} height={16} rx={4} fill="white" stroke={condColor} strokeWidth={1} />
+          <text x={labelX} y={labelY + 4} textAnchor="middle" fill={condColor} fontSize={10} fontWeight="bold">{condLabel}</text>
+        </g>
+      )}
       {hov && (
         <g style={{ pointerEvents: 'all', cursor: 'pointer' }}
           onMouseEnter={() => setHov(true)}
@@ -640,19 +653,34 @@ export default function FlowEditor({
 
       const bf = fl?.bot_flow as { nodes?: any[]; edges?: any[] } | null
       console.log('[FlowEditor] nodes loaded:', JSON.stringify(bf?.nodes ?? [], null, 2))
+      let nodesToFit: FlowNode[] = []
       if (bf?.nodes?.length) {
         const loadedNodes: FlowNode[] = bf.nodes.map((n: any) => ({
           ...n, width: NW, height: nodeH(n),
         }))
+        nodesToFit = loadedNodes
         setNodes(loadedNodes)
         setEdges((bf.edges || []).map(migrateEdge))
       } else {
         const s: FlowNode = { id: 'start-1', type: 'start',  position: { x: 200, y: 80 },  data: {}, width: NW, height: 82 }
         const m: FlowNode = { id: 'msg-1',   type: 'message', position: { x: 200, y: 220 }, data: { text: 'Olá! Bem-vindo. Como posso ajudar?' }, width: NW, height: 136 }
+        nodesToFit = [s, m]
         setNodes([s, m])
         setEdges([{ id: 'e-default', fromNodeId: 'start-1', fromPortId: 'out', toNodeId: 'msg-1', toPortId: 'in' }])
       }
       setLoading(false)
+      setTimeout(() => {
+        const el = canvasRef.current
+        if (!nodesToFit.length || !el) return
+        const xs = nodesToFit.map(n => n.position.x)
+        const ys = nodesToFit.map(n => n.position.y)
+        const minX = Math.min(...xs), maxX = Math.max(...xs) + NW
+        const minY = Math.min(...ys), maxY = Math.max(...ys) + 160
+        const cw = el.clientWidth - 80, ch = el.clientHeight - 80
+        const nz = Math.min(1.5, Math.max(0.25, Math.min(cw / (maxX - minX + 1), ch / (maxY - minY + 1))))
+        setZoom(nz)
+        setPan({ x: (cw - (maxX - minX) * nz) / 2 - minX * nz + 40, y: (ch - (maxY - minY) * nz) / 2 - minY * nz + 40 })
+      }, 100)
     })()
   }, [institutionId])
 
@@ -700,9 +728,13 @@ export default function FlowEditor({
       setDragNodeId(null)
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('touchend',   onUp as EventListener)
+      window.removeEventListener('touchcancel', onUp as EventListener)
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
+    window.addEventListener('touchend',   onUp as EventListener)
+    window.addEventListener('touchcancel', onUp as EventListener)
   }
 
   // ── Canvas pan ────────────────────────────────────────────────────────────
@@ -760,12 +792,12 @@ export default function FlowEditor({
     if (type === 'distribute') defaultData.distributeMode = 'round_robin'
     if (type === 'action')     defaultData.actionType = 'create_lead'
     if (type === 'lead')       defaultData.actionType = 'create_lead'
+    const rect = canvasRef.current?.getBoundingClientRect()
+    const cx = rect ? Math.round((rect.width  / 2 - pan.x) / zoom) : 300
+    const cy = rect ? Math.round((rect.height / 2 - pan.y) / zoom) : 200
     const newNode: FlowNode = {
       id, type,
-      position: {
-        x: Math.round((-pan.x + (canvasRef.current?.clientWidth  || 800) / 2) / zoom - NW / 2),
-        y: Math.round((-pan.y + (canvasRef.current?.clientHeight || 600) / 2) / zoom - 50),
-      },
+      position: { x: cx - NW / 2, y: cy - 50 },
       data: defaultData,
       width: NW,
       height: nodeH({ type, data: defaultData }),
@@ -791,6 +823,7 @@ export default function FlowEditor({
   const handleSave = async () => {
     if (!institutionId) {
       console.error('[FlowEditor] institutionId vazio — não é possível salvar')
+      alert('Erro: institution ID não encontrado. Recarregue a página.')
       return
     }
     setSaving(true)
