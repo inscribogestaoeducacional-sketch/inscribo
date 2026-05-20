@@ -715,6 +715,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [uploadProgress, setUploadProgress] = useState(0)
   const [addingTag, setAddingTag] = useState(false)
   const [newTag, setNewTag] = useState('')
+  const [hubTags, setHubTags] = useState<{ id: string; name: string; color: string }[]>([])
   const [quickReplies, setQuickReplies] = useState<{ id: string; label: string; text: string }[]>([])
   const [flowConfig, setFlowConfig] = useState<{ satisfaction_survey_enabled: boolean; satisfaction_message: string } | null>(null)
 
@@ -1252,6 +1253,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               satisfaction_survey_enabled: !!(data as any).satisfaction_survey_enabled,
               satisfaction_message: (data as any).satisfaction_message || 'Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊',
             })
+          } catch {}
+        })()
+
+        // Load whatsapp_tags for tag dropdown
+        ;(async () => {
+          try {
+            const { data } = await supabase
+              .from('whatsapp_tags')
+              .select('id, name, color')
+              .eq('institution_id', effectiveInstitutionId)
+              .order('name')
+            if (data) setHubTags(data as { id: string; name: string; color: string }[])
           } catch {}
         })()
       }
@@ -3498,12 +3511,24 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                             </span>
                           ))}
                           {addingTag ? (
-                            <input autoFocus value={newTag} onChange={e => setNewTag(e.target.value)}
-                              onKeyDown={e => { if (e.key === 'Enter') handleAddTag(newTag); if (e.key === 'Escape') { setAddingTag(false); setNewTag('') } }}
-                              onBlur={() => { if (newTag.trim()) handleAddTag(newTag); else { setAddingTag(false); setNewTag('') } }}
-                              placeholder="Nova etiqueta..."
-                              style={{ fontSize: 11, padding: '2px 7px', borderRadius: 9999, border: '1px dashed #d1fae5', background: 'transparent', color: '#1A2B4A', outline: 'none', width: 110 }}
-                              maxLength={20} />
+                            hubTags.length > 0 ? (
+                              <select autoFocus value={newTag}
+                                onChange={e => { if (e.target.value) handleAddTag(e.target.value); else { setAddingTag(false); setNewTag('') } }}
+                                onBlur={() => { setAddingTag(false); setNewTag('') }}
+                                style={{ fontSize: 11, padding: '2px 7px', borderRadius: 9999, border: '1px dashed #d1fae5', background: '#fff', color: '#1A2B4A', outline: 'none', cursor: 'pointer' }}>
+                                <option value="">Selecionar etiqueta...</option>
+                                {hubTags.filter(t => !(activeConv?.tags || []).includes(t.name)).map(t => (
+                                  <option key={t.id} value={t.name}>{t.name}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input autoFocus value={newTag} onChange={e => setNewTag(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') handleAddTag(newTag); if (e.key === 'Escape') { setAddingTag(false); setNewTag('') } }}
+                                onBlur={() => { if (newTag.trim()) handleAddTag(newTag); else { setAddingTag(false); setNewTag('') } }}
+                                placeholder="Nova etiqueta..."
+                                style={{ fontSize: 11, padding: '2px 7px', borderRadius: 9999, border: '1px dashed #d1fae5', background: 'transparent', color: '#1A2B4A', outline: 'none', width: 110 }}
+                                maxLength={20} />
+                            )
                           ) : (
                             <button onClick={() => setAddingTag(true)}
                               style={{ fontSize: 11, padding: '2px 9px', borderRadius: 9999, border: '1px dashed #d1fae5', color: '#0d9488', background: 'transparent', cursor: 'pointer', transition: 'all 0.15s' }}

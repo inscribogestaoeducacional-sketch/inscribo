@@ -361,13 +361,16 @@ const FLOW_DAYS = [
 ]
 
 const WA_SECTIONS = [
-  { id: 'conexao',  icon: '📡', label: 'Conexão' },
-  { id: 'horario',  icon: '🕐', label: 'Horário' },
-  { id: 'respostas',icon: '⚡', label: 'Respostas' },
-  { id: 'equipe',   icon: '👥', label: 'Equipe' },
-  { id: 'bloqueios',icon: '🚫', label: 'Bloqueios' },
-  { id: 'pesquisa', icon: '⭐', label: 'Pesquisa' },
+  { id: 'conexao',   icon: '📡', label: 'Conexão' },
+  { id: 'horario',   icon: '🕐', label: 'Horário' },
+  { id: 'respostas', icon: '⚡', label: 'Respostas' },
+  { id: 'equipe',    icon: '👥', label: 'Equipe' },
+  { id: 'bloqueios', icon: '🚫', label: 'Bloqueios' },
+  { id: 'etiquetas', icon: '🏷️', label: 'Etiquetas' },
+  { id: 'pesquisa',  icon: '⭐', label: 'Pesquisa' },
 ]
+
+const TAG_COLORS = ['#6366f1','#16a34a','#dc2626','#d97706','#0891b2','#ec4899','#64748b','#ea580c']
 
 function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [metaConfig, setMetaConfig]       = useState<any>(null)
@@ -420,6 +423,12 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [newBlockReason, setNewBlockReason] = useState('')
   const [savingBlock, setSavingBlock] = useState(false)
   const [waSection, setWaSection] = useState('conexao')
+
+  // Tags
+  const [waTags, setWaTags]       = useState<{ id: string; name: string; color: string }[]>([])
+  const [newTagName, setNewTagName] = useState('')
+  const [newTagColor, setNewTagColor] = useState('#6366f1')
+  const [savingTag, setSavingTag] = useState(false)
 
   // Groups
   const [groups, setGroups] = useState<{ id: string; name: string; emoji: string; member_ids: string[] }[]>([])
@@ -535,6 +544,13 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
         .eq('institution_id', institutionId)
         .order('created_at')
       if (waMountedRef.current) setGroups((groupsData || []) as { id: string; name: string; emoji: string; member_ids: string[] }[])
+    } catch {}
+    try {
+      const { data: tagsData } = await supabase.from('whatsapp_tags')
+        .select('id, name, color')
+        .eq('institution_id', institutionId)
+        .order('name')
+      if (waMountedRef.current) setWaTags((tagsData || []) as { id: string; name: string; color: string }[])
     } catch {}
     if (waMountedRef.current) setLoading(false)
   }
@@ -1176,6 +1192,66 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {waSection === 'etiquetas' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>🏷️ Etiquetas</h3>
+              <div style={dCard}>
+                <p style={{ margin: '0 0 16px', fontSize: 13, color: '#64748B' }}>
+                  Crie etiquetas para organizar suas conversas e leads no fluxo do robô.
+                </p>
+
+                {waTags.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+                    {waTags.map(tag => (
+                      <div key={tag.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, background: tag.color, color: '#fff', fontSize: 12, fontWeight: 600 }}>
+                        {tag.name}
+                        <button onClick={async () => {
+                          await supabase.from('whatsapp_tags').delete().eq('id', tag.id)
+                          setWaTags(prev => prev.filter(t => t.id !== tag.id))
+                        }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.85)', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {waTags.length === 0 && (
+                  <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 16 }}>Nenhuma etiqueta criada ainda.</p>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 6 }}>Nome da etiqueta</label>
+                    <input className={inputCls} value={newTagName} onChange={e => setNewTagName(e.target.value)} placeholder="Ex: VIP, Interessado, Aguardando..." maxLength={30} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 8 }}>Cor</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {TAG_COLORS.map(c => (
+                        <button key={c} onClick={() => setNewTagColor(c)}
+                          style={{ width: 26, height: 26, borderRadius: '50%', background: c, border: newTagColor === c ? '3px solid #1A2B4A' : '2px solid transparent', cursor: 'pointer', flexShrink: 0, outline: 'none' }} />
+                      ))}
+                    </div>
+                  </div>
+                  <button disabled={savingTag || !newTagName.trim()}
+                    onClick={async () => {
+                      if (!newTagName.trim()) return
+                      setSavingTag(true)
+                      const { data, error } = await supabase.from('whatsapp_tags')
+                        .insert({ institution_id: institutionId, name: newTagName.trim(), color: newTagColor })
+                        .select('id, name, color').single()
+                      setSavingTag(false)
+                      if (!error && data) {
+                        setWaTags(prev => [...prev, data as { id: string; name: string; color: string }].sort((a, b) => a.name.localeCompare(b.name)))
+                        setNewTagName(''); setNewTagColor('#6366f1')
+                      }
+                    }}
+                    style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingTag || !newTagName.trim() ? 0.6 : 1 }}>
+                    {savingTag ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : <><Plus size={13} />Adicionar etiqueta</>}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

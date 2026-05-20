@@ -353,9 +353,8 @@ async function processCustomFlow(
   } else if (current?.type === 'menu' && variables[`__menu_sent_${currentNodeId}`]) {
     // Menu was already displayed — process user's choice
     console.log('[MENU S2] resposta do menu, interactiveChoiceId:', interactiveChoiceId, '| texto:', text, '| options:', JSON.stringify(current.data?.options))
-    const options     = current.data?.options || []
-    const menuHeader  = interp(current.data?.menuText || current.data?.text || 'Escolha uma opção:')
-    const optionsText = options.map((o: any, i: number) => `${i + 1}. ${o.text}`).join('\n')
+    const options    = current.data?.options || []
+    const menuHeader = interp(current.data?.menuText || current.data?.text || 'Escolha uma opção:')
 
     // Priority 1: use raw interactive reply ID (opt_0, opt_1…) — direct index, no roundtrip
     let optIdx = -1
@@ -380,18 +379,18 @@ async function processCustomFlow(
         delete variables[`__menu_sent_${currentNodeId}`]
         currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId)
       } else {
-        // Valid index but no edge configured — keep waiting
-        const msg = `Opção inválida. Por favor escolha:\n\n${menuHeader}\n\n${optionsText}`
-        await sendAutoMessage(institutionId, remoteJid, msg)
+        // Valid index but no edge configured — re-prompt with interactive menu
+        await sendAutoMessage(institutionId, remoteJid, 'Não entendi sua resposta 😊 Por favor escolha uma das opções abaixo:')
+        await sendInteractiveMenu(institutionId, remoteJid, menuHeader, menuHeader, options)
         await supabase.from('whatsapp_conversations')
           .update({ bot_current_node: currentNodeId, bot_variables: variables })
           .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
         return
       }
     } else {
-      // Unrecognised choice — re-display full menu
-      const msg = `Opção inválida. Por favor escolha:\n\n${menuHeader}\n\n${optionsText}`
-      await sendAutoMessage(institutionId, remoteJid, msg)
+      // Unrecognised choice — re-display interactive menu
+      await sendAutoMessage(institutionId, remoteJid, 'Não entendi sua resposta 😊 Por favor escolha uma das opções abaixo:')
+      await sendInteractiveMenu(institutionId, remoteJid, menuHeader, menuHeader, options)
       await supabase.from('whatsapp_conversations')
         .update({ bot_current_node: currentNodeId, bot_variables: variables })
         .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
@@ -914,12 +913,20 @@ async function processFlow(
     if (flow.bot_enabled && flow.bot_flow?.nodes?.length) {
       const { data: convState } = await supabase
         .from('whatsapp_conversations')
-        .select('bot_active, assigned_user_id')
+        .select('bot_active, assigned_user_id, bot_variables')
         .eq('institution_id', institutionId)
         .eq('remote_jid', remoteJid)
         .maybeSingle()
 
       console.log('[FLOW] convState:', { bot_active: convState?.bot_active, assigned_user_id: convState?.assigned_user_id })
+
+      // ── button/list reply mid-flow: honour __menu_sent_* regardless of isNewConversation ──
+      const botVars = (convState?.bot_variables as Record<string, string>) || {}
+      const hasMenuPending = !!interactiveChoiceId && Object.keys(botVars).some(k => k.startsWith('__menu_sent_'))
+      if (hasMenuPending) {
+        await processCustomFlow(institutionId, remoteJid, text, flow, false, interactiveChoiceId)
+        return
+      }
 
       // Bot already running — continue flow from current node
       if (convState?.bot_active === true) {

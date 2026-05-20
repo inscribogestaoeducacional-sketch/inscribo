@@ -224,11 +224,13 @@ function NodeBody({
   node,
   users,
   groups,
+  availableTags,
   onChange,
 }: {
   node: FlowNode
   users: { id: string; full_name: string }[]
   groups: { id: string; name: string; emoji: string }[]
+  availableTags: { id: string; name: string; color: string }[]
   onChange: (data: Record<string, any>) => void
 }) {
   const stop = (e: React.MouseEvent) => e.stopPropagation()
@@ -418,10 +420,19 @@ function NodeBody({
                 )}
                 {c.conditionType === 'has_tag' && (
                   <>
-                    <input style={{ ...inputSt, marginTop: 6 }}
-                      value={c.tag || ''} placeholder="Nome da etiqueta"
-                      onChange={e => updateCond(i, { tag: e.target.value })}
-                      onMouseDown={stop} />
+                    {availableTags.length > 0 ? (
+                      <select style={{ ...inputSt, marginTop: 6 }}
+                        value={c.tag || ''} onChange={e => updateCond(i, { tag: e.target.value })}
+                        onMouseDown={stop}>
+                        <option value="">— Selecione a etiqueta —</option>
+                        {availableTags.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                      </select>
+                    ) : (
+                      <input style={{ ...inputSt, marginTop: 6 }}
+                        value={c.tag || ''} placeholder="Nome da etiqueta (crie etiquetas nas configurações)"
+                        onChange={e => updateCond(i, { tag: e.target.value })}
+                        onMouseDown={stop} />
+                    )}
                     <select style={{ ...inputSt, marginTop: 6 }}
                       value={c.tagScope || 'conversation'}
                       onChange={e => updateCond(i, { tagScope: e.target.value })}
@@ -579,10 +590,19 @@ function NodeBody({
                 <option value="close_conversation">Encerrar conversa</option>
               </select>
               {(a.actionType === 'add_tag' || a.actionType === 'add_conversation_tag' || a.actionType === 'remove_conversation_tag') && (
-                <input style={{ ...inputSt, marginTop: 6 }}
-                  value={a.tag || ''} placeholder="Nome da etiqueta"
-                  onChange={e => updateAction(i, { tag: e.target.value })}
-                  onMouseDown={stop} />
+                availableTags.length > 0 ? (
+                  <select style={{ ...inputSt, marginTop: 6 }}
+                    value={a.tag || ''} onChange={e => updateAction(i, { tag: e.target.value })}
+                    onMouseDown={stop}>
+                    <option value="">— Selecione a etiqueta —</option>
+                    {availableTags.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                  </select>
+                ) : (
+                  <input style={{ ...inputSt, marginTop: 6 }}
+                    value={a.tag || ''} placeholder="Nome da etiqueta (crie em Configurações → Etiquetas)"
+                    onChange={e => updateAction(i, { tag: e.target.value })}
+                    onMouseDown={stop} />
+                )
               )}
               {a.actionType === 'upsert_lead' && (
                 <>
@@ -659,7 +679,7 @@ function NodeBody({
 // ── FlowNodeCard ──────────────────────────────────────────────────────────────
 function FlowNodeCard({
   node, selected, zoom, pan, dragging,
-  users, groups,
+  users, groups, availableTags,
   onSelect, onDragStart, onPortMouseDown, onPortMouseUp, onChange, onDelete,
 }: {
   node: FlowNode
@@ -669,6 +689,7 @@ function FlowNodeCard({
   dragging: boolean
   users: { id: string; full_name: string }[]
   groups: { id: string; name: string; emoji: string }[]
+  availableTags: { id: string; name: string; color: string }[]
   onSelect: () => void
   onDragStart: (e: React.MouseEvent) => void
   onPortMouseDown: (portId: string) => void
@@ -740,7 +761,7 @@ function FlowNodeCard({
       </div>
 
       {/* Body */}
-      <NodeBody node={node} users={users} groups={groups} onChange={onChange} />
+      <NodeBody node={node} users={users} groups={groups} availableTags={availableTags} onChange={onChange} />
 
       {/* Output ports */}
       <div style={{ position: 'relative', height: 0 }}>
@@ -843,6 +864,7 @@ export default function FlowEditor({
   const [saved, setSaved]           = useState(false)
   const [users, setUsers]           = useState<{ id: string; full_name: string }[]>([])
   const [groups, setGroups]         = useState<{ id: string; name: string; emoji: string }[]>([])
+  const [availableTags, setAvailableTags] = useState<{ id: string; name: string; color: string }[]>([])
   const [draftBanner, setDraftBanner] = useState(false)
   const [draftData, setDraftData]     = useState<{ nodes: FlowNode[]; edges: FlowEdge[] } | null>(null)
   const dirtyRef = useRef(false)
@@ -857,7 +879,7 @@ export default function FlowEditor({
   useEffect(() => {
     console.log('[FlowEditor] mount — institutionId:', institutionId)
     ;(async () => {
-      const [{ data: fl }, { data: us }, { data: grp }] = await Promise.all([
+      const [{ data: fl }, { data: us }, { data: grp }, { data: tg }] = await Promise.all([
         supabase.from('whatsapp_flows')
           .select('bot_flow, bot_enabled')
           .eq('institution_id', institutionId)
@@ -868,9 +890,14 @@ export default function FlowEditor({
         supabase.from('whatsapp_groups')
           .select('id, name, emoji')
           .eq('institution_id', institutionId),
+        supabase.from('whatsapp_tags')
+          .select('id, name, color')
+          .eq('institution_id', institutionId)
+          .order('name'),
       ])
       if (us) setUsers(us)
       if (grp) setGroups(grp as { id: string; name: string; emoji: string }[])
+      if (tg) setAvailableTags(tg as { id: string; name: string; color: string }[])
       if (fl?.bot_enabled != null) setIsActive(fl.bot_enabled)
 
       const bf = fl?.bot_flow as { nodes?: any[]; edges?: any[] } | null
@@ -1301,6 +1328,7 @@ export default function FlowEditor({
               dragging={dragNodeId === node.id}
               users={users}
               groups={groups}
+              availableTags={availableTags}
               onSelect={() => setSelected(node.id)}
               onDragStart={e => startDragNode(e, node.id)}
               onPortMouseDown={portId => handlePortMouseDown(node.id, portId)}
