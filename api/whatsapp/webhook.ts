@@ -434,26 +434,75 @@ async function processCustomFlow(
       const transferType = node.data?.transferType || 'attendant'
       const groupId      = node.data?.group_id
 
+      // Schedule check: are we within business hours?
+      const tz       = (flow as any).timezone || 'America/Sao_Paulo'
+      const nowTz    = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
+      const dayKeys  = ['SUN','MON','TUE','WED','THU','FRI','SAT']
+      const curDay   = dayKeys[nowTz.getDay()]
+      const curMins  = nowTz.getHours() * 60 + nowTz.getMinutes()
+      const [sh, sm] = ((flow as any).working_start || '08:00').split(':').map(Number)
+      const [eh, em] = ((flow as any).working_end   || '18:00').split(':').map(Number)
+      const withinHours = ((flow as any).working_days ?? []).includes(curDay)
+        && curMins >= sh * 60 + sm && curMins <= eh * 60 + em
+
+      const outsideMsg = (flow as any).outside_hours_message || (flow as any).off_hours_message || ''
+      const lunchMsgText = (flow as any).lunch_message || ''
+
+      const isOnLunch = (att: { lunch_start?: string | null; lunch_end?: string | null } | null) => {
+        if (!att?.lunch_start || !att?.lunch_end) return false
+        const [lsh, lsm] = att.lunch_start.split(':').map(Number)
+        const [leh, lem] = att.lunch_end.split(':').map(Number)
+        return curMins >= lsh * 60 + lsm && curMins <= leh * 60 + lem
+      }
+
+      if (!withinHours) {
+        console.log('[flow] transfer bloqueado — fora do horário:', curDay, `${nowTz.getHours()}:${String(nowTz.getMinutes()).padStart(2,'0')}`)
+        if (outsideMsg) await sendAutoMessage(institutionId, remoteJid, outsideMsg)
+        await supabase.from('whatsapp_conversations')
+          .update({ bot_active: false, status: 'open' })
+          .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+        currentNodeId = 'end'; break
+      }
+
       if (transferType === 'group' && groupId) {
-        // Round-robin distribution across group members
+        // Round-robin distribution across group members, skipping those on lunch
         const { data: group } = await supabase
           .from('whatsapp_groups').select('*').eq('id', groupId).maybeSingle()
 
         if (group && group.member_ids?.length > 0) {
-          const nextIndex  = (group.last_assigned_index + 1) % group.member_ids.length
-          const assigneeId = group.member_ids[nextIndex]
-          const { data: u } = await supabase
-            .from('users').select('full_name').eq('id', assigneeId).maybeSingle()
-          const assigneeName = (u as any)?.full_name || null
+          const { data: members } = await supabase
+            .from('users').select('id,full_name,lunch_start,lunch_end')
+            .in('id', group.member_ids)
 
-          if (transferMsg) await sendAutoMessage(institutionId, remoteJid, interp(transferMsg))
-          await supabase.from('whatsapp_conversations').update({
-            assigned_user_id: assigneeId, assigned_user_name: assigneeName,
-            bot_active: false, status: 'open',
-          }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
-          await supabase.from('whatsapp_groups')
-            .update({ last_assigned_index: nextIndex }).eq('id', groupId)
-          console.log('[flow] grupo round-robin:', group.name, '→', assigneeName, `(índice ${nextIndex})`)
+          // Find next available member (not on lunch) starting after last assigned index
+          const totalMembers = group.member_ids.length
+          let assignee: any = null
+          let newIndex = group.last_assigned_index
+          for (let i = 1; i <= totalMembers; i++) {
+            const idx      = (group.last_assigned_index + i) % totalMembers
+            const memberId = group.member_ids[idx]
+            const member   = (members || []).find((m: any) => m.id === memberId)
+            if (member && !isOnLunch(member as any)) {
+              assignee = member; newIndex = idx; break
+            }
+          }
+
+          if (!assignee) {
+            console.log('[flow] todos membros do grupo em almoço:', group.name)
+            if (lunchMsgText) await sendAutoMessage(institutionId, remoteJid, lunchMsgText)
+            await supabase.from('whatsapp_conversations')
+              .update({ bot_active: false, status: 'open' })
+              .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+          } else {
+            if (transferMsg) await sendAutoMessage(institutionId, remoteJid, interp(transferMsg))
+            await supabase.from('whatsapp_conversations').update({
+              assigned_user_id: assignee.id, assigned_user_name: assignee.full_name,
+              bot_active: false, status: 'open',
+            }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+            await supabase.from('whatsapp_groups')
+              .update({ last_assigned_index: newIndex }).eq('id', groupId)
+            console.log('[flow] grupo round-robin:', group.name, '→', assignee.full_name, `(índice ${newIndex})`)
+          }
         } else {
           console.warn('[flow] grupo sem membros:', groupId)
           await supabase.from('whatsapp_conversations')
@@ -462,14 +511,17 @@ async function processCustomFlow(
         }
       } else {
         // Specific attendant
-        if (transferMsg) await sendAutoMessage(institutionId, remoteJid, interp(transferMsg))
         const assigneeId = node.data?.assignee_id || node.data?.assigneeId
         if (assigneeId) {
-          let assigneeName: string | null = node.data.assignee_name || node.data.assigneeName || null
-          if (!assigneeName) {
-            const { data: u } = await supabase
-              .from('users').select('full_name').eq('id', assigneeId).maybeSingle()
-            assigneeName = (u as any)?.full_name || null
+          const { data: u } = await supabase
+            .from('users').select('full_name,lunch_start,lunch_end').eq('id', assigneeId).maybeSingle()
+          const assigneeName = (u as any)?.full_name || node.data.assignee_name || node.data.assigneeName || null
+
+          if (isOnLunch(u as any)) {
+            console.log('[flow] atendente em almoço, encaminhando mesmo assim:', assigneeName)
+            if (lunchMsgText) await sendAutoMessage(institutionId, remoteJid, lunchMsgText)
+          } else {
+            if (transferMsg) await sendAutoMessage(institutionId, remoteJid, interp(transferMsg))
           }
           await supabase.from('whatsapp_conversations').update({
             assigned_user_id: assigneeId, assigned_user_name: assigneeName,

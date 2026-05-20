@@ -409,7 +409,7 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [editQRId, setEditQRId]         = useState<string | null>(null)
   const [editQRData, setEditQRData]     = useState({ title: '', message: '' })
   // Attendants
-  const [attendants, setAttendants]     = useState<{ id: string; full_name: string; working_hours_start: string; working_hours_end: string; working_days: string[] }[]>([])
+  const [attendants, setAttendants]     = useState<{ id: string; full_name: string; working_hours_start: string; working_hours_end: string; working_days: string[]; lunch_start: string; lunch_end: string; has_lunch_break: boolean }[]>([])
   const [savingAtt, setSavingAtt]       = useState<string | null>(null)
   // Real monthly count
   const [monthlyConvCount, setMonthlyConvCount] = useState(0)
@@ -432,6 +432,12 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [timeoutGroupId, setTimeoutGroupId]     = useState('')
   const [timeoutAssigneeId, setTimeoutAssigneeId] = useState('')
   const [timeoutMessage, setTimeoutMessage]     = useState('Um momento, estou te conectando com um atendente! 👋')
+
+  // Outside hours & lunch messages
+  const [outsideHoursMsg, setOutsideHoursMsg] = useState('Olá! Nosso horário de atendimento é de {horario}. Sua mensagem foi registrada e retornaremos em breve! 👋')
+  const [lunchMsg, setLunchMsg]               = useState('Olá! No momento nossa equipe está no horário de almoço. Retornaremos em breve! 🍽️')
+  const [savingMsgs, setSavingMsgs]           = useState(false)
+  const [msgsSaved, setMsgsSaved]             = useState(false)
 
   const waMountedRef = useRef(true)
   useEffect(() => {
@@ -473,10 +479,12 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
       const { data: flowData } = await supabase.from('whatsapp_flows').select('*').eq('institution_id', institutionId).maybeSingle()
       if (waMountedRef.current && flowData) {
         setFlow(f => ({ ...f, ...flowData }))
-        if (flowData.timeout_minutes)    setTimeoutMinutes(flowData.timeout_minutes)
-        if (flowData.timeout_group_id)   setTimeoutGroupId(flowData.timeout_group_id)
-        if (flowData.timeout_assignee_id) setTimeoutAssigneeId(flowData.timeout_assignee_id)
-        if (flowData.timeout_message)    setTimeoutMessage(flowData.timeout_message)
+        if (flowData.timeout_minutes)      setTimeoutMinutes(flowData.timeout_minutes)
+        if (flowData.timeout_group_id)     setTimeoutGroupId(flowData.timeout_group_id)
+        if (flowData.timeout_assignee_id)  setTimeoutAssigneeId(flowData.timeout_assignee_id)
+        if (flowData.timeout_message)      setTimeoutMessage(flowData.timeout_message)
+        if (flowData.outside_hours_message) setOutsideHoursMsg(flowData.outside_hours_message)
+        if (flowData.lunch_message)         setLunchMsg(flowData.lunch_message)
       }
     } catch {}
     try {
@@ -492,7 +500,7 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
     } catch {}
     try {
       const { data: atts } = await supabase.from('users')
-        .select('id,full_name,working_hours_start,working_hours_end,working_days')
+        .select('id,full_name,working_hours_start,working_hours_end,working_days,lunch_start,lunch_end')
         .eq('institution_id', institutionId)
       if (waMountedRef.current) setAttendants((atts || []).map((a: any) => ({
         id: a.id,
@@ -500,6 +508,9 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
         working_hours_start: a.working_hours_start || '08:00',
         working_hours_end:   a.working_hours_end   || '18:00',
         working_days:        a.working_days        || ['MON','TUE','WED','THU','FRI'],
+        lunch_start:         a.lunch_start         || '12:00',
+        lunch_end:           a.lunch_end           || '13:00',
+        has_lunch_break:     !!(a.lunch_start && a.lunch_end),
       })))
     } catch {}
     try {
@@ -675,8 +686,27 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
         working_hours_start: att.working_hours_start,
         working_hours_end:   att.working_hours_end,
         working_days:        att.working_days,
+        lunch_start:         att.has_lunch_break ? att.lunch_start : null,
+        lunch_end:           att.has_lunch_break ? att.lunch_end   : null,
       }).eq('id', att.id)
     } catch (e) { console.error(e) } finally { setSavingAtt(null) }
+  }
+
+  const toggleAttendantLunch = (id: string) => {
+    setAttendants(prev => prev.map(a => a.id === id ? { ...a, has_lunch_break: !a.has_lunch_break } : a))
+  }
+
+  const handleSaveMsgs = async () => {
+    setSavingMsgs(true)
+    try {
+      const { error } = await supabase.from('whatsapp_flows').upsert(
+        { institution_id: institutionId, outside_hours_message: outsideHoursMsg, lunch_message: lunchMsg },
+        { onConflict: 'institution_id' }
+      )
+      if (error) { alert('Erro: ' + error.message); return }
+      setMsgsSaved(true)
+      setTimeout(() => setMsgsSaved(false), 2500)
+    } catch (e) { console.error(e) } finally { setSavingMsgs(false) }
   }
 
   const toggleDay = (d: string) => setFlow(f => ({
@@ -837,6 +867,24 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                   {savingFlow ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : flowSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar horário</>}
                 </button>
               </div>
+
+              {/* Mensagens automáticas de horário */}
+              <div style={dCard}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 16 }}>💬 Mensagens Automáticas</div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={dLabel}>Mensagem fora do horário (transferências do bot)</label>
+                  <p style={{ fontSize: 11, color: '#94A3B8', margin: '0 0 6px' }}>Use <strong>{'{horario}'}</strong> para inserir os horários configurados automaticamente</p>
+                  <textarea rows={3} style={{ ...dInput, resize: 'vertical' as const }} value={outsideHoursMsg} onChange={e => setOutsideHoursMsg(e.target.value)} />
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={dLabel}>Mensagem de horário de almoço</label>
+                  <textarea rows={3} style={{ ...dInput, resize: 'vertical' as const }} value={lunchMsg} onChange={e => setLunchMsg(e.target.value)} />
+                </div>
+                <button onClick={handleSaveMsgs} disabled={savingMsgs}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: msgsSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingMsgs ? 0.7 : 1 }}>
+                  {savingMsgs ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : msgsSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar mensagens</>}
+                </button>
+              </div>
             </div>
           )}
 
@@ -922,6 +970,28 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                           style={{ padding: '9px 14px', background: '#00A896', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingAtt === att.id ? 0.6 : 1 }}>
                           {savingAtt === att.id ? '...' : <Save size={13} />}
                         </button>
+                      </div>
+                      {/* Lunch break */}
+                      <div style={{ marginTop: 12, borderTop: '1px solid #F1F5F9', paddingTop: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: att.has_lunch_break ? 10 : 0 }}>
+                          <button onClick={() => toggleAttendantLunch(att.id)}
+                            style={{ width: 36, height: 20, borderRadius: 999, background: att.has_lunch_break ? '#00A896' : '#CBD5E1', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
+                            <span style={{ position: 'absolute', top: 2, left: att.has_lunch_break ? 18 : 2, width: 16, height: 16, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
+                          </button>
+                          <span style={{ fontSize: 12, color: '#64748B' }}>Tem horário de almoço?</span>
+                        </div>
+                        {att.has_lunch_break && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                            <div>
+                              <label style={dLabel}>Almoço início</label>
+                              <input type="time" style={dInput} value={att.lunch_start} onChange={e => updateAttendant(att.id, 'lunch_start', e.target.value)} />
+                            </div>
+                            <div>
+                              <label style={dLabel}>Almoço fim</label>
+                              <input type="time" style={dInput} value={att.lunch_end} onChange={e => updateAttendant(att.id, 'lunch_end', e.target.value)} />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1050,6 +1120,12 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 4 }}>Mensagem ao transferir</label>
                   <textarea rows={2} value={timeoutMessage} onChange={e => setTimeoutMessage(e.target.value)}
                     style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid #D1FAE5', borderRadius: 8, background: '#F0FDFB', color: '#1A2B4A', resize: 'none' as const, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }} />
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <button onClick={handleSaveFlow} disabled={savingFlow}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: flowSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
+                    {savingFlow ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : flowSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar timeout</>}
+                  </button>
                 </div>
               </div>
             </div>
