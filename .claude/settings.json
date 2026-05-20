@@ -30,7 +30,9 @@
       "Bash(Remove-Item \"c:\\\\Users\\\\Victor Almeida\\\\AIONEDU\\\\api\\\\whatsapp\\\\_helpers.ts\" -Force)",
       "Bash(Remove-Item \"c:\\\\Users\\\\Victor Almeida\\\\AIONEDU\\\\api\\\\evolution\\\\_config.ts\" -Force)",
       "Bash(Write-Output \"Deleted\")",
-      "Bash(grep -r \"from '\\\\\\\\./\" api/whatsapp/)"
+      "Bash(grep -r \"from '\\\\\\\\./\" api/whatsapp/)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Victor Almeida\\\\AIONEDU\\\\src\\\\components\" -Recurse -Name)",
+      "Bash(Select-String -Pattern \"sidebar|menu|nav|layout\" -AllMatches)"
     ]
   }
 }

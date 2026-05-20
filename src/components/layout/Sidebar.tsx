@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { usePermissions } from '../../contexts/PermissionsContext'
 import { useNotifications } from '../../hooks/useNotifications'
 import {
   LayoutDashboard, Users, BookUser, Calendar,
@@ -8,16 +9,16 @@ import {
 } from 'lucide-react'
 
 const NAV_CFG = [
-  { path: '/home',            label: 'Início',          iconBg: '#E6F7F5', iconColor: '#00A896', Icon: LayoutDashboard, roles: ['admin','manager','user'] },
-  { path: '/leads',           label: 'Leads',           iconBg: '#EDE9FE', iconColor: '#8B5CF6', Icon: Users,           roles: ['admin','manager','user'] },
-  { path: '/contacts',        label: 'Contatos',        iconBg: '#EFF6FF', iconColor: '#3B82F6', Icon: BookUser,        roles: ['admin','manager','user'] },
-  { path: '/visits',          label: 'Visitas',         iconBg: '#FEF3C7', iconColor: '#F59E0B', Icon: Calendar,        roles: ['admin','manager','user'] },
-  { path: '/whatsapp',        label: 'WhatsApp',        iconBg: '#D1FAE5', iconColor: '#10B981', Icon: MessageCircle,   roles: ['admin','manager','user'] },
-  { path: '/reports',         label: 'Relatórios',      iconBg: '#DBEAFE', iconColor: '#3B82F6', Icon: BarChart3,       roles: ['admin','manager'] },
-  { path: '/transferencias',  label: 'Transferências',  iconBg: '#FEE2E2', iconColor: '#DC2626', Icon: ArrowRightLeft,  roles: ['admin','manager','user'] },
-  { path: '/pesquisas',       label: 'Pesquisas',       iconBg: '#FFF7ED', iconColor: '#F97316', Icon: ClipboardList,   roles: ['admin','manager'] },
-  { path: '/users',           label: 'Usuários',        iconBg: '#F1F5F9', iconColor: '#64748B', Icon: UserCog,         roles: ['admin'] },
-  { path: '/settings',        label: 'Config.',         iconBg: '#F1F5F9', iconColor: '#64748B', Icon: Settings,        roles: ['admin'] },
+  { path: '/home',            label: 'Início',          iconBg: '#E6F7F5', iconColor: '#00A896', Icon: LayoutDashboard, roles: ['admin','manager','user'], module: 'inicio' },
+  { path: '/leads',           label: 'Leads',           iconBg: '#EDE9FE', iconColor: '#8B5CF6', Icon: Users,           roles: ['admin','manager','user'], module: 'leads' },
+  { path: '/contacts',        label: 'Contatos',        iconBg: '#EFF6FF', iconColor: '#3B82F6', Icon: BookUser,        roles: ['admin','manager','user'], module: 'contatos' },
+  { path: '/visits',          label: 'Visitas',         iconBg: '#FEF3C7', iconColor: '#F59E0B', Icon: Calendar,        roles: ['admin','manager','user'], module: 'visitas' },
+  { path: '/whatsapp',        label: 'WhatsApp',        iconBg: '#D1FAE5', iconColor: '#10B981', Icon: MessageCircle,   roles: ['admin','manager','user'], module: 'whatsapp' },
+  { path: '/reports',         label: 'Relatórios',      iconBg: '#DBEAFE', iconColor: '#3B82F6', Icon: BarChart3,       roles: ['admin','manager'], module: 'relatorios' },
+  { path: '/transferencias',  label: 'Transferências',  iconBg: '#FEE2E2', iconColor: '#DC2626', Icon: ArrowRightLeft,  roles: ['admin','manager','user'], module: 'transferencias' },
+  { path: '/pesquisas',       label: 'Pesquisas',       iconBg: '#FFF7ED', iconColor: '#F97316', Icon: ClipboardList,   roles: ['admin','manager'], module: 'pesquisas' },
+  { path: '/users',           label: 'Usuários',        iconBg: '#F1F5F9', iconColor: '#64748B', Icon: UserCog,         roles: ['admin'], module: 'usuarios' },
+  { path: '/settings',        label: 'Config.',         iconBg: '#F1F5F9', iconColor: '#64748B', Icon: Settings,        roles: ['admin'], module: 'configuracoes' },
 ]
 
 function Tooltip({ text, children }: { text: string; children: React.ReactNode }) {
@@ -50,6 +51,7 @@ function Tooltip({ text, children }: { text: string; children: React.ReactNode }
 export default function Sidebar() {
   const location = useLocation()
   const { user } = useAuth()
+  const { isModuleEnabled } = usePermissions()
   const { unreadCount } = useNotifications(user?.institution_id || null)
 
   const [expanded, setExpanded] = useState(() => {
@@ -79,7 +81,9 @@ export default function Sidebar() {
     localStorage.setItem('sidebar-expanded', String(next))
   }
 
-  const navItems = NAV_CFG.filter(item => item.roles.includes(user?.role || 'user'))
+  const navItems = NAV_CFG.filter(item =>
+    item.roles.includes(user?.role || 'user') && isModuleEnabled(item.module)
+  )
   const initials = (user?.full_name || 'U').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
   const userName = user?.full_name || 'Usuário'
   const userRole = user?.role === 'admin' ? 'Administrador' : user?.role === 'manager' ? 'Gestor' : 'Usuário'

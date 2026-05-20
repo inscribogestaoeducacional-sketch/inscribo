@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { PermissionsProvider, usePermissions } from './contexts/PermissionsContext'
 import { supabase } from './lib/supabase'
 
 // ── Auth ──────────────────────────────────────────────────────────────────
@@ -79,6 +80,42 @@ function RequireRole({ children, roles }: { children: React.ReactNode; roles: st
   const match = roles.includes(user?.role ?? '') || roles.includes(user?.user_type ?? '')
   if (!match) return <Navigate to="/unauthorized" replace />
   return <>{children}</>
+}
+
+function PermissionDenied() {
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('permission-denied', {
+      detail: { message: 'Você não tem permissão para acessar este módulo.' }
+    }))
+  }, [])
+  return <Navigate to="/atendente" replace />
+}
+
+function PermissionRoute({ children, module }: { children: React.ReactNode; module: string }) {
+  const { user } = useAuth()
+  const { isModuleEnabled, loading } = usePermissions()
+  if (!user || user.role !== 'user') return <>{children}</>
+  if (loading) return null
+  if (!isModuleEnabled(module)) return <PermissionDenied />
+  return <>{children}</>
+}
+
+function GlobalToast() {
+  const [msg, setMsg] = useState<string | null>(null)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      setMsg((e as CustomEvent).detail.message)
+      setTimeout(() => setMsg(null), 4000)
+    }
+    window.addEventListener('permission-denied', handler)
+    return () => window.removeEventListener('permission-denied', handler)
+  }, [])
+  if (!msg) return null
+  return (
+    <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 99999, background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, padding: '12px 18px', fontSize: 13, color: '#DC2626', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+      🔒 {msg}
+    </div>
+  )
 }
 
 function ReportsPage() {
@@ -274,13 +311,13 @@ function AppContent() {
             <Route path="/home" element={<RequireRole roles={['admin','manager']}><GestorHome /></RequireRole>} />
             <Route path="/atendente" element={<RequireRole roles={['user','school_user']}><AttendantHome /></RequireRole>} />
             <Route path="/dashboard"      element={<Dashboard />} />
-            <Route path="/leads"          element={<LeadKanban />} />
+            <Route path="/leads"          element={<PermissionRoute module="leads"><LeadKanban /></PermissionRoute>} />
             <Route path="/clients"        element={<ClientsModule />} />
-            <Route path="/contacts"       element={<ContactsModule />} />
-            <Route path="/visits"         element={<VisitCalendar />} />
+            <Route path="/contacts"       element={<PermissionRoute module="contatos"><ContactsModule /></PermissionRoute>} />
+            <Route path="/visits"         element={<PermissionRoute module="visitas"><VisitCalendar /></PermissionRoute>} />
             <Route path="/enrollments"    element={<EnrollmentManager />} />
-            <Route path="/whatsapp"       element={<WhatsAppHub />} />
-            <Route path="/transferencias" element={<GestorTransfers />} />
+            <Route path="/whatsapp"       element={<PermissionRoute module="whatsapp"><WhatsAppHub /></PermissionRoute>} />
+            <Route path="/transferencias" element={<PermissionRoute module="transferencias"><GestorTransfers /></PermissionRoute>} />
             <Route path="/updates"        element={<GestorUpdates />} />
             <Route path="/pesquisas"      element={<GestorSurveys />} />
             <Route path="/embed" element={<ProtectedRoute allowedRoles={['admin','manager']}><GestorEmbed /></ProtectedRoute>} />
@@ -303,7 +340,10 @@ export default function App() {
   return (
     <Router>
       <AuthProvider>
-        <AppContent />
+        <PermissionsProvider>
+          <GlobalToast />
+          <AppContent />
+        </PermissionsProvider>
       </AuthProvider>
     </Router>
   )
