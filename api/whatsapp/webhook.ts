@@ -690,7 +690,7 @@ async function processCustomFlow(
               institution_id: institutionId,
               phone:          phone.startsWith('55') ? phone : `55${noCode}`,
               student_name:   leadFields.student_name || variables.nome_aluno || variables.nome || '',
-              status:         leadFields.status || 'novo',
+              status:         action.status || 'novo',
               ...(leadFields.email ? { email: leadFields.email } : {}),
             })
           }
