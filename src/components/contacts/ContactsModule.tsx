@@ -99,23 +99,37 @@ export default function ContactsModule() {
   // ── Data loading ────────────────────────────────────────────
   async function load() {
     if (!mountedRef.current) return
+    if (!institutionId) {
+      console.error('Contacts load: institutionId is undefined/null — skipping query')
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
-      const { data } = await supabase
+      // Colunas reais da tabela whatsapp_contacts:
+      // id, institution_id, phone, name, type, lead_id,
+      // profile_picture_url, last_seen_at, created_at, updated_at
+      const { data, error } = await supabase
         .from('whatsapp_contacts')
-        .select('id, phone, name, profile_picture_url, type, lead_id, remote_jid, tags, assigned_user_name, last_seen_at, created_at, leads(id, student_name, responsible_name, email, grade_interest, source, status)')
+        .select('id, phone, name, profile_picture_url, type, lead_id, last_seen_at, created_at, leads(id, student_name, responsible_name, email, grade_interest, source, status)')
         .eq('institution_id', institutionId)
         .order('last_seen_at', { ascending: false })
+
+      if (error) {
+        console.error('Contacts query error:', error)
+        if (mountedRef.current) setLoading(false)
+        return
+      }
 
       if (!mountedRef.current) return
 
       const list: UnifiedContact[] = (data || []).map((c: any) => {
         const lead     = c.leads || null
         const hasLead  = !!c.lead_id
-        const hasWa    = !!c.remote_jid
+        // Todo contato nesta tabela veio do WhatsApp
         const rawPhone = (c.phone || '').replace(/\D/g, '')
         const fmtPhone = rawPhone ? formatPhone(rawPhone) : (c.phone || null)
-        const cfg      = originCfg(hasLead, hasWa)
+        const cfg      = originCfg(hasLead, true)
         return {
           id:                 c.id,
           name:               c.name || fmtPhone || 'Desconhecido',
@@ -127,12 +141,12 @@ export default function ContactsModule() {
           status_lead:        lead?.status || null,
           status_whatsapp:    null,
           has_lead:           hasLead,
-          has_whatsapp:       hasWa,
+          has_whatsapp:       true,
           lead_id:            c.lead_id || null,
-          remote_jid:         c.remote_jid || null,
+          remote_jid:         rawPhone ? `${rawPhone}@s.whatsapp.net` : null,
           contact_type:       c.type === 'unknown' ? null : (c.type || null),
-          assigned_user_name: c.assigned_user_name || null,
-          tags:               (c.tags as string[]) || [],
+          assigned_user_name: null,
+          tags:               [],
           last_contact:       c.last_seen_at || c.created_at || new Date().toISOString(),
           origin_label:       cfg.label,
           origin_color:       cfg.color,
@@ -142,7 +156,8 @@ export default function ContactsModule() {
       })
 
       if (mountedRef.current) { setContacts(list); setLoading(false) }
-    } catch {
+    } catch (e) {
+      console.error('Contacts load exception:', e)
       if (mountedRef.current) setLoading(false)
     }
   }
