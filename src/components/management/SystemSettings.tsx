@@ -362,7 +362,6 @@ const FLOW_DAYS = [
 
 const WA_SECTIONS = [
   { id: 'conexao',  icon: '📡', label: 'Conexão' },
-  { id: 'perfil',   icon: '👤', label: 'Perfil' },
   { id: 'horario',  icon: '🕐', label: 'Horário' },
   { id: 'respostas',icon: '⚡', label: 'Respostas' },
   { id: 'equipe',   icon: '👥', label: 'Equipe' },
@@ -412,10 +411,6 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   // Attendants
   const [attendants, setAttendants]     = useState<{ id: string; full_name: string; working_hours_start: string; working_hours_end: string; working_days: string[] }[]>([])
   const [savingAtt, setSavingAtt]       = useState<string | null>(null)
-  // Business profile
-  const [bizProfile, setBizProfile]     = useState({ description: '', website: '', address: '', vertical: 'EDUCATION' })
-  const [savingBiz, setSavingBiz]       = useState(false)
-  const [bizSaved, setBizSaved]         = useState(false)
   // Real monthly count
   const [monthlyConvCount, setMonthlyConvCount] = useState(0)
   // Blacklist
@@ -628,41 +623,6 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
     }
   }
 
-  const handleSaveBizProfile = async () => {
-    const phoneId = metaConfig?.whatsapp_phone_id || phoneRecord?.phone_number_id
-    const token   = globalToken
-    console.log('[BIZ] phoneId:', phoneId, '| token:', token ? token.slice(0, 12) + '...' : 'missing')
-    if (!phoneId || !token) {
-      alert('Token ou Phone ID não configurado.')
-      return
-    }
-    setSavingBiz(true)
-    try {
-      const body: Record<string, any> = { messaging_product: 'whatsapp' }
-      if (bizProfile.description) body.description = bizProfile.description
-      if (bizProfile.website)     body.websites     = [bizProfile.website]
-      if (bizProfile.address)     body.address      = bizProfile.address
-      if (bizProfile.vertical)    body.vertical     = bizProfile.vertical
-      console.log('[BIZ] sending payload:', JSON.stringify(body))
-      const res = await fetch(`https://graph.facebook.com/v19.0/${phoneId}/whatsapp_business_profile`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      const resJson = await res.json().catch(() => ({}))
-      console.log('[BIZ] response status:', res.status, '| body:', JSON.stringify(resJson))
-      if (!res.ok) {
-        const errMsg = resJson?.error?.message || `HTTP ${res.status}`
-        alert('Erro ao salvar perfil: ' + errMsg)
-        return
-      }
-      setBizSaved(true); setTimeout(() => setBizSaved(false), 2500)
-    } catch (e: any) {
-      console.error('[BIZ] exception:', e?.message, e)
-      alert('Erro ao salvar perfil: ' + (e?.message || 'desconhecido'))
-    } finally { setSavingBiz(false) }
-  }
-
   const handleAddQR = async () => {
     if (!newQR.title || !newQR.message) return
     setSavingQR(true)
@@ -837,43 +797,6 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                   <button onClick={handleTestConnection} disabled={testing}
                     style={{ flex: 1, minWidth: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#64748B', cursor: 'pointer', opacity: testing ? 0.6 : 1 }}>
                     {testing ? <><Loader2 size={13} className="animate-spin" />Testando...</> : <><RefreshCw size={13} />Testar conexão</>}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {waSection === 'perfil' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>👤 Perfil do WhatsApp Business</h3>
-              <div style={dCard}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <div>
-                    <label style={dLabel}>Descrição da empresa</label>
-                    <textarea rows={3} style={{ ...dInput, resize: 'vertical' as const }} value={bizProfile.description} onChange={e => setBizProfile(p => ({ ...p, description: e.target.value }))} placeholder="Escola particular com ensino de qualidade..." />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <div>
-                      <label style={dLabel}>Website</label>
-                      <input style={dInput} value={bizProfile.website} onChange={e => setBizProfile(p => ({ ...p, website: e.target.value }))} placeholder="https://escola.com.br" />
-                    </div>
-                    <div>
-                      <label style={dLabel}>Categoria</label>
-                      <select style={dInput} value={bizProfile.vertical} onChange={e => setBizProfile(p => ({ ...p, vertical: e.target.value }))}>
-                        <option value="EDUCATION">Educação</option>
-                        <option value="SCHOOL">Escola</option>
-                        <option value="EDU">Educação Geral</option>
-                        <option value="OTHER">Outro</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label style={dLabel}>Endereço</label>
-                    <input style={dInput} value={bizProfile.address} onChange={e => setBizProfile(p => ({ ...p, address: e.target.value }))} placeholder="Rua X, 123 - Bairro - Cidade/UF" />
-                  </div>
-                  <button onClick={handleSaveBizProfile} disabled={savingBiz}
-                    style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: bizSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingBiz ? 0.7 : 1 }}>
-                    {bizSaved ? <><Check size={13} />Salvo!</> : savingBiz ? 'Salvando...' : <><Save size={13} />Salvar perfil</>}
                   </button>
                 </div>
               </div>
