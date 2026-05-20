@@ -101,107 +101,45 @@ export default function ContactsModule() {
     if (!mountedRef.current) return
     setLoading(true)
     try {
-      const [leadsRes, convsRes, transfersRes] = await Promise.all([
-        supabase.from('leads')
-          .select('id, student_name, responsible_name, phone, email, grade_interest, source, status, created_at')
-          .eq('institution_id', institutionId).is('deleted_at', null)
-          .order('created_at', { ascending: false }),
-        supabase.from('whatsapp_conversations')
-          .select('remote_jid, contact_name, contact_type, assigned_user_name, tags, status, updated_at, lead_id')
-          .eq('institution_id', institutionId).order('updated_at', { ascending: false }),
-        supabase.from('student_transfers')
-          .select('student_name, status, course_grade')
-          .eq('institution_id', institutionId).is('deleted_at', null),
-      ])
+      const { data } = await supabase
+        .from('whatsapp_contacts')
+        .select('id, phone, name, profile_picture_url, type, lead_id, remote_jid, tags, assigned_user_name, updated_at, created_at, leads(id, student_name, responsible_name, email, grade_interest, source, status)')
+        .eq('institution_id', institutionId)
+        .order('updated_at', { ascending: false })
+
       if (!mountedRef.current) return
 
-      const leads  = leadsRes.data  || []
-      const convs  = convsRes.data  || []
-      const txData = transfersRes.data || []
-
-      const txMap = new Map<string, string>()
-      for (const t of txData) {
-        const key = (t.student_name || '').toLowerCase().trim()
-        if (key && !txMap.has(key)) txMap.set(key, t.status || 'pending')
-      }
-
-      const map = new Map<string, UnifiedContact>()
-
-      for (const l of leads) {
-        const phoneKey = normalizePhone(l.phone || '')
-        const mapKey   = phoneKey || `lead:${l.id}`
-        const existing = map.get(mapKey)
-        const cfg = originCfg(true, false)
-        const txKey = (l.student_name || '').toLowerCase().trim()
-        const transferStatus = txMap.get(txKey) || null
-
-        if (existing) {
-          existing.has_lead      = true
-          existing.lead_id       = l.id
-          existing.student_name  = existing.student_name || l.student_name || null
-          existing.email         = existing.email || l.email || null
-          existing.grade         = existing.grade || l.grade_interest || null
-          existing.source        = existing.source || l.source || null
-          existing.status_lead   = l.status
-          existing.transfer_status = existing.transfer_status || transferStatus
-          const c2 = originCfg(true, existing.has_whatsapp)
-          existing.origin_label  = c2.label
-          existing.origin_color  = c2.color
-          existing.origin_bg     = ''
-          if (new Date(l.created_at) > new Date(existing.last_contact)) existing.last_contact = l.created_at
-        } else {
-          map.set(mapKey, {
-            id: l.id, name: l.responsible_name || l.student_name || 'Sem nome',
-            student_name: l.student_name || null, phone: l.phone || null,
-            email: l.email || null, grade: l.grade_interest || null,
-            source: l.source || null, status_lead: l.status, status_whatsapp: null,
-            has_lead: true, has_whatsapp: false, lead_id: l.id, remote_jid: null,
-            contact_type: null, assigned_user_name: null, tags: [],
-            last_contact: l.created_at, origin_label: cfg.label,
-            origin_color: cfg.color, origin_bg: '', transfer_status: transferStatus,
-          })
+      const list: UnifiedContact[] = (data || []).map((c: any) => {
+        const lead     = c.leads || null
+        const hasLead  = !!c.lead_id
+        const hasWa    = !!c.remote_jid
+        const rawPhone = (c.phone || '').replace(/\D/g, '')
+        const fmtPhone = rawPhone ? formatPhone(rawPhone) : (c.phone || null)
+        const cfg      = originCfg(hasLead, hasWa)
+        return {
+          id:                 c.id,
+          name:               c.name || fmtPhone || 'Desconhecido',
+          student_name:       lead?.student_name || null,
+          phone:              fmtPhone,
+          email:              lead?.email || null,
+          grade:              lead?.grade_interest || null,
+          source:             lead?.source || null,
+          status_lead:        lead?.status || null,
+          status_whatsapp:    null,
+          has_lead:           hasLead,
+          has_whatsapp:       hasWa,
+          lead_id:            c.lead_id || null,
+          remote_jid:         c.remote_jid || null,
+          contact_type:       c.type === 'unknown' ? null : (c.type || null),
+          assigned_user_name: c.assigned_user_name || null,
+          tags:               (c.tags as string[]) || [],
+          last_contact:       c.updated_at || c.created_at || new Date().toISOString(),
+          origin_label:       cfg.label,
+          origin_color:       cfg.color,
+          origin_bg:          '',
+          transfer_status:    null,
         }
-      }
-
-      for (const c of convs) {
-        const rawPhone = phoneFromJid(c.remote_jid || '')
-        const phoneKey = normalizePhone(rawPhone)
-        const mapKey   = phoneKey || `wa:${c.remote_jid}`
-        const existing = map.get(mapKey)
-
-        if (existing) {
-          existing.has_whatsapp       = true
-          existing.remote_jid         = c.remote_jid
-          existing.status_whatsapp    = c.status
-          existing.contact_type       = existing.contact_type || c.contact_type || null
-          existing.assigned_user_name = existing.assigned_user_name || c.assigned_user_name || null
-          existing.tags               = (c.tags?.length ? c.tags : existing.tags)
-          if (c.lead_id && !existing.lead_id) existing.lead_id = c.lead_id
-          const cfg = originCfg(existing.has_lead, true)
-          existing.origin_label = cfg.label
-          existing.origin_color = cfg.color
-          existing.origin_bg    = ''
-          if (!existing.name || existing.name === 'Sem nome') existing.name = c.contact_name || existing.name
-          if (c.updated_at && new Date(c.updated_at) > new Date(existing.last_contact)) existing.last_contact = c.updated_at
-        } else {
-          const cfg = originCfg(false, true)
-          const fmtPhone = formatPhone(rawPhone)
-          map.set(mapKey, {
-            id: c.remote_jid, name: c.contact_name || fmtPhone || 'Desconhecido',
-            student_name: null, phone: fmtPhone || null, email: null, grade: null,
-            source: null, status_lead: null, status_whatsapp: c.status,
-            has_lead: false, has_whatsapp: true, lead_id: c.lead_id || null,
-            remote_jid: c.remote_jid, contact_type: c.contact_type || null,
-            assigned_user_name: c.assigned_user_name || null, tags: c.tags || [],
-            last_contact: c.updated_at || new Date().toISOString(),
-            origin_label: cfg.label, origin_color: cfg.color, origin_bg: '',
-            transfer_status: null,
-          })
-        }
-      }
-
-      const list = Array.from(map.values())
-        .sort((a, b) => new Date(b.last_contact).getTime() - new Date(a.last_contact).getTime())
+      })
 
       if (mountedRef.current) { setContacts(list); setLoading(false) }
     } catch {
@@ -334,9 +272,9 @@ export default function ContactsModule() {
       (c.email?.toLowerCase().includes(q) ?? false)
     const matchOrigin =
       filterOrigin === 'all' ||
-      (filterOrigin === 'lead'     && c.has_lead  && !c.has_whatsapp) ||
-      (filterOrigin === 'whatsapp' && !c.has_lead &&  c.has_whatsapp) ||
-      (filterOrigin === 'both'     && c.has_lead  &&  c.has_whatsapp)
+      (filterOrigin === 'lead'    && c.has_lead) ||
+      (filterOrigin === 'client'  && c.contact_type === 'client') ||
+      (filterOrigin === 'unknown' && !c.has_lead && c.contact_type !== 'client')
     const matchGrade     = filterGrade     === 'all' || c.grade              === filterGrade
     const matchAttendant = filterAttendant === 'all' || c.assigned_user_name === filterAttendant
     return matchSearch && matchOrigin && matchGrade && matchAttendant
@@ -348,10 +286,10 @@ export default function ContactsModule() {
 
   // KPIs
   const kpis = [
-    { label: 'Total',        value: contacts.length,                                                               icon: '👥', color: 'text-[#3B82F6]', bg: 'bg-[#EFF6FF]' },
-    { label: 'Leads ativos', value: contacts.filter(c => c.has_lead && c.status_lead !== 'lost').length,           icon: '🎯', color: 'text-[#7C3AED]', bg: 'bg-[#EDE9FE]' },
-    { label: 'WhatsApp',     value: contacts.filter(c => c.has_whatsapp && c.status_whatsapp !== 'closed').length, icon: '💬', color: 'text-[#D97706]', bg: 'bg-[#FEF3C7]' },
-    { label: 'Unificados',   value: contacts.filter(c => c.has_lead && c.has_whatsapp).length,                     icon: '🔗', color: 'text-[#065F46]', bg: 'bg-[#D1FAE5]' },
+    { label: 'Total',    value: contacts.length,                                              icon: '👥', color: 'text-[#3B82F6]', bg: 'bg-[#EFF6FF]' },
+    { label: 'Leads',    value: contacts.filter(c => c.has_lead).length,                     icon: '🎯', color: 'text-[#7C3AED]', bg: 'bg-[#EDE9FE]' },
+    { label: 'Clientes', value: contacts.filter(c => c.contact_type === 'client').length,    icon: '🏫', color: 'text-[#065F46]', bg: 'bg-[#D1FAE5]' },
+    { label: 'WhatsApp', value: contacts.filter(c => c.has_whatsapp).length,                 icon: '💬', color: 'text-[#D97706]', bg: 'bg-[#FEF3C7]' },
   ]
 
   const openImport = () => { setShowImport(true); setImportRows([]); setImportErrors([]); setImportResult(null) }
@@ -461,10 +399,10 @@ export default function ContactsModule() {
   // ── Mobile early return ───────────────────────────────────────────────────
   if (isMobile) {
     const originFilters = [
-      { value: 'all',      label: 'Todos' },
-      { value: 'lead',     label: 'Lead' },
-      { value: 'whatsapp', label: 'WhatsApp' },
-      { value: 'both',     label: 'Ambos' },
+      { value: 'all',     label: 'Todos' },
+      { value: 'lead',    label: 'Leads' },
+      { value: 'client',  label: 'Clientes' },
+      { value: 'unknown', label: 'Novos' },
     ]
     return (
       <>
@@ -614,10 +552,10 @@ export default function ContactsModule() {
         </div>
         <select value={filterOrigin} onChange={e => { setFilterOrigin(e.target.value); setPage(1) }}
           style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px', outline: 'none', color: '#1A2B4A' }}>
-          <option value="all">Todas as origens</option>
-          <option value="lead">Apenas Lead</option>
-          <option value="whatsapp">Apenas WhatsApp</option>
-          <option value="both">Lead + WhatsApp</option>
+          <option value="all">Todos os tipos</option>
+          <option value="lead">Leads</option>
+          <option value="client">Clientes</option>
+          <option value="unknown">Desconhecidos</option>
         </select>
         {grades.length > 0 && (
           <select value={filterGrade} onChange={e => { setFilterGrade(e.target.value); setPage(1) }}

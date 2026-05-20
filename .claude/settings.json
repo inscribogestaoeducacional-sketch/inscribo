@@ -32,7 +32,15 @@
       "Bash(Write-Output \"Deleted\")",
       "Bash(grep -r \"from '\\\\\\\\./\" api/whatsapp/)",
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Victor Almeida\\\\AIONEDU\\\\src\\\\components\" -Recurse -Name)",
-      "Bash(Select-String -Pattern \"sidebar|menu|nav|layout\" -AllMatches)"
+      "Bash(Select-String -Pattern \"sidebar|menu|nav|layout\" -AllMatches)",
+      "Bash(sed -n '3085,3098p' src/components/whatsapp/WhatsAppHub.tsx)",
+      "Bash(sed -n '3630,3645p' src/components/whatsapp/WhatsAppHub.tsx)",
+      "Bash(sed -n '3727,3733p' src/components/whatsapp/WhatsAppHub.tsx)",
+      "Bash(sed -n '3775,3785p' src/components/whatsapp/WhatsAppHub.tsx)",
+      "Bash(grep -n \"activeConv && \\(\\\\|<>$\\\\|<\\\\/>\" src/components/whatsapp/WhatsAppHub.tsx)",
+      "Bash(sed -n '2536,2545p' src/components/whatsapp/WhatsAppHub.tsx)",
+      "Bash(sed -n '2653,2662p' src/components/whatsapp/WhatsAppHub.tsx)",
+      "Bash(sed -n '2940,2948p' src/components/whatsapp/WhatsAppHub.tsx)"
     ]
   }
 }

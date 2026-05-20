@@ -325,9 +325,41 @@ async function autoLinkLead(institutionId: string, remoteJid: string): Promise<v
         .eq('institution_id', institutionId)
         .eq('remote_jid', remoteJid)
         .is('lead_id', null) // only update if not yet linked
+      await supabase
+        .from('whatsapp_contacts')
+        .update({ lead_id: lead.id, type: 'lead' })
+        .eq('institution_id', institutionId)
+        .eq('phone', phone)
     }
   } catch (e) {
     console.error('❌ autoLinkLead error:', e)
+  }
+}
+
+// ── Create / update contact record ───────────────────────────────────────────
+async function upsertContact(
+  institutionId: string,
+  remoteJid:     string,
+  name:          string,
+  profilePicUrl?: string
+): Promise<void> {
+  try {
+    const phone = remoteJid.replace(/@.*/, '')
+    await supabase
+      .from('whatsapp_contacts')
+      .upsert(
+        {
+          institution_id:    institutionId,
+          phone,
+          remote_jid:        remoteJid,
+          name,
+          updated_at:        new Date().toISOString(),
+          ...(profilePicUrl ? { profile_picture_url: profilePicUrl } : {}),
+        },
+        { onConflict: 'institution_id,phone' }
+      )
+  } catch (e) {
+    console.error('❌ upsertContact error:', e)
   }
 }
 
@@ -793,6 +825,17 @@ async function processCustomFlow(
               status:         action.status || 'novo',
               ...(leadFields.email ? { email: leadFields.email } : {}),
             })
+          }
+          // Link whatsapp_contacts to the created/found lead
+          const { data: upsertedLead } = await supabase.from('leads').select('id')
+            .eq('institution_id', institutionId)
+            .or(`phone.eq.${phone},phone.eq.55${noCode},phone.eq.+55${noCode}`)
+            .maybeSingle()
+          if (upsertedLead?.id) {
+            await supabase.from('whatsapp_contacts')
+              .update({ lead_id: upsertedLead.id, type: 'lead' })
+              .eq('institution_id', institutionId)
+              .eq('phone', phone)
           }
         } else if (action.actionType === 'add_conversation_tag') {
           const tag = (action.tag || '').trim()
@@ -1556,6 +1599,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           })
 
         if (msgErr) console.error('❌ msg insert error:', msgErr.message)
+
+        // ── Upsert contact record ──
+        await upsertContact(institutionId, remoteJid, contactName, value.contacts?.[0]?.profile?.picture_url as string | undefined)
 
         // ── Auto-link lead by phone (skip if already linked) ──
         if (!existingConv?.lead_id) {

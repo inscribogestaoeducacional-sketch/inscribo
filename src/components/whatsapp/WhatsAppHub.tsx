@@ -1,7 +1,6 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+﻿import React, { useState, useRef, useEffect, useCallback } from 'react'
 import EmojiPicker from '@emoji-mart/react'
 import emojiData from '@emoji-mart/data'
-import ContactCard from '../contacts/ContactCard'
 import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight, ChevronLeft,
@@ -16,8 +15,6 @@ import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConvers
 type MsgType = 'text' | 'audio' | 'image' | 'video' | 'document' | 'sticker' | 'deleted'
 type ConvStatus = 'waiting' | 'open' | 'closed'
 type RightPanelTab = 'details' | 'history'
-type MainView = 'conversations' | 'contacts'
-
 interface Message {
   id: string
   type: MsgType
@@ -141,13 +138,6 @@ function toBase64(file: File): Promise<string> {
     reader.onerror = reject
     reader.readAsDataURL(file)
   })
-}
-
-const TAG_COLORS = ['bg-violet-500','bg-blue-500','bg-rose-500','bg-amber-500','bg-emerald-500','bg-teal-500','bg-pink-500','bg-indigo-500','bg-orange-500','bg-cyan-500']
-function tagColor(tag: string): string {
-  let hash = 0
-  for (let i = 0; i < tag.length; i++) hash = tag.charCodeAt(i) + ((hash << 5) - hash)
-  return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length]
 }
 
 function normalizeJid(jid: string): string {
@@ -731,7 +721,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [sendingTemplate, setSendingTemplate] = useState(false)
 
   // New feature states
-  const [mainView, setMainView] = useState<MainView>('conversations')
   const [showMsgSearch, setShowMsgSearch] = useState(false)
   const [msgSearchText, setMsgSearchText] = useState('')
   const [showMoreMenu, setShowMoreMenu] = useState(false)
@@ -748,9 +737,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // Sync state
   const [syncing, setSyncing] = useState(false)
 
-  // Feature 4: ContactDrawer
-  const [showDrawer, setShowDrawer] = useState(false)
-
   // Typing indicator
   const [typingConvIds, setTypingConvIds] = useState<Set<string>>(new Set())
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -766,16 +752,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     return () => window.removeEventListener('resize', handler)
   }, [])
 
-  // Feature 5: Contacts filters
-  const [contactSearch, setContactSearch] = useState('')
-  const [contactTypeFilter, setContactTypeFilter] = useState('')
-  const [contactAttendantFilter, setContactAttendantFilter] = useState('')
-  const [contactStatusFilter, setContactStatusFilter] = useState('')
-  const [contactTagFilter, setContactTagFilter] = useState('')
-  const [showImportModal, setShowImportModal] = useState(false)
-  const [importFile, setImportFile] = useState<File | null>(null)
-  const [importPreview, setImportPreview] = useState<any[]>([])
-  const [importing, setImporting] = useState(false)
 
   const emojiPickerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -2102,100 +2078,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     } catch { setSendError('Erro ao criar lead.') }
   }
 
-  // Feature 5: Export contacts
-  const exportContacts = () => {
-    const data = filteredContacts
-    if (data.length === 0) return
-    const rows = data.map(c => ({
-      Nome: c.name,
-      Telefone: c.phone,
-      Tipo: c.contact_type || '—',
-      Atendente: c.assigned_user_name || '—',
-      Status: safeStatusCfg(c.status).label,
-      Etiquetas: (c.tags || []).join('; '),
-    }))
-    const header = Object.keys(rows[0]).join(',')
-    const csv = [header, ...rows.map(r => Object.values(r).map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n')
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = 'contatos-whatsapp.csv'; a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setImportFile(file)
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string
-      const lines = text.split('\n').filter(l => l.trim())
-      if (lines.length < 2) return
-      const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim())
-      const rows = lines.slice(1, 6).map(line => {
-        const vals = line.split(',').map(v => v.replace(/"/g, '').trim())
-        return headers.reduce((obj, h, i) => ({ ...obj, [h]: vals[i] || '' }), {} as any)
-      })
-      setImportPreview(rows)
-    }
-    reader.readAsText(file, 'utf-8')
-  }
-
-  const confirmImport = async () => {
-    if (!importFile || !effectiveInstitutionId) return
-    setImporting(true)
-    try {
-      const reader = new FileReader()
-      reader.onload = async (ev) => {
-        const text = ev.target?.result as string
-        const lines = text.split('\n').filter(l => l.trim())
-        if (lines.length < 2) return
-        const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim())
-        const rows = lines.slice(1).map(line => {
-          const vals = line.split(',').map(v => v.replace(/"/g, '').trim())
-          return headers.reduce((obj, h, i) => ({ ...obj, [h]: vals[i] || '' }), {} as any)
-        })
-        for (const row of rows) {
-          const phone = (row['Telefone'] || row['telefone'] || row['phone'] || '').replace(/\D/g, '')
-          if (!phone) continue
-          const normalized = phone.startsWith('55') ? phone : `55${phone}`
-          const jid = `${normalized}@s.whatsapp.net`
-          await DatabaseService.upsertConversationStatus(effectiveInstitutionId, jid, 'waiting')
-          if (row['Nome'] || row['nome'] || row['name']) {
-            await supabase.from('whatsapp_conversations').update({ contact_name: row['Nome'] || row['nome'] || row['name'] })
-              .eq('institution_id', effectiveInstitutionId).eq('remote_jid', jid)
-          }
-        }
-        setShowImportModal(false)
-        setImportFile(null)
-        setImportPreview([])
-        await loadMessages()
-      }
-      reader.readAsText(importFile, 'utf-8')
-    } catch { } finally {
-      setImporting(false)
-    }
-  }
-
-  // Feature 5: Filtered contacts
-  const allTags = Array.from(new Set(conversations.flatMap(c => c.tags || [])))
-  const filteredContacts = conversations.filter(c => {
-    if (c.isGroup) return false
-    if (contactSearch && !c.name.toLowerCase().includes(contactSearch.toLowerCase()) && !c.phone.includes(contactSearch)) return false
-    if (contactTypeFilter && c.contact_type !== contactTypeFilter) return false
-    if (contactAttendantFilter && c.assigned_user_id !== contactAttendantFilter) return false
-    if (contactStatusFilter && c.status !== contactStatusFilter) return false
-    if (contactTagFilter && !(c.tags || []).includes(contactTagFilter)) return false
-    return true
-  })
-  const activeContactFilters = [
-    contactTypeFilter && { key: 'type', label: contactTypeFilter === 'lead' ? 'Nova Família' : contactTypeFilter === 'client' ? 'Cliente' : contactTypeFilter === 'supplier' ? 'Fornecedor' : 'Outro', clear: () => setContactTypeFilter('') },
-    contactAttendantFilter && { key: 'att', label: users.find(u => u.id === contactAttendantFilter)?.full_name || '', clear: () => setContactAttendantFilter('') },
-    contactStatusFilter && { key: 'status', label: safeStatusCfg(contactStatusFilter as ConvStatus).label, clear: () => setContactStatusFilter('') },
-    contactTagFilter && { key: 'tag', label: contactTagFilter, clear: () => setContactTagFilter('') },
-  ].filter(Boolean) as { key: string, label: string, clear: () => void }[]
-
   const filteredMessages = activeConv
     ? (msgSearchText.trim()
         ? activeConv.messages.filter(m => m.content.toLowerCase().includes(msgSearchText.toLowerCase()))
@@ -2463,24 +2345,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             </div>
           </div>
 
-          {/* Main view tabs: Conversas | Contatos */}
-          <div style={{ flexShrink: 0, display: 'flex', background: '#FFFFFF', borderBottom: '1px solid #D1FAE5' }}>
-            {([
-              { key: 'conversations', label: 'Conversas' },
-              { key: 'contacts',      label: 'Contatos'  },
-            ] as { key: MainView; label: string }[]).map(t => (
-              <button key={t.key} onClick={() => setMainView(t.key)}
-                style={{
-                  flex: 1, padding: '10px 0', fontSize: 13, fontWeight: mainView === t.key ? 700 : 500,
-                  color: mainView === t.key ? '#1A2B4A' : '#64748B',
-                  borderBottom: mainView === t.key ? '2px solid #00A896' : '2px solid transparent',
-                  background: 'none', border: 'none',
-                  cursor: 'pointer', transition: 'all 0.15s',
-                }}
-              >{t.label}</button>
-            ))}
-          </div>
-
           {/* Filters — Botconversa style */}
           <div style={{ borderBottom: '1px solid #D1FAE5' }}>
             {/* Row 1: Status + Atribuição dropdowns */}
@@ -2673,136 +2537,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         {/* ── Col 2: Chat ───────────────────────────────────────────────────────── */}
         <div style={{ flex: 1, minWidth: 0, display: isMobile && mobilePanel === 'list' ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden', background: '#FAFFFE' }}>
 
-          {/* ── Contacts table view ── */}
-          {mainView === 'contacts' && (
-            <div style={{ flex: 1, overflowY: 'auto', background: '#F0FDFB', padding: 24 }}>
-              <h2 style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 16 }}>Contatos</h2>
-
-              {/* Feature 5: Filter bar */}
-              <div className="flex items-center gap-2 mb-4 flex-wrap">
-                {/* Search */}
-                <div className="relative flex-1 min-w-[200px]">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94A3B8]" />
-                  <input value={contactSearch} onChange={e => setContactSearch(e.target.value)}
-                    placeholder="Buscar por nome ou número..."
-                    className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-[#E2E8F0] rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#00A896]" />
-                </div>
-                {/* Type filter */}
-                <select value={contactTypeFilter} onChange={e => setContactTypeFilter(e.target.value)}
-                  className="px-3 py-2 text-sm bg-white border border-[#E2E8F0] rounded-lg text-[#64748B] focus:outline-none focus:ring-2 focus:ring-[#00A896]">
-                  <option value="">Tipo</option>
-                  <option value="lead">Nova Família</option>
-                  <option value="client">Cliente</option>
-                  <option value="supplier">Fornecedor</option>
-                  <option value="other">Outro</option>
-                </select>
-                {/* Attendant filter */}
-                <select value={contactAttendantFilter} onChange={e => setContactAttendantFilter(e.target.value)}
-                  className="px-3 py-2 text-sm bg-white border border-[#E2E8F0] rounded-lg text-[#64748B] focus:outline-none focus:ring-2 focus:ring-[#00A896]">
-                  <option value="">Atendente</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-                </select>
-                {/* Status filter */}
-                <select value={contactStatusFilter} onChange={e => setContactStatusFilter(e.target.value)}
-                  className="px-3 py-2 text-sm bg-white border border-[#E2E8F0] rounded-lg text-[#64748B] focus:outline-none focus:ring-2 focus:ring-[#00A896]">
-                  <option value="">Status</option>
-                  <option value="waiting">Aguardando</option>
-                  <option value="open">Em Atendimento</option>
-                  <option value="closed">Concluído</option>
-                </select>
-                {/* Tag filter */}
-                {allTags.length > 0 && (
-                  <select value={contactTagFilter} onChange={e => setContactTagFilter(e.target.value)}
-                    className="px-3 py-2 text-sm bg-white border border-[#E2E8F0] rounded-lg text-[#64748B] focus:outline-none focus:ring-2 focus:ring-[#00A896]">
-                    <option value="">Etiqueta</option>
-                    {allTags.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                )}
-                <div className="flex gap-2 ml-auto">
-                  <button onClick={() => setShowImportModal(true)}
-                    className="px-3 py-2 text-sm border border-[#E2E8F0] text-[#64748B] rounded-lg hover:bg-[#F8FAFB] hover:border-[#00A896] hover:text-[#00A896] transition-colors flex items-center gap-1.5">
-                    ↑ Importar
-                  </button>
-                  <button onClick={exportContacts}
-                    className="px-3 py-2 text-sm border border-[#E2E8F0] text-[#64748B] rounded-lg hover:bg-[#F8FAFB] hover:border-[#00A896] hover:text-[#00A896] transition-colors flex items-center gap-1.5">
-                    ↓ Exportar
-                  </button>
-                </div>
-              </div>
-
-              {/* Active filter pills */}
-              {activeContactFilters.length > 0 && (
-                <div className="flex items-center gap-2 mb-3 flex-wrap">
-                  <span className="text-xs text-[#94A3B8]">Filtros:</span>
-                  {activeContactFilters.map(f => (
-                    <span key={f.key} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-[#E6F7F5] text-[#00A896] font-medium">
-                      {f.label}
-                      <button onClick={f.clear} className="hover:opacity-70">×</button>
-                    </span>
-                  ))}
-                  <button onClick={() => { setContactTypeFilter(''); setContactAttendantFilter(''); setContactStatusFilter(''); setContactTagFilter(''); setContactSearch('') }}
-                    className="text-xs text-[#64748B] hover:text-[#1A2B4A] underline">
-                    Limpar filtros
-                  </button>
-                </div>
-              )}
-
-              <div className="bg-white rounded-xl border border-[#E2E8F0] overflow-hidden shadow-sm">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-[#E2E8F0] bg-[#F8FAFB]">
-                      <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide">Nome</th>
-                      <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide">Telefone</th>
-                      <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide">Tipo</th>
-                      <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide">Atendente</th>
-                      <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide">Etiquetas</th>
-                      <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide">Última msg</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredContacts.map(c => (
-                      <tr key={c.id}
-                        onClick={() => { setActiveId(c.id); setShowDrawer(true) }}
-                        className="border-b border-[#E2E8F0] hover:bg-[#F8FAFB] cursor-pointer transition-colors">
-                        <td className="py-2.5 px-4">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-7 h-7 rounded-full ${c.avatarColor} text-white text-xs font-bold flex items-center justify-center flex-shrink-0 overflow-hidden`}>
-                              {c.profile_picture_url
-                                ? <img src={c.profile_picture_url} alt={c.name} className="w-full h-full object-cover" />
-                                : c.name.charAt(0).toUpperCase()}
-                            </div>
-                            <span className="font-semibold text-[#1A2B4A] truncate max-w-[120px]">{c.name}</span>
-                          </div>
-                        </td>
-                        <td className="py-2.5 px-4 text-[#64748B]">{c.phone}</td>
-                        <td className="py-2.5 px-4">
-                          {c.contact_type
-                            ? <span className="px-2 py-0.5 rounded-full bg-[#E6F7F5] text-[#00A896] font-medium">{c.contact_type}</span>
-                            : <span className="text-[#94A3B8]">—</span>}
-                        </td>
-                        <td className="py-2.5 px-4 text-[#64748B]">{c.assigned_user_name || <span className="text-[#94A3B8]">—</span>}</td>
-                        <td className="py-2.5 px-4">
-                          <div className="flex flex-wrap gap-1">
-                            {(c.tags || []).slice(0, 3).map(tag => (
-                              <span key={tag} className={`px-1.5 py-0.5 rounded-full text-white text-[11px] font-medium ${tagColor(tag)}`}>{tag}</span>
-                            ))}
-                            {(c.tags || []).length > 3 && <span className="text-[#64748B]">+{(c.tags || []).length - 3}</span>}
-                          </div>
-                        </td>
-                        <td className="py-2.5 px-4 text-[#64748B]">{fmtConvTime(c.lastTime)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {filteredContacts.length === 0 && (
-                  <p className="text-xs text-[#64748B] text-center py-12">Nenhum contato encontrado</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Chat + composer — hidden in contacts view */}
-          {mainView !== 'contacts' && activeConv && (
+          {activeConv && (
             <div style={{ flexShrink: 0, position: 'relative', background: 'linear-gradient(135deg, #FFFFFF 0%, #F0FDFB 100%)', borderBottom: '1px solid #D1FAE5', minHeight: 64, boxShadow: '0 2px 8px rgba(0,168,150,0.06)' }}>
               {/* Header row */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', height: 64 }}>
@@ -2918,8 +2653,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             </div>
           )}
 
-          {/* Messages area + Composer — hidden in contacts view */}
-          {mainView !== 'contacts' && <>
+          {/* Messages area + Composer */}
+          <>
           <div className="wa-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 2, backgroundImage: 'radial-gradient(circle at 1px 1px, #ccf0ec 1px, transparent 0)', backgroundSize: '24px 24px', backgroundColor: '#f7fefe' }}>
             {!activeConv && conversations.length === 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
@@ -3205,7 +2940,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               </div>
             )}
           </div>
-          </>}
+          </>
         </div>
 
         {/* ── Col 3: Contact Panel ──────────────────────────────────────────────── */}
@@ -3752,29 +3487,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         </div>{/* end flex 3-column row */}
       </div>{/* end main outer container */}
 
-      {/* Feature 4: ContactCard drawer */}
-      <ContactCard
-        mode="drawer"
-        isOpen={showDrawer}
-        onClose={() => setShowDrawer(false)}
-        institutionId={effectiveInstitutionId || ''}
-        initialData={activeConv ? {
-          lead_id:              activeConv.lead_id,
-          remote_jid:           rawJid(activeConv.id),
-          name:                 activeConv.name,
-          phone:                activeConv.phone,
-          contact_type:         activeConv.contact_type,
-          tags:                 activeConv.tags,
-          profile_picture_url:  activeConv.profile_picture_url,
-          assigned_user_name:   activeConv.assigned_user_name,
-          assigned_user_id:     activeConv.assigned_user_id,
-          status:               activeConv.status,
-        } : {}}
-        allConversations={conversations}
-        onUpdate={updates => {
-          if (activeConv) setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, ...updates } : c))
-        }}
-      />
 
       {/* Template Modal */}
       {showTemplateModal && (
@@ -3845,58 +3557,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         </div>
       )}
 
-      {/* Feature 5: Import Modal */}
-      {showImportModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 w-[500px] shadow-2xl border border-[#E2E8F0] max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-[#1A2B4A]">Importar Contatos (CSV)</h3>
-              <button onClick={() => { setShowImportModal(false); setImportFile(null); setImportPreview([]) }}
-                className="p-1 text-[#64748B] hover:text-[#1A2B4A]"><X className="w-4 h-4" /></button>
-            </div>
-            <p className="text-xs text-[#64748B] mb-4">
-              O arquivo CSV deve conter ao menos a coluna <strong>Telefone</strong>. Colunas opcionais: Nome, Tipo.
-            </p>
-            <input type="file" accept=".csv,.txt" onChange={handleImportFile}
-              className="w-full text-sm text-[#64748B] file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-[#E6F7F5] file:text-[#00A896] file:font-medium hover:file:bg-[#00A896] hover:file:text-white file:transition-colors cursor-pointer mb-4" />
-            {importPreview.length > 0 && (
-              <div className="mb-4">
-                <p className="text-xs font-semibold text-[#94A3B8] uppercase tracking-wide mb-2">Prévia (primeiras 5 linhas)</p>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-[#E2E8F0]">
-                        {Object.keys(importPreview[0]).map(h => (
-                          <th key={h} className="text-left py-1.5 pr-3 text-[#94A3B8] font-semibold uppercase">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {importPreview.map((row, i) => (
-                        <tr key={i} className="border-b border-[#E2E8F0]/50">
-                          {Object.values(row).map((v: any, j) => (
-                            <td key={j} className="py-1.5 pr-3 text-[#1A2B4A]">{v}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <button onClick={() => { setShowImportModal(false); setImportFile(null); setImportPreview([]) }}
-                className="flex-1 py-2.5 text-xs font-medium text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
-                Cancelar
-              </button>
-              <button onClick={confirmImport} disabled={!importFile || importing}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
-                {importing ? 'Importando...' : 'Confirmar Importação'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   )
 }
