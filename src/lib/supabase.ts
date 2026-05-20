@@ -34,6 +34,7 @@ export interface Lead {
   address?: string
   budget_range?: string
   cpf?: string
+  tags?: string[]
 }
 
 export interface Visit {

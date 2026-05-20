@@ -3504,12 +3504,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                       <div>
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Etiquetas</label>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                          {(activeConv.tags || []).map(tag => (
-                            <span key={tag} className={tagColor(tag)} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 11, padding: '2px 7px', borderRadius: 9999, fontWeight: 500, color: '#fff' }}>
-                              {tag}
-                              <button onClick={() => handleRemoveTag(tag)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)', padding: '0 0 0 2px', lineHeight: 1 }}>×</button>
-                            </span>
-                          ))}
+                          {(activeConv.tags || []).length === 0 && hubTags.length === 0 && (
+                            <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Configure etiquetas em Configurações → Etiquetas</span>
+                          )}
+                          {(activeConv.tags || []).map(tag => {
+                            const color = hubTags.find(t => t.name === tag)?.color || '#6366f1'
+                            return (
+                              <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 11, padding: '2px 7px', borderRadius: 9999, fontWeight: 600, color: '#fff', background: color }}>
+                                {tag}
+                                <button onClick={() => handleRemoveTag(tag)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)', padding: '0 0 0 2px', lineHeight: 1 }}>×</button>
+                              </span>
+                            )
+                          })}
                           {addingTag ? (
                             hubTags.length > 0 ? (
                               <select autoFocus value={newTag}
@@ -3529,14 +3535,14 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                                 style={{ fontSize: 11, padding: '2px 7px', borderRadius: 9999, border: '1px dashed #d1fae5', background: 'transparent', color: '#1A2B4A', outline: 'none', width: 110 }}
                                 maxLength={20} />
                             )
-                          ) : (
+                          ) : hubTags.length > 0 ? (
                             <button onClick={() => setAddingTag(true)}
                               style={{ fontSize: 11, padding: '2px 9px', borderRadius: 9999, border: '1px dashed #d1fae5', color: '#0d9488', background: 'transparent', cursor: 'pointer', transition: 'all 0.15s' }}
                               onMouseEnter={e => { e.currentTarget.style.borderColor = '#0d9488'; e.currentTarget.style.background = '#e6f7f5' }}
                               onMouseLeave={e => { e.currentTarget.style.borderColor = '#d1fae5'; e.currentTarget.style.background = 'transparent' }}>
                               + Etiqueta
                             </button>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     </div>

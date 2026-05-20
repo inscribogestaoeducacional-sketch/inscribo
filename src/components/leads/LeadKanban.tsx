@@ -517,6 +517,40 @@ function HistoryModal({
   contactForm, setContactForm, showContactForm, setShowContactForm, savingContact, onSaveContact,
   onAudit,
 }: HistoryModalProps) {
+  const [leadTags, setLeadTags] = useState<string[]>(lead?.tags || [])
+  const [availableTags, setAvailableTags] = useState<{ id: string; name: string; color: string }[]>([])
+  const [tagToast, setTagToast] = useState('')
+
+  useEffect(() => { setLeadTags(lead?.tags || []) }, [lead])
+
+  useEffect(() => {
+    if (!lead?.institution_id) return
+    ;(async () => {
+      const { supabase: db } = await import('../../lib/supabase')
+      const { data } = await db.from('whatsapp_tags')
+        .select('id, name, color').eq('institution_id', lead.institution_id).order('name')
+      if (data) setAvailableTags(data as { id: string; name: string; color: string }[])
+    })()
+  }, [lead?.institution_id])
+
+  const handleAddLeadTag = async (tagName: string) => {
+    if (!lead || leadTags.includes(tagName)) return
+    const newTags = [...leadTags, tagName]
+    setLeadTags(newTags)
+    const { supabase: db } = await import('../../lib/supabase')
+    await db.from('leads').update({ tags: newTags }).eq('id', lead.id)
+    setTagToast('Etiqueta adicionada!'); setTimeout(() => setTagToast(''), 2500)
+  }
+
+  const handleRemoveLeadTag = async (tagName: string) => {
+    if (!lead) return
+    const newTags = leadTags.filter(t => t !== tagName)
+    setLeadTags(newTags)
+    const { supabase: db } = await import('../../lib/supabase')
+    await db.from('leads').update({ tags: newTags }).eq('id', lead.id)
+    setTagToast('Etiqueta removida!'); setTimeout(() => setTagToast(''), 2500)
+  }
+
   if (!isOpen || !lead) return null
 
   const formatDateTime = (d: string) => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -550,6 +584,39 @@ function HistoryModal({
                 <p style={{ fontSize: 12, color: '#991B1B', margin: '4px 0 0', fontStyle: 'italic' }}>{(lead as any).lost_reason_detail}</p>
               )}
             </div>
+          )}
+        </div>
+
+        {/* Etiquetas */}
+        <div style={{ background: '#F8FAFC', borderRadius: 12, padding: '14px 16px', marginBottom: 20, border: '1px solid #E2E8F0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>🏷️ Etiquetas</h4>
+            {tagToast && <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>{tagToast}</span>}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+            {leadTags.length === 0 && (
+              <span style={{ fontSize: 12, color: '#94a3b8' }}>
+                {availableTags.length === 0 ? 'Configure etiquetas em Configurações → Etiquetas' : 'Nenhuma etiqueta'}
+              </span>
+            )}
+            {leadTags.map(tag => {
+              const color = availableTags.find(t => t.name === tag)?.color || '#6366f1'
+              return (
+                <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, background: color, color: '#fff', fontSize: 12, fontWeight: 600 }}>
+                  {tag}
+                  <button onClick={() => handleRemoveLeadTag(tag)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+                </span>
+              )
+            })}
+          </div>
+          {availableTags.length > 0 && (
+            <select value="" onChange={e => { if (e.target.value) handleAddLeadTag(e.target.value) }}
+              style={{ fontSize: 12, padding: '5px 10px', borderRadius: 8, border: '1px solid #D1FAE5', background: '#F0FDFB', color: '#1A2B4A', outline: 'none', cursor: 'pointer', maxWidth: 280 }}>
+              <option value="">+ Adicionar etiqueta...</option>
+              {availableTags.filter(t => !leadTags.includes(t.name)).map(t => (
+                <option key={t.id} value={t.name}>{t.name}</option>
+              ))}
+            </select>
           )}
         </div>
 
