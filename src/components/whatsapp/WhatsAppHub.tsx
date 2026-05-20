@@ -1197,7 +1197,14 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           setIsConnected(true)
         } else {
           const inst = await DatabaseService.getInstitution(effectiveInstitutionId)
-          setIsConnected(!!inst?.evolution_instance)
+          const instAny = inst as any
+          if (instAny?.whatsapp_phone_id || instAny?.whatsapp_connected) {
+            setUseMetaApi(true)
+            setConnectionStatus('connected')
+            setIsConnected(true)
+          } else {
+            setIsConnected(!!inst?.evolution_instance)
+          }
         }
       }
 
