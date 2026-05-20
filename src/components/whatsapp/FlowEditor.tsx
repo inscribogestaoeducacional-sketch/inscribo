@@ -68,10 +68,18 @@ function nodeH(node: { type: NodeType; data: Record<string, any> }): number {
     case 'distribute': return 82
     case 'lead':       return 100
     case 'action': {
-      let h = 100
-      const at = node.data?.actionType
-      if (at === 'add_tag' || at === 'add_conversation_tag' || at === 'remove_conversation_tag') h += 38
-      if (at === 'upsert_lead') h += 114
+      const acts: any[] = node.data?.actions?.length
+        ? node.data.actions
+        : node.data?.actionType
+          ? [{ actionType: node.data.actionType }]
+          : [{}]
+      let h = 80 + 32  // base + add-button
+      for (const a of acts) {
+        const at = a.actionType
+        if (at === 'upsert_lead') h += 160
+        else if (at === 'add_conversation_tag' || at === 'remove_conversation_tag') h += 120
+        else h += 80
+      }
       return h
     }
     case 'end':        return 82
@@ -408,54 +416,76 @@ function NodeBody({
         </div>
       )
 
-    case 'action':
+    case 'action': {
+      // Normalize legacy single-action format to array
+      const actions: Array<Record<string, any>> = d.actions?.length
+        ? d.actions
+        : d.actionType
+          ? [{ actionType: d.actionType, tag: d.tag, student_name: d.student_name, email: d.email, status: d.status }]
+          : [{ actionType: 'create_lead' }]
+
+      const updateAction = (i: number, patch: Record<string, any>) => {
+        onChange({ ...d, actions: actions.map((a, j) => j === i ? { ...a, ...patch } : a) })
+      }
+
       return (
         <div style={{ padding: 12 }}>
-          <select style={inputSt} value={d.actionType || 'create_lead'}
-            onChange={e => onChange({ ...d, actionType: e.target.value })}
-            onMouseDown={stop}>
-            <option value="create_lead">Criar lead</option>
-            <option value="add_tag">Adicionar etiqueta</option>
-            <option value="link_lead">Vincular lead</option>
-            <option value="close_conversation">Encerrar conversa</option>
-            <option value="upsert_lead">Criar/atualizar lead</option>
-            <option value="add_conversation_tag">Adicionar etiqueta</option>
-            <option value="remove_conversation_tag">Remover etiqueta</option>
-          </select>
-          {d.actionType === 'add_tag' && (
-            <input style={{ ...inputSt, marginTop: 6 }}
-              value={d.tag || ''} placeholder="Nome da etiqueta"
-              onChange={e => onChange({ ...d, tag: e.target.value })}
-              onMouseDown={stop} />
-          )}
-          {(d.actionType === 'add_conversation_tag' || d.actionType === 'remove_conversation_tag') && (
-            <input style={{ ...inputSt, marginTop: 6 }}
-              value={d.tag || ''} placeholder="Nome da etiqueta"
-              onChange={e => onChange({ ...d, tag: e.target.value })}
-              onMouseDown={stop} />
-          )}
-          {d.actionType === 'upsert_lead' && (
-            <>
-              <input style={{ ...inputSt, marginTop: 6 }}
-                value={d.student_name || ''} placeholder="Nome (ou {{nome_aluno}})"
-                onChange={e => onChange({ ...d, student_name: e.target.value })}
-                onMouseDown={stop} />
-              <input style={{ ...inputSt, marginTop: 6 }}
-                value={d.email || ''} placeholder="E-mail (opcional)"
-                onChange={e => onChange({ ...d, email: e.target.value })}
-                onMouseDown={stop} />
-              <select style={{ ...inputSt, marginTop: 6 }}
-                value={d.status || 'novo'}
-                onChange={e => onChange({ ...d, status: e.target.value })}
+          {actions.map((a, i) => (
+            <div key={i} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 8, marginBottom: 6, position: 'relative' }}>
+              {actions.length > 1 && (
+                <button onMouseDown={stop}
+                  onClick={() => onChange({ ...d, actions: actions.filter((_, j) => j !== i) })}
+                  style={{ position: 'absolute', top: 4, right: 4, background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '2px 5px' }}>
+                  ×
+                </button>
+              )}
+              <select style={{ ...inputSt, paddingRight: actions.length > 1 ? 28 : undefined }} value={a.actionType || 'create_lead'}
+                onChange={e => updateAction(i, { actionType: e.target.value })}
                 onMouseDown={stop}>
-                <option value="novo">Novo</option>
-                <option value="contato">Em contato</option>
-                <option value="matriculado">Matriculado</option>
+                <option value="create_lead">Criar lead</option>
+                <option value="upsert_lead">Criar/atualizar lead</option>
+                <option value="add_tag">Adicionar etiqueta (conv.)</option>
+                <option value="add_conversation_tag">Adicionar etiqueta</option>
+                <option value="remove_conversation_tag">Remover etiqueta</option>
+                <option value="link_lead">Vincular lead</option>
+                <option value="close_conversation">Encerrar conversa</option>
               </select>
-            </>
-          )}
+              {(a.actionType === 'add_tag' || a.actionType === 'add_conversation_tag' || a.actionType === 'remove_conversation_tag') && (
+                <input style={{ ...inputSt, marginTop: 6 }}
+                  value={a.tag || ''} placeholder="Nome da etiqueta"
+                  onChange={e => updateAction(i, { tag: e.target.value })}
+                  onMouseDown={stop} />
+              )}
+              {a.actionType === 'upsert_lead' && (
+                <>
+                  <input style={{ ...inputSt, marginTop: 6 }}
+                    value={a.student_name || ''} placeholder="Nome (ou {{nome_aluno}})"
+                    onChange={e => updateAction(i, { student_name: e.target.value })}
+                    onMouseDown={stop} />
+                  <input style={{ ...inputSt, marginTop: 6 }}
+                    value={a.email || ''} placeholder="E-mail (opcional)"
+                    onChange={e => updateAction(i, { email: e.target.value })}
+                    onMouseDown={stop} />
+                  <select style={{ ...inputSt, marginTop: 6 }}
+                    value={a.status || 'novo'}
+                    onChange={e => updateAction(i, { status: e.target.value })}
+                    onMouseDown={stop}>
+                    <option value="novo">Novo</option>
+                    <option value="contato">Em contato</option>
+                    <option value="matriculado">Matriculado</option>
+                  </select>
+                </>
+              )}
+            </div>
+          ))}
+          <button onMouseDown={stop}
+            onClick={() => onChange({ ...d, actions: [...actions, { actionType: 'create_lead' }] })}
+            style={{ width: '100%', padding: '5px', border: '1px dashed #ec4899', borderRadius: 6, background: 'none', color: '#ec4899', fontSize: 11, cursor: 'pointer', marginTop: 2 }}>
+            + Adicionar ação
+          </button>
         </div>
       )
+    }
 
     case 'distribute':
       return (
@@ -873,7 +903,7 @@ export default function FlowEditor({
     if (type === 'wait')       defaultData.seconds = 5
     if (type === 'media')      defaultData.mediaType = 'image'
     if (type === 'distribute') defaultData.distributeMode = 'round_robin'
-    if (type === 'action')     defaultData.actionType = 'create_lead'
+    if (type === 'action')     defaultData.actions = [{ actionType: 'create_lead' }]
     if (type === 'lead')       defaultData.actionType = 'create_lead'
     const rect = canvasRef.current?.getBoundingClientRect()
     const cx = rect ? Math.round((rect.width  / 2 - pan.x) / zoom) : 300
