@@ -822,26 +822,81 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   }, [])
 
   const startRecording = async () => {
-    console.log('[MIC 1] iniciando...')
-    console.log('[MIC 2] navigator.mediaDevices:', !!navigator.mediaDevices)
-    console.log('[MIC 3] getUserMedia:', !!navigator.mediaDevices?.getUserMedia)
-
-    try {
-      const perm = await navigator.permissions.query({ name: 'microphone' as PermissionName })
-      console.log('[MIC 4] permissão atual:', perm.state)
-    } catch (e) {
-      console.log('[MIC 4] permissions API não suportada:', e)
+    if (!activeId) return
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setSendError('Seu browser não suporta gravação de áudio.')
+      return
     }
-
     try {
-      console.log('[MIC 5] chamando getUserMedia...')
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      console.log('[MIC 6] stream obtido:', stream)
-      stream.getTracks().forEach(t => t.stop())
-      setSendError('Microfone OK! Permissão concedida.')
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true }
+      })
+      audioStreamRef.current = stream
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+      recordingMimeTypeRef.current = mimeType
+
+      const recorder = new MediaRecorder(stream, { mimeType })
+      audioChunksRef.current = []
+      recorder.ondataavailable = e => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data)
+      }
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: mimeType })
+        setAudioBlob(blob)
+        const url = URL.createObjectURL(blob)
+        setAudioPreviewUrl(url)
+        if (waveformAnimRef.current) {
+          cancelAnimationFrame(waveformAnimRef.current)
+          waveformAnimRef.current = null
+        }
+        analyserRef.current = null
+        setWaveformBars(Array(20).fill(0.2))
+        setRecorderState('preview')
+      }
+      recorder.start(100)
+      mediaRecorderRef.current = recorder
+
+      setRecordingSeconds(0)
+      recordingTimerRef.current = setInterval(() =>
+        setRecordingSeconds(s => s + 1), 1000)
+
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+        if (AudioCtx) {
+          const ctx = new AudioCtx()
+          const src = ctx.createMediaStreamSource(stream)
+          const analyser = ctx.createAnalyser()
+          analyser.fftSize = 64
+          src.connect(analyser)
+          analyserRef.current = analyser
+          const animate = () => {
+            if (!analyserRef.current) return
+            const data = new Uint8Array(analyserRef.current.frequencyBinCount)
+            analyserRef.current.getByteFrequencyData(data)
+            const bars = Array.from({ length: 20 }, (_, i) => {
+              const idx = Math.floor(i * data.length / 20)
+              return Math.max(0.1, (data[idx] ?? 0) / 255)
+            })
+            setWaveformBars(bars)
+            waveformAnimRef.current = requestAnimationFrame(animate)
+          }
+          waveformAnimRef.current = requestAnimationFrame(animate)
+        }
+      } catch {}
+
+      setRecorderState('recording')
     } catch (err: any) {
-      console.log('[MIC 7] erro:', err.name, err.message)
-      setSendError('Erro: ' + err.name + ' — ' + err.message)
+      if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+        setSendError('Permissão de microfone negada. Clique no 🔒 na barra de endereço e permita.')
+      } else if (err?.name === 'NotFoundError' || err?.name === 'DevicesNotFoundError') {
+        setSendError('Microfone não encontrado.')
+      } else if (err?.name === 'NotReadableError' || err?.name === 'TrackStartError') {
+        setSendError('Microfone em uso por outro aplicativo.')
+      } else {
+        setSendError('Erro ao gravar: ' + (err?.message || 'desconhecido'))
+      }
     }
   }
 
