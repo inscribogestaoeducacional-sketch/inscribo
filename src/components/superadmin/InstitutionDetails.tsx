@@ -283,7 +283,7 @@ export default function InstitutionDetails() {
   const [sendingContract, setSendingContract] = useState(false)
 
   // WhatsApp form
-  const [waForm,   setWaForm]   = useState({ phone_id: '', phone_number: '', display_name: '' })
+  const [waForm,   setWaForm]   = useState({ phone_id: '', phone_number: '', display_name: '', waba_id: '' })
   const [savingWa, setSavingWa] = useState(false)
 
   // Campaign form
@@ -315,7 +315,7 @@ export default function InstitutionDetails() {
     if (!id) return
     if (!quiet) setLoading(true)
     try {
-      const [instRes, usersRes, paymentsRes, contractRes, processRes, cycleRes, consultantsRes] = await Promise.all([
+      const [instRes, usersRes, paymentsRes, contractRes, processRes, cycleRes, consultantsRes, waPhoneRes] = await Promise.all([
         supabase.from('institutions').select('*').eq('id', id).single(),
         supabase.from('users').select('*').eq('institution_id', id).order('created_at', { ascending: false }),
         supabase.from('payments').select('*').eq('institution_id', id).order('created_at', { ascending: false }),
@@ -323,6 +323,7 @@ export default function InstitutionDetails() {
         supabase.from('onboarding_processes').select('*').eq('institution_id', id).maybeSingle(),
         supabase.from('campaign_cycles').select('*').eq('institution_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('users').select('id, full_name').eq('user_type', 'consultant').order('full_name'),
+        supabase.from('whatsapp_phone_numbers').select('waba_id').eq('institution_id', id).maybeSingle(),
       ])
 
       if (cancelledRef.current) return
@@ -347,9 +348,10 @@ export default function InstitutionDetails() {
           implementation_value: String(inst.implementation_value || 550),
         })
         setWaForm({
-          phone_id: inst.whatsapp_phone_id || '',
+          phone_id:     inst.whatsapp_phone_id || '',
           phone_number: inst.whatsapp_phone_number || '',
           display_name: inst.whatsapp_display_name || '',
+          waba_id:      (waPhoneRes as any)?.data?.waba_id || '',
         })
         setContractForm(p => ({
           ...p,
@@ -590,14 +592,37 @@ export default function InstitutionDetails() {
         whatsapp_display_name: waForm.display_name || testData.verified_name || '',
         whatsapp_connected: true,
       }).eq('id', id)
+      const AION_WABA_ID = '1222972209822315'
+      const wabaToSubscribe = waForm.waba_id?.trim() || ''
+      const effectiveWabaId = wabaToSubscribe || AION_WABA_ID
+
       await supabase.from('whatsapp_phone_numbers').upsert({
         institution_id:  id,
         phone_number_id: waForm.phone_id,
         phone_number:    waForm.phone_number || testData.display_phone_number || '',
         display_name:    waForm.display_name || testData.verified_name || '',
+        waba_id:         effectiveWabaId,
         is_active:       true,
         use_meta_api:    true,
       }, { onConflict: 'institution_id' })
+
+      if (wabaToSubscribe && wabaToSubscribe !== AION_WABA_ID) {
+        try {
+          const subscribeRes = await fetch(
+            `https://graph.facebook.com/v18.0/${wabaToSubscribe}/subscribed_apps`,
+            { method: 'POST', headers: { Authorization: `Bearer ${globalToken}` } }
+          )
+          const subscribeData = await subscribeRes.json()
+          if (subscribeData.success) {
+            console.log('[WA] WABA inscrito com sucesso:', wabaToSubscribe)
+          } else {
+            console.warn('[WA] Falha ao inscrever WABA:', subscribeData)
+          }
+        } catch (e) {
+          console.error('[WA] Erro ao inscrever WABA:', e)
+        }
+      }
+
       showToast('WhatsApp configurado e verificado!')
       loadAll()
     } catch (e: any) { showToast(e.message || 'Erro ao verificar.', false) }
@@ -1215,9 +1240,10 @@ export default function InstitutionDetails() {
                             </div>
                             <div className="mt-3 space-y-3">
                               {[
-                                { k: 'phone_id', l: 'Phone Number ID', placeholder: '1007880222413531' },
-                                { k: 'phone_number', l: 'Número', placeholder: '+55 83 99999-9999' },
-                                { k: 'display_name', l: 'Nome de exibição', placeholder: 'Colégio São João' },
+                                { k: 'phone_id',     l: 'Phone Number ID',   placeholder: '1007880222413531' },
+                                { k: 'phone_number', l: 'Número',            placeholder: '+55 83 99999-9999' },
+                                { k: 'display_name', l: 'Nome de exibição',  placeholder: 'Colégio São João' },
+                                { k: 'waba_id',      l: 'WABA ID (deixe vazio se usar o WABA da Áion)', placeholder: '1222972209822315' },
                               ].map(f => (
                                 <div key={f.k}>
                                   <label className={lbl}>{f.l}</label>
@@ -1411,6 +1437,7 @@ export default function InstitutionDetails() {
                         { k: 'phone_id',     label: 'Phone ID',     placeholder: 'ID do número (Meta)' },
                         { k: 'phone_number', label: 'Telefone',     placeholder: '+55 (00) 00000-0000' },
                         { k: 'display_name', label: 'Nome exibido', placeholder: 'Nome da conta WA' },
+                        { k: 'waba_id',      label: 'WABA ID (deixe vazio se usar o WABA da Áion)', placeholder: '1222972209822315' },
                       ].map(f => (
                         <div key={f.k}>
                           <label className={lbl}>{f.label}</label>

@@ -835,15 +835,37 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
         whatsapp_display_name: verifiedName,
         whatsapp_connected:    true,
       }).eq('id', inst.id)
+      const AION_WABA_ID = '1222972209822315'
+      const wabaToSubscribe = waForm.waba_id?.trim() || ''
+      const effectiveWabaId = wabaToSubscribe || AION_WABA_ID
+
       await supabase.from('whatsapp_phone_numbers').upsert({
         institution_id:  inst.id,
         phone_number_id: waForm.phone_id,
         phone_number:    verifiedPhone,
         display_name:    verifiedName,
-        waba_id:         null,
+        waba_id:         effectiveWabaId,
         is_active:       true,
         use_meta_api:    true,
       }, { onConflict: 'institution_id' })
+
+      if (wabaToSubscribe && wabaToSubscribe !== AION_WABA_ID) {
+        try {
+          const subscribeRes = await fetch(
+            `https://graph.facebook.com/v18.0/${wabaToSubscribe}/subscribed_apps`,
+            { method: 'POST', headers: { Authorization: `Bearer ${globalToken}` } }
+          )
+          const subscribeData = await subscribeRes.json()
+          if (subscribeData.success) {
+            console.log('[WA] WABA inscrito com sucesso:', wabaToSubscribe)
+          } else {
+            console.warn('[WA] Falha ao inscrever WABA:', subscribeData)
+          }
+        } catch (e) {
+          console.error('[WA] Erro ao inscrever WABA:', e)
+        }
+      }
+
       setWaSaved(true)
       await loadWaConfig()
     } catch (e) {
@@ -944,9 +966,10 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
                   <div className="space-y-3 pt-2">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Configurar número</p>
                     {[
-                      { label: 'Phone Number ID (Meta)',       key: 'phone_id',     type: 'text', placeholder: '1007880222413531' },
-                      { label: 'Número de telefone',           key: 'phone_number', type: 'text', placeholder: '5583999990001' },
-                      { label: 'Nome de exibição no WhatsApp', key: 'display_name', type: 'text', placeholder: 'Colégio São João' },
+                      { label: 'Phone Number ID (Meta)',                        key: 'phone_id',     type: 'text', placeholder: '1007880222413531' },
+                      { label: 'Número de telefone',                            key: 'phone_number', type: 'text', placeholder: '5583999990001' },
+                      { label: 'Nome de exibição no WhatsApp',                  key: 'display_name', type: 'text', placeholder: 'Colégio São João' },
+                      { label: 'WABA ID (deixe vazio se usar o WABA da Áion)', key: 'waba_id',      type: 'text', placeholder: '1222972209822315' },
                     ].map(f => (
                       <div key={f.key}>
                         <label className={lbl}>{f.label}</label>
