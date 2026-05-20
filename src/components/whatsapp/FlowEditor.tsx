@@ -53,7 +53,13 @@ function genId() {
 function nodeH(node: { type: NodeType; data: Record<string, any> }): number {
   switch (node.type) {
     case 'start':      return 82
-    case 'message':    return 136
+    case 'message': {
+      const mt = node.data?.mediaType
+      if (mt === 'document') return 160
+      if (mt === 'contact')  return 180
+      if (mt && mt !== 'text') return 120  // image / video / audio
+      return 140
+    }
     case 'question':   return 136
     case 'menu':       return 110 + (node.data.options?.length || 1) * 38
     case 'condition': {
@@ -232,15 +238,74 @@ function NodeBody({
     case 'start':
       return <div style={{ padding: 12 }}><p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>Início do fluxo</p></div>
 
-    case 'message':
+    case 'message': {
+      const activeTab = d.mediaType || 'text'
+      const tabs = [
+        { key: 'text', label: 'Texto' }, { key: 'image', label: 'Imagem' },
+        { key: 'video', label: 'Vídeo' }, { key: 'document', label: 'Doc' },
+        { key: 'audio', label: 'Áudio' }, { key: 'contact', label: 'Contato' },
+      ]
+      const setTab = (key: string) =>
+        onChange(key === 'text' ? { ...d, mediaType: undefined } : { ...d, mediaType: key })
       return (
         <div style={{ padding: 12 }}>
-          <textarea rows={3} style={{ ...inputSt, resize: 'none' }}
-            value={d.text || ''} placeholder="Digite a mensagem..."
-            onChange={e => onChange({ ...d, text: e.target.value })}
-            onMouseDown={stop} />
+          <div style={{ display: 'flex', gap: 2, marginBottom: 8, flexWrap: 'nowrap', overflowX: 'auto' }}>
+            {tabs.map(t => (
+              <button key={t.key} onMouseDown={stop} onClick={() => setTab(t.key)}
+                style={{ padding: '3px 7px', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 10, fontWeight: 600, flexShrink: 0, background: activeTab === t.key ? '#3b82f6' : '#f1f5f9', color: activeTab === t.key ? 'white' : '#64748b' }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {activeTab === 'text' && (
+            <textarea rows={3} style={{ ...inputSt, resize: 'none' }}
+              value={d.text || ''} placeholder="Digite a mensagem..."
+              onChange={e => onChange({ ...d, text: e.target.value })}
+              onMouseDown={stop} />
+          )}
+          {activeTab === 'image' && (
+            <>
+              <input style={inputSt} value={d.mediaUrl || ''} placeholder="URL da imagem"
+                onChange={e => onChange({ ...d, mediaUrl: e.target.value })} onMouseDown={stop} />
+              <input style={{ ...inputSt, marginTop: 6 }} value={d.caption || ''} placeholder="Legenda (opcional)"
+                onChange={e => onChange({ ...d, caption: e.target.value })} onMouseDown={stop} />
+            </>
+          )}
+          {activeTab === 'video' && (
+            <>
+              <input style={inputSt} value={d.mediaUrl || ''} placeholder="URL do vídeo"
+                onChange={e => onChange({ ...d, mediaUrl: e.target.value })} onMouseDown={stop} />
+              <input style={{ ...inputSt, marginTop: 6 }} value={d.caption || ''} placeholder="Legenda (opcional)"
+                onChange={e => onChange({ ...d, caption: e.target.value })} onMouseDown={stop} />
+            </>
+          )}
+          {activeTab === 'document' && (
+            <>
+              <input style={inputSt} value={d.mediaUrl || ''} placeholder="URL do documento"
+                onChange={e => onChange({ ...d, mediaUrl: e.target.value })} onMouseDown={stop} />
+              <input style={{ ...inputSt, marginTop: 6 }} value={d.filename || ''} placeholder="Nome do arquivo (ex: proposta.pdf)"
+                onChange={e => onChange({ ...d, filename: e.target.value })} onMouseDown={stop} />
+              <input style={{ ...inputSt, marginTop: 6 }} value={d.caption || ''} placeholder="Legenda (opcional)"
+                onChange={e => onChange({ ...d, caption: e.target.value })} onMouseDown={stop} />
+            </>
+          )}
+          {activeTab === 'audio' && (
+            <input style={inputSt} value={d.mediaUrl || ''} placeholder="URL do áudio"
+              onChange={e => onChange({ ...d, mediaUrl: e.target.value })} onMouseDown={stop} />
+          )}
+          {activeTab === 'contact' && (
+            <>
+              <input style={inputSt} value={d.contactName || ''} placeholder="Nome do contato *"
+                onChange={e => onChange({ ...d, contactName: e.target.value })} onMouseDown={stop} />
+              <input style={{ ...inputSt, marginTop: 6 }} value={d.contactPhone || ''} placeholder="Telefone (ex: 5583999999999) *"
+                onChange={e => onChange({ ...d, contactPhone: e.target.value })} onMouseDown={stop} />
+              <input style={{ ...inputSt, marginTop: 6 }} value={d.contactCompany || ''} placeholder="Empresa (opcional)"
+                onChange={e => onChange({ ...d, contactCompany: e.target.value })} onMouseDown={stop} />
+            </>
+          )}
         </div>
       )
+    }
 
     case 'question':
       return (
@@ -271,14 +336,28 @@ function NodeBody({
                   width: 18, height: 18, fontSize: 10, display: 'flex',
                   alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                 }}>{i + 1}</span>
-                <input style={{ ...inputSt, flex: 1 }}
-                  value={opt.text || ''} placeholder={`Opção ${i + 1}`}
-                  onChange={e => {
-                    const opts = [...(d.options || [])]
-                    opts[i] = { ...opts[i], text: e.target.value }
-                    onChange({ ...d, options: opts })
-                  }}
-                  onMouseDown={stop} />
+                <div style={{ flex: 1, position: 'relative' }}>
+                  {(() => {
+                    const limit = (d.options?.length || 0) <= 3 ? 20 : 24
+                    const len = (opt.text || '').length
+                    const over = len > limit
+                    return (
+                      <>
+                        <input style={{ ...inputSt, paddingRight: 34, borderColor: over ? '#ef4444' : undefined }}
+                          value={opt.text || ''} placeholder={`Opção ${i + 1}`}
+                          onChange={e => {
+                            const opts = [...(d.options || [])]
+                            opts[i] = { ...opts[i], text: e.target.value }
+                            onChange({ ...d, options: opts })
+                          }}
+                          onMouseDown={stop} />
+                        <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 9, fontWeight: 600, pointerEvents: 'none', color: over ? '#ef4444' : '#94a3b8' }}>
+                          {len}/{limit}
+                        </span>
+                      </>
+                    )
+                  })()}
+                </div>
                 <button onMouseDown={stop}
                   onClick={() => onChange({ ...d, options: (d.options || []).filter((_: any, j: number) => j !== i) })}
                   style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 15, padding: 0 }}>×</button>
@@ -642,7 +721,11 @@ function FlowNodeCard({
         borderRadius: '12px 12px 0 0',
       }}>
         <span style={{ fontSize: 15 }}>{cfg.icon}</span>
-        <span style={{ color: 'white', fontWeight: 700, fontSize: 12, flex: 1 }}>{cfg.label}</span>
+        <span style={{ color: 'white', fontWeight: 700, fontSize: 12, flex: 1 }}>
+          {node.type === 'message' && node.data?.mediaType
+            ? ({'image':'Imagem','video':'Vídeo','document':'Documento','audio':'Áudio','contact':'Contato'} as Record<string,string>)[node.data.mediaType] ?? cfg.label
+            : cfg.label}
+        </span>
         {(node.type === 'distribute' || node.type === 'lead') && (
           <span style={{ background: 'rgba(255,255,255,0.25)', color: 'white', fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 4, letterSpacing: '0.03em' }}>EM BREVE</span>
         )}
@@ -840,23 +923,23 @@ export default function FlowEditor({
   useEffect(() => {
     const el = canvasRef.current
     if (!el) return
-    const handler = (e: WheelEvent) => {
+    const handleWheel = (e: WheelEvent) => {
       e.preventDefault()
       const rect   = el.getBoundingClientRect()
-      const mx     = e.clientX - rect.left
-      const my     = e.clientY - rect.top
-      const oldZ   = zoomRef.current
-      const factor = e.deltaY > 0 ? 0.9 : 1.1
-      const newZ   = Math.min(Math.max(oldZ * factor, 0.25), 2.5)
-      const oldP   = panRef.current
-      setPan({
-        x: mx - (mx - oldP.x) * (newZ / oldZ),
-        y: my - (my - oldP.y) * (newZ / oldZ),
+      const mouseX = e.clientX - rect.left
+      const mouseY = e.clientY - rect.top
+      const factor = e.deltaY < 0 ? 1.1 : 0.9
+      setZoom(prev => {
+        const newZoom = Math.min(2.5, Math.max(0.25, prev * factor))
+        setPan(p => ({
+          x: mouseX - (mouseX - p.x) * (newZoom / prev),
+          y: mouseY - (mouseY - p.y) * (newZoom / prev),
+        }))
+        return newZoom
       })
-      setZoom(newZ)
     }
-    el.addEventListener('wheel', handler, { passive: false })
-    return () => el.removeEventListener('wheel', handler)
+    el.addEventListener('wheel', handleWheel, { passive: false })
+    return () => el.removeEventListener('wheel', handleWheel)
   }, [])
 
   // ── Draft auto-save to localStorage ──────────────────────────────────────

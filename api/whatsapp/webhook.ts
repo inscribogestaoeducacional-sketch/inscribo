@@ -413,8 +413,71 @@ async function processCustomFlow(
     }
 
     if (node.type === 'message') {
-      const msg = interp(node.data?.text || '')
-      if (msg) await sendAutoMessage(institutionId, remoteJid, msg)
+      const mediaType = node.data?.mediaType
+      if (!mediaType || mediaType === 'text') {
+        const msg = interp(node.data?.text || '')
+        if (msg) await sendAutoMessage(institutionId, remoteJid, msg)
+      } else if (['image', 'video', 'document', 'audio'].includes(mediaType)) {
+        const mediaUrl = node.data?.mediaUrl
+        if (mediaUrl) {
+          try {
+            const { data: phone } = await supabase
+              .from('whatsapp_phone_numbers').select('phone_number_id')
+              .eq('institution_id', institutionId).eq('is_active', true).single()
+            const waConfig = await getWAConfig()
+            if (phone?.phone_number_id && waConfig.accessToken) {
+              const mediaBody: Record<string, any> = { link: mediaUrl }
+              if (node.data?.caption) mediaBody.caption = interp(node.data.caption)
+              if (mediaType === 'document' && node.data?.filename) mediaBody.filename = node.data.filename
+              const resp = await fetch(`${GRAPH_URL}/${phone.phone_number_id}/messages`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${waConfig.accessToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to: remoteJid, type: mediaType, [mediaType]: mediaBody }),
+              })
+              if (resp.ok) {
+                const d = await resp.json()
+                await supabase.from('whatsapp_messages').insert({
+                  institution_id: institutionId, remote_jid: remoteJid, message_id: d.messages?.[0]?.id,
+                  instance_name: 'cloud-api', content: node.data?.caption || `[${mediaType}]`,
+                  message_type: mediaType, media_url: mediaUrl, from_me: true, contact_name: '_bot_',
+                  status: 'sent', direction: 'outbound', timestamp: new Date().toISOString(),
+                })
+              } else { console.error('[flow] message media send failed:', await resp.text()) }
+            }
+          } catch (e) { console.error('[flow] message media node error:', e) }
+        }
+      } else if (mediaType === 'contact') {
+        try {
+          const { data: phone } = await supabase
+            .from('whatsapp_phone_numbers').select('phone_number_id')
+            .eq('institution_id', institutionId).eq('is_active', true).single()
+          const waConfig = await getWAConfig()
+          if (phone?.phone_number_id && waConfig.accessToken) {
+            const payload: Record<string, any> = {
+              messaging_product: 'whatsapp', to: remoteJid, type: 'contacts',
+              contacts: [{
+                name: { formatted_name: node.data?.contactName || '', first_name: node.data?.contactName || '' },
+                phones: [{ phone: node.data?.contactPhone || '', type: 'CELL' }],
+                ...(node.data?.contactCompany ? { org: { company: node.data.contactCompany } } : {}),
+              }],
+            }
+            const resp = await fetch(`${GRAPH_URL}/${phone.phone_number_id}/messages`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${waConfig.accessToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            })
+            if (resp.ok) {
+              const d = await resp.json()
+              await supabase.from('whatsapp_messages').insert({
+                institution_id: institutionId, remote_jid: remoteJid, message_id: d.messages?.[0]?.id,
+                instance_name: 'cloud-api', content: `[Contato: ${node.data?.contactName}]`,
+                message_type: 'contacts', from_me: true, contact_name: '_bot_',
+                status: 'sent', direction: 'outbound', timestamp: new Date().toISOString(),
+              })
+            }
+          }
+        } catch (e) { console.error('[flow] message contact send error:', e) }
+      }
       const nexts = edgesFrom(node.id, 'out')
       if (!nexts.length) break
       currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId); continue
