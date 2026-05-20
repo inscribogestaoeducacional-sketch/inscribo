@@ -295,11 +295,12 @@ async function autoLinkLead(institutionId: string, remoteJid: string): Promise<v
 
 // ── Custom flow state-machine processor ─────────────────────────────────────
 async function processCustomFlow(
-  institutionId:     string,
-  remoteJid:         string,
-  text:              string,
-  flow:              any,
-  isNewConversation: boolean
+  institutionId:      string,
+  remoteJid:          string,
+  text:               string,
+  flow:               any,
+  isNewConversation:  boolean,
+  interactiveChoiceId = ''   // raw Meta reply ID, e.g. 'opt_0', 'opt_1'
 ): Promise<void> {
   const bf = flow.bot_flow as { nodes: any[]; edges: any[] } | null
   if (!bf?.nodes?.length) return
@@ -351,21 +352,35 @@ async function processCustomFlow(
     if (nexts.length) { currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId) }
   } else if (current?.type === 'menu' && variables[`__menu_sent_${currentNodeId}`]) {
     // Menu was already displayed — process user's choice
-    console.log('[MENU S2] processando resposta do menu, texto:', text, '| options:', JSON.stringify(current.data?.options))
-    const choice  = parseInt(text.trim(), 10)
-    const options = current.data?.options || []
-    const menuHeader = interp(current.data?.menuText || current.data?.text || 'Escolha uma opção:')
+    console.log('[MENU S2] resposta do menu, interactiveChoiceId:', interactiveChoiceId, '| texto:', text, '| options:', JSON.stringify(current.data?.options))
+    const options     = current.data?.options || []
+    const menuHeader  = interp(current.data?.menuText || current.data?.text || 'Escolha uma opção:')
     const optionsText = options.map((o: any, i: number) => `${i + 1}. ${o.text}`).join('\n')
-    const optIdx  = options.findIndex((o: any, i: number) => (o.number ?? i + 1) === choice)
+
+    // Priority 1: use raw interactive reply ID (opt_0, opt_1…) — direct index, no roundtrip
+    let optIdx = -1
+    if (/^opt_\d+$/.test(interactiveChoiceId)) {
+      const parsed = parseInt(interactiveChoiceId.replace('opt_', ''), 10)
+      if (parsed >= 0 && parsed < options.length) optIdx = parsed
+    }
+    // Fallback: parse 1-based number typed by user
+    if (optIdx < 0) {
+      const choice = parseInt(text.trim(), 10)
+      if (!isNaN(choice)) {
+        optIdx = options.findIndex((o: any, i: number) => (o.number ?? i + 1) === choice)
+      }
+    }
+
     if (optIdx >= 0) {
       const opt = options[optIdx]
+      // Edge fromPortId uses hyphen format (opt-0); Meta reply IDs use underscore (opt_0)
       let nexts = edgesFrom(currentNodeId, `opt-${optIdx}`)
       if (!nexts.length && opt.id) nexts = edgesFrom(currentNodeId, opt.id)
       if (nexts.length) {
         delete variables[`__menu_sent_${currentNodeId}`]
         currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId)
       } else {
-        // Valid choice but no connecting edge — keep waiting
+        // Valid index but no edge configured — keep waiting
         const msg = `Opção inválida. Por favor escolha:\n\n${menuHeader}\n\n${optionsText}`
         await sendAutoMessage(institutionId, remoteJid, msg)
         await supabase.from('whatsapp_conversations')
@@ -374,7 +389,7 @@ async function processCustomFlow(
         return
       }
     } else {
-      // Invalid choice — re-display full menu
+      // Unrecognised choice — re-display full menu
       const msg = `Opção inválida. Por favor escolha:\n\n${menuHeader}\n\n${optionsText}`
       await sendAutoMessage(institutionId, remoteJid, msg)
       await supabase.from('whatsapp_conversations')
