@@ -842,6 +842,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
         display_name:    verifiedName,
         waba_id:         null,
         is_active:       true,
+        use_meta_api:    true,
       }, { onConflict: 'institution_id' })
       setWaSaved(true)
       await loadWaConfig()
@@ -1150,6 +1151,7 @@ export default function AdminSchools() {
             display_name:    editForm.wa_display_name.trim() || null,
             waba_id:         null,
             is_active:       editForm.wa_is_active,
+            use_meta_api:    true,
           }, { onConflict: 'institution_id' })
         if (waErr) throw waErr
       }

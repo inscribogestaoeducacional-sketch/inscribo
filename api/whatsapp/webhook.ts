@@ -1094,18 +1094,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Map phone_number_id → institution (school inbox)
+      // Step A: look up in whatsapp_phone_numbers
       const { data: phoneRecord } = await supabase
         .from('whatsapp_phone_numbers')
         .select('institution_id')
         .eq('phone_number_id', phoneNumberId)
-        .single()
+        .maybeSingle()
 
-      if (!phoneRecord?.institution_id) {
-        console.log('⚠️ phone_number_id não mapeado:', phoneNumberId)
-        return res.status(200).json({ status: 'ignored', reason: 'phone_number_id not registered' })
+      let institutionId: string | null = phoneRecord?.institution_id ?? null
+
+      // Step B: fallback to institutions.whatsapp_phone_id
+      if (!institutionId) {
+        const { data: instRecord } = await supabase
+          .from('institutions')
+          .select('id')
+          .eq('whatsapp_phone_id', phoneNumberId)
+          .maybeSingle()
+        institutionId = instRecord?.id ?? null
       }
 
-      const institutionId = phoneRecord.institution_id
+      if (!institutionId) {
+        console.log('⚠️ Phone ID não cadastrado:', phoneNumberId)
+        return res.status(200).json({ status: 'ignored', reason: 'phone_number_id not registered' })
+      }
 
       // ── Process incoming messages ──────────────────────────────────────────
       for (const msg of value.messages || []) {

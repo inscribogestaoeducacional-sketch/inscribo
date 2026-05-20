@@ -596,6 +596,7 @@ export default function InstitutionDetails() {
         phone_number:    waForm.phone_number || testData.display_phone_number || '',
         display_name:    waForm.display_name || testData.verified_name || '',
         is_active:       true,
+        use_meta_api:    true,
       }, { onConflict: 'institution_id' })
       showToast('WhatsApp configurado e verificado!')
       loadAll()
