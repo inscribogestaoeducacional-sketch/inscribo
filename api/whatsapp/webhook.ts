@@ -199,6 +199,44 @@ async function sendInteractiveMenu(
   }
 }
 
+// ── Send satisfaction survey buttons via Meta Cloud API ─────────────────────
+async function sendSatisfactionSurvey(institutionId: string, remoteJid: string, message: string): Promise<void> {
+  try {
+    const { data: phone } = await supabase
+      .from('whatsapp_phone_numbers').select('phone_number_id')
+      .eq('institution_id', institutionId).eq('is_active', true).single()
+    const waConfig = await getWAConfig()
+    if (!phone?.phone_number_id || !waConfig.accessToken) return
+    const resp = await fetch(`${GRAPH_URL}/${phone.phone_number_id}/messages`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${waConfig.accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp', recipient_type: 'individual', to: remoteJid, type: 'interactive',
+        interactive: {
+          type: 'button',
+          body: { text: message.slice(0, 1024) },
+          action: {
+            buttons: [
+              { type: 'reply', reply: { id: 'survey_1', title: '😞 Ruim' } },
+              { type: 'reply', reply: { id: 'survey_2', title: '😐 Regular' } },
+              { type: 'reply', reply: { id: 'survey_3', title: '😊 Ótimo' } },
+            ],
+          },
+        },
+      }),
+    })
+    if (resp.ok) {
+      const d = await resp.json()
+      await supabase.from('whatsapp_messages').insert({
+        institution_id: institutionId, remote_jid: remoteJid, message_id: d.messages?.[0]?.id,
+        instance_name: 'cloud-api', content: message, message_type: 'interactive',
+        from_me: true, contact_name: '_bot_', status: 'sent', direction: 'outbound',
+        timestamp: new Date().toISOString(),
+      })
+    }
+  } catch (e) { console.error('❌ sendSatisfactionSurvey error:', e) }
+}
+
 // ── Fetch media from Meta, upload to Supabase Storage, return public URL ─────
 // Falls back to the temporary Meta URL if download/upload fails.
 async function resolveMediaUrl(
@@ -852,7 +890,24 @@ async function processCustomFlow(
       currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId); continue
     }
 
-    if (node.type === 'end') { currentNodeId = 'end'; break }
+    if (node.type === 'end') {
+      if (node.data?.message) {
+        await sendAutoMessage(institutionId, remoteJid, interp(node.data.message))
+      }
+      await supabase.from('whatsapp_conversations')
+        .update({ status: 'closed', bot_active: false, assigned_user_id: null, assigned_user_name: null })
+        .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+      const { data: flowCfg } = await supabase
+        .from('whatsapp_flows')
+        .select('satisfaction_survey_enabled, satisfaction_message')
+        .eq('institution_id', institutionId)
+        .maybeSingle()
+      if (flowCfg?.satisfaction_survey_enabled) {
+        const surveyMsg = (flowCfg.satisfaction_message as string) || 'Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊'
+        await sendSatisfactionSurvey(institutionId, remoteJid, surveyMsg)
+      }
+      currentNodeId = 'end'; break
+    }
     break
   }
 
