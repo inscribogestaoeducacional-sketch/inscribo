@@ -57,9 +57,17 @@ function nodeH(node: { type: NodeType; data: Record<string, any> }): number {
     case 'question':   return 136
     case 'menu':       return 110 + (node.data.options?.length || 1) * 38
     case 'condition': {
-      let h = 120
-      if (node.data?.conditionType === 'keyword') h += 38
-      if (node.data?.conditionType === 'has_tag') h += 76
+      const conds: any[] = node.data?.conditions?.length
+        ? node.data.conditions
+        : node.data?.conditionType
+          ? [{ conditionType: node.data.conditionType }]
+          : [{}]
+      let h = 60 + 32  // base + add-button
+      for (const c of conds) {
+        const ct = c.conditionType
+        h += (ct === 'keyword' || ct === 'has_tag') ? 80 : 60
+      }
+      h += Math.max(0, conds.length - 1) * 28  // E/OU badges
       return h
     }
     case 'transfer':   return node.data.transferType === 'group' ? 220 : 180
@@ -290,46 +298,87 @@ function NodeBody({
         </div>
       )
 
-    case 'condition':
+    case 'condition': {
+      // Normalize legacy single-condition format to array
+      const conditions: Array<Record<string, any>> = d.conditions?.length
+        ? d.conditions
+        : d.conditionType
+          ? [{ conditionType: d.conditionType, operator: 'AND', keyword: d.keyword, tag: d.tag, tagScope: d.tagScope }]
+          : [{ conditionType: 'business_hours', operator: 'AND' }]
+
+      const updateCond = (i: number, patch: Record<string, any>) => {
+        onChange({ ...d, conditions: conditions.map((c, j) => j === i ? { ...c, ...patch } : c) })
+      }
+
       return (
         <div style={{ padding: 12 }}>
-          <select style={inputSt} value={d.conditionType || 'business_hours'}
-            onChange={e => onChange({ ...d, conditionType: e.target.value })}
-            onMouseDown={stop}>
-            <option value="business_hours">Horário comercial</option>
-            <option value="lunch_break">Horário de almoço</option>
-            <option value="keyword">Palavra-chave</option>
-            <option value="first_message">Primeira mensagem</option>
-            <option value="has_tag">Tem etiqueta</option>
-          </select>
-          {d.conditionType === 'keyword' && (
-            <input style={{ ...inputSt, marginTop: 6 }}
-              value={d.keyword || ''} placeholder="Digite a palavra-chave"
-              onChange={e => onChange({ ...d, keyword: e.target.value })}
-              onMouseDown={stop} />
-          )}
-          {d.conditionType === 'has_tag' && (
-            <>
-              <input style={{ ...inputSt, marginTop: 6 }}
-                value={d.tag || ''} placeholder="Nome da etiqueta"
-                onChange={e => onChange({ ...d, tag: e.target.value })}
-                onMouseDown={stop} />
-              <select style={{ ...inputSt, marginTop: 6 }}
-                value={d.tagScope || 'conversation'}
-                onChange={e => onChange({ ...d, tagScope: e.target.value })}
-                onMouseDown={stop}>
-                <option value="conversation">Etiqueta da conversa</option>
-                <option value="lead">Etiqueta do lead</option>
-                <option value="both">Conversa ou lead</option>
-              </select>
-            </>
-          )}
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 10, color: '#64748b' }}>
-            <span style={{ color: '#10b981' }}>✓ Sim (esq)</span>
-            <span style={{ color: '#ef4444' }}>✗ Não (dir)</span>
+          {conditions.map((c, i) => (
+            <React.Fragment key={i}>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 8, position: 'relative' }}>
+                {conditions.length > 1 && (
+                  <button onMouseDown={stop}
+                    onClick={() => onChange({ ...d, conditions: conditions.filter((_, j) => j !== i) })}
+                    style={{ position: 'absolute', top: 4, right: 4, background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '2px 5px' }}>
+                    ×
+                  </button>
+                )}
+                <select style={{ ...inputSt, paddingRight: conditions.length > 1 ? 28 : undefined }} value={c.conditionType || 'business_hours'}
+                  onChange={e => updateCond(i, { conditionType: e.target.value })}
+                  onMouseDown={stop}>
+                  <option value="business_hours">Horário comercial</option>
+                  <option value="lunch_break">Horário de almoço</option>
+                  <option value="keyword">Palavra-chave</option>
+                  <option value="first_message">Primeira mensagem</option>
+                  <option value="has_tag">Tem etiqueta</option>
+                </select>
+                {c.conditionType === 'keyword' && (
+                  <input style={{ ...inputSt, marginTop: 6 }}
+                    value={c.keyword || ''} placeholder="Digite a palavra-chave"
+                    onChange={e => updateCond(i, { keyword: e.target.value })}
+                    onMouseDown={stop} />
+                )}
+                {c.conditionType === 'has_tag' && (
+                  <>
+                    <input style={{ ...inputSt, marginTop: 6 }}
+                      value={c.tag || ''} placeholder="Nome da etiqueta"
+                      onChange={e => updateCond(i, { tag: e.target.value })}
+                      onMouseDown={stop} />
+                    <select style={{ ...inputSt, marginTop: 6 }}
+                      value={c.tagScope || 'conversation'}
+                      onChange={e => updateCond(i, { tagScope: e.target.value })}
+                      onMouseDown={stop}>
+                      <option value="conversation">Etiqueta da conversa</option>
+                      <option value="lead">Etiqueta do lead</option>
+                      <option value="both">Conversa ou lead</option>
+                    </select>
+                  </>
+                )}
+              </div>
+              {i < conditions.length - 1 && (
+                <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
+                  <button onMouseDown={stop}
+                    onClick={() => updateCond(i, { operator: c.operator === 'OR' ? 'AND' : 'OR' })}
+                    style={{ padding: '2px 10px', borderRadius: 99, border: 'none', background: c.operator === 'OR' ? '#f97316' : '#3b82f6', color: 'white', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
+                    {c.operator === 'OR' ? 'OU' : 'E'}
+                  </button>
+                </div>
+              )}
+            </React.Fragment>
+          ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+            <button onMouseDown={stop}
+              onClick={() => onChange({ ...d, conditions: [...conditions, { conditionType: 'business_hours', operator: 'AND' }] })}
+              style={{ padding: '5px 8px', border: '1px dashed #ef4444', borderRadius: 6, background: 'none', color: '#ef4444', fontSize: 11, cursor: 'pointer' }}>
+              + Adicionar condição
+            </button>
+            <div style={{ display: 'flex', gap: 10, fontSize: 10, color: '#64748b' }}>
+              <span style={{ color: '#10b981' }}>✓ Sim</span>
+              <span style={{ color: '#ef4444' }}>✗ Não</span>
+            </div>
           </div>
         </div>
       )
+    }
 
     case 'transfer': {
       const tType = d.transferType || 'attendant'
@@ -899,7 +948,7 @@ export default function FlowEditor({
     const id = genId()
     const defaultData: Record<string, any> = {}
     if (type === 'menu')       defaultData.options = [{ text: 'Opção 1' }]
-    if (type === 'condition')  defaultData.conditionType = 'business_hours'
+    if (type === 'condition')  defaultData.conditions = [{ conditionType: 'business_hours', operator: 'AND' }]
     if (type === 'wait')       defaultData.seconds = 5
     if (type === 'media')      defaultData.mediaType = 'image'
     if (type === 'distribute') defaultData.distributeMode = 'round_robin'

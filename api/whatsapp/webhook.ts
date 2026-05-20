@@ -553,58 +553,77 @@ async function processCustomFlow(
     }
 
     if (node.type === 'condition') {
-      let result = false
-      if (node.data?.conditionType === 'business_hours') {
-        const tz  = flow.timezone || 'America/Fortaleza'
-        const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
-        const days = ['SUN','MON','TUE','WED','THU','FRI','SAT']
-        const isDay = ((flow.working_days as string[]) ?? []).includes(days[now.getDay()])
-        const [sh, sm] = (flow.working_start || '08:00').split(':').map(Number)
-        const [eh, em] = (flow.working_end   || '18:00').split(':').map(Number)
-        const cur = now.getHours() * 60 + now.getMinutes()
-        result = isDay && cur >= sh * 60 + sm && cur <= eh * 60 + em
-      } else if (node.data?.conditionType === 'lunch_break') {
-        const tz  = flow.timezone || 'America/Fortaleza'
-        const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
-        const [lsh, lsm] = (flow.lunch_start || '12:00').split(':').map(Number)
-        const [leh, lem] = (flow.lunch_end   || '13:00').split(':').map(Number)
-        const cur = now.getHours() * 60 + now.getMinutes()
-        result = cur >= lsh * 60 + lsm && cur <= leh * 60 + lem
-      } else if (node.data?.conditionType === 'keyword') {
-        result = text.toLowerCase().includes((node.data.keyword || '').toLowerCase())
-      } else if (node.data?.conditionType === 'first_message') {
-        result = isNewConversation
-      } else if (node.data?.conditionType === 'has_tag') {
-        const tag   = (node.data.tag || '').trim()
-        const scope = node.data.tagScope || 'conversation'
-        if (tag) {
-          if (scope === 'conversation' || scope === 'both') {
-            const { data: convTagData } = await supabase
-              .from('whatsapp_conversations')
-              .select('tags')
-              .eq('institution_id', institutionId)
-              .eq('remote_jid', remoteJid)
-              .maybeSingle()
-            result = ((convTagData?.tags as string[]) || []).includes(tag)
-          }
-          if (!result && (scope === 'lead' || scope === 'both')) {
-            const { data: convLead } = await supabase
-              .from('whatsapp_conversations')
-              .select('lead_id')
-              .eq('institution_id', institutionId)
-              .eq('remote_jid', remoteJid)
-              .maybeSingle()
-            if (convLead?.lead_id) {
-              const { data: leadTagData } = await supabase
-                .from('leads')
+      // Support legacy single-condition and new multi-condition array format
+      const conditions: Array<Record<string, any>> = node.data?.conditions?.length
+        ? node.data.conditions
+        : node.data?.conditionType
+          ? [{ conditionType: node.data.conditionType, operator: 'AND', ...node.data }]
+          : []
+
+      const results: boolean[] = []
+      for (const cond of conditions) {
+        let r = false
+        if (cond.conditionType === 'business_hours') {
+          const tz  = flow.timezone || 'America/Fortaleza'
+          const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
+          const days = ['SUN','MON','TUE','WED','THU','FRI','SAT']
+          const isDay = ((flow.working_days as string[]) ?? []).includes(days[now.getDay()])
+          const [sh, sm] = (flow.working_start || '08:00').split(':').map(Number)
+          const [eh, em] = (flow.working_end   || '18:00').split(':').map(Number)
+          const cur = now.getHours() * 60 + now.getMinutes()
+          r = isDay && cur >= sh * 60 + sm && cur <= eh * 60 + em
+        } else if (cond.conditionType === 'lunch_break') {
+          const tz  = flow.timezone || 'America/Fortaleza'
+          const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
+          const [lsh, lsm] = (flow.lunch_start || '12:00').split(':').map(Number)
+          const [leh, lem] = (flow.lunch_end   || '13:00').split(':').map(Number)
+          const cur = now.getHours() * 60 + now.getMinutes()
+          r = cur >= lsh * 60 + lsm && cur <= leh * 60 + lem
+        } else if (cond.conditionType === 'keyword') {
+          r = text.toLowerCase().includes((cond.keyword || '').toLowerCase())
+        } else if (cond.conditionType === 'first_message') {
+          r = isNewConversation
+        } else if (cond.conditionType === 'has_tag') {
+          const tag   = (cond.tag || '').trim()
+          const scope = cond.tagScope || 'conversation'
+          if (tag) {
+            if (scope === 'conversation' || scope === 'both') {
+              const { data: convTagData } = await supabase
+                .from('whatsapp_conversations')
                 .select('tags')
-                .eq('id', convLead.lead_id)
+                .eq('institution_id', institutionId)
+                .eq('remote_jid', remoteJid)
                 .maybeSingle()
-              result = (((leadTagData as any)?.tags as string[]) || []).includes(tag)
+              r = ((convTagData?.tags as string[]) || []).includes(tag)
+            }
+            if (!r && (scope === 'lead' || scope === 'both')) {
+              const { data: convLead } = await supabase
+                .from('whatsapp_conversations')
+                .select('lead_id')
+                .eq('institution_id', institutionId)
+                .eq('remote_jid', remoteJid)
+                .maybeSingle()
+              if (convLead?.lead_id) {
+                const { data: leadTagData } = await supabase
+                  .from('leads')
+                  .select('tags')
+                  .eq('id', convLead.lead_id)
+                  .maybeSingle()
+                r = (((leadTagData as any)?.tags as string[]) || []).includes(tag)
+              }
             }
           }
         }
+        results.push(r)
       }
+
+      // Combine left-to-right: each condition's operator applies between it and the next
+      let result = results[0] ?? false
+      for (let i = 0; i < conditions.length - 1; i++) {
+        const op = conditions[i].operator || 'AND'
+        result = op === 'OR' ? result || results[i + 1] : result && results[i + 1]
+      }
+
       // 'yes'/'no' (new) and 'true'/'false' (old) both resolved by normalizePort
       const nexts = edgesFrom(node.id, result ? 'yes' : 'no')
       if (!nexts.length) break
