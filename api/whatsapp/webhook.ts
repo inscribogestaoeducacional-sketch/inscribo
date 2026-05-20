@@ -697,10 +697,11 @@ async function processCustomFlow(
 
 // ── Full automated flow processor ───────────────────────────────────────────
 async function processFlow(
-  institutionId:     string,
-  remoteJid:         string,
-  text:              string,
-  isNewConversation: boolean
+  institutionId:      string,
+  remoteJid:          string,
+  text:               string,
+  isNewConversation:  boolean,
+  interactiveChoiceId = ''
 ): Promise<void> {
   try {
     // a) Blacklist check
@@ -753,7 +754,7 @@ async function processFlow(
 
       // Bot already running — continue flow from current node
       if (convState?.bot_active === true) {
-        await processCustomFlow(institutionId, remoteJid, text, flow, false)
+        await processCustomFlow(institutionId, remoteJid, text, flow, false, interactiveChoiceId)
         return
       }
 
@@ -776,7 +777,7 @@ async function processFlow(
             bot_active: true, bot_current_node: null, bot_variables: {},
           }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
           if (botErr) console.error('❌ bot activation error:', botErr.message)
-          await processCustomFlow(institutionId, remoteJid, text, flow, true)
+          await processCustomFlow(institutionId, remoteJid, text, flow, true, interactiveChoiceId)
         } else {
           console.log('[flow] conversa reaberta com histórico, robô não ativado')
         }
@@ -1158,17 +1159,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           msg.document?.caption  ||
           ''
 
-        // Detect interactive button/list reply and map to option number
-        let interactiveReply = ''
-        let interactiveTitle = ''
+        // Detect interactive button/list reply — capture raw ID for bot flow menu routing
+        let interactiveReply  = ''
+        let interactiveTitle  = ''
+        let interactiveChoiceId = '' // raw Meta ID, e.g. 'opt_0', 'opt_1' — passed to processCustomFlow
         if (msgType === 'interactive') {
           const ia = msg.interactive
           if (ia?.type === 'button_reply') {
-            const idx = parseInt((ia.button_reply?.id as string || '').replace('opt_', ''))
-            if (!isNaN(idx)) { interactiveReply = String(idx + 1); interactiveTitle = ia.button_reply?.title || '' }
+            interactiveChoiceId = (ia.button_reply?.id as string) || ''
+            interactiveTitle    = ia.button_reply?.title || ''
+            const idx = parseInt(interactiveChoiceId.replace('opt_', ''), 10)
+            if (!isNaN(idx)) interactiveReply = String(idx + 1)
           } else if (ia?.type === 'list_reply') {
-            const idx = parseInt((ia.list_reply?.id as string || '').replace('opt_', ''))
-            if (!isNaN(idx)) { interactiveReply = String(idx + 1); interactiveTitle = ia.list_reply?.title || '' }
+            interactiveChoiceId = (ia.list_reply?.id as string) || ''
+            interactiveTitle    = ia.list_reply?.title || ''
+            const idx = parseInt(interactiveChoiceId.replace('opt_', ''), 10)
+            if (!isNaN(idx)) interactiveReply = String(idx + 1)
           }
         }
         const effectiveText = interactiveReply || text
@@ -1315,7 +1321,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // ── Automated flow ──
-        await processFlow(institutionId, remoteJid, effectiveText, isNewConversation)
+        await processFlow(institutionId, remoteJid, effectiveText, isNewConversation, interactiveChoiceId)
       }
 
       // ── Process delivery/read status updates ──────────────────────────────
