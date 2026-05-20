@@ -103,9 +103,9 @@ export default function ContactsModule() {
     try {
       const { data } = await supabase
         .from('whatsapp_contacts')
-        .select('id, phone, name, profile_picture_url, type, lead_id, remote_jid, tags, assigned_user_name, updated_at, created_at, leads(id, student_name, responsible_name, email, grade_interest, source, status)')
+        .select('id, phone, name, profile_picture_url, type, lead_id, remote_jid, tags, assigned_user_name, last_seen_at, created_at, leads(id, student_name, responsible_name, email, grade_interest, source, status)')
         .eq('institution_id', institutionId)
-        .order('updated_at', { ascending: false })
+        .order('last_seen_at', { ascending: false })
 
       if (!mountedRef.current) return
 
@@ -133,7 +133,7 @@ export default function ContactsModule() {
           contact_type:       c.type === 'unknown' ? null : (c.type || null),
           assigned_user_name: c.assigned_user_name || null,
           tags:               (c.tags as string[]) || [],
-          last_contact:       c.updated_at || c.created_at || new Date().toISOString(),
+          last_contact:       c.last_seen_at || c.created_at || new Date().toISOString(),
           origin_label:       cfg.label,
           origin_color:       cfg.color,
           origin_bg:          '',
