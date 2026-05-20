@@ -844,7 +844,8 @@ export default function FlowEditor({
 
   const handlePortMouseUp = (toNodeId: string, toPortId: string) => {
     if (!connecting || connecting.fromNodeId === toNodeId) { setConnecting(null); return }
-    const alreadyConnected = edges.some(e => e.toNodeId === toNodeId && e.toPortId === toPortId)
+    // Only block duplicate connections on non-input ports; 'in' ports accept multiple sources
+    const alreadyConnected = toPortId !== 'in' && edges.some(e => e.toNodeId === toNodeId && e.toPortId === toPortId)
     if (alreadyConnected) { setConnecting(null); return }
     setEdges(prev => [...prev, {
       id: `${connecting.fromNodeId}-${connecting.fromPortId}-${toNodeId}-${toPortId}`,
