@@ -164,18 +164,28 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
       phoneNumberId = platformWA.phone_number_id
       accessToken   = platformWA.access_token
     } else {
-      const { data: phoneRecord, error: phoneErr } = await supabase
+      const { data: phoneRecord } = await supabase
         .from('whatsapp_phone_numbers')
         .select('phone_number_id')
         .eq('institution_id', institution_id)
         .eq('is_active', true)
-        .single()
+        .maybeSingle()
 
-      if (phoneErr || !phoneRecord) {
-        return res.status(400).json({ error: 'Número WhatsApp não configurado para esta escola' })
+      if (phoneRecord?.phone_number_id) {
+        phoneNumberId = phoneRecord.phone_number_id
+      } else {
+        const { data: instRecord } = await supabase
+          .from('institutions')
+          .select('whatsapp_phone_id')
+          .eq('id', institution_id)
+          .maybeSingle()
+
+        if (!instRecord?.whatsapp_phone_id) {
+          return res.status(400).json({ error: 'Número WhatsApp não configurado para esta escola' })
+        }
+
+        phoneNumberId = instRecord.whatsapp_phone_id
       }
-
-      phoneNumberId = phoneRecord.phone_number_id
       const waConfig = await getWAConfig()
       console.log('[SEND] waConfig:', { hasToken: !!waConfig.accessToken, tokenLength: waConfig.accessToken?.length })
       accessToken   = waConfig.accessToken

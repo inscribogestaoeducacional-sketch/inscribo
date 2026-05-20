@@ -1202,6 +1202,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             setUseMetaApi(true)
             setConnectionStatus('connected')
             setIsConnected(true)
+            if (instAny?.whatsapp_phone_id) {
+              setMetaConfig({ phone_id: instAny.whatsapp_phone_id, token: '' })
+            }
           } else {
             setIsConnected(!!inst?.evolution_instance)
           }
