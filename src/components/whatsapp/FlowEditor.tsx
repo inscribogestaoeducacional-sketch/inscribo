@@ -56,13 +56,24 @@ function nodeH(node: { type: NodeType; data: Record<string, any> }): number {
     case 'message':    return 136
     case 'question':   return 136
     case 'menu':       return 110 + (node.data.options?.length || 1) * 38
-    case 'condition':  return 120
+    case 'condition': {
+      let h = 120
+      if (node.data?.conditionType === 'keyword') h += 38
+      if (node.data?.conditionType === 'has_tag') h += 76
+      return h
+    }
     case 'transfer':   return node.data.transferType === 'group' ? 220 : 180
     case 'wait':       return 82
     case 'media':      return 160
     case 'distribute': return 82
     case 'lead':       return 100
-    case 'action':     return 100
+    case 'action': {
+      let h = 100
+      const at = node.data?.actionType
+      if (at === 'add_tag' || at === 'add_conversation_tag' || at === 'remove_conversation_tag') h += 38
+      if (at === 'upsert_lead') h += 114
+      return h
+    }
     case 'end':        return 82
     default:           return 100
   }
@@ -281,12 +292,29 @@ function NodeBody({
             <option value="lunch_break">Horário de almoço</option>
             <option value="keyword">Palavra-chave</option>
             <option value="first_message">Primeira mensagem</option>
+            <option value="has_tag">Tem etiqueta</option>
           </select>
           {d.conditionType === 'keyword' && (
             <input style={{ ...inputSt, marginTop: 6 }}
               value={d.keyword || ''} placeholder="Digite a palavra-chave"
               onChange={e => onChange({ ...d, keyword: e.target.value })}
               onMouseDown={stop} />
+          )}
+          {d.conditionType === 'has_tag' && (
+            <>
+              <input style={{ ...inputSt, marginTop: 6 }}
+                value={d.tag || ''} placeholder="Nome da etiqueta"
+                onChange={e => onChange({ ...d, tag: e.target.value })}
+                onMouseDown={stop} />
+              <select style={{ ...inputSt, marginTop: 6 }}
+                value={d.tagScope || 'conversation'}
+                onChange={e => onChange({ ...d, tagScope: e.target.value })}
+                onMouseDown={stop}>
+                <option value="conversation">Etiqueta da conversa</option>
+                <option value="lead">Etiqueta do lead</option>
+                <option value="both">Conversa ou lead</option>
+              </select>
+            </>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 10, color: '#64748b' }}>
             <span style={{ color: '#10b981' }}>✓ Sim (esq)</span>
@@ -390,12 +418,41 @@ function NodeBody({
             <option value="add_tag">Adicionar etiqueta</option>
             <option value="link_lead">Vincular lead</option>
             <option value="close_conversation">Encerrar conversa</option>
+            <option value="upsert_lead">Criar/atualizar lead</option>
+            <option value="add_conversation_tag">Adicionar etiqueta</option>
+            <option value="remove_conversation_tag">Remover etiqueta</option>
           </select>
           {d.actionType === 'add_tag' && (
             <input style={{ ...inputSt, marginTop: 6 }}
               value={d.tag || ''} placeholder="Nome da etiqueta"
               onChange={e => onChange({ ...d, tag: e.target.value })}
               onMouseDown={stop} />
+          )}
+          {(d.actionType === 'add_conversation_tag' || d.actionType === 'remove_conversation_tag') && (
+            <input style={{ ...inputSt, marginTop: 6 }}
+              value={d.tag || ''} placeholder="Nome da etiqueta"
+              onChange={e => onChange({ ...d, tag: e.target.value })}
+              onMouseDown={stop} />
+          )}
+          {d.actionType === 'upsert_lead' && (
+            <>
+              <input style={{ ...inputSt, marginTop: 6 }}
+                value={d.student_name || ''} placeholder="Nome (ou {{nome_aluno}})"
+                onChange={e => onChange({ ...d, student_name: e.target.value })}
+                onMouseDown={stop} />
+              <input style={{ ...inputSt, marginTop: 6 }}
+                value={d.email || ''} placeholder="E-mail (opcional)"
+                onChange={e => onChange({ ...d, email: e.target.value })}
+                onMouseDown={stop} />
+              <select style={{ ...inputSt, marginTop: 6 }}
+                value={d.status || 'novo'}
+                onChange={e => onChange({ ...d, status: e.target.value })}
+                onMouseDown={stop}>
+                <option value="novo">Novo</option>
+                <option value="contato">Em contato</option>
+                <option value="matriculado">Matriculado</option>
+              </select>
+            </>
           )}
         </div>
       )
@@ -624,6 +681,9 @@ export default function FlowEditor({
   const [saved, setSaved]           = useState(false)
   const [users, setUsers]           = useState<{ id: string; full_name: string }[]>([])
   const [groups, setGroups]         = useState<{ id: string; name: string; emoji: string }[]>([])
+  const [draftBanner, setDraftBanner] = useState(false)
+  const [draftData, setDraftData]     = useState<{ nodes: FlowNode[]; edges: FlowEdge[] } | null>(null)
+  const dirtyRef = useRef(false)
 
   const canvasRef = useRef<HTMLDivElement>(null)
   const zoomRef   = useRef(zoom)
@@ -669,6 +729,19 @@ export default function FlowEditor({
         setEdges([{ id: 'e-default', fromNodeId: 'start-1', fromPortId: 'out', toNodeId: 'msg-1', toPortId: 'in' }])
       }
       setLoading(false)
+      try {
+        const dKey = `flow_draft_${institutionId}`
+        const raw = localStorage.getItem(dKey)
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          if (Date.now() - (parsed.savedAt || 0) < 30 * 60 * 1000) {
+            setDraftData({ nodes: parsed.nodes, edges: parsed.edges })
+            setDraftBanner(true)
+          } else {
+            localStorage.removeItem(dKey)
+          }
+        }
+      } catch {}
       setTimeout(() => {
         const el = canvasRef.current
         if (!nodesToFit.length || !el) return
@@ -706,6 +779,14 @@ export default function FlowEditor({
     el.addEventListener('wheel', handler, { passive: false })
     return () => el.removeEventListener('wheel', handler)
   }, [])
+
+  // ── Draft auto-save to localStorage ──────────────────────────────────────
+  useEffect(() => {
+    if (!dirtyRef.current) return
+    try {
+      localStorage.setItem(`flow_draft_${institutionId}`, JSON.stringify({ nodes, edges, savedAt: Date.now() }))
+    } catch {}
+  }, [nodes, edges, institutionId])
 
   // ── Node drag ─────────────────────────────────────────────────────────────
   const startDragNode = (e: React.MouseEvent, nodeId: string) => {
@@ -773,6 +854,7 @@ export default function FlowEditor({
       toPortId,
     }])
     setConnecting(null)
+    dirtyRef.current = true
   }
 
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
@@ -804,6 +886,7 @@ export default function FlowEditor({
     }
     setNodes(prev => [...prev, newNode])
     setSelected(id)
+    dirtyRef.current = true
   }
 
   const deleteNode = (id: string) => {
@@ -811,12 +894,14 @@ export default function FlowEditor({
     setNodes(prev => prev.filter(n => n.id !== id))
     setEdges(prev => prev.filter(e => e.fromNodeId !== id && e.toNodeId !== id))
     if (selectedNode === id) setSelected(null)
+    dirtyRef.current = true
   }
 
   const updateNodeData = (id: string, data: Record<string, any>) => {
     setNodes(prev => prev.map(n =>
       n.id === id ? { ...n, data, height: nodeH({ type: n.type, data }) } : n
     ))
+    dirtyRef.current = true
   }
 
   // ── Save ──────────────────────────────────────────────────────────────────
@@ -864,6 +949,9 @@ export default function FlowEditor({
     } else {
       console.log('[FlowEditor] salvo com sucesso')
       setSaved(true)
+      try { localStorage.removeItem(`flow_draft_${institutionId}`) } catch {}
+      setDraftBanner(false)
+      dirtyRef.current = false
       setTimeout(() => setSaved(false), 2500)
     }
     setSaving(false)
@@ -946,6 +1034,27 @@ export default function FlowEditor({
         </div>
       </div>
 
+      {/* ── Draft recovery banner ── */}
+      {draftBanner && draftData && (
+        <div style={{
+          background: '#fef9c3', borderBottom: '1px solid #fde68a',
+          padding: '8px 16px', display: 'flex', alignItems: 'center',
+          gap: 12, fontSize: 12, color: '#92400e', flexShrink: 0,
+        }}>
+          <span>⚠️ Rascunho não salvo encontrado da sessão anterior.</span>
+          <button
+            onClick={() => { setNodes(draftData.nodes); setEdges(draftData.edges); setDraftBanner(false); setDraftData(null) }}
+            style={{ padding: '4px 10px', background: '#f59e0b', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 11 }}>
+            Usar rascunho
+          </button>
+          <button
+            onClick={() => { try { localStorage.removeItem(`flow_draft_${institutionId}`) } catch {} setDraftBanner(false); setDraftData(null) }}
+            style={{ padding: '4px 10px', background: 'white', color: '#92400e', border: '1px solid #fde68a', borderRadius: 6, cursor: 'pointer', fontSize: 11 }}>
+            Descartar
+          </button>
+        </div>
+      )}
+
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {/* ── Left sidebar ── */}
         <div style={{
@@ -1005,7 +1114,7 @@ export default function FlowEditor({
                 nodes={nodes}
                 zoom={zoom}
                 pan={pan}
-                onDelete={() => setEdges(prev => prev.filter(e => e.id !== edge.id))}
+                onDelete={() => { setEdges(prev => prev.filter(e => e.id !== edge.id)); dirtyRef.current = true }}
               />
             ))}
             {/* Temporary connection line */}

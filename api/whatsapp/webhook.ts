@@ -574,6 +574,36 @@ async function processCustomFlow(
         result = text.toLowerCase().includes((node.data.keyword || '').toLowerCase())
       } else if (node.data?.conditionType === 'first_message') {
         result = isNewConversation
+      } else if (node.data?.conditionType === 'has_tag') {
+        const tag   = (node.data.tag || '').trim()
+        const scope = node.data.tagScope || 'conversation'
+        if (tag) {
+          if (scope === 'conversation' || scope === 'both') {
+            const { data: convTagData } = await supabase
+              .from('whatsapp_conversations')
+              .select('tags')
+              .eq('institution_id', institutionId)
+              .eq('remote_jid', remoteJid)
+              .maybeSingle()
+            result = ((convTagData?.tags as string[]) || []).includes(tag)
+          }
+          if (!result && (scope === 'lead' || scope === 'both')) {
+            const { data: convLead } = await supabase
+              .from('whatsapp_conversations')
+              .select('lead_id')
+              .eq('institution_id', institutionId)
+              .eq('remote_jid', remoteJid)
+              .maybeSingle()
+            if (convLead?.lead_id) {
+              const { data: leadTagData } = await supabase
+                .from('leads')
+                .select('tags')
+                .eq('id', convLead.lead_id)
+                .maybeSingle()
+              result = (((leadTagData as any)?.tags as string[]) || []).includes(tag)
+            }
+          }
+        }
       }
       // 'yes'/'no' (new) and 'true'/'false' (old) both resolved by normalizePort
       const nexts = edgesFrom(node.id, result ? 'yes' : 'no')
@@ -613,6 +643,54 @@ async function processCustomFlow(
         await supabase.from('whatsapp_conversations')
           .update({ status: 'closed', bot_active: false })
           .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+      } else if (node.data?.actionType === 'upsert_lead') {
+        const phone  = remoteJid.replace(/@.*/, '')
+        const noCode = phone.startsWith('55') ? phone.slice(2) : phone
+        const { data: existingLead } = await supabase.from('leads').select('id')
+          .eq('institution_id', institutionId)
+          .or(`phone.eq.${phone},phone.eq.55${noCode},phone.eq.+55${noCode}`)
+          .maybeSingle()
+        const leadFields: Record<string, any> = {}
+        if (node.data.student_name) leadFields.student_name = interp(node.data.student_name)
+        if (node.data.email)        leadFields.email        = interp(node.data.email)
+        if (node.data.status)       leadFields.status       = node.data.status
+        if (existingLead) {
+          if (Object.keys(leadFields).length) {
+            await supabase.from('leads').update(leadFields).eq('id', existingLead.id)
+          }
+        } else {
+          await supabase.from('leads').insert({
+            institution_id: institutionId,
+            phone:          phone.startsWith('55') ? phone : `55${noCode}`,
+            student_name:   leadFields.student_name || variables.nome_aluno || variables.nome || '',
+            status:         leadFields.status || 'novo',
+            ...(leadFields.email ? { email: leadFields.email } : {}),
+          })
+        }
+      } else if (node.data?.actionType === 'add_conversation_tag') {
+        const tag = (node.data.tag || '').trim()
+        if (tag) {
+          const { data: convTagData } = await supabase.from('whatsapp_conversations')
+            .select('tags').eq('institution_id', institutionId).eq('remote_jid', remoteJid).maybeSingle()
+          const tags: string[] = (convTagData?.tags as string[]) || []
+          if (!tags.includes(tag)) {
+            await supabase.from('whatsapp_conversations')
+              .update({ tags: [...tags, tag] })
+              .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+          }
+        }
+      } else if (node.data?.actionType === 'remove_conversation_tag') {
+        const tag = (node.data.tag || '').trim()
+        if (tag) {
+          const { data: convTagData } = await supabase.from('whatsapp_conversations')
+            .select('tags').eq('institution_id', institutionId).eq('remote_jid', remoteJid).maybeSingle()
+          const tags: string[] = (convTagData?.tags as string[]) || []
+          if (tags.includes(tag)) {
+            await supabase.from('whatsapp_conversations')
+              .update({ tags: tags.filter((t: string) => t !== tag) })
+              .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+          }
+        }
       }
       const nexts = edgesFrom(node.id, 'out')
       if (!nexts.length) break
