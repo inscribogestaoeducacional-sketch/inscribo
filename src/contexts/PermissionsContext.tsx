@@ -20,13 +20,15 @@ export function usePermissions() {
   return useContext(PermissionsContext)
 }
 
+const isPrivilegedRole = (role: string) => role === 'admin' || role === 'manager'
+
 export function PermissionsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   const [permissions, setPermissions] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
 
   const loadPermissions = useCallback(async () => {
-    if (!user?.institution_id || user.role !== 'user') {
+    if (!user?.id || isPrivilegedRole(user.role)) {
       setPermissions({})
       setLoading(false)
       return
@@ -34,10 +36,9 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     setLoading(true)
     try {
       const { data } = await supabase
-        .from('role_permissions')
+        .from('user_permissions')
         .select('module, enabled')
-        .eq('institution_id', user.institution_id)
-        .eq('role', 'consultor')
+        .eq('user_id', user.id)
       const map: Record<string, boolean> = {}
       if (data) {
         for (const row of data) {
@@ -50,14 +51,14 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     } finally {
       setLoading(false)
     }
-  }, [user?.institution_id, user?.role])
+  }, [user?.id, user?.role])
 
   useEffect(() => {
     loadPermissions()
   }, [loadPermissions])
 
   const isModuleEnabled = (module: string): boolean => {
-    if (!user || user.role !== 'user') return true
+    if (!user || isPrivilegedRole(user.role)) return true
     if (!(module in permissions)) return true
     return permissions[module]
   }

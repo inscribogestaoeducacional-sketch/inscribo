@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import { usePermissions } from '../../contexts/PermissionsContext'
 import { supabase } from '../../lib/supabase'
 import {
-  Users, Plus, Edit, Trash2, Shield, User, UserCheck, Search,
+  Users, Plus, Edit, Trash2, Shield, UserCheck, Search,
   Eye, EyeOff, Mail, Calendar, CheckCircle, XCircle, Key, X,
-  Building2, AlertTriangle, Loader2, RefreshCw, Lock, Save
+  Building2, AlertTriangle, Loader2, RefreshCw
 } from 'lucide-react'
 
 const PERM_MODULES = [
@@ -39,15 +40,45 @@ function UserModal({ isOpen, onClose, onSave, editingUser }: {
   const [showPwd, setShowPwd] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [permMap, setPermMap] = useState<Record<string, boolean>>({})
+  const [loadingPerms, setLoadingPerms] = useState(false)
+
+  const isConsultor = (role: string) => role !== 'admin' && role !== 'manager'
 
   useEffect(() => {
     if (editingUser) {
       setFormData({ full_name: editingUser.full_name, email: editingUser.email, role: editingUser.role, password: '', confirmPassword: '', active: editingUser.active })
+      if (isConsultor(editingUser.role)) {
+        setLoadingPerms(true)
+        supabase.from('user_permissions').select('module, enabled').eq('user_id', editingUser.id)
+          .then(({ data }) => {
+            const map: Record<string, boolean> = {}
+            PERM_MODULES.forEach(m => { map[m.id] = true })
+            if (data) for (const row of data) map[row.module] = row.enabled
+            setPermMap(map)
+          })
+          .finally(() => setLoadingPerms(false))
+      } else {
+        setPermMap({})
+      }
     } else {
       setFormData({ full_name: '', email: '', role: 'user', password: '', confirmPassword: '', active: true })
+      const map: Record<string, boolean> = {}
+      PERM_MODULES.forEach(m => { map[m.id] = true })
+      setPermMap(map)
     }
     setError('')
   }, [editingUser, isOpen])
+
+  useEffect(() => {
+    if (!editingUser && isConsultor(formData.role)) {
+      const map: Record<string, boolean> = {}
+      PERM_MODULES.forEach(m => { map[m.id] = true })
+      setPermMap(map)
+    } else if (!isConsultor(formData.role)) {
+      setPermMap({})
+    }
+  }, [formData.role])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,7 +88,11 @@ function UserModal({ isOpen, onClose, onSave, editingUser }: {
       if (formData.password.length < 6) return setError('Senha mínima: 6 caracteres')
     }
     setLoading(true)
-    try { await onSave(formData); onClose() }
+    try {
+      const payload = isConsultor(formData.role) ? { ...formData, permissions: permMap } : formData
+      await onSave(payload)
+      onClose()
+    }
     catch (err: any) { setError(err.message || 'Erro ao salvar') }
     finally { setLoading(false) }
   }
@@ -65,10 +100,11 @@ function UserModal({ isOpen, onClose, onSave, editingUser }: {
   if (!isOpen) return null
 
   const S = { input: 'w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#00A896] focus:outline-none transition-all text-sm' }
+  const showPerms = isConsultor(formData.role)
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 80px rgba(0,0,0,0.25)' }}>
+      <div style={{ background: '#fff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 560, maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 24px 80px rgba(0,0,0,0.25)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <h2 style={{ fontSize: 17, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{editingUser ? 'Editar Usuário' : 'Novo Usuário'}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><X size={20} /></button>
@@ -117,6 +153,36 @@ function UserModal({ isOpen, onClose, onSave, editingUser }: {
             <input type="checkbox" id="active" checked={formData.active} onChange={e => setFormData({ ...formData, active: e.target.checked })} style={{ width: 16, height: 16, accentColor: '#00A896' }} />
             <label htmlFor="active" style={{ fontSize: 13, color: '#475569', cursor: 'pointer' }}>Usuário ativo no sistema</label>
           </div>
+
+          {showPerms && (
+            <div style={{ border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden' }}>
+              <div style={{ padding: '12px 16px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>🔒 Acesso aos Módulos</p>
+                <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0' }}>Administradores e gestores têm acesso total.</p>
+              </div>
+              {loadingPerms ? (
+                <div style={{ textAlign: 'center', padding: 24 }}><Loader2 size={18} color="#00A896" className="animate-spin" style={{ margin: '0 auto' }} /></div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: '#E2E8F0' }}>
+                  {PERM_MODULES.map(m => {
+                    const enabled = permMap[m.id] ?? true
+                    return (
+                      <div key={m.id} onClick={() => setPermMap(p => ({ ...p, [m.id]: !(p[m.id] ?? true) }))}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#fff', cursor: 'pointer', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <span style={{ fontSize: 16, flexShrink: 0 }}>{m.icon}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: enabled ? '#1A2B4A' : '#94A3B8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.label}</span>
+                        </div>
+                        <div style={{ width: 36, height: 20, borderRadius: 999, background: enabled ? '#00A896' : '#CBD5E1', flexShrink: 0, position: 'relative', transition: 'background 0.2s' }}>
+                          <span style={{ position: 'absolute', top: 2, left: enabled ? 18 : 2, width: 16, height: 16, background: '#fff', borderRadius: '50%', transition: 'left 0.2s', display: 'block' }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {!editingUser && (
             <div style={{ background: '#EFF6FF', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#1D4ED8' }}>
@@ -208,6 +274,7 @@ function PasswordModal({ isOpen, onClose, targetUser }: { isOpen: boolean; onClo
 // ─── Componente Principal ─────────────────────────────────────────────────────
 export default function UserManagement() {
   const { user } = useAuth()
+  const { refreshPermissions } = usePermissions()
   const [users, setUsers] = useState<AppUser[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -219,11 +286,6 @@ export default function UserManagement() {
   const [filterStatus, setFilterStatus] = useState('')
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
-  const [activeTab, setActiveTab] = useState<'users' | 'permissions'>('users')
-  const [permMap, setPermMap] = useState<Record<string, boolean>>({})
-  const [savingPerms, setSavingPerms] = useState(false)
-  const [permsSaved, setPermsSaved] = useState(false)
-  const [loadingPerms, setLoadingPerms] = useState(false)
 
   useEffect(() => { loadUsers() }, [user])
 
@@ -236,46 +298,6 @@ export default function UserManagement() {
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok })
     setTimeout(() => setToast(null), 3000)
-  }
-
-  const loadPermissions = async () => {
-    if (!user?.institution_id) return
-    setLoadingPerms(true)
-    try {
-      const { data } = await supabase
-        .from('role_permissions')
-        .select('module, enabled')
-        .eq('institution_id', user.institution_id)
-        .eq('role', 'consultor')
-      const map: Record<string, boolean> = {}
-      PERM_MODULES.forEach(m => { map[m.id] = true })
-      if (data) {
-        for (const row of data) map[row.module] = row.enabled
-      }
-      setPermMap(map)
-    } catch (e) { console.error(e) } finally { setLoadingPerms(false) }
-  }
-
-  const handleSavePerms = async () => {
-    if (!user?.institution_id) return
-    setSavingPerms(true)
-    try {
-      const rows = PERM_MODULES.map(m => ({
-        institution_id: user.institution_id,
-        role: 'consultor',
-        module: m.id,
-        enabled: permMap[m.id] ?? true,
-      }))
-      const { error } = await supabase
-        .from('role_permissions')
-        .upsert(rows, { onConflict: 'institution_id,role,module' })
-      if (error) throw error
-      showToast('Permissões salvas com sucesso!')
-      setPermsSaved(true)
-      setTimeout(() => setPermsSaved(false), 2500)
-    } catch (e: any) {
-      showToast('Erro ao salvar permissões: ' + e.message, false)
-    } finally { setSavingPerms(false) }
   }
 
   const loadUsers = async () => {
@@ -297,40 +319,65 @@ export default function UserManagement() {
     }
   }
 
+  const isConsultor = (role: string) => role !== 'admin' && role !== 'manager'
+
   const handleSave = async (formData: any) => {
+    const { permissions, ...userData } = formData
     if (editingUser) {
-      // Editar usuário existente
       const { error } = await supabase
         .from('users')
-        .update({ full_name: formData.full_name, role: formData.role, active: formData.active })
+        .update({ full_name: userData.full_name, role: userData.role, active: userData.active })
         .eq('id', editingUser.id)
       if (error) throw error
+
+      if (isConsultor(userData.role) && permissions) {
+        const rows = PERM_MODULES.map(m => ({
+          institution_id: user!.institution_id,
+          user_id: editingUser.id,
+          module: m.id,
+          enabled: permissions[m.id] ?? true,
+        }))
+        const { error: permErr } = await supabase
+          .from('user_permissions')
+          .upsert(rows, { onConflict: 'user_id,module' })
+        if (permErr) throw permErr
+        if (editingUser.id === user?.id) await refreshPermissions()
+      }
+
       showToast('Usuário atualizado com sucesso!')
     } else {
-      // Criar novo usuário via signUp
       const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
+        email: userData.email,
+        password: userData.password,
         options: {
-          data: { full_name: formData.full_name, role: formData.role },
+          data: { full_name: userData.full_name, role: userData.role },
           emailRedirectTo: `${window.location.origin}/login`
         }
       })
       if (authError) throw authError
       if (!authData.user) throw new Error('Erro ao criar usuário')
 
-      // Inserir na tabela users
       const { error: profileError } = await supabase
         .from('users')
         .upsert({
           id: authData.user.id,
-          email: formData.email,
-          full_name: formData.full_name,
-          role: formData.role,
+          email: userData.email,
+          full_name: userData.full_name,
+          role: userData.role,
           institution_id: user!.institution_id,
-          active: formData.active
+          active: userData.active
         }, { onConflict: 'id' })
       if (profileError) throw profileError
+
+      if (isConsultor(userData.role) && permissions) {
+        const rows = PERM_MODULES.map(m => ({
+          institution_id: user!.institution_id,
+          user_id: authData.user!.id,
+          module: m.id,
+          enabled: permissions[m.id] ?? true,
+        }))
+        await supabase.from('user_permissions').upsert(rows, { onConflict: 'user_id,module' })
+      }
 
       showToast('Usuário criado! Email de boas-vindas enviado.')
     }
@@ -524,72 +571,15 @@ export default function UserManagement() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {activeTab === 'users' && (
-            <>
-              <button onClick={loadUsers} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', fontSize: 12, color: '#64748B', cursor: 'pointer' }}>
-                <RefreshCw size={13} /> Atualizar
-              </button>
-              <button onClick={() => { setEditingUser(null); setShowModal(true) }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                <Plus size={15} /> Novo Usuário
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', borderRadius: 12, padding: 4, width: 'fit-content' }}>
-        {([
-          { id: 'users' as 'users' | 'permissions', label: 'Usuários', icon: <Users size={13} /> },
-          { id: 'permissions' as 'users' | 'permissions', label: 'Permissões por Perfil', icon: <Lock size={13} /> },
-        ]).map(tab => (
-          <button key={tab.id} onClick={() => { setActiveTab(tab.id); if (tab.id === 'permissions') loadPermissions() }}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: activeTab === tab.id ? 700 : 500, background: activeTab === tab.id ? '#fff' : 'transparent', color: activeTab === tab.id ? '#1A2B4A' : '#64748B', cursor: 'pointer', boxShadow: activeTab === tab.id ? '0 1px 4px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s' }}>
-            {tab.icon}{tab.label}
+          <button onClick={loadUsers} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', fontSize: 12, color: '#64748B', cursor: 'pointer' }}>
+            <RefreshCw size={13} /> Atualizar
           </button>
-        ))}
+          <button onClick={() => { setEditingUser(null); setShowModal(true) }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            <Plus size={15} /> Novo Usuário
+          </button>
+        </div>
       </div>
 
-      {activeTab === 'permissions' && (
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 24 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-            <div>
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: '0 0 4px' }}>🔒 Permissões — Consultor</h2>
-              <p style={{ fontSize: 12, color: '#64748B', margin: 0 }}>Administradores e gestores têm acesso total e não são configuráveis.</p>
-            </div>
-            <button onClick={handleSavePerms} disabled={savingPerms}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 10, border: 'none', background: permsSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingPerms ? 0.7 : 1 }}>
-              {savingPerms ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : permsSaved ? <><CheckCircle size={13} />Salvo!</> : <><Save size={13} />Salvar permissões</>}
-            </button>
-          </div>
-          {loadingPerms ? (
-            <div style={{ textAlign: 'center', padding: 40 }}>
-              <Loader2 size={24} color="#00A896" className="animate-spin" style={{ margin: '0 auto' }} />
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {PERM_MODULES.map(m => (
-                <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: 10, border: '1px solid #F1F5F9', background: '#FAFAFA' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ fontSize: 20, lineHeight: 1 }}>{m.icon}</span>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A' }}>{m.label}</div>
-                      <div style={{ fontSize: 11, color: '#94A3B8' }}>{m.desc}</div>
-                    </div>
-                  </div>
-                  <button onClick={() => setPermMap(p => ({ ...p, [m.id]: !(p[m.id] ?? true) }))}
-                    style={{ width: 44, height: 24, borderRadius: 999, background: (permMap[m.id] ?? true) ? '#00A896' : '#CBD5E1', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
-                    <span style={{ position: 'absolute', top: 3, left: (permMap[m.id] ?? true) ? 22 : 3, width: 18, height: 18, background: '#fff', borderRadius: '50%', transition: 'left 0.2s', display: 'block' }} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'users' && (
-      <>
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 }}>
         {[
@@ -694,9 +684,6 @@ export default function UserManagement() {
           </table>
         )}
       </div>
-
-      </>
-      )}
 
       <UserModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingUser(null) }} onSave={handleSave} editingUser={editingUser} />
       <PasswordModal isOpen={showPwdModal} onClose={() => { setShowPwdModal(false); setPwdUser(null) }} targetUser={pwdUser} />
