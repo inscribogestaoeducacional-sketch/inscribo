@@ -1366,6 +1366,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
     const rawBody = await readRawBody(req)
 
+    // Diagnostic logs — always run before any validation or early return
+    try {
+      const _body = JSON.parse(rawBody.toString())
+      console.log('[WEBHOOK RAW] body keys:', Object.keys(_body || {}))
+      console.log('[WEBHOOK RAW] entry count:', _body?.entry?.length || 0)
+      console.log('[WEBHOOK RAW] entry[0] keys:', Object.keys(_body?.entry?.[0] || {}))
+      console.log('[WEBHOOK RAW] changes[0] field:', _body?.entry?.[0]?.changes?.[0]?.field)
+      console.log('[WEBHOOK RAW] changes[0] value keys:', Object.keys(_body?.entry?.[0]?.changes?.[0]?.value || {}))
+      console.log('[WEBHOOK RAW] messages:', _body?.entry?.[0]?.changes?.[0]?.value?.messages?.length || 0)
+      console.log('[WEBHOOK RAW] statuses:', _body?.entry?.[0]?.changes?.[0]?.value?.statuses?.length || 0)
+    } catch {}
+
     // HMAC-SHA256 validation (timing-safe)
     const signature = req.headers['x-hub-signature-256'] as string | undefined
     if (waConfig.appSecret) {
