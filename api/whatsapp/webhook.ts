@@ -343,19 +343,28 @@ async function autoLinkLead(institutionId: string, remoteJid: string): Promise<v
 // ── Phone normalization: always returns 13-digit BR format (55+DDD+9+8digits)
 function normalizePhone(raw: string): string {
   let digits = raw.replace(/\D/g, '')
-  // Remove country code 55 when total is 12 or 13 digits
+
+  // Remove código do país 55 se tiver 12 ou 13 dígitos
   if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {
     digits = digits.slice(2)
   }
-  // 10 digits = DDD + 8-digit number → insert 9 after DDD
+
+  // Agora deve ter 10 ou 11 dígitos
+  // Se tiver 10: DDD(2) + número(8) → adicionar 9 após DDD
   if (digits.length === 10) {
-    digits = digits.slice(0, 2) + '9' + digits.slice(2)
+    const ddd = digits.slice(0, 2)
+    const num = digits.slice(2)
+    digits = ddd + '9' + num
   }
-  // Prepend country code to get 13 digits
+
+  // Se tiver 11: DDD(2) + 9 + número(8) → correto
+  // Adicionar código do país 55
   if (digits.length === 11) {
     digits = '55' + digits
   }
-  // If not 13 digits (invalid), return raw digits unchanged
+
+  // Se ainda não tiver 13 dígitos, retornar como está
+  console.log('[NORMALIZE]', 'raw:', raw, 'result:', digits, 'length:', digits.length)
   return digits
 }
 
@@ -366,6 +375,7 @@ async function upsertContact(
   name:          string,
   profilePicUrl?: string
 ): Promise<void> {
+  console.log('[UPSERT] iniciando para:', remoteJid, institutionId)
   try {
     const rawPhone = remoteJid.replace(/@.*/, '')
     const phone    = normalizePhone(rawPhone)
@@ -404,8 +414,15 @@ async function upsertContact(
           ...(profilePicUrl ? { profile_picture_url: profilePicUrl } : {}),
         })
     }
-  } catch (e) {
-    console.error('❌ upsertContact error:', e)
+  } catch (e: any) {
+    console.error('❌ upsertContact error:', {
+      message: e?.message,
+      code: e?.code,
+      details: e?.details,
+      hint: e?.hint,
+      phone: normalizePhone(remoteJid.replace(/@.*/, '')),
+      institutionId
+    })
   }
 }
 
