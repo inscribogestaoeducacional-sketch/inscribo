@@ -1476,6 +1476,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log('[WEBHOOK] messages count:', body?.entry?.[0]?.changes?.[0]?.value?.messages?.length || 0)
       console.log('[WEBHOOK] statuses count:', body?.entry?.[0]?.changes?.[0]?.value?.statuses?.length || 0)
 
+      console.log('[PRE-LOOP]',
+        'messages:', value.messages?.length ?? 0,
+        'statuses:', value.statuses?.length ?? 0,
+        'institutionId:', institutionId?.slice(0,8))
+
       // ── Process incoming messages ──────────────────────────────────────────
       for (const msg of value.messages || []) {
         // Always store remote_jid without @-suffix to avoid duplicate rows
