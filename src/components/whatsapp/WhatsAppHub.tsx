@@ -1437,14 +1437,28 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   useEffect(() => {
     if (!phoneParam || phoneParamHandledRef.current || loading) return
     phoneParamHandledRef.current = true
-    const digits = phoneParam.replace(/\D/g, '')
-    const jid = `55${digits}@s.whatsapp.net`
-    const existing = conversations.find(c => c.id === jid || c.phone.replace(/\D/g,'') === digits)
+
+    // Normalize: strip non-digits, remove leading 55 country code and leading 0
+    const normP = (p: string) => {
+      let d = p.replace(/\D/g, '')
+      if (d.length >= 12 && d.startsWith('55')) d = d.slice(2)
+      if (d.startsWith('0')) d = d.slice(1)
+      return d
+    }
+    const targetPhone = normP(phoneParam)
+
+    const existing = conversations.find(c => {
+      const convPhone = normP(c.phone || c.id || '')
+      return convPhone === targetPhone || convPhone.endsWith(targetPhone) || targetPhone.endsWith(convPhone)
+    })
+
     if (existing) {
       setActiveId(existing.id)
     } else {
-      const phone = digits.replace(/(\d{2})(\d{5})(\d{4})/, '$1 $2-$3')
-      const name = nameParam ? decodeURIComponent(nameParam) : `+55 ${phone}`
+      const digits = phoneParam.replace(/\D/g, '')
+      const jid    = `55${targetPhone}@s.whatsapp.net`
+      const phone  = targetPhone.replace(/(\d{2})(\d{5})(\d{4})/, '$1 $2-$3')
+      const name   = nameParam ? decodeURIComponent(nameParam) : `+55 ${phone}`
       const newConv: Conversation = {
         id: jid, name, phone,
         avatarColor: jidToColor(jid),
@@ -1817,12 +1831,15 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const rJid = rawJid(activeId)
     await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, type)
     // Also update whatsapp_contacts.type so ContactProfile reflects the change
-    const contactPhone = rJid.replace(/@.*/, '')
+    // Use normalized phone (strip 55 prefix) to match stored contacts
+    const rawContactPhone = rJid.replace(/@.*/, '')
+    let normContactPhone  = rawContactPhone.replace(/\D/g, '')
+    if (normContactPhone.length >= 12 && normContactPhone.startsWith('55')) normContactPhone = normContactPhone.slice(2)
     await supabase
       .from('whatsapp_contacts')
       .update({ type, updated_at: new Date().toISOString() })
       .eq('institution_id', effectiveInstitutionId)
-      .eq('phone', contactPhone)
+      .or(`phone.eq.${normContactPhone},phone.eq.55${normContactPhone},phone.eq.${rawContactPhone}`)
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, contact_type: type } : c))
     await DatabaseService.logConversationEvent({
       institution_id: effectiveInstitutionId,

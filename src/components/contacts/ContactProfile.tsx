@@ -126,6 +126,10 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
   // Avatar photo
   const [imgErr, setImgErr] = useState(false)
 
+  // Delete
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting,      setDeleting]      = useState(false)
+
   useEffect(() => {
     mountedRef.current = true
     loadAvailTags()
@@ -151,11 +155,16 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
     try {
       const { data, error } = await supabase
         .from('contact_notes')
-        .select('*')
+        .select('id, content, author_name, created_at')
         .eq('institution_id', institutionId)
         .eq('contact_ref_id', contactRef)
         .order('created_at', { ascending: false })
-      if (error) throw error
+      if (error) {
+        // 400 = table or column doesn't exist — degrade silently
+        console.warn('loadNotes:', error.code, error.message)
+        if (mountedRef.current) setNotesAvailable(false)
+        return
+      }
       if (mountedRef.current) setNotes(data || [])
     } catch (e) {
       console.error('loadNotes error:', e)
@@ -317,13 +326,18 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
     if (!noteText.trim()) return
     setSavingNote(true)
     try {
-      const { data } = await supabase.from('contact_notes').insert({
+      const { data, error } = await supabase.from('contact_notes').insert({
         institution_id:   institutionId,
         contact_ref_id:   contactRef,
         contact_ref_type: contact.lead_id ? 'lead' : 'whatsapp',
         content:          noteText.trim(),
         author_name:      user?.full_name || 'Usuário',
-      }).select('*').maybeSingle()
+      }).select('id, content, author_name, created_at').maybeSingle()
+      if (error) {
+        console.warn('handleAddNote:', error.code, error.message)
+        if (mountedRef.current) setNotesAvailable(false)
+        return
+      }
       if (mountedRef.current) {
         if (data) setNotes(prev => [data, ...prev])
         setNoteText('')
@@ -351,6 +365,23 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
       console.error('handleSaveTransfer error:', e)
       if (mountedRef.current) setTError(e?.message || 'Erro ao salvar')
     } finally { if (mountedRef.current) setSavingT(false) }
+  }
+
+  async function handleDelete() {
+    setDeleting(true)
+    try {
+      if (contact.id) {
+        await supabase.from('whatsapp_contacts').delete().eq('id', contact.id)
+      }
+      showToast('Contato excluído.')
+      onUpdate(contact.id, {})
+      onClose()
+    } catch (e: any) {
+      console.error('handleDelete error:', e)
+      showToast('Erro ao excluir: ' + (e?.message || 'tente novamente'))
+    } finally {
+      if (mountedRef.current) setDeleting(false)
+    }
   }
 
   // ── Derived ───────────────────────────────────────────────
@@ -537,6 +568,29 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                 {saving ? 'Salvando...' : 'Salvar dados'}
               </button>
+
+              {/* Delete contact */}
+              {!confirmDelete ? (
+                <button onClick={() => setConfirmDelete(true)}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 0', borderRadius: 10, border: '1.5px solid #FCA5A5', background: 'transparent', color: '#DC2626', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginTop: 2 }}>
+                  Excluir contato
+                </button>
+              ) : (
+                <div style={{ padding: '12px 14px', background: '#FFF5F5', borderRadius: 10, border: '1px solid #FECACA', marginTop: 2 }}>
+                  <p style={{ margin: '0 0 10px', fontSize: 13, color: '#DC2626', fontWeight: 600 }}>Tem certeza? Esta ação não pode ser desfeita.</p>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => setConfirmDelete(false)}
+                      style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: '1px solid #E2E8F0', background: 'white', fontSize: 13, color: '#64748B', cursor: 'pointer' }}>
+                      Cancelar
+                    </button>
+                    <button onClick={handleDelete} disabled={deleting}
+                      style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 0', borderRadius: 8, border: 'none', background: '#DC2626', color: 'white', fontSize: 13, fontWeight: 600, cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? 0.7 : 1 }}>
+                      {deleting ? <Loader2 size={13} className="animate-spin" /> : null}
+                      {deleting ? 'Excluindo...' : 'Confirmar exclusão'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

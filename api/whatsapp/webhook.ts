@@ -336,6 +336,18 @@ async function autoLinkLead(institutionId: string, remoteJid: string): Promise<v
   }
 }
 
+// ── Phone normalization: strip country code 55 and leading 0 ────────────────
+function normalizePhone(raw: string): string {
+  let digits = raw.replace(/\D/g, '')
+  if (digits.length >= 12 && digits.startsWith('55')) {
+    digits = digits.slice(2)
+  }
+  if (digits.startsWith('0')) {
+    digits = digits.slice(1)
+  }
+  return digits
+}
+
 // ── Create / update contact record ───────────────────────────────────────────
 async function upsertContact(
   institutionId: string,
@@ -344,7 +356,9 @@ async function upsertContact(
   profilePicUrl?: string
 ): Promise<void> {
   try {
-    const phone = remoteJid.replace(/@.*/, '')
+    const rawPhone = remoteJid.replace(/@.*/, '')
+    const phone    = normalizePhone(rawPhone)
+
     // Check if contact already exists to avoid overwriting a manually set type
     const { data: existing } = await supabase
       .from('whatsapp_contacts')
