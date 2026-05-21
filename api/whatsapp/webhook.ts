@@ -345,19 +345,38 @@ async function upsertContact(
 ): Promise<void> {
   try {
     const phone = remoteJid.replace(/@.*/, '')
-    await supabase
+    // Check if contact already exists to avoid overwriting a manually set type
+    const { data: existing } = await supabase
       .from('whatsapp_contacts')
-      .upsert(
-        {
+      .select('id')
+      .eq('institution_id', institutionId)
+      .eq('phone', phone)
+      .maybeSingle()
+
+    if (existing) {
+      // Update only safe fields — preserve type set by agents
+      await supabase
+        .from('whatsapp_contacts')
+        .update({
+          name,
+          updated_at: new Date().toISOString(),
+          ...(profilePicUrl ? { profile_picture_url: profilePicUrl } : {}),
+        })
+        .eq('institution_id', institutionId)
+        .eq('phone', phone)
+    } else {
+      await supabase
+        .from('whatsapp_contacts')
+        .insert({
           institution_id:    institutionId,
           phone,
           remote_jid:        remoteJid,
           name,
+          type:              'unknown',
           updated_at:        new Date().toISOString(),
           ...(profilePicUrl ? { profile_picture_url: profilePicUrl } : {}),
-        },
-        { onConflict: 'institution_id,phone' }
-      )
+        })
+    }
   } catch (e) {
     console.error('❌ upsertContact error:', e)
   }

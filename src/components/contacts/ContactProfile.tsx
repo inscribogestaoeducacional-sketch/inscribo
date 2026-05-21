@@ -455,6 +455,8 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
                   <option value="unknown">Desconhecido</option>
                   <option value="lead">Lead</option>
                   <option value="client">Cliente</option>
+                  <option value="supplier">Fornecedor</option>
+                  <option value="other">Outro</option>
                 </select>
               </div>
 

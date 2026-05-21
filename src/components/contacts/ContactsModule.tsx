@@ -84,9 +84,11 @@ function fmtFull(s: string | null | undefined): string {
 }
 
 function typeCfg(type: string | null) {
-  if (type === 'lead')   return { label: 'Lead',     badgeStyle: { background: '#EDE9FE', color: '#7C3AED' } }
-  if (type === 'client') return { label: 'Cliente',  badgeStyle: { background: '#D1FAE5', color: '#065F46' } }
-  return                        { label: 'WhatsApp', badgeStyle: { background: '#FEF3C7', color: '#D97706' } }
+  if (type === 'lead')     return { label: 'Lead',       badgeStyle: { background: '#EDE9FE', color: '#7C3AED' } }
+  if (type === 'client')   return { label: 'Cliente',    badgeStyle: { background: '#D1FAE5', color: '#065F46' } }
+  if (type === 'supplier') return { label: 'Fornecedor', badgeStyle: { background: '#DBEAFE', color: '#1D4ED8' } }
+  if (type === 'other')    return { label: 'Outro',      badgeStyle: { background: '#F1F5F9', color: '#64748B' } }
+  return                          { label: 'WhatsApp',   badgeStyle: { background: '#FEF3C7', color: '#D97706' } }
 }
 
 function mapContact(c: any): UnifiedContact {

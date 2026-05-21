@@ -766,6 +766,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const waveformAnimRef = useRef<number | null>(null)
   const audioStreamRef = useRef<MediaStream | null>(null)
   const recordingMimeTypeRef = useRef<string>('')
+  const phoneParamHandledRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const notifAudioRef = useRef<HTMLAudioElement | null>(null)
   const activeIdRef       = useRef<string | null>(null)
@@ -1432,9 +1433,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     return () => { supabase.removeChannel(ch); presenceChannelRef.current = null }
   }, [activeId, user?.id])
 
-  // Handle incoming phone param from LeadKanban
+  // Handle incoming phone param from LeadKanban — runs only after conversations finish loading
   useEffect(() => {
-    if (!phoneParam) return
+    if (!phoneParam || phoneParamHandledRef.current || loading) return
+    phoneParamHandledRef.current = true
     const digits = phoneParam.replace(/\D/g, '')
     const jid = `55${digits}@s.whatsapp.net`
     const existing = conversations.find(c => c.id === jid || c.phone.replace(/\D/g,'') === digits)
@@ -1454,7 +1456,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       setConversations(prev => [newConv, ...prev])
       setActiveId(jid)
     }
-  }, [phoneParam, nameParam])
+  }, [phoneParam, nameParam, loading, conversations])
 
   const activeConvMsgCount = conversations.find(c => c.id === activeId)?.messages.length ?? 0
 
@@ -1814,12 +1816,19 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }
     const rJid = rawJid(activeId)
     await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, type)
+    // Also update whatsapp_contacts.type so ContactProfile reflects the change
+    const contactPhone = rJid.replace(/@.*/, '')
+    await supabase
+      .from('whatsapp_contacts')
+      .update({ type, updated_at: new Date().toISOString() })
+      .eq('institution_id', effectiveInstitutionId)
+      .eq('phone', contactPhone)
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, contact_type: type } : c))
     await DatabaseService.logConversationEvent({
       institution_id: effectiveInstitutionId,
       remote_jid: rJid,
       event_type: 'contact_identified',
-      description: `Contato identificado como: ${type === 'lead' ? 'Lead' : type === 'client' ? 'Cliente' : 'Outro'}`,
+      description: `Contato identificado como: ${type === 'lead' ? 'Lead' : type === 'client' ? 'Cliente' : type === 'supplier' ? 'Fornecedor' : 'Outro'}`,
       user_id: user.id,
       user_name: user.full_name || user.email,
     })
