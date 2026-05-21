@@ -302,6 +302,7 @@ async function autoLinkLead(institutionId: string, remoteJid: string): Promise<v
     const rawPhone       = remoteJid.replace(/@.*/, '')    // strip @s.whatsapp.net
     const normalizedPhone = normalizePhone(rawPhone)        // 13-digit BR format
     const noCode         = rawPhone.startsWith('55') ? rawPhone.slice(2) : rawPhone
+    console.log('[LINK] buscando lead por:', normalizedPhone)
 
     // Try phone variants: raw, with 55, with +55, without country code
     const { data: lead } = await supabase
@@ -318,6 +319,7 @@ async function autoLinkLead(institutionId: string, remoteJid: string): Promise<v
       )
       .limit(1)
       .maybeSingle()
+    console.log('[LINK] lead encontrado:', lead?.id)
 
     if (lead?.id) {
       await supabase
@@ -367,6 +369,7 @@ async function upsertContact(
   try {
     const rawPhone = remoteJid.replace(/@.*/, '')
     const phone    = normalizePhone(rawPhone)
+    console.log('[UPSERT] phone normalizado:', phone)
 
     // Check if contact already exists to avoid overwriting a manually set type
     const { data: existing } = await supabase
@@ -375,6 +378,7 @@ async function upsertContact(
       .eq('institution_id', institutionId)
       .eq('phone', phone)
       .maybeSingle()
+    console.log('[UPSERT] existing:', existing?.id)
 
     if (existing) {
       // Update only safe fields — preserve type set by agents
@@ -1476,6 +1480,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         const timestamp   = new Date(parseInt(msg.timestamp) * 1000).toISOString()
         const contactName = (value.contacts?.[0]?.profile?.name as string | undefined) || remoteJid
+        console.log('[WEBHOOK] institutionId:', institutionId)
+        console.log('[WEBHOOK] remoteJid:', remoteJid)
+        console.log('[WEBHOOK] contactName:', contactName)
         const msgType     = (msg.type as string) || 'text'
 
         // Extract text body
@@ -1646,6 +1653,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (msgErr) console.error('❌ msg insert error:', msgErr.message)
 
         // ── Upsert contact record ──
+        console.log('[WEBHOOK] chamando upsertContact...')
         await upsertContact(institutionId, remoteJid, contactName, value.contacts?.[0]?.profile?.picture_url as string | undefined)
 
         // ── Track received conversations (client-initiated, does not count against limit) ──
