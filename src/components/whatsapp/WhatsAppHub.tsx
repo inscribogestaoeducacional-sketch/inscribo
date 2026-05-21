@@ -166,9 +166,11 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
     if (isGroup) {
       name = jidMsgs.find(m => m.contact_name)?.contact_name || normJid.replace(/@g\.us$/, '')
     } else {
-      name = jidMsgs.find(m => !m.from_me && m.contact_name)?.contact_name
-        || convData?.contact_name
+      // convData.contact_name (manually edited) takes priority over the WhatsApp-API name from messages
+      name = convData?.contact_name
+        || jidMsgs.find(m => !m.from_me && m.contact_name)?.contact_name
         || formatPhone(normJid)
+      console.log('[BUILD CONV] nome:', convData?.contact_name, '| jid:', normJid)
     }
 
     return {
@@ -1394,6 +1396,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         table: 'whatsapp_conversations',
         filter: convFilter
       }, (payload: any) => {
+        console.log('[RT] UPDATE conversa recebido:', payload.new?.remote_jid, payload.new?.contact_name)
         const normJid = normalizeJid(payload.new?.remote_jid || '')
 
         if (skipNextNameUpdateRef.current === normJid) {

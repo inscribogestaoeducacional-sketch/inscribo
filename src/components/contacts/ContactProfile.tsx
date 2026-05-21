@@ -262,12 +262,13 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
       }
       const normPhone = normP(contact.phone || '')
       if ((contact.remote_jid || contact.phone) && normPhone) {
-        const jid = `${normPhone}@s.whatsapp.net`
-        const { error: convErr } = await supabase.from('whatsapp_conversations')
+        // remote_jid is stored WITHOUT @s.whatsapp.net in whatsapp_conversations
+        console.log('[SYNC] atualizando conversa:', normPhone, 'nome:', editName)
+        const { error: convErr, count } = await supabase.from('whatsapp_conversations')
           .update({ contact_name: editName })
           .eq('institution_id', institutionId)
-          .eq('remote_jid', jid)
-        console.log('[SYNC NAME] atualizando conversa:', jid, convErr)
+          .eq('remote_jid', normPhone)
+        console.log('[SYNC] resultado conversa:', { convErr, count, normPhone })
         synced.push('WhatsApp')
       }
       // Update contact type and name in whatsapp_contacts
@@ -279,14 +280,13 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
           .eq('phone', rawPhone)
         console.log('[SYNC NAME] atualizado em whatsapp_contacts:', rawPhone)
       }
-      // Sync contact_type to whatsapp_conversations
+      // Sync contact_type to whatsapp_conversations (remote_jid stored without @s.whatsapp.net)
       if (editType !== contact.contact_type && normPhone) {
-        const jid = `${normPhone}@s.whatsapp.net`
         await supabase.from('whatsapp_conversations')
           .update({ contact_type: editType === 'unknown' ? null : editType })
           .eq('institution_id', institutionId)
-          .eq('remote_jid', jid)
-        console.log('[SYNC TYPE] atualizado em whatsapp_conversations:', jid)
+          .eq('remote_jid', normPhone)
+        console.log('[SYNC TYPE] atualizado em whatsapp_conversations:', normPhone)
       }
       const newContactType = editType === 'unknown' ? null : editType
       onUpdate(contact.id, {
