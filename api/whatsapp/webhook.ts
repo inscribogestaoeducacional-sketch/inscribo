@@ -1481,8 +1481,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Always store remote_jid without @-suffix to avoid duplicate rows
         const remoteJid   = (msg.from as string).replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
         const rawPhone    = remoteJid.replace(/@.*/, '')
+        console.log('[LOOP] msg recebida:', msg.type, remoteJid, institutionId)
 
         // Sempre criar/atualizar contato ao receber mensagem (antes de qualquer continue)
+        console.log('[LOOP] chamando upsertContact:', remoteJid)
         await upsertContact(
           institutionId,
           remoteJid,
