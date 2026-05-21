@@ -22,6 +22,8 @@ export interface UnifiedContact {
   assigned_user_name: string | null; tags: string[]
   last_contact: string; origin_label: string; origin_color: string; origin_bg: string
   transfer_status?: string | null
+  profile_picture_url?: string | null
+  created_at?: string | null
 }
 
 interface Props {

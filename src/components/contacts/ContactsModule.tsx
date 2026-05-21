@@ -1,20 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { Users, BookUser, Search, Phone, Download, Upload, FileText, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import {
+  Users, BookUser, Search, Phone, Download, Upload, FileText,
+  RefreshCw, MessageSquare, ChevronsUpDown, ChevronUp, ChevronDown, ChevronRight,
+} from 'lucide-react'
 import ContactCard from './ContactCard'
 import { UnifiedContact } from './ContactProfile'
 
-// ─── Helpers ─────────────────────────────────────────────────
+// ─── Constants ───────────────────────────────────────────────
 const HEX_COLORS = ['#00A896','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
+const PAGE_SIZE  = 50
+const GRAPH_URL  = 'https://graph.facebook.com/v19.0'
 
+// ─── Helpers ─────────────────────────────────────────────────
 function nameHash(name: string) {
   let h = 0
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff
   return Math.abs(h)
 }
-
 const hexColor = (name: string) => HEX_COLORS[nameHash(name) % HEX_COLORS.length]
 
 function initials(name: string) {
@@ -22,15 +27,6 @@ function initials(name: string) {
   if (!parts.length) return '?'
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-}
-
-function normalizePhone(s: string): string {
-  if (!s) return ''
-  return s.replace(/\D/g, '').slice(-9)
-}
-
-function phoneFromJid(jid: string): string {
-  return jid.split('@')[0]
 }
 
 function formatPhone(digits: string): string {
@@ -41,33 +37,132 @@ function formatPhone(digits: string): string {
 }
 
 function fmtDate(s: string): string {
-  const d = new Date(s)
+  const d    = new Date(s)
   const diff = Date.now() - d.getTime()
-  if (diff < 86400000) return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  if (diff < 86400000)     return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   if (diff < 7 * 86400000) return d.toLocaleDateString('pt-BR', { weekday: 'short' })
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 }
 
-function originCfg(hasLead: boolean, hasWa: boolean) {
-  if (hasLead && hasWa) return { label: 'Lead + WhatsApp', color: 'bg-[#D1FAE5] text-[#065F46]', badgeStyle: { background: '#D1FAE5', color: '#065F46' } }
-  if (hasLead)          return { label: 'Lead',            color: 'bg-[#EDE9FE] text-[#7C3AED]', badgeStyle: { background: '#EDE9FE', color: '#7C3AED' } }
-  return                       { label: 'WhatsApp',        color: 'bg-[#FEF3C7] text-[#D97706]', badgeStyle: { background: '#FEF3C7', color: '#D97706' } }
+function fmtCreated(s: string | null | undefined): string {
+  if (!s) return '—'
+  return new Date(s).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-// Usa o campo `type` de whatsapp_contacts como fonte única de verdade
+function fmtFull(s: string | null | undefined): string {
+  if (!s) return ''
+  return new Date(s).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
+}
+
 function typeCfg(type: string | null) {
-  if (type === 'lead')   return { label: 'Lead',     color: 'bg-[#EDE9FE] text-[#7C3AED]', badgeStyle: { background: '#EDE9FE', color: '#7C3AED' } }
-  if (type === 'client') return { label: 'Cliente',  color: 'bg-[#D1FAE5] text-[#065F46]', badgeStyle: { background: '#D1FAE5', color: '#065F46' } }
-  return                        { label: 'WhatsApp', color: 'bg-[#FEF3C7] text-[#D97706]', badgeStyle: { background: '#FEF3C7', color: '#D97706' } }
+  if (type === 'lead')   return { label: 'Lead',     badgeStyle: { background: '#EDE9FE', color: '#7C3AED' } }
+  if (type === 'client') return { label: 'Cliente',  badgeStyle: { background: '#D1FAE5', color: '#065F46' } }
+  return                        { label: 'WhatsApp', badgeStyle: { background: '#FEF3C7', color: '#D97706' } }
 }
 
-const PAGE_SIZE = 20
+function mapContact(c: any): UnifiedContact {
+  const lead     = c.leads || null
+  const rawPhone = (c.phone || '').replace(/\D/g, '')
+  const fmtPhone = rawPhone ? formatPhone(rawPhone) : (c.phone || null)
+  const cfg      = typeCfg(c.type)
+  return {
+    id:                  c.id,
+    name:                c.name || lead?.responsible_name || lead?.student_name || fmtPhone || 'Desconhecido',
+    student_name:        lead?.student_name || null,
+    phone:               fmtPhone,
+    email:               lead?.email || null,
+    grade:               lead?.grade_interest || null,
+    source:              lead?.source || null,
+    status_lead:         lead?.status || null,
+    status_whatsapp:     null,
+    has_lead:            !!c.lead_id,
+    has_whatsapp:        true,
+    lead_id:             c.lead_id || null,
+    remote_jid:          rawPhone ? `${rawPhone}@s.whatsapp.net` : null,
+    contact_type:        c.type === 'unknown' ? null : (c.type || null),
+    assigned_user_name:  null,
+    tags:                [],
+    last_contact:        c.last_seen_at || c.created_at || new Date().toISOString(),
+    profile_picture_url: c.profile_picture_url || null,
+    created_at:          c.created_at || null,
+    origin_label:        cfg.label,
+    origin_color:        '',
+    origin_bg:           '',
+    transfer_status:     null,
+  }
+}
 
-// ─── Component ────────────────────────────────────────────────
+// ─── ContactAvatar ───────────────────────────────────────────
+function ContactAvatar({
+  name, url, size = 36, onClick,
+}: {
+  name: string; url?: string | null; size?: number; onClick?: () => void
+}) {
+  const [err, setErr] = useState(false)
+  const color = hexColor(name)
+  if (url && !err) {
+    return (
+      <img
+        src={url} alt={name}
+        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, cursor: onClick ? 'zoom-in' : 'default' }}
+        onError={() => setErr(true)}
+        onClick={e => { e.stopPropagation(); onClick?.() }}
+      />
+    )
+  }
+  return (
+    <div
+      style={{ width: size, height: size, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: Math.round(size * 0.33), fontWeight: 700, flexShrink: 0 }}
+      onClick={e => { e.stopPropagation() }}
+    >
+      {initials(name)}
+    </div>
+  )
+}
+
+// ─── SortIcon ────────────────────────────────────────────────
+function SortIcon({ col, sortCol, sortDir }: { col: string; sortCol: string; sortDir: 'asc' | 'desc' }) {
+  if (sortCol !== col) return <ChevronsUpDown size={12} color="#CBD5E1" style={{ flexShrink: 0 }} />
+  return sortDir === 'asc'
+    ? <ChevronUp   size={12} color="#3B82F6" style={{ flexShrink: 0 }} />
+    : <ChevronDown size={12} color="#3B82F6" style={{ flexShrink: 0 }} />
+}
+
+// ─── Skeleton rows ───────────────────────────────────────────
+function SkeletonRows() {
+  return (
+    <>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+          <td style={{ padding: '12px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div className="animate-pulse" style={{ width: 36, height: 36, borderRadius: '50%', background: '#E2E8F0', flexShrink: 0 }} />
+              <div>
+                <div className="animate-pulse" style={{ width: 140, height: 11, background: '#E2E8F0', borderRadius: 6, marginBottom: 5 }} />
+                <div className="animate-pulse" style={{ width: 90, height: 9, background: '#F1F5F9', borderRadius: 6 }} />
+              </div>
+            </div>
+          </td>
+          {[90, 70, 60, 80, 90, 100].map((w, j) => (
+            <td key={j} style={{ padding: '12px 16px' }}>
+              <div className="animate-pulse" style={{ width: w, height: 11, background: '#E2E8F0', borderRadius: 6 }} />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  )
+}
+
+// ─── Main component ──────────────────────────────────────────
 export default function ContactsModule() {
-  const { user } = useAuth()
-  const institutionId = user?.institution_id!
-  const mountedRef = useRef(true)
+  const { user }       = useAuth()
+  const institutionId  = user?.institution_id!
+  const schoolName     = (user as any)?.institution_name || ''
+  const navigate       = useNavigate()
+  const mountedRef     = useRef(true)
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   useEffect(() => {
@@ -76,19 +171,33 @@ export default function ContactsModule() {
     return () => window.removeEventListener('resize', h)
   }, [])
 
-  const [contacts, setContacts] = useState<UnifiedContact[]>([])
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [filterOrigin, setFilterOrigin] = useState('all')
-  const [filterGrade, setFilterGrade] = useState('all')
-  const [filterAttendant, setFilterAttendant] = useState('all')
-  const [page, setPage] = useState(1)
-  const [profileContact, setProfileContact] = useState<UnifiedContact | null>(null)
+  // ── Data state ───────────────────────────────────────────
+  const [contacts,    setContacts]    = useState<UnifiedContact[]>([])
+  const [total,       setTotal]       = useState(0)
+  const [offset,      setOffset]      = useState(0)
+  const [hasMore,     setHasMore]     = useState(false)
+  const [loading,     setLoading]     = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [kpiCounts,   setKpiCounts]   = useState({ total: 0, lead: 0, client: 0, unknown: 0 })
 
-  const [showImport, setShowImport] = useState(false)
-  const [importRows, setImportRows] = useState<{ nome: string; telefone: string; email: string; endereco: string }[]>([])
-  const [importErrors, setImportErrors] = useState<string[]>([])
-  const [importResult, setImportResult] = useState<{ imported: number; duplicates: number } | null>(null)
+  // ── Filter / sort state ──────────────────────────────────
+  const [search,       setSearch]       = useState('')
+  const [filterOrigin, setFilterOrigin] = useState('all')
+  const [filterGrade,  setFilterGrade]  = useState('all')
+  const [sortCol,      setSortCol]      = useState('created_at')
+  const [sortDir,      setSortDir]      = useState<'asc' | 'desc'>('desc')
+
+  // ── UI state ─────────────────────────────────────────────
+  const [profileContact,   setProfileContact]   = useState<UnifiedContact | null>(null)
+  const [zoomedPhoto,      setZoomedPhoto]      = useState<string | null>(null)
+  const [startConvContact, setStartConvContact] = useState<UnifiedContact | null>(null)
+  const [templateSending,  setTemplateSending]  = useState(false)
+
+  // ── Import state ─────────────────────────────────────────
+  const [showImport,    setShowImport]    = useState(false)
+  const [importRows,    setImportRows]    = useState<{ nome: string; telefone: string; email: string; endereco: string }[]>([])
+  const [importErrors,  setImportErrors]  = useState<string[]>([])
+  const [importResult,  setImportResult]  = useState<{ imported: number; duplicates: number } | null>(null)
   const [importLoading, setImportLoading] = useState(false)
 
   const [searchParams] = useSearchParams()
@@ -97,95 +206,271 @@ export default function ContactsModule() {
     if (q) setSearch(q)
   }, [searchParams])
 
-  useEffect(() => {
-    mountedRef.current = true
-    load()
-    return () => { mountedRef.current = false }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Skip-first refs — prevent double-load on mount
+  const skipFiltersRef = useRef(true)
+  const skipSearchRef  = useRef(true)
 
-  // ── Data loading ────────────────────────────────────────────
-  async function load() {
+  // Latest filter values for real-time handler (avoids stale closure)
+  const filterStateRef = useRef({ origin: 'all', search: '', grade: 'all', sortCol: 'created_at', sortDir: 'desc' as 'asc' | 'desc' })
+  filterStateRef.current = { origin: filterOrigin, search, grade: filterGrade, sortCol, sortDir }
+
+  // ── KPI counts (global, unfiltered) ─────────────────────
+  async function refreshKpiCounts() {
+    if (!institutionId || !mountedRef.current) return
+    const [t, l, c, u] = await Promise.all([
+      supabase.from('whatsapp_contacts').select('*', { count: 'exact', head: true }).eq('institution_id', institutionId),
+      supabase.from('whatsapp_contacts').select('*', { count: 'exact', head: true }).eq('institution_id', institutionId).eq('type', 'lead'),
+      supabase.from('whatsapp_contacts').select('*', { count: 'exact', head: true }).eq('institution_id', institutionId).eq('type', 'client'),
+      supabase.from('whatsapp_contacts').select('*', { count: 'exact', head: true }).eq('institution_id', institutionId).or('type.eq.unknown,type.is.null'),
+    ])
+    if (mountedRef.current) {
+      setKpiCounts({ total: t.count || 0, lead: l.count || 0, client: c.count || 0, unknown: u.count || 0 })
+    }
+  }
+
+  // ── Data loading ─────────────────────────────────────────
+  async function load(params: {
+    reset?:  boolean
+    search?: string
+    origin?: string
+    grade?:  string
+    sc?:     string
+    sd?:     'asc' | 'desc'
+    from?:   number
+  } = {}) {
+    const {
+      reset  = true,
+      search: s = search,
+      origin    = filterOrigin,
+      grade     = filterGrade,
+      sc        = sortCol,
+      sd        = sortDir,
+      from: fromArg,
+    } = params
+
     if (!mountedRef.current) return
     if (!institutionId) {
-      console.error('Contacts load: institutionId is undefined/null — skipping query')
-      setLoading(false)
+      console.error('Contacts load: institutionId is undefined — skipping')
+      if (reset) setLoading(false)
       return
     }
-    setLoading(true)
-    try {
-      // Colunas reais da tabela whatsapp_contacts:
-      // id, institution_id, phone, name, type, lead_id,
-      // profile_picture_url, last_seen_at, created_at, updated_at
-      // FK explícita evita 400 quando o PostgREST não resolve o join automaticamente
-      const { data, error } = await supabase
-        .from('whatsapp_contacts')
-        .select('id, phone, name, profile_picture_url, type, lead_id, last_seen_at, created_at, leads!lead_id(id, student_name, responsible_name, email, grade_interest, source, status)')
-        .eq('institution_id', institutionId)
-        .order('last_seen_at', { ascending: false, nullsFirst: false })
 
+    const from = fromArg ?? (reset ? 0 : offset)
+    const to   = from + PAGE_SIZE - 1
+
+    if (reset) { setLoading(true); setContacts([]) }
+    else         setLoadingMore(true)
+
+    try {
+      const isSearch = s.trim().length >= 2
+      const useGrade = grade !== 'all'
+
+      const selectStr = useGrade
+        ? 'id, phone, name, profile_picture_url, type, lead_id, last_seen_at, created_at, leads!lead_id!inner(id, student_name, responsible_name, email, grade_interest, source, status)'
+        : 'id, phone, name, profile_picture_url, type, lead_id, last_seen_at, created_at, leads!lead_id(id, student_name, responsible_name, email, grade_interest, source, status)'
+
+      let query = supabase
+        .from('whatsapp_contacts')
+        .select(selectStr, { count: 'exact' })
+        .eq('institution_id', institutionId)
+        .range(from, to)
+        .order(sc, { ascending: sd === 'asc', nullsFirst: false })
+
+      if (isSearch)            query = query.or(`name.ilike.%${s.trim()}%,phone.ilike.%${s.trim()}%`)
+      if (origin === 'lead')   query = query.eq('type', 'lead')
+      if (origin === 'client') query = query.eq('type', 'client')
+      if (origin === 'unknown') query = query.or('type.eq.unknown,type.is.null')
+      if (useGrade)            query = query.eq('leads.grade_interest', grade)
+
+      const { data, error, count } = await query
+
+      if (!mountedRef.current) return
       if (error) {
         console.error('Contacts query error:', JSON.stringify(error))
-        if (mountedRef.current) setLoading(false)
+        reset ? setLoading(false) : setLoadingMore(false)
         return
       }
 
-      if (!mountedRef.current) return
+      const newList   = (data || []).map(mapContact)
+      const newOffset = from + newList.length
+      const totalCount = count || 0
 
-      const list: UnifiedContact[] = (data || []).map((c: any) => {
-        const lead     = c.leads || null
-        const hasLead  = !!c.lead_id
-        const rawPhone = (c.phone || '').replace(/\D/g, '')
-        const fmtPhone = rawPhone ? formatPhone(rawPhone) : (c.phone || null)
-        const cfg      = typeCfg(c.type)
-        return {
-          id:                 c.id,
-          // Prioridade: nome WhatsApp → responsável → aluno → telefone
-          name:               c.name || lead?.responsible_name || lead?.student_name || fmtPhone || 'Desconhecido',
-          student_name:       lead?.student_name || null,
-          phone:              fmtPhone,
-          email:              lead?.email || null,
-          grade:              lead?.grade_interest || null,
-          source:             lead?.source || null,
-          status_lead:        lead?.status || null,
-          status_whatsapp:    null,
-          has_lead:           hasLead,
-          has_whatsapp:       true,
-          lead_id:            c.lead_id || null,
-          remote_jid:         rawPhone ? `${rawPhone}@s.whatsapp.net` : null,
-          contact_type:       c.type === 'unknown' ? null : (c.type || null),
-          assigned_user_name: null,
-          tags:               [],
-          last_contact:       c.last_seen_at || c.created_at || new Date().toISOString(),
-          origin_label:       cfg.label,
-          origin_color:       cfg.color,
-          origin_bg:          '',
-          transfer_status:    null,
-        }
-      })
-
-      if (mountedRef.current) { setContacts(list); setLoading(false) }
+      if (reset) {
+        setContacts(newList)
+      } else {
+        setContacts(prev => [...prev, ...newList])
+      }
+      setOffset(newOffset)
+      setTotal(totalCount)
+      setHasMore(newOffset < totalCount)
     } catch (e) {
       console.error('Contacts load exception:', e)
-      if (mountedRef.current) setLoading(false)
+    } finally {
+      if (mountedRef.current) { reset ? setLoading(false) : setLoadingMore(false) }
+    }
+  }
+
+  // ── Mount: initial load + real-time subscription ─────────
+  useEffect(() => {
+    mountedRef.current = true
+    load()
+    refreshKpiCounts()
+
+    const channel = supabase
+      .channel('wc_module_rt')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'whatsapp_contacts', filter: `institution_id=eq.${institutionId}` },
+        (payload) => {
+          const fs = filterStateRef.current
+          if (payload.eventType === 'INSERT') {
+            const noFilters   = fs.origin === 'all' && fs.search.trim().length < 2 && fs.grade === 'all'
+            const defaultSort = fs.sortCol === 'created_at' && fs.sortDir === 'desc'
+            if (noFilters && defaultSort) {
+              setContacts(prev => [mapContact(payload.new), ...prev])
+            }
+            refreshKpiCounts()
+          } else if (payload.eventType === 'UPDATE') {
+            setContacts(prev => prev.map(c => c.id === payload.new.id ? { ...c, ...mapContact(payload.new) } : c))
+            refreshKpiCounts()
+          } else if (payload.eventType === 'DELETE') {
+            setContacts(prev => prev.filter(c => c.id !== payload.old.id))
+            setTotal(prev => prev - 1)
+            refreshKpiCounts()
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      mountedRef.current = false
+      supabase.removeChannel(channel)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ── Filter/sort change → immediate reload ─────────────────
+  useEffect(() => {
+    if (skipFiltersRef.current) { skipFiltersRef.current = false; return }
+    load({ reset: true, search, origin: filterOrigin, grade: filterGrade, sc: sortCol, sd: sortDir })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterOrigin, filterGrade, sortCol, sortDir])
+
+  // ── Search change → debounced reload ─────────────────────
+  useEffect(() => {
+    if (skipSearchRef.current) { skipSearchRef.current = false; return }
+    const t = setTimeout(() => {
+      load({ reset: true, search, origin: filterOrigin, grade: filterGrade, sc: sortCol, sd: sortDir })
+    }, 350)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search])
+
+  // ── Handlers ─────────────────────────────────────────────
+  function handleLoadMore() {
+    if (loadingMore || !hasMore) return
+    load({ reset: false, search, origin: filterOrigin, grade: filterGrade, sc: sortCol, sd: sortDir, from: offset })
+  }
+
+  function handleSortClick(col: string) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('desc') }
+  }
+
+  function clearFilters() {
+    setSearch(''); setFilterOrigin('all'); setFilterGrade('all')
+  }
+
+  async function handleStartConversation(contact: UnifiedContact) {
+    const rawPhone = (contact.phone || '').replace(/\D/g, '')
+    if (!rawPhone) return
+    const { data: conv } = await supabase
+      .from('whatsapp_conversations')
+      .select('updated_at')
+      .eq('institution_id', institutionId)
+      .eq('remote_jid', `${rawPhone}@s.whatsapp.net`)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const withinWindow = conv && (Date.now() - new Date(conv.updated_at).getTime()) < 86400000
+    if (withinWindow) {
+      navigate(`/whatsapp?phone=${rawPhone}`)
+    } else {
+      setStartConvContact(contact)
+    }
+  }
+
+  async function sendTemplate(contact: UnifiedContact) {
+    setTemplateSending(true)
+    try {
+      const rawPhone = (contact.phone || '').replace(/\D/g, '')
+      const to       = rawPhone.startsWith('55') ? rawPhone : `55${rawPhone}`
+
+      const [{ data: phoneData }, { data: settingsData }] = await Promise.all([
+        supabase.from('whatsapp_phone_numbers').select('phone_number_id').eq('institution_id', institutionId).eq('is_active', true).maybeSingle(),
+        supabase.from('platform_settings').select('key, value').in('key', ['wa_access_token']),
+      ])
+
+      const cfg: Record<string, string> = {}
+      settingsData?.forEach((r: any) => { cfg[r.key] = r.value })
+
+      if (!phoneData?.phone_number_id || !cfg['wa_access_token']) {
+        alert('Configurações do WhatsApp não encontradas.')
+        return
+      }
+
+      const resp = await fetch(`${GRAPH_URL}/${phoneData.phone_number_id}/messages`, {
+        method:  'POST',
+        headers: { 'Authorization': `Bearer ${cfg['wa_access_token']}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to,
+          type: 'template',
+          template: {
+            name: 'iniciar_contato',
+            language: { code: 'pt_BR' },
+            components: [{ type: 'body', parameters: [
+              { type: 'text', text: contact.name },
+              { type: 'text', text: schoolName || 'nossa escola' },
+            ]}],
+          },
+        }),
+      })
+
+      if (resp.ok) {
+        setStartConvContact(null)
+        navigate(`/whatsapp?phone=${rawPhone}`)
+      } else {
+        const err = await resp.json()
+        console.error('Template send error:', err)
+        alert(`Erro ao enviar: ${err.error?.message || 'Tente novamente'}`)
+      }
+    } catch (e: any) {
+      console.error('sendTemplate exception:', e)
+      alert('Erro ao enviar mensagem')
+    } finally {
+      if (mountedRef.current) setTemplateSending(false)
     }
   }
 
   function handleProfileUpdate(id: string, updates: Record<string, any>) {
     if (updates.deleted) {
       setContacts(prev => prev.filter(c => c.id !== id))
+      setTotal(prev => Math.max(0, prev - 1))
       setProfileContact(null)
+      refreshKpiCounts()
       return
     }
     setContacts(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c))
     if (profileContact?.id === id) setProfileContact(prev => prev ? { ...prev, ...updates } : prev)
   }
 
+  // ── Import / Export ──────────────────────────────────────
   function downloadTemplate() {
-    const BOM = '﻿'
-    const csv = BOM + 'nome,telefone,email,endereco\nJoão Silva,11999998888,joao@email.com,"Rua das Flores, 123"\n'
+    const csv  = '﻿' + 'nome,telefone,email,endereco\nJoão Silva,11999998888,joao@email.com,"Rua das Flores, 123"\n'
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = 'template-contatos.csv'; a.click()
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a'); a.href = url; a.download = 'template-contatos.csv'; a.click()
     URL.revokeObjectURL(url)
   }
 
@@ -202,17 +487,17 @@ export default function ContactsModule() {
   }
 
   function parseCSV(text: string): { nome: string; telefone: string; email: string; endereco: string }[] {
-    const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim())
+    const lines  = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim())
     if (lines.length < 2) return []
     const header = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''))
-    const idx = (col: string) => header.indexOf(col)
+    const idx    = (col: string) => header.indexOf(col)
     const [ni, ti, ei, endi] = [idx('nome'), idx('telefone'), idx('email'), idx('endereco')]
     return lines.slice(1).map(line => {
       const cols = parseCSVLine(line)
       return {
-        nome: ni >= 0 ? cols[ni] || '' : '',
-        telefone: ti >= 0 ? cols[ti] || '' : '',
-        email: ei >= 0 ? cols[ei] || '' : '',
+        nome:     ni   >= 0 ? cols[ni]   || '' : '',
+        telefone: ti   >= 0 ? cols[ti]   || '' : '',
+        email:    ei   >= 0 ? cols[ei]   || '' : '',
         endereco: endi >= 0 ? cols[endi] || '' : '',
       }
     })
@@ -223,16 +508,14 @@ export default function ContactsModule() {
     if (!file) return
     const reader = new FileReader()
     reader.onload = ev => {
-      const text = ev.target?.result as string
-      const all = parseCSV(text)
+      const text    = ev.target?.result as string
+      const all     = parseCSV(text)
       const errors: string[] = []
-      const valid = all.filter(r => r.telefone.replace(/\D/g, '').length >= 8)
+      const valid   = all.filter(r => r.telefone.replace(/\D/g, '').length >= 8)
       const skipped = all.length - valid.length
-      if (all.length === 0) errors.push('Nenhuma linha encontrada. Verifique se o arquivo tem a coluna "telefone".')
-      if (skipped > 0) errors.push(`${skipped} linha(s) sem telefone válido serão ignoradas.`)
-      setImportRows(valid)
-      setImportErrors(errors)
-      setImportResult(null)
+      if (all.length === 0)  errors.push('Nenhuma linha encontrada. Verifique se o arquivo tem a coluna "telefone".')
+      if (skipped > 0)       errors.push(`${skipped} linha(s) sem telefone válido serão ignoradas.`)
+      setImportRows(valid); setImportErrors(errors); setImportResult(null)
     }
     reader.readAsText(file, 'utf-8')
   }
@@ -241,7 +524,8 @@ export default function ContactsModule() {
     if (!importRows.length) return
     setImportLoading(true)
     try {
-      const { data: existingLeads } = await supabase.from('leads').select('phone').eq('institution_id', institutionId).is('deleted_at', null)
+      const { data: existingLeads } = await supabase
+        .from('leads').select('phone').eq('institution_id', institutionId).is('deleted_at', null)
       const existingPhones = new Set((existingLeads || []).map(l => (l.phone || '').replace(/\D/g, '')))
       const seen = new Set<string>()
       let duplicates = 0
@@ -259,7 +543,7 @@ export default function ContactsModule() {
         imported = data?.length || 0
       }
       setImportResult({ imported, duplicates })
-      if (imported > 0) load()
+      if (imported > 0) { load(); refreshKpiCounts() }
     } catch (e: any) {
       setImportErrors([e.message || 'Erro desconhecido'])
     } finally {
@@ -268,55 +552,114 @@ export default function ContactsModule() {
   }
 
   function exportCSV() {
-    const BOM = '\uFEFF'
-    const header = 'Nome,Telefone,E-mail,Aluno,Série,Origem,Último contato'
-    const rows = filtered.map(c =>
-      [c.name, c.phone || '', c.email || '', c.student_name || '', c.grade || '', c.origin_label, fmtDate(c.last_contact)]
+    const header = 'Nome,Telefone,E-mail,Aluno,Série,Tipo,Último contato,Adicionado em'
+    const rows   = contacts.map(c =>
+      [c.name, c.phone || '', c.email || '', c.student_name || '', c.grade || '',
+       c.origin_label, fmtDate(c.last_contact), fmtCreated(c.created_at)]
         .map(v => `"${String(v).replace(/"/g, '""')}"`)
         .join(',')
     )
-    const csv = BOM + [header, ...rows].join('\n')
+    const csv  = '﻿' + [header, ...rows].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a'); a.href = url; a.download = 'contatos.csv'; a.click()
     URL.revokeObjectURL(url)
   }
 
-  // ── Derived filters ─────────────────────────────────────────
-  const grades     = [...new Set(contacts.map(c => c.grade).filter(Boolean))] as string[]
-  const attendants = [...new Set(contacts.map(c => c.assigned_user_name).filter(Boolean))] as string[]
+  // ── Derived ──────────────────────────────────────────────
+  const grades       = [...new Set(contacts.map(c => c.grade).filter(Boolean))] as string[]
+  const hasFilters   = search || filterOrigin !== 'all' || filterGrade !== 'all'
+  const openImport   = () => { setShowImport(true); setImportRows([]); setImportErrors([]); setImportResult(null) }
 
-  const filtered = contacts.filter(c => {
-    const q = search.toLowerCase()
-    const matchSearch = !search ||
-      c.name.toLowerCase().includes(q) ||
-      (c.student_name?.toLowerCase().includes(q) ?? false) ||
-      (c.phone?.includes(search) ?? false) ||
-      (c.email?.toLowerCase().includes(q) ?? false)
-    const matchOrigin =
-      filterOrigin === 'all' ||
-      (filterOrigin === 'lead'    && c.has_lead) ||
-      (filterOrigin === 'client'  && c.contact_type === 'client') ||
-      (filterOrigin === 'unknown' && !c.has_lead && c.contact_type !== 'client')
-    const matchGrade     = filterGrade     === 'all' || c.grade              === filterGrade
-    const matchAttendant = filterAttendant === 'all' || c.assigned_user_name === filterAttendant
-    return matchSearch && matchOrigin && matchGrade && matchAttendant
-  })
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const safePage   = Math.min(page, totalPages)
-  const pageItems  = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
-
-  // KPIs
-  const kpis = [
-    { label: 'Total',    value: contacts.length,                                                    icon: '👥', color: 'text-[#3B82F6]', bg: 'bg-[#EFF6FF]' },
-    { label: 'Leads',    value: contacts.filter(c => c.contact_type === 'lead').length,             icon: '🎯', color: 'text-[#7C3AED]', bg: 'bg-[#EDE9FE]' },
-    { label: 'Clientes', value: contacts.filter(c => c.contact_type === 'client').length,           icon: '🏫', color: 'text-[#065F46]', bg: 'bg-[#D1FAE5]' },
-    { label: 'WhatsApp', value: contacts.filter(c => !c.contact_type).length,                      icon: '💬', color: 'text-[#D97706]', bg: 'bg-[#FEF3C7]' },
+  const kpiDefs = [
+    { label: 'Total',     count: kpiCounts.total,   filterVal: 'all',     icon: '👥', activeColor: '#3B82F6', activeBg: '#DBEAFE', idleBg: '#EFF6FF'  },
+    { label: 'Leads',     count: kpiCounts.lead,    filterVal: 'lead',    icon: '🎯', activeColor: '#7C3AED', activeBg: '#C4B5FD', idleBg: '#EDE9FE'  },
+    { label: 'Clientes',  count: kpiCounts.client,  filterVal: 'client',  icon: '🏫', activeColor: '#065F46', activeBg: '#A7F3D0', idleBg: '#D1FAE5'  },
+    { label: 'WhatsApp',  count: kpiCounts.unknown, filterVal: 'unknown', icon: '💬', activeColor: '#D97706', activeBg: '#FDE68A', idleBg: '#FEF3C7'  },
   ]
 
-  const openImport = () => { setShowImport(true); setImportRows([]); setImportErrors([]); setImportResult(null) }
+  // ── Sortable header ───────────────────────────────────────
+  const SortTh = ({ col, label }: { col: string; label: string }) => (
+    <th
+      onClick={() => handleSortClick(col)}
+      style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: sortCol === col ? '#3B82F6' : '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        {label}
+        <SortIcon col={col} sortCol={sortCol} sortDir={sortDir} />
+      </div>
+    </th>
+  )
 
+  // ── Profile view ─────────────────────────────────────────
+  if (profileContact) {
+    return (
+      <ContactCard
+        mode="page"
+        onClose={() => setProfileContact(null)}
+        institutionId={institutionId}
+        initialData={{
+          lead_id:            profileContact.lead_id,
+          remote_jid:         profileContact.remote_jid,
+          name:               profileContact.name,
+          phone:              profileContact.phone   ?? undefined,
+          email:              profileContact.email   ?? undefined,
+          student_name:       profileContact.student_name ?? undefined,
+          grade_interest:     profileContact.grade   ?? undefined,
+          contact_type:       profileContact.contact_type ?? undefined,
+          tags:               profileContact.tags,
+          source:             profileContact.source  ?? undefined,
+          assigned_user_name: profileContact.assigned_user_name ?? undefined,
+        }}
+        onUpdate={updates => handleProfileUpdate(profileContact.id, updates)}
+      />
+    )
+  }
+
+  // ── Empty state ───────────────────────────────────────────
+  const EmptyState = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '64px 0', gap: 12, textAlign: 'center' }}>
+      <Users size={48} color="#E2E8F0" />
+      <p style={{ fontSize: 15, color: '#94a3b8', margin: 0, fontWeight: 500 }}>
+        {contacts.length === 0 && !hasFilters
+          ? 'Nenhum contato ainda'
+          : search
+            ? `Nenhum resultado para "${search}"`
+            : 'Nenhum contato encontrado'}
+      </p>
+      {contacts.length === 0 && !hasFilters && (
+        <p style={{ fontSize: 12, color: '#CBD5E1', margin: 0, maxWidth: 280 }}>
+          Os contatos aparecem aqui quando leads ou conversas WhatsApp forem registrados.
+        </p>
+      )}
+      {hasFilters && (
+        <button onClick={clearFilters} style={{ marginTop: 4, padding: '7px 18px', border: '1px solid #E2E8F0', borderRadius: 9, background: '#fff', color: '#64748B', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
+          Limpar filtros
+        </button>
+      )}
+    </div>
+  )
+
+  // ── Load more footer ──────────────────────────────────────
+  const LoadMoreFooter = () => (
+    <div style={{ padding: '14px 20px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff' }}>
+      <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
+        Mostrando {contacts.length} de {total} contatos
+      </p>
+      {hasMore && (
+        <button
+          onClick={handleLoadMore} disabled={loadingMore}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 18px', border: '1px solid #e2e8f0', borderRadius: 9, background: '#fff', color: '#64748b', fontSize: 13, cursor: loadingMore ? 'not-allowed' : 'pointer', fontWeight: 600, opacity: loadingMore ? 0.6 : 1 }}
+        >
+          {loadingMore
+            ? <><div className="animate-spin" style={{ width: 14, height: 14, border: '2px solid #94a3b8', borderTopColor: 'transparent', borderRadius: '50%' }} /> Carregando...</>
+            : `Carregar mais ${Math.min(PAGE_SIZE, total - contacts.length)}`}
+        </button>
+      )}
+    </div>
+  )
+
+  // ── Modals ────────────────────────────────────────────────
   const importModal = showImport ? (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) setShowImport(false) }}>
@@ -325,12 +668,10 @@ export default function ContactsModule() {
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1A2B4A' }}>Importar contatos</h2>
           <button onClick={() => setShowImport(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 22, lineHeight: 1 }}>✕</button>
         </div>
-
         <button onClick={downloadTemplate}
           style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, border: '1.5px dashed #CBD5E1', background: '#F8FAFC', color: '#475569', fontSize: 13, cursor: 'pointer', marginBottom: 16, width: '100%', boxSizing: 'border-box' }}>
           <FileText size={16} color="#3B82F6" /> Download template CSV (nome, telefone, email, endereco)
         </button>
-
         <label style={{ display: 'block', marginBottom: 16, cursor: 'pointer' }}>
           <div style={{ border: '2px dashed #CBD5E1', borderRadius: 10, padding: '24px', textAlign: 'center', background: '#F8FAFC' }}>
             <Upload size={24} color="#94A3B8" style={{ display: 'block', margin: '0 auto 8px' }} />
@@ -339,13 +680,11 @@ export default function ContactsModule() {
           </div>
           <input type="file" accept=".csv" onChange={handleFileChange} style={{ display: 'none' }} />
         </label>
-
         {importErrors.length > 0 && (
           <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
             {importErrors.map((err, i) => <p key={i} style={{ margin: i > 0 ? '4px 0 0' : 0, fontSize: 12, color: '#DC2626' }}>{err}</p>)}
           </div>
         )}
-
         {importRows.length > 0 && !importResult && (
           <div>
             <p style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A', margin: '0 0 8px' }}>{importRows.length} contato(s) válido(s) — pré-visualização:</p>
@@ -379,47 +718,61 @@ export default function ContactsModule() {
             </button>
           </div>
         )}
-
         {importResult && (
           <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '20px', textAlign: 'center' }}>
             <p style={{ margin: '0 0 4px', fontSize: 28, fontWeight: 800, color: '#065F46' }}>✅ {importResult.imported} importado(s)</p>
             {importResult.duplicates > 0 && <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6B7280' }}>{importResult.duplicates} duplicata(s) ignorada(s)</p>}
-            <button onClick={() => setShowImport(false)}
-              style={{ marginTop: 16, padding: '9px 24px', background: '#065F46', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              Fechar
-            </button>
+            <button onClick={() => setShowImport(false)} style={{ marginTop: 16, padding: '9px 24px', background: '#065F46', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Fechar</button>
           </div>
         )}
       </div>
     </div>
   ) : null
 
-  // ─── Render ────────────────────────────────────────────────
-  if (profileContact) {
-    return (
-      <ContactCard
-        mode="page"
-        onClose={() => setProfileContact(null)}
-        institutionId={institutionId}
-        initialData={{
-          lead_id:            profileContact.lead_id,
-          remote_jid:         profileContact.remote_jid,
-          name:               profileContact.name,
-          phone:              profileContact.phone   ?? undefined,
-          email:              profileContact.email   ?? undefined,
-          student_name:       profileContact.student_name ?? undefined,
-          grade_interest:     profileContact.grade   ?? undefined,
-          contact_type:       profileContact.contact_type ?? undefined,
-          tags:               profileContact.tags,
-          source:             profileContact.source  ?? undefined,
-          assigned_user_name: profileContact.assigned_user_name ?? undefined,
-        }}
-        onUpdate={updates => handleProfileUpdate(profileContact.id, updates)}
-      />
-    )
-  }
+  const zoomModal = zoomedPhoto ? (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={() => setZoomedPhoto(null)}>
+      <div style={{ position: 'relative' }}>
+        <img src={zoomedPhoto} alt="Foto do contato" style={{ width: 240, height: 240, borderRadius: 16, objectFit: 'cover', display: 'block', boxShadow: '0 8px 40px rgba(0,0,0,0.5)' }} />
+        <button onClick={() => setZoomedPhoto(null)} style={{ position: 'absolute', top: -12, right: -12, background: '#fff', border: 'none', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
+          <span style={{ fontSize: 14, color: '#64748B', lineHeight: 1 }}>✕</span>
+        </button>
+      </div>
+    </div>
+  ) : null
 
-  // ── Mobile early return ───────────────────────────────────────────────────
+  const convModal = startConvContact ? (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      onClick={e => { if (e.target === e.currentTarget) setStartConvContact(null) }}>
+      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 440, padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1A2B4A' }}>Iniciar conversa</h2>
+          <button onClick={() => setStartConvContact(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 20 }}>✕</button>
+        </div>
+        <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 14px', lineHeight: 1.5 }}>
+          A janela de 24h está encerrada. Para retomar a conversa, envie uma mensagem via template aprovado.
+        </p>
+        <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '12px 14px', marginBottom: 20 }}>
+          <p style={{ margin: 0, fontSize: 13, color: '#1A2B4A', lineHeight: 1.6 }}>
+            Olá, <strong>{startConvContact.name}</strong>! 😊 Aqui é <strong>{schoolName || 'nossa escola'}</strong>, tudo bem?
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={() => setStartConvContact(null)}
+            style={{ padding: '9px 18px', border: '1px solid #E2E8F0', borderRadius: 9, background: '#fff', color: '#64748B', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
+            Cancelar
+          </button>
+          <button onClick={() => sendTemplate(startConvContact)} disabled={templateSending}
+            style={{ padding: '9px 18px', border: 'none', borderRadius: 9, background: '#25D366', color: '#fff', fontSize: 13, cursor: templateSending ? 'not-allowed' : 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, opacity: templateSending ? 0.7 : 1 }}>
+            <MessageSquare size={14} />
+            {templateSending ? 'Enviando...' : 'Enviar template'}
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null
+
+  // ─── MOBILE LAYOUT ────────────────────────────────────────
   if (isMobile) {
     const originFilters = [
       { value: 'all',     label: 'Todos' },
@@ -429,305 +782,292 @@ export default function ContactsModule() {
     ]
     return (
       <>
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8f9fb' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8f9fb' }}>
 
-        {/* Header */}
-        <div style={{ padding: '16px 16px 0', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <BookUser size={16} color="#3B82F6" />
-          </div>
-          <h1 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Contatos</h1>
-          <span style={{ background: '#EFF6FF', color: '#3B82F6', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999 }}>{contacts.length}</span>
-          <button onClick={openImport}
-            style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', padding: '6px 12px', borderRadius: 9, fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
-            <Upload size={13} /> Importar
-          </button>
-        </div>
-
-        {/* Search */}
-        <div style={{ padding: '12px 16px 0', flexShrink: 0 }}>
-          <div style={{ position: 'relative' }}>
-            <Search style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 15, height: 15, color: '#94A3B8' }} />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar contato..."
-              style={{ width: '100%', paddingLeft: 36, paddingRight: 12, height: 44, background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, fontSize: 16, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
-          </div>
-        </div>
-
-        {/* Origin filter chips */}
-        <div style={{ padding: '10px 16px 0', flexShrink: 0, overflowX: 'auto', display: 'flex', gap: 6, scrollbarWidth: 'none' }}>
-          {originFilters.map(({ value, label }) => (
-            <button key={value} onClick={() => setFilterOrigin(value)}
-              style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 9999, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
-                background: filterOrigin === value ? '#3B82F6' : '#F0F9FF',
-                color: filterOrigin === value ? '#fff' : '#64748B' }}>
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* KPIs 2x2 */}
-        <div style={{ padding: '12px 16px 0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, flexShrink: 0 }}>
-          {kpis.map(k => (
-            <div key={k.label} style={{ background: '#fff', borderRadius: 12, border: '1px solid #E2E8F0', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 22 }}>{k.icon}</span>
-              <div>
-                <p style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0, lineHeight: 1 }}>{k.value}</p>
-                <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0', fontWeight: 500 }}>{k.label}</p>
-              </div>
+          {/* Header */}
+          <div style={{ padding: '16px 16px 0', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <BookUser size={16} color="#3B82F6" />
             </div>
-          ))}
-        </div>
+            <h1 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Contatos</h1>
+            <span style={{ background: '#EFF6FF', color: '#3B82F6', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999 }}>{kpiCounts.total}</span>
+            <button onClick={openImport}
+              style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', padding: '6px 12px', borderRadius: 9, fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+              <Upload size={13} /> Importar
+            </button>
+          </div>
 
-        {/* Contact list */}
-        <div style={{ flex: 1, overflowY: 'auto', marginTop: 10, background: '#fff', borderTop: '1px solid #F1F5F9' }}>
-          {loading ? (
-            <div style={{ padding: 40, textAlign: 'center' }}><p style={{ fontSize: 13, color: '#94A3B8' }}>Carregando...</p></div>
-          ) : filtered.length === 0 ? (
-            <div style={{ padding: 40, textAlign: 'center' }}><p style={{ fontSize: 13, color: '#94A3B8' }}>Nenhum contato encontrado</p></div>
-          ) : filtered.map(c => {
-            const color = hexColor(c.name)
-            const hasLead = c.has_lead
-            const hasWa = c.has_whatsapp
-            const originBg = hasLead && hasWa ? '#D1FAE5' : hasLead ? '#EDE9FE' : '#DBEAFE'
-            const originColor = hasLead && hasWa ? '#065F46' : hasLead ? '#7C3AED' : '#1D4ED8'
-            const originLabel = hasLead && hasWa ? 'Ambos' : hasLead ? 'Lead' : 'WhatsApp'
-            return (
-              <div key={c.id} onClick={() => setProfileContact(c)}
-                style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
-                <div style={{ width: 44, height: 44, borderRadius: '50%', background: color, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: '#fff' }}>
-                  {initials(c.name)}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{c.name}</p>
-                    <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: originBg, color: originColor, flexShrink: 0, marginLeft: 6 }}>{originLabel}</span>
+          {/* Search */}
+          <div style={{ padding: '12px 16px 0', flexShrink: 0 }}>
+            <div style={{ position: 'relative' }}>
+              <Search style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 15, height: 15, color: '#94A3B8' }} />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar contato..."
+                style={{ width: '100%', paddingLeft: 36, paddingRight: 12, height: 44, background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, fontSize: 16, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+          </div>
+
+          {/* Origin filter chips */}
+          <div style={{ padding: '10px 16px 0', flexShrink: 0, overflowX: 'auto', display: 'flex', gap: 6, scrollbarWidth: 'none' }}>
+            {originFilters.map(({ value, label }) => (
+              <button key={value} onClick={() => setFilterOrigin(value)}
+                style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 9999, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                  background: filterOrigin === value ? '#3B82F6' : '#F0F9FF',
+                  color:      filterOrigin === value ? '#fff'    : '#64748B' }}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* KPIs 2×2 — clickable */}
+          <div style={{ padding: '12px 16px 0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, flexShrink: 0 }}>
+            {kpiDefs.map(k => {
+              const active = filterOrigin === k.filterVal
+              return (
+                <button key={k.label} onClick={() => setFilterOrigin(k.filterVal)}
+                  style={{ background: active ? k.activeBg : '#fff', borderRadius: 12, border: `1.5px solid ${active ? k.activeColor : '#E2E8F0'}`, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}>
+                  <span style={{ fontSize: 22 }}>{k.icon}</span>
+                  <div>
+                    <p style={{ fontSize: 18, fontWeight: 800, color: active ? k.activeColor : '#1A2B4A', margin: 0, lineHeight: 1 }}>{k.count}</p>
+                    <p style={{ fontSize: 11, color: active ? k.activeColor : '#94A3B8', margin: '2px 0 0', fontWeight: 500 }}>{k.label}</p>
                   </div>
-                  {(c.student_name || c.grade) && (
-                    <p style={{ fontSize: 13, color: '#64748B', margin: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {[c.student_name, c.grade].filter(Boolean).join(' · ')}
-                    </p>
-                  )}
-                  {c.phone && <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>{c.phone}</p>}
-                </div>
-                <ChevronRight size={16} color="#CBD5E1" style={{ flexShrink: 0 }} />
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Contact list */}
+          <div style={{ flex: 1, overflowY: 'auto', marginTop: 10, background: '#fff', borderTop: '1px solid #F1F5F9' }}>
+            {loading ? (
+              <div style={{ padding: 40, textAlign: 'center' }}>
+                <div className="animate-spin" style={{ width: 28, height: 28, border: '3px solid #00A896', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 10px' }} />
+                <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>Carregando...</p>
               </div>
-            )
-          })}
+            ) : contacts.length === 0 ? (
+              <EmptyState />
+            ) : (
+              <>
+                {contacts.map(c => {
+                  const cfg = typeCfg(c.contact_type)
+                  return (
+                    <div key={c.id} onClick={() => setProfileContact(c)}
+                      style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+                      <ContactAvatar
+                        name={c.name}
+                        url={c.profile_picture_url}
+                        size={44}
+                        onClick={c.profile_picture_url ? () => setZoomedPhoto(c.profile_picture_url!) : undefined}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{c.name}</p>
+                          <span style={{ ...cfg.badgeStyle, fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999, flexShrink: 0, marginLeft: 6 }}>{cfg.label}</span>
+                        </div>
+                        {(c.student_name || c.grade) && (
+                          <p style={{ fontSize: 13, color: '#64748B', margin: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {[c.student_name, c.grade].filter(Boolean).join(' · ')}
+                          </p>
+                        )}
+                        {c.phone && <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>{c.phone}</p>}
+                      </div>
+                      <ChevronRight size={16} color="#CBD5E1" style={{ flexShrink: 0 }} />
+                    </div>
+                  )
+                })}
+                {/* Load more */}
+                <div style={{ padding: '12px 16px', textAlign: 'center', borderTop: contacts.length > 0 ? '1px solid #F1F5F9' : 'none' }}>
+                  {hasMore ? (
+                    <button onClick={handleLoadMore} disabled={loadingMore}
+                      style={{ width: '100%', padding: '10px', border: '1px solid #E2E8F0', borderRadius: 10, background: '#fff', color: '#64748B', fontSize: 13, fontWeight: 600, cursor: loadingMore ? 'not-allowed' : 'pointer', opacity: loadingMore ? 0.6 : 1 }}>
+                      {loadingMore ? 'Carregando...' : `Ver mais ${Math.min(PAGE_SIZE, total - contacts.length)} contatos`}
+                    </button>
+                  ) : contacts.length > 0 && (
+                    <p style={{ fontSize: 12, color: '#CBD5E1', margin: 0 }}>{contacts.length} contatos carregados</p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      </div>
-      {importModal}
+        {importModal}
+        {zoomModal}
+        {convModal}
       </>
     )
   }
 
+  // ─── DESKTOP LAYOUT ───────────────────────────────────────
   return (
     <>
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#f8f9fb' }}>
+      <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%', background: '#f8f9fb' }}>
 
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 12, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <BookUser size={18} color="#3B82F6" />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Contatos</h1>
-              <span style={{ padding: '2px 9px', background: '#EFF6FF', color: '#3B82F6', fontSize: 11, fontWeight: 700, borderRadius: 999 }}>{contacts.length}</span>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <BookUser size={18} color="#3B82F6" />
             </div>
-            <p style={{ fontSize: 13, color: '#94a3b8', margin: '2px 0 0' }}>Leads e WhatsApp unificados</p>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={openImport}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>
-            <Upload size={14} /> Importar CSV
-          </button>
-          <button onClick={exportCSV} disabled={loading || filtered.length === 0}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer', opacity: (loading || filtered.length === 0) ? 0.5 : 1 }}>
-            <Download size={14} /> Exportar CSV
-          </button>
-          <button onClick={load} disabled={loading}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Atualizar
-          </button>
-        </div>
-      </div>
-
-      {/* KPI cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 16 }}>
-        {kpis.map(k => (
-          <div key={k.label} style={{ background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '16px 18px' }}>
-            <p style={{ fontSize: 26, fontWeight: 700, color: '#1e2d6b', margin: '0 0 4px' }}>{k.value}</p>
-            <p style={{ fontSize: 11, color: '#94a3b8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{k.label}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Filter bar */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
-          <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-          <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}
-            placeholder="Buscar por nome, telefone ou e-mail..."
-            style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px 9px 36px', outline: 'none', width: '100%', color: '#1A2B4A', boxSizing: 'border-box' }} />
-        </div>
-        <select value={filterOrigin} onChange={e => { setFilterOrigin(e.target.value); setPage(1) }}
-          style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px', outline: 'none', color: '#1A2B4A' }}>
-          <option value="all">Todos os tipos</option>
-          <option value="lead">Leads</option>
-          <option value="client">Clientes</option>
-          <option value="unknown">Desconhecidos</option>
-        </select>
-        {grades.length > 0 && (
-          <select value={filterGrade} onChange={e => { setFilterGrade(e.target.value); setPage(1) }}
-            style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px', outline: 'none', color: '#1A2B4A' }}>
-            <option value="all">Todas as séries</option>
-            {grades.map(g => <option key={g} value={g}>{g}</option>)}
-          </select>
-        )}
-        {attendants.length > 0 && (
-          <select value={filterAttendant} onChange={e => { setFilterAttendant(e.target.value); setPage(1) }}
-            style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px', outline: 'none', color: '#1A2B4A' }}>
-            <option value="all">Todos os atendentes</option>
-            {attendants.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-        )}
-      </div>
-
-      {/* Table */}
-      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-        {loading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '64px 0', gap: 12 }}>
-            <div className="animate-spin" style={{ width: 32, height: 32, border: '3px solid #00A896', borderTopColor: 'transparent', borderRadius: '50%' }} />
-            <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>Carregando contatos...</p>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '64px 0', gap: 12, textAlign: 'center' }}>
-            <Users size={48} color="#e2e8f0" />
-            <p style={{ fontSize: 15, color: '#94a3b8', margin: 0, fontWeight: 500 }}>
-              {contacts.length === 0 ? 'Nenhum contato ainda' : 'Nenhum contato encontrado'}
-            </p>
-            {contacts.length === 0 && (
-              <p style={{ fontSize: 12, color: '#CBD5E1', margin: 0, maxWidth: 280 }}>Os contatos aparecem aqui quando leads ou conversas WhatsApp forem registrados.</p>
-            )}
-          </div>
-        ) : (
-          <>
-            {isMobile ? (
-              /* ── Mobile: cards ── */
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {pageItems.map(c => {
-                  const color  = hexColor(c.name)
-                  const origin = typeCfg(c.contact_type)
-                  return (
-                    <div key={c.id} onClick={() => setProfileContact(c)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}>
-                      <div style={{ width: 40, height: 40, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
-                        {initials(c.name)}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <p style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>{c.name}</p>
-                          <span style={{ ...origin.badgeStyle, fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 999 }}>{origin.label}</span>
-                        </div>
-                        {c.student_name && <p style={{ fontSize: 12, color: '#64748b', margin: '1px 0 0' }}>{c.student_name}</p>}
-                        {c.phone && <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 3 }}><Phone size={11} />{c.phone}</p>}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>{fmtDate(c.last_contact)}</div>
-                    </div>
-                  )
-                })}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Contatos</h1>
+                <span style={{ padding: '2px 9px', background: '#EFF6FF', color: '#3B82F6', fontSize: 11, fontWeight: 700, borderRadius: 999 }}>{kpiCounts.total}</span>
               </div>
-            ) : (
-              /* ── Desktop: tabela ── */
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    {['Contato', 'Telefone', 'Origem', 'Série', 'Último contato', 'Ações'].map(h => (
-                      <th key={h} style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {pageItems.map(c => {
-                    const color  = hexColor(c.name)
-                    const origin = typeCfg(c.contact_type)
-                    return (
-                      <tr key={c.id} onClick={() => setProfileContact(c)}
-                        style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
-                        onMouseLeave={e => (e.currentTarget.style.background = '')}>
-                        <td style={{ padding: '12px 16px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <div style={{ width: 36, height: 36, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
-                              {initials(c.name)}
-                            </div>
-                            <div style={{ minWidth: 0 }}>
-                              <p style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</p>
-                              {c.student_name && (
-                                <p style={{ fontSize: 12, color: '#64748b', margin: '1px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.student_name}</p>
-                              )}
-                              {c.tags.length > 0 && (
-                                <div style={{ display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap' }}>
-                                  {c.tags.slice(0, 2).map((t, i) => (
-                                    <span key={i} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 999, background: '#F0F9FF', color: '#0369A1', fontWeight: 600 }}>{t}</span>
-                                  ))}
-                                  {c.tags.length > 2 && <span style={{ fontSize: 10, color: '#94a3b8' }}>+{c.tags.length - 2}</span>}
-                                </div>
-                              )}
-                            </div>
+              <p style={{ fontSize: 13, color: '#94a3b8', margin: '2px 0 0' }}>Leads e WhatsApp unificados</p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={openImport}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>
+              <Upload size={14} /> Importar CSV
+            </button>
+            <button onClick={exportCSV} disabled={loading || contacts.length === 0}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer', opacity: (loading || contacts.length === 0) ? 0.5 : 1 }}>
+              <Download size={14} /> Exportar ({contacts.length})
+            </button>
+            <button onClick={() => load()} disabled={loading}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Atualizar
+            </button>
+          </div>
+        </div>
+
+        {/* KPI cards — clickable, highlight active */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+          {kpiDefs.map(k => {
+            const active = filterOrigin === k.filterVal
+            return (
+              <button key={k.label} onClick={() => setFilterOrigin(active ? 'all' : k.filterVal)}
+                style={{ background: active ? k.activeBg : '#fff', borderRadius: 14, border: `1.5px solid ${active ? k.activeColor : '#e2e8f0'}`, padding: '16px 18px', textAlign: 'left', cursor: 'pointer', transition: 'all 0.15s' }}>
+                <p style={{ fontSize: 28, fontWeight: 700, color: active ? k.activeColor : '#1e2d6b', margin: '0 0 4px' }}>{k.count}</p>
+                <p style={{ fontSize: 11, color: active ? k.activeColor : '#94a3b8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{k.label}</p>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Filter bar */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
+            <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar por nome, telefone ou e-mail..."
+              style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px 9px 36px', outline: 'none', width: '100%', color: '#1A2B4A', boxSizing: 'border-box' }} />
+          </div>
+          <select value={filterOrigin} onChange={e => setFilterOrigin(e.target.value)}
+            style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px', outline: 'none', color: '#1A2B4A' }}>
+            <option value="all">Todos os tipos</option>
+            <option value="lead">Leads</option>
+            <option value="client">Clientes</option>
+            <option value="unknown">Desconhecidos</option>
+          </select>
+          {grades.length > 0 && (
+            <select value={filterGrade} onChange={e => setFilterGrade(e.target.value)}
+              style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px', outline: 'none', color: '#1A2B4A' }}>
+              <option value="all">Todas as séries</option>
+              {grades.map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
+          )}
+          {hasFilters && (
+            <button onClick={clearFilters}
+              style={{ border: '1.5px solid #FCA5A5', borderRadius: 10, fontSize: 13, background: '#FEF2F2', padding: '9px 14px', outline: 'none', color: '#DC2626', cursor: 'pointer', fontWeight: 600 }}>
+              Limpar filtros
+            </button>
+          )}
+        </div>
+
+        {/* Table */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <SortTh col="name"         label="Contato" />
+                <SortTh col="phone"        label="Telefone" />
+                <SortTh col="type"         label="Tipo" />
+                <th style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>Série</th>
+                <SortTh col="last_seen_at" label="Último contato" />
+                <SortTh col="created_at"   label="Adicionado em" />
+                <th style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <SkeletonRows />
+              ) : contacts.length === 0 ? (
+                <tr>
+                  <td colSpan={7}>
+                    <EmptyState />
+                  </td>
+                </tr>
+              ) : (
+                contacts.map(c => {
+                  const cfg = typeCfg(c.contact_type)
+                  return (
+                    <tr key={c.id} onClick={() => setProfileContact(c)}
+                      style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
+                      onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <ContactAvatar
+                            name={c.name}
+                            url={c.profile_picture_url}
+                            size={36}
+                            onClick={c.profile_picture_url ? () => setZoomedPhoto(c.profile_picture_url!) : undefined}
+                          />
+                          <div style={{ minWidth: 0 }}>
+                            <p style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</p>
+                            {c.student_name && (
+                              <p style={{ fontSize: 12, color: '#64748b', margin: '1px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.student_name}</p>
+                            )}
                           </div>
-                        </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          {c.phone
-                            ? <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#475569' }}><Phone size={12} />{c.phone}</span>
-                            : <span style={{ color: '#CBD5E1', fontSize: 13 }}>—</span>}
-                        </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          <span style={{ ...origin.badgeStyle, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, whiteSpace: 'nowrap' }}>
-                            {origin.label}
-                          </span>
-                        </td>
-                        <td style={{ padding: '12px 16px', fontSize: 13, color: '#475569' }}>{c.grade || <span style={{ color: '#CBD5E1' }}>—</span>}</td>
-                        <td style={{ padding: '12px 16px', fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtDate(c.last_contact)}</td>
-                        <td style={{ padding: '12px 16px' }}>
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        {c.phone
+                          ? <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#475569' }}><Phone size={12} />{c.phone}</span>
+                          : <span style={{ color: '#CBD5E1', fontSize: 13 }}>—</span>}
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={{ ...cfg.badgeStyle, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, whiteSpace: 'nowrap' }}>
+                          {cfg.label}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: 13, color: '#475569' }}>
+                        {c.grade || <span style={{ color: '#CBD5E1' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                        {fmtDate(c.last_contact)}
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap' }} title={fmtFull(c.created_at)}>
+                        {fmtCreated(c.created_at)}
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ display: 'flex', gap: 6 }}>
                           <button onClick={e => { e.stopPropagation(); setProfileContact(c) }}
-                            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 600, border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', color: '#64748b', cursor: 'pointer' }}>
+                            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 600, border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', color: '#64748b', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                             Ver perfil
                           </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            )}
+                          <button
+                            onClick={e => { e.stopPropagation(); handleStartConversation(c) }}
+                            title="Iniciar conversa no WhatsApp"
+                            style={{ padding: '5px 10px', fontSize: 12, fontWeight: 600, border: '1px solid #BBF7D0', borderRadius: 8, background: '#F0FDF4', color: '#16A34A', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                            <MessageSquare size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
 
-            {/* Pagination footer */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderTop: '1px solid #e2e8f0', background: '#fff' }}>
-              <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
-                Mostrando {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} de {filtered.length} contatos
-              </p>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
-                  style={{ display: 'flex', alignItems: 'center', gap: 4, border: '1px solid #e2e8f0', background: '#fff', borderRadius: 8, padding: '6px 14px', fontSize: 13, cursor: safePage === 1 ? 'not-allowed' : 'pointer', opacity: safePage === 1 ? 0.4 : 1, color: '#64748b' }}>
-                  <ChevronLeft size={13} /> Anterior
-                </button>
-                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
-                  style={{ display: 'flex', alignItems: 'center', gap: 4, border: '1px solid #e2e8f0', background: '#fff', borderRadius: 8, padding: '6px 14px', fontSize: 13, cursor: safePage === totalPages ? 'not-allowed' : 'pointer', opacity: safePage === totalPages ? 0.4 : 1, color: '#64748b' }}>
-                  Próxima <ChevronRight size={13} />
-                </button>
-              </div>
-            </div>
-          </>
-        )}
+          {!loading && <LoadMoreFooter />}
+        </div>
       </div>
-    </div>
-    {importModal}
+
+      {importModal}
+      {zoomModal}
+      {convModal}
     </>
   )
 }
