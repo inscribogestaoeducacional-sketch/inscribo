@@ -723,6 +723,15 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [sendingReactivate, setSendingReactivate] = useState(false)
   const [hubToast, setHubToast] = useState<string | null>(null)
 
+  // Template panel for new outbound conversations
+  const [showTemplatePanel, setShowTemplatePanel] = useState(false)
+
+  // Lead data for right panel
+  const [leadData, setLeadData] = useState<any>(null)
+  const [editingLead, setEditingLead] = useState(false)
+  const [leadEditForm, setLeadEditForm] = useState<any>({})
+  const [savingLead, setSavingLead] = useState(false)
+
   // New feature states
   const [showMsgSearch, setShowMsgSearch] = useState(false)
   const [msgSearchText, setMsgSearchText] = useState('')
@@ -778,6 +787,20 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // Keep refs in sync so realtime handlers can read the latest values
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
   useEffect(() => { conversationsRef.current = conversations }, [conversations])
+
+  // Load lead data when active conversation changes
+  useEffect(() => {
+    const leadId = conversations.find(c => c.id === activeId)?.lead_id
+    if (!leadId) { setLeadData(null); setEditingLead(false); return }
+    supabase
+      .from('leads')
+      .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at')
+      .eq('id', leadId)
+      .single()
+      .then(({ data }) => {
+        if (data) { setLeadData(data); setLeadEditForm(data) }
+      })
+  }, [activeId])
 
   // Request browser notification permission on first load
   useEffect(() => {
@@ -1120,6 +1143,30 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }
   }
 
+  const handleSaveLead = async (overrides?: Partial<typeof leadEditForm>) => {
+    const form = overrides ? { ...leadEditForm, ...overrides } : leadEditForm
+    if (!activeConv?.lead_id || !form) return
+    setSavingLead(true)
+    try {
+      await supabase.from('leads').update({
+        responsible_name: form.responsible_name,
+        student_name: form.student_name,
+        grade_interest: form.grade_interest,
+        email: form.email,
+        status: form.status,
+      }).eq('id', activeConv.lead_id)
+      setLeadData({ ...leadData, ...form })
+      setLeadEditForm({ ...leadData, ...form })
+      setEditingLead(false)
+      setHubToast('Lead atualizado!')
+      setTimeout(() => setHubToast(null), 3000)
+    } catch {
+      setSendError('Erro ao salvar lead.')
+    } finally {
+      setSavingLead(false)
+    }
+  }
+
   const loadHistory = async (jid: string) => {
     if (!effectiveInstitutionId || !jid) return
     setHistoryLoading(true)
@@ -1299,6 +1346,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         event: '*', schema: 'public', table: 'whatsapp_conversations',
         filter: convFilter
       }, (payload: any) => {
+        // Ignore UPDATEs that only changed contact_name — handled by the UPDATE listener below
+        if (
+          payload.eventType === 'UPDATE' &&
+          payload.new?.contact_name !== payload.old?.contact_name &&
+          payload.new?.last_message === payload.old?.last_message
+        ) return
         const rJid = payload.new?.remote_jid || payload.old?.remote_jid || ''
         const nJid = normalizeJid(rJid)
         if (CLOSING_IDS.has(rJid) || CLOSING_IDS.has(nJid)) return
@@ -2071,9 +2124,93 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       }
       setConversations(prev => [newConv, ...prev])
       setActiveId(jid)
+      // Show template panel for new outbound conversations
+      setSelectedTemplate('')
+      setTemplateVars({})
+      setShowTemplatePanel(true)
     }
     setShowNewConvModal(false)
     setNewConvPhone('')
+  }
+
+  const handleSendNewConvTemplate = async () => {
+    if (!activeId || !effectiveInstitutionId || !selectedTemplate) return
+    const tmpl = templates.find(t => t.id === selectedTemplate) ||
+      { id: '', name: selectedTemplate, language: 'pt_BR', components: [] }
+    const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
+    const varKeys = Object.keys(templateVars)
+    const components = varKeys.length > 0
+      ? [{ type: 'body', parameters: varKeys.map(k => ({ type: 'text', text: templateVars[k] })) }]
+      : []
+
+    setSendingTemplate(true)
+    try {
+      const res = await fetch('/api/whatsapp/send-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          institution_id: effectiveInstitutionId,
+          to,
+          template_name: tmpl.name,
+          language: tmpl.language || 'pt_BR',
+          components,
+        }),
+      })
+      if (!res.ok) throw new Error('Erro ao enviar template')
+
+      const optimistic: Message = {
+        id: `temp-tmpl-${Date.now()}`,
+        type: 'text',
+        content: `[Template] ${tmpl.name}`,
+        from: 'me',
+        ts: new Date(),
+        status: 'sent',
+        senderName: user?.full_name || undefined,
+      }
+      setConversations(prev => prev.map(c =>
+        c.id === activeId
+          ? {
+              ...c,
+              messages: [...c.messages, optimistic],
+              lastMessage: optimistic.content,
+              lastTime: optimistic.ts,
+              status: 'open',
+              assigned_user_id: user?.id,
+              assigned_user_name: user?.full_name,
+            }
+          : c
+      ))
+
+      // Update conversation in DB
+      await supabase.from('whatsapp_conversations')
+        .update({
+          status: 'open',
+          assigned_user_id: user?.id,
+          assigned_user_name: user?.full_name,
+          bot_active: false,
+        })
+        .eq('institution_id', effectiveInstitutionId)
+        .eq('remote_jid', rawJid(activeId))
+
+      // Increment outbound initiated count
+      const monthYear = new Date().toISOString().slice(0, 7)
+      try {
+        await supabase.rpc('increment_initiated_count', {
+          p_institution_id: effectiveInstitutionId,
+          p_month_year: monthYear,
+        })
+      } catch {}
+
+      setShowTemplatePanel(false)
+      setSelectedTemplate('')
+      setTemplateVars({})
+      setHubToast('Template enviado! Aguardando resposta...')
+      setTimeout(() => setHubToast(null), 4000)
+    } catch (err: any) {
+      setSendError(err.message || 'Erro ao enviar template')
+    } finally {
+      setSendingTemplate(false)
+    }
   }
 
   const handleAddTag = async (tag: string) => {
@@ -2961,6 +3098,76 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           {/* Composer */}
           <div style={{ flexShrink: 0, background: 'linear-gradient(to top, #FFFFFF 0%, #F8FFFE 100%)', borderTop: '1px solid #D1FAE5', padding: '10px 16px 14px', boxShadow: '0 -2px 12px rgba(0,168,150,0.06)' }}>
 
+            {/* Template panel for new outbound conversations */}
+            {showTemplatePanel && (
+              <div style={{ marginBottom: 10, background: '#F0FDFB', borderRadius: 14, border: '1px solid #A7F3D0', padding: '14px 14px 12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <div>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#0d9488' }}>Iniciar conversa com template</p>
+                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748B' }}>Selecione um template aprovado para enviar</p>
+                  </div>
+                  <button onClick={() => setShowTemplatePanel(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: 2 }}>
+                    <X style={{ width: 14, height: 14 }} />
+                  </button>
+                </div>
+                {templates.length === 0 ? (
+                  <p style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic', margin: '0 0 10px' }}>
+                    Nenhum template aprovado cadastrado.
+                    <span style={{ color: '#00A896', cursor: 'pointer', marginLeft: 4 }} onClick={() => navigate('/settings?tab=whatsapp')}>
+                      Configurar templates
+                    </span>
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10, maxHeight: 160, overflowY: 'auto' }}>
+                    {templates.map(tpl => {
+                      const bodyText = tpl.components?.find((c: any) => c.type === 'BODY')?.text || tpl.name
+                      const isSelected = selectedTemplate === tpl.id
+                      return (
+                        <button key={tpl.id} onClick={() => { setSelectedTemplate(tpl.id); setTemplateVars({}) }}
+                          style={{ textAlign: 'left', padding: '8px 10px', background: isSelected ? '#CCFBF1' : '#FFFFFF', border: `1.5px solid ${isSelected ? '#0d9488' : '#D1FAE5'}`, borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s' }}>
+                          <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{tpl.name}</p>
+                          <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bodyText}</p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                {selectedTemplate && (() => {
+                  const tmpl = templates.find(t => t.id === selectedTemplate)
+                  if (!tmpl) return null
+                  const bodyComp = tmpl.components?.find((c: any) => c.type === 'BODY')
+                  if (!bodyComp?.text) return null
+                  const matches = [...bodyComp.text.matchAll(/\{\{(\d+)\}\}/g)]
+                  if (matches.length === 0) return null
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                      <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#64748B' }}>Variáveis do template:</p>
+                      {matches.map(([, n]) => (
+                        <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 11, color: '#94A3B8', whiteSpace: 'nowrap' }}>{`{{${n}}}`}</span>
+                          <input value={templateVars[n] || ''}
+                            onChange={e => setTemplateVars(v => ({ ...v, [n]: e.target.value }))}
+                            placeholder={`Variável ${n}`}
+                            style={{ flex: 1, padding: '5px 8px', fontSize: 12, background: '#fff', border: '1px solid #D1FAE5', borderRadius: 7, color: '#1A2B4A', outline: 'none' }} />
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => setShowTemplatePanel(false)}
+                    style={{ flex: 1, padding: '8px 0', fontSize: 12, color: '#64748B', border: '1px solid #D1FAE5', borderRadius: 9, background: '#fff', cursor: 'pointer' }}>
+                    Cancelar
+                  </button>
+                  <button onClick={handleSendNewConvTemplate}
+                    disabled={sendingTemplate || !selectedTemplate}
+                    style={{ flex: 2, padding: '8px 0', fontSize: 12, fontWeight: 700, color: '#fff', background: sendingTemplate || !selectedTemplate ? '#94A3B8' : '#0d9488', border: 'none', borderRadius: 9, cursor: sendingTemplate || !selectedTemplate ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
+                    {sendingTemplate ? 'Enviando...' : 'Enviar Template'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Quick replies panel */}
             {showQuickReplies && (
               <div style={{ marginBottom: 8, background: '#F0FDFB', borderRadius: 12, border: '1px solid #D1FAE5', padding: 12 }}>
@@ -3571,16 +3778,133 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     {!collapseLead && (
                       <div style={{ padding: '0 12px 12px' }}>
                         {activeConv.lead_id ? (
-                          <button onClick={() => navigate(`/leads?highlight=${activeConv.lead_id}`)}
-                            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: '#f0fdfb', border: '1px solid #d1fae5', borderRadius: 9, cursor: 'pointer', fontSize: 12, color: '#1A2B4A', fontWeight: 500, transition: 'all 0.15s' }}
-                            onMouseEnter={e => { e.currentTarget.style.background = '#e6f7f5'; e.currentTarget.style.borderColor = '#0d9488' }}
-                            onMouseLeave={e => { e.currentTarget.style.background = '#f0fdfb'; e.currentTarget.style.borderColor = '#d1fae5' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <User style={{ width: 14, height: 14, color: '#0d9488' }} />
-                              <span>Ver Lead no CRM</span>
+                          leadData ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              {/* Lead data header */}
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', background: '#f0fdfb', borderRadius: 9, border: '1px solid #d1fae5' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <User style={{ width: 13, height: 13, color: '#0d9488', flexShrink: 0 }} />
+                                  <div>
+                                    <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{leadData.responsible_name || '—'}</p>
+                                    {leadData.student_name && (
+                                      <p style={{ margin: 0, fontSize: 11, color: '#64748B' }}>{leadData.student_name}</p>
+                                    )}
+                                  </div>
+                                </div>
+                                <button onClick={() => { setEditingLead(v => !v); if (!editingLead) setLeadEditForm({ ...leadData }) }}
+                                  style={{ fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 7, border: '1px solid #d1fae5', color: '#0d9488', background: 'transparent', cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 }}
+                                  onMouseEnter={e => (e.currentTarget.style.background = '#e6f7f5')}
+                                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                                  {editingLead ? 'Cancelar' : '✏️ Editar'}
+                                </button>
+                              </div>
+
+                              {/* View mode */}
+                              {!editingLead && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '0 2px' }}>
+                                  {leadData.grade_interest && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                                      <span style={{ color: '#64748B' }}>Série</span>
+                                      <span style={{ color: '#1A2B4A', fontWeight: 500 }}>{leadData.grade_interest}</span>
+                                    </div>
+                                  )}
+                                  {leadData.email && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, gap: 8 }}>
+                                      <span style={{ color: '#64748B', flexShrink: 0 }}>E-mail</span>
+                                      <span style={{ color: '#1A2B4A', fontWeight: 500, wordBreak: 'break-all', textAlign: 'right' }}>{leadData.email}</span>
+                                    </div>
+                                  )}
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+                                    <span style={{ color: '#64748B' }}>Status</span>
+                                    <select value={leadEditForm.status || leadData.status || 'new'}
+                                      onChange={e => { const s = e.target.value; setLeadEditForm((f: any) => ({ ...f, status: s })); handleSaveLead({ status: s }) }}
+                                      style={{ fontSize: 11, padding: '2px 6px', borderRadius: 7, border: '1px solid #d1fae5', background: '#f0fdfb', color: '#0d9488', fontWeight: 600, outline: 'none', cursor: 'pointer' }}>
+                                      <option value="new">Novo</option>
+                                      <option value="contact">Em contato</option>
+                                      <option value="scheduled">Visita agendada</option>
+                                      <option value="visit">Visita realizada</option>
+                                      <option value="proposal">Proposta enviada</option>
+                                      <option value="enrolled">Matriculado</option>
+                                      <option value="lost">Perdido</option>
+                                    </select>
+                                  </div>
+                                  {leadData.source && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                                      <span style={{ color: '#64748B' }}>Origem</span>
+                                      <span style={{ color: '#1A2B4A', fontWeight: 500 }}>{leadData.source}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Edit mode */}
+                              {editingLead && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 7, background: '#f0fdfb', borderRadius: 10, padding: '10px 12px', border: '1px solid #d1fae5' }}>
+                                  {[
+                                    { label: 'Responsável', key: 'responsible_name' },
+                                    { label: 'Aluno', key: 'student_name' },
+                                    { label: 'E-mail', key: 'email' },
+                                  ].map(({ label, key }) => (
+                                    <div key={key}>
+                                      <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 3 }}>{label}</label>
+                                      <input value={(leadEditForm as any)[key] || ''}
+                                        onChange={e => setLeadEditForm((f: any) => ({ ...f, [key]: e.target.value }))}
+                                        style={{ width: '100%', padding: '6px 8px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
+                                    </div>
+                                  ))}
+                                  <div>
+                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 3 }}>Série</label>
+                                    <select value={leadEditForm.grade_interest || ''}
+                                      onChange={e => setLeadEditForm((f: any) => ({ ...f, grade_interest: e.target.value }))}
+                                      style={{ width: '100%', padding: '6px 8px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}>
+                                      <option value="">Selecionar...</option>
+                                      {['Educação Infantil','1º Ano','2º Ano','3º Ano','4º Ano','5º Ano','6º Ano','7º Ano','8º Ano','9º Ano','1º EM','2º EM','3º EM'].map(g => (
+                                        <option key={g} value={g}>{g}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 3 }}>Status</label>
+                                    <select value={leadEditForm.status || 'new'}
+                                      onChange={e => setLeadEditForm((f: any) => ({ ...f, status: e.target.value }))}
+                                      style={{ width: '100%', padding: '6px 8px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}>
+                                      <option value="new">Novo</option>
+                                      <option value="contact">Em contato</option>
+                                      <option value="scheduled">Visita agendada</option>
+                                      <option value="visit">Visita realizada</option>
+                                      <option value="proposal">Proposta enviada</option>
+                                      <option value="enrolled">Matriculado</option>
+                                      <option value="lost">Perdido</option>
+                                    </select>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: 6 }}>
+                                    <button onClick={() => handleSaveLead()}
+                                      disabled={savingLead}
+                                      style={{ flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600, color: '#fff', background: savingLead ? '#94A3B8' : '#0d9488', border: 'none', borderRadius: 7, cursor: savingLead ? 'not-allowed' : 'pointer' }}>
+                                      {savingLead ? 'Salvando...' : 'Salvar'}
+                                    </button>
+                                    <button onClick={() => setEditingLead(false)}
+                                      style={{ padding: '6px 10px', fontSize: 12, color: '#64748B', border: '1px solid #d1fae5', borderRadius: 7, background: '#fff', cursor: 'pointer' }}>
+                                      Cancelar
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Actions row */}
+                              <button onClick={() => navigate(`/leads?highlight=${activeConv.lead_id}`)}
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', background: 'transparent', border: '1px solid #d1fae5', borderRadius: 9, cursor: 'pointer', fontSize: 12, color: '#0d9488', fontWeight: 600, transition: 'all 0.15s' }}
+                                onMouseEnter={e => { e.currentTarget.style.background = '#e6f7f5'; e.currentTarget.style.borderColor = '#0d9488' }}
+                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#d1fae5' }}>
+                                <User style={{ width: 12, height: 12 }} />
+                                Ver no CRM
+                              </button>
                             </div>
-                            <ChevronRight style={{ width: 13, height: 13, color: '#94A3B8' }} />
-                          </button>
+                          ) : (
+                            <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0' }}>
+                              <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#0d9488] border-t-transparent" />
+                            </div>
+                          )
                         ) : linkingLead ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                             <input autoFocus value={leadSearch} onChange={e => searchLeads(e.target.value)}
