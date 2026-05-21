@@ -1428,7 +1428,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const body  = JSON.parse(rawBody.toString())
       const value = body?.entry?.[0]?.changes?.[0]?.value
-      if (!value) return res.status(200).end()
+      if (!value) {
+        console.log('[WEBHOOK] value undefined - payload:',
+          JSON.stringify(body?.entry?.[0]?.changes?.[0]))
+        return res.status(200).end()
+      }
+
+      console.log('[WEBHOOK] value field:',
+        body?.entry?.[0]?.changes?.[0]?.field)
+      console.log('[WEBHOOK] messages count:',
+        value?.messages?.length || 0)
+      console.log('[WEBHOOK] statuses count:',
+        value?.statuses?.length || 0)
 
       const phoneNumberId = value.metadata?.phone_number_id
 
