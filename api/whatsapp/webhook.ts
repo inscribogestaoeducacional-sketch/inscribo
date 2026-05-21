@@ -1476,10 +1476,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log('[WEBHOOK] messages count:', body?.entry?.[0]?.changes?.[0]?.value?.messages?.length || 0)
       console.log('[WEBHOOK] statuses count:', body?.entry?.[0]?.changes?.[0]?.value?.statuses?.length || 0)
 
-      console.log('[PRE-LOOP]',
-        'messages:', value.messages?.length ?? 0,
-        'statuses:', value.statuses?.length ?? 0,
-        'institutionId:', institutionId?.slice(0,8))
+      // Criar contatos para TODAS as mensagens do payload
+      // antes de qualquer processamento
+      const allMessages = value.messages || []
+      const allStatuses = value.statuses || []
+
+      console.log('[PRE-LOOP] msgs:', allMessages.length,
+        'statuses:', allStatuses.length)
+
+      for (const m of allMessages) {
+        const rawJid = (m.from as string || '')
+          .replace(/@s\.whatsapp\.net$/, '')
+          .replace(/@g\.us$/, '')
+        if (!rawJid || rawJid.includes('@')) continue
+
+        const contactName =
+          value.contacts?.find((c: any) =>
+            c.wa_id === rawJid
+          )?.profile?.name || rawJid
+
+        const picUrl = value.contacts?.find((c: any) =>
+          c.wa_id === rawJid
+        )?.profile?.picture_url
+
+        console.log('[PRE-LOOP] criando contato:', rawJid)
+
+        await upsertContact(
+          institutionId,
+          rawJid,
+          contactName,
+          picUrl
+        )
+      }
 
       // ── Process incoming messages ──────────────────────────────────────────
       for (const msg of value.messages || []) {
