@@ -279,6 +279,15 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
           .eq('phone', rawPhone)
         console.log('[SYNC NAME] atualizado em whatsapp_contacts:', rawPhone)
       }
+      // Sync contact_type to whatsapp_conversations
+      if (editType !== contact.contact_type && normPhone) {
+        const jid = `${normPhone}@s.whatsapp.net`
+        await supabase.from('whatsapp_conversations')
+          .update({ contact_type: editType === 'unknown' ? null : editType })
+          .eq('institution_id', institutionId)
+          .eq('remote_jid', jid)
+        console.log('[SYNC TYPE] atualizado em whatsapp_conversations:', jid)
+      }
       const newContactType = editType === 'unknown' ? null : editType
       onUpdate(contact.id, {
         name: editName,
@@ -312,6 +321,20 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
           .eq('institution_id', institutionId)
           .eq('remote_jid', contact.remote_jid)
       }
+      const normP = (p: string) => {
+        let d = p.replace(/\D/g, '')
+        if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
+        if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
+        if (d.length === 11) d = '55' + d
+        return d
+      }
+      const normPhone = normP(contact.phone || '')
+      if (normPhone) {
+        await supabase.from('whatsapp_contacts')
+          .update({ tags: newTags })
+          .eq('institution_id', institutionId)
+          .eq('phone', normPhone)
+      }
       onUpdate(contact.id, { tags: newTags })
     } catch (e) { console.error('handleAddTag error:', e) }
   }
@@ -328,6 +351,20 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
           .update({ tags: newTags })
           .eq('institution_id', institutionId)
           .eq('remote_jid', contact.remote_jid)
+      }
+      const normP = (p: string) => {
+        let d = p.replace(/\D/g, '')
+        if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
+        if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
+        if (d.length === 11) d = '55' + d
+        return d
+      }
+      const normPhone = normP(contact.phone || '')
+      if (normPhone) {
+        await supabase.from('whatsapp_contacts')
+          .update({ tags: newTags })
+          .eq('institution_id', institutionId)
+          .eq('phone', normPhone)
       }
       onUpdate(contact.id, { tags: newTags })
     } catch (e) { console.error('handleRemoveTag error:', e) }

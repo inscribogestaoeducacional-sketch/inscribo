@@ -698,6 +698,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // New state variables
   const [showNewConvModal, setShowNewConvModal] = useState(false)
   const [newConvPhone, setNewConvPhone] = useState('')
+  const [newConvName, setNewConvName] = useState('')
   const [showLeadModal, setShowLeadModal] = useState(false)
   const [showClientModal, setShowClientModal] = useState(false)
   const [leadForm, setLeadForm] = useState({ responsible_name: '', student_name: '', phone: '', email: '', grade_interest: '', source: 'WhatsApp' })
@@ -1159,6 +1160,32 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       setEditingLead(false)
       setHubToast('Lead atualizado!')
       setTimeout(() => setHubToast(null), 3000)
+
+      if (form.responsible_name && effectiveInstitutionId) {
+        const normPhone = (() => {
+          let d = (form.phone || '').replace(/\D/g, '')
+          if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
+          if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
+          if (d.length === 11) d = '55' + d
+          return d
+        })()
+
+        if (normPhone) {
+          await supabase.from('whatsapp_contacts')
+            .update({ name: form.responsible_name })
+            .eq('institution_id', effectiveInstitutionId)
+            .eq('phone', normPhone)
+
+          skipNextNameUpdateRef.current = activeId
+          setConversations(prev => prev.map(c =>
+            c.id === activeId ? { ...c, name: form.responsible_name } : c
+          ))
+          await supabase.from('whatsapp_conversations')
+            .update({ contact_name: form.responsible_name })
+            .eq('institution_id', effectiveInstitutionId)
+            .eq('remote_jid', activeId)
+        }
+      }
     } catch {
       setSendError('Erro ao salvar lead.')
     } finally {
@@ -1342,47 +1369,85 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const convChannel = supabase
       .channel(`waconv-${channelSuffix}`)
       .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'whatsapp_conversations',
-        filter: convFilter
+        event: 'INSERT',
+        schema: 'public',
+        table: 'whatsapp_messages',
+        filter: msgFilter
       }, (payload: any) => {
-        // Ignore UPDATEs that only changed metadata (not a new message) — prevents full reload
-        // resetting UI states like showTemplatePanel and editingContact
-        if (payload.eventType === 'UPDATE') {
-          const n = payload.new || {}
-          const o = payload.old || {}
-          if (n.last_message === o.last_message &&
-              n.last_message_at === o.last_message_at) {
-            return
-          }
+        const msgJid = payload.new?.remote_jid || ''
+        if (normalizeJid(msgJid) === activeIdRef.current) {
+          loadMessages()
         }
-        const rJid = payload.new?.remote_jid || payload.old?.remote_jid || ''
-        const nJid = normalizeJid(rJid)
-        if (CLOSING_IDS.has(rJid) || CLOSING_IDS.has(nJid)) return
-        loadMessages()
+        setConversations(prev => prev.map(c =>
+          c.id === normalizeJid(msgJid)
+            ? {
+                ...c,
+                lastMessage: payload.new?.content || '',
+                lastTime: new Date(payload.new?.timestamp || Date.now())
+              }
+            : c
+        ))
       })
       .on('postgres_changes', {
-        event: 'UPDATE', schema: 'public', table: 'whatsapp_conversations',
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'whatsapp_conversations',
         filter: convFilter
       }, (payload: any) => {
-        if (payload.new?.contact_name && payload.new?.remote_jid) {
-          const normJid = normalizeJid(payload.new.remote_jid)
-          if (skipNextNameUpdateRef.current === normJid) {
-            skipNextNameUpdateRef.current = null
-            return
-          }
-          setConversations(prev => prev.map(c =>
-            c.id === normJid
-              ? { ...c, name: payload.new.contact_name }
-              : c
-          ))
+        const normJid = normalizeJid(payload.new?.remote_jid || '')
+
+        if (skipNextNameUpdateRef.current === normJid) {
+          skipNextNameUpdateRef.current = null
+          return
         }
+
+        setConversations(prev => prev.map(c => {
+          if (c.id !== normJid) return c
+          return {
+            ...c,
+            name: payload.new?.contact_name || c.name,
+            status: payload.new?.status || c.status,
+            contact_type: payload.new?.contact_type || c.contact_type,
+            lead_id: payload.new?.lead_id || c.lead_id,
+            tags: payload.new?.tags || c.tags,
+            assigned_user_id: payload.new?.assigned_user_id || c.assigned_user_id,
+            assigned_user_name: payload.new?.assigned_user_name || c.assigned_user_name,
+          }
+        }))
       })
       .subscribe()
+
+    let leadsChannel: ReturnType<typeof supabase.channel> | null = null
+    if (effectiveInstitutionId) {
+      leadsChannel = supabase
+        .channel(`leads-${channelSuffix}`)
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'leads',
+          filter: `institution_id=eq.${effectiveInstitutionId}`
+        }, (payload: any) => {
+          const currentLeadId = conversationsRef.current.find(c => c.id === activeIdRef.current)?.lead_id
+          if (payload.new?.id === currentLeadId) {
+            setLeadData(payload.new)
+            setLeadEditForm(payload.new)
+          }
+          if (payload.new?.responsible_name) {
+            setConversations(prev => prev.map(c =>
+              c.lead_id === payload.new.id
+                ? { ...c, name: payload.new.responsible_name }
+                : c
+            ))
+          }
+        })
+        .subscribe()
+    }
 
     const interval = setInterval(loadMessages, 60000)
     return () => {
       supabase.removeChannel(msgChannel)
       supabase.removeChannel(convChannel)
+      if (leadsChannel) supabase.removeChannel(leadsChannel)
       clearInterval(interval)
     }
   }, [effectiveInstitutionId, isAionInbox])
@@ -2123,18 +2188,22 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }
   }
 
-  const handleNewConv = () => {
+  const handleNewConv = async () => {
     if (!newConvPhone.trim()) return
     const digits = newConvPhone.replace(/\D/g, '')
     const normalized = digits.startsWith('55') ? digits : `55${digits}`
     const jid = `${normalized}@s.whatsapp.net`
     const existing = conversations.find(c => c.id === jid)
     if (existing) {
+      if (newConvName) {
+        setConversations(prev => prev.map(c => c.id === jid ? { ...c, name: newConvName } : c))
+      }
       setActiveId(existing.id)
     } else {
       const phone = formatPhone(jid)
+      const name = newConvName || phone
       const newConv: Conversation = {
-        id: jid, name: phone, phone,
+        id: jid, name, phone,
         avatarColor: jidToColor(jid),
         lastMessage: '', lastTime: new Date(),
         unreadCount: 0, status: 'open', online: false,
@@ -2151,8 +2220,48 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       setTemplateVars({})
       setShowTemplatePanel(true)
     }
+
+    if (effectiveInstitutionId) {
+      try {
+        const { data: existingContact } = await supabase
+          .from('whatsapp_contacts')
+          .select('id, name')
+          .eq('institution_id', effectiveInstitutionId)
+          .eq('phone', normalized)
+          .maybeSingle()
+
+        if (existingContact) {
+          await supabase
+            .from('whatsapp_contacts')
+            .update({ name: newConvName || existingContact.name, updated_at: new Date().toISOString() })
+            .eq('id', existingContact.id)
+        } else {
+          await supabase
+            .from('whatsapp_contacts')
+            .insert({ institution_id: effectiveInstitutionId, phone: normalized, name: newConvName || normalized, type: 'unknown', updated_at: new Date().toISOString() })
+        }
+
+        const noCode = normalized.startsWith('55') ? normalized.slice(2) : normalized
+        const { data: lead } = await supabase
+          .from('leads')
+          .select('id')
+          .eq('institution_id', effectiveInstitutionId)
+          .or(`phone.eq.${normalized},phone.eq.${noCode},phone.eq.55${noCode}`)
+          .maybeSingle()
+
+        if (lead?.id) {
+          await supabase
+            .from('whatsapp_contacts')
+            .update({ lead_id: lead.id, type: 'lead' })
+            .eq('institution_id', effectiveInstitutionId)
+            .eq('phone', normalized)
+        }
+      } catch {}
+    }
+
     setShowNewConvModal(false)
     setNewConvPhone('')
+    setNewConvName('')
   }
 
   const handleSendNewConvTemplate = async () => {
@@ -2543,6 +2652,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             <h3 className="text-sm font-bold text-[#1A2B4A] mb-4">Nova Conversa</h3>
             <input
               autoFocus
+              type="text"
+              value={newConvName}
+              onChange={e => setNewConvName(e.target.value)}
+              placeholder="Nome do contato (opcional)"
+              className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none mb-3"
+            />
+            <input
               type="tel"
               value={newConvPhone}
               onChange={e => setNewConvPhone(e.target.value)}
@@ -2551,7 +2667,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none mb-4"
             />
             <div className="flex gap-2">
-              <button onClick={() => { setShowNewConvModal(false); setNewConvPhone('') }}
+              <button onClick={() => { setShowNewConvModal(false); setNewConvPhone(''); setNewConvName('') }}
                 className="flex-1 py-2.5 text-xs font-medium text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
                 Cancelar
               </button>

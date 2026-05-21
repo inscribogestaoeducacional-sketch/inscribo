@@ -934,6 +934,32 @@ export default function LeadKanban() {
       await DatabaseService.logActivity({ user_id: user!.id, action: 'Lead criado', entity_type: 'lead', entity_id: newLead.id, details: { student_name: newLead.student_name, responsible_name: newLead.responsible_name, source: newLead.source, grade_interest: newLead.grade_interest, phone: newLead.phone || '', email: newLead.email || '', address: newLead.address || '', budget_range: newLead.budget_range || '', notes: newLead.notes || '' }, institution_id: user!.institution_id })
       await logAudit({ institution_id: user!.institution_id, module: 'leads', record_id: newLead.id, action: 'created', new_value: `${newLead.student_name} — ${newLead.grade_interest}`, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
     }
+    // Sync responsible_name to whatsapp_contacts and whatsapp_conversations
+    const phone = data.phone || (editingLead?.phone ?? '')
+    const responsibleName = data.responsible_name || (editingLead?.responsible_name ?? '')
+    if (phone && responsibleName) {
+      try {
+        const { supabase: db } = await import('../../lib/supabase')
+        const normP = (p: string) => {
+          let d = p.replace(/\D/g, '')
+          if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
+          if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
+          if (d.length === 11) d = '55' + d
+          return d
+        }
+        const normPhone = normP(phone)
+        const instId = user!.institution_id
+        await db.from('whatsapp_contacts')
+          .update({ name: responsibleName })
+          .eq('institution_id', instId)
+          .eq('phone', normPhone)
+        await db.from('whatsapp_conversations')
+          .update({ contact_name: responsibleName })
+          .eq('institution_id', instId)
+          .eq('remote_jid', `${normPhone}@s.whatsapp.net`)
+      } catch {}
+    }
+
     await loadData()
     setEditingLead(null)
   }
