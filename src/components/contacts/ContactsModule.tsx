@@ -117,7 +117,7 @@ function mapContact(c: any): UnifiedContact {
     remote_jid:          rawPhone ? `${rawPhone}@s.whatsapp.net` : null,
     contact_type:        c.type === 'unknown' ? null : (c.type || null),
     assigned_user_name:  null,
-    tags:                lead?.tags || [],
+    tags:                c.tags || [],
     last_contact:        c.last_seen_at || c.created_at || new Date().toISOString(),
     profile_picture_url: c.profile_picture_url || null,
     created_at:          c.created_at || null,
@@ -327,11 +327,11 @@ export default function ContactsModule() {
       const useGrade       = grade  !== 'all'
       const useTag         = tag    !== 'all'
       const useStatus      = status !== 'all'
-      const needsInnerJoin = useGrade || useTag || useStatus
+      const needsInnerJoin = useGrade || useStatus
 
       const selectStr = needsInnerJoin
-        ? 'id, phone, name, profile_picture_url, type, lead_id, last_seen_at, created_at, leads!lead_id!inner(id, student_name, responsible_name, email, grade_interest, source, status, tags)'
-        : 'id, phone, name, profile_picture_url, type, lead_id, last_seen_at, created_at, leads!lead_id(id, student_name, responsible_name, email, grade_interest, source, status, tags)'
+        ? 'id, phone, name, profile_picture_url, type, lead_id, last_seen_at, created_at, tags, leads!lead_id!inner(id, student_name, responsible_name, email, grade_interest, source, status)'
+        : 'id, phone, name, profile_picture_url, type, lead_id, last_seen_at, created_at, tags, leads!lead_id(id, student_name, responsible_name, email, grade_interest, source, status)'
 
       let query = supabase
         .from('whatsapp_contacts')
@@ -346,7 +346,7 @@ export default function ContactsModule() {
       if (origin === 'unknown') query = query.or('type.eq.unknown,type.is.null')
       if (useGrade)             query = query.eq('leads.grade_interest', grade)
       if (useStatus)            query = query.eq('leads.status', status)
-      if (useTag)               query = (query as any).filter('leads.tags', 'cs', `{"${tag}"}`)
+      if (useTag)               query = (query as any).filter('tags', 'cs', `{"${tag}"}`)
 
       const { data, error, count } = await query
 
