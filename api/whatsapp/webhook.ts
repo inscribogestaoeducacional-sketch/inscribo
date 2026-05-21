@@ -1376,7 +1376,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log('[WEBHOOK RAW] changes[0] value keys:', Object.keys(_body?.entry?.[0]?.changes?.[0]?.value || {}))
       console.log('[WEBHOOK RAW] messages:', _body?.entry?.[0]?.changes?.[0]?.value?.messages?.length || 0)
       console.log('[WEBHOOK RAW] statuses:', _body?.entry?.[0]?.changes?.[0]?.value?.statuses?.length || 0)
-    } catch {}
+    } catch (parseErr) {
+      console.log('[WEBHOOK RAW] parse error:', parseErr)
+      console.log('[WEBHOOK RAW] rawBody length:', rawBody?.length || 0)
+      console.log('[WEBHOOK RAW] rawBody preview:', rawBody?.toString()?.slice(0, 200) || 'empty')
+    }
 
     // HMAC-SHA256 validation (timing-safe)
     const signature = req.headers['x-hub-signature-256'] as string | undefined
