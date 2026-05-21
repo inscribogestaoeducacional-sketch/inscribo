@@ -253,23 +253,33 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
         }).eq('id', contact.lead_id)
         synced.push('lead')
       }
-      if (contact.remote_jid || contact.phone) {
-        const normPhone = (contact.phone || '').replace(/\D/g, '')
-        if (normPhone) {
-          await supabase.from('whatsapp_conversations')
-            .update({ contact_name: editName })
-            .eq('institution_id', institutionId)
-            .or(`remote_jid.eq.${normPhone}@s.whatsapp.net,remote_jid.like.%${normPhone}%`)
-          synced.push('WhatsApp')
-        }
+      const normP = (p: string) => {
+        let d = p.replace(/\D/g, '')
+        if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
+        if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
+        if (d.length === 11) d = '55' + d
+        return d
       }
-      // Update contact type in whatsapp_contacts
-      const rawPhone = (editPhone || contact.phone || '').replace(/\D/g, '')
+      const normPhone = normP(contact.phone || '')
+      if ((contact.remote_jid || contact.phone) && normPhone) {
+        const { error: convErr } = await supabase.from('whatsapp_conversations')
+          .update({ contact_name: editName })
+          .eq('institution_id', institutionId)
+          .or(
+            `remote_jid.eq.${normPhone}@s.whatsapp.net,` +
+            `remote_jid.eq.${normPhone}@c.us`
+          )
+        console.log('[SYNC NAME] atualizado em conversas:', normPhone, convErr)
+        synced.push('WhatsApp')
+      }
+      // Update contact type and name in whatsapp_contacts
+      const rawPhone = normP(editPhone || contact.phone || '')
       if (rawPhone) {
         await supabase.from('whatsapp_contacts')
-          .update({ type: editType === 'unknown' ? null : editType })
+          .update({ type: editType === 'unknown' ? null : editType, name: editName })
           .eq('institution_id', institutionId)
           .eq('phone', rawPhone)
+        console.log('[SYNC NAME] atualizado em whatsapp_contacts:', rawPhone)
       }
       const newContactType = editType === 'unknown' ? null : editType
       onUpdate(contact.id, {

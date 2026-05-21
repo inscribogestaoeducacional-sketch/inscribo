@@ -7,7 +7,7 @@ import {
   CheckCheck, Check, Zap, Settings, User, Users, Download,
   X, MoreVertical
 } from 'lucide-react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConversationEvent, User as UserType, supabase } from '../../lib/supabase'
 
@@ -655,6 +655,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const { user } = useAuth()
   const effectiveInstitutionId = propInstitutionId ?? user?.institution_id ?? ''
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
   const phoneParam = searchParams.get('phone')
   const nameParam  = searchParams.get('name')
@@ -1474,6 +1475,42 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       if (isMobile) setMobilePanel('chat')
     }
   }, [phoneParam, nameParam, loading, conversations])
+
+  // Handle phone passed via navigation state (e.g. from ContactProfile WhatsApp button)
+  useEffect(() => {
+    const phoneParam = location.state?.phone
+    if (!phoneParam || loading) return
+
+    const normP = (p: string): string => {
+      let d = p.replace(/\D/g, '')
+      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
+      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
+      if (d.length === 11) d = '55' + d
+      return d
+    }
+
+    const target = normP(String(phoneParam))
+    console.log('[PHONE PARAM] procurando:', target)
+
+    const found = conversations.find(c => {
+      const jid = (c.id || '').replace('@s.whatsapp.net', '').replace('@c.us', '')
+      const norm = normP(jid)
+      console.log('[PHONE PARAM] comparando:', norm, '===', target)
+      return norm === target
+    })
+
+    if (found) {
+      console.log('[PHONE PARAM] conversa encontrada:', found.id)
+      setActiveId(found.id)
+      if (isMobile) setMobilePanel('chat')
+    } else {
+      console.log('[PHONE PARAM] conversa não encontrada — abrindo nova')
+      setNewConvPhone(target)
+      setShowNewConvModal(true)
+    }
+
+    window.history.replaceState({}, '', '/whatsapp')
+  }, [location.state?.phone, conversations, loading])
 
   const activeConvMsgCount = conversations.find(c => c.id === activeId)?.messages.length ?? 0
 
@@ -3265,6 +3302,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                                   setConversations(prev => prev.map(c => c.id === activeId ? {...c, name: editForm.name} : c))
                                   await supabase.from('whatsapp_conversations').update({ contact_name: editForm.name })
                                     .eq('institution_id', effectiveInstitutionId).eq('remote_jid', rawJid(activeId))
+                                  const normPhone = (() => {
+                                    let d = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
+                                    if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
+                                    if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
+                                    if (d.length === 11) d = '55' + d
+                                    return d
+                                  })()
+                                  await supabase.from('whatsapp_contacts')
+                                    .update({ name: editForm.name })
+                                    .eq('institution_id', effectiveInstitutionId)
+                                    .eq('phone', normPhone)
+                                  console.log('[SYNC NAME] atualizado em whatsapp_contacts:', normPhone)
                                 }
                                 if (editForm.contact_type && editForm.contact_type !== (activeConv.contact_type || '')) {
                                   await DatabaseService.setConversationContactType(effectiveInstitutionId, rawJid(activeId), editForm.contact_type)
