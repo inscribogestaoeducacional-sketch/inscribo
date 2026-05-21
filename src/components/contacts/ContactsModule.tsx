@@ -6,13 +6,34 @@ import {
   Users, BookUser, Search, Phone, Download, Upload, FileText,
   RefreshCw, MessageSquare, ChevronsUpDown, ChevronUp, ChevronDown, ChevronRight,
 } from 'lucide-react'
-import ContactCard from './ContactCard'
-import { UnifiedContact } from './ContactProfile'
+import ContactProfile, { UnifiedContact } from './ContactProfile'
 
 // ─── Constants ───────────────────────────────────────────────
 const HEX_COLORS = ['#00A896','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
 const PAGE_SIZE  = 50
 const GRAPH_URL  = 'https://graph.facebook.com/v19.0'
+
+const EXPORT_FIELD_DEFS = [
+  { key: 'responsible_name', label: 'Nome do responsável' },
+  { key: 'student_name',     label: 'Nome do aluno'       },
+  { key: 'phone',            label: 'Telefone'            },
+  { key: 'email',            label: 'E-mail'              },
+  { key: 'grade',            label: 'Série'               },
+  { key: 'type',             label: 'Tipo'                },
+  { key: 'tags',             label: 'Etiquetas'           },
+  { key: 'last_contact',     label: 'Último contato'      },
+  { key: 'created_at',       label: 'Adicionado em'       },
+  { key: 'status',           label: 'Status do lead'      },
+] as const
+type ExportFieldKey = typeof EXPORT_FIELD_DEFS[number]['key']
+
+const LEAD_STATUSES = [
+  { value: 'novo',        label: 'Novo'        },
+  { value: 'contacted',   label: 'Contatado'   },
+  { value: 'negotiating', label: 'Negociando'  },
+  { value: 'enrolled',    label: 'Matriculado' },
+  { value: 'lost',        label: 'Perdido'     },
+]
 
 // ─── Helpers ─────────────────────────────────────────────────
 function nameHash(name: string) {
@@ -96,7 +117,7 @@ function mapContact(c: any): UnifiedContact {
     remote_jid:          rawPhone ? `${rawPhone}@s.whatsapp.net` : null,
     contact_type:        c.type === 'unknown' ? null : (c.type || null),
     assigned_user_name:  null,
-    tags:                [],
+    tags:                lead?.tags || [],
     last_contact:        c.last_seen_at || c.created_at || new Date().toISOString(),
     profile_picture_url: c.profile_picture_url || null,
     created_at:          c.created_at || null,
@@ -197,6 +218,8 @@ export default function ContactsModule() {
   const [search,       setSearch]       = useState('')
   const [filterOrigin, setFilterOrigin] = useState('all')
   const [filterGrade,  setFilterGrade]  = useState('all')
+  const [filterTag,    setFilterTag]    = useState('all')
+  const [filterStatus, setFilterStatus] = useState('all')
   const [sortCol,      setSortCol]      = useState('created_at')
   const [sortDir,      setSortDir]      = useState<'asc' | 'desc'>('desc')
 
@@ -205,6 +228,12 @@ export default function ContactsModule() {
   const [zoomedPhoto,      setZoomedPhoto]      = useState<string | null>(null)
   const [startConvContact, setStartConvContact] = useState<UnifiedContact | null>(null)
   const [templateSending,  setTemplateSending]  = useState(false)
+  const [showExportModal,  setShowExportModal]  = useState(false)
+  const [exportFields,     setExportFields]     = useState<Record<ExportFieldKey, boolean>>({
+    responsible_name: true, student_name: true, phone: true, email: true,
+    grade: true, type: true, tags: true, last_contact: true, created_at: true, status: true,
+  })
+  const [availTagsFilter,  setAvailTagsFilter]  = useState<{ id: string; name: string; color: string }[]>([])
 
   // ── Import state ─────────────────────────────────────────
   const [showImport,    setShowImport]    = useState(false)
@@ -224,8 +253,11 @@ export default function ContactsModule() {
   const skipSearchRef  = useRef(true)
 
   // Latest filter values for real-time handler (avoids stale closure)
-  const filterStateRef = useRef({ origin: 'all', search: '', grade: 'all', sortCol: 'created_at', sortDir: 'desc' as 'asc' | 'desc' })
-  filterStateRef.current = { origin: filterOrigin, search, grade: filterGrade, sortCol, sortDir }
+  const filterStateRef = useRef({
+    origin: 'all', search: '', grade: 'all', tag: 'all', status: 'all',
+    sortCol: 'created_at', sortDir: 'desc' as 'asc' | 'desc',
+  })
+  filterStateRef.current = { origin: filterOrigin, search, grade: filterGrade, tag: filterTag, status: filterStatus, sortCol, sortDir }
 
   // ── KPI counts (global, unfiltered) ─────────────────────
   async function refreshKpiCounts() {
@@ -241,12 +273,26 @@ export default function ContactsModule() {
     }
   }
 
+  // ── Load available tags for filter dropdown ──────────────
+  async function loadFilterTags() {
+    try {
+      const { data } = await supabase
+        .from('whatsapp_tags')
+        .select('id, name, color')
+        .eq('institution_id', institutionId)
+        .order('name')
+      if (mountedRef.current && data) setAvailTagsFilter(data as { id: string; name: string; color: string }[])
+    } catch (e) { /* tags filter is optional */ }
+  }
+
   // ── Data loading ─────────────────────────────────────────
   async function load(params: {
     reset?:  boolean
     search?: string
     origin?: string
     grade?:  string
+    tag?:    string
+    status?: string
     sc?:     string
     sd?:     'asc' | 'desc'
     from?:   number
@@ -256,6 +302,8 @@ export default function ContactsModule() {
       search: s = search,
       origin    = filterOrigin,
       grade     = filterGrade,
+      tag       = filterTag,
+      status    = filterStatus,
       sc        = sortCol,
       sd        = sortDir,
       from: fromArg,
@@ -275,12 +323,15 @@ export default function ContactsModule() {
     else         setLoadingMore(true)
 
     try {
-      const isSearch = s.trim().length >= 2
-      const useGrade = grade !== 'all'
+      const isSearch       = s.trim().length >= 2
+      const useGrade       = grade  !== 'all'
+      const useTag         = tag    !== 'all'
+      const useStatus      = status !== 'all'
+      const needsInnerJoin = useGrade || useTag || useStatus
 
-      const selectStr = useGrade
-        ? 'id, phone, name, profile_picture_url, type, lead_id, last_seen_at, created_at, leads!lead_id!inner(id, student_name, responsible_name, email, grade_interest, source, status)'
-        : 'id, phone, name, profile_picture_url, type, lead_id, last_seen_at, created_at, leads!lead_id(id, student_name, responsible_name, email, grade_interest, source, status)'
+      const selectStr = needsInnerJoin
+        ? 'id, phone, name, profile_picture_url, type, lead_id, last_seen_at, created_at, leads!lead_id!inner(id, student_name, responsible_name, email, grade_interest, source, status, tags)'
+        : 'id, phone, name, profile_picture_url, type, lead_id, last_seen_at, created_at, leads!lead_id(id, student_name, responsible_name, email, grade_interest, source, status, tags)'
 
       let query = supabase
         .from('whatsapp_contacts')
@@ -289,11 +340,13 @@ export default function ContactsModule() {
         .range(from, to)
         .order(sc, { ascending: sd === 'asc', nullsFirst: false })
 
-      if (isSearch)            query = query.or(`name.ilike.%${s.trim()}%,phone.ilike.%${s.trim()}%`)
-      if (origin === 'lead')   query = query.eq('type', 'lead')
-      if (origin === 'client') query = query.eq('type', 'client')
+      if (isSearch)             query = query.or(`name.ilike.%${s.trim()}%,phone.ilike.%${s.trim()}%`)
+      if (origin === 'lead')    query = query.eq('type', 'lead')
+      if (origin === 'client')  query = query.eq('type', 'client')
       if (origin === 'unknown') query = query.or('type.eq.unknown,type.is.null')
-      if (useGrade)            query = query.eq('leads.grade_interest', grade)
+      if (useGrade)             query = query.eq('leads.grade_interest', grade)
+      if (useStatus)            query = query.eq('leads.status', status)
+      if (useTag)               query = (query as any).filter('leads.tags', 'cs', `{"${tag}"}`)
 
       const { data, error, count } = await query
 
@@ -304,8 +357,8 @@ export default function ContactsModule() {
         return
       }
 
-      const newList   = (data || []).map(mapContact)
-      const newOffset = from + newList.length
+      const newList    = (data || []).map(mapContact)
+      const newOffset  = from + newList.length
       const totalCount = count || 0
 
       if (reset) {
@@ -328,6 +381,7 @@ export default function ContactsModule() {
     mountedRef.current = true
     load()
     refreshKpiCounts()
+    loadFilterTags()
 
     const channel = supabase
       .channel('wc_module_rt')
@@ -337,7 +391,7 @@ export default function ContactsModule() {
         (payload) => {
           const fs = filterStateRef.current
           if (payload.eventType === 'INSERT') {
-            const noFilters   = fs.origin === 'all' && fs.search.trim().length < 2 && fs.grade === 'all'
+            const noFilters   = fs.origin === 'all' && fs.search.trim().length < 2 && fs.grade === 'all' && fs.tag === 'all' && fs.status === 'all'
             const defaultSort = fs.sortCol === 'created_at' && fs.sortDir === 'desc'
             if (noFilters && defaultSort) {
               setContacts(prev => [mapContact(payload.new), ...prev])
@@ -365,15 +419,15 @@ export default function ContactsModule() {
   // ── Filter/sort change → immediate reload ─────────────────
   useEffect(() => {
     if (skipFiltersRef.current) { skipFiltersRef.current = false; return }
-    load({ reset: true, search, origin: filterOrigin, grade: filterGrade, sc: sortCol, sd: sortDir })
+    load({ reset: true, search, origin: filterOrigin, grade: filterGrade, tag: filterTag, status: filterStatus, sc: sortCol, sd: sortDir })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterOrigin, filterGrade, sortCol, sortDir])
+  }, [filterOrigin, filterGrade, filterTag, filterStatus, sortCol, sortDir])
 
   // ── Search change → debounced reload ─────────────────────
   useEffect(() => {
     if (skipSearchRef.current) { skipSearchRef.current = false; return }
     const t = setTimeout(() => {
-      load({ reset: true, search, origin: filterOrigin, grade: filterGrade, sc: sortCol, sd: sortDir })
+      load({ reset: true, search, origin: filterOrigin, grade: filterGrade, tag: filterTag, status: filterStatus, sc: sortCol, sd: sortDir })
     }, 350)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -382,7 +436,7 @@ export default function ContactsModule() {
   // ── Handlers ─────────────────────────────────────────────
   function handleLoadMore() {
     if (loadingMore || !hasMore) return
-    load({ reset: false, search, origin: filterOrigin, grade: filterGrade, sc: sortCol, sd: sortDir, from: offset })
+    load({ reset: false, search, origin: filterOrigin, grade: filterGrade, tag: filterTag, status: filterStatus, sc: sortCol, sd: sortDir, from: offset })
   }
 
   function handleSortClick(col: string) {
@@ -392,6 +446,7 @@ export default function ContactsModule() {
 
   function clearFilters() {
     setSearch(''); setFilterOrigin('all'); setFilterGrade('all')
+    setFilterTag('all'); setFilterStatus('all')
   }
 
   async function handleStartConversation(contact: UnifiedContact) {
@@ -564,13 +619,24 @@ export default function ContactsModule() {
     }
   }
 
-  function exportCSV() {
-    const header = 'Nome,Telefone,E-mail,Aluno,Série,Tipo,Último contato,Adicionado em'
+  function exportCSVWithFields() {
+    const fieldGetters: Record<ExportFieldKey, (c: UnifiedContact) => string> = {
+      responsible_name: c => c.name,
+      student_name:     c => c.student_name || '',
+      phone:            c => c.phone || '',
+      email:            c => c.email || '',
+      grade:            c => c.grade || '',
+      type:             c => c.origin_label,
+      tags:             c => (c.tags || []).join('; '),
+      last_contact:     c => fmtDate(c.last_contact),
+      created_at:       c => fmtCreated(c.created_at),
+      status:           c => c.status_lead || '',
+    }
+    const active = EXPORT_FIELD_DEFS.filter(f => exportFields[f.key])
+    if (!active.length) { alert('Selecione ao menos um campo.'); return }
+    const header = active.map(f => f.label).join(',')
     const rows   = contacts.map(c =>
-      [c.name, c.phone || '', c.email || '', c.student_name || '', c.grade || '',
-       c.origin_label, fmtDate(c.last_contact), fmtCreated(c.created_at)]
-        .map(v => `"${String(v).replace(/"/g, '""')}"`)
-        .join(',')
+      active.map(f => `"${String(fieldGetters[f.key](c)).replace(/"/g, '""')}"`).join(',')
     )
     const csv  = '﻿' + [header, ...rows].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -580,15 +646,15 @@ export default function ContactsModule() {
   }
 
   // ── Derived ──────────────────────────────────────────────
-  const grades       = [...new Set(contacts.map(c => c.grade).filter(Boolean))] as string[]
-  const hasFilters   = search || filterOrigin !== 'all' || filterGrade !== 'all'
-  const openImport   = () => { setShowImport(true); setImportRows([]); setImportErrors([]); setImportResult(null) }
+  const grades     = [...new Set(contacts.map(c => c.grade).filter(Boolean))] as string[]
+  const hasFilters = !!(search || filterOrigin !== 'all' || filterGrade !== 'all' || filterTag !== 'all' || filterStatus !== 'all')
+  const openImport = () => { setShowImport(true); setImportRows([]); setImportErrors([]); setImportResult(null) }
 
   const kpiDefs = [
-    { label: 'Total',     count: kpiCounts.total,   filterVal: 'all',     icon: '👥', activeColor: '#3B82F6', activeBg: '#DBEAFE', idleBg: '#EFF6FF'  },
-    { label: 'Leads',     count: kpiCounts.lead,    filterVal: 'lead',    icon: '🎯', activeColor: '#7C3AED', activeBg: '#C4B5FD', idleBg: '#EDE9FE'  },
-    { label: 'Clientes',  count: kpiCounts.client,  filterVal: 'client',  icon: '🏫', activeColor: '#065F46', activeBg: '#A7F3D0', idleBg: '#D1FAE5'  },
-    { label: 'WhatsApp',  count: kpiCounts.unknown, filterVal: 'unknown', icon: '💬', activeColor: '#D97706', activeBg: '#FDE68A', idleBg: '#FEF3C7'  },
+    { label: 'Total',    count: kpiCounts.total,   filterVal: 'all',     icon: '👥', activeColor: '#3B82F6', activeBg: '#DBEAFE', idleBg: '#EFF6FF' },
+    { label: 'Leads',    count: kpiCounts.lead,    filterVal: 'lead',    icon: '🎯', activeColor: '#7C3AED', activeBg: '#C4B5FD', idleBg: '#EDE9FE' },
+    { label: 'Clientes', count: kpiCounts.client,  filterVal: 'client',  icon: '🏫', activeColor: '#065F46', activeBg: '#A7F3D0', idleBg: '#D1FAE5' },
+    { label: 'WhatsApp', count: kpiCounts.unknown, filterVal: 'unknown', icon: '💬', activeColor: '#D97706', activeBg: '#FDE68A', idleBg: '#FEF3C7' },
   ]
 
   // ── Sortable header ───────────────────────────────────────
@@ -603,31 +669,6 @@ export default function ContactsModule() {
       </div>
     </th>
   )
-
-  // ── Profile view ─────────────────────────────────────────
-  if (profileContact) {
-    return (
-      <ContactCard
-        mode="page"
-        onClose={() => setProfileContact(null)}
-        institutionId={institutionId}
-        initialData={{
-          lead_id:            profileContact.lead_id,
-          remote_jid:         profileContact.remote_jid,
-          name:               profileContact.name,
-          phone:              profileContact.phone   ?? undefined,
-          email:              profileContact.email   ?? undefined,
-          student_name:       profileContact.student_name ?? undefined,
-          grade_interest:     profileContact.grade   ?? undefined,
-          contact_type:       profileContact.contact_type ?? undefined,
-          tags:               profileContact.tags,
-          source:             profileContact.source  ?? undefined,
-          assigned_user_name: profileContact.assigned_user_name ?? undefined,
-        }}
-        onUpdate={updates => handleProfileUpdate(profileContact.id, updates)}
-      />
-    )
-  }
 
   // ── Empty state ───────────────────────────────────────────
   const EmptyState = () => (
@@ -673,6 +714,18 @@ export default function ContactsModule() {
   )
 
   // ── Modals ────────────────────────────────────────────────
+
+  // Profile modal (overlay, not full-page replacement)
+  const profileModal = profileContact ? (
+    <ContactProfile
+      contact={profileContact}
+      institutionId={institutionId}
+      onClose={() => setProfileContact(null)}
+      onUpdate={(id, updates) => handleProfileUpdate(id, updates)}
+    />
+  ) : null
+
+  // Import modal
   const importModal = showImport ? (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) setShowImport(false) }}>
@@ -738,6 +791,47 @@ export default function ContactsModule() {
             <button onClick={() => setShowImport(false)} style={{ marginTop: 16, padding: '9px 24px', background: '#065F46', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Fechar</button>
           </div>
         )}
+      </div>
+    </div>
+  ) : null
+
+  // Export modal with field checkboxes
+  const exportModal = showExportModal ? (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      onClick={e => { if (e.target === e.currentTarget) setShowExportModal(false) }}>
+      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 420, padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1A2B4A' }}>Exportar contatos</h2>
+          <button onClick={() => setShowExportModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 22, lineHeight: 1 }}>✕</button>
+        </div>
+        <p style={{ margin: '0 0 14px', fontSize: 13, color: '#64748B' }}>
+          Exportando {contacts.length} contato(s). Selecione os campos:
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+          {EXPORT_FIELD_DEFS.map(f => (
+            <label key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, color: '#1A2B4A', padding: '7px 10px', borderRadius: 8, border: `1px solid ${exportFields[f.key] ? '#00A896' : '#E2E8F0'}`, background: exportFields[f.key] ? '#F0FDFA' : '#fff', transition: 'all 0.12s' }}>
+              <input
+                type="checkbox"
+                checked={exportFields[f.key]}
+                onChange={e => setExportFields(prev => ({ ...prev, [f.key]: e.target.checked }))}
+                style={{ width: 15, height: 15, accentColor: '#00A896', flexShrink: 0 }}
+              />
+              {f.label}
+            </label>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={() => setShowExportModal(false)}
+            style={{ padding: '9px 18px', border: '1px solid #E2E8F0', borderRadius: 9, background: '#fff', color: '#64748B', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
+            Cancelar
+          </button>
+          <button
+            onClick={() => { exportCSVWithFields(); setShowExportModal(false) }}
+            disabled={!Object.values(exportFields).some(Boolean) || contacts.length === 0}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700, opacity: (!Object.values(exportFields).some(Boolean) || contacts.length === 0) ? 0.5 : 1 }}>
+            <Download size={14} /> Exportar CSV
+          </button>
+        </div>
       </div>
     </div>
   ) : null
@@ -829,6 +923,15 @@ export default function ContactsModule() {
                 {label}
               </button>
             ))}
+            {/* Status filter chip row */}
+            {LEAD_STATUSES.map(s => (
+              <button key={s.value} onClick={() => setFilterStatus(filterStatus === s.value ? 'all' : s.value)}
+                style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 9999, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                  background: filterStatus === s.value ? '#00A896' : '#F0FFF4',
+                  color:      filterStatus === s.value ? '#fff'    : '#64748B' }}>
+                {s.label}
+              </button>
+            ))}
           </div>
 
           {/* KPIs 2×2 — clickable */}
@@ -902,8 +1005,10 @@ export default function ContactsModule() {
           </div>
         </div>
         {importModal}
+        {exportModal}
         {zoomModal}
         {convModal}
+        {profileModal}
       </>
     )
   }
@@ -932,7 +1037,7 @@ export default function ContactsModule() {
               style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>
               <Upload size={14} /> Importar CSV
             </button>
-            <button onClick={exportCSV} disabled={loading || contacts.length === 0}
+            <button onClick={() => setShowExportModal(true)} disabled={loading || contacts.length === 0}
               style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer', opacity: (loading || contacts.length === 0) ? 0.5 : 1 }}>
               <Download size={14} /> Exportar ({contacts.length})
             </button>
@@ -957,7 +1062,7 @@ export default function ContactsModule() {
           })}
         </div>
 
-        {/* Filter bar */}
+        {/* Filter bar row 1 */}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
             <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
@@ -984,6 +1089,22 @@ export default function ContactsModule() {
               style={{ border: '1.5px solid #FCA5A5', borderRadius: 10, fontSize: 13, background: '#FEF2F2', padding: '9px 14px', outline: 'none', color: '#DC2626', cursor: 'pointer', fontWeight: 600 }}>
               Limpar filtros
             </button>
+          )}
+        </div>
+
+        {/* Filter bar row 2 — status + tags */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: -10 }}>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+            style={{ border: `1.5px solid ${filterStatus !== 'all' ? '#00A896' : '#E2E8F0'}`, borderRadius: 10, fontSize: 13, background: filterStatus !== 'all' ? '#F0FDFA' : '#fff', padding: '9px 12px', outline: 'none', color: filterStatus !== 'all' ? '#00A896' : '#1A2B4A', fontWeight: filterStatus !== 'all' ? 600 : 400 }}>
+            <option value="all">Todos os status</option>
+            {LEAD_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          {availTagsFilter.length > 0 && (
+            <select value={filterTag} onChange={e => setFilterTag(e.target.value)}
+              style={{ border: `1.5px solid ${filterTag !== 'all' ? '#00A896' : '#E2E8F0'}`, borderRadius: 10, fontSize: 13, background: filterTag !== 'all' ? '#F0FDFA' : '#fff', padding: '9px 12px', outline: 'none', color: filterTag !== 'all' ? '#00A896' : '#1A2B4A', fontWeight: filterTag !== 'all' ? 600 : 400 }}>
+              <option value="all">Todas as etiquetas</option>
+              {availTagsFilter.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+            </select>
           )}
         </div>
 
@@ -1079,8 +1200,10 @@ export default function ContactsModule() {
       </div>
 
       {importModal}
+      {exportModal}
       {zoomModal}
       {convModal}
+      {profileModal}
     </>
   )
 }
