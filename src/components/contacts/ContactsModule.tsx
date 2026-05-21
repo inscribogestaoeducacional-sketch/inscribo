@@ -63,14 +63,27 @@ function typeCfg(type: string | null) {
 }
 
 function mapContact(c: any): UnifiedContact {
-  const lead     = c.leads || null
+  const lead     = c.leads as any || null
   const rawPhone = (c.phone || '').replace(/\D/g, '')
   const fmtPhone = rawPhone ? formatPhone(rawPhone) : (c.phone || null)
   const cfg      = typeCfg(c.type)
+  const mainName =
+    lead?.responsible_name?.trim() ||
+    c.name?.trim()                 ||
+    lead?.student_name?.trim()     ||
+    fmtPhone                       ||
+    'Desconhecido'
+  const subtitle =
+    lead?.responsible_name?.trim()
+      ? (lead?.student_name?.trim() || '')
+      : c.name?.trim()
+        ? (fmtPhone || '')
+        : ''
   return {
     id:                  c.id,
-    name:                c.name || lead?.responsible_name || lead?.student_name || fmtPhone || 'Desconhecido',
+    name:                mainName,
     student_name:        lead?.student_name || null,
+    subtitle:            subtitle || null,
     phone:               fmtPhone,
     email:               lead?.email || null,
     grade:               lead?.grade_interest || null,
@@ -862,9 +875,9 @@ export default function ContactsModule() {
                           <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{c.name}</p>
                           <span style={{ ...cfg.badgeStyle, fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999, flexShrink: 0, marginLeft: 6 }}>{cfg.label}</span>
                         </div>
-                        {(c.student_name || c.grade) && (
+                        {(c.subtitle || c.grade) && (
                           <p style={{ fontSize: 13, color: '#64748B', margin: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {[c.student_name, c.grade].filter(Boolean).join(' · ')}
+                            {[c.subtitle, c.grade].filter(Boolean).join(' · ')}
                           </p>
                         )}
                         {c.phone && <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>{c.phone}</p>}
@@ -1015,8 +1028,8 @@ export default function ContactsModule() {
                           />
                           <div style={{ minWidth: 0 }}>
                             <p style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</p>
-                            {c.student_name && (
-                              <p style={{ fontSize: 12, color: '#64748b', margin: '1px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.student_name}</p>
+                            {c.subtitle && (
+                              <p style={{ fontSize: 12, color: '#64748b', margin: '1px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.subtitle}</p>
                             )}
                           </div>
                         </div>

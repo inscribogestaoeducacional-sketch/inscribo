@@ -24,6 +24,7 @@ export interface UnifiedContact {
   transfer_status?: string | null
   profile_picture_url?: string | null
   created_at?: string | null
+  subtitle?: string | null
 }
 
 interface Props {
