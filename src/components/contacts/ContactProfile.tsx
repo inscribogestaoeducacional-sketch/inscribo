@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import {
   X, ArrowRightLeft, FileText, Clock, User, Plus, Check, Loader2,
-  MessageSquare, Tag as TagIcon,
+  Tag as TagIcon,
 } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────
@@ -14,8 +14,6 @@ const GRADES = [
   '6º Ano EF','7º Ano EF','8º Ano EF','9º Ano EF',
   'Ensino Médio 1','Ensino Médio 2','Ensino Médio 3',
 ]
-
-const GRAPH_URL = 'https://graph.facebook.com/v19.0'
 
 const HEX_COLORS = ['#00A896','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
 function nameHash(s: string) {
@@ -34,12 +32,6 @@ function lightenHex(hex: string, amount: number): string {
   const g = Math.round(((n >> 8)  & 0xff) * (1 - amount) + 255 * amount)
   const b = Math.round((n & 0xff)          * (1 - amount) + 255 * amount)
   return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`
-}
-
-const CONV_STATUS: Record<string, { label: string; bg: string; color: string }> = {
-  waiting: { label: 'Aguardando',     bg: '#FEF3C7', color: '#D97706' },
-  open:    { label: 'Em Atendimento', bg: '#D1FAE5', color: '#059669' },
-  closed:  { label: 'Concluído',      bg: '#F1F5F9', color: '#64748B' },
 }
 
 // ─── Interface ────────────────────────────────────────────────
@@ -90,9 +82,8 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
   const navigate  = useNavigate()
   const mountedRef = useRef(true)
   const contactRef = contact.lead_id || contact.remote_jid || contact.id
-  const schoolName = (user as any)?.institution_name || ''
 
-  type TabKey = 'dados' | 'historico' | 'notas' | 'whatsapp' | 'transferencia'
+  type TabKey = 'dados' | 'historico' | 'notas' | 'transferencia'
   const [tab, setTab] = useState<TabKey>('dados')
 
   // Form — dados
@@ -118,11 +109,6 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
   // History
   const [history, setHistory] = useState<{ icon: string; title: string; description: string; date: string }[]>([])
 
-  // WhatsApp conversation
-  const [conv,             setConv]             = useState<any>(null)
-  const [showTplConfirm,   setShowTplConfirm]   = useState(false)
-  const [sendingTemplate,  setSendingTemplate]  = useState(false)
-
   // Transfers
   const [transfers,        setTransfers]        = useState<any[]>([])
   const [loadingT,         setLoadingT]         = useState(false)
@@ -144,7 +130,6 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
     mountedRef.current = true
     loadAvailTags()
     loadNotes()
-    loadConversation()
     loadTransfers()
     buildHistory()
     return () => { mountedRef.current = false }
@@ -176,21 +161,6 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
       console.error('loadNotes error:', e)
       if (mountedRef.current) setNotesAvailable(false)
     }
-  }
-
-  async function loadConversation() {
-    if (!contact.remote_jid) return
-    try {
-      const { data } = await supabase
-        .from('whatsapp_conversations')
-        .select('id, status, assigned_user_name, updated_at')
-        .eq('institution_id', institutionId)
-        .eq('remote_jid', contact.remote_jid)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      if (mountedRef.current) setConv(data)
-    } catch (e) { console.error('loadConversation error:', e) }
   }
 
   async function loadTransfers() {
@@ -383,43 +353,6 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
     } finally { if (mountedRef.current) setSavingT(false) }
   }
 
-  async function sendTemplate() {
-    setSendingTemplate(true)
-    try {
-      const rawPhone = (contact.phone || '').replace(/\D/g, '')
-      const to       = rawPhone.startsWith('55') ? rawPhone : `55${rawPhone}`
-      const [{ data: phoneData }, { data: settingsData }] = await Promise.all([
-        supabase.from('whatsapp_phone_numbers').select('phone_number_id').eq('institution_id', institutionId).eq('is_active', true).maybeSingle(),
-        supabase.from('platform_settings').select('key, value').in('key', ['wa_access_token']),
-      ])
-      const cfg: Record<string, string> = {}
-      settingsData?.forEach((r: any) => { cfg[r.key] = r.value })
-      if (!phoneData?.phone_number_id || !cfg['wa_access_token']) { alert('Configurações WhatsApp não encontradas.'); return }
-      const resp = await fetch(`${GRAPH_URL}/${phoneData.phone_number_id}/messages`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${cfg['wa_access_token']}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp', to, type: 'template',
-          template: {
-            name: 'iniciar_contato', language: { code: 'pt_BR' },
-            components: [{ type: 'body', parameters: [
-              { type: 'text', text: contact.name },
-              { type: 'text', text: schoolName || 'nossa escola' },
-            ]}],
-          },
-        }),
-      })
-      if (resp.ok) {
-        setShowTplConfirm(false)
-        navigate(`/whatsapp?phone=${(contact.phone || '').replace(/\D/g, '')}`)
-      } else {
-        const err = await resp.json()
-        alert(`Erro ao enviar: ${err.error?.message || 'Tente novamente'}`)
-      }
-    } catch (e: any) { alert('Erro ao enviar mensagem') }
-    finally { if (mountedRef.current) setSendingTemplate(false) }
-  }
-
   // ── Derived ───────────────────────────────────────────────
   const color        = hexColor(contact.name)
   const headerBg1   = lightenHex(color, 0.88)
@@ -428,11 +361,10 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
   const getTagColor = (name: string) => availTags.find(t => t.name === name)?.color || '#94A3B8'
 
   const tabs = [
-    { key: 'dados',         label: 'Dados',         icon: <User         size={13} /> },
-    { key: 'historico',     label: 'Histórico',      icon: <Clock        size={13} /> },
-    { key: 'notas',         label: 'Anotações',      icon: <FileText     size={13} /> },
-    { key: 'whatsapp',      label: 'WhatsApp',       icon: <MessageSquare size={13} /> },
-    { key: 'transferencia', label: 'Transferência',  icon: <ArrowRightLeft size={13} /> },
+    { key: 'dados',         label: 'Dados',        icon: <User           size={13} /> },
+    { key: 'historico',     label: 'Histórico',    icon: <Clock          size={13} /> },
+    { key: 'notas',         label: 'Anotações',    icon: <FileText       size={13} /> },
+    { key: 'transferencia', label: 'Transferência', icon: <ArrowRightLeft size={13} /> },
   ] as const
 
   // ── Render ────────────────────────────────────────────────
@@ -658,82 +590,6 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
                         <p style={{ margin: 0, fontSize: 11, color: '#94A3B8' }}>{n.author_name} · {new Date(n.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                       </div>
                     ))
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* ── WHATSAPP ─────────────────────────────── */}
-          {tab === 'whatsapp' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {!contact.remote_jid ? (
-                <div style={{ textAlign: 'center', padding: '32px 0', color: '#94A3B8' }}>
-                  <MessageSquare size={36} color="#E2E8F0" style={{ margin: '0 auto 12px', display: 'block' }} />
-                  <p style={{ margin: 0, fontSize: 14 }}>Contato sem WhatsApp vinculado.</p>
-                </div>
-              ) : conv ? (
-                <>
-                  <div style={{ background: '#F8FAFC', borderRadius: 12, border: '1px solid #E2E8F0', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div>
-                      <label style={lbl}>Status da conversa</label>
-                      <span style={{
-                        display: 'inline-block', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700,
-                        background: (CONV_STATUS[conv.status] || CONV_STATUS['closed']).bg,
-                        color:      (CONV_STATUS[conv.status] || CONV_STATUS['closed']).color,
-                      }}>
-                        {(CONV_STATUS[conv.status] || { label: conv.status || 'Desconhecido' }).label}
-                      </span>
-                    </div>
-                    {conv.assigned_user_name && (
-                      <div>
-                        <label style={lbl}>Atendente</label>
-                        <p style={{ margin: 0, fontSize: 13, color: '#475569' }}>{conv.assigned_user_name}</p>
-                      </div>
-                    )}
-                    <div>
-                      <label style={lbl}>Último acesso</label>
-                      <p style={{ margin: 0, fontSize: 13, color: '#64748B' }}>
-                        {new Date(conv.updated_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => navigate(`/whatsapp?phone=${(contact.phone || '').replace(/\D/g, '')}`)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', border: 'none', borderRadius: 12, background: '#25D366', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-                    <MessageSquare size={16} /> Ir para conversa no WhatsApp
-                  </button>
-                </>
-              ) : (
-                <>
-                  <div style={{ textAlign: 'center', padding: '24px 0 0' }}>
-                    <MessageSquare size={36} color="#E2E8F0" style={{ margin: '0 auto 10px', display: 'block' }} />
-                    <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 600, color: '#1A2B4A' }}>Nenhuma conversa encontrada</p>
-                    <p style={{ margin: '0 0 16px', fontSize: 12, color: '#94A3B8' }}>Inicie uma conversa via template.</p>
-                  </div>
-                  {!showTplConfirm ? (
-                    <button onClick={() => setShowTplConfirm(true)}
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', border: 'none', borderRadius: 12, background: '#25D366', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-                      <MessageSquare size={16} /> Iniciar conversa
-                    </button>
-                  ) : (
-                    <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 12, padding: 16 }}>
-                      <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: '#065F46' }}>Template a ser enviado:</p>
-                      <p style={{ margin: '0 0 14px', fontSize: 13, color: '#1A2B4A', lineHeight: 1.6, background: '#fff', padding: '10px 12px', borderRadius: 8, border: '1px solid #D1FAE5' }}>
-                        Olá, <strong>{contact.name}</strong>! 😊 Aqui é <strong>{schoolName || 'nossa escola'}</strong>, tudo bem?
-                      </p>
-                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                        <button onClick={() => setShowTplConfirm(false)}
-                          style={{ padding: '8px 16px', border: '1px solid #E2E8F0', borderRadius: 9, background: '#fff', color: '#64748B', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
-                          Cancelar
-                        </button>
-                        <button onClick={sendTemplate} disabled={sendingTemplate}
-                          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', border: 'none', borderRadius: 9, background: '#25D366', color: '#fff', fontSize: 13, fontWeight: 700, cursor: sendingTemplate ? 'not-allowed' : 'pointer', opacity: sendingTemplate ? 0.7 : 1 }}>
-                          {sendingTemplate ? <Loader2 size={13} className="animate-spin" /> : <MessageSquare size={13} />}
-                          {sendingTemplate ? 'Enviando...' : 'Enviar'}
-                        </button>
-                      </div>
-                    </div>
                   )}
                 </>
               )}

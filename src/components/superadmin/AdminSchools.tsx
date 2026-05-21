@@ -762,7 +762,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
   onClose: () => void
   onEdit: () => void
 }) {
-  const [tab, setTab]         = useState<'info' | 'whatsapp'>('info')
+  const [tab, setTab]         = useState<'info' | 'whatsapp' | 'templates'>('info')
   const [waConfig, setWaConfig] = useState<any>(null)
   const [waLoading, setWaLoading] = useState(false)
   const [waForm, setWaForm]   = useState({ phone_id: '', phone_number: '', display_name: '', waba_id: '' })
@@ -770,6 +770,11 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
   const [waError, setWaError] = useState('')
   const [waSaved, setWaSaved] = useState(false)
   const [usage, setUsage]     = useState({ count: 0, limit: 1000 })
+  const [waTemplates, setWaTemplates]         = useState<any[]>([])
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [showAddTemplate, setShowAddTemplate]   = useState(false)
+  const [newTemplate, setNewTemplate]           = useState({ name: '', category: 'UTILITY', body: '' })
+  const [sendingNewTemplate, setSendingNewTemplate] = useState(false)
 
   useEffect(() => { if (tab === 'whatsapp') loadWaConfig() }, [tab])
 
@@ -807,6 +812,111 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
       }
     } catch {}
     setWaLoading(false)
+  }
+
+  const createDefaultTemplates = async (wabaId: string, token: string): Promise<void> => {
+    if (!wabaId || !token) return
+    const AION_WABA = '1222972209822315'
+    if (wabaId === AION_WABA) return
+
+    const { data: templates } = await supabase
+      .from('whatsapp_platform_templates')
+      .select('*')
+      .eq('is_default', true)
+
+    for (const tpl of templates || []) {
+      try {
+        const checkRes = await fetch(
+          `https://graph.facebook.com/v18.0/${wabaId}/message_templates?name=${tpl.name}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        const checkData = await checkRes.json()
+        if (checkData.data?.length > 0) continue
+
+        await fetch(
+          `https://graph.facebook.com/v18.0/${wabaId}/message_templates`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: tpl.name,
+              language: tpl.language,
+              category: tpl.category,
+              components: [{
+                type: 'BODY',
+                text: tpl.body_text,
+                example: {
+                  body_text: [tpl.variables.map((_: string, i: number) =>
+                    i === 0 ? 'João' : 'Colégio Exemplo'
+                  )],
+                },
+              }],
+            }),
+          }
+        )
+        console.log(`[templates] criado ${tpl.name} no WABA ${wabaId}`)
+      } catch (e) {
+        console.error(`[templates] erro ao criar ${tpl.name}:`, e)
+      }
+    }
+  }
+
+  const loadWaTemplates = async () => {
+    setLoadingTemplates(true)
+    try {
+      const { data: waPhoneRow } = await supabase
+        .from('whatsapp_phone_numbers').select('waba_id').eq('institution_id', inst.id).maybeSingle()
+      const wabaId = waPhoneRow?.waba_id
+      if (!wabaId) { setWaTemplates([]); return }
+      const { data: tokenRow } = await supabase
+        .from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
+      const token = tokenRow?.value || ''
+      if (!token) return
+      const res = await fetch(
+        `https://graph.facebook.com/v18.0/${wabaId}/message_templates?limit=50`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      const data = await res.json()
+      setWaTemplates(data.data || [])
+    } catch (e) {
+      console.error('[templates] erro ao carregar:', e)
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }
+
+  const handleAddTemplate = async () => {
+    if (!newTemplate.name || !newTemplate.body) return
+    setSendingNewTemplate(true)
+    try {
+      const { data: waPhoneRow } = await supabase
+        .from('whatsapp_phone_numbers').select('waba_id').eq('institution_id', inst.id).maybeSingle()
+      const wabaId = waPhoneRow?.waba_id
+      if (!wabaId) throw new Error('WABA ID não configurado')
+      const { data: tokenRow } = await supabase
+        .from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
+      const token = tokenRow?.value || ''
+      if (!token) throw new Error('Token de acesso não encontrado')
+      const res = await fetch(`https://graph.facebook.com/v18.0/${wabaId}/message_templates`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newTemplate.name.toLowerCase().replace(/\s+/g, '_'),
+          language: 'pt_BR',
+          category: newTemplate.category,
+          components: [{ type: 'BODY', text: newTemplate.body }],
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error?.message || 'Erro ao enviar template')
+      setShowAddTemplate(false)
+      setNewTemplate({ name: '', category: 'UTILITY', body: '' })
+      loadWaTemplates()
+    } catch (e) {
+      console.error('[templates] erro ao criar:', e)
+    } finally {
+      setSendingNewTemplate(false)
+    }
   }
 
   const handleSaveWa = async () => {
@@ -866,6 +976,9 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
         }
       }
 
+      // Criar templates padrão no WABA da escola
+      await createDefaultTemplates(effectiveWabaId, globalToken)
+
       setWaSaved(true)
       await loadWaConfig()
     } catch (e) {
@@ -893,8 +1006,8 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
 
         {/* Tabs */}
         <div className="flex gap-1 px-4 pt-3 border-b border-gray-100">
-          {[{ id: 'info', label: 'Detalhes' }, { id: 'whatsapp', label: 'WhatsApp' }].map(t => (
-            <button key={t.id} onClick={() => setTab(t.id as any)}
+          {[{ id: 'info', label: 'Detalhes' }, { id: 'whatsapp', label: 'WhatsApp' }, { id: 'templates', label: 'Templates' }].map(t => (
+            <button key={t.id} onClick={() => { setTab(t.id as any); if (t.id === 'templates') loadWaTemplates() }}
               className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors -mb-px
                 ${tab === t.id ? 'border-cyan-500 text-cyan-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
               {t.label}
@@ -1002,6 +1115,89 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
               )}
             </div>
           )}
+
+          {/* Templates tab */}
+          {tab === 'templates' && (
+            <div className="p-4 overflow-y-auto flex-1">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold text-gray-700">Templates WhatsApp</p>
+                <button onClick={() => setShowAddTemplate(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded-xl text-xs font-semibold hover:bg-cyan-100">
+                  <Plus className="w-3 h-3" /> Adicionar
+                </button>
+              </div>
+
+              {loadingTemplates ? (
+                <div className="flex justify-center py-8"><div className="w-5 h-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" /></div>
+              ) : waTemplates.length === 0 ? (
+                <p className="text-sm text-gray-400 italic text-center py-8">Nenhum template encontrado.</p>
+              ) : (
+                <div className="space-y-2">
+                  {waTemplates.map((tpl: any) => {
+                    const sc: Record<string, string> = {
+                      APPROVED: 'bg-green-100 text-green-700',
+                      PENDING:  'bg-yellow-100 text-yellow-700',
+                      REJECTED: 'bg-red-100 text-red-700',
+                    }
+                    const bodyComp = tpl.components?.find((c: any) => c.type === 'BODY')
+                    return (
+                      <div key={tpl.id} className="border border-gray-100 rounded-xl p-3 bg-gray-50">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className="font-mono text-xs font-bold text-gray-800">{tpl.name}</span>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{tpl.category}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${sc[tpl.status] || 'bg-gray-100 text-gray-600'}`}>{tpl.status}</span>
+                        </div>
+                        {bodyComp?.text && (
+                          <p className="text-xs text-gray-500 truncate">{bodyComp.text}</p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {showAddTemplate && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[300] p-4">
+                  <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-bold text-gray-900">Novo Template</h3>
+                      <button onClick={() => setShowAddTemplate(false)}><X className="w-4 h-4 text-gray-400" /></button>
+                    </div>
+                    <div className="space-y-3">
+                      <div>
+                        <label className={lbl}>Nome (snake_case)</label>
+                        <input className={inp} placeholder="ex: boas_vindas" value={newTemplate.name}
+                          onChange={e => setNewTemplate(p => ({ ...p, name: e.target.value.toLowerCase().replace(/\s+/g,'_') }))} />
+                      </div>
+                      <div>
+                        <label className={lbl}>Categoria</label>
+                        <select className={inp} value={newTemplate.category}
+                          onChange={e => setNewTemplate(p => ({ ...p, category: e.target.value }))}>
+                          <option value="UTILITY">UTILITY</option>
+                          <option value="MARKETING">MARKETING</option>
+                          <option value="AUTHENTICATION">AUTHENTICATION</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={lbl}>Texto do corpo</label>
+                        <textarea className={inp} rows={3} placeholder="Olá, {{1}}!"
+                          value={newTemplate.body}
+                          onChange={e => setNewTemplate(p => ({ ...p, body: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-4">
+                      <button onClick={() => setShowAddTemplate(false)} className="flex-1 py-2 border border-gray-200 rounded-xl text-sm text-gray-600">Cancelar</button>
+                      <button onClick={handleAddTemplate} disabled={sendingNewTemplate || !newTemplate.name || !newTemplate.body}
+                        className="flex-1 py-2 bg-cyan-600 text-white rounded-xl text-sm font-semibold disabled:opacity-60 flex items-center justify-center gap-1">
+                        {sendingNewTemplate && <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                        Enviar para aprovação
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -1020,7 +1216,9 @@ export default function AdminSchools() {
   const [institutions, setInstitutions] = useState<any[]>([])
   const [consultants, setConsultants] = useState<any[]>([])
   const [cycles, setCycles] = useState<any[]>([])
-  const [waNumbers, setWaNumbers] = useState<Record<string, any>>({})
+  const [waNumbers, setWaNumbers]   = useState<Record<string, any>>({})
+  const [waUsageMap, setWaUsageMap] = useState<Record<string, { initiated: number; limit: number }>>({})
+
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
@@ -1062,13 +1260,17 @@ export default function AdminSchools() {
 
   const loadData = async () => {
     setLoading(true)
-    const [instRes, consultRes, cycleRes, waRes] = await Promise.all([
+    const monthYear = new Date().toISOString().slice(0, 7)
+    const [instRes, consultRes, cycleRes, waRes, usageRes] = await Promise.all([
       supabase.from('institutions').select('id, name, city, state, email, phone, plan, plan_status, monthly_value, consultant_id, evolution_instance, created_at, address, cnpj').order('name'),
       supabase.from('users').select('id, full_name, email').eq('user_type', 'consultant'),
       supabase.from('campaign_cycles')
         .select('institution_id, status, year, id, start_date, end_date, campaign_start_month, label')
         .order('created_at', { ascending: false }),
       supabase.from('whatsapp_phone_numbers').select('*'),
+      supabase.from('whatsapp_conversation_usage')
+        .select('institution_id, initiated_count, limit_count')
+        .eq('month_year', monthYear),
     ])
     if (cancelledRef.current) return
     if (instRes.error) console.error('institutions error:', instRes.error)
@@ -1079,6 +1281,11 @@ export default function AdminSchools() {
     const waMap: Record<string, any> = {}
     for (const r of (waRes.data || [])) waMap[r.institution_id] = r
     setWaNumbers(waMap)
+    const usageMap: Record<string, { initiated: number; limit: number }> = {}
+    for (const r of (usageRes.data || [])) {
+      usageMap[r.institution_id] = { initiated: r.initiated_count || 0, limit: r.limit_count || 1000 }
+    }
+    setWaUsageMap(usageMap)
     setLoading(false)
   }
 
@@ -1389,9 +1596,16 @@ export default function AdminSchools() {
                       </td>
                       <td className="px-5 py-3.5">
                         {waNumbers[inst.id]?.is_active
-                          ? <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full" title={waNumbers[inst.id]?.phone_number || ''}>
-                              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />Ativo
-                            </span>
+                          ? <div className="flex flex-col gap-0.5">
+                              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full" title={waNumbers[inst.id]?.phone_number || ''}>
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />Ativo
+                              </span>
+                              {waUsageMap[inst.id] && (
+                                <span className="text-[10px] text-gray-400 pl-0.5">
+                                  {waUsageMap[inst.id].initiated}/{waUsageMap[inst.id].limit} conv.
+                                </span>
+                              )}
+                            </div>
                           : waNumbers[inst.id]
                             ? <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-yellow-700 bg-yellow-50 border border-yellow-200 px-2.5 py-1 rounded-full">
                                 <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />Inativo

@@ -1603,6 +1603,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // ── Upsert contact record ──
         await upsertContact(institutionId, remoteJid, contactName, value.contacts?.[0]?.profile?.picture_url as string | undefined)
 
+        // ── Track received conversations (client-initiated, does not count against limit) ──
+        if (isNewConversation) {
+          try {
+            const monthYear = new Date().toISOString().slice(0, 7)
+            const { data: usageRow } = await supabase
+              .from('whatsapp_conversation_usage')
+              .select('id, received_count')
+              .eq('institution_id', institutionId)
+              .eq('month_year', monthYear)
+              .maybeSingle()
+            if (usageRow) {
+              await supabase.from('whatsapp_conversation_usage')
+                .update({ received_count: usageRow.received_count + 1, updated_at: new Date().toISOString() })
+                .eq('id', usageRow.id)
+            } else {
+              await supabase.from('whatsapp_conversation_usage')
+                .insert({ institution_id: institutionId, month_year: monthYear, received_count: 1 })
+            }
+          } catch (e) {
+            console.error('❌ usage tracking error:', e)
+          }
+        }
+
         // ── Auto-link lead by phone (skip if already linked) ──
         if (!existingConv?.lead_id) {
           await autoLinkLead(institutionId, remoteJid)

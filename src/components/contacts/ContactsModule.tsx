@@ -11,7 +11,13 @@ import ContactProfile, { UnifiedContact } from './ContactProfile'
 // ─── Constants ───────────────────────────────────────────────
 const HEX_COLORS = ['#00A896','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
 const PAGE_SIZE  = 50
-const GRAPH_URL  = 'https://graph.facebook.com/v19.0'
+
+const GRADES_LIST = [
+  'Infantil I','Infantil II','Infantil III','Infantil IV','Infantil V',
+  '1º Ano EF','2º Ano EF','3º Ano EF','4º Ano EF','5º Ano EF',
+  '6º Ano EF','7º Ano EF','8º Ano EF','9º Ano EF',
+  'Ensino Médio 1','Ensino Médio 2','Ensino Médio 3',
+]
 
 const EXPORT_FIELD_DEFS = [
   { key: 'responsible_name', label: 'Nome do responsável' },
@@ -224,16 +230,21 @@ export default function ContactsModule() {
   const [sortDir,      setSortDir]      = useState<'asc' | 'desc'>('desc')
 
   // ── UI state ─────────────────────────────────────────────
-  const [profileContact,   setProfileContact]   = useState<UnifiedContact | null>(null)
-  const [zoomedPhoto,      setZoomedPhoto]      = useState<string | null>(null)
-  const [startConvContact, setStartConvContact] = useState<UnifiedContact | null>(null)
-  const [templateSending,  setTemplateSending]  = useState(false)
-  const [showExportModal,  setShowExportModal]  = useState(false)
-  const [exportFields,     setExportFields]     = useState<Record<ExportFieldKey, boolean>>({
+  const [profileContact,  setProfileContact]  = useState<UnifiedContact | null>(null)
+  const [zoomedPhoto,     setZoomedPhoto]     = useState<string | null>(null)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [exportFields,    setExportFields]    = useState<Record<ExportFieldKey, boolean>>({
     responsible_name: true, student_name: true, phone: true, email: true,
     grade: true, type: true, tags: true, last_contact: true, created_at: true, status: true,
   })
-  const [availTagsFilter,  setAvailTagsFilter]  = useState<{ id: string; name: string; color: string }[]>([])
+  const [exportFilterOrigin, setExportFilterOrigin] = useState('all')
+  const [exportFilterStatus, setExportFilterStatus] = useState('all')
+  const [exportFilterGrade,  setExportFilterGrade]  = useState('all')
+  const [exportSearch,       setExportSearch]       = useState('')
+  const [exportCount,        setExportCount]        = useState(0)
+  const [exportFetching,     setExportFetching]     = useState(false)
+  const [exportLoading,      setExportLoading]      = useState(false)
+  const [availTagsFilter,    setAvailTagsFilter]    = useState<{ id: string; name: string; color: string }[]>([])
 
   // ── Import state ─────────────────────────────────────────
   const [showImport,    setShowImport]    = useState(false)
@@ -433,6 +444,40 @@ export default function ContactsModule() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search])
 
+  // ── Export modal: live count ──────────────────────────────
+  useEffect(() => {
+    if (!showExportModal) return
+    const timer = setTimeout(async () => {
+      if (!mountedRef.current) return
+      setExportFetching(true)
+      try {
+        const useGrade   = exportFilterGrade  !== 'all'
+        const useStatus  = exportFilterStatus !== 'all'
+        const needsInner = useGrade || useStatus
+        const joinStr    = needsInner
+          ? 'leads!lead_id!inner(grade_interest, status)'
+          : 'leads!lead_id(grade_interest, status)'
+        let q = supabase
+          .from('whatsapp_contacts')
+          .select(joinStr, { count: 'exact', head: true })
+          .eq('institution_id', institutionId)
+        if (exportSearch.trim().length >= 2)
+          q = q.or(`name.ilike.%${exportSearch.trim()}%,phone.ilike.%${exportSearch.trim()}%`)
+        if (exportFilterOrigin === 'lead')    q = q.eq('type', 'lead')
+        if (exportFilterOrigin === 'client')  q = q.eq('type', 'client')
+        if (exportFilterOrigin === 'unknown') q = q.or('type.eq.unknown,type.is.null')
+        if (useGrade)  q = q.eq('leads.grade_interest', exportFilterGrade)
+        if (useStatus) q = q.eq('leads.status', exportFilterStatus)
+        const { count } = await q
+        if (mountedRef.current) setExportCount(count || 0)
+      } catch { /* ignore */ } finally {
+        if (mountedRef.current) setExportFetching(false)
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showExportModal, exportFilterOrigin, exportFilterStatus, exportFilterGrade, exportSearch])
+
   // ── Handlers ─────────────────────────────────────────────
   function handleLoadMore() {
     if (loadingMore || !hasMore) return
@@ -447,78 +492,6 @@ export default function ContactsModule() {
   function clearFilters() {
     setSearch(''); setFilterOrigin('all'); setFilterGrade('all')
     setFilterTag('all'); setFilterStatus('all')
-  }
-
-  async function handleStartConversation(contact: UnifiedContact) {
-    const rawPhone = (contact.phone || '').replace(/\D/g, '')
-    if (!rawPhone) return
-    const { data: conv } = await supabase
-      .from('whatsapp_conversations')
-      .select('updated_at')
-      .eq('institution_id', institutionId)
-      .eq('remote_jid', `${rawPhone}@s.whatsapp.net`)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    const withinWindow = conv && (Date.now() - new Date(conv.updated_at).getTime()) < 86400000
-    if (withinWindow) {
-      navigate(`/whatsapp?phone=${rawPhone}`)
-    } else {
-      setStartConvContact(contact)
-    }
-  }
-
-  async function sendTemplate(contact: UnifiedContact) {
-    setTemplateSending(true)
-    try {
-      const rawPhone = (contact.phone || '').replace(/\D/g, '')
-      const to       = rawPhone.startsWith('55') ? rawPhone : `55${rawPhone}`
-
-      const [{ data: phoneData }, { data: settingsData }] = await Promise.all([
-        supabase.from('whatsapp_phone_numbers').select('phone_number_id').eq('institution_id', institutionId).eq('is_active', true).maybeSingle(),
-        supabase.from('platform_settings').select('key, value').in('key', ['wa_access_token']),
-      ])
-
-      const cfg: Record<string, string> = {}
-      settingsData?.forEach((r: any) => { cfg[r.key] = r.value })
-
-      if (!phoneData?.phone_number_id || !cfg['wa_access_token']) {
-        alert('Configurações do WhatsApp não encontradas.')
-        return
-      }
-
-      const resp = await fetch(`${GRAPH_URL}/${phoneData.phone_number_id}/messages`, {
-        method:  'POST',
-        headers: { 'Authorization': `Bearer ${cfg['wa_access_token']}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to,
-          type: 'template',
-          template: {
-            name: 'iniciar_contato',
-            language: { code: 'pt_BR' },
-            components: [{ type: 'body', parameters: [
-              { type: 'text', text: contact.name },
-              { type: 'text', text: schoolName || 'nossa escola' },
-            ]}],
-          },
-        }),
-      })
-
-      if (resp.ok) {
-        setStartConvContact(null)
-        navigate(`/whatsapp?phone=${rawPhone}`)
-      } else {
-        const err = await resp.json()
-        console.error('Template send error:', err)
-        alert(`Erro ao enviar: ${err.error?.message || 'Tente novamente'}`)
-      }
-    } catch (e: any) {
-      console.error('sendTemplate exception:', e)
-      alert('Erro ao enviar mensagem')
-    } finally {
-      if (mountedRef.current) setTemplateSending(false)
-    }
   }
 
   function handleProfileUpdate(id: string, updates: Record<string, any>) {
@@ -619,36 +592,76 @@ export default function ContactsModule() {
     }
   }
 
-  function exportCSVWithFields() {
-    const fieldGetters: Record<ExportFieldKey, (c: UnifiedContact) => string> = {
-      responsible_name: c => c.name,
-      student_name:     c => c.student_name || '',
-      phone:            c => c.phone || '',
-      email:            c => c.email || '',
-      grade:            c => c.grade || '',
-      type:             c => c.origin_label,
-      tags:             c => (c.tags || []).join('; '),
-      last_contact:     c => fmtDate(c.last_contact),
-      created_at:       c => fmtCreated(c.created_at),
-      status:           c => c.status_lead || '',
-    }
+  async function exportCSVWithFields() {
     const active = EXPORT_FIELD_DEFS.filter(f => exportFields[f.key])
     if (!active.length) { alert('Selecione ao menos um campo.'); return }
-    const header = active.map(f => f.label).join(',')
-    const rows   = contacts.map(c =>
-      active.map(f => `"${String(fieldGetters[f.key](c)).replace(/"/g, '""')}"`).join(',')
-    )
-    const csv  = '﻿' + [header, ...rows].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a'); a.href = url; a.download = 'contatos.csv'; a.click()
-    URL.revokeObjectURL(url)
+
+    setExportLoading(true)
+    try {
+      const useGrade   = exportFilterGrade  !== 'all'
+      const useStatus  = exportFilterStatus !== 'all'
+      const needsInner = useGrade || useStatus
+      const selectStr  = needsInner
+        ? 'id, phone, name, type, lead_id, last_seen_at, created_at, tags, leads!lead_id!inner(id, student_name, responsible_name, email, grade_interest, source, status)'
+        : 'id, phone, name, type, lead_id, last_seen_at, created_at, tags, leads!lead_id(id, student_name, responsible_name, email, grade_interest, source, status)'
+
+      let q = supabase
+        .from('whatsapp_contacts')
+        .select(selectStr)
+        .eq('institution_id', institutionId)
+        .order(sortCol, { ascending: sortDir === 'asc', nullsFirst: false })
+
+      if (exportSearch.trim().length >= 2)
+        q = q.or(`name.ilike.%${exportSearch.trim()}%,phone.ilike.%${exportSearch.trim()}%`)
+      if (exportFilterOrigin === 'lead')    q = q.eq('type', 'lead')
+      if (exportFilterOrigin === 'client')  q = q.eq('type', 'client')
+      if (exportFilterOrigin === 'unknown') q = q.or('type.eq.unknown,type.is.null')
+      if (useGrade)  q = q.eq('leads.grade_interest', exportFilterGrade)
+      if (useStatus) q = q.eq('leads.status', exportFilterStatus)
+
+      const { data, error } = await q
+      if (error) { console.error('Export query error:', error); alert('Erro ao exportar. Tente novamente.'); return }
+
+      const allContacts = (data || []).map(mapContact)
+      const fieldGetters: Record<ExportFieldKey, (c: UnifiedContact) => string> = {
+        responsible_name: c => c.name,
+        student_name:     c => c.student_name || '',
+        phone:            c => c.phone || '',
+        email:            c => c.email || '',
+        grade:            c => c.grade || '',
+        type:             c => c.origin_label,
+        tags:             c => (c.tags || []).join('; '),
+        last_contact:     c => fmtDate(c.last_contact),
+        created_at:       c => fmtCreated(c.created_at),
+        status:           c => c.status_lead || '',
+      }
+      const header = active.map(f => f.label).join(',')
+      const rows   = allContacts.map(c =>
+        active.map(f => `"${String(fieldGetters[f.key](c)).replace(/"/g, '""')}"`).join(',')
+      )
+      const csv  = '﻿' + [header, ...rows].join('\n')
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a'); a.href = url; a.download = 'contatos.csv'; a.click()
+      URL.revokeObjectURL(url)
+      setShowExportModal(false)
+    } catch (e) {
+      console.error('exportCSVWithFields exception:', e)
+      alert('Erro ao exportar.')
+    } finally {
+      if (mountedRef.current) setExportLoading(false)
+    }
   }
 
   // ── Derived ──────────────────────────────────────────────
   const grades     = [...new Set(contacts.map(c => c.grade).filter(Boolean))] as string[]
   const hasFilters = !!(search || filterOrigin !== 'all' || filterGrade !== 'all' || filterTag !== 'all' || filterStatus !== 'all')
   const openImport = () => { setShowImport(true); setImportRows([]); setImportErrors([]); setImportResult(null) }
+  const openExport = () => {
+    setExportFilterOrigin('all'); setExportFilterStatus('all')
+    setExportFilterGrade('all'); setExportSearch('')
+    setShowExportModal(true)
+  }
 
   const kpiDefs = [
     { label: 'Total',    count: kpiCounts.total,   filterVal: 'all',     icon: '👥', activeColor: '#3B82F6', activeBg: '#DBEAFE', idleBg: '#EFF6FF' },
@@ -795,18 +808,56 @@ export default function ContactsModule() {
     </div>
   ) : null
 
-  // Export modal with field checkboxes
+  // Export modal with independent filters + field checkboxes
   const exportModal = showExportModal ? (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) setShowExportModal(false) }}>
-      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 420, padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto', padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1A2B4A' }}>Exportar contatos</h2>
           <button onClick={() => setShowExportModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 22, lineHeight: 1 }}>✕</button>
         </div>
-        <p style={{ margin: '0 0 14px', fontSize: 13, color: '#64748B' }}>
-          Exportando {contacts.length} contato(s). Selecione os campos:
-        </p>
+
+        {/* ── Filtros independentes ── */}
+        <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Filtros de exportação</p>
+        <div style={{ position: 'relative', marginBottom: 8 }}>
+          <Search size={13} color="#94A3B8" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+          <input value={exportSearch} onChange={e => setExportSearch(e.target.value)}
+            placeholder="Buscar por nome ou telefone..."
+            style={{ width: '100%', padding: '8px 12px 8px 30px', border: '1.5px solid #E2E8F0', borderRadius: 9, fontSize: 13, outline: 'none', color: '#1A2B4A', boxSizing: 'border-box' }} />
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <select value={exportFilterOrigin} onChange={e => setExportFilterOrigin(e.target.value)}
+            style={{ flex: 1, border: '1.5px solid #E2E8F0', borderRadius: 9, fontSize: 13, padding: '8px 10px', outline: 'none', color: '#1A2B4A' }}>
+            <option value="all">Todos os tipos</option>
+            <option value="lead">Leads</option>
+            <option value="client">Clientes</option>
+            <option value="unknown">Desconhecidos</option>
+          </select>
+          <select value={exportFilterStatus} onChange={e => setExportFilterStatus(e.target.value)}
+            style={{ flex: 1, border: '1.5px solid #E2E8F0', borderRadius: 9, fontSize: 13, padding: '8px 10px', outline: 'none', color: '#1A2B4A' }}>
+            <option value="all">Todos os status</option>
+            {LEAD_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+        </div>
+        <select value={exportFilterGrade} onChange={e => setExportFilterGrade(e.target.value)}
+          style={{ width: '100%', border: '1.5px solid #E2E8F0', borderRadius: 9, fontSize: 13, padding: '8px 10px', outline: 'none', color: '#1A2B4A', marginBottom: 10, boxSizing: 'border-box' }}>
+          <option value="all">Todas as séries</option>
+          {GRADES_LIST.map(g => <option key={g} value={g}>{g}</option>)}
+        </select>
+
+        {/* ── Contador ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#F0FDFA', borderRadius: 9, marginBottom: 18, border: '1px solid #CCFBF1' }}>
+          {exportFetching && (
+            <div className="animate-spin" style={{ width: 12, height: 12, border: '2px solid #00A896', borderTopColor: 'transparent', borderRadius: '50%', flexShrink: 0 }} />
+          )}
+          <p style={{ margin: 0, fontSize: 13, color: '#00A896', fontWeight: 600 }}>
+            {exportFetching ? 'Calculando...' : `${exportCount} contato(s) com os filtros selecionados`}
+          </p>
+        </div>
+
+        {/* ── Campos ── */}
+        <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Campos a exportar</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
           {EXPORT_FIELD_DEFS.map(f => (
             <label key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, color: '#1A2B4A', padding: '7px 10px', borderRadius: 8, border: `1px solid ${exportFields[f.key] ? '#00A896' : '#E2E8F0'}`, background: exportFields[f.key] ? '#F0FDFA' : '#fff', transition: 'all 0.12s' }}>
@@ -820,16 +871,17 @@ export default function ContactsModule() {
             </label>
           ))}
         </div>
+
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={() => setShowExportModal(false)}
             style={{ padding: '9px 18px', border: '1px solid #E2E8F0', borderRadius: 9, background: '#fff', color: '#64748B', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
             Cancelar
           </button>
           <button
-            onClick={() => { exportCSVWithFields(); setShowExportModal(false) }}
-            disabled={!Object.values(exportFields).some(Boolean) || contacts.length === 0}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700, opacity: (!Object.values(exportFields).some(Boolean) || contacts.length === 0) ? 0.5 : 1 }}>
-            <Download size={14} /> Exportar CSV
+            onClick={() => exportCSVWithFields()}
+            disabled={exportLoading || exportFetching || !Object.values(exportFields).some(Boolean) || exportCount === 0}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700, opacity: (exportLoading || exportFetching || !Object.values(exportFields).some(Boolean) || exportCount === 0) ? 0.5 : 1 }}>
+            <Download size={14} /> {exportLoading ? 'Exportando...' : `Exportar ${exportCount} contatos`}
           </button>
         </div>
       </div>
@@ -844,37 +896,6 @@ export default function ContactsModule() {
         <button onClick={() => setZoomedPhoto(null)} style={{ position: 'absolute', top: -12, right: -12, background: '#fff', border: 'none', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
           <span style={{ fontSize: 14, color: '#64748B', lineHeight: 1 }}>✕</span>
         </button>
-      </div>
-    </div>
-  ) : null
-
-  const convModal = startConvContact ? (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-      onClick={e => { if (e.target === e.currentTarget) setStartConvContact(null) }}>
-      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 440, padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1A2B4A' }}>Iniciar conversa</h2>
-          <button onClick={() => setStartConvContact(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 20 }}>✕</button>
-        </div>
-        <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 14px', lineHeight: 1.5 }}>
-          A janela de 24h está encerrada. Para retomar a conversa, envie uma mensagem via template aprovado.
-        </p>
-        <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '12px 14px', marginBottom: 20 }}>
-          <p style={{ margin: 0, fontSize: 13, color: '#1A2B4A', lineHeight: 1.6 }}>
-            Olá, <strong>{startConvContact.name}</strong>! 😊 Aqui é <strong>{schoolName || 'nossa escola'}</strong>, tudo bem?
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button onClick={() => setStartConvContact(null)}
-            style={{ padding: '9px 18px', border: '1px solid #E2E8F0', borderRadius: 9, background: '#fff', color: '#64748B', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
-            Cancelar
-          </button>
-          <button onClick={() => sendTemplate(startConvContact)} disabled={templateSending}
-            style={{ padding: '9px 18px', border: 'none', borderRadius: 9, background: '#25D366', color: '#fff', fontSize: 13, cursor: templateSending ? 'not-allowed' : 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, opacity: templateSending ? 0.7 : 1 }}>
-            <MessageSquare size={14} />
-            {templateSending ? 'Enviando...' : 'Enviar template'}
-          </button>
-        </div>
       </div>
     </div>
   ) : null
@@ -1007,7 +1028,6 @@ export default function ContactsModule() {
         {importModal}
         {exportModal}
         {zoomModal}
-        {convModal}
         {profileModal}
       </>
     )
@@ -1037,7 +1057,7 @@ export default function ContactsModule() {
               style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>
               <Upload size={14} /> Importar CSV
             </button>
-            <button onClick={() => setShowExportModal(true)} disabled={loading || contacts.length === 0}
+            <button onClick={openExport} disabled={loading}
               style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer', opacity: (loading || contacts.length === 0) ? 0.5 : 1 }}>
               <Download size={14} /> Exportar ({contacts.length})
             </button>
@@ -1181,8 +1201,8 @@ export default function ContactsModule() {
                             Ver perfil
                           </button>
                           <button
-                            onClick={e => { e.stopPropagation(); handleStartConversation(c) }}
-                            title="Iniciar conversa no WhatsApp"
+                            onClick={e => { e.stopPropagation(); navigate(`/whatsapp?phone=${(c.phone || '').replace(/\D/g, '')}`) }}
+                            title="Abrir no WhatsApp"
                             style={{ padding: '5px 10px', fontSize: 12, fontWeight: 600, border: '1px solid #BBF7D0', borderRadius: 8, background: '#F0FDF4', color: '#16A34A', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
                             <MessageSquare size={12} />
                           </button>
@@ -1202,7 +1222,6 @@ export default function ContactsModule() {
       {importModal}
       {exportModal}
       {zoomModal}
-      {convModal}
       {profileModal}
     </>
   )

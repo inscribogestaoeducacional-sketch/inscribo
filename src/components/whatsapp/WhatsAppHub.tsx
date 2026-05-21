@@ -719,6 +719,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [selectedTemplate, setSelectedTemplate] = useState('')
   const [templateVars, setTemplateVars] = useState<Record<string, string>>({})
   const [sendingTemplate, setSendingTemplate] = useState(false)
+  const [sendingReactivate, setSendingReactivate] = useState(false)
+  const [hubToast, setHubToast] = useState<string | null>(null)
 
   // New feature states
   const [showMsgSearch, setShowMsgSearch] = useState(false)
@@ -1513,6 +1515,16 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   }, [inputText])
 
   const activeConv = conversations.find(c => c.id === activeId) ?? null
+
+  // Detect if the 24h WhatsApp messaging window has expired
+  const windowExpired = (() => {
+    if (!activeConv) return false
+    const lastClientMsg = [...activeConv.messages]
+      .filter(m => m.from === 'them')
+      .sort((a, b) => b.ts.getTime() - a.ts.getTime())[0]
+    return !lastClientMsg || (Date.now() - lastClientMsg.ts.getTime()) > 24 * 60 * 60 * 1000
+  })()
+
   const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0)
 
   const naoLidas = conversations.filter(c => !c.isGroup && (c.unreadCount || 0) > 0).length
@@ -1664,6 +1676,86 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       setSendError(err.message || 'Erro ao enviar template')
     } finally {
       setSendingTemplate(false)
+    }
+  }
+
+  const handleReactivate = async () => {
+    if (!activeId || !effectiveInstitutionId || sendingReactivate) return
+    setSendingReactivate(true)
+    try {
+      const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
+      const contactName = activeConv?.name || to
+
+      const { data: phoneData } = await supabase
+        .from('whatsapp_phone_numbers')
+        .select('phone_number_id, waba_id')
+        .eq('institution_id', effectiveInstitutionId)
+        .eq('is_active', true)
+        .maybeSingle()
+
+      const { data: tokenRow } = await supabase
+        .from('platform_settings')
+        .select('value')
+        .eq('key', 'wa_access_token')
+        .maybeSingle()
+
+      const token = tokenRow?.value || ''
+      if (!phoneData?.phone_number_id || !token) throw new Error('WhatsApp não configurado')
+
+      const wabaId = phoneData.waba_id || '1222972209822315'
+
+      // Verify template exists and is approved
+      const checkRes = await fetch(
+        `https://graph.facebook.com/v18.0/${wabaId}/message_templates?name=reativar_atendimento&status=APPROVED`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      const checkData = await checkRes.json()
+      if (!checkData.data?.length) {
+        throw new Error('Template "reativar_atendimento" não aprovado. Aguarde aprovação da Meta.')
+      }
+
+      const sendRes = await fetch(
+        `https://graph.facebook.com/v18.0/${phoneData.phone_number_id}/messages`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to,
+            type: 'template',
+            template: {
+              name: 'reativar_atendimento',
+              language: { code: 'pt_BR' },
+              components: [{ type: 'body', parameters: [{ type: 'text', text: contactName }] }],
+            },
+          }),
+        }
+      )
+      if (!sendRes.ok) {
+        const err = await sendRes.json()
+        throw new Error((err as any)?.error?.message || 'Erro ao enviar template')
+      }
+
+      const optimistic: Message = {
+        id: `temp-reactivate-${Date.now()}`,
+        type: 'text',
+        content: '[Template] reativar_atendimento',
+        from: 'me',
+        ts: new Date(),
+        status: 'sent',
+        senderName: user?.full_name || undefined,
+      }
+      setConversations(prev => prev.map(c =>
+        c.id === activeId
+          ? { ...c, messages: [...c.messages, optimistic], lastMessage: optimistic.content, lastTime: optimistic.ts }
+          : c
+      ))
+      setHubToast('Template enviado! Aguardando resposta...')
+      setTimeout(() => setHubToast(null), 4000)
+    } catch (err: any) {
+      setSendError(err.message || 'Erro ao reativar conversa.')
+    } finally {
+      setSendingReactivate(false)
     }
   }
 
@@ -2833,6 +2925,24 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               </div>
             )}
 
+            {/* 24h window expired overlay */}
+            {windowExpired && recorderState === 'idle' ? (
+              <div style={{ background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#92400E', margin: 0 }}>⏱ Janela de 24h expirada</p>
+                  <p style={{ fontSize: 11, color: '#B45309', margin: '2px 0 0' }}>Use um template para reativar a conversa</p>
+                </div>
+                <button
+                  onClick={handleReactivate}
+                  disabled={sendingReactivate}
+                  style={{ background: '#F59E0B', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: sendingReactivate ? 'not-allowed' : 'pointer', opacity: sendingReactivate ? 0.7 : 1, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  {sendingReactivate && <div style={{ width: 12, height: 12, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />}
+                  Reativar conversa
+                </button>
+              </div>
+            ) : null}
+
             {/* Input row */}
             {recorderState === 'recording' ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -2897,7 +3007,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 <textarea
                   ref={inputRef}
                   value={inputText}
+                  disabled={windowExpired}
                   onChange={e => {
+                    if (windowExpired) return
                     setInputText(e.target.value)
                     if (presenceChannelRef.current && user?.id) {
                       presenceChannelRef.current.track({ userId: user.id, typing: true }).catch(() => {})
@@ -2907,15 +3019,19 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                       }, 3000)
                     }
                   }}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-                  placeholder="Digite uma mensagem..."
+                  onKeyDown={e => { if (!windowExpired && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+                  placeholder={windowExpired ? 'Janela de 24h expirada' : 'Digite uma mensagem...'}
                   rows={1}
                   style={{
-                    flex: 1, padding: '10px 18px', fontSize: 14, background: '#F0FDFB',
-                    border: '1.5px solid #D1FAE5', borderRadius: 28, color: '#1A2B4A',
+                    flex: 1, padding: '10px 18px', fontSize: 14,
+                    background: windowExpired ? '#F9FAFB' : '#F0FDFB',
+                    border: `1.5px solid ${windowExpired ? '#E5E7EB' : '#D1FAE5'}`,
+                    borderRadius: 28,
+                    color: windowExpired ? '#9CA3AF' : '#1A2B4A',
                     outline: 'none', resize: 'none', minHeight: 42, maxHeight: 100,
                     fontFamily: 'inherit', lineHeight: 1.5, transition: 'all 0.2s',
                     boxShadow: '0 1px 4px rgba(0,168,150,0.08) inset',
+                    cursor: windowExpired ? 'not-allowed' : 'text',
                   }}
                   onFocus={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#FFFFFF' }}
                   onBlur={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#F0FDFB' }}
@@ -3481,6 +3597,15 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           <div style={{ position: 'absolute', bottom: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 50, pointerEvents: 'none' }}>
             <div style={{ background: '#FFFFFF', border: '1px solid #FCA5A5', color: '#DC2626', fontSize: 12, fontWeight: 600, padding: '10px 16px', borderRadius: 12, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
               {sendError}
+            </div>
+          </div>
+        )}
+
+        {/* Hub success toast */}
+        {hubToast && (
+          <div style={{ position: 'absolute', bottom: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 50, pointerEvents: 'none' }}>
+            <div style={{ background: '#FFFFFF', border: '1px solid #6EE7B7', color: '#059669', fontSize: 12, fontWeight: 600, padding: '10px 16px', borderRadius: 12, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', whiteSpace: 'nowrap' }}>
+              {hubToast}
             </div>
           </div>
         )}

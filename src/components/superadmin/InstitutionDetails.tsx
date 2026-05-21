@@ -253,7 +253,9 @@ export default function InstitutionDetails() {
   const [meetings,          setMeetings]          = useState<any[]>([])
   const [cycle,             setCycle]             = useState<any>(null)
   const [consultants,       setConsultants]       = useState<any[]>([])
-  const [waUsage,           setWaUsage]           = useState({ count: 0, limit: 1000 })
+  const [waUsage,           setWaUsage]           = useState({ count: 0, limit: 1000, initiated: 0, received: 0 })
+  const [updatingLimit,    setUpdatingLimit]     = useState(false)
+  const [newLimit,         setNewLimit]          = useState('')
   const [loading,           setLoading]           = useState(true)
   const [toast,             setToast]             = useState<{ msg: string; ok: boolean } | null>(null)
   const [copied,            setCopied]            = useState<string | null>(null)
@@ -297,7 +299,14 @@ export default function InstitutionDetails() {
   const [initingProcess, setInitingProcess] = useState(false)
 
   // Gestão da escola tabs
-  const [mgmtTab, setMgmtTab] = useState<'users' | 'whatsapp' | 'financial'>('users')
+  const [mgmtTab, setMgmtTab] = useState<'users' | 'whatsapp' | 'financial' | 'templates'>('users')
+
+  // Templates tab state
+  const [waTemplates, setWaTemplates] = useState<any[]>([])
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [showAddTemplate, setShowAddTemplate] = useState(false)
+  const [newTemplate, setNewTemplate] = useState({ name: '', category: 'UTILITY', body: '' })
+  const [sendingNewTemplate, setSendingNewTemplate] = useState(false)
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok })
@@ -375,11 +384,22 @@ export default function InstitutionDetails() {
         setMeetings([])
       }
 
-      const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0)
-      const { count: waCount } = await supabase.from('whatsapp_conversations')
-        .select('id', { count: 'exact', head: true })
-        .eq('institution_id', id).gte('created_at', monthStart.toISOString())
-      if (!cancelledRef.current && waCount !== null) setWaUsage({ count: waCount, limit: 1000 })
+      const monthYear = new Date().toISOString().slice(0, 7)
+      const { data: usageRow } = await supabase
+        .from('whatsapp_conversation_usage')
+        .select('initiated_count, received_count, limit_count')
+        .eq('institution_id', id)
+        .eq('month_year', monthYear)
+        .maybeSingle()
+      if (!cancelledRef.current) {
+        setWaUsage({
+          count:     usageRow?.initiated_count  ?? 0,
+          limit:     usageRow?.limit_count      ?? 1000,
+          initiated: usageRow?.initiated_count  ?? 0,
+          received:  usageRow?.received_count   ?? 0,
+        })
+        setNewLimit(String(usageRow?.limit_count ?? 1000))
+      }
 
     } catch {
       if (!cancelledRef.current) showToast('Erro ao carregar dados.', false)
@@ -575,6 +595,141 @@ export default function InstitutionDetails() {
     loadAll()
   }
 
+  const createDefaultTemplates = async (wabaId: string, token: string): Promise<void> => {
+    if (!wabaId || !token) return
+    const AION_WABA = '1222972209822315'
+    if (wabaId === AION_WABA) return
+
+    const { data: templates } = await supabase
+      .from('whatsapp_platform_templates')
+      .select('*')
+      .eq('is_default', true)
+
+    for (const tpl of templates || []) {
+      try {
+        const checkRes = await fetch(
+          `https://graph.facebook.com/v18.0/${wabaId}/message_templates?name=${tpl.name}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        const checkData = await checkRes.json()
+        if (checkData.data?.length > 0) continue
+
+        await fetch(
+          `https://graph.facebook.com/v18.0/${wabaId}/message_templates`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: tpl.name,
+              language: tpl.language,
+              category: tpl.category,
+              components: [{
+                type: 'BODY',
+                text: tpl.body_text,
+                example: {
+                  body_text: [tpl.variables.map((_: string, i: number) =>
+                    i === 0 ? 'João' : 'Colégio Exemplo'
+                  )],
+                },
+              }],
+            }),
+          }
+        )
+        console.log(`[templates] criado ${tpl.name} no WABA ${wabaId}`)
+      } catch (e) {
+        console.error(`[templates] erro ao criar ${tpl.name}:`, e)
+      }
+    }
+  }
+
+  const loadWaTemplates = async () => {
+    setLoadingTemplates(true)
+    try {
+      const { data: waPhoneRow } = await supabase
+        .from('whatsapp_phone_numbers')
+        .select('waba_id')
+        .eq('institution_id', id)
+        .maybeSingle()
+      const wabaId = waPhoneRow?.waba_id
+      if (!wabaId) { setWaTemplates([]); return }
+
+      const { data: tokenRow } = await supabase
+        .from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
+      const token = tokenRow?.value || ''
+      if (!token) return
+
+      const res = await fetch(
+        `https://graph.facebook.com/v18.0/${wabaId}/message_templates?limit=50`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      const data = await res.json()
+      setWaTemplates(data.data || [])
+    } catch (e) {
+      console.error('[templates] erro ao carregar:', e)
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }
+
+  const handleAddTemplate = async () => {
+    if (!newTemplate.name || !newTemplate.body) { showToast('Nome e corpo são obrigatórios.', false); return }
+    setSendingNewTemplate(true)
+    try {
+      const { data: waPhoneRow } = await supabase
+        .from('whatsapp_phone_numbers').select('waba_id').eq('institution_id', id).maybeSingle()
+      const wabaId = waPhoneRow?.waba_id
+      if (!wabaId) throw new Error('WABA ID não configurado')
+
+      const { data: tokenRow } = await supabase
+        .from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
+      const token = tokenRow?.value || ''
+      if (!token) throw new Error('Token de acesso não encontrado')
+
+      const res = await fetch(`https://graph.facebook.com/v18.0/${wabaId}/message_templates`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newTemplate.name.toLowerCase().replace(/\s+/g, '_'),
+          language: 'pt_BR',
+          category: newTemplate.category,
+          components: [{ type: 'BODY', text: newTemplate.body }],
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error?.message || 'Erro ao enviar template')
+      showToast('Template enviado para aprovação Meta!')
+      setShowAddTemplate(false)
+      setNewTemplate({ name: '', category: 'UTILITY', body: '' })
+      loadWaTemplates()
+    } catch (e: any) {
+      showToast(e.message || 'Erro ao criar template.', false)
+    } finally {
+      setSendingNewTemplate(false)
+    }
+  }
+
+  const handleUpdateLimit = async () => {
+    const lim = parseInt(newLimit, 10)
+    if (isNaN(lim) || lim < 0) { showToast('Limite inválido.', false); return }
+    setUpdatingLimit(true)
+    try {
+      const monthYear = new Date().toISOString().slice(0, 7)
+      await supabase.from('whatsapp_conversation_usage')
+        .upsert({
+          institution_id: id,
+          month_year:     monthYear,
+          limit_count:    lim,
+          updated_at:     new Date().toISOString(),
+        }, { onConflict: 'institution_id,month_year' })
+      setWaUsage(u => ({ ...u, limit: lim }))
+      showToast('Limite atualizado!')
+    } catch (e: any) {
+      showToast(e.message || 'Erro ao atualizar limite.', false)
+    } finally {
+      setUpdatingLimit(false)
+    }
+  }
+
   const handleSaveWhatsApp = async () => {
     if (!waForm.phone_id) { showToast('Phone Number ID é obrigatório.', false); return }
     setSavingWa(true)
@@ -622,6 +777,9 @@ export default function InstitutionDetails() {
           console.error('[WA] Erro ao inscrever WABA:', e)
         }
       }
+
+      // Criar templates padrão no WABA da escola
+      await createDefaultTemplates(effectiveWabaId, globalToken)
 
       showToast('WhatsApp configurado e verificado!')
       loadAll()
@@ -1312,11 +1470,15 @@ export default function InstitutionDetails() {
                 {([
                   { id: 'users',     label: 'Usuários' },
                   { id: 'whatsapp',  label: 'WhatsApp' },
+                  { id: 'templates', label: 'Templates' },
                   { id: 'financial', label: 'Financeiro' },
                 ] as const).map(t => (
                   <button
                     key={t.id}
-                    onClick={() => setMgmtTab(t.id)}
+                    onClick={() => {
+                      setMgmtTab(t.id)
+                      if (t.id === 'templates') loadWaTemplates()
+                    }}
                     className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors -mb-px border-b-2 ${
                       mgmtTab === t.id
                         ? 'text-cyan-700 border-cyan-500 bg-cyan-50'
@@ -1404,28 +1566,47 @@ export default function InstitutionDetails() {
                     }
                   </div>
 
-                  {/* Usage bar */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <p className="text-xs font-semibold text-gray-600">Uso de conversas</p>
-                      <p className="text-xs font-bold text-gray-700">{waUsage.count} / {waUsage.limit}</p>
+                  {/* Usage section */}
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Uso de conversas</p>
+                      <span className="text-xs text-gray-400">{new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</span>
                     </div>
-                    <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${usagePct >= 100 ? 'bg-red-500' : usagePct >= 80 ? 'bg-amber-400' : 'bg-green-500'}`}
-                        style={{ width: `${usagePct}%` }}
-                      />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-white rounded-lg border border-gray-200 p-3 text-center">
+                        <p className="text-xs font-semibold text-gray-500 mb-1">Iniciadas (escola)</p>
+                        <p className="text-lg font-bold text-gray-900">{waUsage.initiated}<span className="text-xs font-normal text-gray-400">/{waUsage.limit}</span></p>
+                      </div>
+                      <div className="bg-white rounded-lg border border-gray-200 p-3 text-center">
+                        <p className="text-xs font-semibold text-gray-500 mb-1">Recebidas (gratuitas)</p>
+                        <p className="text-lg font-bold text-gray-900">{waUsage.received}</p>
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between mt-1.5">
-                      <p className="text-xs text-gray-400">{usagePct}% utilizado</p>
-                      {usagePct >= 80 && (
-                        <button
-                          onClick={() => { setShowNewCharge(true); setChargeForm(f => ({ ...f, payment_type: 'extra_conversations' })) }}
-                          className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg hover:bg-amber-100"
-                        >
-                          + Liberar extras
-                        </button>
-                      )}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs text-gray-500">{usagePct}% do limite</p>
+                        {usagePct >= 80 && (
+                          <button
+                            onClick={() => { setShowNewCharge(true); setChargeForm(f => ({ ...f, payment_type: 'extra_conversations' })) }}
+                            className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg hover:bg-amber-100"
+                          >+ Liberar extras</button>
+                        )}
+                      </div>
+                      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all ${usagePct >= 100 ? 'bg-red-500' : usagePct >= 80 ? 'bg-amber-400' : 'bg-green-500'}`} style={{ width: `${usagePct}%` }} />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+                      <div className="flex-1">
+                        <label className={lbl}>Limite mensal</label>
+                        <input type="number" min="0" className={inp} value={newLimit}
+                          onChange={e => setNewLimit(e.target.value)} />
+                      </div>
+                      <button onClick={handleUpdateLimit} disabled={updatingLimit}
+                        className="mt-5 flex items-center gap-1.5 px-3 py-2.5 bg-cyan-600 text-white rounded-lg text-xs font-semibold disabled:opacity-60 hover:bg-cyan-700">
+                        {updatingLimit ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                        Atualizar
+                      </button>
                     </div>
                   </div>
 
@@ -1461,6 +1642,107 @@ export default function InstitutionDetails() {
                       Salvar e verificar
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Tab: Templates */}
+              {mgmtTab === 'templates' && (
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-sm font-semibold text-gray-700">Templates WhatsApp</p>
+                    <button
+                      onClick={() => setShowAddTemplate(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded-xl text-xs font-semibold hover:bg-cyan-100"
+                    >
+                      <Plus className="w-3 h-3" /> Adicionar template
+                    </button>
+                  </div>
+
+                  {loadingTemplates ? (
+                    <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" /></div>
+                  ) : waTemplates.length === 0 ? (
+                    <p className="text-sm text-gray-400 italic text-center py-8">Nenhum template encontrado.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {waTemplates.map((tpl: any) => {
+                        const statusColors: Record<string, { badge: string; dot: string }> = {
+                          APPROVED: { badge: 'bg-green-100 text-green-700', dot: 'bg-green-500' },
+                          PENDING:  { badge: 'bg-yellow-100 text-yellow-700', dot: 'bg-yellow-400' },
+                          REJECTED: { badge: 'bg-red-100 text-red-700', dot: 'bg-red-500' },
+                        }
+                        const sc = statusColors[tpl.status] || { badge: 'bg-gray-100 text-gray-600', dot: 'bg-gray-400' }
+                        const bodyComp = tpl.components?.find((c: any) => c.type === 'BODY')
+                        return (
+                          <div key={tpl.id} className="border border-gray-100 rounded-xl p-4 bg-gray-50">
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono text-xs font-bold text-gray-800">{tpl.name}</span>
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">{tpl.category}</span>
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 ${sc.badge}`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
+                                  {tpl.status}
+                                </span>
+                              </div>
+                              {tpl.created_time && (
+                                <span className="text-xs text-gray-400 shrink-0">{new Date(tpl.created_time * 1000).toLocaleDateString('pt-BR')}</span>
+                              )}
+                            </div>
+                            {bodyComp?.text && (
+                              <p className="text-xs text-gray-600 bg-white border border-gray-200 rounded-lg p-2 whitespace-pre-wrap">{bodyComp.text}</p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Add template modal */}
+                  {showAddTemplate && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[200] p-4">
+                      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
+                        <div className="flex items-center justify-between mb-5">
+                          <h2 className="text-lg font-bold text-gray-900">Novo Template</h2>
+                          <button onClick={() => setShowAddTemplate(false)}><X className="w-5 h-5 text-gray-400" /></button>
+                        </div>
+                        <div className="space-y-4">
+                          <div>
+                            <label className={lbl}>Nome (snake_case)</label>
+                            <input className={inp} placeholder="ex: boas_vindas" value={newTemplate.name}
+                              onChange={e => setNewTemplate(p => ({ ...p, name: e.target.value.toLowerCase().replace(/\s+/g,'_') }))} />
+                          </div>
+                          <div>
+                            <label className={lbl}>Categoria</label>
+                            <select className={inp} value={newTemplate.category}
+                              onChange={e => setNewTemplate(p => ({ ...p, category: e.target.value }))}>
+                              <option value="UTILITY">UTILITY</option>
+                              <option value="MARKETING">MARKETING</option>
+                              <option value="AUTHENTICATION">AUTHENTICATION</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className={lbl}>Texto do corpo (use {'{{'+'1}}'} para variáveis)</label>
+                            <textarea className={inp} rows={4} placeholder="Olá, {{1}}! Bem-vindo ao {{2}}."
+                              value={newTemplate.body}
+                              onChange={e => setNewTemplate(p => ({ ...p, body: e.target.value }))} />
+                          </div>
+                          {newTemplate.body && (
+                            <div>
+                              <label className={lbl}>Preview</label>
+                              <div className="bg-[#DCF8C6] rounded-xl px-4 py-3 text-sm text-gray-800 border border-green-200">{newTemplate.body}</div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-3 mt-6">
+                          <button onClick={() => setShowAddTemplate(false)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
+                          <button onClick={handleAddTemplate} disabled={sendingNewTemplate}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
+                            {sendingNewTemplate ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Send className="w-4 h-4" />}
+                            Enviar para aprovação
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

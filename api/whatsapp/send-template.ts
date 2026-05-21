@@ -57,6 +57,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Número WhatsApp não configurado para esta escola' })
     }
 
+    // ── Check monthly conversation limit before sending ──
+    const monthYear = new Date().toISOString().slice(0, 7)
+    const { data: usageRow } = await supabase
+      .from('whatsapp_conversation_usage')
+      .select('id, initiated_count, limit_count')
+      .eq('institution_id', institution_id)
+      .eq('month_year', monthYear)
+      .maybeSingle()
+
+    const initiatedCount = usageRow?.initiated_count ?? 0
+    const limitCount     = usageRow?.limit_count     ?? 1000
+
+    if (initiatedCount >= limitCount) {
+      console.warn('[usage] limite atingido:', institution_id, initiatedCount, '>=', limitCount)
+      return res.status(429).json({ error: 'Limite mensal de conversas atingido' })
+    }
+
     // ── Build template payload ──
     const templatePayload: any = {
       name:     template_name,
@@ -114,6 +131,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await (conversation_id
       ? convUpdate.eq('id', conversation_id)
       : convUpdate.eq('institution_id', institution_id).eq('remote_jid', to))
+
+    // ── Increment initiated_count (school-initiated conversation) ──
+    try {
+      if (usageRow) {
+        await supabase.from('whatsapp_conversation_usage')
+          .update({ initiated_count: usageRow.initiated_count + 1, updated_at: new Date().toISOString() })
+          .eq('id', usageRow.id)
+      } else {
+        await supabase.from('whatsapp_conversation_usage')
+          .insert({ institution_id, month_year: monthYear, initiated_count: 1 })
+      }
+    } catch (e) {
+      console.error('❌ usage increment error:', e)
+    }
 
     return res.status(200).json({ success: true, wamid })
 
