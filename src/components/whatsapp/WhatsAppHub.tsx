@@ -1462,6 +1462,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
     if (existing) {
       setActiveId(existing.id)
+      if (isMobile) setMobilePanel('chat')
     } else {
       const jid   = `${targetPhone}@s.whatsapp.net`
       const local = targetPhone.slice(2) // strip 55
@@ -1477,6 +1478,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       }
       setConversations(prev => [newConv, ...prev])
       setActiveId(jid)
+      if (isMobile) setMobilePanel('chat')
     }
   }, [phoneParam, nameParam, loading, conversations])
 
@@ -1833,6 +1835,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   }
 
   const handleContactType = async (type: string) => {
+    console.log('[CONTACT TYPE] chamada com:', type, '| activeId:', activeId, '| institution:', effectiveInstitutionId)
     if (!activeId || !effectiveInstitutionId) return
     if (type === 'lead') {
       setLeadForm(prev => ({
@@ -2067,6 +2070,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const newTags = [...currentTags, tag.trim()]
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, tags: newTags } : c))
     await DatabaseService.updateConversationTags(effectiveInstitutionId, rawJid(activeId), newTags)
+    // Sync tags to whatsapp_contacts
+    const normPhone = (() => {
+      let d = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
+      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
+      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
+      if (d.length === 11) d = '55' + d
+      return d
+    })()
+    await supabase.from('whatsapp_contacts')
+      .update({ tags: newTags })
+      .eq('institution_id', effectiveInstitutionId)
+      .eq('phone', normPhone)
     setAddingTag(false)
     setNewTag('')
   }
@@ -2076,6 +2091,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const newTags = (activeConv?.tags || []).filter(t => t !== tag)
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, tags: newTags } : c))
     await DatabaseService.updateConversationTags(effectiveInstitutionId, rawJid(activeId), newTags)
+    // Sync tags to whatsapp_contacts
+    const normPhone = (() => {
+      let d = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
+      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
+      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
+      if (d.length === 11) d = '55' + d
+      return d
+    })()
+    await supabase.from('whatsapp_contacts')
+      .update({ tags: newTags })
+      .eq('institution_id', effectiveInstitutionId)
+      .eq('phone', normPhone)
   }
 
   const handleCloseConversation = async () => {
@@ -3357,8 +3384,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                           <p style={{ fontSize: 12, fontWeight: 600, color: '#d97706', margin: '0 0 8px' }}>Quem é esse contato?</p>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
                             {[
-                              { key: 'lead',     label: '🎓 Nova Família', bg: '#0d9488', color: '#fff',    onClick: () => { setLeadForm(prev => ({ ...prev, responsible_name: activeConv.name !== formatPhone(activeConv.id) ? activeConv.name : '', phone: activeConv.phone })); setShowLeadModal(true) } },
-                              { key: 'client',   label: '✅ Família',       bg: '#d1fae5', color: '#059669', onClick: () => setShowClientModal(true) },
+                              { key: 'lead',     label: '🎓 Nova Família', bg: '#0d9488', color: '#fff',    onClick: () => handleContactType('lead') },
+                              { key: 'client',   label: '✅ Família',       bg: '#d1fae5', color: '#059669', onClick: () => handleContactType('client') },
                               { key: 'supplier', label: '🏢 Fornecedor',    bg: '#ede9fe', color: '#7C3AED', onClick: () => handleContactType('supplier') },
                               { key: 'other',    label: 'Outro',            bg: '#f1f5f9', color: '#64748B', onClick: () => handleContactType('other') },
                             ].map(opt => (
