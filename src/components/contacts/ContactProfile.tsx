@@ -253,12 +253,15 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
         }).eq('id', contact.lead_id)
         synced.push('lead')
       }
-      if (contact.remote_jid && editName !== contact.name) {
-        await supabase.from('whatsapp_conversations')
-          .update({ contact_name: editName })
-          .eq('remote_jid', contact.remote_jid)
-          .eq('institution_id', institutionId)
-        synced.push('WhatsApp')
+      if (contact.remote_jid || contact.phone) {
+        const normPhone = (contact.phone || '').replace(/\D/g, '')
+        if (normPhone) {
+          await supabase.from('whatsapp_conversations')
+            .update({ contact_name: editName })
+            .eq('institution_id', institutionId)
+            .or(`remote_jid.eq.${normPhone}@s.whatsapp.net,remote_jid.like.%${normPhone}%`)
+          synced.push('WhatsApp')
+        }
       }
       // Update contact type in whatsapp_contacts
       const rawPhone = (editPhone || contact.phone || '').replace(/\D/g, '')

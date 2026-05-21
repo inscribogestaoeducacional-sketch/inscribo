@@ -7,7 +7,7 @@ import {
   CheckCheck, Check, Zap, Settings, User, Users, Download,
   X, MoreVertical
 } from 'lucide-react'
-import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConversationEvent, User as UserType, supabase } from '../../lib/supabase'
 
@@ -655,7 +655,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const { user } = useAuth()
   const effectiveInstitutionId = propInstitutionId ?? user?.institution_id ?? ''
   const navigate = useNavigate()
-  const location = useLocation()
   const [searchParams] = useSearchParams()
   const phoneParam = searchParams.get('phone')
   const nameParam  = searchParams.get('name')
@@ -722,12 +721,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [sendingTemplate, setSendingTemplate] = useState(false)
   const [sendingReactivate, setSendingReactivate] = useState(false)
   const [hubToast, setHubToast] = useState<string | null>(null)
-
-  // "Iniciar conversa" modal (triggered from ContactsModule via location.state)
-  const [showInitConvModal, setShowInitConvModal] = useState(false)
-  const [initConvPhone,     setInitConvPhone]     = useState('')
-  const [initConvName,      setInitConvName]      = useState('')
-  const [sendingInitConv,   setSendingInitConv]   = useState(false)
 
   // New feature states
   const [showMsgSearch, setShowMsgSearch] = useState(false)
@@ -1482,17 +1475,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }
   }, [phoneParam, nameParam, loading, conversations])
 
-  // Open "Iniciar conversa" modal when navigated from ContactsModule with state.newContact
-  useEffect(() => {
-    const nc = (location.state as any)?.newContact
-    if (!nc?.startTemplate) return
-    setInitConvPhone(nc.phone || '')
-    setInitConvName(nc.name || '')
-    setShowInitConvModal(true)
-    // Clear state so back-navigation doesn't re-trigger
-    window.history.replaceState({}, '')
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
   const activeConvMsgCount = conversations.find(c => c.id === activeId)?.messages.length ?? 0
 
   useEffect(() => {
@@ -1885,50 +1867,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       user_id: user.id,
       user_name: user.full_name || user.email,
     })
-  }
-
-  const handleSendInitConv = async () => {
-    if (!initConvPhone || !effectiveInstitutionId || sendingInitConv) return
-    setSendingInitConv(true)
-    try {
-      const res = await fetch('/api/whatsapp/send-template', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          institution_id: effectiveInstitutionId,
-          to:             initConvPhone,
-          template_name:  'iniciar_contato',
-          language:       'pt_BR',
-          components:     initConvName
-            ? [{ type: 'body', parameters: [{ type: 'text', text: initConvName }] }]
-            : [],
-        }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || 'Erro ao enviar template')
-      }
-      // Add conversation to list and open it
-      const jid = `${initConvPhone}@s.whatsapp.net`
-      setConversations(prev => {
-        if (prev.find(c => c.id === jid)) return prev
-        const newConv: Conversation = {
-          id: jid, name: initConvName || initConvPhone, phone: initConvPhone,
-          avatarColor: jidToColor(jid),
-          lastMessage: '[Template] iniciar_contato', lastTime: new Date(),
-          unreadCount: 0, status: 'open', online: false,
-          labels: [], isGroup: false, tags: [], messages: [],
-        }
-        return [newConv, ...prev]
-      })
-      setActiveId(jid)
-      setShowInitConvModal(false)
-      setHubToast('Conversa iniciada com sucesso!')
-    } catch (err: any) {
-      setSendError(err.message || 'Erro ao iniciar conversa')
-    } finally {
-      setSendingInitConv(false)
-    }
   }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2386,38 +2324,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               <button onClick={handleNewConv} disabled={!newConvPhone.trim()}
                 className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
                 Iniciar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Iniciar Conversa Modal (from ContactsModule) */}
-      {showInitConvModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ background: '#fff', borderRadius: 20, padding: 24, width: 360, boxShadow: '0 24px 64px rgba(0,0,0,0.18)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>Iniciar conversa</h3>
-              <button onClick={() => setShowInitConvModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: 4 }}>
-                <X size={16} />
-              </button>
-            </div>
-            <p style={{ margin: '0 0 4px', fontSize: 12, color: '#64748B' }}>Contato</p>
-            <p style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 600, color: '#1A2B4A' }}>{initConvName || initConvPhone}</p>
-            <div style={{ background: '#F0FDF9', border: '1px solid #99F6E4', borderRadius: 12, padding: '12px 14px', marginBottom: 20 }}>
-              <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 600, color: '#0D9488', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Template a ser enviado</p>
-              <p style={{ margin: 0, fontSize: 13, color: '#1A2B4A', lineHeight: 1.5 }}>
-                Olá, <strong>{initConvName || 'contato'}</strong>! 😊 Aqui é [Escola], tudo bem?
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setShowInitConvModal(false)} disabled={sendingInitConv}
-                style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, color: '#64748B', cursor: 'pointer' }}>
-                Cancelar
-              </button>
-              <button onClick={handleSendInitConv} disabled={sendingInitConv}
-                style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, cursor: sendingInitConv ? 'not-allowed' : 'pointer', opacity: sendingInitConv ? 0.7 : 1 }}>
-                {sendingInitConv ? 'Enviando...' : 'Enviar'}
               </button>
             </div>
           </div>
