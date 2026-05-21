@@ -1427,6 +1427,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
       const body  = JSON.parse(rawBody.toString())
+      console.log('[WEBHOOK] changes[0]:',
+        JSON.stringify(body?.entry?.[0]?.changes?.[0]))
+      console.log('[WEBHOOK] field:',
+        body?.entry?.[0]?.changes?.[0]?.field)
       const value = body?.entry?.[0]?.changes?.[0]?.value
       if (!value) {
         console.log('[WEBHOOK] value undefined - payload:',
