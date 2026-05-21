@@ -1438,6 +1438,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ status: 'ignored', reason: 'phone_number_id not registered' })
       }
 
+      console.log('[WEBHOOK] payload entries:', Object.keys(body?.entry?.[0] || {}))
+      console.log('[WEBHOOK] changes:', JSON.stringify(body?.entry?.[0]?.changes?.[0]?.value ? Object.keys(body?.entry?.[0]?.changes?.[0]?.value) : 'sem value'))
+      console.log('[WEBHOOK] messages count:', body?.entry?.[0]?.changes?.[0]?.value?.messages?.length || 0)
+      console.log('[WEBHOOK] statuses count:', body?.entry?.[0]?.changes?.[0]?.value?.statuses?.length || 0)
+
       // ── Process incoming messages ──────────────────────────────────────────
       for (const msg of value.messages || []) {
         // Always store remote_jid without @-suffix to avoid duplicate rows
