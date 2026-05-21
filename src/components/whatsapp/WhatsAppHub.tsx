@@ -788,19 +788,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
   useEffect(() => { conversationsRef.current = conversations }, [conversations])
 
-  // Load lead data when active conversation changes
-  useEffect(() => {
-    const leadId = conversations.find(c => c.id === activeId)?.lead_id
-    if (!leadId) { setLeadData(null); setEditingLead(false); return }
-    supabase
-      .from('leads')
-      .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at')
-      .eq('id', leadId)
-      .single()
-      .then(({ data }) => {
-        if (data) { setLeadData(data); setLeadEditForm(data) }
-      })
-  }, [activeId])
+  // (leadData useEffect moved below activeConv definition — see below)
 
   // Request browser notification permission on first load
   useEffect(() => {
@@ -1002,6 +990,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (found) setConversations(prev => prev.map(c =>
       c.id === activeId ? { ...c, name: found.responsible_name || found.student_name || c.name } : c
     ))
+    // Carregar dados do lead imediatamente no painel direito
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at')
+      .eq('id', leadId)
+      .single()
+    if (lead) {
+      console.log('[LEAD PANEL] linked & loaded:', lead.responsible_name)
+      setLeadData(lead)
+      setLeadEditForm(lead)
+    }
     setLinkingLead(false)
     setLeadSearch('')
     setLeadResults([])
@@ -1346,12 +1345,16 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         event: '*', schema: 'public', table: 'whatsapp_conversations',
         filter: convFilter
       }, (payload: any) => {
-        // Ignore UPDATEs that only changed contact_name — handled by the UPDATE listener below
-        if (
-          payload.eventType === 'UPDATE' &&
-          payload.new?.contact_name !== payload.old?.contact_name &&
-          payload.new?.last_message === payload.old?.last_message
-        ) return
+        // Ignore UPDATEs that only changed metadata (not a new message) — prevents full reload
+        // resetting UI states like showTemplatePanel and editingContact
+        if (payload.eventType === 'UPDATE') {
+          const n = payload.new || {}
+          const o = payload.old || {}
+          if (n.last_message === o.last_message &&
+              n.last_message_at === o.last_message_at) {
+            return
+          }
+        }
         const rJid = payload.new?.remote_jid || payload.old?.remote_jid || ''
         const nJid = normalizeJid(rJid)
         if (CLOSING_IDS.has(rJid) || CLOSING_IDS.has(nJid)) return
@@ -1662,6 +1665,25 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   }, [inputText])
 
   const activeConv = conversations.find(c => c.id === activeId) ?? null
+
+  // Load lead data when active conversation or its lead_id changes
+  useEffect(() => {
+    const leadId = activeConv?.lead_id
+    console.log('[LEAD PANEL] activeId:', activeId, '| lead_id:', leadId)
+    if (!leadId) { setLeadData(null); setEditingLead(false); return }
+    supabase
+      .from('leads')
+      .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at')
+      .eq('id', leadId)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          console.log('[LEAD PANEL] loaded:', data.responsible_name)
+          setLeadData(data)
+          setLeadEditForm(data)
+        }
+      })
+  }, [activeId, activeConv?.lead_id])
 
   // Detect if the 24h WhatsApp messaging window has expired
   const windowExpired = (() => {

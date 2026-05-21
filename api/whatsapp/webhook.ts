@@ -299,8 +299,9 @@ async function resolveMediaUrl(
 // ── Auto-link lead by phone number ───────────────────────────────────────────
 async function autoLinkLead(institutionId: string, remoteJid: string): Promise<void> {
   try {
-    const phone   = remoteJid.replace(/@.*/, '')           // strip @s.whatsapp.net
-    const noCode  = phone.startsWith('55') ? phone.slice(2) : phone
+    const rawPhone       = remoteJid.replace(/@.*/, '')    // strip @s.whatsapp.net
+    const normalizedPhone = normalizePhone(rawPhone)        // 13-digit BR format
+    const noCode         = rawPhone.startsWith('55') ? rawPhone.slice(2) : rawPhone
 
     // Try phone variants: raw, with 55, with +55, without country code
     const { data: lead } = await supabase
@@ -309,7 +310,7 @@ async function autoLinkLead(institutionId: string, remoteJid: string): Promise<v
       .eq('institution_id', institutionId)
       .or(
         [
-          `phone.eq.${phone}`,
+          `phone.eq.${rawPhone}`,
           `phone.eq.55${noCode}`,
           `phone.eq.+55${noCode}`,
           `phone.eq.${noCode}`,
@@ -325,11 +326,12 @@ async function autoLinkLead(institutionId: string, remoteJid: string): Promise<v
         .eq('institution_id', institutionId)
         .eq('remote_jid', remoteJid)
         .is('lead_id', null) // only update if not yet linked
+      // Use normalized phone to match what upsertContact stores
       await supabase
         .from('whatsapp_contacts')
         .update({ lead_id: lead.id, type: 'lead' })
         .eq('institution_id', institutionId)
-        .eq('phone', phone)
+        .eq('phone', normalizedPhone)
     }
   } catch (e) {
     console.error('❌ autoLinkLead error:', e)
@@ -1518,7 +1520,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // ── Check existing conversation ──
         const { data: existingConv } = await supabase
           .from('whatsapp_conversations')
-          .select('status, lead_id')
+          .select('status, lead_id, contact_name')
           .eq('institution_id', institutionId)
           .eq('remote_jid', remoteJid)
           .maybeSingle()
@@ -1580,6 +1582,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           isNewConversation,
         })
 
+        // Preserve agent-edited name: only use Meta profile name on first message
+        const finalContactName = existingConv?.contact_name || contactName
+
         // ── Upsert conversation ──
         const { error: convErr } = await supabase
           .from('whatsapp_conversations')
@@ -1587,7 +1592,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             {
               institution_id:  institutionId,
               remote_jid:      remoteJid,
-              contact_name:    contactName,
+              contact_name:    finalContactName,
               last_message:    contentPreview,
               last_message_at: timestamp,
               status:          upsertStatus,
