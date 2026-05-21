@@ -770,8 +770,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const phoneParamHandledRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const notifAudioRef = useRef<HTMLAudioElement | null>(null)
-  const activeIdRef       = useRef<string | null>(null)
-  const conversationsRef  = useRef<typeof conversations>([])
+  const activeIdRef            = useRef<string | null>(null)
+  const conversationsRef       = useRef<typeof conversations>([])
+  const skipNextNameUpdateRef  = useRef<string | null>(null)
   // closingIdsRef replaced by module-level CLOSING_IDS
 
   // Keep refs in sync so realtime handlers can read the latest values
@@ -1309,6 +1310,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       }, (payload: any) => {
         if (payload.new?.contact_name && payload.new?.remote_jid) {
           const normJid = normalizeJid(payload.new.remote_jid)
+          if (skipNextNameUpdateRef.current === normJid) {
+            skipNextNameUpdateRef.current = null
+            return
+          }
           setConversations(prev => prev.map(c =>
             c.id === normJid
               ? { ...c, name: payload.new.contact_name }
@@ -3332,6 +3337,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                               <button onClick={async () => {
                                 if (!activeId || !effectiveInstitutionId) return
                                 if (editForm.name && editForm.name !== activeConv.name) {
+                                  skipNextNameUpdateRef.current = activeId
                                   setConversations(prev => prev.map(c => c.id === activeId ? {...c, name: editForm.name} : c))
                                   await supabase.from('whatsapp_conversations').update({ contact_name: editForm.name })
                                     .eq('institution_id', effectiveInstitutionId).eq('remote_jid', rawJid(activeId))

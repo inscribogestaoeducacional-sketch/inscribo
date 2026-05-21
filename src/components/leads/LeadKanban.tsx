@@ -1196,8 +1196,15 @@ export default function LeadKanban() {
   }
 
   const handleWhatsApp = (lead: Lead) => {
-    const phone = (lead.phone || '').replace(/\D/g, '')
-    navigate(`/whatsapp?phone=${phone}&name=${encodeURIComponent(lead.responsible_name)}`)
+    if (!lead.phone) return
+    const normPhone = (p: string): string => {
+      let d = p.replace(/\D/g, '')
+      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
+      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
+      if (d.length === 11) d = '55' + d
+      return d
+    }
+    navigate('/whatsapp', { state: { phone: normPhone(lead.phone) } })
   }
 
   const stats = getLeadStats()
