@@ -262,14 +262,12 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
       }
       const normPhone = normP(contact.phone || '')
       if ((contact.remote_jid || contact.phone) && normPhone) {
+        const jid = `${normPhone}@s.whatsapp.net`
         const { error: convErr } = await supabase.from('whatsapp_conversations')
           .update({ contact_name: editName })
           .eq('institution_id', institutionId)
-          .or(
-            `remote_jid.eq.${normPhone}@s.whatsapp.net,` +
-            `remote_jid.eq.${normPhone}@c.us`
-          )
-        console.log('[SYNC NAME] atualizado em conversas:', normPhone, convErr)
+          .eq('remote_jid', jid)
+        console.log('[SYNC NAME] atualizando conversa:', jid, convErr)
         synced.push('WhatsApp')
       }
       // Update contact type and name in whatsapp_contacts

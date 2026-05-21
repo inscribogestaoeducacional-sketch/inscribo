@@ -1303,6 +1303,19 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         if (CLOSING_IDS.has(rJid) || CLOSING_IDS.has(nJid)) return
         loadMessages()
       })
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'whatsapp_conversations',
+        filter: convFilter
+      }, (payload: any) => {
+        if (payload.new?.contact_name && payload.new?.remote_jid) {
+          const normJid = normalizeJid(payload.new.remote_jid)
+          setConversations(prev => prev.map(c =>
+            c.id === normJid
+              ? { ...c, name: payload.new.contact_name }
+              : c
+          ))
+        }
+      })
       .subscribe()
 
     const interval = setInterval(loadMessages, 60000)
@@ -1504,9 +1517,29 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       setActiveId(found.id)
       if (isMobile) setMobilePanel('chat')
     } else {
-      console.log('[PHONE PARAM] conversa não encontrada — abrindo nova')
-      setNewConvPhone(target)
-      setShowNewConvModal(true)
+      console.log('[PHONE PARAM] conversa não encontrada — criando em branco')
+      const jid = `${target}@s.whatsapp.net`
+      const existingByJid = conversations.find(c => c.id === jid)
+      if (existingByJid) {
+        setActiveId(existingByJid.id)
+        if (isMobile) setMobilePanel('chat')
+      } else {
+        const phone = formatPhone(jid)
+        const newConv: Conversation = {
+          id: jid, name: phone, phone,
+          avatarColor: jidToColor(jid),
+          lastMessage: '', lastTime: new Date(),
+          unreadCount: 0, status: 'open', online: false,
+          labels: [], isGroup: false, tags: [],
+          messages: [],
+        }
+        if (effectiveInstitutionId) {
+          DatabaseService.upsertConversationStatus(effectiveInstitutionId, jid, 'open').catch(() => {})
+        }
+        setConversations(prev => [newConv, ...prev])
+        setActiveId(jid)
+        if (isMobile) setMobilePanel('chat')
+      }
     }
 
     window.history.replaceState({}, '', '/whatsapp')
