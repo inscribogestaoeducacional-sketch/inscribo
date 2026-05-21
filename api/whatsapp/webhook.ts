@@ -336,15 +336,22 @@ async function autoLinkLead(institutionId: string, remoteJid: string): Promise<v
   }
 }
 
-// ── Phone normalization: strip country code 55 and leading 0 ────────────────
+// ── Phone normalization: always returns 13-digit BR format (55+DDD+9+8digits)
 function normalizePhone(raw: string): string {
   let digits = raw.replace(/\D/g, '')
-  if (digits.length >= 12 && digits.startsWith('55')) {
+  // Remove country code 55 when total is 12 or 13 digits
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {
     digits = digits.slice(2)
   }
-  if (digits.startsWith('0')) {
-    digits = digits.slice(1)
+  // 10 digits = DDD + 8-digit number → insert 9 after DDD
+  if (digits.length === 10) {
+    digits = digits.slice(0, 2) + '9' + digits.slice(2)
   }
+  // Prepend country code to get 13 digits
+  if (digits.length === 11) {
+    digits = '55' + digits
+  }
+  // If not 13 digits (invalid), return raw digits unchanged
   return digits
 }
 
