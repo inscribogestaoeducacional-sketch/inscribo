@@ -1209,7 +1209,15 @@ export default function ContactsModule() {
                               if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
                               if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
                               if (d.length === 11) d = '55' + d
-                              navigate(`/whatsapp?phone=${d}`)
+                              navigate('/whatsapp', {
+                                state: {
+                                  newContact: {
+                                    phone: d,
+                                    name: c.name,
+                                    startTemplate: true,
+                                  },
+                                },
+                              })
                             }}
                             title="Abrir no WhatsApp"
                             style={{ padding: '5px 10px', fontSize: 12, fontWeight: 600, border: '1px solid #BBF7D0', borderRadius: 8, background: '#F0FDF4', color: '#16A34A', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
