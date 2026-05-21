@@ -381,6 +381,10 @@ async function upsertContact(
     const phone    = normalizePhone(rawPhone)
     console.log('[UPSERT] phone normalizado:', phone)
 
+    console.log('[UPSERT DETAIL] remoteJid:', remoteJid)
+    console.log('[UPSERT DETAIL] phone normalizado:', phone)
+    console.log('[UPSERT DETAIL] institutionId:', institutionId)
+
     // Check if contact already exists to avoid overwriting a manually set type
     const { data: existing } = await supabase
       .from('whatsapp_contacts')
@@ -389,6 +393,7 @@ async function upsertContact(
       .eq('phone', phone)
       .maybeSingle()
     console.log('[UPSERT] existing:', existing?.id)
+    console.log('[UPSERT DETAIL] existing:', existing?.id || 'null')
 
     if (existing) {
       // Update only safe fields — preserve type set by agents
@@ -414,6 +419,7 @@ async function upsertContact(
           ...(profilePicUrl ? { profile_picture_url: profilePicUrl } : {}),
         })
     }
+    console.log('[UPSERT DETAIL] operação concluída:', existing ? 'UPDATE' : 'INSERT')
   } catch (e: any) {
     console.error('❌ upsertContact error:', {
       message: e?.message,
@@ -423,6 +429,7 @@ async function upsertContact(
       phone: normalizePhone(remoteJid.replace(/@.*/, '')),
       institutionId
     })
+    console.log('[UPSERT DETAIL] ERRO:', JSON.stringify(e))
   }
 }
 
