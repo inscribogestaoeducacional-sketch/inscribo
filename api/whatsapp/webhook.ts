@@ -1482,6 +1482,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const remoteJid   = (msg.from as string).replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
         const rawPhone    = remoteJid.replace(/@.*/, '')
 
+        // Sempre criar/atualizar contato ao receber mensagem (antes de qualquer continue)
+        await upsertContact(
+          institutionId,
+          remoteJid,
+          (value.contacts?.[0]?.profile?.name as string | undefined) || remoteJid,
+          value.contacts?.[0]?.profile?.picture_url as string | undefined
+        )
+
         // ── Early blacklist check ──
         const { data: isBlocked } = await supabase
           .from('whatsapp_blacklist')
