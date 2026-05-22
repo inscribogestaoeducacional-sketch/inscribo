@@ -19,6 +19,13 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { DatabaseService, Lead, ActivityLog } from '../../lib/supabase'
 import { createNotification } from '../../lib/notifications'
 
+type AuditEntry = {
+  id: string; action: string; record_id: string; module: string
+  institution_id: string; user_id: string | null; user_name: string | null
+  user_role: string | null; field_changed: string | null; old_value: string | null
+  new_value: string | null; created_at: string
+}
+
 // ─── Config ───────────────────────────────────────────────────────────────────
 const statusConfig = {
   new:       { label: 'Novo',             accent: '#6b7280', headerBg: 'bg-gray-100',   headerText: 'text-gray-700',   badgeBg: 'bg-gray-500'   },
@@ -264,7 +271,7 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLea
   const [savingNote, setSavingNote] = useState(false)
   const [savingActivity, setSavingActivity] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
-  const [history, setHistory] = useState<ActivityLog[]>([])
+  const [history, setHistory] = useState<AuditEntry[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [quickNote, setQuickNote] = useState('')
   const [activityForm, setActivityForm] = useState({ tipo: 'Ligação', descricao: '', data: new Date().toISOString().split('T')[0] })
@@ -306,8 +313,16 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLea
       setLoadingHistory(true)
       ;(async () => {
         try {
-          const h = await DatabaseService.getActivityLogs((editingLead as any).institution_id ?? '', editingLead.id)
-          setHistory(h)
+          const { supabase: db } = await import('../../lib/supabase')
+          const instId = (editingLead as any).institution_id ?? ''
+          const { data } = await db.from('audit_logs')
+            .select('*')
+            .eq('institution_id', instId)
+            .eq('record_id', editingLead.id)
+            .eq('module', 'lead')
+            .order('created_at', { ascending: true })
+            .limit(50)
+          setHistory((data || []) as AuditEntry[])
         } catch { setHistory([]) }
         finally { setLoadingHistory(false) }
       })()
@@ -347,15 +362,18 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLea
     try {
       const { supabase: db } = await import('../../lib/supabase')
       const instId = (editingLead as any).institution_id ?? ''
-      await db.from('activity_logs').insert({
-        user_id: modalUser?.id || null, user_name: modalUser?.full_name || 'Atendente', action: activityForm.tipo,
-        entity_type: 'lead', entity_id: editingLead.id, institution_id: instId,
-        details: { description: activityForm.descricao, contact_date: activityForm.data, type: 'note' },
-        created_at: new Date().toISOString(),
+      await db.from('audit_logs').insert({
+        institution_id: instId, module: 'lead', record_id: editingLead.id,
+        action: activityForm.tipo,
+        field_changed: activityForm.descricao,
+        new_value: activityForm.data,
+        user_id: modalUser?.id || null, user_name: modalUser?.full_name || 'Atendente', user_role: '',
       })
       setActivityForm({ tipo: 'Ligação', descricao: '', data: new Date().toISOString().split('T')[0] })
-      const h = await DatabaseService.getActivityLogs(instId, editingLead.id)
-      setHistory(h)
+      const { data: h } = await db.from('audit_logs')
+        .select('*').eq('institution_id', instId).eq('record_id', editingLead.id).eq('module', 'lead')
+        .order('created_at', { ascending: true }).limit(50)
+      setHistory((h || []) as AuditEntry[])
     } catch {} finally { setSavingActivity(false) }
   }
 
@@ -392,33 +410,7 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLea
     if (action === 'Presencial') return '#F97316'
     return '#94A3B8'
   }
-  const buildDesc = (item: ActivityLog): string => {
-    const d = item.details || {}
-    if (item.action === 'Lead criado') {
-      const parts: string[] = []
-      if (d.grade_interest) parts.push(d.grade_interest as string)
-      if (d.source) parts.push(`Origem: ${d.source}`)
-      return parts.join(' · ')
-    }
-    if (item.action === 'Status alterado') {
-      const from = statusConfig[d.previous_status as keyof typeof statusConfig]?.label || d.previous_status
-      const to = statusConfig[d.new_status as keyof typeof statusConfig]?.label || d.new_status
-      return `${from} → ${to}`
-    }
-    if (item.action === 'Lead reaberto') return 'Lead reaberto para contato'
-    if (item.action === 'Lead perdido') {
-      const reason = LOST_REASONS.find(r => r.value === d.lost_reason)?.label || d.lost_reason || ''
-      return reason ? `Motivo: ${reason}` : ''
-    }
-    if (item.action === 'Visita agendada') {
-      return [d.scheduled_date, d.scheduled_time ? `às ${d.scheduled_time}` : ''].filter(Boolean).join(' ')
-    }
-    if (item.action === 'Lead editado') {
-      const changed = Object.keys(d.changes || {})
-      return changed.length > 0 ? `Campos: ${changed.join(', ')}` : ''
-    }
-    return (d.description as string) || ''
-  }
+  const buildDesc = (item: AuditEntry): string => item.field_changed || item.new_value || ''
 
   const tabBtn = (tab: typeof activeTab, label: string) => (
     <button onClick={() => setActiveTab(tab)} style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', borderBottom: activeTab === tab ? '2px solid #00A896' : '2px solid transparent', color: activeTab === tab ? '#00A896' : '#64748B', background: 'transparent', transition: 'all 0.15s' }}>{label}</button>
@@ -1257,7 +1249,13 @@ export default function LeadKanban() {
           if (nv !== ov && nv !== undefined && nv !== null && nv !== '') { changes[key] = nv; previousData[key] = ov }
         })
         if (Object.keys(changes).length > 0) {
-          await DatabaseService.logActivity({ user_id: user!.id, action: 'Lead editado', entity_type: 'lead', entity_id: editingLead.id, details: { changes, previous: previousData, student_name: data.student_name || editingLead.student_name, responsible_name: data.responsible_name || editingLead.responsible_name }, institution_id: instId })
+          await db.from('audit_logs').insert({
+            institution_id: instId, module: 'lead', record_id: editingLead.id,
+            action: 'Lead editado',
+            field_changed: `Campos: ${Object.keys(changes).join(', ')}`,
+            new_value: data.student_name || editingLead.student_name,
+            user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
+          })
         }
         await logAudit({ institution_id: instId, module: 'leads', record_id: editingLead.id, action: 'updated', field_changed: 'dados', old_value: editingLead.student_name, new_value: data.student_name || editingLead.student_name, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
       } else {
@@ -1276,7 +1274,13 @@ export default function LeadKanban() {
         }).select().single()
         if (error) throw error
         savedLeadId = newLead.id
-        await DatabaseService.logActivity({ user_id: user!.id, action: 'Lead criado', entity_type: 'lead', entity_id: newLead.id, details: { student_name: newLead.student_name, responsible_name: newLead.responsible_name, source: newLead.source, grade_interest: newLead.grade_interest, phone: newLead.phone || '', notes: newLead.notes || '' }, institution_id: instId })
+        await db.from('audit_logs').insert({
+          institution_id: instId, module: 'lead', record_id: newLead.id,
+          action: 'Lead criado',
+          field_changed: `Aluno: ${newLead.student_name}${newLead.grade_interest ? ` · ${newLead.grade_interest}` : ''}${newLead.source ? ` · Origem: ${newLead.source}` : ''}`,
+          new_value: newLead.phone || '',
+          user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
+        })
         await logAudit({ institution_id: instId, module: 'leads', record_id: newLead.id, action: 'created', new_value: `${newLead.student_name} — ${newLead.grade_interest}`, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
       }
     } catch (err) {
@@ -1332,7 +1336,16 @@ export default function LeadKanban() {
       await DatabaseService.updateLead(leadId, { status: newStatus })
       if (previousStatus !== newStatus) {
         const isReopen = previousStatus === 'lost'
-        await DatabaseService.logActivity({ user_id: user!.id, action: isReopen ? 'Lead reaberto' : 'Status alterado', entity_type: 'lead', entity_id: leadId, details: { previous_status: previousStatus, new_status: newStatus, student_name: currentLead.student_name, responsible_name: currentLead.responsible_name }, institution_id: user!.institution_id })
+        const { supabase: db } = await import('../../lib/supabase')
+        await db.from('audit_logs').insert({
+          institution_id: user!.institution_id, module: 'lead', record_id: leadId,
+          action: isReopen ? 'Lead reaberto' : 'Status alterado',
+          field_changed: isReopen
+            ? 'Lead reaberto para contato'
+            : `${statusConfig[previousStatus as keyof typeof statusConfig]?.label} → ${statusConfig[newStatus as keyof typeof statusConfig]?.label}`,
+          new_value: newStatus,
+          user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
+        })
         await logAudit({ institution_id: user!.institution_id, module: 'leads', record_id: leadId, action: 'status_changed', old_value: previousStatus, new_value: newStatus, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
         if (newStatus === 'enrolled') {
           createNotification({
@@ -1367,21 +1380,12 @@ export default function LeadKanban() {
         lost_reason_detail: detail || null,
       }).eq('id', lead.id)
 
-      // Log de atividade
-      await DatabaseService.logActivity({
-        user_id: user!.id,
+      await db.from('audit_logs').insert({
+        institution_id: user!.institution_id, module: 'lead', record_id: lead.id,
         action: 'Lead perdido',
-        entity_type: 'lead',
-        entity_id: lead.id,
-        details: {
-          previous_status: lead.status,
-          new_status: 'lost',
-          lost_reason: reason,
-          lost_reason_detail: detail,
-          student_name: lead.student_name,
-          responsible_name: lead.responsible_name,
-        },
-        institution_id: user!.institution_id,
+        field_changed: LOST_REASONS.find(r => r.value === reason)?.label || reason,
+        new_value: detail || '',
+        user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
       })
 
       await logAudit({
@@ -1439,7 +1443,14 @@ export default function LeadKanban() {
       const visitDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hours), parseInt(minutes), 0, 0)
       await DatabaseService.createVisit({ institution_id: user!.institution_id, lead_id: leadToSchedule.id, student_name: leadToSchedule.student_name, scheduled_date: visitDate.toISOString(), notes: data.notes, status: 'scheduled' })
       await DatabaseService.updateLead(leadToSchedule.id, { status: 'scheduled' })
-      await DatabaseService.logActivity({ user_id: user!.id, action: 'Visita agendada', entity_type: 'lead', entity_id: leadToSchedule.id, details: { scheduled_date: data.scheduled_date, scheduled_time: data.scheduled_time, notes: data.notes, student_name: leadToSchedule.student_name, responsible_name: leadToSchedule.responsible_name }, institution_id: user!.institution_id })
+      const { supabase: db } = await import('../../lib/supabase')
+      await db.from('audit_logs').insert({
+        institution_id: user!.institution_id, module: 'lead', record_id: leadToSchedule.id,
+        action: 'Visita agendada',
+        field_changed: `${data.scheduled_date} às ${data.scheduled_time}`,
+        new_value: data.notes || '',
+        user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
+      })
       await loadData()
       setShowScheduleVisitModal(false)
       setLeadToSchedule(null)
