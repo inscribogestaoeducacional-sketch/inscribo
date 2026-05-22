@@ -744,6 +744,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   // Feature 1: Connection status
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'disconnected'>('unknown')
+  const [windowExpired, setWindowExpired] = useState(false)
 
   // Meta API state
   const [useMetaApi, setUseMetaApi] = useState(false)
@@ -1543,9 +1544,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   }, [activeId])
 
-  // Load history when switching to history tab
+  // Load history when switching to history tab (conv events + CRM events)
   useEffect(() => {
-    if (rightPanelTab === 'history' && activeId) loadHistory(rawJid(activeId))
+    if (rightPanelTab === 'history' && activeId) {
+      loadHistory(rawJid(activeId))
+      const leadId = conversations.find(c => c.id === activeId)?.lead_id
+      if (leadId) loadLeadCrmEvents(leadId)
+    }
   }, [rightPanelTab, activeId])
 
   // Presence channel for typing indicator — subscribe per active conversation
@@ -1753,14 +1758,22 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       })
   }, [activeId, activeConv?.lead_id])
 
-  // Detect if the 24h WhatsApp messaging window has expired
-  const windowExpired = (() => {
-    if (!activeConv) return false
-    const lastClientMsg = [...activeConv.messages]
-      .filter(m => m.from === 'them')
-      .sort((a, b) => b.ts.getTime() - a.ts.getTime())[0]
-    return !lastClientMsg || (Date.now() - lastClientMsg.ts.getTime()) > 24 * 60 * 60 * 1000
-  })()
+  // Reactive 24h window check — recalculates every minute
+  useEffect(() => {
+    const calcExpired = () => {
+      if (!activeConv) { setWindowExpired(false); return }
+      const lastClientMsg = activeConv.messages
+        .filter(m => m.from === 'them')
+        .sort((a, b) => b.ts.getTime() - a.ts.getTime())[0]
+      setWindowExpired(
+        !lastClientMsg ||
+        Date.now() - lastClientMsg.ts.getTime() > 24 * 60 * 60 * 1000
+      )
+    }
+    calcExpired()
+    const interval = setInterval(calcExpired, 60000)
+    return () => clearInterval(interval)
+  }, [activeConv?.messages, activeId])
 
   const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0)
 
@@ -2579,6 +2592,26 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           : c
         ))
       }
+      // Sync to whatsapp_contacts
+      const normPhone = (() => {
+        let d = (leadForm.phone || activeConv?.phone || '').replace(/\D/g, '')
+        if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
+        if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
+        if (d.length === 11) d = '55' + d
+        return d
+      })()
+      if (normPhone && effectiveInstitutionId) {
+        await supabase
+          .from('whatsapp_contacts')
+          .upsert({
+            institution_id: effectiveInstitutionId,
+            phone: normPhone,
+            name: leadForm.responsible_name || normPhone,
+            type: 'lead',
+            lead_id: lead.id,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'institution_id,phone' })
+      }
       setShowLeadModal(false)
       setLeadForm({ responsible_name: '', student_name: '', phone: '', email: '', grade_interest: '', source: 'WhatsApp' })
     } catch { setSendError('Erro ao criar lead.') }
@@ -2778,6 +2811,74 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               }}
                 className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81]">
                 Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Template Modal */}
+      {showTemplateModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-96 shadow-2xl border border-[#E2E8F0] max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-[#1A2B4A]">Enviar Template</h3>
+              <button onClick={() => { setShowTemplateModal(false); setSelectedTemplate(''); setTemplateVars({}) }} className="p-1 text-[#64748B] hover:text-[#1A2B4A]">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {templates.length === 0 ? (
+              <p className="text-xs text-[#94A3B8] italic mb-4">
+                Nenhum template aprovado.{' '}
+                <span className="text-[#00A896] cursor-pointer" onClick={() => { setShowTemplateModal(false); navigate('/settings?tab=whatsapp') }}>
+                  Configurar em Configurações → WhatsApp
+                </span>
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2 mb-4 max-h-52 overflow-y-auto">
+                {templates.map(tpl => {
+                  const bodyText = tpl.components?.find((c: any) => c.type === 'BODY')?.text || tpl.name
+                  const isSelected = selectedTemplate === tpl.id
+                  return (
+                    <button key={tpl.id} onClick={() => { setSelectedTemplate(tpl.id); setTemplateVars({}) }}
+                      style={{ textAlign: 'left', padding: '10px 12px', background: isSelected ? '#CCFBF1' : '#F8FAFB', border: `1.5px solid ${isSelected ? '#0d9488' : '#E2E8F0'}`, borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s' }}>
+                      <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{tpl.name}</p>
+                      <p style={{ margin: '3px 0 0', fontSize: 11, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bodyText}</p>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            {selectedTemplate && (() => {
+              const tmpl = templates.find(t => t.id === selectedTemplate)
+              if (!tmpl) return null
+              const bodyComp = tmpl.components?.find((c: any) => c.type === 'BODY')
+              if (!bodyComp?.text) return null
+              const matches = [...bodyComp.text.matchAll(/\{\{(\d+)\}\}/g)]
+              if (matches.length === 0) return null
+              return (
+                <div className="flex flex-col gap-2 mb-4">
+                  <p className="text-xs font-semibold text-[#64748B]">Variáveis:</p>
+                  {matches.map(([, n]) => (
+                    <div key={n} className="flex items-center gap-2">
+                      <span className="text-xs text-[#94A3B8] whitespace-nowrap">{`{{${n}}}`}</span>
+                      <input value={templateVars[n] || ''}
+                        onChange={e => setTemplateVars(v => ({ ...v, [n]: e.target.value }))}
+                        placeholder={`Variável ${n}`}
+                        className="flex-1 px-2 py-1.5 text-xs bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
+            <div className="flex gap-2 mt-2">
+              <button onClick={() => { setShowTemplateModal(false); setSelectedTemplate(''); setTemplateVars({}) }}
+                className="flex-1 py-2.5 text-xs font-medium text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
+                Cancelar
+              </button>
+              <button onClick={handleSendTemplate} disabled={sendingTemplate || !selectedTemplate}
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
+                {sendingTemplate ? 'Enviando...' : 'Enviar Template'}
               </button>
             </div>
           </div>
@@ -3141,15 +3242,47 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               {/* More menu dropdown */}
               {showMoreMenu && (
                 <div ref={moreMenuRef} style={{ position: 'absolute', right: 16, top: 56, zIndex: 30, background: '#FFFFFF', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', border: '1px solid #D1FAE5', paddingTop: 4, paddingBottom: 4, minWidth: 160 }}>
-                  <button onClick={() => { setConversations(prev => prev.map(c => c.id === activeId ? {...c, messages: []} : c)); setShowMoreMenu(false) }}
+                  <button onClick={async () => {
+                    if (!window.confirm('Isso apagará todas as mensagens permanentemente. Continuar?')) return
+                    setConversations(prev => prev.map(c => c.id === activeId ? {...c, messages: []} : c))
+                    setShowMoreMenu(false)
+                    if (activeId && effectiveInstitutionId) {
+                      await supabase.from('whatsapp_messages')
+                        .delete()
+                        .eq('institution_id', effectiveInstitutionId)
+                        .eq('remote_jid', activeId)
+                    }
+                  }}
                     style={{ width: '100%', textAlign: 'left', padding: '10px 16px', fontSize: 13, color: '#1A2B4A', background: 'none', border: 'none', cursor: 'pointer' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFC')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                     Limpar conversa
                   </button>
-                  <button onClick={() => { setShowMoreMenu(false) }}
-                    style={{ width: '100%', textAlign: 'left', padding: '10px 16px', fontSize: 13, color: '#1A2B4A', background: 'none', border: 'none', cursor: 'pointer' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFC')}
+                  <button onClick={async () => {
+                    if (!window.confirm('Bloquear este contato? Mensagens futuras serão ignoradas.')) return
+                    setShowMoreMenu(false)
+                    if (!activeId || !effectiveInstitutionId) return
+                    const normPhone = (() => {
+                      let d = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
+                      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
+                      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
+                      if (d.length === 11) d = '55' + d
+                      return d
+                    })()
+                    try {
+                      await supabase.from('whatsapp_blacklist').insert({
+                        institution_id: effectiveInstitutionId,
+                        phone: normPhone,
+                        blocked_at: new Date().toISOString()
+                      })
+                    } catch {}
+                    setConversations(prev => prev.filter(c => c.id !== activeId))
+                    setActiveId(null)
+                    setHubToast('Contato bloqueado')
+                    setTimeout(() => setHubToast(null), 3000)
+                  }}
+                    style={{ width: '100%', textAlign: 'left', padding: '10px 16px', fontSize: 13, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#FEF2F2')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                     Bloquear contato
                   </button>
@@ -3424,11 +3557,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   <p style={{ fontSize: 11, color: '#B45309', margin: '2px 0 0' }}>Use um template para reativar a conversa</p>
                 </div>
                 <button
-                  onClick={handleReactivate}
-                  disabled={sendingReactivate}
-                  style={{ background: '#F59E0B', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: sendingReactivate ? 'not-allowed' : 'pointer', opacity: sendingReactivate ? 0.7 : 1, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}
+                  onClick={() => setShowTemplateModal(true)}
+                  style={{ background: '#F59E0B', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}
                 >
-                  {sendingReactivate && <div style={{ width: 12, height: 12, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />}
                   Reativar conversa
                 </button>
               </div>
@@ -3681,6 +3812,14 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                                 <option value="other">Outro</option>
                               </select>
                             </div>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 3 }}>Nota interna</label>
+                              <textarea value={editForm.notes || ''}
+                                onChange={e => setEditForm(f => ({...f, notes: e.target.value}))}
+                                placeholder="Anotações sobre este contato..."
+                                rows={3}
+                                style={{ width: '100%', padding: '7px 9px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                            </div>
                             <div style={{ display: 'flex', gap: 6 }}>
                               <button onClick={async () => {
                                 if (!activeId || !effectiveInstitutionId) return
@@ -3705,6 +3844,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                                 if (editForm.contact_type && editForm.contact_type !== (activeConv.contact_type || '')) {
                                   await DatabaseService.setConversationContactType(effectiveInstitutionId, rawJid(activeId), editForm.contact_type)
                                   setConversations(prev => prev.map(c => c.id === activeId ? {...c, contact_type: editForm.contact_type} : c))
+                                }
+                                if (editForm.notes !== undefined) {
+                                  await supabase.from('whatsapp_conversations')
+                                    .update({ notes: editForm.notes })
+                                    .eq('institution_id', effectiveInstitutionId)
+                                    .eq('remote_jid', rawJid(activeId))
                                 }
                                 setEditingContact(false)
                               }}
@@ -3855,6 +4000,58 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                         )}
                       </div>
 
+                      {/* Bot toggle */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Robô</label>
+                        <button
+                          onClick={async () => {
+                            if (!activeId || !effectiveInstitutionId) return
+                            const newBotActive = !activeConv.bot_active
+                            await supabase.from('whatsapp_conversations')
+                              .update(newBotActive
+                                ? { bot_active: true, assigned_user_id: null, assigned_user_name: null }
+                                : { bot_active: false, assigned_user_id: user?.id, assigned_user_name: user?.full_name || user?.email, status: 'open' }
+                              )
+                              .eq('institution_id', effectiveInstitutionId)
+                              .eq('remote_jid', rawJid(activeId))
+                            setConversations(prev => prev.map(c =>
+                              c.id === activeId
+                                ? { ...c, bot_active: newBotActive, ...(newBotActive
+                                    ? { assigned_user_id: undefined, assigned_user_name: undefined }
+                                    : { assigned_user_id: user?.id, assigned_user_name: user?.full_name || user?.email, status: 'open' as ConvStatus }) }
+                                : c
+                            ))
+                            setHubToast(newBotActive ? 'Robô ativado' : 'Robô desativado — atendimento assumido por você')
+                            setTimeout(() => setHubToast(null), 3000)
+                          }}
+                          style={{
+                            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '8px 12px',
+                            background: activeConv.bot_active ? '#d1fae5' : '#f1f5f9',
+                            border: `1px solid ${activeConv.bot_active ? '#a7f3d0' : '#e2e8f0'}`,
+                            borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s',
+                          }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                            <span style={{ fontSize: 14 }}>🤖</span>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: activeConv.bot_active ? '#059669' : '#64748B' }}>
+                              Robô {activeConv.bot_active ? 'ativo' : 'inativo'}
+                            </span>
+                          </div>
+                          <div style={{
+                            width: 32, height: 18, borderRadius: 9999,
+                            background: activeConv.bot_active ? '#00A896' : '#CBD5E1',
+                            position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                          }}>
+                            <div style={{
+                              position: 'absolute', top: 2,
+                              left: activeConv.bot_active ? 16 : 2,
+                              width: 14, height: 14, borderRadius: '50%', background: '#fff',
+                              transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                            }} />
+                          </div>
+                        </button>
+                      </div>
+
                       {/* Tags */}
                       <div>
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Etiquetas</label>
@@ -3955,20 +4152,71 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                                       <span style={{ color: '#1A2B4A', fontWeight: 500, wordBreak: 'break-all', textAlign: 'right' }}>{leadData.email}</span>
                                     </div>
                                   )}
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
-                                    <span style={{ color: '#64748B' }}>Status</span>
-                                    <select value={leadEditForm.status || leadData.status || 'new'}
-                                      onChange={e => { const s = e.target.value; setLeadEditForm((f: any) => ({ ...f, status: s })); handleSaveLead({ status: s }) }}
-                                      style={{ fontSize: 11, padding: '2px 6px', borderRadius: 7, border: '1px solid #d1fae5', background: '#f0fdfb', color: '#0d9488', fontWeight: 600, outline: 'none', cursor: 'pointer' }}>
-                                      <option value="new">Novo</option>
-                                      <option value="contact">Em contato</option>
-                                      <option value="scheduled">Visita agendada</option>
-                                      <option value="visit">Visita realizada</option>
-                                      <option value="proposal">Proposta enviada</option>
-                                      <option value="enrolled">Matriculado</option>
-                                      <option value="lost">Perdido</option>
-                                    </select>
-                                  </div>
+                                  {/* Lead funnel visual */}
+                                  {(() => {
+                                    const STAGES = [
+                                      { key: 'new',       label: 'Novo'       },
+                                      { key: 'contact',   label: 'Contato'    },
+                                      { key: 'scheduled', label: 'Ag.'        },
+                                      { key: 'visit',     label: 'Visita'     },
+                                      { key: 'proposal',  label: 'Proposta'   },
+                                      { key: 'enrolled',  label: 'Matrícula'  },
+                                    ]
+                                    const curStatus = leadEditForm.status || leadData.status || 'new'
+                                    const curIdx = STAGES.findIndex(s => s.key === curStatus)
+                                    return (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                                          {STAGES.map((stage, idx) => {
+                                            const done   = idx < curIdx
+                                            const active = idx === curIdx
+                                            return (
+                                              <React.Fragment key={stage.key}>
+                                                <div
+                                                  title={stage.label}
+                                                  onClick={() => { setLeadEditForm((f: any) => ({ ...f, status: stage.key })); handleSaveLead({ status: stage.key }) }}
+                                                  style={{
+                                                    width: 20, height: 20, borderRadius: '50%', cursor: 'pointer', flexShrink: 0,
+                                                    background: done || active ? '#00A896' : '#E2E8F0',
+                                                    border: active ? '2.5px solid #007A6E' : '2px solid transparent',
+                                                    boxSizing: 'border-box',
+                                                    boxShadow: active ? '0 0 0 2px rgba(0,168,150,0.25)' : 'none',
+                                                    transition: 'all 0.15s',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                  }}
+                                                >
+                                                  {done && <span style={{ fontSize: 8, color: '#fff', fontWeight: 700 }}>✓</span>}
+                                                </div>
+                                                {idx < STAGES.length - 1 && (
+                                                  <div style={{ flex: 1, height: 2, background: done ? '#00A896' : '#E2E8F0', transition: 'background 0.15s' }} />
+                                                )}
+                                              </React.Fragment>
+                                            )
+                                          })}
+                                        </div>
+                                        <div style={{ display: 'flex' }}>
+                                          {STAGES.map((stage, idx) => (
+                                            <span key={stage.key}
+                                              onClick={() => { setLeadEditForm((f: any) => ({ ...f, status: stage.key })); handleSaveLead({ status: stage.key }) }}
+                                              style={{
+                                                flex: 1, fontSize: 9, textAlign: 'center', lineHeight: 1.2, cursor: 'pointer',
+                                                color: idx <= curIdx ? '#0d9488' : '#94A3B8',
+                                                fontWeight: idx === curIdx ? 700 : 400,
+                                              }}>
+                                              {stage.label}
+                                            </span>
+                                          ))}
+                                        </div>
+                                        <button
+                                          onClick={() => { setLeadEditForm((f: any) => ({ ...f, status: 'lost' })); handleSaveLead({ status: 'lost' }) }}
+                                          style={{ fontSize: 10, color: curStatus === 'lost' ? '#fff' : '#EF4444', background: curStatus === 'lost' ? '#EF4444' : 'transparent', border: '1px solid #FECACA', borderRadius: 7, padding: '3px 8px', cursor: 'pointer', alignSelf: 'flex-start', transition: 'all 0.15s' }}
+                                          onMouseEnter={e => { if (curStatus !== 'lost') e.currentTarget.style.background = '#FEE2E2' }}
+                                          onMouseLeave={e => { if (curStatus !== 'lost') e.currentTarget.style.background = 'transparent' }}>
+                                          {curStatus === 'lost' ? '🔴 Perdido' : 'Marcar como Perdido'}
+                                        </button>
+                                      </div>
+                                    )
+                                  })()}
                                   {leadData.source && (
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                                       <span style={{ color: '#64748B' }}>Origem</span>
@@ -4117,64 +4365,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   )}
                 </div>
 
-                {/* ── SEÇÃO: HISTÓRICO CRM ────────────────────────────────────── */}
-                <div>
-                  <button
-                    onClick={() => {
-                      const next = !collapseHistory
-                      setCollapseHistory(next)
-                      if (!next && activeConv?.lead_id) loadLeadCrmEvents(activeConv.lead_id)
-                    }}
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fefd', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#edfaf8')}
-                    onMouseLeave={e => (e.currentTarget.style.background = '#f8fefd')}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Histórico CRM</span>
-                    {collapseHistory
-                      ? <ChevronRight style={{ width: 14, height: 14, color: '#0d9488' }} />
-                      : <ChevronDown style={{ width: 14, height: 14, color: '#0d9488' }} />}
-                  </button>
-                  {!collapseHistory && (
-                    <div style={{ padding: '0 12px 12px' }}>
-                      {!activeConv?.lead_id ? (
-                        <p style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic', textAlign: 'center', padding: '6px 0' }}>
-                          Vincule a um lead para ver histórico
-                        </p>
-                      ) : leadCrmLoading ? (
-                        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0' }}>
-                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#0d9488] border-t-transparent" />
-                        </div>
-                      ) : leadCrmEvents.length === 0 ? (
-                        <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '6px 0' }}>Sem eventos registrados</p>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                          {leadCrmEvents.map((ev, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '5px 7px', borderRadius: 7, cursor: 'default', transition: 'background 0.1s' }}
-                              onMouseEnter={e => (e.currentTarget.style.background = '#f0fdfb')}
-                              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                              <div style={{ width: 6, height: 6, borderRadius: '50%', background: ev.color, marginTop: 5, flexShrink: 0 }} />
-                              <div>
-                                <p style={{ fontSize: 12, fontWeight: 500, color: '#1A2B4A', margin: 0 }}>{ev.label}</p>
-                                <p style={{ fontSize: 11, color: '#64748B', margin: 0 }}>{ev.time}</p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
               </div>
             )}
 
             {/* ── Histórico tab ── */}
             {rightPanelTab === 'history' && (
-              <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', background: '#FFFFFF' }}>
+              <div className="wa-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', background: '#FFFFFF' }}>
                 <p style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Histórico de eventos</p>
-                {historyLoading ? (
+                {historyLoading || leadCrmLoading ? (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 0' }}>
                     <div className="animate-spin rounded-full h-5 w-5 border-2 border-[#00A896] border-t-transparent" />
                   </div>
-                ) : convHistory.length === 0 ? (
+                ) : convHistory.length === 0 && leadCrmEvents.length === 0 ? (
                   <p style={{ fontSize: 12, color: '#64748B', textAlign: 'center', padding: '32px 0' }}>Nenhum evento registrado</p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -4194,6 +4396,28 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                         </div>
                       </div>
                     ))}
+                    {leadCrmEvents.length > 0 && (
+                      <>
+                        {convHistory.length > 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0' }}>
+                            <div style={{ flex: 1, height: 1, background: '#E2E8F0' }} />
+                            <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>CRM</span>
+                            <div style={{ flex: 1, height: 1, background: '#E2E8F0' }} />
+                          </div>
+                        )}
+                        {leadCrmEvents.map((ev, i) => (
+                          <div key={`crm-${i}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px', borderRadius: 8, transition: 'background 0.15s' }}
+                            onMouseEnter={e => (e.currentTarget.style.background = '#F0FDFB')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                            <div style={{ width: 8, height: 8, borderRadius: '50%', background: ev.color, marginTop: 4, flexShrink: 0 }} />
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <p style={{ fontSize: 12, fontWeight: 500, color: '#1A2B4A', margin: 0, lineHeight: 1.4 }}>{ev.label}</p>
+                              <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0' }}>{ev.time}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
