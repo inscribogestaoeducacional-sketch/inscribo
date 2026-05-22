@@ -1,162 +1,62 @@
-import React from 'react'
+import React, { useEffect } from 'react'
+import Navbar from '../components/Navbar'
+import Footer from '../components/Footer'
+import { SHARED_CSS } from '../styles/sharedCSS'
 
 export default function Privacidade() {
+  useEffect(() => {
+    const el = document.createElement('style')
+    el.id = 'aion-css'
+    el.textContent = SHARED_CSS
+    if (!document.getElementById('aion-css')) document.head.appendChild(el)
+    return () => { document.getElementById('aion-css')?.remove() }
+  }, [])
+
+  const sections = [
+    { title: '1. Dados coletados', body: 'A ÁION EDU coleta os seguintes dados para prestação dos serviços contratados: (a) dados de identificação — nome, e-mail, número de telefone e WhatsApp, cargo e nome da instituição de ensino; (b) dados de uso da plataforma — registros de acesso, logs de atividade, funcionalidades utilizadas e preferências de configuração; (c) dados das famílias e leads cadastrados pelas instituições — gerenciados pelos próprios usuários da plataforma; (d) dados de comunicação — histórico de conversas via WhatsApp gerado no uso da plataforma.' },
+    { title: '2. Finalidade do tratamento', body: 'Os dados são utilizados exclusivamente para: prestação dos serviços contratados; melhoria contínua da plataforma; comunicação sobre atualizações e suporte técnico; cumprimento de obrigações legais e contratuais; geração de relatórios e análises para os usuários da plataforma. Não utilizamos dados para fins publicitários de terceiros.' },
+    { title: '3. Compartilhamento de dados', body: 'Não vendemos, alugamos ou cedemos seus dados a terceiros. Compartilhamos dados apenas com: prestadores de serviços necessários para o funcionamento da plataforma (servidores, serviços de e-mail, autenticação), sempre sob contrato de confidencialidade; autoridades públicas quando exigido por lei; adquirente em caso de fusão ou aquisição da empresa, com manutenção das garantias desta política.' },
+    { title: '4. Retenção de dados', body: 'Os dados são retidos pelo período necessário para a prestação dos serviços e por até 5 (cinco) anos após o encerramento do contrato, para cumprimento de obrigações legais. Após esse prazo, os dados são excluídos ou anonimizados de forma segura.' },
+    { title: '5. Direitos do titular', body: 'Conforme a Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018), você tem direito a: confirmação da existência de tratamento; acesso aos seus dados; correção de dados incompletos ou desatualizados; anonimização, bloqueio ou eliminação de dados desnecessários; portabilidade dos dados; eliminação dos dados tratados com consentimento; informação sobre entidades com quem compartilhamos dados; revogação do consentimento. Para exercer esses direitos, entre em contato: privacidade@aionedu.com.br' },
+    { title: '6. Cookies e rastreamento', body: 'Utilizamos cookies estritamente necessários para autenticação e funcionamento da plataforma. Cookies analíticos (para melhoria do produto) são utilizados de forma anonimizada. Você pode desabilitar cookies no seu navegador, mas isso pode afetar o funcionamento de algumas funcionalidades.' },
+    { title: '7. Contato', body: 'Para dúvidas, solicitações ou exercício de direitos relacionados aos seus dados pessoais, entre em contato com nosso Encarregado de Proteção de Dados (DPO): E-mail: privacidade@aionedu.com.br — WhatsApp: (83) 9344-4383 — ÁION Soluções Tecnológicas Ltda. — CNPJ 65.835.064/0001-58 — Patos, Paraíba — Brasil.' },
+    { title: '8. Atualizações desta política', body: 'Esta Política de Privacidade pode ser atualizada periodicamente para refletir mudanças na legislação ou na operação da plataforma. Notificaremos os usuários sobre mudanças relevantes por e-mail ou aviso na plataforma. A versão atual está vigente desde 01 de janeiro de 2026.' },
+  ]
+
   return (
-    <div style={{ minHeight: '100vh', background: '#f9fafb', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
-      {/* Header */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '0 24px' }}>
-        <div style={{ maxWidth: 900, margin: '0 auto', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <a href="/" style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontWeight: 800, fontSize: 18, color: '#00523C' }}>Áion Edu</span>
-            <span style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Inteligência em matrículas</span>
-          </a>
-          <a href="/" style={{ fontSize: 14, color: '#00523C', fontWeight: 600, textDecoration: 'none' }}>← Voltar ao início</a>
-        </div>
-      </div>
+    <>
+      <Navbar />
+      <main>
+        {/* Hero */}
+        <section style={{ background: '#F4F7F5', padding: '140px 48px 60px', textAlign: 'center' }}>
+          <div className="tag-g" style={{ display: 'inline-flex', marginBottom: 20 }}>Legal</div>
+          <h1 className="s-title" style={{ fontSize: 'clamp(32px,4vw,52px)', color: '#111827', marginBottom: 16 }}>Política de Privacidade</h1>
+          <p style={{ fontSize: 16, color: '#6B7280', maxWidth: 540, margin: '0 auto', lineHeight: 1.8 }}>
+            Como coletamos, usamos e protegemos seus dados pessoais em conformidade com a LGPD.
+          </p>
+          <p style={{ fontSize: 13, color: '#9CA3AF', marginTop: 12 }}>Última atualização: 01 de janeiro de 2026</p>
+        </section>
 
-      {/* Content */}
-      <div style={{ maxWidth: 800, margin: '0 auto', padding: '48px 24px 80px' }}>
-        <div style={{ background: '#fff', borderRadius: 16, padding: '48px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid #f0f0f0' }}>
-
-          <div style={{ marginBottom: 40 }}>
-            <h1 style={{ fontSize: 32, fontWeight: 800, color: '#111827', marginBottom: 8 }}>Política de Privacidade</h1>
-            <p style={{ fontSize: 14, color: '#6b7280' }}>
-              <strong>AION SOLUCOES TECNOLOGICAS LTDA</strong> · CNPJ: 65.835.064/0001-58
-            </p>
-            <p style={{ fontSize: 13, color: '#9ca3af', marginTop: 4 }}>Última atualização: abril de 2026</p>
-            <div style={{ height: 3, width: 60, background: 'linear-gradient(90deg, #00523C, #00A896)', borderRadius: 2, marginTop: 20 }} />
-          </div>
-
-          {[
-            {
-              id: 'quem-somos',
-              title: '1. Quem somos',
-              content: (
-                <p style={p}>
-                  A Áion Edu é uma plataforma de gestão de matrículas operada pela <strong>AION SOLUCOES
-                  TECNOLOGICAS LTDA</strong>, inscrita no CNPJ 65.835.064/0001-58, com sede em R. Francisco
-                  Vicente de Araújo, 48, Bela Vista, Patos - PB.
-                </p>
-              ),
-            },
-            {
-              id: 'dados',
-              title: '2. Dados que coletamos',
-              content: (
-                <ul style={ul}>
-                  <li style={li}><strong>Dados de identificação:</strong> nome, e-mail, telefone, cargo</li>
-                  <li style={li}><strong>Dados da instituição:</strong> nome da escola, CNPJ, cidade, estado</li>
-                  <li style={li}><strong>Dados operacionais:</strong> leads, visitas, matrículas inseridos pelos usuários</li>
-                  <li style={li}><strong>Dados de uso:</strong> logs de acesso, funcionalidades utilizadas</li>
-                </ul>
-              ),
-            },
-            {
-              id: 'uso',
-              title: '3. Como usamos seus dados',
-              content: (
-                <ul style={ul}>
-                  <li style={li}>Prestação do serviço contratado</li>
-                  <li style={li}>Melhoria contínua da plataforma</li>
-                  <li style={li}>Comunicação sobre atualizações e novidades</li>
-                  <li style={li}>Análise agregada e anônima de uso</li>
-                </ul>
-              ),
-            },
-            {
-              id: 'compartilhamento',
-              title: '4. Compartilhamento',
-              content: (
-                <>
-                  <p style={p}>Não vendemos dados. Compartilhamos apenas com:</p>
-                  <ul style={ul}>
-                    <li style={li}>Provedores de infraestrutura (Supabase, Vercel, Anthropic)</li>
-                    <li style={li}>Quando exigido por lei ou autoridade competente</li>
-                  </ul>
-                </>
-              ),
-            },
-            {
-              id: 'lgpd',
-              title: '5. Seus direitos (LGPD)',
-              content: (
-                <>
-                  <p style={p}>Nos termos da Lei Geral de Proteção de Dados (Lei 13.709/2018), você tem direito a:</p>
-                  <ul style={ul}>
-                    <li style={li}>Acessar seus dados</li>
-                    <li style={li}>Corrigir dados incorretos</li>
-                    <li style={li}>Solicitar exclusão</li>
-                    <li style={li}>Revogar consentimento</li>
-                  </ul>
-                  <p style={{ ...p, marginTop: 12 }}>
-                    Para exercer seus direitos, entre em contato: <strong>contato@aionedu.com.br</strong>
-                  </p>
-                </>
-              ),
-            },
-            {
-              id: 'retencao',
-              title: '6. Retenção',
-              content: (
-                <p style={p}>
-                  Dados são mantidos enquanto o contrato estiver ativo, acrescido de 5 anos para
-                  cumprimento de obrigações legais.
-                </p>
-              ),
-            },
-            {
-              id: 'seguranca',
-              title: '7. Segurança',
-              content: (
-                <p style={p}>
-                  Utilizamos criptografia em trânsito e em repouso, autenticação segura com múltiplos
-                  fatores disponível, e Row Level Security no banco de dados para garantir que cada
-                  instituição acesse apenas seus próprios dados.
-                </p>
-              ),
-            },
-            {
-              id: 'cookies',
-              title: '8. Cookies',
-              content: (
-                <p style={p}>
-                  Utilizamos cookies essenciais para funcionamento da plataforma e analytics anônimos
-                  para melhoria contínua do serviço. Não utilizamos cookies para fins publicitários.
-                </p>
-              ),
-            },
-            {
-              id: 'contato',
-              title: '9. Contato',
-              content: (
-                <div style={{ background: '#f0fdf4', borderRadius: 10, padding: '16px 20px', border: '1px solid #bbf7d0' }}>
-                  <p style={{ fontSize: 14, color: '#065f46', lineHeight: 1.8, margin: 0 }}>
-                    <strong>AION SOLUCOES TECNOLOGICAS LTDA</strong><br />
-                    CNPJ: 65.835.064/0001-58<br />
-                    R. Francisco Vicente de Araújo, 48 · Bela Vista · Patos - PB · CEP 58.704-560<br />
-                    contato@aionedu.com.br · (83) 9855-6393
-                  </p>
-                </div>
-              ),
-            },
-          ].map(section => (
-            <div key={section.id} id={section.id} style={{ marginBottom: 36, paddingBottom: 36, borderBottom: '1px solid #f3f4f6' }}>
-              <h2 style={{ fontSize: 20, fontWeight: 700, color: '#00523C', marginBottom: 14 }}>{section.title}</h2>
-              {section.content}
+        {/* Content */}
+        <section style={{ padding: '64px 48px 112px', background: '#fff' }}>
+          <div style={{ maxWidth: 800, margin: '0 auto' }}>
+            <div style={{ background: '#E6F7F5', borderRadius: 16, padding: '20px 24px', marginBottom: 48, border: '1px solid #A7F3D0' }}>
+              <p style={{ fontSize: 14, color: '#00523C', lineHeight: 1.8, fontWeight: 600 }}>
+                A ÁION Soluções Tecnológicas Ltda. está comprometida com a proteção da sua privacidade e com o cumprimento da Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018). Esta política descreve como tratamos as informações coletadas em nossa plataforma.
+              </p>
             </div>
-          ))}
-        </div>
-      </div>
 
-      {/* Footer */}
-      <div style={{ background: '#0a1628', color: '#6b7280', textAlign: 'center', padding: '20px 24px', fontSize: 12 }}>
-        © 2026 Áion Edu — AION SOLUCOES TECNOLOGICAS LTDA · CNPJ 65.835.064/0001-58 ·{' '}
-        <a href="/termos" style={{ color: '#9ca3af', textDecoration: 'none' }}>Termos de Uso</a>
-      </div>
-    </div>
+            {sections.map((s, i) => (
+              <div key={i} style={{ marginBottom: 40 }}>
+                <h2 style={{ fontFamily: 'Bricolage Grotesque, sans-serif', fontWeight: 800, fontSize: 20, color: '#111827', marginBottom: 14, letterSpacing: '-.02em' }}>{s.title}</h2>
+                <p style={{ fontSize: 15, color: '#4B5563', lineHeight: 1.9 }}>{s.body}</p>
+                {i < sections.length - 1 && <div style={{ height: 1, background: '#F3F4F6', marginTop: 40 }} />}
+              </div>
+            ))}
+          </div>
+        </section>
+      </main>
+      <Footer />
+    </>
   )
 }
-
-const p: React.CSSProperties = { fontSize: 14, color: '#374151', lineHeight: 1.75, margin: 0 }
-const ul: React.CSSProperties = { paddingLeft: 20, margin: 0 }
-const li: React.CSSProperties = { fontSize: 14, color: '#374151', lineHeight: 1.75, marginBottom: 4 }

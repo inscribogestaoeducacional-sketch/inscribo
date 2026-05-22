@@ -1,283 +1,215 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useEffect, useRef } from 'react'
+import Navbar from '../components/Navbar'
+import Footer from '../components/Footer'
+import { SHARED_CSS } from '../styles/sharedCSS'
 
-const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800;12..96,900&display=swap');
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; }
-body { font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; color: #111827; }
-.anim { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
-.anim.visible { opacity: 1; transform: none; }
-@media (max-width: 768px) {
-  .sobre-hero h1 { font-size: 28px !important; }
-  .sobre-grid { grid-template-columns: 1fr !important; }
-  .sobre-valores { grid-template-columns: 1fr 1fr !important; }
-  .sobre-time { grid-template-columns: 1fr 1fr !important; }
-  .sobre-timeline { grid-template-columns: 1fr !important; }
-  .nav-links-desktop { display: none !important; }
-  .nav-mobile-btn { display: block !important; }
+function Ic({ children, size = 20, color = 'currentColor', stroke = 1.8 }: { children: React.ReactNode; size?: number; color?: string; stroke?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round">{children}</svg>
 }
-@media (max-width: 480px) {
-  .footer-grid { grid-template-columns: 1fr !important; }
-  .sobre-valores { grid-template-columns: 1fr !important; }
-}
-`
+const IcTarget = (p: any) => <Ic {...p}><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></Ic>
+const IcBarChart = (p: any) => <Ic {...p}><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></Ic>
+const IcTrendUp = (p: any) => <Ic {...p}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></Ic>
+const IcArrowRight = (p: any) => <Ic {...p}><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></Ic>
+const IcLinkedin = (p: any) => <Ic {...p}><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" /><rect x="2" y="9" width="4" height="12" /><circle cx="4" cy="4" r="2" /></Ic>
+const IcInstagram = (p: any) => <Ic {...p}><rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></Ic>
 
-function useAnim() {
+function useReveal(delay = '') {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const el = ref.current; if (!el) return
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { el.classList.add('visible'); obs.disconnect() } }, { threshold: 0.12 })
+    el.classList.add('reveal')
+    if (delay) el.classList.add(`d${delay}`)
+    const obs = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) { el.classList.add('in'); obs.disconnect() }
+    }, { threshold: 0.07 })
     obs.observe(el)
     return () => obs.disconnect()
   }, [])
   return ref
 }
 
-// ─── NAVBAR ─────────────────────────────────────────────────────────────────
-function Navbar() {
-  const [scrolled, setScrolled] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-
-  useEffect(() => {
-    const fn = () => setScrolled(window.scrollY > 20)
-    window.addEventListener('scroll', fn)
-    return () => window.removeEventListener('scroll', fn)
-  }, [])
-
-  return (
-    <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000, background: scrolled ? 'rgba(255,255,255,0.97)' : 'transparent', backdropFilter: scrolled ? 'blur(12px)' : 'none', boxShadow: scrolled ? '0 1px 20px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.3s ease', padding: '0 24px' }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 64 }}>
-        <a href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
-          <img src="/aion-logo-full.png" alt="ÁION EDU" style={{ height: 36, objectFit: 'contain' }} onError={e => { e.currentTarget.style.display = 'none'; (e.currentTarget.nextElementSibling as HTMLElement | null)?.removeAttribute('style') }} />
-          <span style={{ display: 'none', fontFamily: 'Bricolage Grotesque, sans-serif', fontWeight: 800, fontSize: 20, color: scrolled ? '#00523C' : 'white' }}>ÁION EDU</span>
-        </a>
-        <div className="nav-links-desktop" style={{ display: 'flex', gap: 32, alignItems: 'center' }}>
-          {[{ href: '/', label: 'Início' }, { href: '/#modulos', label: 'Módulos' }, { href: '/#como-funciona', label: 'Como funciona' }, { href: '/blog', label: 'Blog' }, { href: '/sobre', label: 'Sobre' }, { href: '/parceiros', label: 'Parceiros' }].map(link => (
-            <a key={link.href} href={link.href} style={{ color: scrolled ? '#374151' : 'rgba(255,255,255,0.9)', textDecoration: 'none', fontSize: 14, fontWeight: 500, transition: 'color 0.2s' }}>{link.label}</a>
-          ))}
-          <a href="/#demo" style={{ background: '#00A896', color: 'white', padding: '8px 20px', borderRadius: 20, textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>Agendar demo</a>
-        </div>
-        <button onClick={() => setMenuOpen(!menuOpen)} className="nav-mobile-btn" style={{ display: 'none', background: 'none', border: 'none', cursor: 'pointer', fontSize: 24, color: scrolled ? '#111827' : 'white' }}>
-          {menuOpen ? '✕' : '☰'}
-        </button>
-      </div>
-      {menuOpen && (
-        <div style={{ background: 'white', padding: '16px 24px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {[{ href: '/', label: 'Início' }, { href: '/blog', label: 'Blog' }, { href: '/sobre', label: 'Sobre' }, { href: '/parceiros', label: 'Parceiros' }].map(link => (
-            <a key={link.href} href={link.href} style={{ color: '#374151', textDecoration: 'none', fontSize: 15, fontWeight: 500 }}>{link.label}</a>
-          ))}
-          <a href="/#demo" style={{ background: '#00A896', color: 'white', padding: '10px 20px', borderRadius: 20, textDecoration: 'none', fontSize: 14, fontWeight: 600, textAlign: 'center' }}>Agendar demo</a>
-        </div>
-      )}
-    </nav>
-  )
+function RevealCard({ children, delay, style }: { children: React.ReactNode; delay?: string; style?: React.CSSProperties }) {
+  const ref = useReveal(delay)
+  return <div ref={ref} style={style}>{children}</div>
 }
 
-// ─── FOOTER ─────────────────────────────────────────────────────────────────
-function Footer() {
+function PersonCard({ name, role, bio }: { name: string; role: string; bio: string }) {
   return (
-    <footer style={{ background: '#00523C', color: 'white', padding: '60px 24px 32px' }}>
-      <div className="footer-grid" style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 40, marginBottom: 48 }}>
-        <div>
-          <div style={{ fontFamily: 'Bricolage Grotesque, sans-serif', fontWeight: 800, fontSize: 22, marginBottom: 12 }}>ÁION EDU</div>
-          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, lineHeight: 1.6, marginBottom: 16 }}>A plataforma inteligente para campanhas de matrícula escolar.</p>
-          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>CNPJ: 65.835.064/0001-58<br/>Patos, Paraíba — Brasil</div>
-        </div>
-        <div>
-          <div style={{ fontWeight: 700, marginBottom: 16, fontSize: 14 }}>Produto</div>
-          {['Módulos', 'Como funciona', 'Implantação', 'Parceiros'].map(item => (
-            <div key={item} style={{ marginBottom: 10 }}><a href="#" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 13 }}>{item}</a></div>
-          ))}
-        </div>
-        <div>
-          <div style={{ fontWeight: 700, marginBottom: 16, fontSize: 14 }}>Empresa</div>
-          {[{ label: 'Sobre nós', href: '/sobre' }, { label: 'Blog', href: '/blog' }, { label: 'Parceiros', href: '/parceiros' }].map(item => (
-            <div key={item.label} style={{ marginBottom: 10 }}><a href={item.href} style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 13 }}>{item.label}</a></div>
-          ))}
-        </div>
-        <div>
-          <div style={{ fontWeight: 700, marginBottom: 16, fontSize: 14 }}>Legal</div>
-          {[{ label: 'Privacidade', href: '/privacidade' }, { label: 'Termos de uso', href: '/termos' }].map(item => (
-            <div key={item.label} style={{ marginBottom: 10 }}><a href={item.href} style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 13 }}>{item.label}</a></div>
-          ))}
-          <div style={{ marginTop: 16, color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>
-            WhatsApp:<br/><a href="https://wa.me/5583933444383" style={{ color: '#0DD3BF', textDecoration: 'none' }}>(83) 9344-4383</a>
+    <div className="card" style={{ padding: 36 }}>
+      <div style={{ width: 88, height: 88, borderRadius: '50%', background: '#E6F7F5', border: '2px solid #A7F3D0', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20, fontSize: 32, fontWeight: 900, color: '#00523C', fontFamily: 'Bricolage Grotesque, sans-serif' }}>
+        {name[0]}
+      </div>
+      <h3 style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 4 }}>{name}</h3>
+      <p style={{ fontSize: 12, fontWeight: 800, color: '#00A896', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 16 }}>{role}</p>
+      <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.8, marginBottom: 20 }}>{bio}</p>
+      <div style={{ display: 'flex', gap: 10 }}>
+        {[IcLinkedin, IcInstagram].map((Icon, i) => (
+          <div key={i} style={{ width: 34, height: 34, borderRadius: '50%', background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background .2s', color: '#6B7280' }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#E6F7F5'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = '#F3F4F6'}
+          >
+            <Icon size={15} color="#6B7280" />
           </div>
-        </div>
+        ))}
       </div>
-      <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>© 2026 ÁION Soluções Tecnológicas Ltda. Todos os direitos reservados.</span>
-        <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>Feito com 💚 no sertão paraibano</span>
-      </div>
-    </footer>
+    </div>
   )
 }
 
 export default function SobreNos() {
-  const r1 = useAnim(), r2 = useAnim(), r3 = useAnim(), r4 = useAnim(), r5 = useAnim(), r6 = useAnim()
+  const r1 = useReveal()
+  const r2 = useReveal()
+  const r3 = useReveal()
+  const r4 = useReveal()
 
-  const valores = [
-    { icon: '🎯', title: 'Foco no resultado', desc: 'Cada funcionalidade existe para ajudar sua escola a matricular mais e reter melhor. Sem funcionalidade de vitrine.', gradient: 'linear-gradient(135deg,#E6F7F5,#F0FDF9)' },
-    { icon: '🤝', title: 'Parceria real', desc: 'Não somos só um software. Somos o time que ajuda sua escola a crescer com método e acompanhamento contínuo.', gradient: 'linear-gradient(135deg,#EEF2FF,#F5F3FF)' },
-    { icon: '🔍', title: 'Transparência', desc: 'Dados claros, processos visíveis. Nenhuma informação escondida, nenhum jargão desnecessário com o cliente.', gradient: 'linear-gradient(135deg,#FEF3C7,#FFFBEB)' },
-    { icon: '🇧🇷', title: '100% brasileiro', desc: 'Feito para a realidade das escolas privadas brasileiras. LGPD, INEP, ERPs nacionais — suporte em português, sempre.', gradient: 'linear-gradient(135deg,#ECFDF5,#F0FDF4)' },
-    { icon: '⚡', title: 'Inovação prática', desc: 'IA aplicada onde faz diferença real: plano de campanha, análise de saída, previsão de retenção e score de leads.', gradient: 'linear-gradient(135deg,#FEF2F2,#FFF1F2)' },
-    { icon: '🌱', title: 'Crescimento sustentável', desc: 'Acreditamos que escolas saudáveis constroem comunidades melhores. Crescer com dados é crescer de forma duradoura.', gradient: 'linear-gradient(135deg,#E6F7F5,#ECFDF5)' },
-  ]
-
-  const time = [
-    { inicial: 'V', nome: 'Victor Almeida', cargo: 'Co-fundador & CEO', bio: 'Produto, estratégia e visão de mercado', cor: '#00523C', linkedin: '#' },
-    { inicial: 'R', nome: 'Rafaela Costa', cargo: 'Co-fundadora & Produto', bio: 'UX, pesquisa e jornada do cliente', cor: '#00A896', linkedin: '#' },
-    { inicial: 'T', nome: 'Thiago Melo', cargo: 'Engenharia', bio: 'Arquitetura, backend e integrações', cor: '#6366F1', linkedin: '#' },
-    { inicial: 'A', nome: 'Ana Bezerra', cargo: 'Sucesso do Cliente', bio: 'Onboarding, suporte e retenção', cor: '#F59E0B', linkedin: '#' },
-  ]
-
-  const timeline = [
-    { year: '2024', label: 'Ideia nasceu em Patos/PB', desc: 'Observamos de perto escolas privadas gerenciando matrículas em planilhas e grupos de WhatsApp.', color: '#00A896' },
-    { year: '2025', label: 'Primeiro cliente — Ágape', desc: 'Colégio Ágape se tornou o primeiro cliente e provou o conceito da plataforma em uma campanha real.', color: '#6366F1' },
-    { year: '2026', label: 'Lançamento oficial', desc: 'Plataforma completa com CRM, WhatsApp Oficial, IA e relatórios disponível para escolas de todo o Brasil.', color: '#F59E0B' },
-  ]
+  useEffect(() => {
+    const el = document.createElement('style')
+    el.id = 'aion-css'
+    el.textContent = SHARED_CSS
+    if (!document.getElementById('aion-css')) document.head.appendChild(el)
+    return () => { document.getElementById('aion-css')?.remove() }
+  }, [])
 
   return (
     <>
-      <style>{CSS}</style>
       <Navbar />
-
-      {/* Hero */}
-      <section className="sobre-hero" style={{ background: 'linear-gradient(135deg,#00523C 0%,#006B50 45%,#00A896 100%)', padding: '120px 24px 80px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', inset: 0, opacity: 0.05, backgroundImage: 'linear-gradient(rgba(255,255,255,.6) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.6) 1px,transparent 1px)', backgroundSize: '48px 48px', pointerEvents: 'none' }} />
-        <div style={{ maxWidth: 720, margin: '0 auto', position: 'relative', zIndex: 1 }}>
-          <div style={{ display: 'inline-block', background: 'rgba(255,255,255,0.15)', borderRadius: 999, padding: '6px 16px', marginBottom: 20 }}>
-            <span style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: 600 }}>Fundada em Patos, Paraíba · 2024</span>
-          </div>
-          <h1 style={{ fontSize: 44, fontWeight: 900, color: '#fff', lineHeight: 1.2, marginBottom: 20, fontFamily: 'Bricolage Grotesque, sans-serif' }}>
-            Somos a Áion Edu
-          </h1>
-          <p style={{ fontSize: 18, color: 'rgba(255,255,255,0.85)', lineHeight: 1.7 }}>
-            Nascemos com uma missão simples: dar às escolas privadas brasileiras as ferramentas e os dados que elas precisam para crescer com consistência.
-          </p>
-        </div>
-      </section>
-
-      {/* Missão destacada */}
-      <section style={{ padding: '0 24px', background: '#fff' }}>
-        <div style={{ maxWidth: 860, margin: '0 auto', transform: 'translateY(-32px)' }}>
-          <div style={{ background: '#00523C', borderRadius: 20, padding: '40px 48px', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,82,60,0.25)' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16 }}>Nossa missão</div>
-            <p style={{ fontSize: 22, fontWeight: 700, color: '#fff', lineHeight: 1.6, maxWidth: 640, margin: '0 auto' }}>
-              "Transformar campanhas de matrícula que hoje funcionam no improviso em operações organizadas, previsíveis e inteligentes."
+      <main>
+        {/* Hero */}
+        <section style={{
+          background: `radial-gradient(ellipse 70% 60% at 20% 50%, rgba(0,82,60,0.95) 0%, transparent 60%), radial-gradient(ellipse 40% 60% at 80% 20%, rgba(0,168,150,0.2) 0%, transparent 55%), #00301F`,
+          padding: '140px 48px 96px', minHeight: '65vh', display: 'flex', alignItems: 'center', position: 'relative', overflow: 'hidden',
+        }}>
+          <div className="grid-pattern" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
+          <div style={{ maxWidth: 860, margin: '0 auto', textAlign: 'center', position: 'relative', zIndex: 1 }}>
+            <div className="tag-d" style={{ marginBottom: 24, display: 'inline-flex', animation: 'fadeIn .8s ease both' }}>Quem somos</div>
+            <h1 className="s-title" style={{ fontSize: 'clamp(40px,5vw,64px)', color: '#fff', marginBottom: 24, animation: 'fadeUp .9s ease .1s both', lineHeight: 1.04 }}>
+              Construindo o futuro das<br /><span style={{ color: '#0DD3BF' }}>escolas privadas brasileiras</span>
+            </h1>
+            <p style={{ fontSize: 18, color: 'rgba(255,255,255,.72)', maxWidth: 620, margin: '0 auto', lineHeight: 1.8, animation: 'fadeUp .9s ease .2s both' }}>
+              A ÁION EDU nasceu da experiência direta com a realidade das escolas privadas brasileiras — e da convicção de que tecnologia, quando bem aplicada, transforma resultados.
             </p>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* História */}
-      <section style={{ padding: '20px 24px 80px' }}>
-        <div ref={r1} className="sobre-grid anim" style={{ maxWidth: 1000, margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48 }}>
-          <div>
-            <h2 style={{ fontSize: 28, fontWeight: 800, color: '#00523C', marginBottom: 16, fontFamily: 'Bricolage Grotesque, sans-serif' }}>Nossa história</h2>
-            <p style={{ fontSize: 15, color: '#374151', lineHeight: 1.8, marginBottom: 16 }}>
-              A Áion Edu surgiu de uma observação simples: escolas privadas brasileiras enfrentam campanhas de matrículas cada vez mais competitivas, mas ainda gerenciam tudo em planilhas e grupos de WhatsApp.
-            </p>
-            <p style={{ fontSize: 15, color: '#374151', lineHeight: 1.8, marginBottom: 16 }}>
-              A partir de Patos, no sertão da Paraíba, desenvolvemos uma plataforma que integra CRM, WhatsApp, inteligência artificial e relatórios em um único sistema — feito especificamente para o jeito que as escolas privadas brasileiras funcionam.
-            </p>
-            <p style={{ fontSize: 15, color: '#374151', lineHeight: 1.8 }}>
-              Hoje trabalhamos lado a lado com gestores escolares para que cada campanha de matrículas seja planejada, executada e analisada com dados reais.
-            </p>
-          </div>
-          <div>
-            <div style={{ background: '#F0FDF9', borderRadius: 16, padding: 32, marginBottom: 20, border: '1px solid #A7F3D0' }}>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: '#00523C', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Nossa visão</h3>
-              <p style={{ fontSize: 16, color: '#065F46', lineHeight: 1.7 }}>
-                Ser a plataforma de referência para gestão de matrículas em escolas privadas no Brasil.
-              </p>
-            </div>
-            <div style={{ background: '#FAFAFA', borderRadius: 16, padding: 32, border: '1px solid #E5E7EB' }}>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Localização</h3>
-              <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.7 }}>
-                AION SOLUÇÕES TECNOLÓGICAS LTDA<br/>
-                CNPJ: 65.835.064/0001-58<br/>
-                R. Francisco Vicente de Araújo, 48 · Bela Vista<br/>
-                Patos - PB · CEP 58.704-560
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Timeline */}
-      <section style={{ padding: '80px 24px', background: '#F9FAFB' }}>
-        <div ref={r2} className="anim" style={{ maxWidth: 1000, margin: '0 auto' }}>
-          <h2 style={{ fontSize: 28, fontWeight: 800, color: '#111827', textAlign: 'center', marginBottom: 12, fontFamily: 'Bricolage Grotesque, sans-serif' }}>Nossa jornada</h2>
-          <p style={{ textAlign: 'center', color: '#6B7280', fontSize: 15, marginBottom: 52 }}>Do sertão paraibano para o Brasil.</p>
-          <div className="sobre-timeline" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
-            {timeline.map((item, i) => (
-              <div key={i} style={{ background: '#fff', borderRadius: 16, padding: 28, border: '1px solid #E5E7EB', position: 'relative', overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: item.color, borderRadius: '16px 16px 0 0' }} />
-                <div style={{ fontSize: 36, fontWeight: 900, color: item.color, fontFamily: 'Bricolage Grotesque, sans-serif', marginBottom: 8, lineHeight: 1 }}>{item.year}</div>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 10 }}>{item.label}</h3>
-                <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.7 }}>{item.desc}</p>
+        {/* Nossa história */}
+        <section className="section-pad" style={{ background: '#fff' }}>
+          <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 72, alignItems: 'center' }}>
+              <div ref={r1}>
+                <div className="tag-g" style={{ marginBottom: 20 }}>Nossa história</div>
+                <h2 className="s-title" style={{ fontSize: 'clamp(28px,3.5vw,42px)', color: '#111827', marginBottom: 24 }}>
+                  De uma pergunta simples a uma<br /><span style={{ color: '#0DD3BF' }}>plataforma completa</span>
+                </h2>
+                <p style={{ fontSize: 16, color: '#4B5563', lineHeight: 1.85, marginBottom: 20 }}>
+                  A ÁION EDU surgiu de uma pergunta simples: por que escolas privadas brasileiras ainda gerenciam campanhas de matrícula no improviso?
+                </p>
+                <p style={{ fontSize: 16, color: '#4B5563', lineHeight: 1.85, marginBottom: 20 }}>
+                  Victor e Fábio, com anos de experiência em tecnologia e no mercado educacional, viram de perto o quanto escolas perdiam em matrículas por falta de processo, dados e ferramentas adequadas. Em 2024, decidiram construir a plataforma que gostariam de ter encontrado.
+                </p>
+                <p style={{ fontSize: 16, color: '#4B5563', lineHeight: 1.85 }}>
+                  Hoje, a ÁION EDU é a plataforma mais completa para campanhas de matrícula do mercado — com CRM, WhatsApp Oficial Meta, IA e relatórios pensados especificamente para a realidade das escolas privadas brasileiras.
+                </p>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* Valores */}
-      <section style={{ padding: '80px 24px', background: '#fff' }}>
-        <div ref={r3} className="anim" style={{ maxWidth: 1000, margin: '0 auto' }}>
-          <h2 style={{ fontSize: 28, fontWeight: 800, color: '#111827', textAlign: 'center', marginBottom: 12, fontFamily: 'Bricolage Grotesque, sans-serif' }}>Nossos valores</h2>
-          <p style={{ textAlign: 'center', color: '#6B7280', fontSize: 15, marginBottom: 48 }}>Os princípios que guiam cada decisão de produto e de negócio.</p>
-          <div className="sobre-valores" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
-            {valores.map(v => (
-              <div key={v.title} style={{ background: v.gradient, borderRadius: 16, padding: '28px 24px', border: '1px solid #E5E7EB', transition: 'transform 0.2s, box-shadow 0.2s' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-4px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 12px 32px rgba(0,0,0,0.08)' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ''; (e.currentTarget as HTMLElement).style.boxShadow = '' }}
-              >
-                <div style={{ fontSize: 36, marginBottom: 14 }}>{v.icon}</div>
-                <h3 style={{ fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 8 }}>{v.title}</h3>
-                <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.7 }}>{v.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Time */}
-      <section style={{ padding: '80px 24px', background: '#F9FAFB' }}>
-        <div ref={r4} className="anim" style={{ maxWidth: 900, margin: '0 auto' }}>
-          <h2 style={{ fontSize: 28, fontWeight: 800, color: '#111827', textAlign: 'center', marginBottom: 12, fontFamily: 'Bricolage Grotesque, sans-serif' }}>Quem está por trás</h2>
-          <p style={{ textAlign: 'center', color: '#6B7280', fontSize: 15, marginBottom: 52 }}>Um time pequeno, focado e obcecado com o problema das escolas privadas brasileiras.</p>
-          <div className="sobre-time" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 28 }}>
-            {time.map(p => (
-              <div key={p.nome} style={{ textAlign: 'center', background: '#fff', borderRadius: 16, padding: '28px 16px', border: '1px solid #E5E7EB' }}>
-                <div style={{ width: 72, height: 72, borderRadius: '50%', background: `linear-gradient(135deg,${p.cor},${p.cor}bb)`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: 24, fontWeight: 800, color: '#fff', boxShadow: `0 8px 24px ${p.cor}40` }}>
-                  {p.inicial}
+              {/* Timeline */}
+              <RevealCard delay="2">
+                <div className="card" style={{ padding: 36 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 28 }}>Nossa linha do tempo</h3>
+                  {[
+                    { year: '2024', title: 'Fundação', desc: 'Victor e Fábio fundam a ÁION Soluções Tecnológicas Ltda. em Patos, Paraíba.', color: '#00A896' },
+                    { year: '2025', title: 'Lançamento', desc: 'Lançamento oficial da plataforma com CRM, WhatsApp Oficial Meta e Diagnóstico IA.', color: '#6366F1' },
+                    { year: '2026', title: 'Primeiras escolas', desc: 'Colégio Ágape torna-se a primeira escola parceira, validando o produto com dados reais.', color: '#F59E0B' },
+                  ].map((t, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 20, marginBottom: i < 2 ? 28 : 0 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: '50%', background: `${t.color}18`, border: `2px solid ${t.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, color: t.color, flexShrink: 0 }}>{t.year.slice(2)}</div>
+                        {i < 2 && <div style={{ width: 2, flex: 1, background: '#E5E7EB', marginTop: 6 }} />}
+                      </div>
+                      <div style={{ paddingBottom: i < 2 ? 20 : 0 }}>
+                        <p style={{ fontWeight: 800, color: '#111827', marginBottom: 4, fontSize: 15 }}>{t.year} — {t.title}</p>
+                        <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.7 }}>{t.desc}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <p style={{ fontWeight: 700, fontSize: 14, color: '#111827', marginBottom: 4 }}>{p.nome}</p>
-                <p style={{ fontSize: 12, color: p.cor, fontWeight: 600, marginBottom: 6 }}>{p.cargo}</p>
-                <p style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12, lineHeight: 1.5 }}>{p.bio}</p>
-                <a href={p.linkedin} style={{ fontSize: 11, color: '#0077B5', textDecoration: 'none', fontWeight: 600 }}>LinkedIn →</a>
-              </div>
-            ))}
+              </RevealCard>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* CTA */}
-      <section style={{ padding: '80px 24px', background: 'linear-gradient(135deg,#00523C,#00A896)', textAlign: 'center' }}>
-        <div ref={r5} className="anim" style={{ maxWidth: 600, margin: '0 auto' }}>
-          <h2 style={{ fontSize: 28, fontWeight: 800, color: '#fff', marginBottom: 16, fontFamily: 'Bricolage Grotesque, sans-serif' }}>Conheça a plataforma</h2>
-          <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.85)', marginBottom: 32, lineHeight: 1.7 }}>
-            Veja como a Áion Edu pode transformar a gestão de matrículas da sua escola.
-          </p>
-          <a href="/#demo" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#fff', color: '#00523C', padding: '14px 32px', borderRadius: 12, fontWeight: 700, fontSize: 16, textDecoration: 'none' }}>
-            Agendar demonstração gratuita →
-          </a>
-        </div>
-      </section>
+        {/* Time */}
+        <section className="section-pad" style={{ background: '#F4F7F5' }}>
+          <div style={{ maxWidth: 900, margin: '0 auto' }}>
+            <div ref={r2} style={{ textAlign: 'center', marginBottom: 56 }}>
+              <div className="tag-g" style={{ marginBottom: 20 }}>O time</div>
+              <h2 className="s-title" style={{ fontSize: 'clamp(28px,3.5vw,44px)', color: '#111827' }}>As pessoas por trás da ÁION EDU</h2>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+              <RevealCard delay="1">
+                <PersonCard
+                  name="Victor Almeida"
+                  role="Co-fundador & CTO"
+                  bio="Victor é o arquiteto técnico da ÁION EDU. Com experiência em desenvolvimento de sistemas para o mercado educacional, lidera a engenharia da plataforma com foco em performance, usabilidade e inovação. É o responsável por transformar cada demanda das escolas em funcionalidades reais que resolvem problemas do dia a dia."
+                />
+              </RevealCard>
+              <RevealCard delay="2">
+                <PersonCard
+                  name="Fábio Santos"
+                  role="Co-fundador & CEO"
+                  bio="Fábio traz a visão comercial e estratégica da ÁION EDU. Com trajetória no mercado educacional e em vendas consultivas, é o responsável por conectar a plataforma às necessidades reais das escolas — conduzindo cada demonstração com foco em resultado e construindo parcerias de longo prazo."
+                />
+              </RevealCard>
+            </div>
+          </div>
+        </section>
 
+        {/* Missão */}
+        <section className="section-pad" style={{ background: '#fff' }}>
+          <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+            <div ref={r3} style={{ textAlign: 'center', marginBottom: 56 }}>
+              <div className="tag-g" style={{ marginBottom: 20 }}>Nossa missão</div>
+              <h2 className="s-title" style={{ fontSize: 'clamp(28px,3.5vw,44px)', color: '#111827', maxWidth: 720, margin: '0 auto' }}>
+                Transformar campanhas de matrícula que funcionam no improviso em operações{' '}
+                <span style={{ color: '#0DD3BF' }}>organizadas, previsíveis e inteligentes.</span>
+              </h2>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 24 }}>
+              {[
+                { Icon: IcTarget, title: 'Processo', desc: 'Cada família acompanhada, cada lead trabalhado, cada etapa registrada.' },
+                { Icon: IcBarChart, title: 'Dados', desc: 'Decisões baseadas em métricas reais, não em intuição ou achismo.' },
+                { Icon: IcTrendUp, title: 'Resultado', desc: 'Mais matrículas, equipe organizada e campanha previsível campanha após campanha.' },
+              ].map((v, i) => (
+                <RevealCard key={i} delay={`${i + 1}`}>
+                  <div className="card" style={{ padding: 32, textAlign: 'center' }}>
+                    <div style={{ width: 60, height: 60, borderRadius: 16, background: '#E6F7F5', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                      <v.Icon size={26} color="#00523C" />
+                    </div>
+                    <h3 style={{ fontSize: 18, fontWeight: 800, color: '#111827', marginBottom: 12 }}>{v.title}</h3>
+                    <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.8 }}>{v.desc}</p>
+                  </div>
+                </RevealCard>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* CTA */}
+        <section className="section-pad" style={{ background: 'linear-gradient(135deg,#00523C,#00A896)', position: 'relative', overflow: 'hidden' }}>
+          <div className="grid-pattern" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
+          <div ref={r4} style={{ maxWidth: 640, margin: '0 auto', textAlign: 'center', position: 'relative', zIndex: 1 }}>
+            <div className="tag-d" style={{ marginBottom: 20, display: 'inline-flex' }}>Vamos conversar?</div>
+            <h2 className="s-title" style={{ fontSize: 'clamp(28px,3.5vw,44px)', color: '#fff', marginBottom: 20 }}>
+              Conheça a ÁION EDU na prática
+            </h2>
+            <p style={{ fontSize: 17, color: 'rgba(255,255,255,.78)', marginBottom: 36, lineHeight: 1.8 }}>
+              Agende uma reunião com o nosso time e veja como a plataforma pode transformar a campanha de matrículas da sua escola.
+            </p>
+            <a href="/#demo" className="btn-white" style={{ fontSize: 15, padding: '16px 34px' }}>
+              Agendar reunião <IcArrowRight size={16} />
+            </a>
+          </div>
+        </section>
+      </main>
       <Footer />
     </>
   )

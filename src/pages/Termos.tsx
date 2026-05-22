@@ -1,189 +1,70 @@
-import React from 'react'
+import React, { useEffect } from 'react'
+import Navbar from '../components/Navbar'
+import Footer from '../components/Footer'
+import { SHARED_CSS } from '../styles/sharedCSS'
 
 export default function Termos() {
+  useEffect(() => {
+    const el = document.createElement('style')
+    el.id = 'aion-css'
+    el.textContent = SHARED_CSS
+    if (!document.getElementById('aion-css')) document.head.appendChild(el)
+    return () => { document.getElementById('aion-css')?.remove() }
+  }, [])
+
+  const sections = [
+    { title: '1. Objeto', body: 'Estes Termos de Uso regulam o acesso e a utilização da plataforma ÁION EDU, de titularidade da ÁION Soluções Tecnológicas Ltda. (CNPJ 65.835.064/0001-58), com sede em Patos, Paraíba — Brasil. Ao acessar ou utilizar a plataforma, o usuário concorda integralmente com os termos aqui estabelecidos.' },
+    { title: '2. Cadastro e acesso', body: 'O acesso à plataforma requer cadastro válido com informações verídicas. O usuário é responsável pela confidencialidade de suas credenciais de acesso e por todas as atividades realizadas com sua conta. A ÁION EDU pode suspender ou encerrar contas que violem estes termos, com ou sem aviso prévio, dependendo da gravidade da infração.' },
+    { title: '3. Uso da plataforma', body: 'A plataforma ÁION EDU é disponibilizada para uso exclusivo das instituições de ensino privadas e seus colaboradores, para fins de gestão de campanhas de matrícula e atendimento a famílias. É vedado: compartilhar acesso com terceiros não autorizados; utilizar a plataforma para fins ilícitos; realizar engenharia reversa, cópia ou reprodução não autorizada; sobrecarregar intencionalmente os servidores da plataforma.' },
+    { title: '4. Pagamentos e renovação', body: 'Os valores e condições de pagamento são definidos no contrato de serviço firmado entre a ÁION EDU e a instituição contratante. O não pagamento nas datas acordadas pode resultar na suspensão temporária ou encerramento do acesso à plataforma, conforme estabelecido no contrato.' },
+    { title: '5. Propriedade intelectual', body: 'Todo o conteúdo da plataforma ÁION EDU — incluindo código-fonte, design, textos, logotipos, algoritmos e funcionalidades — é de propriedade exclusiva da ÁION Soluções Tecnológicas Ltda. e protegido pelas leis de propriedade intelectual vigentes. É vedada qualquer reprodução, distribuição ou modificação sem autorização expressa e por escrito.' },
+    { title: '6. Limitação de responsabilidade', body: 'A ÁION EDU não se responsabiliza por: decisões tomadas pelos usuários com base nos dados da plataforma; resultados de campanhas de matrícula; indisponibilidade temporária por manutenção ou falhas de terceiros; danos causados por uso inadequado da plataforma. A responsabilidade total da ÁION EDU está limitada ao valor pago pelo contratante nos últimos 12 meses.' },
+    { title: '7. Rescisão', body: 'Qualquer das partes pode rescindir o contrato mediante aviso prévio de 30 (trinta) dias. Em caso de violação grave dos presentes termos, a ÁION EDU pode rescindir o contrato de forma imediata. Após a rescisão, o acesso à plataforma será encerrado e os dados do cliente serão retidos conforme a Política de Privacidade.' },
+    { title: '8. Foro e legislação aplicável', body: 'Estes Termos de Uso são regidos pelas leis da República Federativa do Brasil. Para a resolução de conflitos, fica eleito o foro da Comarca de Patos, Paraíba, com renúncia expressa a qualquer outro, por mais privilegiado que seja. Tentaremos resolver disputas de forma amigável antes de qualquer medida judicial.' },
+  ]
+
   return (
-    <div style={{ minHeight: '100vh', background: '#f9fafb', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
-      {/* Header */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '0 24px' }}>
-        <div style={{ maxWidth: 900, margin: '0 auto', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <a href="/" style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontWeight: 800, fontSize: 18, color: '#00523C' }}>Áion Edu</span>
-            <span style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Inteligência em matrículas</span>
-          </a>
-          <a href="/" style={{ fontSize: 14, color: '#00523C', fontWeight: 600, textDecoration: 'none' }}>← Voltar ao início</a>
-        </div>
-      </div>
+    <>
+      <Navbar />
+      <main>
+        {/* Hero */}
+        <section style={{ background: '#F4F7F5', padding: '140px 48px 60px', textAlign: 'center' }}>
+          <div className="tag-g" style={{ display: 'inline-flex', marginBottom: 20 }}>Legal</div>
+          <h1 className="s-title" style={{ fontSize: 'clamp(32px,4vw,52px)', color: '#111827', marginBottom: 16 }}>Termos de Uso</h1>
+          <p style={{ fontSize: 16, color: '#6B7280', maxWidth: 540, margin: '0 auto', lineHeight: 1.8 }}>
+            Condições gerais de uso da plataforma ÁION EDU para instituições de ensino e seus colaboradores.
+          </p>
+          <p style={{ fontSize: 13, color: '#9CA3AF', marginTop: 12 }}>Última atualização: 01 de janeiro de 2026</p>
+        </section>
 
-      {/* Content */}
-      <div style={{ maxWidth: 800, margin: '0 auto', padding: '48px 24px 80px' }}>
-        <div style={{ background: '#fff', borderRadius: 16, padding: '48px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid #f0f0f0' }}>
-
-          <div style={{ marginBottom: 40 }}>
-            <h1 style={{ fontSize: 32, fontWeight: 800, color: '#111827', marginBottom: 8 }}>Termos de Uso</h1>
-            <p style={{ fontSize: 14, color: '#6b7280' }}>
-              <strong>AION SOLUCOES TECNOLOGICAS LTDA</strong> · CNPJ: 65.835.064/0001-58
-            </p>
-            <p style={{ fontSize: 13, color: '#9ca3af', marginTop: 4 }}>Última atualização: abril de 2026</p>
-            <div style={{ height: 3, width: 60, background: 'linear-gradient(90deg, #00523C, #00A896)', borderRadius: 2, marginTop: 20 }} />
-          </div>
-
-          {[
-            {
-              title: '1. Aceitação',
-              content: (
-                <p style={p}>
-                  Ao usar a Áion Edu, você concorda com estes Termos de Uso. Caso não concorde, não
-                  utilize a plataforma. O uso continuado após alterações nos termos implica aceitação
-                  das novas condições.
-                </p>
-              ),
-            },
-            {
-              title: '2. O serviço',
-              content: (
-                <>
-                  <p style={p}>
-                    A Áion Edu é uma plataforma SaaS (Software as a Service) de gestão de matrículas
-                    para escolas privadas brasileiras.
-                  </p>
-                  <div style={{ background: '#f0fdf4', borderRadius: 10, padding: '14px 18px', border: '1px solid #bbf7d0', marginTop: 12 }}>
-                    <p style={{ fontSize: 14, color: '#065f46', margin: 0, fontWeight: 600 }}>
-                      Plano Escola: R$ 550/mês por instituição · Sem limite de usuários
-                    </p>
-                  </div>
-                </>
-              ),
-            },
-            {
-              title: '3. Responsabilidades do usuário',
-              content: (
-                <ul style={ul}>
-                  <li style={li}>Manter dados de acesso seguros e não compartilhar credenciais</li>
-                  <li style={li}>Usar a plataforma apenas para fins legítimos e lícitos</li>
-                  <li style={li}>Não inserir dados de terceiros sem consentimento expresso</li>
-                  <li style={li}>Manter dados atualizados e precisos</li>
-                  <li style={li}>Não realizar engenharia reversa, scraping ou tentativas de acesso indevido</li>
-                </ul>
-              ),
-            },
-            {
-              title: '4. Responsabilidades da Áion Edu',
-              content: (
-                <ul style={ul}>
-                  <li style={li}>Disponibilidade mínima de 99% ao mês (SLA)</li>
-                  <li style={li}>Suporte em horário comercial (seg-sex, 8h–18h, horário de Brasília)</li>
-                  <li style={li}>Backup diário dos dados da plataforma</li>
-                  <li style={li}>Notificação prévia de manutenções programadas com impacto na disponibilidade</li>
-                </ul>
-              ),
-            },
-            {
-              title: '5. Pagamento',
-              content: (
-                <ul style={ul}>
-                  <li style={li}>Cobrança mensal no cartão de crédito ou boleto via Asaas</li>
-                  <li style={li}>Cancelamento a qualquer momento sem multa ou fidelidade</li>
-                  <li style={li}>Reembolso proporcional em caso de interrupção do serviço por falha da Áion Edu</li>
-                  <li style={li}>Primeiro mês gratuito para novos clientes</li>
-                </ul>
-              ),
-            },
-            {
-              title: '6. Propriedade intelectual',
-              content: (
-                <>
-                  <p style={p}>
-                    A plataforma Áion Edu, seus algoritmos, interface, código-fonte, marca e demais
-                    elementos são propriedade exclusiva da <strong>AION SOLUCOES TECNOLOGICAS LTDA</strong>.
-                  </p>
-                  <p style={{ ...p, marginTop: 10 }}>
-                    Os dados inseridos pelos clientes (leads, matrículas, históricos) pertencem
-                    exclusivamente às instituições clientes. A Áion Edu não reivindica propriedade
-                    sobre esses dados.
-                  </p>
-                </>
-              ),
-            },
-            {
-              title: '7. Limitação de responsabilidade',
-              content: (
-                <>
-                  <p style={p}>
-                    A Áion Edu não se responsabiliza por decisões de negócio tomadas com base nas
-                    análises e projeções geradas pela plataforma.
-                  </p>
-                  <p style={{ ...p, marginTop: 10 }}>
-                    As projeções geradas pela IA são estimativas baseadas em dados históricos e
-                    tendências de mercado, não constituindo garantia de resultado.
-                  </p>
-                  <p style={{ ...p, marginTop: 10 }}>
-                    A responsabilidade da Áion Edu, em qualquer hipótese, limita-se ao valor pago
-                    pelo cliente nos últimos 3 meses de vigência do contrato.
-                  </p>
-                </>
-              ),
-            },
-            {
-              title: '8. Rescisão',
-              content: (
-                <p style={p}>
-                  Qualquer parte pode encerrar o contrato a qualquer momento, com ou sem aviso prévio.
-                  Recomendamos aviso prévio de 30 dias para possibilitar a exportação adequada dos dados.
-                  Após o encerramento, os dados ficam disponíveis para exportação por 30 dias.
-                </p>
-              ),
-            },
-            {
-              title: '9. Alterações nos termos',
-              content: (
-                <p style={p}>
-                  A Áion Edu pode atualizar estes Termos a qualquer momento. Usuários serão notificados
-                  por e-mail com pelo menos 15 dias de antecedência em caso de mudanças materiais.
-                  O uso continuado após a vigência das alterações constitui aceitação.
-                </p>
-              ),
-            },
-            {
-              title: '10. Foro',
-              content: (
-                <p style={p}>
-                  Fica eleito o foro da Comarca de Patos, Estado da Paraíba, Brasil, para dirimir
-                  quaisquer controvérsias decorrentes destes Termos, com renúncia expressa a qualquer
-                  outro, por mais privilegiado que seja.
-                </p>
-              ),
-            },
-            {
-              title: '11. Contato',
-              content: (
-                <div style={{ background: '#f0fdf4', borderRadius: 10, padding: '16px 20px', border: '1px solid #bbf7d0' }}>
-                  <p style={{ fontSize: 14, color: '#065f46', lineHeight: 1.8, margin: 0 }}>
-                    <strong>AION SOLUCOES TECNOLOGICAS LTDA</strong><br />
-                    CNPJ: 65.835.064/0001-58<br />
-                    R. Francisco Vicente de Araújo, 48 · Bela Vista · Patos - PB · CEP 58.704-560<br />
-                    contato@aionedu.com.br · (83) 9855-6393
-                  </p>
-                </div>
-              ),
-            },
-          ].map((section, i) => (
-            <div key={i} style={{ marginBottom: 36, paddingBottom: 36, borderBottom: '1px solid #f3f4f6' }}>
-              <h2 style={{ fontSize: 20, fontWeight: 700, color: '#00523C', marginBottom: 14 }}>{section.title}</h2>
-              {section.content}
+        {/* Content */}
+        <section style={{ padding: '64px 48px 112px', background: '#fff' }}>
+          <div style={{ maxWidth: 800, margin: '0 auto' }}>
+            <div style={{ background: '#FFFBEB', borderRadius: 16, padding: '20px 24px', marginBottom: 48, border: '1px solid #FDE68A' }}>
+              <p style={{ fontSize: 14, color: '#92400E', lineHeight: 1.8, fontWeight: 600 }}>
+                Ao acessar ou utilizar a plataforma ÁION EDU, você confirma que leu, entendeu e concorda com estes Termos de Uso na íntegra. Caso não concorde, não utilize a plataforma.
+              </p>
             </div>
-          ))}
-        </div>
-      </div>
 
-      {/* Footer */}
-      <div style={{ background: '#0a1628', color: '#6b7280', textAlign: 'center', padding: '20px 24px', fontSize: 12 }}>
-        © 2026 Áion Edu — AION SOLUCOES TECNOLOGICAS LTDA · CNPJ 65.835.064/0001-58 ·{' '}
-        <a href="/privacidade" style={{ color: '#9ca3af', textDecoration: 'none' }}>Política de Privacidade</a>
-      </div>
-    </div>
+            {sections.map((s, i) => (
+              <div key={i} style={{ marginBottom: 40 }}>
+                <h2 style={{ fontFamily: 'Bricolage Grotesque, sans-serif', fontWeight: 800, fontSize: 20, color: '#111827', marginBottom: 14, letterSpacing: '-.02em' }}>{s.title}</h2>
+                <p style={{ fontSize: 15, color: '#4B5563', lineHeight: 1.9 }}>{s.body}</p>
+                {i < sections.length - 1 && <div style={{ height: 1, background: '#F3F4F6', marginTop: 40 }} />}
+              </div>
+            ))}
+
+            <div style={{ background: '#F9FAFB', borderRadius: 16, padding: '24px', marginTop: 20, border: '1px solid #E5E7EB' }}>
+              <p style={{ fontSize: 14, color: '#374151', lineHeight: 1.8 }}>
+                <strong>Dúvidas sobre os termos?</strong> Entre em contato pelo WhatsApp{' '}
+                <a href="https://wa.me/5583933444383" style={{ color: '#00A896', fontWeight: 700 }}>(83) 9344-4383</a>{' '}
+                ou pelo e-mail <a href="mailto:contato@aionedu.com.br" style={{ color: '#00A896', fontWeight: 700 }}>contato@aionedu.com.br</a>.
+              </p>
+            </div>
+          </div>
+        </section>
+      </main>
+      <Footer />
+    </>
   )
 }
-
-const p: React.CSSProperties = { fontSize: 14, color: '#374151', lineHeight: 1.75, margin: 0 }
-const ul: React.CSSProperties = { paddingLeft: 20, margin: 0 }
-const li: React.CSSProperties = { fontSize: 14, color: '#374151', lineHeight: 1.75, marginBottom: 4 }
