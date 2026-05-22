@@ -1423,9 +1423,22 @@ export default function LeadKanban() {
     if (!lead || !window.confirm(`Tem certeza que deseja excluir o lead "${lead.student_name}"?\n\nEsta ação não pode ser desfeita.`)) return
     try {
       const { supabase: db } = await import('../../lib/supabase')
-      const { error } = await db.from('leads').delete().eq('id', leadId).eq('institution_id', user!.institution_id)
+      const instId = user!.institution_id
+
+      // 1. Desvincular mensagens do lead
+      await db.from('whatsapp_messages').update({ lead_id: null }).eq('lead_id', leadId).eq('institution_id', instId)
+      // 2. Desvincular conversas do lead
+      await db.from('whatsapp_conversations').update({ lead_id: null }).eq('lead_id', leadId).eq('institution_id', instId)
+      // 3. Desvincular contatos do lead
+      await db.from('whatsapp_contacts').update({ lead_id: null, type: 'unknown' }).eq('lead_id', leadId).eq('institution_id', instId)
+      // 4. Deletar logs do lead
+      await db.from('audit_logs').delete().eq('record_id', leadId).eq('institution_id', instId)
+
+      // 5. Deletar o lead
+      const { error } = await db.from('leads').delete().eq('id', leadId).eq('institution_id', instId)
       if (error) throw error
-      await logAudit({ institution_id: user!.institution_id, module: 'leads', record_id: leadId, action: 'deleted', old_value: lead.student_name, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
+
+      await logAudit({ institution_id: instId, module: 'leads', record_id: leadId, action: 'deleted', old_value: lead.student_name, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
       setLeads(prev => prev.filter(l => l.id !== leadId))
       if (editingLead?.id === leadId) { setShowNewLeadModal(false); setEditingLead(null) }
       showToast('Lead excluído com sucesso', 'success')
