@@ -1,8 +1,8 @@
 export const SHARED_CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800;12..96,900&display=swap');
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; max-width: 100%; }
+html { scroll-behavior: smooth; overflow-x: hidden; max-width: 100vw; }
 body { font-family: 'Plus Jakarta Sans', sans-serif; color: #111827; overflow-x: hidden; background: #fff; }
 
 @keyframes fadeUp    { from{opacity:0;transform:translateY(32px)} to{opacity:1;transform:translateY(0)} }
@@ -78,7 +78,7 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; color: #111827; overflow-x:
 .btn-teal:hover { transform:translateY(-2px); box-shadow:0 12px 36px rgba(0,168,150,.45); }
 
 .card {
-  background:#fff; border:1.5px solid #E8ECF0; border-radius:20px;
+  background:#fff; border:1.5px solid #E8ECF0; border-radius:20px; overflow:hidden;
   transition:border-color .25s, box-shadow .25s, transform .25s;
 }
 .card:hover { border-color:#0DD3BF; box-shadow:0 16px 48px rgba(13,211,191,.15); transform:translateY(-6px); }
@@ -112,6 +112,8 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; color: #111827; overflow-x:
 .nav-dropdown-item { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:10px; color:#374151; font-size:14px; font-weight:600; text-decoration:none; transition:background .15s, color .15s; }
 .nav-dropdown-item:hover { background:#E6F7F5; color:#00523C; }
 .nav-mobile-btn { display:none; background:none; border:none; cursor:pointer; padding:4px; }
+.nav-hamburger { display:none; background:none; border:none; cursor:pointer; padding:4px; }
+.nav-mobile-menu { background:#fff; padding:16px 24px 28px; display:flex; flex-direction:column; gap:16px; border-top:1px solid #F3F4F6; box-shadow:0 8px 24px rgba(0,0,0,.1); }
 
 /* Footer link hover */
 .footer-link { color:rgba(255,255,255,.7); text-decoration:none; font-size:14px; transition:color .2s; }
@@ -132,10 +134,22 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; color: #111827; overflow-x:
   .grid-4 { grid-template-columns:1fr 1fr !important; }
   .steps-g { grid-template-columns:1fr !important; }
 }
+@media (max-width:1024px) {
+  .grid-3 { grid-template-columns:1fr 1fr !important; }
+}
 @media (max-width:768px) {
+  .nav-links-desktop { display:none !important; }
+  .nav-ctas-desktop { display:none !important; }
   .nav-links-desk { display:none !important; }
   .nav-ctas-desk { display:none !important; }
   .nav-mobile-btn { display:block !important; }
+  .nav-hamburger { display:block !important; }
+  .hero-section { padding:100px 24px 64px !important; }
+  .hero-section .s-title { font-size:clamp(32px,8vw,48px) !important; }
+  .hero-ctas { flex-direction:column !important; align-items:stretch !important; }
+  .hero-ctas a, .hero-ctas button { width:100% !important; justify-content:center !important; box-sizing:border-box !important; }
+  .card { padding:24px 20px; }
+  .ticker-track { animation-duration:20s; }
   .grid-3 { grid-template-columns:1fr !important; }
   .form-g { grid-template-columns:1fr !important; }
   .section-pad { padding:72px 24px !important; }

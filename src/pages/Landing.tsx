@@ -120,7 +120,7 @@ function HeroMockup() {
 // ── HERO ──────────────────────────────────────────────────────────────────
 function Hero() {
   return (
-    <section style={{
+    <section className="hero-section" style={{
       background: `radial-gradient(ellipse 80% 60% at 15% 50%, rgba(0,82,60,0.98) 0%, transparent 65%), radial-gradient(ellipse 50% 70% at 85% 15%, rgba(0,168,150,0.25) 0%, transparent 55%), radial-gradient(ellipse 35% 45% at 75% 85%, rgba(13,211,191,0.12) 0%, transparent 50%), #00301F`,
       padding: '140px 48px 96px', minHeight: '100vh', display: 'flex', alignItems: 'center', position: 'relative', overflow: 'hidden',
     }}>
@@ -132,8 +132,8 @@ function Hero() {
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#4ADE80', display: 'inline-block', animation: 'pulse2 2s infinite' }} />
               <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.85)', letterSpacing: '.04em' }}>CRM · WhatsApp Oficial Meta · IA · Pipeline · Relatórios</span>
             </div>
-            <h1 className="s-title" style={{ fontSize: 'clamp(44px,5.5vw,76px)', color: '#fff', marginBottom: 28, animation: 'fadeUp .9s ease .1s both', lineHeight: 1.04 }}>
-              O futuro da campanha<br />de matrícula e do<br />atendimento da sua<br />escola <span style={{ color: '#0DD3BF' }}>começa agora.</span>
+            <h1 className="s-title" style={{ fontSize: 'clamp(36px,5.5vw,72px)', color: '#fff', marginBottom: 28, animation: 'fadeUp .9s ease .1s both', lineHeight: 1.05, letterSpacing: '-0.03em', maxWidth: 640 }}>
+              O futuro da campanha<br />de matrícula e do atendimento<br />da sua escola <span style={{ color: '#0DD3BF' }}>começa agora.</span>
             </h1>
             <p style={{ fontSize: 17, color: 'rgba(255,255,255,.75)', lineHeight: 1.8, marginBottom: 40, maxWidth: 520, animation: 'fadeUp .9s ease .2s both' }}>
               A ÁION EDU lê os dados da sua escola, cria um plano de campanha com metas e ações, centraliza o atendimento das famílias e entrega ao gestor visibilidade total — do primeiro contato até a matrícula assinada.
@@ -258,8 +258,8 @@ function Solucoes() {
                     <s.icon size={24} color={s.ic} />
                   </div>
                   {s.meta && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#EBF5FB', padding: '5px 10px', borderRadius: 999, fontSize: 11, fontWeight: 800, color: '#1877F2' }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" /></svg>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#EBF5FB', padding: '5px 10px', borderRadius: 999, fontSize: 11, fontWeight: 800, color: '#1877F2' }}>
+                      <img src="https://static.xx.fbcdn.net/rsrc.php/y1/r/4hZ1LkFP2sW.webp" alt="Meta" style={{ height: 12, filter: 'none' }} />
                       Parceiro Oficial
                     </div>
                   )}
@@ -292,9 +292,7 @@ function MetaPartner() {
       <div className="grid-pattern" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
       <div ref={r0} style={{ maxWidth: 760, margin: '0 auto', textAlign: 'center', position: 'relative', zIndex: 1 }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
-          <svg width="90" height="24" viewBox="0 0 90 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <text x="0" y="20" fontFamily="'Plus Jakarta Sans',sans-serif" fontWeight="700" fontSize="22" fill="white" letterSpacing="-0.5">Meta</text>
-          </svg>
+          <img src="https://static.xx.fbcdn.net/rsrc.php/y1/r/4hZ1LkFP2sW.webp" alt="Meta" style={{ height: 28, filter: 'brightness(0) invert(1)' }} />
         </div>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 999, padding: '7px 18px', marginBottom: 28 }}>
           <IcShield size={14} color="#0DD3BF" />

@@ -23,6 +23,7 @@ function IconChevronDown({ size = 14, color = 'currentColor' }: { size?: number;
 }
 
 const NAV_LINKS = [
+  { href: '/', label: 'Início' },
   { href: '/#solucoes', label: 'Módulos' },
   { href: '/sobre', label: 'Quem Somos' },
   { href: '/blog', label: 'Blog' },
@@ -78,7 +79,7 @@ export default function Navbar() {
         </a>
 
         {/* Desktop Links */}
-        <div className="nav-links-desk" style={{ display: 'flex', gap: 28, alignItems: 'center' }}>
+        <div className="nav-links-desktop" style={{ display: 'flex', gap: 28, alignItems: 'center' }}>
           {/* Soluções dropdown */}
           <div style={{ position: 'relative' }} onMouseEnter={() => setDropOpen(true)} onMouseLeave={() => setDropOpen(false)}>
             <button className={linkClass} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
@@ -99,7 +100,7 @@ export default function Navbar() {
         </div>
 
         {/* Desktop CTAs */}
-        <div className="nav-ctas-desk" style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
+        <div className="nav-ctas-desktop" style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
           <a href="/login" style={{
             color: scrolled ? '#374151' : 'rgba(255,255,255,.88)',
             border: `1.5px solid ${borderColor}`,
