@@ -240,168 +240,349 @@ interface NewLeadModalProps {
   editingLead?: Lead | null
 }
 
+const LEAD_STAGES = [
+  { key: 'new',       label: 'Novo'      },
+  { key: 'contact',   label: 'Contato'   },
+  { key: 'scheduled', label: 'Ag.'       },
+  { key: 'visit',     label: 'Visita'    },
+  { key: 'proposal',  label: 'Proposta'  },
+  { key: 'enrolled',  label: 'Matrícula' },
+] as const
+
+function avatarColor(name: string): string {
+  const colors = ['#00A896', '#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444', '#10B981']
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h)
+  return colors[Math.abs(h) % colors.length]
+}
+
 function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProps) {
-  const [currentStep, setCurrentStep] = useState(1)
+  const [activeTab, setActiveTab] = useState<'dados' | 'historico' | 'anotacoes'>('dados')
   const [saving, setSaving] = useState(false)
+  const [savingNote, setSavingNote] = useState(false)
+  const [savingActivity, setSavingActivity] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [history, setHistory] = useState<ActivityLog[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [quickNote, setQuickNote] = useState('')
+  const [activityForm, setActivityForm] = useState({ tipo: 'Ligação', descricao: '', data: new Date().toISOString().split('T')[0] })
   const [formData, setFormData] = useState({
-    student_name: '', grade_interest: '', responsible_name: '',
-    phone: '', email: '', address: '', budget_range: '', source: '', notes: ''
+    student_name: '', grade_interest: '', shift_interest: '',
+    responsible_name: '', phone: '', email: '', address: '',
+    budget_range: '', source: '', notes: '', sales_rep: '',
+    status: 'new' as Lead['status'],
   })
 
   useEffect(() => {
+    if (!isOpen) return
     if (editingLead) {
       setFormData({
-        student_name: editingLead.student_name, grade_interest: editingLead.grade_interest,
-        responsible_name: editingLead.responsible_name,
-        phone: editingLead.phone || '', email: editingLead.email || '',
-        address: editingLead.address || '', budget_range: editingLead.budget_range || '',
-        source: editingLead.source, notes: editingLead.notes || ''
+        student_name: editingLead.student_name ?? '',
+        grade_interest: editingLead.grade_interest ?? '',
+        shift_interest: (editingLead as any).shift_interest ?? '',
+        responsible_name: editingLead.responsible_name ?? '',
+        phone: editingLead.phone ?? '',
+        email: editingLead.email ?? '',
+        address: editingLead.address ?? '',
+        budget_range: editingLead.budget_range ?? '',
+        source: editingLead.source ?? '',
+        notes: editingLead.notes ?? '',
+        sales_rep: (editingLead as any).sales_rep ?? '',
+        status: editingLead.status ?? 'new',
       })
     } else {
-      setFormData({ student_name: '', grade_interest: '', responsible_name: '', phone: '', email: '', address: '', budget_range: '', source: '', notes: '' })
+      setFormData({ student_name: '', grade_interest: '', shift_interest: '', responsible_name: '', phone: '', email: '', address: '', budget_range: '', source: '', notes: '', sales_rep: '', status: 'new' })
     }
-    setCurrentStep(1)
+    setActiveTab('dados')
     setFieldErrors({})
+    setQuickNote('')
+    setHistory([])
   }, [editingLead, isOpen])
+
+  useEffect(() => {
+    if (activeTab === 'historico' && editingLead?.id) {
+      setLoadingHistory(true)
+      ;(async () => {
+        try {
+          const h = await DatabaseService.getActivityLogs((editingLead as any).institution_id ?? '', editingLead.id)
+          setHistory(h)
+        } catch { setHistory([]) }
+        finally { setLoadingHistory(false) }
+      })()
+    }
+  }, [activeTab, editingLead?.id])
 
   const validate = (): boolean => {
     const errors: Record<string, string> = {}
-    if (!formData.student_name.trim()) errors.student_name = 'Nome do aluno é obrigatório'
-    if (!formData.responsible_name.trim()) errors.responsible_name = 'Nome do responsável é obrigatório'
-    if (!formData.phone.trim()) errors.phone = 'Telefone é obrigatório'
+    if (!formData.student_name.trim()) errors.student_name = 'Obrigatório'
+    if (!formData.responsible_name.trim()) errors.responsible_name = 'Obrigatório'
+    if (!formData.phone.trim()) errors.phone = 'Obrigatório'
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!validate()) return
+  const handleSubmit = async () => {
+    if (!validate()) { setActiveTab('dados'); return }
     setSaving(true)
     try { await onSave(formData); onClose() } finally { setSaving(false) }
   }
 
+  const handleSaveNote = async () => {
+    if (!editingLead) return
+    const noteText = quickNote || formData.notes
+    if (!noteText.trim()) return
+    setSavingNote(true)
+    try {
+      const { supabase: db } = await import('../../lib/supabase')
+      await db.from('leads').update({ notes: noteText }).eq('id', editingLead.id)
+      setFormData(f => ({ ...f, notes: noteText }))
+    } catch {} finally { setSavingNote(false) }
+  }
+
+  const handleAddActivity = async () => {
+    if (!editingLead || !activityForm.descricao.trim()) return
+    setSavingActivity(true)
+    try {
+      const { supabase: db } = await import('../../lib/supabase')
+      const instId = (editingLead as any).institution_id ?? ''
+      await db.from('activity_logs').insert({
+        user_id: null, user_name: 'Atendente', action: activityForm.tipo,
+        entity_type: 'lead', entity_id: editingLead.id, institution_id: instId,
+        details: { description: activityForm.descricao, contact_date: activityForm.data, type: 'note' },
+        created_at: new Date().toISOString(),
+      })
+      setActivityForm({ tipo: 'Ligação', descricao: '', data: new Date().toISOString().split('T')[0] })
+      const h = await DatabaseService.getActivityLogs(instId, editingLead.id)
+      setHistory(h)
+    } catch {} finally { setSavingActivity(false) }
+  }
+
   if (!isOpen) return null
 
-  const stepLabels = ['Dados do Aluno', 'Dados do Responsável', 'Informações Adicionais']
+  const initials = (formData.responsible_name || formData.student_name || '?').charAt(0).toUpperCase()
+  const bgColor = avatarColor(formData.responsible_name || formData.student_name || '?')
+  const curStageIdx = LEAD_STAGES.findIndex(s => s.key === formData.status)
+  const formatDT = (d: string) => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  const tabBtn = (tab: typeof activeTab, label: string) => (
+    <button onClick={() => setActiveTab(tab)} style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', borderBottom: activeTab === tab ? '2px solid #00A896' : '2px solid transparent', color: activeTab === tab ? '#00A896' : '#64748B', background: 'transparent', transition: 'all 0.15s' }}>{label}</button>
+  )
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,43,74,0.35)', backdropFilter: 'blur(3px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ background: '#FFFFFF', borderRadius: 20, padding: 28, width: '100%', maxWidth: 640, maxHeight: '90vh', overflowY: 'auto', border: '0.5px solid #D1FAE5', boxShadow: '0 20px 60px rgba(0,168,150,0.15)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Users style={{ width: 16, height: 16, color: '#00A896' }} />
-            </div>
-            <h2 style={{ fontSize: 17, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{editingLead ? 'Editar Lead' : 'Novo Lead'}</h2>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: '#FFFFFF', borderRadius: 20, width: '100%', maxWidth: 680, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.2)', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ background: 'linear-gradient(135deg, #00A896 0%, #007A6E 100%)', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+          <div style={{ width: 52, height: 52, borderRadius: 16, background: bgColor, border: '2px solid rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
+            {initials}
           </div>
-          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: '0.5px solid #E2E8F0', background: '#F8FAFC', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <X style={{ width: 15, height: 15, color: '#94A3B8' }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formData.responsible_name || 'Novo Lead'}</div>
+            {formData.student_name && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Aluno: {formData.student_name}</div>}
+            <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+              {formData.status && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(255,255,255,0.25)', color: '#fff' }}>{statusConfig[formData.status]?.label}</span>}
+              {formData.phone && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>📞 {formData.phone}</span>}
+              {formData.email && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>✉ {formData.email}</span>}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 10, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <X style={{ width: 15, height: 15, color: '#fff' }} />
           </button>
         </div>
 
-        <div className="flex items-center justify-center mb-8">
-          {[1, 2, 3].map((step) => (
-            <div key={step} className="flex items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${step <= currentStep ? 'bg-[#14b8a6] text-white' : 'bg-gray-200 text-gray-500'}`}>{step}</div>
-              {step < 3 && <div className={`w-12 h-0.5 mx-2 rounded-full transition-all ${step < currentStep ? 'bg-[#14b8a6]' : 'bg-gray-200'}`} />}
-            </div>
-          ))}
+        {/* Tabs */}
+        <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC', flexShrink: 0, paddingLeft: 8 }}>
+          {tabBtn('dados', 'Dados')}
+          {editingLead && tabBtn('historico', 'Histórico')}
+          {editingLead && tabBtn('anotacoes', 'Anotações')}
         </div>
-        <p className="text-center text-sm font-semibold text-gray-500 mb-6">{stepLabels[currentStep - 1]}</p>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {currentStep === 1 && (
-            <div className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome do Aluno *</label>
-                  <input type="text" value={formData.student_name}
-                    onChange={(e) => { setFormData({ ...formData, student_name: e.target.value }); setFieldErrors(prev => ({ ...prev, student_name: '' })) }}
-                    className={inputCls + (fieldErrors.student_name ? ' border-red-400' : '')} placeholder="Nome completo do aluno" />
-                  {fieldErrors.student_name && <p className="text-red-500 text-xs mt-1">{fieldErrors.student_name}</p>}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Série/Ano de Interesse</label>
-                  <select value={formData.grade_interest} onChange={(e) => setFormData({ ...formData, grade_interest: e.target.value })} className={inputCls}>
-                    <option value="">Selecione a série</option>
-                    {gradeOptions.map(g => <option key={g} value={g}>{g}</option>)}
-                  </select>
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+
+          {/* ABA DADOS */}
+          {activeTab === 'dados' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Dados do Responsável</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Nome completo *</label>
+                    <input value={formData.responsible_name} onChange={e => { setFormData(f => ({ ...f, responsible_name: e.target.value })); setFieldErrors(p => ({ ...p, responsible_name: '' })) }} placeholder="Nome do responsável"
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: fieldErrors.responsible_name ? '1.5px solid #EF4444' : '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
+                    {fieldErrors.responsible_name && <p style={{ fontSize: 11, color: '#EF4444', marginTop: 3 }}>{fieldErrors.responsible_name}</p>}
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Telefone / WhatsApp *</label>
+                    <input value={formData.phone} onChange={e => { setFormData(f => ({ ...f, phone: applyPhoneMask(e.target.value) })); setFieldErrors(p => ({ ...p, phone: '' })) }} placeholder="11 99999-9999"
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: fieldErrors.phone ? '1.5px solid #EF4444' : '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
+                    {fieldErrors.phone && <p style={{ fontSize: 11, color: '#EF4444', marginTop: 3 }}>{fieldErrors.phone}</p>}
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>E-mail</label>
+                    <input type="email" value={formData.email} onChange={e => setFormData(f => ({ ...f, email: e.target.value }))} placeholder="email@exemplo.com"
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
+                  </div>
                 </div>
               </div>
+
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Dados do Aluno</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Nome do aluno *</label>
+                    <input value={formData.student_name} onChange={e => { setFormData(f => ({ ...f, student_name: e.target.value })); setFieldErrors(p => ({ ...p, student_name: '' })) }} placeholder="Nome completo do aluno"
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: fieldErrors.student_name ? '1.5px solid #EF4444' : '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
+                    {fieldErrors.student_name && <p style={{ fontSize: 11, color: '#EF4444', marginTop: 3 }}>{fieldErrors.student_name}</p>}
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Série de interesse</label>
+                    <select value={formData.grade_interest} onChange={e => setFormData(f => ({ ...f, grade_interest: e.target.value }))}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
+                      <option value="">Selecione</option>
+                      {gradeOptions.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Turno</label>
+                    <select value={formData.shift_interest} onChange={e => setFormData(f => ({ ...f, shift_interest: e.target.value }))}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
+                      <option value="">Selecione</option>
+                      <option value="Manhã">Manhã</option>
+                      <option value="Tarde">Tarde</option>
+                      <option value="Integral">Integral</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Informações do Lead</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Origem</label>
+                    <select value={formData.source} onChange={e => setFormData(f => ({ ...f, source: e.target.value }))}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
+                      <option value="">Selecione</option>
+                      {sourceOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Responsável comercial</label>
+                    <input value={formData.sales_rep} onChange={e => setFormData(f => ({ ...f, sales_rep: e.target.value }))} placeholder="Nome do atendente"
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
+                  </div>
+                </div>
+              </div>
+
+              {editingLead && (
+                <div>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Funil de Status</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      {LEAD_STAGES.map((stage, idx) => {
+                        const done = idx < curStageIdx; const active = idx === curStageIdx
+                        return (
+                          <React.Fragment key={stage.key}>
+                            <div onClick={() => setFormData(f => ({ ...f, status: stage.key as Lead['status'] }))} title={stage.label}
+                              style={{ width: 22, height: 22, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: done || active ? '#00A896' : '#E2E8F0', border: active ? '2.5px solid #007A6E' : '2px solid transparent', boxShadow: active ? '0 0 0 3px rgba(0,168,150,0.2)' : 'none', transition: 'all 0.15s' }}>
+                              {done && <span style={{ fontSize: 9, color: '#fff', fontWeight: 700 }}>✓</span>}
+                            </div>
+                            {idx < LEAD_STAGES.length - 1 && <div style={{ flex: 1, height: 2, background: done ? '#00A896' : '#E2E8F0', transition: 'background 0.2s' }} />}
+                          </React.Fragment>
+                        )
+                      })}
+                    </div>
+                    <div style={{ display: 'flex' }}>
+                      {LEAD_STAGES.map((stage, idx) => (
+                        <div key={stage.key} style={{ flex: idx === 0 ? '0 0 22px' : 1, textAlign: idx === 0 ? 'left' : idx === LEAD_STAGES.length - 1 ? 'right' : 'center' }}>
+                          <span style={{ fontSize: 10, color: idx === curStageIdx ? '#00A896' : '#94A3B8', fontWeight: idx === curStageIdx ? 700 : 400 }}>{stage.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={() => setFormData(f => ({ ...f, status: 'lost' }))}
+                      style={{ marginTop: 4, alignSelf: 'flex-start', padding: '5px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: formData.status === 'lost' ? '#EF4444' : '#FEF2F2', color: formData.status === 'lost' ? '#fff' : '#DC2626', transition: 'all 0.15s' }}>
+                      {formData.status === 'lost' ? '🔴 Perdido' : 'Marcar como Perdido'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {currentStep === 2 && (
-            <div className="space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome do Responsável *</label>
-                <input type="text" value={formData.responsible_name}
-                  onChange={(e) => { setFormData({ ...formData, responsible_name: e.target.value }); setFieldErrors(prev => ({ ...prev, responsible_name: '' })) }}
-                  className={inputCls + (fieldErrors.responsible_name ? ' border-red-400' : '')} placeholder="Nome completo do responsável" />
-                {fieldErrors.responsible_name && <p className="text-red-500 text-xs mt-1">{fieldErrors.responsible_name}</p>}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Telefone *</label>
-                  <input type="tel" value={formData.phone}
-                    onChange={(e) => { setFormData({ ...formData, phone: applyPhoneMask(e.target.value) }); setFieldErrors(prev => ({ ...prev, phone: '' })) }}
-                    className={inputCls + (fieldErrors.phone ? ' border-red-400' : '')} placeholder="11 99999-9999" />
-                  {fieldErrors.phone && <p className="text-red-500 text-xs mt-1">{fieldErrors.phone}</p>}
+          {/* ABA HISTÓRICO */}
+          {activeTab === 'historico' && editingLead && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ background: '#F8FAFC', borderRadius: 12, padding: 14, border: '1px solid #E2E8F0' }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A', marginBottom: 10 }}>Registrar atividade</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                  <select value={activityForm.tipo} onChange={e => setActivityForm(f => ({ ...f, tipo: e.target.value }))}
+                    style={{ padding: '7px 10px', borderRadius: 8, border: '1.5px solid #E2E8F0', fontSize: 12, outline: 'none', background: '#fff', color: '#1A2B4A' }}>
+                    <option>Ligação</option><option>Email</option><option>WhatsApp</option><option>Presencial</option><option>Outro</option>
+                  </select>
+                  <input type="date" value={activityForm.data} onChange={e => setActivityForm(f => ({ ...f, data: e.target.value }))}
+                    style={{ padding: '7px 10px', borderRadius: 8, border: '1.5px solid #E2E8F0', fontSize: 12, outline: 'none', color: '#1A2B4A' }} />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">E-mail</label>
-                  <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className={inputCls} placeholder="email@exemplo.com" />
-                </div>
+                <textarea value={activityForm.descricao} onChange={e => setActivityForm(f => ({ ...f, descricao: e.target.value }))} placeholder="Descreva o contato..." rows={2}
+                  style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: '1.5px solid #E2E8F0', fontSize: 12, outline: 'none', resize: 'none', boxSizing: 'border-box', color: '#1A2B4A', marginBottom: 8 }} />
+                <button onClick={handleAddActivity} disabled={savingActivity || !activityForm.descricao.trim()}
+                  style={{ padding: '6px 14px', borderRadius: 8, background: '#00A896', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingActivity || !activityForm.descricao.trim() ? 0.5 : 1 }}>
+                  {savingActivity ? 'Salvando...' : 'Registrar'}
+                </button>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Endereço</label>
-                <input type="text" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} className={inputCls} placeholder="Endereço completo" />
-              </div>
+              {loadingHistory
+                ? <div style={{ textAlign: 'center', padding: 32 }}><div className="animate-spin rounded-full h-7 w-7 border-4 border-[#00A896] border-t-transparent mx-auto" /></div>
+                : history.length === 0
+                  ? <div style={{ textAlign: 'center', padding: 32, color: '#94A3B8', fontSize: 13 }}>Nenhuma atividade registrada</div>
+                  : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {history.map(item => (
+                        <div key={item.id} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, padding: '10px 14px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A' }}>{item.action}</span>
+                            <span style={{ fontSize: 11, color: '#94A3B8' }}>{formatDT(item.created_at)}</span>
+                          </div>
+                          {item.details?.description && <p style={{ fontSize: 12, color: '#475569', margin: 0 }}>{item.details.description}</p>}
+                          {item.details?.previous_status && item.details?.new_status && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                              <span style={{ fontSize: 11, padding: '2px 7px', background: '#F1F5F9', borderRadius: 999, color: '#64748B' }}>{statusConfig[item.details.previous_status as keyof typeof statusConfig]?.label}</span>
+                              <span style={{ fontSize: 11, color: '#00A896', fontWeight: 700 }}>→</span>
+                              <span style={{ fontSize: 11, padding: '2px 7px', background: '#E6F7F5', borderRadius: 999, color: '#00A896', fontWeight: 600 }}>{statusConfig[item.details.new_status as keyof typeof statusConfig]?.label}</span>
+                            </div>
+                          )}
+                          <span style={{ fontSize: 11, color: '#94A3B8' }}>por {item.user_name}</span>
+                        </div>
+                      ))}
+                    </div>
+              }
             </div>
           )}
 
-          {currentStep === 3 && (
-            <div className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Faixa de Orçamento</label>
-                  <select value={formData.budget_range} onChange={(e) => setFormData({ ...formData, budget_range: e.target.value })} className={inputCls}>
-                    <option value="">Selecione a faixa</option>
-                    <option value="Até R$ 500">Até R$ 500</option>
-                    <option value="R$ 500 - R$ 1.000">R$ 500 - R$ 1.000</option>
-                    <option value="R$ 1.000 - R$ 1.500">R$ 1.000 - R$ 1.500</option>
-                    <option value="R$ 1.500 - R$ 2.000">R$ 1.500 - R$ 2.000</option>
-                    <option value="Acima de R$ 2.000">Acima de R$ 2.000</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Origem do Lead</label>
-                  <select value={formData.source} onChange={(e) => setFormData({ ...formData, source: e.target.value })} className={inputCls}>
-                    <option value="">Selecione a origem</option>
-                    {sourceOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-              </div>
+          {/* ABA ANOTAÇÕES */}
+          {activeTab === 'anotacoes' && editingLead && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Observações</label>
-                <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} className={inputCls} rows={4} placeholder="Informações adicionais sobre o lead" />
+                <p style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A', marginBottom: 8 }}>Nota sobre este lead</p>
+                <textarea value={quickNote || formData.notes} onChange={e => setQuickNote(e.target.value)} placeholder="Anotações importantes sobre este lead..." rows={6}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', color: '#1A2B4A', lineHeight: 1.6 }} />
+                <button onClick={handleSaveNote} disabled={savingNote}
+                  style={{ marginTop: 8, padding: '7px 16px', borderRadius: 9, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingNote ? 0.6 : 1 }}>
+                  {savingNote ? 'Salvando...' : 'Salvar nota'}
+                </button>
               </div>
+              <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>A nota fica visível para toda a equipe.</p>
             </div>
           )}
+        </div>
 
-          <div className="flex justify-between pt-4 border-t border-gray-100">
-            <div>{currentStep > 1 && <button type="button" onClick={() => setCurrentStep(currentStep - 1)} className={btnSecondary}>Anterior</button>}</div>
-            <div className="flex gap-2">
-              <button type="button" onClick={onClose} className={btnSecondary}>Cancelar</button>
-              {currentStep < 3
-                ? <button type="button" onClick={() => setCurrentStep(currentStep + 1)} className={btnPrimary}>Próximo</button>
-                : <button type="submit" disabled={saving} className={btnPrimary + ' disabled:opacity-50 disabled:cursor-not-allowed'}>
-                    {saving ? <><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />Salvando...</> : <><Save className="w-4 h-4" />{editingLead ? 'Atualizar' : 'Salvar'} Lead</>}
-                  </button>}
-            </div>
-          </div>
-        </form>
+        {/* Footer */}
+        <div style={{ borderTop: '1px solid #E2E8F0', padding: '14px 24px', display: 'flex', justifyContent: 'flex-end', gap: 10, flexShrink: 0, background: '#F8FAFC' }}>
+          <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#64748B' }}>Cancelar</button>
+          <button onClick={handleSubmit} disabled={saving}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 20px', borderRadius: 9, background: saving ? '#94A3B8' : '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
+            {saving
+              ? <><div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />Salvando...</>
+              : <><Save style={{ width: 14, height: 14 }} />{editingLead ? 'Salvar alterações' : 'Criar Lead'}</>}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -752,7 +933,7 @@ interface CardContentProps {
   onWhatsApp: (lead: Lead) => void
 }
 
-function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory, onAudit, onEdit, onDelete, onWhatsApp }: CardContentProps) {
+function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory, onAudit, onEdit, onDelete, onStatusChange, onWhatsApp }: CardContentProps) {
   const lostReason = (lead as any).lost_reason
   const lostLabel = lostReason ? LOST_REASONS.find(r => r.value === lostReason)?.label : null
 
@@ -798,6 +979,16 @@ function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory,
           <div style={{ background: '#FEF2F2', borderRadius: 6, padding: '4px 8px', marginBottom: 6 }}>
             <p style={{ fontSize: 11, color: '#DC2626', fontWeight: 500, margin: 0 }}>⚠ {lostLabel}</p>
           </div>
+        )}
+        {lead.status === 'lost' && !overlay && (
+          <button
+            type="button"
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); onStatusChange(lead.id, 'contact') }}
+            style={{ marginTop: 4, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: '#2563EB', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}
+          >
+            🔄 Reabrir lead
+          </button>
         )}
 
         {lead.phone && (
@@ -898,7 +1089,43 @@ export default function LeadKanban() {
     setTimeout(() => setToast(null), 3000)
   }, [])
 
-  useEffect(() => { if (user?.institution_id) loadData() }, [user])
+  useEffect(() => {
+    if (!user?.institution_id) return
+    loadData()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let leadsChannel: any = null
+    ;(async () => {
+      const { supabase: db } = await import('../../lib/supabase')
+      leadsChannel = db
+        .channel(`leads-kanban-${user.institution_id}`)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'leads',
+          filter: `institution_id=eq.${user.institution_id}`,
+        }, (payload: any) => {
+          if (payload.eventType === 'INSERT') {
+            setLeads(prev => {
+              if (prev.find(l => l.id === payload.new.id)) return prev
+              return [payload.new as Lead, ...prev]
+            })
+          } else if (payload.eventType === 'UPDATE') {
+            setLeads(prev => prev.map(l => l.id === payload.new.id ? { ...l, ...payload.new } : l))
+          } else if (payload.eventType === 'DELETE') {
+            setLeads(prev => prev.filter(l => l.id !== payload.old.id))
+          }
+        })
+        .subscribe()
+    })()
+    return () => {
+      ;(async () => {
+        if (leadsChannel) {
+          const { supabase: db } = await import('../../lib/supabase')
+          db.removeChannel(leadsChannel)
+        }
+      })()
+    }
+  }, [user?.institution_id])
 
   const loadData = async () => {
     try {
@@ -916,6 +1143,7 @@ export default function LeadKanban() {
   const handleSave = async (data: Partial<Lead>) => {
     setError('')
     const leadData: Partial<Lead> = { ...data, institution_id: user!.institution_id, status: editingLead ? editingLead.status : 'new' }
+    let savedLeadId: string = editingLead?.id ?? ''
     if (editingLead) {
       await DatabaseService.updateLead(editingLead.id, leadData)
       const changes: Record<string, unknown> = {}
@@ -931,13 +1159,14 @@ export default function LeadKanban() {
       await logAudit({ institution_id: user!.institution_id, module: 'leads', record_id: editingLead.id, action: 'updated', field_changed: 'dados', old_value: editingLead.student_name, new_value: data.student_name || editingLead.student_name, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
     } else {
       const newLead = await DatabaseService.createLead(leadData)
+      savedLeadId = newLead.id
       await DatabaseService.logActivity({ user_id: user!.id, action: 'Lead criado', entity_type: 'lead', entity_id: newLead.id, details: { student_name: newLead.student_name, responsible_name: newLead.responsible_name, source: newLead.source, grade_interest: newLead.grade_interest, phone: newLead.phone || '', email: newLead.email || '', address: newLead.address || '', budget_range: newLead.budget_range || '', notes: newLead.notes || '' }, institution_id: user!.institution_id })
       await logAudit({ institution_id: user!.institution_id, module: 'leads', record_id: newLead.id, action: 'created', new_value: `${newLead.student_name} — ${newLead.grade_interest}`, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
     }
-    // Sync responsible_name to whatsapp_contacts and whatsapp_conversations
+    // Sync to whatsapp_contacts (upsert) and whatsapp_conversations
     const phone = data.phone || (editingLead?.phone ?? '')
     const responsibleName = data.responsible_name || (editingLead?.responsible_name ?? '')
-    if (phone && responsibleName) {
+    if (phone) {
       try {
         const { supabase: db } = await import('../../lib/supabase')
         const normP = (p: string) => {
@@ -950,9 +1179,14 @@ export default function LeadKanban() {
         const normPhone = normP(phone)
         const instId = user!.institution_id
         await db.from('whatsapp_contacts')
-          .update({ name: responsibleName })
-          .eq('institution_id', instId)
-          .eq('phone', normPhone)
+          .upsert({
+            institution_id: instId,
+            phone: normPhone,
+            name: responsibleName || normPhone,
+            type: 'lead',
+            ...(savedLeadId ? { lead_id: savedLeadId } : {}),
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'institution_id,phone' })
         await db.from('whatsapp_conversations')
           .update({ contact_name: responsibleName })
           .eq('institution_id', instId)
@@ -1222,7 +1456,10 @@ export default function LeadKanban() {
   }
 
   const handleWhatsApp = (lead: Lead) => {
-    if (!lead.phone) return
+    if (!lead.phone) {
+      showToast('Este lead não tem telefone cadastrado', 'error')
+      return
+    }
     const normPhone = (p: string): string => {
       let d = p.replace(/\D/g, '')
       if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
@@ -1230,7 +1467,7 @@ export default function LeadKanban() {
       if (d.length === 11) d = '55' + d
       return d
     }
-    navigate('/whatsapp', { state: { phone: normPhone(lead.phone) } })
+    navigate(`/whatsapp?phone=${normPhone(lead.phone)}`)
   }
 
   const stats = getLeadStats()
