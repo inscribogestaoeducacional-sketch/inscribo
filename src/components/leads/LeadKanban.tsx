@@ -925,15 +925,13 @@ interface CardContentProps {
   isFlashing: boolean
   overlay?: boolean
   onSchedule: (lead: Lead) => void
-  onHistory: (lead: Lead) => void
-  onAudit: (id: string) => void
   onEdit: (lead: Lead) => void
   onDelete: (id: string) => void
   onStatusChange: (id: string, status: Lead['status']) => void
   onWhatsApp: (lead: Lead) => void
 }
 
-function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory, onAudit, onEdit, onDelete, onStatusChange, onWhatsApp }: CardContentProps) {
+function CardContent({ lead, config, isFlashing, overlay, onSchedule, onEdit, onDelete, onStatusChange, onWhatsApp }: CardContentProps) {
   const lostReason = (lead as any).lost_reason
   const lostLabel = lostReason ? LOST_REASONS.find(r => r.value === lostReason)?.label : null
 
@@ -942,10 +940,11 @@ function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory,
       className={`group relative rounded-xl border transition-all duration-150 overflow-hidden ${
         isFlashing ? 'bg-teal-50/40 border-teal-400 ring-2 ring-teal-500 shadow-md animate-pulse'
         : overlay ? 'bg-white border-gray-200 shadow-xl scale-105 opacity-50'
-        : 'bg-white border-gray-200 shadow-sm hover:shadow-md hover:border-teal-300 hover:bg-gray-50'
+        : 'bg-white border-gray-200 shadow-sm hover:shadow-md hover:border-teal-300'
       }`}
       style={{ borderLeft: `3px solid ${config.accent}` }}
     >
+      {/* Card body — clicável para editar */}
       <div className="p-3">
         <div className="flex items-start gap-2 mb-1.5">
           <div className="w-8 h-8 rounded-full bg-teal-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -956,10 +955,14 @@ function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory,
             <p className="text-xs text-gray-500 truncate">{lead.responsible_name}</p>
           </div>
           {!overlay && (
-            <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 flex-shrink-0 transition-opacity">
-              <button title="Editar" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onEdit(lead) }} className="p-1 rounded-md text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
-              <button title="Excluir" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onDelete(lead.id) }} className="p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
-            </div>
+            <button
+              title="Excluir"
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); onDelete(lead.id) }}
+              className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all flex-shrink-0"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
           )}
         </div>
 
@@ -974,36 +977,42 @@ function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory,
           </div>
         )}
 
-        {/* Motivo de perda no card */}
         {lead.status === 'lost' && lostLabel && (
-          <div style={{ background: '#FEF2F2', borderRadius: 6, padding: '4px 8px', marginBottom: 6 }}>
+          <div style={{ background: '#FEF2F2', borderRadius: 6, padding: '4px 8px', marginBottom: 4 }}>
             <p style={{ fontSize: 11, color: '#DC2626', fontWeight: 500, margin: 0 }}>⚠ {lostLabel}</p>
           </div>
         )}
-        {lead.status === 'lost' && !overlay && (
-          <button
-            type="button"
-            onPointerDown={e => e.stopPropagation()}
-            onClick={e => { e.stopPropagation(); onStatusChange(lead.id, 'contact') }}
-            style={{ marginTop: 4, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: '#2563EB', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}
-          >
-            🔄 Reabrir lead
-          </button>
-        )}
-
-        {lead.phone && (
-          <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onWhatsApp(lead) }} className="flex items-center gap-1.5 text-xs text-teal-600 font-medium hover:text-teal-700 transition-colors">
-            <Phone className="w-3 h-3 flex-shrink-0" />
-            <span className="truncate">{lead.phone}</span>
-          </button>
-        )}
       </div>
 
+      {/* Footer sempre visível */}
       {!overlay && (
-        <div className="hidden group-hover:flex bg-gray-50 border-t border-gray-100 rounded-b-xl px-3 py-2 gap-2">
-          <button title="WhatsApp" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onWhatsApp(lead) }} className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-green-100 text-green-700 hover:bg-green-200 transition-colors"><MessageCircle className="w-3 h-3" />WA</button>
-          <button title="Agendar Visita" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onSchedule(lead) }} className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"><Calendar className="w-3 h-3" />Visita</button>
-          <button title="Histórico" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onAudit(lead.id) }} className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"><Clock className="w-3 h-3" />Hist.</button>
+        <div style={{ borderTop: '1px solid #F1F5F9', padding: '5px 8px', display: 'flex', gap: 5 }}>
+          {lead.status === 'lost' ? (
+            <button
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); onStatusChange(lead.id, 'contact') }}
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: 7, background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#2563EB', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+            >
+              🔄 Reabrir
+            </button>
+          ) : (
+            <>
+              <button
+                onPointerDown={e => e.stopPropagation()}
+                onClick={e => { e.stopPropagation(); onWhatsApp(lead) }}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: 7, background: '#DCFCE7', border: 'none', color: '#15803D', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+              >
+                <MessageCircle style={{ width: 12, height: 12 }} /> WA
+              </button>
+              <button
+                onPointerDown={e => e.stopPropagation()}
+                onClick={e => { e.stopPropagation(); onSchedule(lead) }}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: 7, background: '#DBEAFE', border: 'none', color: '#1D4ED8', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+              >
+                <Calendar style={{ width: 12, height: 12 }} /> Visita
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -1013,8 +1022,19 @@ function CardContent({ lead, config, isFlashing, overlay, onSchedule, onHistory,
 // ─── SortableCard ─────────────────────────────────────────────────────────────
 function SortableCard(props: Omit<CardContentProps, 'overlay'>) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: props.lead.id })
+  const didDrag = React.useRef(false)
+
+  React.useEffect(() => {
+    if (isDragging) didDrag.current = true
+  }, [isDragging])
+
+  const handleClick = () => {
+    if (didDrag.current) { didDrag.current = false; return }
+    props.onEdit(props.lead)
+  }
+
   return (
-    <div ref={setNodeRef} className={`cursor-grab active:cursor-grabbing ${isDragging ? 'opacity-40' : ''}`} style={{ transform: CSS.Transform.toString(transform), transition, touchAction: 'none' }} {...attributes} {...listeners}>
+    <div ref={setNodeRef} className={`cursor-grab active:cursor-grabbing ${isDragging ? 'opacity-40' : ''}`} style={{ transform: CSS.Transform.toString(transform), transition, touchAction: 'none' }} {...attributes} {...listeners} onClick={handleClick}>
       <CardContent {...props} />
     </div>
   )
@@ -1043,20 +1063,9 @@ export default function LeadKanban() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterSource, setFilterSource] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
-  const [showHistory, setShowHistory] = useState(false)
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [auditLeadId, setAuditLeadId] = useState<string | null>(null)
-  const [loadingHistory, setLoadingHistory] = useState(false)
-  const [leadHistory, setLeadHistory] = useState<ActivityLog[]>([])
-  const [newAction, setNewAction] = useState('')
-  const [savingAction, setSavingAction] = useState(false)
-  const [editingAction, setEditingAction] = useState<string | null>(null)
-  const [editingActionText, setEditingActionText] = useState('')
   const [showScheduleVisitModal, setShowScheduleVisitModal] = useState(false)
   const [leadToSchedule, setLeadToSchedule] = useState<Lead | null>(null)
-  const [contactForm, setContactForm] = useState({ tipo: 'Ligação', descricao: '', data: new Date().toISOString().split('T')[0] })
-  const [showContactForm, setShowContactForm] = useState(false)
-  const [savingContact, setSavingContact] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'error' | 'success' } | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [overColumnId, setOverColumnId] = useState<string | null>(null)
@@ -1141,31 +1150,69 @@ export default function LeadKanban() {
   }
 
   const handleSave = async (data: Partial<Lead>) => {
+    console.log('[LEAD SAVE] iniciando...', data)
     setError('')
-    const leadData: Partial<Lead> = { ...data, institution_id: user!.institution_id, status: editingLead ? editingLead.status : 'new' }
+    const instId = user!.institution_id
     let savedLeadId: string = editingLead?.id ?? ''
-    if (editingLead) {
-      await DatabaseService.updateLead(editingLead.id, leadData)
-      const changes: Record<string, unknown> = {}
-      const previousData: Record<string, unknown> = {}
-      Object.keys(data).forEach(key => {
-        const newValue = (data as Record<string, unknown>)[key]
-        const oldValue = (editingLead as unknown as Record<string, unknown>)[key]
-        if (newValue !== oldValue && newValue !== undefined && newValue !== null && newValue !== '') { changes[key] = newValue; previousData[key] = oldValue }
-      })
-      if (Object.keys(changes).length > 0) {
-        await DatabaseService.logActivity({ user_id: user!.id, action: 'Lead editado', entity_type: 'lead', entity_id: editingLead.id, details: { changes, previous: previousData, student_name: data.student_name || editingLead.student_name, responsible_name: data.responsible_name || editingLead.responsible_name }, institution_id: user!.institution_id })
+
+    try {
+      const { supabase: db } = await import('../../lib/supabase')
+
+      if (editingLead) {
+        const { error } = await db.from('leads').update({
+          student_name:     data.student_name     ?? editingLead.student_name,
+          responsible_name: data.responsible_name ?? editingLead.responsible_name,
+          phone:            data.phone            ?? editingLead.phone,
+          email:            data.email            ?? editingLead.email,
+          address:          data.address          ?? editingLead.address,
+          grade_interest:   data.grade_interest   ?? editingLead.grade_interest,
+          source:           data.source           ?? editingLead.source,
+          budget_range:     data.budget_range     ?? editingLead.budget_range,
+          notes:            data.notes            ?? editingLead.notes,
+          status:           data.status           || editingLead.status,
+          updated_at:       new Date().toISOString(),
+        }).eq('id', editingLead.id)
+        if (error) throw error
+
+        const changes: Record<string, unknown> = {}
+        const previousData: Record<string, unknown> = {}
+        Object.keys(data).forEach(key => {
+          const nv = (data as Record<string, unknown>)[key]
+          const ov = (editingLead as unknown as Record<string, unknown>)[key]
+          if (nv !== ov && nv !== undefined && nv !== null && nv !== '') { changes[key] = nv; previousData[key] = ov }
+        })
+        if (Object.keys(changes).length > 0) {
+          await DatabaseService.logActivity({ user_id: user!.id, action: 'Lead editado', entity_type: 'lead', entity_id: editingLead.id, details: { changes, previous: previousData, student_name: data.student_name || editingLead.student_name, responsible_name: data.responsible_name || editingLead.responsible_name }, institution_id: instId })
+        }
+        await logAudit({ institution_id: instId, module: 'leads', record_id: editingLead.id, action: 'updated', field_changed: 'dados', old_value: editingLead.student_name, new_value: data.student_name || editingLead.student_name, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
+      } else {
+        const { data: newLead, error } = await db.from('leads').insert({
+          institution_id:   instId,
+          student_name:     data.student_name,
+          responsible_name: data.responsible_name,
+          phone:            data.phone,
+          email:            data.email,
+          address:          data.address,
+          grade_interest:   data.grade_interest,
+          source:           data.source,
+          budget_range:     data.budget_range,
+          notes:            data.notes,
+          status:           'new',
+        }).select().single()
+        if (error) throw error
+        savedLeadId = newLead.id
+        await DatabaseService.logActivity({ user_id: user!.id, action: 'Lead criado', entity_type: 'lead', entity_id: newLead.id, details: { student_name: newLead.student_name, responsible_name: newLead.responsible_name, source: newLead.source, grade_interest: newLead.grade_interest, phone: newLead.phone || '', notes: newLead.notes || '' }, institution_id: instId })
+        await logAudit({ institution_id: instId, module: 'leads', record_id: newLead.id, action: 'created', new_value: `${newLead.student_name} — ${newLead.grade_interest}`, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
       }
-      await logAudit({ institution_id: user!.institution_id, module: 'leads', record_id: editingLead.id, action: 'updated', field_changed: 'dados', old_value: editingLead.student_name, new_value: data.student_name || editingLead.student_name, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
-    } else {
-      const newLead = await DatabaseService.createLead(leadData)
-      savedLeadId = newLead.id
-      await DatabaseService.logActivity({ user_id: user!.id, action: 'Lead criado', entity_type: 'lead', entity_id: newLead.id, details: { student_name: newLead.student_name, responsible_name: newLead.responsible_name, source: newLead.source, grade_interest: newLead.grade_interest, phone: newLead.phone || '', email: newLead.email || '', address: newLead.address || '', budget_range: newLead.budget_range || '', notes: newLead.notes || '' }, institution_id: user!.institution_id })
-      await logAudit({ institution_id: user!.institution_id, module: 'leads', record_id: newLead.id, action: 'created', new_value: `${newLead.student_name} — ${newLead.grade_interest}`, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
+    } catch (err) {
+      console.error('[LEAD SAVE] erro:', err)
+      showToast('Erro ao salvar lead. Tente novamente.', 'error')
+      throw err
     }
+
     // Sync to whatsapp_contacts (upsert) and whatsapp_conversations
-    const phone = data.phone || (editingLead?.phone ?? '')
-    const responsibleName = data.responsible_name || (editingLead?.responsible_name ?? '')
+    const phone = (data.phone || editingLead?.phone || '').trim()
+    const responsibleName = data.responsible_name || editingLead?.responsible_name || ''
     if (phone) {
       try {
         const { supabase: db } = await import('../../lib/supabase')
@@ -1177,20 +1224,12 @@ export default function LeadKanban() {
           return d
         }
         const normPhone = normP(phone)
-        const instId = user!.institution_id
-        await db.from('whatsapp_contacts')
-          .upsert({
-            institution_id: instId,
-            phone: normPhone,
-            name: responsibleName || normPhone,
-            type: 'lead',
-            ...(savedLeadId ? { lead_id: savedLeadId } : {}),
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'institution_id,phone' })
-        await db.from('whatsapp_conversations')
-          .update({ contact_name: responsibleName })
-          .eq('institution_id', instId)
-          .eq('remote_jid', `${normPhone}@s.whatsapp.net`)
+        await db.from('whatsapp_contacts').upsert({
+          institution_id: instId, phone: normPhone, name: responsibleName || normPhone,
+          type: 'lead', ...(savedLeadId ? { lead_id: savedLeadId } : {}), updated_at: new Date().toISOString(),
+        }, { onConflict: 'institution_id,phone' })
+        await db.from('whatsapp_conversations').update({ contact_name: responsibleName })
+          .eq('institution_id', instId).eq('remote_jid', `${normPhone}@s.whatsapp.net`)
       } catch {}
     }
 
@@ -1330,66 +1369,6 @@ export default function LeadKanban() {
     }
   }
 
-  const loadLeadHistory = async (leadId: string) => {
-    try {
-      setLoadingHistory(true)
-      const history = await DatabaseService.getActivityLogs(user!.institution_id, leadId)
-      setLeadHistory(history)
-    } catch (err) {
-      console.error('Erro ao carregar histórico:', err); setLeadHistory([])
-    } finally {
-      setLoadingHistory(false)
-    }
-  }
-
-  const handleAddAction = async () => {
-    if (!newAction.trim() || !selectedLead) return
-    try {
-      setSavingAction(true)
-      await DatabaseService.logActivity({ user_id: user!.id, action: 'Ação manual adicionada', entity_type: 'lead', entity_id: selectedLead.id, details: { description: newAction.trim(), student_name: selectedLead.student_name, responsible_name: selectedLead.responsible_name }, institution_id: user!.institution_id })
-      await loadLeadHistory(selectedLead.id); setNewAction('')
-    } catch (err) {
-      console.error('Erro ao salvar ação:', err); setError('Erro ao adicionar ação ao histórico')
-    } finally {
-      setSavingAction(false)
-    }
-  }
-
-  const handleSaveContact = async () => {
-    if (!selectedLead) return
-    setSavingContact(true)
-    try {
-      await DatabaseService.logActivity({ user_id: user!.id, action: contactForm.tipo, entity_type: 'lead', entity_id: selectedLead.id, details: { description: contactForm.descricao, contact_date: contactForm.data, student_name: selectedLead.student_name, responsible_name: selectedLead.responsible_name }, institution_id: user!.institution_id })
-      await loadLeadHistory(selectedLead.id)
-      setContactForm({ tipo: 'Ligação', descricao: '', data: new Date().toISOString().split('T')[0] })
-      setShowContactForm(false)
-      showToast('Contato registrado!', 'success')
-    } catch (err) {
-      console.error('Erro ao registrar contato:', err); showToast('Erro ao registrar contato', 'error')
-    } finally {
-      setSavingContact(false)
-    }
-  }
-
-  const handleSaveEditAction = async (actionId: string) => {
-    if (!editingActionText.trim()) return
-    try {
-      await DatabaseService.updateActivityLog(actionId, { details: { ...leadHistory.find(h => h.id === actionId)?.details, description: editingActionText.trim() } })
-      await loadLeadHistory(selectedLead!.id); setEditingAction(null); setEditingActionText('')
-    } catch (err) {
-      console.error('Erro ao atualizar ação:', err); setError('Erro ao atualizar ação')
-    }
-  }
-
-  const handleDeleteAction = async (actionId: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta ação?')) return
-    try {
-      await DatabaseService.deleteActivityLog(actionId); await loadLeadHistory(selectedLead!.id)
-    } catch (err) {
-      console.error('Erro ao excluir ação:', err); setError('Erro ao excluir ação')
-    }
-  }
-
   const getLeadsByStatus = (status: Lead['status']) => {
     return leads.filter(lead => {
       const matchesStatus = lead.status === status
@@ -1476,13 +1455,6 @@ export default function LeadKanban() {
 
   const cardActions = {
     onSchedule: (lead: Lead) => { setLeadToSchedule(lead); setShowScheduleVisitModal(true) },
-    onHistory: (lead: Lead) => {
-      setSelectedLead(lead); setShowHistory(true); setNewAction(''); setEditingAction(null)
-      setEditingActionText(''); setShowContactForm(false)
-      setContactForm({ tipo: 'Ligação', descricao: '', data: new Date().toISOString().split('T')[0] })
-      loadLeadHistory(lead.id)
-    },
-    onAudit: (id: string) => setAuditLeadId(id),
     onEdit: (lead: Lead) => { setEditingLead(lead); setShowNewLeadModal(true) },
     onDelete: handleDelete,
     onStatusChange: handleStatusChange,
@@ -1553,7 +1525,7 @@ export default function LeadKanban() {
           ) : mobileLeads.map(lead => {
             const cfg = statusConfig[lead.status]
             return (
-              <div key={lead.id} onClick={() => cardActions.onHistory(lead)}
+              <div key={lead.id} onClick={() => cardActions.onEdit(lead)}
                 style={{ padding: '14px 16px', background: '#fff', borderBottom: '1px solid #F1F5F9', display: 'flex', gap: 12, cursor: 'pointer' }}>
                 <div style={{ width: 44, height: 44, borderRadius: 12, background: cfg?.accent ?? '#6b7280', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: '#fff' }}>
                   {lead.student_name.charAt(0).toUpperCase()}
@@ -1589,17 +1561,6 @@ export default function LeadKanban() {
         {showScheduleVisitModal && leadToSchedule && (
           <ScheduleVisitModal isOpen={showScheduleVisitModal} onClose={() => { setShowScheduleVisitModal(false); setLeadToSchedule(null) }} lead={leadToSchedule} onSchedule={handleScheduleVisit} />
         )}
-        <HistoryModal isOpen={showHistory} onClose={() => { setShowHistory(false); setSelectedLead(null) }}
-          lead={selectedLead} history={leadHistory} loading={loadingHistory}
-          newAction={newAction} setNewAction={setNewAction} savingAction={savingAction}
-          editingAction={editingAction} setEditingAction={setEditingAction}
-          editingActionText={editingActionText} setEditingActionText={setEditingActionText}
-          onAddAction={handleAddAction} onSaveEditAction={handleSaveEditAction} onDeleteAction={handleDeleteAction}
-          contactForm={contactForm} setContactForm={setContactForm}
-          showContactForm={showContactForm} setShowContactForm={setShowContactForm}
-          savingContact={savingContact} onSaveContact={handleSaveContact}
-          onAudit={(id) => { setShowHistory(false); setSelectedLead(null); setAuditLeadId(id) }}
-        />
         <LostReasonModal isOpen={lostReasonModal.open} lead={lostReasonModal.lead} onConfirm={handleConfirmLost} onCancel={handleCancelLost} />
         {auditLeadId && <AuditModal recordId={auditLeadId} moduleName="leads" isOpen={!!auditLeadId} onClose={() => setAuditLeadId(null)} />}
         {toast && (
@@ -1698,7 +1659,7 @@ export default function LeadKanban() {
         <DragOverlay dropAnimation={null}>
           {activeLead ? (
             <div className="w-[260px] rotate-1 cursor-grabbing">
-              <CardContent lead={activeLead} config={statusConfig[activeLead.status]} isFlashing={false} overlay onSchedule={() => {}} onHistory={() => {}} onAudit={() => {}} onEdit={() => {}} onDelete={() => {}} onStatusChange={() => {}} onWhatsApp={() => {}} />
+              <CardContent lead={activeLead} config={statusConfig[activeLead.status]} isFlashing={false} overlay onSchedule={() => {}} onEdit={() => {}} onDelete={() => {}} onStatusChange={() => {}} onWhatsApp={() => {}} />
             </div>
           ) : null}
         </DragOverlay>
@@ -1710,19 +1671,6 @@ export default function LeadKanban() {
       {showScheduleVisitModal && leadToSchedule && (
         <ScheduleVisitModal isOpen={showScheduleVisitModal} onClose={() => { setShowScheduleVisitModal(false); setLeadToSchedule(null) }} lead={leadToSchedule} onSchedule={handleScheduleVisit} />
       )}
-
-      <HistoryModal
-        isOpen={showHistory} onClose={() => { setShowHistory(false); setSelectedLead(null) }}
-        lead={selectedLead} history={leadHistory} loading={loadingHistory}
-        newAction={newAction} setNewAction={setNewAction} savingAction={savingAction}
-        editingAction={editingAction} setEditingAction={setEditingAction}
-        editingActionText={editingActionText} setEditingActionText={setEditingActionText}
-        onAddAction={handleAddAction} onSaveEditAction={handleSaveEditAction} onDeleteAction={handleDeleteAction}
-        contactForm={contactForm} setContactForm={setContactForm}
-        showContactForm={showContactForm} setShowContactForm={setShowContactForm}
-        savingContact={savingContact} onSaveContact={handleSaveContact}
-        onAudit={(id) => { setShowHistory(false); setSelectedLead(null); setAuditLeadId(id) }}
-      />
 
       {/* Modal de motivo de perda */}
       <LostReasonModal
