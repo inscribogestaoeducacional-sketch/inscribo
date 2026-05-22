@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  LineChart, Line, PieChart, Pie, Cell,
+  LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar
 } from 'recharts'
@@ -207,7 +207,7 @@ export default function GestorHome() {
   const [cycles, setCycles] = useState<CampaignCycle[]>([])
   const [funnelData, setFunnelData] = useState<FunnelMetrics[]>([])
   const [transfers, setTransfers] = useState<StudentTransfer[]>([])
-  const [leads, setLeads] = useState<{ id: string; status: string; created_at: string }[]>([])
+  const [leads, setLeads] = useState<{ id: string; status: string; created_at: string; grade_interest?: string; source?: string }[]>([])
   const [visits, setVisits] = useState<{ id: string; status: string; created_at: string }[]>([])
   const [waMessages, setWaMessages] = useState<{ id: string; created_at: string; from_me: boolean; remote_jid: string }[]>([])
   const [waPhoneRecord, setWaPhoneRecord] = useState<{ phone_number: string; display_name: string } | null>(null)
@@ -229,6 +229,11 @@ export default function GestorHome() {
   const [aiInsightLoading, setAiInsightLoading] = useState(false)
   const aiInsightFetched = useRef(false)
   const mountedRef = useRef(true)
+  const [periodFilter, setPeriodFilter] = useState('mes')
+  const [waConvsRaw, setWaConvsRaw] = useState<{ id: string; created_at: string; status: string; assigned_user_name: string | null; bot_active: boolean | null; satisfaction_score: number | null }[]>([])
+  const [surveyScoresList, setSurveyScoresList] = useState<{ satisfaction_score: number | null }[]>([])
+  const [aiLastUpdated, setAiLastUpdated] = useState<number | null>(null)
+  const dashboardRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     mountedRef.current = true
@@ -245,7 +250,7 @@ export default function GestorHome() {
         supabase.from('campaign_cycles').select('*').eq('institution_id', institutionId).order('created_at', { ascending: false }),
         supabase.from('funnel_metrics').select('*').eq('institution_id', institutionId).order('created_at', { ascending: true }),
         supabase.from('student_transfers').select('id,student_name,course_grade,transfer_date,reason_category').eq('institution_id', institutionId).is('deleted_at', null).order('transfer_date', { ascending: false }).limit(5),
-        supabase.from('leads').select('id,status,created_at').eq('institution_id', institutionId),
+        supabase.from('leads').select('id,status,created_at,grade_interest,source').eq('institution_id', institutionId),
         supabase.from('visits').select('id,status,created_at').eq('institution_id', institutionId),
         supabase.from('whatsapp_messages').select('id,created_at,from_me,remote_jid').eq('institution_id', institutionId).gte('created_at', thirtyDaysAgo),
         supabase.from('enrollments').select('id,user_id,created_at').eq('institution_id', institutionId),
@@ -316,9 +321,11 @@ export default function GestorHome() {
         waDaily.push({ day: label, count: waConvs.filter(c => c.created_at.slice(0, 10) === dayStr).length })
       }
       setWaConvStats({ total: waTotal, byBot: waByBot, byTeam: waByTeam, closed: waClosed, daily: waDaily, avgSatisfaction: waAvgSatisfaction })
+      setWaConvsRaw(waConvs)
 
       // Satisfaction breakdown
       const surveyScores = waConvs.filter(c => c.satisfaction_score !== null && c.satisfaction_score > 0)
+      setSurveyScoresList(surveyScores)
       if (surveyScores.length > 0) {
         const ruim    = surveyScores.filter(c => c.satisfaction_score === 1).length
         const regular = surveyScores.filter(c => c.satisfaction_score === 2).length
@@ -425,9 +432,27 @@ export default function GestorHome() {
     } catch { } finally { setMarketLoading(false) }
   }
 
-  async function fetchAiInsight(funnel: FunnelMetrics) {
-    if (aiInsightFetched.current) return
+  const AI_CACHE_KEY = `ai_insight_${institutionId}`
+  const AI_CACHE_TTL = 2 * 60 * 60 * 1000
+
+  async function fetchAiInsight(funnel: FunnelMetrics, forceRefresh = false) {
+    if (aiInsightFetched.current && !forceRefresh) return
     aiInsightFetched.current = true
+
+    if (!forceRefresh) {
+      try {
+        const cached = localStorage.getItem(AI_CACHE_KEY)
+        if (cached) {
+          const { text, timestamp } = JSON.parse(cached)
+          if (Date.now() - timestamp < AI_CACHE_TTL) {
+            setAiInsight(text)
+            setAiLastUpdated(timestamp)
+            return
+          }
+        }
+      } catch { }
+    }
+
     setAiInsightLoading(true)
     try {
       const res = await fetch('/api/ai', {
@@ -441,8 +466,37 @@ export default function GestorHome() {
         }),
       })
       const json = await res.json()
-      if (json.result) setAiInsight(json.result)
+      if (json.result) {
+        setAiInsight(json.result)
+        const ts = Date.now()
+        setAiLastUpdated(ts)
+        try { localStorage.setItem(AI_CACHE_KEY, JSON.stringify({ text: json.result, timestamp: ts })) } catch { }
+      }
     } catch { } finally { setAiInsightLoading(false) }
+  }
+
+  function getGreeting() {
+    const h = new Date().getHours()
+    if (h < 12) return 'Bom dia'
+    if (h < 18) return 'Boa tarde'
+    return 'Boa noite'
+  }
+
+  function formatDate(d: Date) {
+    return d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
+  }
+
+  const handleExportPDF = async () => {
+    if (!dashboardRef.current) return
+    const html2canvas = (await import('html2canvas')).default
+    const jsPDF = (await import('jspdf')).default
+    const canvas = await html2canvas(dashboardRef.current, { scale: 1.5, useCORS: true, backgroundColor: '#F9FAFB' })
+    const imgData = canvas.toDataURL('image/jpeg', 0.92)
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: 'a4' })
+    const w = pdf.internal.pageSize.getWidth()
+    const h = (canvas.height * w) / canvas.width
+    pdf.addImage(imgData, 'JPEG', 0, 0, w, h)
+    pdf.save(`dashboard-${user?.institution_name ?? 'escola'}-${new Date().toISOString().slice(0, 10)}.pdf`)
   }
 
   // ── dados derivados ────────────────────────────────────────────────────────
@@ -520,6 +574,23 @@ export default function GestorHome() {
   const scoreBg = score >= 80 ? '#f0fdf4' : score >= 60 ? '#fffbeb' : '#fef2f2'
   const radius = 54; const circumference = 2 * Math.PI * radius; const offset = circumference - (score / 100) * circumference
 
+  const chartDataWithTotal = chartData.map(d => ({ ...d, total: (d.veteranos || 0) + (d.novatos || 0) }))
+
+  const gradeData = leads.filter(l => l.grade_interest).reduce((acc, l) => {
+    acc[l.grade_interest!] = (acc[l.grade_interest!] || 0) + 1; return acc
+  }, {} as Record<string, number>)
+  const gradeSorted = Object.entries(gradeData).sort(([, a], [, b]) => b - a).slice(0, 8).map(([name, value]) => ({ name, value }))
+
+  const sourceData = leads.filter(l => l.source).reduce((acc, l) => {
+    acc[l.source!] = (acc[l.source!] || 0) + 1; return acc
+  }, {} as Record<string, number>)
+  const SOURCE_COLORS: Record<string, string> = { WhatsApp: '#25D366', Instagram: '#E1306C', Facebook: '#1877F2', 'Indicação': '#F59E0B', Site: '#6366F1' }
+  const sourceSorted = Object.entries(sourceData).sort(([, a], [, b]) => b - a).map(([name, value]) => ({ name, value, fill: SOURCE_COLORS[name] ?? '#9CA3AF' }))
+
+  const schoolName = user?.institution_name || 'Sua escola'
+  const avgSatisfaction = waConvStats?.avgSatisfaction ?? null
+  const avgResponseTime = waAvgResponse
+
   const campaignMonthsList = getCampaignMonthsList(activeCycle?.start_date ?? anyCycle?.start_date, activeCycle?.end_date ?? anyCycle?.end_date)
   const defaultSeasonality: Record<number, number> = { 1: 12, 2: 7, 8: 12, 9: 15, 10: 20, 11: 18, 12: 16 }
   const calendarMax = Math.max(...campaignMonthsList.map(m => defaultSeasonality[m] ?? 10))
@@ -546,6 +617,10 @@ export default function GestorHome() {
     if (regPct < 60) alerts.push({ msg: `Cadastros ${regPct.toFixed(0)}% da meta — intensifique captação`, type: 'warning', action: 'Ver funil', path: '/reports' })
   }
   if (score >= 75) alerts.push({ msg: `Score ${score} — escola com desempenho acima da média!`, type: 'success' })
+  const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
+  const leadsNoContact = leads.filter(l => l.created_at < fiveDaysAgo && l.status !== 'matriculado' && l.status !== 'enrolled' && l.status !== 'descartado').length
+  if (leadsNoContact > 0) alerts.push({ msg: `${leadsNoContact} leads sem contato há mais de 5 dias`, type: 'warning', action: 'Ver leads', path: '/leads' })
+  if (avgSatisfaction !== null && avgSatisfaction < 2.5) alerts.push({ msg: `Satisfação média abaixo de 2.5 (${avgSatisfaction.toFixed(1)}/3) — atenção ao atendimento`, type: 'warning', action: 'Ver pesquisas', path: '/surveys' })
 
   const avgFee = (setupCycle?.school_data?.avg_monthly_fee as number | null | undefined) || latest?.avg_monthly_fee || latest?.fee || null
 
@@ -687,23 +762,28 @@ export default function GestorHome() {
   }
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#f8f9fb' }}>
+    <div ref={dashboardRef} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#F9FAFB' }}>
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 0, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>
-            {greeting()}, {user?.full_name?.split(' ')[0] || 'Gestor'} 👋
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: '#111827', margin: 0 }}>
+            {getGreeting()}, {user?.full_name?.split(' ')[0] || 'Gestor'}! 👋
           </h1>
-          <p style={{ fontSize: 13, color: '#94a3b8', margin: '3px 0 0' }}>
-            {user?.institution_name || 'Sua escola'} · {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+          <p style={{ color: '#6B7280', fontSize: 14, margin: '4px 0 0' }}>
+            {schoolName} • {formatDate(new Date())}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {(['hoje', 'semana', 'mes', 'ano'] as const).map(p => (
+            <button key={p} onClick={() => setPeriodFilter(p)} style={{ padding: '6px 14px', borderRadius: 20, border: 'none', background: periodFilter === p ? '#00A896' : '#F3F4F6', color: periodFilter === p ? 'white' : '#374151', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+              {p === 'hoje' ? 'Hoje' : p === 'semana' ? 'Semana' : p === 'mes' ? 'Mês' : 'Ano'}
+            </button>
+          ))}
           {!campaignUnlocked && (
             <div style={{ position: 'relative' }} onMouseEnter={() => setBtnTooltip(true)} onMouseLeave={() => setBtnTooltip(false)}>
-              <button disabled style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10, background: '#f1f5f9', color: '#94a3b8', border: '1px solid #e2e8f0', fontSize: 13, fontWeight: 600, cursor: 'not-allowed' }}>
-                <Lock size={14} /> Campanha bloqueada
+              <button disabled style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 14px', borderRadius: 20, background: '#F3F4F6', color: '#94a3b8', border: '1px solid #e2e8f0', fontSize: 13, fontWeight: 500, cursor: 'not-allowed' }}>
+                <Lock size={14} /> Bloqueado
               </button>
               {btnTooltip && (
                 <div style={{ position: 'absolute', right: 0, top: '110%', zIndex: 999, background: '#1e2d6b', color: 'white', fontSize: 12, lineHeight: 1.4, padding: '8px 12px', borderRadius: 8, whiteSpace: 'nowrap', maxWidth: 260, boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
@@ -713,25 +793,50 @@ export default function GestorHome() {
               )}
             </div>
           )}
+          <button onClick={handleExportPDF} style={{ padding: '6px 16px', borderRadius: 20, border: '1px solid #E5E7EB', background: 'white', color: '#374151', fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            ↓ Exportar PDF
+          </button>
         </div>
       </div>
 
       {/* ── Alertas inteligentes ─────────────────────────────────────────────── */}
       {alerts.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {alerts.map((a, i) => (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderRadius: 12,
-              background: a.type === 'warning' ? '#fef2f2' : a.type === 'success' ? '#f0fdf4' : '#eff6ff',
-              border: `1px solid ${a.type === 'warning' ? '#fecaca' : a.type === 'success' ? '#bbf7d0' : '#bfdbfe'}`
-            }}>
-              {a.type === 'warning' ? <AlertTriangle size={14} color="#dc2626" /> : a.type === 'success' ? <CheckCircle size={14} color="#16a34a" /> : <Info size={14} color="#3b82f6" />}
-              <span style={{ fontSize: 13, color: a.type === 'warning' ? '#991b1b' : a.type === 'success' ? '#166534' : '#1e40af', flex: 1 }}>{a.msg}</span>
-              {a.action && a.path && (
-                <button onClick={() => navigate(a.path!)} style={{ fontSize: 11, fontWeight: 700, color: '#1e2d6b', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3 }}>
-                  {a.action} <ArrowRight size={10} />
-                </button>
-              )}
+          {alerts.map((a, i) => {
+            const cfg = {
+              warning: { bg: '#FEF2F2', border: '#FECACA', color: '#991B1B', icon: '⚠️', badge: 'Atenção' },
+              success: { bg: '#F0FDF4', border: '#BBF7D0', color: '#166534', icon: '✅', badge: 'Ótimo' },
+              info: { bg: '#EFF6FF', border: '#BFDBFE', color: '#1E40AF', icon: 'ℹ️', badge: 'Info' },
+            }[a.type]
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 14, background: cfg.bg, border: `1px solid ${cfg.border}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                <span style={{ fontSize: 18, flexShrink: 0 }}>{cfg.icon}</span>
+                <span style={{ fontSize: 13, color: cfg.color, flex: 1, fontWeight: 500 }}>{a.msg}</span>
+                {a.action && a.path && (
+                  <button onClick={() => navigate(a.path!)} style={{ fontSize: 11, fontWeight: 700, color: cfg.color, background: 'rgba(0,0,0,0.06)', border: 'none', borderRadius: 20, padding: '4px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                    {a.action} <ArrowRight size={10} />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── KPI rápidos ─────────────────────────────────────────────────────── */}
+      {!loading && (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)', gap: 12 }}>
+          {[
+            { label: 'Conversas hoje', value: waConvsRaw.filter(c => new Date(c.created_at).toDateString() === new Date().toDateString()).length, icon: '💬', color: '#00A896', bg: '#F0FDFA' },
+            { label: 'Leads novos hoje', value: leads.filter(l => new Date(l.created_at).toDateString() === new Date().toDateString()).length, icon: '👤', color: '#8B5CF6', bg: '#F5F3FF' },
+            { label: 'Matrículas', value: leads.filter(l => l.status === 'enrolled' || l.status === 'matriculado').length, icon: '🎓', color: '#F59E0B', bg: '#FFFBEB' },
+            { label: 'Satisfação média', value: avgSatisfaction ? avgSatisfaction.toFixed(1) + '/3' : '-', icon: '⭐', color: '#10B981', bg: '#ECFDF5' },
+            { label: 'Tempo de resposta', value: avgResponseTime ? avgResponseTime + 'min' : '-', icon: '⚡', color: '#EF4444', bg: '#FEF2F2' },
+          ].map(card => (
+            <div key={card.label} style={{ background: card.bg, borderRadius: 16, padding: '16px 20px', border: `1px solid ${card.color}22`, boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
+              <div style={{ fontSize: 24, marginBottom: 8 }}>{card.icon}</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: card.color, lineHeight: 1 }}>{card.value}</div>
+              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>{card.label}</div>
             </div>
           ))}
         </div>
@@ -759,7 +864,7 @@ export default function GestorHome() {
       {!loading && hasHistory && (
         <div style={{ display: 'flex', gap: 16, alignItems: 'stretch', flexDirection: isMobile ? 'column' : 'row' }}>
           {/* Score gauge */}
-          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
+          <div style={{ background: '#fff', borderRadius: 20, border: '1px solid #e2e8f0', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', borderTop: `4px solid ${score >= 80 ? '#10B981' : score >= 60 ? '#F59E0B' : score >= 40 ? '#EF4444' : '#7F1D1D'}` }}>
             <svg width="140" height="140" viewBox="0 0 140 140">
               <circle cx="70" cy="70" r={radius} fill="none" stroke="#e5e7eb" strokeWidth="12"/>
               <circle cx="70" cy="70" r={radius} fill="none" stroke={scoreColor} strokeWidth="12" strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" transform="rotate(-90 70 70)" style={{ transition: 'stroke-dashoffset 1s ease' }}/>
@@ -809,18 +914,28 @@ export default function GestorHome() {
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 380px', gap: 16 }}>
 
           {/* Histórico de alunos */}
-          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
+          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
             <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Histórico de alunos por ano</h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="year" tick={{ fontSize: 12, fill: '#64748b' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={40} />
-                <Tooltip formatter={(value, name) => [fmt(Number(value)), name === 'novatos' ? 'Novatos' : 'Veteranos']} contentStyle={{ borderRadius: 10, fontSize: 12, border: '1px solid #e2e8f0' }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="veteranos" name="Veteranos" stroke="#00A896" strokeWidth={2.5} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="novatos" name="Novatos" stroke="#8B5CF6" strokeWidth={2.5} dot={{ r: 4 }} />
-              </LineChart>
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={chartDataWithTotal} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gradVet" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#00A896" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#00A896" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="gradNov" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6"/>
+                <XAxis dataKey="year" tick={{ fontSize: 12 }}/>
+                <YAxis tick={{ fontSize: 12 }}/>
+                <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} formatter={(value, name) => [fmt(Number(value)), name === 'novatos' ? 'Novatos' : name === 'veteranos' ? 'Veteranos' : 'Total']} />
+                <Legend/>
+                <Area type="monotone" dataKey="veteranos" name="Veteranos" stroke="#00A896" strokeWidth={2} fill="url(#gradVet)"/>
+                <Area type="monotone" dataKey="novatos" name="Novatos" stroke="#8B5CF6" strokeWidth={2} fill="url(#gradNov)"/>
+              </AreaChart>
             </ResponsiveContainer>
           </div>
 
@@ -910,6 +1025,44 @@ export default function GestorHome() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── Gráficos: Séries + Origens ──────────────────────────────────────── */}
+      {(gradeSorted.length > 0 || sourceSorted.length > 0) && (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
+          {gradeSorted.length > 0 && (
+            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Séries mais procuradas</h3>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={gradeSorted} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" horizontal={false}/>
+                  <XAxis type="number" tick={{ fontSize: 11 }}/>
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={80}/>
+                  <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}/>
+                  <Bar dataKey="value" name="Leads" fill="#00A896" radius={[0, 6, 6, 0]}/>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+          {sourceSorted.length > 0 && (
+            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Leads por origem</h3>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={sourceSorted} margin={{ top: 0, right: 20, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6"/>
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }}/>
+                  <YAxis tick={{ fontSize: 11 }}/>
+                  <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}/>
+                  <Bar dataKey="value" name="Leads" radius={[6, 6, 0, 0]}>
+                    {sourceSorted.map((entry, index) => (
+                      <Cell key={index} fill={entry.fill}/>
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
       )}
 
@@ -1048,21 +1201,44 @@ export default function GestorHome() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {userRankings.map((u, i) => {
+                  const medals = ['🥇', '🥈', '🥉']
                   const medalColors = ['#F59E0B', '#94A3B8', '#CD7F32']
                   const isTop = i < 3
+                  const initials = u.full_name.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
+                  const avatarColors = ['#00A896', '#8B5CF6', '#F59E0B', '#EF4444', '#3B82F6']
+                  const avatarColor = avatarColors[i % avatarColors.length]
+                  const attendantSatisf = waSatisfStats?.byAttendant.find(a => a.name === u.full_name)
+                  const satisfPct = attendantSatisf ? Math.round((attendantSatisf.sum / attendantSatisf.total / 3) * 100) : null
                   return (
-                    <div key={u.user_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, background: i === 0 ? '#FFFBEB' : '#F8FAFC', border: `1px solid ${i === 0 ? '#FDE68A' : '#F1F5F9'}` }}>
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: isTop ? medalColors[i] : '#E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        {i === 0 ? <Trophy size={13} color="#fff" /> : <span style={{ fontSize: 11, fontWeight: 700, color: isTop ? '#fff' : '#94a3b8' }}>{i + 1}</span>}
+                    <div key={u.user_id} style={{ padding: '12px 14px', borderRadius: 12, background: i === 0 ? '#FFFBEB' : '#F8FAFC', border: `1px solid ${i === 0 ? '#FDE68A' : '#F1F5F9'}` }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: satisfPct !== null ? 8 : 0 }}>
+                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 12, fontWeight: 700, color: '#fff' }}>
+                          {initials}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {isTop && <span style={{ fontSize: 14 }}>{medals[i]}</span>}
+                            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1e2d6b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.full_name}</p>
+                          </div>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
+                            <span style={{ fontSize: 11, color: '#6B7280' }}>{u.enrollments_count} matrículas</span>
+                            {attendantSatisf && <span style={{ fontSize: 11, color: '#10B981' }}>⭐ {(attendantSatisf.sum / attendantSatisf.total).toFixed(1)}/3</span>}
+                            {waAvgResponse !== null && <span style={{ fontSize: 11, color: '#6366F1' }}>⚡ {waAvgResponse}min</span>}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: i === 0 ? '#F59E0B' : '#1e2d6b' }}>{u.enrollments_count}</p>
+                        </div>
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1e2d6b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.full_name}</p>
-                        <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>{u.role}</p>
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: i === 0 ? '#F59E0B' : '#1e2d6b' }}>{u.enrollments_count}</p>
-                        <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>matrículas</p>
-                      </div>
+                      {satisfPct !== null && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 11, color: '#94a3b8', minWidth: 16 }}>😊</span>
+                          <div style={{ flex: 1, height: 6, borderRadius: 3, background: '#F3F4F6', overflow: 'hidden' }}>
+                            <div style={{ width: `${satisfPct}%`, height: '100%', background: satisfPct >= 80 ? '#10B981' : satisfPct >= 50 ? '#F59E0B' : '#EF4444', borderRadius: 3, transition: 'width 0.8s ease' }}/>
+                          </div>
+                          <span style={{ fontSize: 11, color: '#374151', fontWeight: 600, minWidth: 32 }}>{satisfPct}%</span>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -1077,21 +1253,43 @@ export default function GestorHome() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {waTeamRanking.map(({ name, count }, i) => {
-                  const medalColors = ['#F59E0B', '#94A3B8', '#CD7F32']
+                  const medals = ['🥇', '🥈', '🥉']
                   const isTop = i < 3
+                  const initials = name.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
+                  const avatarColors = ['#00A896', '#8B5CF6', '#F59E0B', '#EF4444', '#3B82F6']
+                  const avatarColor = avatarColors[i % avatarColors.length]
+                  const attendantSatisf = waSatisfStats?.byAttendant.find(a => a.name === name)
+                  const satisfPct = attendantSatisf ? Math.round((attendantSatisf.sum / attendantSatisf.total / 3) * 100) : null
                   return (
-                    <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, background: i === 0 ? '#FFFBEB' : '#F8FAFC', border: `1px solid ${i === 0 ? '#FDE68A' : '#F1F5F9'}` }}>
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: isTop ? medalColors[i] : '#E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        {i === 0 ? <Trophy size={13} color="#fff" /> : <span style={{ fontSize: 11, fontWeight: 700, color: isTop ? '#fff' : '#94a3b8' }}>{i + 1}</span>}
+                    <div key={name} style={{ padding: '12px 14px', borderRadius: 12, background: i === 0 ? '#FFFBEB' : '#F8FAFC', border: `1px solid ${i === 0 ? '#FDE68A' : '#F1F5F9'}` }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: satisfPct !== null ? 8 : 0 }}>
+                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 12, fontWeight: 700, color: '#fff' }}>
+                          {initials}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {isTop && <span style={{ fontSize: 14 }}>{medals[i]}</span>}
+                            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1e2d6b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</p>
+                          </div>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
+                            <span style={{ fontSize: 11, color: '#6B7280' }}>{count} conversas</span>
+                            {attendantSatisf && <span style={{ fontSize: 11, color: '#10B981' }}>⭐ {(attendantSatisf.sum / attendantSatisf.total).toFixed(1)}/3</span>}
+                            {waAvgResponse !== null && <span style={{ fontSize: 11, color: '#6366F1' }}>⚡ {waAvgResponse}min</span>}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: i === 0 ? '#F59E0B' : '#1e2d6b' }}>{count}</p>
+                        </div>
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1e2d6b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</p>
-                        <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>atendente</p>
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: i === 0 ? '#F59E0B' : '#1e2d6b' }}>{count}</p>
-                        <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>atendimentos</p>
-                      </div>
+                      {satisfPct !== null && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 11, color: '#94a3b8', minWidth: 16 }}>😊</span>
+                          <div style={{ flex: 1, height: 6, borderRadius: 3, background: '#F3F4F6', overflow: 'hidden' }}>
+                            <div style={{ width: `${satisfPct}%`, height: '100%', background: satisfPct >= 80 ? '#10B981' : satisfPct >= 50 ? '#F59E0B' : '#EF4444', borderRadius: 3, transition: 'width 0.8s ease' }}/>
+                          </div>
+                          <span style={{ fontSize: 11, color: '#374151', fontWeight: 600, minWidth: 32 }}>{satisfPct}%</span>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -1168,31 +1366,32 @@ export default function GestorHome() {
         {/* Satisfação */}
         {waSatisfStats && (
           <SectionCard title="Satisfação dos Atendimentos" subtitle="Últimos 30 dias" icon={<Star />} iconBg="#FEF3C7" iconColor="#F59E0B" action={() => navigate('/surveys')} actionLabel="Ver pesquisas">
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 16 }}>
-              <div style={{ textAlign: 'center', flexShrink: 0 }}>
-                <div style={{ fontSize: 40, fontWeight: 800, color: waSatisfStats.avgScore >= 2.5 ? '#10b981' : waSatisfStats.avgScore >= 1.5 ? '#f59e0b' : '#ef4444', lineHeight: 1 }}>
-                  {waSatisfStats.avgScore.toFixed(1)}
-                </div>
-                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>score médio</div>
-                <div style={{ fontSize: 10, color: '#94a3b8' }}>{waSatisfStats.total} av.</div>
+            <div style={{ textAlign: 'center', marginBottom: 16 }}>
+              <div style={{ fontSize: 48, fontWeight: 800, color: waSatisfStats.avgScore >= 2.5 ? '#00A896' : waSatisfStats.avgScore >= 1.5 ? '#F59E0B' : '#EF4444', lineHeight: 1 }}>
+                {waSatisfStats.avgScore.toFixed(1)}
               </div>
-              <div style={{ flex: 1 }}>
-                {[
-                  { label: '😊 Ótimo',   count: waSatisfStats.otimo,   color: '#10b981' },
-                  { label: '😐 Regular', count: waSatisfStats.regular, color: '#f59e0b' },
-                  { label: '😞 Ruim',    count: waSatisfStats.ruim,    color: '#ef4444' },
-                ].map(item => (
-                  <div key={item.label} style={{ marginBottom: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2 }}>
-                      <span style={{ color: '#64748b' }}>{item.label}</span>
-                      <span style={{ color: '#1e2d6b', fontWeight: 600 }}>{waSatisfStats.total > 0 ? Math.round(item.count / waSatisfStats.total * 100) : 0}%</span>
+              <div style={{ color: '#6B7280', fontSize: 14, marginTop: 4 }}>
+                de 3.0 • {surveyScoresList.length} avaliações
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              {[
+                { emoji: '😊', label: 'Ótimo', score: 3, color: '#10B981' },
+                { emoji: '😐', label: 'Regular', score: 2, color: '#F59E0B' },
+                { emoji: '😞', label: 'Ruim', score: 1, color: '#EF4444' },
+              ].map(item => {
+                const count = surveyScoresList.filter(c => c.satisfaction_score === item.score).length
+                const pct = surveyScoresList.length > 0 ? Math.round(count / surveyScoresList.length * 100) : 0
+                return (
+                  <div key={item.score} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                    <span style={{ fontSize: 20, minWidth: 24 }}>{item.emoji}</span>
+                    <div style={{ flex: 1, height: 8, borderRadius: 4, background: '#F3F4F6', overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: item.color, borderRadius: 4, transition: 'width 0.8s ease' }}/>
                     </div>
-                    <div style={{ height: 7, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', background: item.color, width: `${waSatisfStats.total > 0 ? item.count / waSatisfStats.total * 100 : 0}%`, borderRadius: 99 }} />
-                    </div>
+                    <span style={{ fontSize: 13, color: '#374151', fontWeight: 600, minWidth: 35 }}>{pct}%</span>
                   </div>
-                ))}
-              </div>
+                )
+              })}
             </div>
             {waSatisfStats.byAttendant.length > 0 && (
               <div>
@@ -1200,7 +1399,7 @@ export default function GestorHome() {
                 {waSatisfStats.byAttendant.map(({ name, total: t, sum }, i) => (
                   <div key={name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f1f5f9' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: i === 0 ? '#f59e0b' : '#94a3b8' }}>#{i + 1}</span>
+                      <span style={{ fontSize: 12 }}>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
                       <span style={{ fontSize: 12, color: '#1e2d6b', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1244,20 +1443,40 @@ export default function GestorHome() {
 
       {/* ── AI Insight ───────────────────────────────────────────────────────── */}
       {(aiInsightLoading || aiInsight) && (
-        <div style={{ background: 'linear-gradient(135deg, #1e2d6b, #4C1D95)', borderRadius: 16, padding: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Sparkles size={16} color="#fff" />
+        <div style={{ background: 'linear-gradient(135deg, #1e2d6b, #4C1D95)', borderRadius: 20, padding: 24, boxShadow: '0 4px 24px rgba(30,45,107,0.2)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Sparkles size={16} color="#fff" />
+              </div>
+              <div>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#fff', margin: 0 }}>Análise da IA — Áion Edu</h3>
+                <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>
+                  {aiLastUpdated ? `Última análise: ${new Date(aiLastUpdated).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : 'Baseada nos dados do funil e histórico da escola'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#fff', margin: 0 }}>Análise da IA — Áion Edu</h3>
-              <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>Baseada nos dados do funil e histórico da escola</p>
-            </div>
+            {latestFunnel && (
+              <button
+                onClick={() => { aiInsightFetched.current = false; fetchAiInsight(latestFunnel, true) }}
+                disabled={aiInsightLoading}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 20, background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff', fontSize: 12, fontWeight: 500, cursor: aiInsightLoading ? 'not-allowed' : 'pointer', opacity: aiInsightLoading ? 0.6 : 1 }}
+              >
+                🔄 Atualizar
+              </button>
+            )}
           </div>
           {aiInsightLoading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 14, borderRadius: 4, background: 'rgba(255,255,255,0.15)' }} />)}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[...Array(3)].map((_, i) => <div key={i} style={{ height: 14, borderRadius: 4, background: 'rgba(255,255,255,0.15)', animation: 'pulse 1.5s infinite' }} />)}
+              <p style={{ margin: '8px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Gerando análise...</p>
+            </div>
           ) : (
-            <p style={{ margin: 0, fontSize: 14, color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>{aiInsight}</p>
+            <div>
+              {aiInsight?.split('\n').filter(p => p.trim()).map((para, i) => (
+                <p key={i} style={{ margin: i === 0 ? 0 : '10px 0 0', fontSize: 14, color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>{para}</p>
+              ))}
+            </div>
           )}
         </div>
       )}
