@@ -94,6 +94,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
   const [editType,  setEditType]  = useState(contact.contact_type || 'unknown')
   const [saving,    setSaving]    = useState(false)
   const [toast,     setToast]     = useState<string | null>(null)
+  const [creatingLead, setCreatingLead] = useState(false)
 
   // Tags
   const [tags,         setTags]         = useState<string[]>(contact.tags || [])
@@ -240,6 +241,51 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
   function showToast(msg: string) { setToast(msg); setTimeout(() => { if (mountedRef.current) setToast(null) }, 3000) }
 
   // ── Actions ───────────────────────────────────────────────
+  async function handleCreateLead() {
+    setCreatingLead(true)
+    try {
+      const { data: newLead, error } = await supabase
+        .from('leads')
+        .insert({
+          institution_id: institutionId,
+          responsible_name: contact.name,
+          phone: contact.phone,
+          email: contact.email || null,
+          status: 'novo',
+          source: 'WhatsApp',
+        })
+        .select('id')
+        .single()
+
+      if (error || !newLead) throw error
+
+      await supabase
+        .from('whatsapp_contacts')
+        .update({ type: 'lead', lead_id: newLead.id })
+        .eq('id', contact.id)
+
+      if (contact.phone) {
+        const normPhone = contact.phone.replace(/\D/g, '')
+        await supabase
+          .from('whatsapp_conversations')
+          .update({ lead_id: newLead.id })
+          .eq('institution_id', institutionId)
+          .or(
+            `remote_jid.eq.${normPhone}@s.whatsapp.net,` +
+            `remote_jid.eq.${normPhone}`
+          )
+      }
+
+      onUpdate(contact.id, { contact_type: 'lead', lead_id: newLead.id })
+      showToast('Lead criado com sucesso!')
+    } catch (e) {
+      console.error('[CREATE LEAD]', e)
+      showToast('Erro ao criar lead')
+    } finally {
+      setCreatingLead(false)
+    }
+  }
+
   async function handleSaveDados() {
     setSaving(true)
     try {
@@ -610,6 +656,32 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
                   <p style={{ margin: 0, fontSize: 12, color: '#CBD5E1' }}>Nenhuma etiqueta disponível. Configure em Configurações → WhatsApp.</p>
                 )}
               </div>
+
+              {contact.contact_type !== 'lead' && contact.contact_type !== 'client' && (
+                <button
+                  onClick={handleCreateLead}
+                  disabled={creatingLead}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    borderRadius: 10,
+                    border: 'none',
+                    background: '#00A896',
+                    color: 'white',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: creatingLead ? 'not-allowed' : 'pointer',
+                    opacity: creatingLead ? 0.7 : 1,
+                    marginBottom: 8,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                  }}
+                >
+                  {creatingLead ? '⏳ Criando...' : '👤 Converter para Lead'}
+                </button>
+              )}
 
               <button onClick={handleSaveDados} disabled={saving}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', borderRadius: 10, border: 'none', background: '#00A896', color: 'white', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, marginTop: 4 }}>

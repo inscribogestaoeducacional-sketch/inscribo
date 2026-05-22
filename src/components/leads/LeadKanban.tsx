@@ -60,6 +60,13 @@ const gradeOptions = [
   '1ª Série EM', '2ª Série EM', '3ª Série EM'
 ]
 
+const GRADES = [
+  'Infantil I', 'Infantil II', 'Infantil III', 'Infantil IV', 'Infantil V',
+  '1º Ano EF', '2º Ano EF', '3º Ano EF', '4º Ano EF', '5º Ano EF',
+  '6º Ano EF', '7º Ano EF', '8º Ano EF', '9º Ano EF',
+  'Ensino Médio 1', 'Ensino Médio 2', 'Ensino Médio 3',
+]
+
 const timeSlots = [
   '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
   '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
@@ -1133,6 +1140,8 @@ export default function LeadKanban() {
   const [periodFilter, setPeriodFilter] = useState<'all'|'today'|'week'|'month'|'year'|'custom'>('all')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
+  const [gradeFilter, setGradeFilter] = useState('all')
+  const [shiftFilter, setShiftFilter] = useState('all')
   const [auditLeadId, setAuditLeadId] = useState<string | null>(null)
   const [showScheduleVisitModal, setShowScheduleVisitModal] = useState(false)
   const [leadToSchedule, setLeadToSchedule] = useState<Lead | null>(null)
@@ -1507,6 +1516,8 @@ export default function LeadKanban() {
         if (start && created < start) return false
         if (end && created > end) return false
       }
+      if (gradeFilter !== 'all' && lead.grade_interest !== gradeFilter) return false
+      if (shiftFilter !== 'all' && (lead as any).shift_interest !== shiftFilter) return false
       return true
     })
   }
@@ -1586,6 +1597,7 @@ export default function LeadKanban() {
   const activeLead = activeId ? leads.find(l => l.id === activeId) : null
   const visibleStatuses = filterStatus ? Object.keys(statusConfig).filter(s => s === filterStatus) : Object.keys(statusConfig)
   const filteredTotal = visibleStatuses.reduce((sum, s) => sum + getLeadsByStatus(s as Lead['status']).length, 0)
+  const hasActiveFilters = searchTerm !== '' || filterSource !== '' || filterStatus !== '' || periodFilter !== 'all' || gradeFilter !== 'all' || shiftFilter !== 'all'
 
   const cardActions = {
     onSchedule: (lead: Lead) => { setLeadToSchedule(lead); setShowScheduleVisitModal(true) },
@@ -1618,6 +1630,8 @@ export default function LeadKanban() {
         if (pStart && created < pStart) return false
         if (pEnd && created > pEnd) return false
       }
+      if (gradeFilter !== 'all' && l.grade_interest !== gradeFilter) return false
+      if (shiftFilter !== 'all' && (l as any).shift_interest !== shiftFilter) return false
       return true
     })
     return (
@@ -1768,6 +1782,24 @@ export default function LeadKanban() {
             <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="px-3 py-2.5 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] outline-none text-sm shadow-sm text-gray-700" />
             <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="px-3 py-2.5 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] outline-none text-sm shadow-sm text-gray-700" />
           </div>
+        )}
+        <select value={gradeFilter} onChange={e => setGradeFilter(e.target.value)} className="px-4 py-2.5 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none text-sm shadow-sm text-gray-700">
+          <option value="all">Todas as séries</option>
+          {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+        </select>
+        <select value={shiftFilter} onChange={e => setShiftFilter(e.target.value)} className="px-4 py-2.5 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none text-sm shadow-sm text-gray-700">
+          <option value="all">Todos os turnos</option>
+          <option value="Manhã">Manhã</option>
+          <option value="Tarde">Tarde</option>
+          <option value="Integral">Integral</option>
+        </select>
+        {hasActiveFilters && (
+          <button
+            onClick={() => { setSearchTerm(''); setFilterSource(''); setFilterStatus(''); setPeriodFilter('all'); setCustomStart(''); setCustomEnd(''); setGradeFilter('all'); setShiftFilter('all') }}
+            className="px-4 py-2.5 border border-gray-200 rounded-xl bg-white text-sm shadow-sm text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all font-semibold whitespace-nowrap"
+          >
+            Limpar filtros
+          </button>
         )}
       </div>
 
