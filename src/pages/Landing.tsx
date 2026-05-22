@@ -121,6 +121,35 @@ body {
   .footer-g { grid-template-columns:1fr !important; }
   .tabs-scroll { flex-wrap:wrap !important; }
 }
+
+/* Navbar responsiva */
+@media (max-width: 768px) {
+  .nav-links-desktop { display: none !important; }
+  .nav-mobile-btn { display: block !important; }
+}
+
+/* Cards hover */
+.card-hover {
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.12) !important;
+}
+
+/* Pulse animation */
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+/* Footer responsivo */
+@media (max-width: 768px) {
+  .footer-grid { grid-template-columns: 1fr 1fr !important; }
+}
+@media (max-width: 480px) {
+  .footer-grid { grid-template-columns: 1fr !important; }
+}
 `
 
 function useReveal(d = '') {
@@ -137,58 +166,84 @@ function useReveal(d = '') {
   return ref
 }
 
-// ─── HEADER ───────────────────────────────────────────────────────────────
-function Header() {
-  const [sc, setSc] = useState(false)
-  const [mob, setMob] = useState(false)
+// ─── NAVBAR ───────────────────────────────────────────────────────────────
+function Navbar() {
+  const [scrolled, setScrolled] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+
   useEffect(() => {
-    const h = () => setSc(window.scrollY > 30)
-    window.addEventListener('scroll', h)
-    return () => window.removeEventListener('scroll', h)
+    const fn = () => setScrolled(window.scrollY > 20)
+    window.addEventListener('scroll', fn)
+    return () => window.removeEventListener('scroll', fn)
   }, [])
+
   return (
-    <>
-      <nav style={{
-        position:'fixed', top:0, left:0, right:0, zIndex:300,
-        padding:'0 36px', height:66,
-        display:'flex', alignItems:'center', justifyContent:'space-between',
-        background: sc ? 'rgba(255,255,255,.97)' : 'transparent',
-        backdropFilter: sc ? 'blur(18px)' : 'none',
-        borderBottom: sc ? '1px solid #E5E7EB' : '1px solid transparent',
-        transition:'background .3s, border-color .3s',
-      }}>
-        <Link to="/" style={{ textDecoration:'none', display:'flex', alignItems:'center', gap:10 }}>
-          <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 36, objectFit: 'contain' }} />
-        </Link>
+    <nav style={{
+      position: 'fixed', top: 0, left: 0, right: 0,
+      zIndex: 1000,
+      background: scrolled ? 'rgba(255,255,255,0.97)' : 'transparent',
+      backdropFilter: scrolled ? 'blur(12px)' : 'none',
+      boxShadow: scrolled ? '0 1px 20px rgba(0,0,0,0.08)' : 'none',
+      transition: 'all 0.3s ease',
+      padding: '0 24px'
+    }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 64 }}>
+        <a href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
+          <img
+            src="/aion-logo-full.png"
+            alt="ÁION EDU"
+            style={{ height: 36, objectFit: 'contain' }}
+            onError={e => {
+              e.currentTarget.style.display = 'none';
+              (e.currentTarget.nextElementSibling as HTMLElement | null)?.removeAttribute('style')
+            }}
+          />
+          <span style={{ display: 'none', fontFamily: 'Bricolage Grotesque, sans-serif', fontWeight: 800, fontSize: 20, color: scrolled ? '#00523C' : 'white' }}>
+            ÁION EDU
+          </span>
+        </a>
 
-        <div className="nav-links" style={{ display:'flex', gap:30, alignItems:'center' }}>
-          {[['#modulos','Módulos'],['#implantacao','Implantação'],['#diferenciais','Diferenciais'],['#demo','Demo']].map(([href,label]) => (
-            <a key={href} href={href} className={sc ? 'nav-a-sc' : 'nav-a'}>{label}</a>
+        <div className="nav-links-desktop" style={{ display: 'flex', gap: 32, alignItems: 'center' }}>
+          {[
+            { href: '/', label: 'Início' },
+            { href: '/#modulos', label: 'Módulos' },
+            { href: '/#como-funciona', label: 'Como funciona' },
+            { href: '/blog', label: 'Blog' },
+            { href: '/sobre', label: 'Sobre' },
+            { href: '/parceiros', label: 'Parceiros' },
+          ].map(link => (
+            <a key={link.href} href={link.href} style={{ color: scrolled ? '#374151' : 'rgba(255,255,255,0.9)', textDecoration: 'none', fontSize: 14, fontWeight: 500, transition: 'color 0.2s' }}>
+              {link.label}
+            </a>
           ))}
-          <Link to="/blog" className={sc ? 'nav-a-sc' : 'nav-a'}>Blog</Link>
-        </div>
-
-        <div style={{ display:'flex', gap:10, alignItems:'center' }}>
-          <Link to="/login" style={{ padding:'8px 16px', borderRadius:9, fontSize:13, fontWeight:700, textDecoration:'none', color: sc ? '#374151' : '#fff', border:`1.5px solid ${sc ? '#E5E7EB' : 'rgba(255,255,255,.35)'}`, transition:'all .2s' }}>
-            Entrar
-          </Link>
-          <a href="#demo" className="btn-g" style={{ padding:'9px 20px', fontSize:13, boxShadow:'none' }}>
-            Agendar Demo →
+          <a href="/#demo" style={{ background: '#00A896', color: 'white', padding: '8px 20px', borderRadius: 20, textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
+            Agendar demo
           </a>
-          <button className="mob-btn" onClick={() => setMob(!mob)} style={{ display:'none', background:'none', border:'none', cursor:'pointer', padding:4, flexDirection:'column', gap:5 }}>
-            {[0,1,2].map(i => <div key={i} style={{ width:22, height:2, background: sc ? '#374151' : '#fff', borderRadius:2 }} />)}
-          </button>
         </div>
-      </nav>
-      {mob && (
-        <div style={{ position:'fixed', top:66, left:0, right:0, zIndex:299, background:'#fff', borderBottom:'1px solid #E5E7EB', padding:'16px 24px', display:'flex', flexDirection:'column', gap:4 }}>
-          {[['#modulos','Módulos'],['#implantacao','Implantação'],['#diferenciais','Diferenciais'],['#demo','Demo']].map(([href,label]) => (
-            <a key={href} href={href} onClick={() => setMob(false)} style={{ color:'#374151', textDecoration:'none', fontSize:15, fontWeight:600, padding:'11px 0', borderBottom:'1px solid #F3F4F6' }}>{label}</a>
+
+        <button onClick={() => setMenuOpen(!menuOpen)} className="nav-mobile-btn" style={{ display: 'none', background: 'none', border: 'none', cursor: 'pointer', fontSize: 24, color: scrolled ? '#111827' : 'white' }}>
+          {menuOpen ? '✕' : '☰'}
+        </button>
+      </div>
+
+      {menuOpen && (
+        <div style={{ background: 'white', padding: '16px 24px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {[
+            { href: '/', label: 'Início' },
+            { href: '/blog', label: 'Blog' },
+            { href: '/sobre', label: 'Sobre' },
+            { href: '/parceiros', label: 'Parceiros' },
+          ].map(link => (
+            <a key={link.href} href={link.href} style={{ color: '#374151', textDecoration: 'none', fontSize: 15, fontWeight: 500 }}>
+              {link.label}
+            </a>
           ))}
-          <Link to="/login" onClick={() => setMob(false)} style={{ color:'#374151', textDecoration:'none', fontSize:15, fontWeight:600, padding:'11px 0' }}>Entrar</Link>
+          <a href="/#demo" style={{ background: '#00A896', color: 'white', padding: '10px 20px', borderRadius: 20, textDecoration: 'none', fontSize: 14, fontWeight: 600, textAlign: 'center' }}>
+            Agendar demo
+          </a>
         </div>
       )}
-    </>
+    </nav>
   )
 }
 
@@ -197,6 +252,8 @@ function HeroDashboard() {
   const [beat, setBeat] = useState(false)
   useEffect(() => { const id = setInterval(() => setBeat(b => !b), 2200); return () => clearInterval(id) }, [])
   return (
+    <div style={{ position: 'relative' }}>
+      <div style={{ position: 'absolute', top: -12, right: -12, background: '#0DD3BF', color: '#00523C', padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700, animation: 'pulse 2s infinite', zIndex: 10 }}>● AO VIVO</div>
     <div style={{ background:'rgba(255,255,255,.12)', borderRadius:22, padding:3, border:'1px solid rgba(255,255,255,.2)', boxShadow:'0 32px 80px rgba(0,0,0,.25)', animation:'floatY 5s ease-in-out infinite' }}>
       <div style={{ background:'#fff', borderRadius:20, overflow:'hidden' }}>
         <div style={{ padding:'13px 18px', borderBottom:'1px solid #F3F4F6', display:'flex', alignItems:'center', justifyContent:'space-between', background:'#FAFAFA' }}>
@@ -255,6 +312,7 @@ function HeroDashboard() {
           ))}
         </div>
       </div>
+    </div>
     </div>
   )
 }
@@ -329,27 +387,62 @@ function Ticker() {
   )
 }
 
+// ─── STAT CARD ────────────────────────────────────────────────────────────
+function StatCard({ value, suffix, label, desc, icon, color, index }: {
+  value: number; suffix: string; label: string; desc: string; icon: string; color: string; index: number
+}) {
+  const [count, setCount] = useState(0)
+  const [visible, setVisible] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = ref.current; if (!el) return
+    const obs = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) { setVisible(true); obs.disconnect() }
+    }, { threshold: 0.1 })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (!visible) return
+    setCount(0)
+    const interval = setInterval(() => {
+      setCount(prev => {
+        if (prev >= value) { clearInterval(interval); return value }
+        return Math.min(prev + Math.ceil(value / 30), value)
+      })
+    }, 50)
+    return () => clearInterval(interval)
+  }, [visible, value])
+
+  return (
+    <div ref={ref} style={{ padding: '44px 28px', borderRight: index < 3 ? '1px solid #E5E7EB' : 'none', textAlign: 'center' }}>
+      <div style={{ fontSize: 36, marginBottom: 14 }}>{icon}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 2, marginBottom: 8 }}>
+        <div className="s-title" style={{ fontSize: 52, color, lineHeight: 1 }}>{count}</div>
+        <div className="s-title" style={{ fontSize: 26, color }}>{suffix}</div>
+      </div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6 }}>{desc}</div>
+    </div>
+  )
+}
+
 // ─── NÚMEROS ──────────────────────────────────────────────────────────────
 function Numeros() {
-  const nums = [
-    { val:'+40%', label:'crescimento médio de captação', icon:'📈' },
-    { val:'85%', label:'meta de rematrícula estruturada', icon:'🔄' },
-    { val:'3 min', label:'plano de campanha pela IA', icon:'⚡' },
-    { val:'100%', label:'feito para a realidade brasileira', icon:'🇧🇷' },
+  const stats = [
+    { value: 40, suffix: '%', label: 'Mais conversões', desc: 'em média nas escolas parceiras', icon: '📈', color: '#00A896' },
+    { value: 85, suffix: '%', label: 'Taxa de rematrícula', desc: 'com acompanhamento pelo sistema', icon: '🔄', color: '#8B5CF6' },
+    { value: 3, suffix: 'min', label: 'Tempo de resposta', desc: 'médio com WhatsApp integrado', icon: '⚡', color: '#F59E0B' },
+    { value: 100, suffix: '%', label: 'Dados em tempo real', desc: 'sem planilhas ou anotações', icon: '📊', color: '#10B981' },
   ]
   return (
-    <section style={{ background:'#fff', borderBottom:'1px solid #E5E7EB' }}>
-      <div className="nums-g" style={{ maxWidth:1100, margin:'0 auto', display:'grid', gridTemplateColumns:'repeat(4,1fr)' }}>
-        {nums.map((n,i) => {
-          const r = useReveal(`${i+1}`)
-          return (
-            <div key={i} ref={r} className="reveal" style={{ padding:'36px 28px', borderRight:i<3?'1px solid #E5E7EB':'none', textAlign:'center' }}>
-              <div style={{ fontSize:28, marginBottom:10 }}>{n.icon}</div>
-              <div className="s-title" style={{ fontSize:42, color:'#00523C', marginBottom:8, lineHeight:1 }}>{n.val}</div>
-              <div style={{ fontSize:13, color:'#6B7280', lineHeight:1.5 }}>{n.label}</div>
-            </div>
-          )
-        })}
+    <section style={{ background: '#fff', borderBottom: '1px solid #E5E7EB' }}>
+      <div className="nums-g" style={{ maxWidth: 1100, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)' }}>
+        {stats.map((s, i) => (
+          <StatCard key={i} {...s} index={i} />
+        ))}
       </div>
     </section>
   )
@@ -780,6 +873,60 @@ function Depoimento() {
   )
 }
 
+// ─── PARA QUEM É ──────────────────────────────────────────────────────────
+function ParaQuem() {
+  const r0 = useReveal()
+  const cards = [
+    {
+      icon: '🏫',
+      title: 'Escola independente',
+      desc: 'Que quer profissionalizar a campanha e sair das planilhas',
+      items: ['1 a 3 atendentes', 'Até 500 alunos', 'Campanha manual hoje']
+    },
+    {
+      icon: '🏢',
+      title: 'Escola em crescimento',
+      desc: 'Que já tem equipe e quer dados para tomar decisões',
+      items: ['3 a 10 atendentes', '500 a 2000 alunos', 'Quer previsibilidade']
+    },
+    {
+      icon: '🌐',
+      title: 'Rede de escolas',
+      desc: 'Que precisa padronizar e escalar a captação em múltiplas unidades',
+      items: ['10+ atendentes', '2000+ alunos', 'Múltiplas unidades']
+    }
+  ]
+  return (
+    <section style={{ padding: '80px 24px', background: '#F9FAFB' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div ref={r0} className="reveal" style={{ textAlign: 'center', marginBottom: 52 }}>
+          <div className="tag-g" style={{ marginBottom: 18 }}>Para quem é</div>
+          <h2 className="s-title" style={{ fontSize: 'clamp(26px,4vw,40px)', color: '#111827', marginBottom: 14 }}>
+            Para qual escola é a ÁION EDU?
+          </h2>
+        </div>
+        <div className="dores-g" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 24 }}>
+          {cards.map((card, i) => (
+            <div key={i} className="card card-hover" style={{ padding: 32 }}>
+              <div style={{ fontSize: 44, marginBottom: 16 }}>{card.icon}</div>
+              <h3 style={{ fontSize: 18, fontWeight: 800, color: '#111827', marginBottom: 10, lineHeight: 1.3 }}>{card.title}</h3>
+              <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.7, marginBottom: 20 }}>{card.desc}</p>
+              <ul style={{ listStyle: 'none', padding: 0 }}>
+                {card.items.map((item, j) => (
+                  <li key={j} style={{ fontSize: 13, color: '#374151', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ color: '#00A896', fontWeight: 700 }}>✓</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 // ─── FAQ ──────────────────────────────────────────────────────────────────
 function FAQ() {
   const [open, setOpen] = useState<number | null>(null)
@@ -861,7 +1008,7 @@ function CTAFinal() {
         <div ref={r0} className="reveal" style={{ textAlign:'center', marginBottom:50 }}>
           <div className="tag-d" style={{ marginBottom:18 }}>Pronto para começar?</div>
           <h2 className="s-title" style={{ fontSize:'clamp(26px,4vw,46px)', color:'#fff', marginBottom:14 }}>
-            Comece antes da campanha de agosto
+            Comece antes da próxima campanha de matrícula
           </h2>
           <p style={{ fontSize:17, color:'rgba(255,255,255,.8)', maxWidth:480, margin:'0 auto', lineHeight:1.75 }}>
             Escolas que planejam com antecedência têm resultados consistentemente melhores na captação de novos alunos.
@@ -875,7 +1022,7 @@ function CTAFinal() {
             <p style={{ color:'#374151', lineHeight:1.75, fontSize:15 }}>Nossa equipe vai entrar em contato via WhatsApp em até 2 horas úteis.</p>
             <div style={{ display:'flex', gap:12, justifyContent:'center', marginTop:20, flexWrap:'wrap' }}>
               <a
-                href="https://wa.me/5583985556393?text=Olá! Acabei de solicitar uma demonstração da Áion Edu e gostaria de agendar."
+                href="https://wa.me/5583933444383?text=Olá! Acabei de solicitar uma demonstração da Áion Edu e gostaria de agendar."
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn-g"
@@ -919,47 +1066,61 @@ function CTAFinal() {
 // ─── FOOTER ───────────────────────────────────────────────────────────────
 function Footer() {
   return (
-    <footer style={{ background:'#111827', padding:'64px 36px 32px' }}>
-      <div style={{ maxWidth:1100, margin:'0 auto' }}>
-        <div className="footer-g" style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr', gap:48, marginBottom:48 }}>
-          <div>
-            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:18 }}>
-              <img src="/aion-logo-full.png" alt="Áion Edu" style={{ height: 32, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+    <footer style={{ background: '#00523C', color: 'white', padding: '60px 24px 32px' }}>
+      <div className="footer-grid" style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 40, marginBottom: 48 }}>
+        <div>
+          <div style={{ fontFamily: 'Bricolage Grotesque, sans-serif', fontWeight: 800, fontSize: 22, marginBottom: 12 }}>ÁION EDU</div>
+          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, lineHeight: 1.6, marginBottom: 16 }}>
+            A plataforma inteligente para campanhas de matrícula escolar.
+          </p>
+          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+            CNPJ: 65.835.064/0001-58<br/>
+            Patos, Paraíba — Brasil
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontWeight: 700, marginBottom: 16, fontSize: 14 }}>Produto</div>
+          {['Módulos', 'Como funciona', 'Implantação', 'Parceiros'].map(item => (
+            <div key={item} style={{ marginBottom: 10 }}>
+              <a href="#" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 13 }}>{item}</a>
             </div>
-            <p style={{ fontSize:13, color:'#9CA3AF', lineHeight:1.75, marginBottom:16 }}>Inteligência em matrículas para escolas privadas brasileiras.</p>
-            <p style={{ fontSize:12, color:'#6B7280', lineHeight:1.85 }}>
-              AION SOLUÇÕES TECNOLÓGICAS LTDA<br />
-              CNPJ: 65.835.064/0001-58<br />
-              R. Francisco Vicente de Araújo, 48 · Bela Vista<br />
-              Patos - PB · CEP 58.704-560<br />
-              (83) 9855-6393 · contato@aionedu.com.br
-            </p>
-          </div>
-          <div>
-            <h4 style={{ color:'#fff', fontSize:11, fontWeight:800, marginBottom:16, textTransform:'uppercase', letterSpacing:'.08em' }}>Produto</h4>
-            {[['#modulos','Módulos'],['#como-funciona','Como funciona'],['#implantacao','Implantação'],['#demo','Demo']].map(([href,label]) => (
-              <a key={href} href={href} style={{ display:'block', color:'#9CA3AF', textDecoration:'none', fontSize:13, marginBottom:10, transition:'color .2s' }} onMouseEnter={e=>(e.currentTarget.style.color='#fff')} onMouseLeave={e=>(e.currentTarget.style.color='#9CA3AF')}>{label}</a>
-            ))}
-          </div>
-          <div>
-            <h4 style={{ color:'#fff', fontSize:11, fontWeight:800, marginBottom:16, textTransform:'uppercase', letterSpacing:'.08em' }}>Empresa</h4>
-            {[['/sobre','Sobre nós'],['/parceiros','Parceiros'],['/blog','Blog']].map(([href,label]) => (
-              <Link key={href} to={href} style={{ display:'block', color:'#9CA3AF', textDecoration:'none', fontSize:13, marginBottom:10, transition:'color .2s' }} onMouseEnter={e=>(e.currentTarget.style.color='#fff')} onMouseLeave={e=>(e.currentTarget.style.color='#9CA3AF')}>{label}</Link>
-            ))}
-          </div>
-          <div>
-            <h4 style={{ color:'#fff', fontSize:11, fontWeight:800, marginBottom:16, textTransform:'uppercase', letterSpacing:'.08em' }}>Legal</h4>
-            {[['/privacidade','Política de Privacidade'],['/termos','Termos de Uso'],['/privacidade','LGPD']].map(([href,label]) => (
-              <Link key={label} to={href} style={{ display:'block', color:'#9CA3AF', textDecoration:'none', fontSize:13, marginBottom:10, transition:'color .2s' }} onMouseEnter={e=>(e.currentTarget.style.color='#fff')} onMouseLeave={e=>(e.currentTarget.style.color='#9CA3AF')}>{label}</Link>
-            ))}
+          ))}
+        </div>
+
+        <div>
+          <div style={{ fontWeight: 700, marginBottom: 16, fontSize: 14 }}>Empresa</div>
+          {[
+            { label: 'Sobre nós', href: '/sobre' },
+            { label: 'Blog', href: '/blog' },
+            { label: 'Parceiros', href: '/parceiros' },
+          ].map(item => (
+            <div key={item.label} style={{ marginBottom: 10 }}>
+              <a href={item.href} style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 13 }}>{item.label}</a>
+            </div>
+          ))}
+        </div>
+
+        <div>
+          <div style={{ fontWeight: 700, marginBottom: 16, fontSize: 14 }}>Legal</div>
+          {[
+            { label: 'Privacidade', href: '/privacidade' },
+            { label: 'Termos de uso', href: '/termos' },
+          ].map(item => (
+            <div key={item.label} style={{ marginBottom: 10 }}>
+              <a href={item.href} style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 13 }}>{item.label}</a>
+            </div>
+          ))}
+          <div style={{ marginTop: 16, color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>
+            WhatsApp:<br/>
+            <a href="https://wa.me/5583933444383" style={{ color: '#0DD3BF', textDecoration: 'none' }}>(83) 9344-4383</a>
           </div>
         </div>
-        <div style={{ borderTop:'1px solid #1F2937', paddingTop:26, display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10 }}>
-          <p style={{ fontSize:12, color:'#6B7280' }}>© 2026 Áion Edu. Todos os direitos reservados.</p>
-          <div style={{ display:'flex', gap:16 }}>
-            {['🇧🇷 Feito no Brasil','🔒 LGPD'].map(t => <span key={t} style={{ fontSize:11, color:'#4B5563', fontWeight:600 }}>{t}</span>)}
-          </div>
-        </div>
+      </div>
+
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>© 2026 ÁION Soluções Tecnológicas Ltda. Todos os direitos reservados.</span>
+        <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>Feito com 💚 no sertão paraibano</span>
       </div>
     </footer>
   )
@@ -976,7 +1137,7 @@ export default function Landing() {
 
   return (
     <>
-      <Header />
+      <Navbar />
       <main>
         <Hero />
         <Ticker />
@@ -987,12 +1148,13 @@ export default function Landing() {
         <Implantacao />
         <Diferenciais />
         <Depoimento />
+        <ParaQuem />
         <FAQ />
         <CTAFinal />
       </main>
       <Footer />
       <a
-        href="https://wa.me/5583985556393?text=Olá! Tenho interesse na Áion Edu e gostaria de saber mais."
+        href="https://wa.me/5583933444383?text=Olá! Tenho interesse na Áion Edu e gostaria de saber mais."
         target="_blank"
         rel="noopener noreferrer"
         style={{

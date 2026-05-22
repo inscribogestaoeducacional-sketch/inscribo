@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 // ─── Dados dos artigos ──────────────────────────────────────────────────────
@@ -6,7 +6,7 @@ export const POSTS = [
   {
     slug: 'como-estruturar-campanha-matriculas',
     title: 'Como estruturar sua campanha de matrículas antes de agosto',
-    category: 'Planejamento',
+    category: 'Captação',
     date: 'Março 2026',
     readTime: '5 min',
     excerpt: 'Escolas que planejam com antecedência têm resultados consistentemente melhores. Veja o passo a passo para chegar em agosto pronto.',
@@ -47,7 +47,7 @@ O planejamento antecipado não é burocracia — é a diferença entre uma campa
   {
     slug: 'por-que-escola-perde-leads',
     title: 'Por que sua escola perde leads sem saber',
-    category: 'CRM',
+    category: 'Gestão',
     date: 'Fevereiro 2026',
     readTime: '4 min',
     excerpt: 'A maioria das escolas perde entre 30% e 50% dos leads por falta de acompanhamento. Veja como isso acontece e como evitar.',
@@ -81,7 +81,7 @@ Com esse processo em lugar, sua equipe para de perder leads por omissão e come�
   {
     slug: 'taxa-rematricula',
     title: 'Taxa de rematrícula: como calcular e melhorar',
-    category: 'Retenção',
+    category: 'Gestão',
     date: 'Janeiro 2026',
     readTime: '6 min',
     excerpt: 'Reter um aluno custa 5x menos do que captar um novo. Mas a maioria das escolas não sabe calcular corretamente sua taxa de rematrícula.',
@@ -159,7 +159,7 @@ Se WhatsApp é um canal crítico para sua campanha de matrículas — e é — u
   {
     slug: 'inep-censo-escolar',
     title: 'INEP e Censo Escolar: como usar os dados para sua campanha',
-    category: 'Dados',
+    category: 'Tecnologia',
     date: 'Novembro 2025',
     readTime: '7 min',
     excerpt: 'O INEP publica dados públicos sobre todas as escolas do Brasil. Saiba como usar essas informações para entender seu mercado e definir metas realistas.',
@@ -186,10 +186,6 @@ A partir desse número, você pode definir metas de crescimento realistas — cr
 
 Além dos dados absolutos, os dados do Censo permitem entender a velocidade de crescimento do mercado local. Em municípios onde o número total de matrículas privadas cresce 3% ao ano, uma escola que cresce 3% está apenas acompanhando o mercado. Para crescer de verdade, precisa superar esse índice.
 
-**Onde acessar**
-
-Os dados do Censo Escolar estão disponíveis no portal do INEP (inep.gov.br/censo-escolar). Os microdados são públicos e gratuitos. A leitura exige alguma familiaridade com dados, mas ferramentas de BI conseguem processar os arquivos.
-
 **Conclusão**
 
 Usar dados do INEP não é complexo — é necessário. Uma meta de matrículas que ignora o tamanho real do mercado local é uma meta no escuro.
@@ -198,7 +194,7 @@ Usar dados do INEP não é complexo — é necessário. Uma meta de matrículas 
   {
     slug: 'funil-matriculas',
     title: 'Funil de matrículas: da captação ao contrato assinado',
-    category: 'Processo',
+    category: 'Captação',
     date: 'Outubro 2025',
     readTime: '6 min',
     excerpt: 'Um funil bem estruturado é a diferença entre uma campanha caótica e uma campanha previsível. Veja como montar o funil certo para a sua escola.',
@@ -225,10 +221,6 @@ Sem registro, o funil não existe na prática. Quando você tem os dados de cada
 
 Se sua taxa de visita para matrícula é alta (acima de 60%) mas sua taxa de agendamento de visita é baixa (menos de 30%), o problema está na qualificação e no agendamento — não na visita em si.
 
-**A importância do tempo entre estágios**
-
-Além das taxas de conversão, o tempo médio entre estágios é um indicador crítico. Um lead que ficou 15 dias no estágio "Contato feito" provavelmente esfriou. Um lead em "Proposta enviada" há mais de 7 dias precisa de um follow-up imediato.
-
 **Conclusão**
 
 Funil de matrículas não é burocracia — é o mapa da campanha. Com o funil registrado e atualizado, você para de trabalhar no escuro e começa a tomar decisões com base no que está realmente acontecendo.
@@ -236,22 +228,30 @@ Funil de matrículas não é burocracia — é o mapa da campanha. Com o funil r
   },
 ]
 
-// ─── CSS ────────────────────────────────────────────────────────────────────
+const CATEGORIES = ['Todos', 'Captação', 'Gestão', 'WhatsApp', 'Tecnologia', 'Cases']
+
 const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800;12..96,900&display=swap');
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #111827; }
+body { font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; color: #111827; }
 .anim { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
 .anim.visible { opacity: 1; transform: none; }
-.nav-link { color: #374151; text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
-.nav-link:hover { color: #00523C; }
-.post-card { background: #fff; border-radius: 14px; border: 1px solid #E5E7EB; overflow: hidden; transition: box-shadow 0.2s, transform 0.2s; cursor: pointer; text-decoration: none; color: inherit; display: block; }
-.post-card:hover { box-shadow: 0 8px 32px rgba(0,0,0,0.1); transform: translateY(-2px); }
+.post-card { background: #fff; border-radius: 20px; border: 1px solid #E5E7EB; overflow: hidden; transition: box-shadow 0.25s, transform 0.25s; cursor: pointer; text-decoration: none; color: inherit; display: block; }
+.post-card:hover { box-shadow: 0 12px 40px rgba(0,0,0,0.1); transform: translateY(-4px); }
 .post-content h2 { font-size: 22px; font-weight: 800; color: #111827; margin: 28px 0 16px; }
 .post-content h3, .post-content strong { font-size: 16px; font-weight: 700; color: #111827; display: block; margin: 20px 0 8px; }
 .post-content p { font-size: 15px; color: #374151; line-height: 1.8; margin-bottom: 16px; }
+.cat-btn { padding: 8px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid #E5E7EB; background: #fff; color: #6B7280; transition: all 0.2s; font-family: 'Plus Jakarta Sans', sans-serif; }
+.cat-btn.active { background: #00523C; color: #fff; border-color: #00523C; }
+.cat-btn:hover:not(.active) { border-color: #00A896; color: #00523C; }
 @media (max-width: 768px) {
   .blog-grid { grid-template-columns: 1fr !important; }
+  .nav-links-desktop { display: none !important; }
+  .nav-mobile-btn { display: block !important; }
+}
+@media (max-width: 480px) {
+  .footer-grid { grid-template-columns: 1fr !important; }
 }
 `
 
@@ -266,70 +266,189 @@ function useAnim() {
   return ref
 }
 
-function Nav() {
+// ─── NAVBAR ─────────────────────────────────────────────────────────────────
+function Navbar() {
+  const [scrolled, setScrolled] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  useEffect(() => {
+    const fn = () => setScrolled(window.scrollY > 20)
+    window.addEventListener('scroll', fn)
+    return () => window.removeEventListener('scroll', fn)
+  }, [])
+
   return (
-    <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #E5E7EB', padding: '0 24px', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg,#00523C,#00A896)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'white' }} />
+    <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000, background: scrolled ? 'rgba(255,255,255,0.97)' : 'transparent', backdropFilter: scrolled ? 'blur(12px)' : 'none', boxShadow: scrolled ? '0 1px 20px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.3s ease', padding: '0 24px' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 64 }}>
+        <a href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
+          <img src="/aion-logo-full.png" alt="ÁION EDU" style={{ height: 36, objectFit: 'contain' }} onError={e => { e.currentTarget.style.display = 'none'; (e.currentTarget.nextElementSibling as HTMLElement | null)?.removeAttribute('style') }} />
+          <span style={{ display: 'none', fontFamily: 'Bricolage Grotesque, sans-serif', fontWeight: 800, fontSize: 20, color: scrolled ? '#00523C' : 'white' }}>ÁION EDU</span>
+        </a>
+        <div className="nav-links-desktop" style={{ display: 'flex', gap: 32, alignItems: 'center' }}>
+          {[{ href: '/', label: 'Início' }, { href: '/#modulos', label: 'Módulos' }, { href: '/#como-funciona', label: 'Como funciona' }, { href: '/blog', label: 'Blog' }, { href: '/sobre', label: 'Sobre' }, { href: '/parceiros', label: 'Parceiros' }].map(link => (
+            <a key={link.href} href={link.href} style={{ color: scrolled ? '#374151' : 'rgba(255,255,255,0.9)', textDecoration: 'none', fontSize: 14, fontWeight: 500, transition: 'color 0.2s' }}>{link.label}</a>
+          ))}
+          <a href="/#demo" style={{ background: '#00A896', color: 'white', padding: '8px 20px', borderRadius: 20, textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>Agendar demo</a>
         </div>
-        <span style={{ fontWeight: 800, fontSize: 16, color: '#00523C' }}>Áion Edu</span>
-      </Link>
-      <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
-        <Link to="/sobre" className="nav-link">Sobre</Link>
-        <Link to="/parceiros" className="nav-link">Parceiros</Link>
-        <Link to="/login" style={{ padding: '7px 16px', background: '#00523C', color: '#fff', borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>Entrar</Link>
+        <button onClick={() => setMenuOpen(!menuOpen)} className="nav-mobile-btn" style={{ display: 'none', background: 'none', border: 'none', cursor: 'pointer', fontSize: 24, color: scrolled ? '#111827' : 'white' }}>
+          {menuOpen ? '✕' : '☰'}
+        </button>
       </div>
+      {menuOpen && (
+        <div style={{ background: 'white', padding: '16px 24px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {[{ href: '/', label: 'Início' }, { href: '/blog', label: 'Blog' }, { href: '/sobre', label: 'Sobre' }, { href: '/parceiros', label: 'Parceiros' }].map(link => (
+            <a key={link.href} href={link.href} style={{ color: '#374151', textDecoration: 'none', fontSize: 15, fontWeight: 500 }}>{link.label}</a>
+          ))}
+          <a href="/#demo" style={{ background: '#00A896', color: 'white', padding: '10px 20px', borderRadius: 20, textDecoration: 'none', fontSize: 14, fontWeight: 600, textAlign: 'center' }}>Agendar demo</a>
+        </div>
+      )}
     </nav>
   )
+}
+
+// ─── FOOTER ─────────────────────────────────────────────────────────────────
+function Footer() {
+  return (
+    <footer style={{ background: '#00523C', color: 'white', padding: '60px 24px 32px' }}>
+      <div className="footer-grid" style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 40, marginBottom: 48 }}>
+        <div>
+          <div style={{ fontFamily: 'Bricolage Grotesque, sans-serif', fontWeight: 800, fontSize: 22, marginBottom: 12 }}>ÁION EDU</div>
+          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, lineHeight: 1.6, marginBottom: 16 }}>A plataforma inteligente para campanhas de matrícula escolar.</p>
+          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>CNPJ: 65.835.064/0001-58<br/>Patos, Paraíba — Brasil</div>
+        </div>
+        <div>
+          <div style={{ fontWeight: 700, marginBottom: 16, fontSize: 14 }}>Produto</div>
+          {['Módulos', 'Como funciona', 'Implantação', 'Parceiros'].map(item => (
+            <div key={item} style={{ marginBottom: 10 }}><a href="#" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 13 }}>{item}</a></div>
+          ))}
+        </div>
+        <div>
+          <div style={{ fontWeight: 700, marginBottom: 16, fontSize: 14 }}>Empresa</div>
+          {[{ label: 'Sobre nós', href: '/sobre' }, { label: 'Blog', href: '/blog' }, { label: 'Parceiros', href: '/parceiros' }].map(item => (
+            <div key={item.label} style={{ marginBottom: 10 }}><a href={item.href} style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 13 }}>{item.label}</a></div>
+          ))}
+        </div>
+        <div>
+          <div style={{ fontWeight: 700, marginBottom: 16, fontSize: 14 }}>Legal</div>
+          {[{ label: 'Privacidade', href: '/privacidade' }, { label: 'Termos de uso', href: '/termos' }].map(item => (
+            <div key={item.label} style={{ marginBottom: 10 }}><a href={item.href} style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 13 }}>{item.label}</a></div>
+          ))}
+          <div style={{ marginTop: 16, color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>
+            WhatsApp:<br/><a href="https://wa.me/5583933444383" style={{ color: '#0DD3BF', textDecoration: 'none' }}>(83) 9344-4383</a>
+          </div>
+        </div>
+      </div>
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>© 2026 ÁION Soluções Tecnológicas Ltda. Todos os direitos reservados.</span>
+        <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>Feito com 💚 no sertão paraibano</span>
+      </div>
+    </footer>
+  )
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+  Captação: '#00A896',
+  Gestão: '#6366F1',
+  WhatsApp: '#10B981',
+  Tecnologia: '#8B5CF6',
+  Cases: '#F59E0B',
+  Planejamento: '#00A896',
+  CRM: '#6366F1',
+  Retenção: '#10B981',
+  Dados: '#8B5CF6',
+  Processo: '#F59E0B',
+}
+
+function getInitials(name: string) {
+  return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
 }
 
 // ─── Blog Grid ──────────────────────────────────────────────────────────────
 export default function Blog() {
   const r1 = useAnim()
+  const [activeCategory, setActiveCategory] = useState('Todos')
+
+  const filtered = activeCategory === 'Todos'
+    ? POSTS
+    : POSTS.filter(p => p.category === activeCategory)
+
   return (
     <>
       <style>{CSS}</style>
-      <Nav />
-      <section style={{ background: 'linear-gradient(135deg,#00523C,#00A896)', padding: '100px 24px 60px', textAlign: 'center' }}>
-        <h1 style={{ fontSize: 36, fontWeight: 900, color: '#fff', marginBottom: 12 }}>Blog Áion Edu</h1>
-        <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.85)' }}>Estratégia, dados e processo para gestores de escolas privadas.</p>
+      <Navbar />
+
+      {/* Hero */}
+      <section style={{ background: 'linear-gradient(135deg,#00523C 0%,#006B50 45%,#00A896 100%)', padding: '110px 24px 72px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', inset: 0, opacity: 0.05, backgroundImage: 'linear-gradient(rgba(255,255,255,.6) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.6) 1px,transparent 1px)', backgroundSize: '48px 48px', pointerEvents: 'none' }} />
+        <div style={{ maxWidth: 680, margin: '0 auto', position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'inline-block', background: 'rgba(255,255,255,0.15)', borderRadius: 999, padding: '6px 16px', marginBottom: 20 }}>
+            <span style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: 600 }}>Conteúdo para gestores escolares</span>
+          </div>
+          <h1 style={{ fontSize: 'clamp(32px,5vw,52px)', fontWeight: 900, color: '#fff', marginBottom: 16, fontFamily: 'Bricolage Grotesque, sans-serif', lineHeight: 1.15 }}>Blog Áion Edu</h1>
+          <p style={{ fontSize: 18, color: 'rgba(255,255,255,0.85)', lineHeight: 1.7 }}>Insights e estratégias para gestores de escolas particulares</p>
+        </div>
       </section>
 
-      <section style={{ padding: '60px 24px', background: '#F9FAFB', minHeight: '60vh' }}>
-        <div ref={r1} className="anim blog-grid" style={{ maxWidth: 1000, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
-          {POSTS.map(post => (
-            <Link key={post.slug} to={`/blog/${post.slug}`} className="post-card">
-              <div style={{ background: 'linear-gradient(135deg,#00523C,#00A896)', height: 6 }} />
-              <div style={{ padding: '20px 20px 24px' }}>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                  <span style={{ background: '#E6F7F5', color: '#00523C', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999 }}>{post.category}</span>
-                  <span style={{ color: '#9CA3AF', fontSize: 11 }}>{post.readTime} leitura</span>
-                </div>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: '#111827', lineHeight: 1.4, marginBottom: 10 }}>{post.title}</h3>
-                <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, marginBottom: 16 }}>{post.excerpt}</p>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 12, color: '#9CA3AF' }}>{post.date}</span>
-                  <span style={{ fontSize: 13, color: '#00523C', fontWeight: 600 }}>Ler artigo →</span>
-                </div>
-              </div>
-            </Link>
+      {/* Filtro de categorias */}
+      <div style={{ background: '#fff', borderBottom: '1px solid #E5E7EB', padding: '16px 24px', position: 'sticky', top: 64, zIndex: 50 }}>
+        <div style={{ maxWidth: 1000, margin: '0 auto', display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
+          {CATEGORIES.map(cat => (
+            <button key={cat} className={`cat-btn${activeCategory === cat ? ' active' : ''}`} onClick={() => setActiveCategory(cat)}>
+              {cat}
+            </button>
           ))}
+        </div>
+      </div>
+
+      {/* Grid de artigos */}
+      <section style={{ padding: '60px 24px', background: '#F9FAFB', minHeight: '60vh' }}>
+        <div ref={r1} className="anim" style={{ maxWidth: 1000, margin: '0 auto' }}>
+          {filtered.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '80px 0', color: '#9CA3AF' }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>📭</div>
+              <p style={{ fontSize: 16, fontWeight: 600 }}>Nenhum artigo nesta categoria ainda.</p>
+            </div>
+          ) : (
+            <div className="blog-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
+              {filtered.map(post => {
+                const color = CATEGORY_COLORS[post.category] || '#00A896'
+                const initials = getInitials('Áion Edu')
+                return (
+                  <Link key={post.slug} to={`/blog/${post.slug}`} className="post-card">
+                    <div style={{ background: `linear-gradient(135deg,#00523C,${color})`, height: 8 }} />
+                    <div style={{ padding: '22px 22px 26px' }}>
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center' }}>
+                        <span style={{ background: `${color}18`, color, fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 999 }}>{post.category}</span>
+                        <span style={{ color: '#9CA3AF', fontSize: 11 }}>⏱ {post.readTime}</span>
+                      </div>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: '#111827', lineHeight: 1.4, marginBottom: 10 }}>{post.title}</h3>
+                      <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.65, marginBottom: 20 }}>{post.excerpt}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: `linear-gradient(135deg,#00523C,#00A896)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: '#fff' }}>{initials}</div>
+                          <span style={{ fontSize: 12, color: '#6B7280' }}>{post.date}</span>
+                        </div>
+                        <span style={{ fontSize: 13, color: '#00523C', fontWeight: 600 }}>Ler →</span>
+                      </div>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
         </div>
       </section>
 
       {/* CTA */}
       <section style={{ padding: '64px 24px', background: 'linear-gradient(135deg,#00523C,#00A896)', textAlign: 'center' }}>
-        <h2 style={{ fontSize: 26, fontWeight: 800, color: '#fff', marginBottom: 12 }}>Pronto para colocar em prática?</h2>
+        <h2 style={{ fontSize: 28, fontWeight: 800, color: '#fff', marginBottom: 12, fontFamily: 'Bricolage Grotesque, sans-serif' }}>Pronto para colocar em prática?</h2>
         <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 15, marginBottom: 28 }}>Conheça a plataforma que coloca tudo isso em um só lugar.</p>
-        <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#fff', color: '#00523C', padding: '13px 28px', borderRadius: 10, fontWeight: 700, fontSize: 15, textDecoration: 'none' }}>
+        <a href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#fff', color: '#00523C', padding: '13px 28px', borderRadius: 12, fontWeight: 700, fontSize: 15, textDecoration: 'none' }}>
           Ver a plataforma →
-        </Link>
+        </a>
       </section>
 
-      <footer style={{ background: '#111827', padding: '32px 24px', textAlign: 'center' }}>
-        <p style={{ color: '#9CA3AF', fontSize: 13 }}>© 2026 Áion Edu · <Link to="/privacidade" style={{ color: '#9CA3AF', textDecoration: 'none' }}>Privacidade</Link></p>
-      </footer>
+      <Footer />
     </>
   )
 }
@@ -342,24 +461,21 @@ export function BlogPost() {
   if (!post) return (
     <>
       <style>{CSS}</style>
-      <Nav />
+      <Navbar />
       <div style={{ padding: '120px 24px', textAlign: 'center' }}>
         <h1 style={{ fontSize: 28, color: '#111827' }}>Artigo não encontrado</h1>
-        <Link to="/blog" style={{ color: '#00A896', marginTop: 16, display: 'inline-block' }}>← Voltar ao blog</Link>
+        <a href="/blog" style={{ color: '#00A896', marginTop: 16, display: 'inline-block' }}>← Voltar ao blog</a>
       </div>
     </>
   )
 
-  // Parse markdown-like bold (**text**) to <strong>
   function renderContent(text: string) {
     return text.trim().split('\n\n').map((block, i) => {
       const trimmed = block.trim()
       if (!trimmed) return null
-      // Bold headings: **text**
       if (trimmed.startsWith('**') && trimmed.endsWith('**') && !trimmed.slice(2, -2).includes('**')) {
         return <strong key={i}>{trimmed.slice(2, -2)}</strong>
       }
-      // Replace inline **bold**
       const parts = trimmed.split(/\*\*(.*?)\*\*/g)
       return (
         <p key={i}>
@@ -369,18 +485,20 @@ export function BlogPost() {
     })
   }
 
+  const color = CATEGORY_COLORS[post.category] || '#00A896'
+
   return (
     <>
       <style>{CSS}</style>
-      <Nav />
+      <Navbar />
 
-      <section style={{ background: 'linear-gradient(135deg,#00523C,#00A896)', padding: '100px 24px 60px' }}>
+      <section style={{ background: 'linear-gradient(135deg,#00523C,#00A896)', padding: '110px 24px 60px' }}>
         <div style={{ maxWidth: 720, margin: '0 auto' }}>
           <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
             <span style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 999 }}>{post.category}</span>
-            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>{post.date} · {post.readTime} de leitura</span>
+            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>{post.date} · ⏱ {post.readTime} de leitura</span>
           </div>
-          <h1 style={{ fontSize: 34, fontWeight: 900, color: '#fff', lineHeight: 1.3 }}>{post.title}</h1>
+          <h1 style={{ fontSize: 34, fontWeight: 900, color: '#fff', lineHeight: 1.3, fontFamily: 'Bricolage Grotesque, sans-serif' }}>{post.title}</h1>
         </div>
       </section>
 
@@ -390,23 +508,21 @@ export function BlogPost() {
             {renderContent(post.content)}
           </div>
 
-          <div style={{ marginTop: 48, padding: '32px', background: '#F0FDF9', borderRadius: 14, textAlign: 'center' }}>
-            <h3 style={{ fontSize: 20, fontWeight: 800, color: '#00523C', marginBottom: 10 }}>Pronto para colocar em prática?</h3>
+          <div style={{ marginTop: 48, padding: '32px', background: '#F0FDF9', borderRadius: 16, textAlign: 'center', border: `1px solid ${color}30` }}>
+            <h3 style={{ fontSize: 20, fontWeight: 800, color: '#00523C', marginBottom: 10, fontFamily: 'Bricolage Grotesque, sans-serif' }}>Pronto para colocar em prática?</h3>
             <p style={{ fontSize: 14, color: '#374151', marginBottom: 20, lineHeight: 1.7 }}>A Áion Edu integra tudo que você acabou de ler em uma só plataforma.</p>
-            <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#00523C', color: '#fff', padding: '12px 24px', borderRadius: 9, fontWeight: 700, fontSize: 15, textDecoration: 'none' }}>
+            <a href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#00523C', color: '#fff', padding: '12px 24px', borderRadius: 10, fontWeight: 700, fontSize: 15, textDecoration: 'none' }}>
               Conhecer a plataforma →
-            </Link>
+            </a>
           </div>
 
           <div style={{ marginTop: 32 }}>
-            <Link to="/blog" style={{ color: '#00A896', fontSize: 14, textDecoration: 'none', fontWeight: 600 }}>← Voltar ao blog</Link>
+            <a href="/blog" style={{ color: '#00A896', fontSize: 14, textDecoration: 'none', fontWeight: 600 }}>← Voltar ao blog</a>
           </div>
         </div>
       </section>
 
-      <footer style={{ background: '#111827', padding: '32px 24px', textAlign: 'center' }}>
-        <p style={{ color: '#9CA3AF', fontSize: 13 }}>© 2026 Áion Edu</p>
-      </footer>
+      <Footer />
     </>
   )
 }
