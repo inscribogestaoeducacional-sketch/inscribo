@@ -1130,6 +1130,9 @@ export default function LeadKanban() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterSource, setFilterSource] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [periodFilter, setPeriodFilter] = useState<'all'|'today'|'week'|'month'|'year'|'custom'>('all')
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd, setCustomEnd] = useState('')
   const [auditLeadId, setAuditLeadId] = useState<string | null>(null)
   const [showScheduleVisitModal, setShowScheduleVisitModal] = useState(false)
   const [leadToSchedule, setLeadToSchedule] = useState<Lead | null>(null)
@@ -1473,12 +1476,38 @@ export default function LeadKanban() {
     }
   }
 
+  const getPeriodDates = () => {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    switch (periodFilter) {
+      case 'today': return { start: today, end: now }
+      case 'week': {
+        const weekStart = new Date(today)
+        weekStart.setDate(today.getDate() - today.getDay())
+        return { start: weekStart, end: now }
+      }
+      case 'month': return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now }
+      case 'year':  return { start: new Date(now.getFullYear(), 0, 1), end: now }
+      case 'custom': return {
+        start: customStart ? new Date(customStart) : null,
+        end:   customEnd   ? new Date(customEnd + 'T23:59:59') : null,
+      }
+      default: return { start: null, end: null }
+    }
+  }
+
   const getLeadsByStatus = (status: Lead['status']) => {
+    const { start, end } = getPeriodDates()
     return leads.filter(lead => {
-      const matchesStatus = lead.status === status
-      const matchesSearch = searchTerm === '' || lead.student_name.toLowerCase().includes(searchTerm.toLowerCase()) || lead.responsible_name.toLowerCase().includes(searchTerm.toLowerCase())
-      const matchesSource = filterSource === '' || lead.source === filterSource
-      return matchesStatus && matchesSearch && matchesSource
+      if (lead.status !== status) return false
+      if (searchTerm !== '' && !lead.student_name.toLowerCase().includes(searchTerm.toLowerCase()) && !lead.responsible_name.toLowerCase().includes(searchTerm.toLowerCase())) return false
+      if (filterSource !== '' && lead.source !== filterSource) return false
+      if (periodFilter !== 'all') {
+        const created = new Date(lead.created_at)
+        if (start && created < start) return false
+        if (end && created > end) return false
+      }
+      return true
     })
   }
 
@@ -1556,6 +1585,7 @@ export default function LeadKanban() {
   const stats = getLeadStats()
   const activeLead = activeId ? leads.find(l => l.id === activeId) : null
   const visibleStatuses = filterStatus ? Object.keys(statusConfig).filter(s => s === filterStatus) : Object.keys(statusConfig)
+  const filteredTotal = visibleStatuses.reduce((sum, s) => sum + getLeadsByStatus(s as Lead['status']).length, 0)
 
   const cardActions = {
     onSchedule: (lead: Lead) => { setLeadToSchedule(lead); setShowScheduleVisitModal(true) },
@@ -1578,11 +1608,18 @@ export default function LeadKanban() {
 
   // ── Mobile early return ───────────────────────────────────────────────────
   if (isMobile) {
-    const mobileLeads = leads.filter(l =>
-      (filterStatus === '' || l.status === filterStatus) &&
-      (filterSource === '' || l.source === filterSource) &&
-      (searchTerm === '' || l.student_name.toLowerCase().includes(searchTerm.toLowerCase()) || l.responsible_name.toLowerCase().includes(searchTerm.toLowerCase()))
-    )
+    const { start: pStart, end: pEnd } = getPeriodDates()
+    const mobileLeads = leads.filter(l => {
+      if (filterStatus !== '' && l.status !== filterStatus) return false
+      if (filterSource !== '' && l.source !== filterSource) return false
+      if (searchTerm !== '' && !l.student_name.toLowerCase().includes(searchTerm.toLowerCase()) && !l.responsible_name.toLowerCase().includes(searchTerm.toLowerCase())) return false
+      if (periodFilter !== 'all') {
+        const created = new Date(l.created_at)
+        if (pStart && created < pStart) return false
+        if (pEnd && created > pEnd) return false
+      }
+      return true
+    })
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8f9fb' }}>
 
@@ -1592,7 +1629,7 @@ export default function LeadKanban() {
             <Users style={{ width: 16, height: 16, color: '#8B5CF6' }} />
           </div>
           <h1 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Leads</h1>
-          <span style={{ background: '#EDE9FE', color: '#7C3AED', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999 }}>{stats.total}</span>
+          <span style={{ background: '#EDE9FE', color: '#7C3AED', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999 }}>{mobileLeads.length}</span>
         </div>
 
         {/* Search */}
@@ -1689,7 +1726,7 @@ export default function LeadKanban() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Leads</h1>
-              <span style={{ padding: '2px 10px', background: '#EDE9FE', color: '#7C3AED', fontSize: 12, fontWeight: 700, borderRadius: 999 }}>{stats.total}</span>
+              <span style={{ padding: '2px 10px', background: '#EDE9FE', color: '#7C3AED', fontSize: 12, fontWeight: 700, borderRadius: 999 }}>{filteredTotal}</span>
             </div>
             <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>Gestão do funil de captação</p>
           </div>
@@ -1705,8 +1742,8 @@ export default function LeadKanban() {
       </div>
 
       {/* Filter Bar */}
-      <div className="flex flex-col lg:flex-row gap-3 mb-6">
-        <div className="relative flex-1">
+      <div className="flex flex-col lg:flex-row gap-3 mb-6 flex-wrap">
+        <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
           <input type="text" placeholder="Buscar por nome..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 pr-4 py-2.5 w-full border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none transition-all text-sm shadow-sm" />
         </div>
@@ -1718,6 +1755,20 @@ export default function LeadKanban() {
           <option value="">Todas as origens</option>
           {sourceOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
+        <select value={periodFilter} onChange={(e) => setPeriodFilter(e.target.value as typeof periodFilter)} className="px-4 py-2.5 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none text-sm shadow-sm text-gray-700">
+          <option value="all">Todos os períodos</option>
+          <option value="today">Hoje</option>
+          <option value="week">Esta semana</option>
+          <option value="month">Este mês</option>
+          <option value="year">Este ano</option>
+          <option value="custom">Personalizado</option>
+        </select>
+        {periodFilter === 'custom' && (
+          <div className="flex gap-2">
+            <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="px-3 py-2.5 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] outline-none text-sm shadow-sm text-gray-700" />
+            <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="px-3 py-2.5 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] outline-none text-sm shadow-sm text-gray-700" />
+          </div>
+        )}
       </div>
 
       {error && (
