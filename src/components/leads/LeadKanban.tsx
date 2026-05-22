@@ -238,6 +238,7 @@ interface NewLeadModalProps {
   onClose: () => void
   onSave: (data: Partial<Lead>) => Promise<void>
   editingLead?: Lead | null
+  onDelete?: (id: string) => void
 }
 
 const LEAD_STAGES = [
@@ -256,7 +257,8 @@ function avatarColor(name: string): string {
   return colors[Math.abs(h) % colors.length]
 }
 
-function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProps) {
+function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLeadModalProps) {
+  const { user: modalUser } = useAuth()
   const [activeTab, setActiveTab] = useState<'dados' | 'historico' | 'anotacoes'>('dados')
   const [saving, setSaving] = useState(false)
   const [savingNote, setSavingNote] = useState(false)
@@ -346,7 +348,7 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
       const { supabase: db } = await import('../../lib/supabase')
       const instId = (editingLead as any).institution_id ?? ''
       await db.from('activity_logs').insert({
-        user_id: null, user_name: 'Atendente', action: activityForm.tipo,
+        user_id: modalUser?.id || null, user_name: modalUser?.full_name || 'Atendente', action: activityForm.tipo,
         entity_type: 'lead', entity_id: editingLead.id, institution_id: instId,
         details: { description: activityForm.descricao, contact_date: activityForm.data, type: 'note' },
         created_at: new Date().toISOString(),
@@ -363,6 +365,61 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
   const bgColor = avatarColor(formData.responsible_name || formData.student_name || '?')
   const curStageIdx = LEAD_STAGES.findIndex(s => s.key === formData.status)
   const formatDT = (d: string) => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+  const getEventIcon = (action: string) => {
+    if (action === 'Lead criado') return '📝'
+    if (action === 'Lead editado') return '✏️'
+    if (action === 'Lead perdido') return '❌'
+    if (action === 'Lead reaberto') return '🔓'
+    if (action === 'Status alterado') return '🔄'
+    if (action === 'Visita agendada') return '📅'
+    if (action === 'Ligação') return '📞'
+    if (action === 'Email' || action === 'E-mail') return '📧'
+    if (action === 'WhatsApp') return '💬'
+    if (action === 'Presencial') return '🤝'
+    return '📌'
+  }
+  const getEventColor = (action: string) => {
+    if (action === 'Lead criado') return '#10B981'
+    if (action === 'Lead editado') return '#3B82F6'
+    if (action === 'Lead perdido') return '#EF4444'
+    if (action === 'Lead reaberto') return '#3B82F6'
+    if (action === 'Status alterado') return '#8B5CF6'
+    if (action === 'Visita agendada') return '#F59E0B'
+    if (action === 'Ligação') return '#06B6D4'
+    if (action === 'WhatsApp') return '#25D366'
+    if (action === 'Email' || action === 'E-mail') return '#3B82F6'
+    if (action === 'Presencial') return '#F97316'
+    return '#94A3B8'
+  }
+  const buildDesc = (item: ActivityLog): string => {
+    const d = item.details || {}
+    if (item.action === 'Lead criado') {
+      const parts: string[] = []
+      if (d.grade_interest) parts.push(d.grade_interest as string)
+      if (d.source) parts.push(`Origem: ${d.source}`)
+      return parts.join(' · ')
+    }
+    if (item.action === 'Status alterado') {
+      const from = statusConfig[d.previous_status as keyof typeof statusConfig]?.label || d.previous_status
+      const to = statusConfig[d.new_status as keyof typeof statusConfig]?.label || d.new_status
+      return `${from} → ${to}`
+    }
+    if (item.action === 'Lead reaberto') return 'Lead reaberto para contato'
+    if (item.action === 'Lead perdido') {
+      const reason = LOST_REASONS.find(r => r.value === d.lost_reason)?.label || d.lost_reason || ''
+      return reason ? `Motivo: ${reason}` : ''
+    }
+    if (item.action === 'Visita agendada') {
+      return [d.scheduled_date, d.scheduled_time ? `às ${d.scheduled_time}` : ''].filter(Boolean).join(' ')
+    }
+    if (item.action === 'Lead editado') {
+      const changed = Object.keys(d.changes || {})
+      return changed.length > 0 ? `Campos: ${changed.join(', ')}` : ''
+    }
+    return (d.description as string) || ''
+  }
+
   const tabBtn = (tab: typeof activeTab, label: string) => (
     <button onClick={() => setActiveTab(tab)} style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', borderBottom: activeTab === tab ? '2px solid #00A896' : '2px solid transparent', color: activeTab === tab ? '#00A896' : '#64748B', background: 'transparent', transition: 'all 0.15s' }}>{label}</button>
   )
@@ -512,6 +569,7 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
           {/* ABA HISTÓRICO */}
           {activeTab === 'historico' && editingLead && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Registrar atividade */}
               <div style={{ background: '#F8FAFC', borderRadius: 12, padding: 14, border: '1px solid #E2E8F0' }}>
                 <p style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A', marginBottom: 10 }}>Registrar atividade</p>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
@@ -529,29 +587,41 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
                   {savingActivity ? 'Salvando...' : 'Registrar'}
                 </button>
               </div>
+
+              {/* Timeline */}
               {loadingHistory
                 ? <div style={{ textAlign: 'center', padding: 32 }}><div className="animate-spin rounded-full h-7 w-7 border-4 border-[#00A896] border-t-transparent mx-auto" /></div>
                 : history.length === 0
                   ? <div style={{ textAlign: 'center', padding: 32, color: '#94A3B8', fontSize: 13 }}>Nenhuma atividade registrada</div>
-                  : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {history.map(item => (
-                        <div key={item.id} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 10, padding: '10px 14px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A' }}>{item.action}</span>
-                            <span style={{ fontSize: 11, color: '#94A3B8' }}>{formatDT(item.created_at)}</span>
-                          </div>
-                          {item.details?.description && <p style={{ fontSize: 12, color: '#475569', margin: 0 }}>{item.details.description}</p>}
-                          {item.details?.previous_status && item.details?.new_status && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                              <span style={{ fontSize: 11, padding: '2px 7px', background: '#F1F5F9', borderRadius: 999, color: '#64748B' }}>{statusConfig[item.details.previous_status as keyof typeof statusConfig]?.label}</span>
-                              <span style={{ fontSize: 11, color: '#00A896', fontWeight: 700 }}>→</span>
-                              <span style={{ fontSize: 11, padding: '2px 7px', background: '#E6F7F5', borderRadius: 999, color: '#00A896', fontWeight: 600 }}>{statusConfig[item.details.new_status as keyof typeof statusConfig]?.label}</span>
+                  : (
+                    <div style={{ position: 'relative', paddingLeft: 28 }}>
+                      <div style={{ position: 'absolute', left: 8, top: 0, bottom: 0, width: 2, background: '#E2E8F0', borderRadius: 1 }} />
+                      {history.map((item, idx) => {
+                        const color = getEventColor(item.action)
+                        const desc = buildDesc(item)
+                        return (
+                          <div key={item.id} style={{ position: 'relative', marginBottom: idx < history.length - 1 ? 12 : 0 }}>
+                            <div style={{
+                              position: 'absolute', left: -25, top: 13,
+                              width: 12, height: 12, borderRadius: '50%',
+                              background: color, border: '2.5px solid #fff',
+                              boxShadow: '0 1px 4px rgba(0,0,0,0.18)', zIndex: 1,
+                            }} />
+                            <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderLeft: `3px solid ${color}`, borderRadius: 10, padding: '10px 14px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 3 }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>
+                                  {getEventIcon(item.action)} {item.action}
+                                </span>
+                                <span style={{ fontSize: 10, color: '#94A3B8', whiteSpace: 'nowrap', marginLeft: 8, flexShrink: 0 }}>{formatDT(item.created_at)}</span>
+                              </div>
+                              {desc && <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 4px', lineHeight: 1.5 }}>{desc}</p>}
+                              <span style={{ fontSize: 11, color: '#94A3B8' }}>por {item.user_name || 'Sistema'}</span>
                             </div>
-                          )}
-                          <span style={{ fontSize: 11, color: '#94A3B8' }}>por {item.user_name}</span>
-                        </div>
-                      ))}
+                          </div>
+                        )
+                      })}
                     </div>
+                  )
               }
             </div>
           )}
@@ -574,14 +644,19 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProp
         </div>
 
         {/* Footer */}
-        <div style={{ borderTop: '1px solid #E2E8F0', padding: '14px 24px', display: 'flex', justifyContent: 'flex-end', gap: 10, flexShrink: 0, background: '#F8FAFC' }}>
-          <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#64748B' }}>Cancelar</button>
-          <button onClick={handleSubmit} disabled={saving}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 20px', borderRadius: 9, background: saving ? '#94A3B8' : '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
-            {saving
-              ? <><div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />Salvando...</>
-              : <><Save style={{ width: 14, height: 14 }} />{editingLead ? 'Salvar alterações' : 'Criar Lead'}</>}
-          </button>
+        <div style={{ borderTop: '1px solid #E2E8F0', padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, background: '#F8FAFC' }}>
+          {editingLead && onDelete
+            ? <button onClick={() => onDelete(editingLead.id)} style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid #FECACA', background: '#FEF2F2', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#DC2626' }}>Excluir lead</button>
+            : <span />}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#64748B' }}>Cancelar</button>
+            <button onClick={handleSubmit} disabled={saving}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 20px', borderRadius: 9, background: saving ? '#94A3B8' : '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
+              {saving
+                ? <><div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />Salvando...</>
+                : <><Save style={{ width: 14, height: 14 }} />{editingLead ? 'Salvar alterações' : 'Criar Lead'}</>}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1256,7 +1331,8 @@ export default function LeadKanban() {
       const previousStatus = currentLead.status
       await DatabaseService.updateLead(leadId, { status: newStatus })
       if (previousStatus !== newStatus) {
-        await DatabaseService.logActivity({ user_id: user!.id, action: 'Status alterado', entity_type: 'lead', entity_id: leadId, details: { previous_status: previousStatus, new_status: newStatus, student_name: currentLead.student_name, responsible_name: currentLead.responsible_name }, institution_id: user!.institution_id })
+        const isReopen = previousStatus === 'lost'
+        await DatabaseService.logActivity({ user_id: user!.id, action: isReopen ? 'Lead reaberto' : 'Status alterado', entity_type: 'lead', entity_id: leadId, details: { previous_status: previousStatus, new_status: newStatus, student_name: currentLead.student_name, responsible_name: currentLead.responsible_name }, institution_id: user!.institution_id })
         await logAudit({ institution_id: user!.institution_id, module: 'leads', record_id: leadId, action: 'status_changed', old_value: previousStatus, new_value: newStatus, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
         if (newStatus === 'enrolled') {
           createNotification({
@@ -1340,14 +1416,18 @@ export default function LeadKanban() {
 
   const handleDelete = async (leadId: string) => {
     const lead = leads.find(l => l.id === leadId)
-    if (!lead || !confirm(`Tem certeza que deseja excluir o lead "${lead.student_name}"?\n\nEsta ação não pode ser desfeita.`)) return
+    if (!lead || !window.confirm(`Tem certeza que deseja excluir o lead "${lead.student_name}"?\n\nEsta ação não pode ser desfeita.`)) return
     try {
       const { supabase: db } = await import('../../lib/supabase')
-      await db.from('leads').update({ deleted_at: new Date().toISOString(), deleted_by: user!.full_name }).eq('id', leadId)
+      const { error } = await db.from('leads').delete().eq('id', leadId).eq('institution_id', user!.institution_id)
+      if (error) throw error
       await logAudit({ institution_id: user!.institution_id, module: 'leads', record_id: leadId, action: 'deleted', old_value: lead.student_name, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
-      await loadData()
+      setLeads(prev => prev.filter(l => l.id !== leadId))
+      if (editingLead?.id === leadId) { setShowNewLeadModal(false); setEditingLead(null) }
+      showToast('Lead excluído com sucesso', 'success')
     } catch (err) {
-      console.error('Erro ao excluir lead:', err); setError('Erro ao excluir lead: ' + (err as Error).message)
+      console.error('[DELETE LEAD]', err)
+      showToast('Erro ao excluir lead. Tente novamente.', 'error')
     }
   }
 
@@ -1557,7 +1637,7 @@ export default function LeadKanban() {
         </button>
 
         {/* Modals */}
-        <NewLeadModal isOpen={showNewLeadModal} onClose={() => { setShowNewLeadModal(false); setEditingLead(null) }} onSave={handleSave} editingLead={editingLead} />
+        <NewLeadModal isOpen={showNewLeadModal} onClose={() => { setShowNewLeadModal(false); setEditingLead(null) }} onSave={handleSave} editingLead={editingLead} onDelete={handleDelete} />
         {showScheduleVisitModal && leadToSchedule && (
           <ScheduleVisitModal isOpen={showScheduleVisitModal} onClose={() => { setShowScheduleVisitModal(false); setLeadToSchedule(null) }} lead={leadToSchedule} onSchedule={handleScheduleVisit} />
         )}
