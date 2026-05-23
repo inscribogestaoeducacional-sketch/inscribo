@@ -81,6 +81,18 @@ async function sendAutoMessage(
     if (resp.ok) {
       const d    = await resp.json()
       const wamid = d.messages?.[0]?.id
+      const { data: conv } = await supabase
+        .from('whatsapp_conversations')
+        .select('first_response_at, id')
+        .eq('remote_jid', to)
+        .eq('institution_id', institutionId)
+        .single()
+      if (conv && !conv.first_response_at) {
+        await supabase
+          .from('whatsapp_conversations')
+          .update({ first_response_at: new Date().toISOString() })
+          .eq('id', conv.id)
+      }
       await supabase.from('whatsapp_messages').insert({
         institution_id: institutionId,
         remote_jid:     to,

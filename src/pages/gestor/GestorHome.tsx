@@ -212,7 +212,7 @@ export default function GestorHome() {
   const [waMessages, setWaMessages] = useState<{ id: string; created_at: string; from_me: boolean; remote_jid: string }[]>([])
   const [waPhoneRecord, setWaPhoneRecord] = useState<{ phone_number: string; display_name: string } | null>(null)
   const [waConvStats, setWaConvStats] = useState<{ total: number; byBot: number; byTeam: number; closed: number; daily: { day: string; count: number }[]; avgSatisfaction: number | null } | null>(null)
-  const [waTeamRanking, setWaTeamRanking] = useState<{ name: string; count: number }[]>([])
+  const [waTeamRanking, setWaTeamRanking] = useState<{ userId: string; count: number }[]>([])
   const [waAvgResponse, setWaAvgResponse] = useState<number | null>(null)
   const [waSatisfStats, setWaSatisfStats] = useState<{ total: number; ruim: number; regular: number; otimo: number; avgScore: number; byAttendant: { name: string; total: number; sum: number }[] } | null>(null)
   const [rankingMode, setRankingMode] = useState<'matriculas' | 'whatsapp' | 'satisfacao'>('matriculas')
@@ -228,9 +228,10 @@ export default function GestorHome() {
   const [aiInsight, setAiInsight] = useState<string | null>(null)
   const [aiInsightLoading, setAiInsightLoading] = useState(false)
   const aiInsightFetched = useRef(false)
+  const [aiExpanded, setAiExpanded] = useState(false)
   const mountedRef = useRef(true)
   const [periodFilter, setPeriodFilter] = useState('mes')
-  const [waConvsRaw, setWaConvsRaw] = useState<{ id: string; created_at: string; status: string; assigned_user_name: string | null; bot_active: boolean | null; satisfaction_score: number | null }[]>([])
+  const [waConvsRaw, setWaConvsRaw] = useState<{ id: string; created_at: string; status: string; assigned_user_name: string | null; assigned_user_id: string | null; bot_active: boolean | null; satisfaction_score: number | null; first_response_at: string | null; remote_jid: string }[]>([])
   const [surveyScoresList, setSurveyScoresList] = useState<{ satisfaction_score: number | null }[]>([])
   const [aiLastUpdated, setAiLastUpdated] = useState<number | null>(null)
   const dashboardRef = useRef<HTMLDivElement>(null)
@@ -280,7 +281,7 @@ export default function GestorHome() {
         supabase.from('enrollments').select('id,user_id,created_at').eq('institution_id', institutionId),
         supabase.from('users').select('id,full_name,role').eq('institution_id', institutionId),
         supabase.from('whatsapp_phone_numbers').select('phone_number,display_name').eq('institution_id', institutionId).limit(1).maybeSingle(),
-        supabase.from('whatsapp_conversations').select('id,created_at,status,assigned_user_name,bot_active,satisfaction_score').eq('institution_id', institutionId).gte('created_at', start),
+        supabase.from('whatsapp_conversations').select('id,created_at,status,assigned_user_name,assigned_user_id,bot_active,satisfaction_score,first_response_at,remote_jid').eq('institution_id', institutionId).gte('created_at', start),
       ])
 
       const loadedCycles = (cyclesRes.data ?? []) as CampaignCycle[]
@@ -291,21 +292,6 @@ export default function GestorHome() {
       setVisits((visitsRes.data ?? []) as { id: string; status: string; created_at: string }[])
       const waMsgs = (waRes.data ?? []) as { id: string; created_at: string; from_me: boolean; remote_jid: string }[]
       setWaMessages(waMsgs)
-
-      // Avg first-response time per conversation (minutes), capped at 24h
-      const byJid: Record<string, { created_at: string; from_me: boolean }[]> = {}
-      waMsgs.forEach(m => { if (!byJid[m.remote_jid]) byJid[m.remote_jid] = []; byJid[m.remote_jid].push(m) })
-      const responseTimes: number[] = []
-      Object.values(byJid).forEach(msgs => {
-        const sorted = [...msgs].sort((a, b) => a.created_at.localeCompare(b.created_at))
-        const firstIn = sorted.find(m => !m.from_me)
-        const firstOut = sorted.find(m => m.from_me && firstIn && m.created_at > firstIn.created_at)
-        if (firstIn && firstOut) {
-          const diff = (new Date(firstOut.created_at).getTime() - new Date(firstIn.created_at).getTime()) / 60000
-          if (diff > 0 && diff < 1440) responseTimes.push(diff)
-        }
-      })
-      setWaAvgResponse(responseTimes.length > 0 ? Math.round(responseTimes.reduce((s, v) => s + v, 0) / responseTimes.length) : null)
 
       // Calcular ranking de usuários
       const enrollments = (enrollRes.data ?? []) as { id: string; user_id: string; created_at: string }[]
@@ -329,13 +315,21 @@ export default function GestorHome() {
       setWaPhoneRecord((waPhoneRes.data as { phone_number: string; display_name: string } | null) ?? null)
 
       // WA conversation stats (last 30 days)
-      const waConvs = (waConvsRes.data ?? []) as { id: string; created_at: string; status: string; assigned_user_name: string | null; bot_active: boolean | null; satisfaction_score: number | null }[]
+      const waConvs = (waConvsRes.data ?? []) as { id: string; created_at: string; status: string; assigned_user_name: string | null; assigned_user_id: string | null; bot_active: boolean | null; satisfaction_score: number | null; first_response_at: string | null; remote_jid: string }[]
       setActiveConvsNow(waConvs.filter(c => c.status === 'open' || c.status === 'waiting').length)
+      const respTimes: number[] = []
+      waConvs.forEach(c => {
+        if (c.first_response_at && c.created_at) {
+          const diff = (new Date(c.first_response_at).getTime() - new Date(c.created_at).getTime()) / 60000
+          if (diff > 0 && diff < 1440) respTimes.push(diff)
+        }
+      })
+      setWaAvgResponse(respTimes.length > 0 ? Math.round(respTimes.reduce((s, v) => s + v, 0) / respTimes.length) : null)
       const waTotal = waConvs.length
       const waByBot = waConvs.filter(c => c.bot_active === true).length
       const waByTeam = waConvs.filter(c => c.bot_active !== true).length
       const waClosed = waConvs.filter(c => c.status === 'closed').length
-      const scores = waConvs.map(c => c.satisfaction_score).filter((s): s is number => s !== null && s > 0)
+      const scores = waConvs.map(c => c.satisfaction_score).filter((s): s is number => typeof s === 'number' && s >= 1 && s <= 3)
       const waAvgSatisfaction = scores.length > 0 ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10 : null
       const now7 = new Date()
       const waDaily: { day: string; count: number }[] = []
@@ -349,7 +343,7 @@ export default function GestorHome() {
       setWaConvsRaw(waConvs)
 
       // Satisfaction breakdown
-      const surveyScores = waConvs.filter(c => c.satisfaction_score !== null && c.satisfaction_score > 0)
+      const surveyScores = waConvs.filter(c => typeof c.satisfaction_score === 'number' && c.satisfaction_score >= 1 && c.satisfaction_score <= 3)
       setSurveyScoresList(surveyScores)
       if (surveyScores.length > 0) {
         const ruim    = surveyScores.filter(c => c.satisfaction_score === 1).length
@@ -358,7 +352,8 @@ export default function GestorHome() {
         const avgScore = surveyScores.reduce((s, c) => s + (c.satisfaction_score || 0), 0) / surveyScores.length
         const attMap: Record<string, { total: number; sum: number }> = {}
         surveyScores.forEach(c => {
-          const name = c.assigned_user_name || 'Sem atendente'
+          if (!c.assigned_user_id) return
+          const name = c.assigned_user_name || 'Usuário'
           if (!attMap[name]) attMap[name] = { total: 0, sum: 0 }
           attMap[name].total++
           attMap[name].sum += c.satisfaction_score || 0
@@ -370,13 +365,13 @@ export default function GestorHome() {
         setWaSatisfStats({ total: surveyScores.length, ruim, regular, otimo, avgScore, byAttendant })
       }
 
-      // WA team ranking by closed conversations
+      // WA team ranking by closed conversations (keyed by assigned_user_id)
       const waRankMap: Record<string, number> = {}
-      waConvs.filter(c => c.status === 'closed' && c.assigned_user_name).forEach(c => {
-        const name = c.assigned_user_name!
-        waRankMap[name] = (waRankMap[name] || 0) + 1
+      waConvs.filter(c => c.status === 'closed' && c.assigned_user_id).forEach(c => {
+        const uid = c.assigned_user_id!
+        waRankMap[uid] = (waRankMap[uid] || 0) + 1
       })
-      setWaTeamRanking(Object.entries(waRankMap).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5))
+      setWaTeamRanking(Object.entries(waRankMap).map(([userId, count]) => ({ userId, count })).sort((a, b) => b.count - a.count).slice(0, 5))
 
       const duration = new Date(end).getTime() - new Date(start).getTime()
       const prevStart = new Date(new Date(start).getTime() - duration).toISOString()
@@ -799,7 +794,7 @@ export default function GestorHome() {
   }
 
   return (
-    <div ref={dashboardRef} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24, minHeight: '100%', background: '#F9FAFB' }}>
+    <div ref={dashboardRef} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16, minHeight: '100%', background: '#F9FAFB' }}>
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 0, flexWrap: 'wrap', gap: 12 }}>
@@ -875,7 +870,7 @@ export default function GestorHome() {
             { label: 'Matrículas', value: totalEnrolled, prev: prevEnrolled, icon: '🎓', color: '#F59E0B', bg: '#FFFBEB', path: '/enrollments' },
             { label: 'Taxa de conversão', value: conversionRateNum.toFixed(1) + '%', prev: null as number | null, icon: '📈', color: '#10B981', bg: '#ECFDF5', path: '/leads' },
             { label: 'Satisfação média', value: waSatisfStats ? waSatisfStats.avgScore.toFixed(1) + '/3' : '—', prev: null as number | null, icon: '⭐', color: '#F59E0B', bg: '#FFFBEB', path: '/surveys' },
-            { label: 'Tempo de resposta', value: waAvgResponse ? waAvgResponse + 'min' : '—', prev: null as number | null, icon: '⚡', color: '#EF4444', bg: '#FEF2F2', path: '/whatsapp' },
+            { label: 'Tempo de resposta', value: waAvgResponse !== null ? (waAvgResponse < 60 ? `${waAvgResponse}min` : `${Math.floor(waAvgResponse / 60)}h ${waAvgResponse % 60}m`) : '—', prev: null as number | null, icon: '⚡', color: '#EF4444', bg: '#FEF2F2', path: '/whatsapp' },
           ].map(card => {
             const variation = card.prev !== null && card.prev > 0
               ? Math.round((Number(card.value) - card.prev) / card.prev * 100)
@@ -1180,124 +1175,7 @@ export default function GestorHome() {
         </div>
       )}
 
-      {/* ── Campanha em andamento ────────────────────────────────────────────── */}
-      {activeCycle && funnelHasData && latestFunnel && (
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 0 3px #dcfce7' }} />
-              <div>
-                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Campanha em andamento</h3>
-                <p style={{ margin: '2px 0 0', fontSize: 12, color: '#94a3b8' }}>Período: {latestFunnel.period}</p>
-              </div>
-            </div>
-            <button onClick={() => navigate('/reports')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#00A896', background: 'none', border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontWeight: 600 }}>
-              Ver funil completo <ArrowRight size={12} />
-            </button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-            {[
-              { label: 'Cadastros', val: latestFunnel.registrations, target: latestFunnel.registrations_target, color: '#3B82F6' },
-              { label: 'Agendas', val: latestFunnel.schedules, target: latestFunnel.schedules_target, color: '#8B5CF6' },
-              { label: 'Visitas', val: latestFunnel.visits, target: latestFunnel.visits_target, color: '#F59E0B' },
-              { label: 'Matrículas', val: latestFunnel.enrollments, target: latestFunnel.enrollments_target, color: '#00A896' },
-            ].map(({ label, val, target, color }) => {
-              const pct = (target ?? 0) > 0 ? Math.round(((val ?? 0) / target!) * 100) : null
-              const barColor = pct === null ? '#e2e8f0' : pct >= 100 ? '#22c55e' : pct >= 70 ? '#f59e0b' : '#ef4444'
-              return (
-                <div key={label} style={{ background: '#f8fafc', borderRadius: 12, padding: '14px 16px' }}>
-                  <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
-                  <p style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 700, color: '#1e2d6b' }}>{fmt(val ?? 0)}</p>
-                  {(target ?? 0) > 0 && (
-                    <>
-                      <div style={{ height: 4, background: '#e2e8f0', borderRadius: 2, marginBottom: 4, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${Math.min(100, pct ?? 0)}%`, background: barColor, borderRadius: 2, transition: 'width 0.8s ease' }} />
-                      </div>
-                      <p style={{ margin: 0, fontSize: 11, color: barColor, fontWeight: 600 }}>{pct}% da meta ({fmt(target!)})</p>
-                    </>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-          {/* Botões Finalizar / Apagar campanha */}
-          {activeCycle && activeCycle.status === 'active' && (
-            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-              <button
-                onClick={async () => {
-                  if (!confirm('Finalizar a campanha? Isso encerrará o ciclo atual e gerará um relatório final.')) return
-                  await supabase.from('campaign_cycles')
-                    .update({ status: 'finished', finished_at: new Date().toISOString() })
-                    .eq('id', activeCycle.id)
-                  load()
-                }}
-                style={{ padding: '10px 20px', borderRadius: 10, background: '#16A34A', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-              >
-                ✅ Finalizar campanha
-              </button>
-              <button
-                onClick={async () => {
-                  if (!confirm('Apagar campanha? Todos os dados serão removidos e você poderá criar uma nova.')) return
-                  await supabase.from('campaign_cycles').delete().eq('id', activeCycle.id)
-                  load()
-                }}
-                style={{ padding: '10px 20px', borderRadius: 10, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-              >
-                🗑️ Apagar campanha
-              </button>
-            </div>
-          )}
-        </div>
-      )}
 
-      {/* ── Funil visual de leads ────────────────────────────────────────────── */}
-      {leads.length > 0 && (() => {
-        const stages = [
-          { label: 'Novo', status: ['novo', 'new'], color: '#94A3B8', bg: '#F8FAFC' },
-          { label: 'Contatado', status: ['contatado', 'contact'], color: '#8B5CF6', bg: '#F5F3FF' },
-          { label: 'Visita', status: ['visita_agendada', 'scheduled', 'visita_realizada', 'visit'], color: '#F59E0B', bg: '#FFFBEB' },
-          { label: 'Proposta', status: ['proposta', 'proposal'], color: '#3B82F6', bg: '#EFF6FF' },
-          { label: 'Matriculado', status: ['matriculado', 'enrolled'], color: '#00A896', bg: '#F0FDFA' },
-        ]
-        const counts = stages.map(s => ({ ...s, count: leads.filter(l => s.status.includes(l.status)).length }))
-        const maxC = Math.max(...counts.map(s => s.count), 1)
-        return (
-          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px 24px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Funil de Leads</h3>
-              <span style={{ fontSize: 12, color: '#94a3b8' }}>Conversão: {conversionRateNum.toFixed(1)}%</span>
-            </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', height: 120, marginBottom: 16 }}>
-              {counts.map((stage, i) => {
-                const h = Math.max(8, (stage.count / maxC) * 100)
-                const next = counts[i + 1]
-                const drop = next && stage.count > 0 ? Math.round((1 - next.count / stage.count) * 100) : null
-                return (
-                  <div key={stage.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: stage.color }}>{stage.count}</div>
-                    <div
-                      onClick={() => navigate('/leads')}
-                      style={{ width: '100%', height: `${h}%`, background: stage.bg, border: `2px solid ${stage.color}44`, borderRadius: 8, cursor: 'pointer', transition: 'all 0.2s', minHeight: 8 }}
-                      onMouseEnter={e => { e.currentTarget.style.background = stage.color + '22'; e.currentTarget.style.borderColor = stage.color }}
-                      onMouseLeave={e => { e.currentTarget.style.background = stage.bg; e.currentTarget.style.borderColor = stage.color + '44' }}
-                    />
-                    <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textAlign: 'center' }}>{stage.label}</div>
-                    {drop !== null && <div style={{ fontSize: 10, color: drop > 50 ? '#EF4444' : '#94a3b8' }}>-{drop}%</div>}
-                  </div>
-                )
-              })}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              {counts.map((stage, i) => (
-                <React.Fragment key={stage.label}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color, flexShrink: 0 }} />
-                  {i < counts.length - 1 && <div style={{ flex: 1, height: 2, background: `linear-gradient(90deg,${stage.color},${counts[i + 1].color})` }} />}
-                </React.Fragment>
-              ))}
-            </div>
-          </div>
-        )
-      })()}
 
       {/* ── Linha 3: Funil leads + Ranking usuários ──────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
@@ -1359,15 +1237,21 @@ export default function GestorHome() {
             const medals = ['🥇', '🥈', '🥉']
             const avatarColors = ['#00A896', '#8B5CF6', '#F59E0B', '#EF4444', '#3B82F6']
             const teamStats = userRankings.map(u => {
-              const waData = waTeamRanking.find(w => w.name === u.full_name)
-              const satisfData = waSatisfStats?.byAttendant.find(a => a.name === u.full_name)
-              const avgResp = avgResponseByAttendant[u.full_name] ?? null
+              const waData = waTeamRanking.find(w => w.userId === u.user_id)
+              const satisfConvs = waConvsRaw.filter(c =>
+                c.assigned_user_id === u.user_id &&
+                typeof c.satisfaction_score === 'number' &&
+                c.satisfaction_score >= 1 && c.satisfaction_score <= 3
+              )
+              const satisfScore = satisfConvs.length > 0
+                ? satisfConvs.reduce((s, c) => s + (c.satisfaction_score || 0), 0) / satisfConvs.length
+                : null
               return {
                 ...u,
                 wa_count: waData?.count ?? 0,
-                satisf_score: satisfData ? satisfData.sum / satisfData.total : null,
-                satisf_count: satisfData?.total ?? 0,
-                avg_response: avgResp,
+                satisf_score: satisfScore,
+                satisf_count: satisfConvs.length,
+                avg_response: avgResponseByAttendant[u.user_id] ?? null,
               }
             })
             const sortedTeam = [...teamStats].sort((a, b) => {
@@ -1448,19 +1332,35 @@ export default function GestorHome() {
             </div>
           ) : waConvStats ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-                {([
-                  { label: 'Conversas', value: waConvStats.total, color: '#1e2d6b', bg: '#f8fafc', pct: null as number | null },
-                  { label: 'Pelo robô', value: waConvStats.byBot, color: '#8B5CF6', bg: '#F5F3FF', pct: waConvStats.total > 0 ? Math.round((waConvStats.byBot / waConvStats.total) * 100) : 0 },
-                  { label: 'Pela equipe', value: waConvStats.byTeam, color: '#3B82F6', bg: '#EFF6FF', pct: waConvStats.total > 0 ? Math.round((waConvStats.byTeam / waConvStats.total) * 100) : 0 },
-                  { label: 'Fechadas', value: waConvStats.closed, color: '#10B981', bg: '#F0FDF4', pct: waConvStats.total > 0 ? Math.round((waConvStats.closed / waConvStats.total) * 100) : 0 },
-                ]).map(({ label, value, color, bg, pct }) => (
-                  <div key={label} style={{ background: bg, borderRadius: 10, padding: '10px 12px' }}>
-                    <p style={{ margin: '0 0 2px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
-                    <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color }}>{value}{pct !== null ? <span style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8', marginLeft: 4 }}>({pct}%)</span> : null}</p>
+              {(() => {
+                const hadResponseByJid: Record<string, boolean> = {}
+                waMessages.forEach(m => {
+                  if (m.from_me) hadResponseByJid[m.remote_jid] = true
+                  else if (hadResponseByJid[m.remote_jid] === undefined) hadResponseByJid[m.remote_jid] = false
+                })
+                const total = waConvsRaw.length
+                const botResp = waConvsRaw.filter(c => !c.assigned_user_id && hadResponseByJid[c.remote_jid] === true).length
+                const teamResp = waConvsRaw.filter(c => !!c.assigned_user_id && hadResponseByJid[c.remote_jid] === true).length
+                const noResp = waConvsRaw.filter(c => !hadResponseByJid[c.remote_jid] && c.status === 'closed').length
+                const closedCount = waConvsRaw.filter(c => c.status === 'closed').length
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 6 }}>
+                    {([
+                      { label: 'Total', value: total, color: '#1e2d6b', bg: '#f8fafc' },
+                      { label: 'Bot respondeu', value: botResp, color: '#8B5CF6', bg: '#F5F3FF' },
+                      { label: 'Equipe resp.', value: teamResp, color: '#3B82F6', bg: '#EFF6FF' },
+                      { label: 'Sem resposta', value: noResp, color: '#EF4444', bg: '#FEF2F2' },
+                      { label: 'Fechadas', value: closedCount, color: '#10B981', bg: '#F0FDF4' },
+                    ]).map(({ label, value, color, bg }) => (
+                      <div key={label} style={{ background: bg, borderRadius: 10, padding: '10px 6px', textAlign: 'center' }}>
+                        <p style={{ margin: 0, fontSize: 20, fontWeight: 800, color }}>{value}</p>
+                        <p style={{ margin: '3px 0 0', fontSize: 9, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.2 }}>{label}</p>
+                        {total > 0 && value > 0 && <p style={{ margin: '2px 0 0', fontSize: 10, color: '#94a3b8' }}>{Math.round(value / total * 100)}%</p>}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                )
+              })()}
               <div>
                 <p style={{ margin: '0 0 6px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Conversas — últimos 7 dias</p>
                 <ResponsiveContainer width="100%" height={72}>
@@ -1608,18 +1508,34 @@ export default function GestorHome() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {transfers.map(t => (
-                <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: '#fafafa', border: '1px solid #f1f5f9' }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: '#FFE4E6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <AlertTriangle size={14} color="#F43F5E" />
+              {transfers.map(t => {
+                const REASON_COLORS: Record<string, { bg: string; color: string }> = {
+                  financial: { bg: '#FEE2E2', color: '#DC2626' },
+                  competition: { bg: '#FEF3C7', color: '#D97706' },
+                  pedagogical: { bg: '#DBEAFE', color: '#2563EB' },
+                  relocation: { bg: '#F3F4F6', color: '#6B7280' },
+                  distance: { bg: '#FEF9C3', color: '#854D0E' },
+                  other: { bg: '#F3F4F6', color: '#6B7280' },
+                }
+                const rc = t.reason_category ? (REASON_COLORS[t.reason_category] ?? { bg: '#F3F4F6', color: '#6B7280' }) : null
+                return (
+                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: '#fff', border: '1px solid #f1f5f9', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                    <ArrowRight size={14} color="#F43F5E" style={{ flexShrink: 0 }} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.student_name}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#94a3b8' }}>{t.course_grade}</p>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+                      <span style={{ fontSize: 10, color: '#94a3b8' }}>{new Date(t.transfer_date).toLocaleDateString('pt-BR')}</span>
+                      {t.reason_category && rc && (
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: rc.bg, color: rc.color }}>
+                          {REASON_LABELS[t.reason_category] || t.reason_category}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.student_name}</p>
-                    <p style={{ margin: '2px 0 0', fontSize: 11, color: '#94a3b8' }}>{t.course_grade} · {t.reason_category ? REASON_LABELS[t.reason_category] || t.reason_category : 'Sem motivo'}</p>
-                  </div>
-                  <span style={{ fontSize: 10, color: '#94a3b8', flexShrink: 0 }}>{new Date(t.transfer_date).toLocaleDateString('pt-BR')}</span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </SectionCard>
@@ -1627,39 +1543,33 @@ export default function GestorHome() {
 
       {/* ── AI Insight ───────────────────────────────────────────────────────── */}
       {(aiInsightLoading || aiInsight) && (
-        <div style={{ background: 'linear-gradient(135deg, #1e2d6b, #4C1D95)', borderRadius: 20, padding: 24, boxShadow: '0 4px 24px rgba(30,45,107,0.2)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Sparkles size={16} color="#fff" />
-              </div>
-              <div>
-                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#fff', margin: 0 }}>Análise da IA — Áion Edu</h3>
-                <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>
-                  {aiLastUpdated ? `Última análise: ${new Date(aiLastUpdated).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : 'Baseada nos dados do funil e histórico da escola'}
-                </p>
-              </div>
-            </div>
+        <div style={{ background: '#F8FAFC', borderRadius: 14, border: '1px solid #E2E8F0', padding: '12px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Sparkles size={13} color="#6366F1" />
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#374151', flex: 1 }}>Análise da IA</span>
+            {aiLastUpdated && <span style={{ fontSize: 10, color: '#94a3b8' }}>{new Date(aiLastUpdated).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>}
             {latestFunnel && (
-              <button
-                onClick={() => { aiInsightFetched.current = false; fetchAiInsight(latestFunnel, true) }}
-                disabled={aiInsightLoading}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 20, background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff', fontSize: 12, fontWeight: 500, cursor: aiInsightLoading ? 'not-allowed' : 'pointer', opacity: aiInsightLoading ? 0.6 : 1 }}
-              >
-                🔄 Atualizar
+              <button onClick={() => { aiInsightFetched.current = false; fetchAiInsight(latestFunnel, true) }} disabled={aiInsightLoading}
+                style={{ padding: '3px 6px', borderRadius: 6, background: 'none', border: '1px solid #E2E8F0', cursor: aiInsightLoading ? 'not-allowed' : 'pointer', opacity: aiInsightLoading ? 0.5 : 1, display: 'flex', alignItems: 'center' }}>
+                <RefreshCw size={11} color="#94a3b8" />
               </button>
             )}
           </div>
           {aiInsightLoading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[...Array(3)].map((_, i) => <div key={i} style={{ height: 14, borderRadius: 4, background: 'rgba(255,255,255,0.15)', animation: 'pulse 1.5s infinite' }} />)}
-              <p style={{ margin: '8px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Gerando análise...</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+              {[...Array(2)].map((_, i) => <div key={i} style={{ height: 12, borderRadius: 4, background: '#E2E8F0' }} />)}
             </div>
           ) : (
-            <div>
-              {aiInsight?.split('\n').filter(p => p.trim()).map((para, i) => (
-                <p key={i} style={{ margin: i === 0 ? 0 : '10px 0 0', fontSize: 14, color: 'rgba(255,255,255,0.9)', lineHeight: 1.7 }}>{para}</p>
-              ))}
+            <div style={{ marginTop: 8 }}>
+              <div style={{ maxHeight: aiExpanded ? 'none' : 80, overflow: 'hidden', position: 'relative' }}>
+                {aiInsight?.split('\n').filter(p => p.trim()).map((para, i) => (
+                  <p key={i} style={{ margin: i === 0 ? 0 : '6px 0 0', fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{para}</p>
+                ))}
+                {!aiExpanded && <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 28, background: 'linear-gradient(transparent, #F8FAFC)' }} />}
+              </div>
+              <button onClick={() => setAiExpanded(e => !e)} style={{ marginTop: 4, fontSize: 11, color: '#6366F1', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600 }}>
+                {aiExpanded ? 'Ver menos' : 'Ver mais'}
+              </button>
             </div>
           )}
         </div>
