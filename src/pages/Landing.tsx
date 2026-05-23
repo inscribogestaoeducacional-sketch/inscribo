@@ -575,7 +575,7 @@ function CTAFinal() {
             </div>
             <h3 className="s-title" style={{ fontSize: 26, color: '#00523C', marginBottom: 14 }}>Recebemos sua solicitação!</h3>
             <p style={{ color: '#374151', lineHeight: 1.8, fontSize: 15 }}>Nossa equipe vai entrar em contato via WhatsApp em até 2 horas úteis.</p>
-            <a href="https://wa.me/5583933444383?text=Ol%C3%A1!%20Acabei%20de%20solicitar%20uma%20demonstra%C3%A7%C3%A3o." target="_blank" rel="noopener noreferrer" className="btn-g" style={{ marginTop: 24, background: '#25D366', boxShadow: '0 4px 20px rgba(37,211,102,.35)', display: 'inline-flex' }}>
+            <a href="https://wa.me/5583993444383?text=Ol%C3%A1!%20Acabei%20de%20solicitar%20uma%20demonstra%C3%A7%C3%A3o." target="_blank" rel="noopener noreferrer" className="btn-g" style={{ marginTop: 24, background: '#25D366', boxShadow: '0 4px 20px rgba(37,211,102,.35)', display: 'inline-flex' }}>
               Falar agora no WhatsApp
             </a>
           </div>
@@ -602,7 +602,7 @@ function CTAFinal() {
         )}
         <div style={{ textAlign: 'center', marginTop: 28 }}>
           <p style={{ color: 'rgba(255,255,255,.65)', fontSize: 14, marginBottom: 12 }}>Prefere falar direto?</p>
-          <a href="https://wa.me/5583933444383" target="_blank" rel="noopener noreferrer" className="btn-ghost">Chamar no WhatsApp</a>
+          <a href="https://wa.me/5583993444383" target="_blank" rel="noopener noreferrer" className="btn-ghost">Chamar no WhatsApp</a>
         </div>
       </div>
     </section>
@@ -612,7 +612,7 @@ function CTAFinal() {
 // ── FLOATING WA BUTTON ────────────────────────────────────────────────────
 function WAButton() {
   return (
-    <a href="https://wa.me/5583933444383?text=Ol%C3%A1!%20Tenho%20interesse%20na%20%C3%81ion%20Edu." target="_blank" rel="noopener noreferrer"
+    <a href="https://wa.me/5583993444383?text=Ol%C3%A1!%20Tenho%20interesse%20na%20%C3%81ion%20Edu." target="_blank" rel="noopener noreferrer"
       style={{ position: 'fixed', bottom: 28, right: 28, zIndex: 999, width: 60, height: 60, borderRadius: '50%', background: '#25D366', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 24px rgba(37,211,102,.55)', textDecoration: 'none', transition: 'transform .2s, box-shadow .2s' }}
       onMouseEnter={e => { const t = e.currentTarget as HTMLElement; t.style.transform = 'scale(1.12)'; t.style.boxShadow = '0 8px 32px rgba(37,211,102,.65)' }}
       onMouseLeave={e => { const t = e.currentTarget as HTMLElement; t.style.transform = 'scale(1)'; t.style.boxShadow = '0 4px 24px rgba(37,211,102,.55)' }}

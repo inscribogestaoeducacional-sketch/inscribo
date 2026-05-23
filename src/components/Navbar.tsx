@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 
 function IconMenu({ size = 22, color = 'currentColor' }: { size?: number; color?: string }) {
   return (
@@ -42,6 +42,7 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [dropOpen, setDropOpen] = useState(false)
+  const dropTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 24)
@@ -81,15 +82,20 @@ export default function Navbar() {
         {/* Desktop Links */}
         <div className="nav-links-desktop" style={{ display: 'flex', gap: 28, alignItems: 'center' }}>
           {/* Soluções dropdown */}
-          <div style={{ position: 'relative' }} onMouseEnter={() => setDropOpen(true)} onMouseLeave={() => setDropOpen(false)}>
+          <div style={{ position: 'relative' }}
+            onMouseEnter={() => { if (dropTimerRef.current) clearTimeout(dropTimerRef.current); setDropOpen(true) }}
+            onMouseLeave={() => { dropTimerRef.current = setTimeout(() => setDropOpen(false), 150) }}
+          >
             <button className={linkClass} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
               Soluções <IconChevronDown color={scrolled ? '#4B5563' : 'rgba(255,255,255,.85)'} />
             </button>
             {dropOpen && (
-              <div className="nav-dropdown">
-                {SOLUCOES_DROPDOWN.map(item => (
-                  <a key={item.label} href={item.href} className="nav-dropdown-item">{item.label}</a>
-                ))}
+              <div style={{ position: 'absolute', top: '100%', left: 0, paddingTop: 8, zIndex: 1000, minWidth: 220 }}>
+                <div className="nav-dropdown" style={{ position: 'static', top: 'unset', left: 'unset' }}>
+                  {SOLUCOES_DROPDOWN.map(item => (
+                    <a key={item.label} href={item.href} className="nav-dropdown-item">{item.label}</a>
+                  ))}
+                </div>
               </div>
             )}
           </div>

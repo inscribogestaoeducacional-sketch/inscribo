@@ -215,7 +215,7 @@ export default function GestorHome() {
   const [waTeamRanking, setWaTeamRanking] = useState<{ name: string; count: number }[]>([])
   const [waAvgResponse, setWaAvgResponse] = useState<number | null>(null)
   const [waSatisfStats, setWaSatisfStats] = useState<{ total: number; ruim: number; regular: number; otimo: number; avgScore: number; byAttendant: { name: string; total: number; sum: number }[] } | null>(null)
-  const [rankingMode, setRankingMode] = useState<'matriculas' | 'whatsapp'>('matriculas')
+  const [rankingMode, setRankingMode] = useState<'matriculas' | 'whatsapp' | 'satisfacao'>('matriculas')
   const [userRankings, setUserRankings] = useState<UserRanking[]>([])
   const [marketData, setMarketData] = useState<MarketData | null>(null)
   const [marketLoading, setMarketLoading] = useState(false)
@@ -234,29 +234,53 @@ export default function GestorHome() {
   const [surveyScoresList, setSurveyScoresList] = useState<{ satisfaction_score: number | null }[]>([])
   const [aiLastUpdated, setAiLastUpdated] = useState<number | null>(null)
   const dashboardRef = useRef<HTMLDivElement>(null)
+  const [prevLeadsCount, setPrevLeadsCount] = useState(0)
+  const [prevEnrolled, setPrevEnrolled] = useState(0)
+  const [activeConvsNow, setActiveConvsNow] = useState(0)
+  const [avgResponseByAttendant, setAvgResponseByAttendant] = useState<Record<string,number>>({})
+
+  const getPeriodRange = () => {
+    const now = new Date()
+    const end = now.toISOString()
+    let start: string
+    switch (periodFilter) {
+      case 'hoje':
+        start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString(); break
+      case 'semana': {
+        const d = new Date(now)
+        d.setDate(d.getDate() - 7)
+        start = d.toISOString(); break
+      }
+      case 'ano':
+        start = new Date(now.getFullYear(), 0, 1).toISOString(); break
+      default:
+        start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+    }
+    return { start, end }
+  }
 
   useEffect(() => {
     mountedRef.current = true
     return () => { mountedRef.current = false }
   }, [])
 
-  useEffect(() => { if (!institutionId) return; load() }, [institutionId])
+  useEffect(() => { if (!institutionId) return; load() }, [institutionId, periodFilter])
 
   async function load() {
     setLoading(true)
     try {
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+      const { start, end } = getPeriodRange()
       const [cyclesRes, funnelRes, transferRes, leadsRes, visitsRes, waRes, enrollRes, usersRes, waPhoneRes, waConvsRes] = await Promise.all([
         supabase.from('campaign_cycles').select('*').eq('institution_id', institutionId).order('created_at', { ascending: false }),
         supabase.from('funnel_metrics').select('*').eq('institution_id', institutionId).order('created_at', { ascending: true }),
         supabase.from('student_transfers').select('id,student_name,course_grade,transfer_date,reason_category').eq('institution_id', institutionId).is('deleted_at', null).order('transfer_date', { ascending: false }).limit(5),
-        supabase.from('leads').select('id,status,created_at,grade_interest,source').eq('institution_id', institutionId),
-        supabase.from('visits').select('id,status,created_at').eq('institution_id', institutionId),
-        supabase.from('whatsapp_messages').select('id,created_at,from_me,remote_jid').eq('institution_id', institutionId).gte('created_at', thirtyDaysAgo),
+        supabase.from('leads').select('id,status,created_at,grade_interest,source').eq('institution_id', institutionId).gte('created_at', start),
+        supabase.from('visits').select('id,status,created_at').eq('institution_id', institutionId).gte('created_at', start),
+        supabase.from('whatsapp_messages').select('id,created_at,from_me,remote_jid').eq('institution_id', institutionId).gte('created_at', start),
         supabase.from('enrollments').select('id,user_id,created_at').eq('institution_id', institutionId),
         supabase.from('users').select('id,full_name,role').eq('institution_id', institutionId),
         supabase.from('whatsapp_phone_numbers').select('phone_number,display_name').eq('institution_id', institutionId).limit(1).maybeSingle(),
-        supabase.from('whatsapp_conversations').select('id,created_at,status,assigned_user_name,bot_active,satisfaction_score').eq('institution_id', institutionId).gte('created_at', thirtyDaysAgo),
+        supabase.from('whatsapp_conversations').select('id,created_at,status,assigned_user_name,bot_active,satisfaction_score').eq('institution_id', institutionId).gte('created_at', start),
       ])
 
       const loadedCycles = (cyclesRes.data ?? []) as CampaignCycle[]
@@ -306,6 +330,7 @@ export default function GestorHome() {
 
       // WA conversation stats (last 30 days)
       const waConvs = (waConvsRes.data ?? []) as { id: string; created_at: string; status: string; assigned_user_name: string | null; bot_active: boolean | null; satisfaction_score: number | null }[]
+      setActiveConvsNow(waConvs.filter(c => c.status === 'open' || c.status === 'waiting').length)
       const waTotal = waConvs.length
       const waByBot = waConvs.filter(c => c.bot_active === true).length
       const waByTeam = waConvs.filter(c => c.bot_active !== true).length
@@ -352,6 +377,18 @@ export default function GestorHome() {
         waRankMap[name] = (waRankMap[name] || 0) + 1
       })
       setWaTeamRanking(Object.entries(waRankMap).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5))
+
+      const duration = new Date(end).getTime() - new Date(start).getTime()
+      const prevStart = new Date(new Date(start).getTime() - duration).toISOString()
+      const prevLeadsRes = await supabase
+        .from('leads')
+        .select('id,status,created_at')
+        .eq('institution_id', institutionId)
+        .gte('created_at', prevStart)
+        .lt('created_at', start)
+      setPrevLeadsCount(prevLeadsRes.data?.length ?? 0)
+      setPrevEnrolled((prevLeadsRes.data ?? []).filter(l =>
+        l.status === 'enrolled' || l.status === 'matriculado').length)
 
       const alreadySetup = loadedCycles.some(c => ['setup','draft','active','completed','released'].includes(c.status ?? ''))
       if (!alreadySetup) setShowSetup(true)
@@ -793,6 +830,12 @@ export default function GestorHome() {
               )}
             </div>
           )}
+          {activeConvsNow > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 20, background: '#F0FDF4', border: '1px solid #BBF7D0' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#166534' }}>{activeConvsNow} ativas agora</span>
+            </div>
+          )}
           <button onClick={handleExportPDF} style={{ padding: '6px 16px', borderRadius: 20, border: '1px solid #E5E7EB', background: 'white', color: '#374151', fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
             ↓ Exportar PDF
           </button>
@@ -825,20 +868,36 @@ export default function GestorHome() {
 
       {/* ── KPI rápidos ─────────────────────────────────────────────────────── */}
       {!loading && (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(6,1fr)', gap: 12 }}>
           {[
-            { label: 'Conversas hoje', value: waConvsRaw.filter(c => new Date(c.created_at).toDateString() === new Date().toDateString()).length, icon: '💬', color: '#00A896', bg: '#F0FDFA' },
-            { label: 'Leads novos hoje', value: leads.filter(l => new Date(l.created_at).toDateString() === new Date().toDateString()).length, icon: '👤', color: '#8B5CF6', bg: '#F5F3FF' },
-            { label: 'Matrículas', value: leads.filter(l => l.status === 'enrolled' || l.status === 'matriculado').length, icon: '🎓', color: '#F59E0B', bg: '#FFFBEB' },
-            { label: 'Satisfação média', value: avgSatisfaction ? avgSatisfaction.toFixed(1) + '/3' : '-', icon: '⭐', color: '#10B981', bg: '#ECFDF5' },
-            { label: 'Tempo de resposta', value: avgResponseTime ? avgResponseTime + 'min' : '-', icon: '⚡', color: '#EF4444', bg: '#FEF2F2' },
-          ].map(card => (
-            <div key={card.label} style={{ background: card.bg, borderRadius: 16, padding: '16px 20px', border: `1px solid ${card.color}22`, boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
-              <div style={{ fontSize: 24, marginBottom: 8 }}>{card.icon}</div>
-              <div style={{ fontSize: 28, fontWeight: 800, color: card.color, lineHeight: 1 }}>{card.value}</div>
-              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>{card.label}</div>
-            </div>
-          ))}
+            { label: 'Leads no período', value: leads.length, prev: prevLeadsCount, icon: '👤', color: '#8B5CF6', bg: '#F5F3FF', path: '/leads' },
+            { label: 'Conversas WhatsApp', value: waConvsRaw.length, prev: null as number | null, icon: '💬', color: '#00A896', bg: '#F0FDFA', path: '/whatsapp' },
+            { label: 'Matrículas', value: totalEnrolled, prev: prevEnrolled, icon: '🎓', color: '#F59E0B', bg: '#FFFBEB', path: '/enrollments' },
+            { label: 'Taxa de conversão', value: conversionRateNum.toFixed(1) + '%', prev: null as number | null, icon: '📈', color: '#10B981', bg: '#ECFDF5', path: '/leads' },
+            { label: 'Satisfação média', value: waSatisfStats ? waSatisfStats.avgScore.toFixed(1) + '/3' : '—', prev: null as number | null, icon: '⭐', color: '#F59E0B', bg: '#FFFBEB', path: '/surveys' },
+            { label: 'Tempo de resposta', value: waAvgResponse ? waAvgResponse + 'min' : '—', prev: null as number | null, icon: '⚡', color: '#EF4444', bg: '#FEF2F2', path: '/whatsapp' },
+          ].map(card => {
+            const variation = card.prev !== null && card.prev > 0
+              ? Math.round((Number(card.value) - card.prev) / card.prev * 100)
+              : null
+            return (
+              <div key={card.label}
+                onClick={() => navigate(card.path)}
+                style={{ background: card.bg, borderRadius: 16, padding: '16px 18px', border: `1px solid ${card.color}22`, cursor: 'pointer', boxShadow: '0 2px 12px rgba(0,0,0,0.04)', transition: 'transform 0.15s' }}
+                onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-2px)')}
+                onMouseLeave={e => (e.currentTarget.style.transform = 'translateY(0)')}
+              >
+                <div style={{ fontSize: 22, marginBottom: 8 }}>{card.icon}</div>
+                <div style={{ fontSize: 26, fontWeight: 800, color: card.color, lineHeight: 1 }}>{card.value}</div>
+                <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>{card.label}</div>
+                {variation !== null && (
+                  <div style={{ marginTop: 6, fontSize: 11, fontWeight: 600, color: variation >= 0 ? '#16a34a' : '#dc2626', display: 'flex', alignItems: 'center', gap: 3 }}>
+                    {variation >= 0 ? '↑' : '↓'}{Math.abs(variation)}% vs anterior
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -1028,6 +1087,61 @@ export default function GestorHome() {
         </div>
       )}
 
+      {/* ── Gráficos: Leads por dia + WhatsApp por dia ──────────────────────── */}
+      {(() => {
+        const { start } = getPeriodRange()
+        const days: { date: string; count: number }[] = []
+        const startDate = new Date(start)
+        const now = new Date()
+        const cur = new Date(startDate)
+        while (cur <= now && days.length < 30) {
+          const dateStr = cur.toISOString().slice(0, 10)
+          days.push({
+            date: cur.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+            count: leads.filter(l => l.created_at.slice(0, 10) === dateStr).length,
+          })
+          cur.setDate(cur.getDate() + 1)
+        }
+        return (days.length > 1 || (waConvStats?.daily?.length ?? 0) > 0) ? (
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
+            {days.length > 1 && (
+              <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Leads por dia</h3>
+                <ResponsiveContainer width="100%" height={200}>
+                  <AreaChart data={days} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="gradLeads" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                    <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} formatter={(v) => [v, 'Leads']} />
+                    <Area type="monotone" dataKey="count" name="Leads" stroke="#8B5CF6" strokeWidth={2} fill="url(#gradLeads)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            {waConvStats?.daily && (
+              <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>WhatsApp por dia</h3>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={waConvStats.daily} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                    <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                    <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} formatter={(v) => [v, 'Conversas']} />
+                    <Bar dataKey="count" name="Conversas" fill="#00A896" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        ) : null
+      })()}
+
       {/* ── Gráficos: Séries + Origens ──────────────────────────────────────── */}
       {(gradeSorted.length > 0 || sourceSorted.length > 0) && (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
@@ -1115,7 +1229,7 @@ export default function GestorHome() {
                   await supabase.from('campaign_cycles')
                     .update({ status: 'finished', finished_at: new Date().toISOString() })
                     .eq('id', activeCycle.id)
-                  window.location.reload()
+                  load()
                 }}
                 style={{ padding: '10px 20px', borderRadius: 10, background: '#16A34A', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
               >
@@ -1125,7 +1239,7 @@ export default function GestorHome() {
                 onClick={async () => {
                   if (!confirm('Apagar campanha? Todos os dados serão removidos e você poderá criar uma nova.')) return
                   await supabase.from('campaign_cycles').delete().eq('id', activeCycle.id)
-                  window.location.reload()
+                  load()
                 }}
                 style={{ padding: '10px 20px', borderRadius: 10, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
               >
@@ -1135,6 +1249,55 @@ export default function GestorHome() {
           )}
         </div>
       )}
+
+      {/* ── Funil visual de leads ────────────────────────────────────────────── */}
+      {leads.length > 0 && (() => {
+        const stages = [
+          { label: 'Novo', status: ['novo', 'new'], color: '#94A3B8', bg: '#F8FAFC' },
+          { label: 'Contatado', status: ['contatado', 'contact'], color: '#8B5CF6', bg: '#F5F3FF' },
+          { label: 'Visita', status: ['visita_agendada', 'scheduled', 'visita_realizada', 'visit'], color: '#F59E0B', bg: '#FFFBEB' },
+          { label: 'Proposta', status: ['proposta', 'proposal'], color: '#3B82F6', bg: '#EFF6FF' },
+          { label: 'Matriculado', status: ['matriculado', 'enrolled'], color: '#00A896', bg: '#F0FDFA' },
+        ]
+        const counts = stages.map(s => ({ ...s, count: leads.filter(l => s.status.includes(l.status)).length }))
+        const maxC = Math.max(...counts.map(s => s.count), 1)
+        return (
+          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px 24px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Funil de Leads</h3>
+              <span style={{ fontSize: 12, color: '#94a3b8' }}>Conversão: {conversionRateNum.toFixed(1)}%</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', height: 120, marginBottom: 16 }}>
+              {counts.map((stage, i) => {
+                const h = Math.max(8, (stage.count / maxC) * 100)
+                const next = counts[i + 1]
+                const drop = next && stage.count > 0 ? Math.round((1 - next.count / stage.count) * 100) : null
+                return (
+                  <div key={stage.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: stage.color }}>{stage.count}</div>
+                    <div
+                      onClick={() => navigate('/leads')}
+                      style={{ width: '100%', height: `${h}%`, background: stage.bg, border: `2px solid ${stage.color}44`, borderRadius: 8, cursor: 'pointer', transition: 'all 0.2s', minHeight: 8 }}
+                      onMouseEnter={e => { e.currentTarget.style.background = stage.color + '22'; e.currentTarget.style.borderColor = stage.color }}
+                      onMouseLeave={e => { e.currentTarget.style.background = stage.bg; e.currentTarget.style.borderColor = stage.color + '44' }}
+                    />
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textAlign: 'center' }}>{stage.label}</div>
+                    {drop !== null && <div style={{ fontSize: 10, color: drop > 50 ? '#EF4444' : '#94a3b8' }}>-{drop}%</div>}
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {counts.map((stage, i) => (
+                <React.Fragment key={stage.label}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color, flexShrink: 0 }} />
+                  {i < counts.length - 1 && <div style={{ flex: 1, height: 2, background: `linear-gradient(90deg,${stage.color},${counts[i + 1].color})` }} />}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Linha 3: Funil leads + Ranking usuários ──────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
@@ -1182,59 +1345,79 @@ export default function GestorHome() {
         </SectionCard>
 
         {/* Ranking de usuários */}
-        <SectionCard title="Ranking da Equipe" subtitle={rankingMode === 'matriculas' ? 'Por matrículas confirmadas' : 'Por atendimentos WhatsApp'} icon={<Trophy />} iconBg="#FEF3C7" iconColor="#F59E0B" action={() => navigate('/reports')} actionLabel="Ver relatórios">
+        <SectionCard title="Ranking da Equipe" subtitle={rankingMode === 'matriculas' ? 'Por matrículas confirmadas' : rankingMode === 'whatsapp' ? 'Por atendimentos WhatsApp' : 'Por satisfação'} icon={<Trophy />} iconBg="#FEF3C7" iconColor="#F59E0B" action={() => navigate('/reports')} actionLabel="Ver relatórios">
           <div style={{ display: 'flex', gap: 4, marginBottom: 12, background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
-            {(['matriculas', 'whatsapp'] as const).map(mode => (
+            {(['matriculas', 'whatsapp', 'satisfacao'] as const).map(mode => (
               <button key={mode} onClick={() => setRankingMode(mode)} style={{ flex: 1, padding: '5px 0', borderRadius: 6, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', background: rankingMode === mode ? '#fff' : 'transparent', color: rankingMode === mode ? '#1e2d6b' : '#94a3b8', boxShadow: rankingMode === mode ? '0 1px 4px rgba(0,0,0,0.08)' : 'none' }}>
-                {mode === 'matriculas' ? 'Matrículas' : 'WhatsApp'}
+                {mode === 'matriculas' ? 'Matrículas' : mode === 'whatsapp' ? 'WhatsApp' : 'Satisfação'}
               </button>
             ))}
           </div>
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{[...Array(4)].map((_, i) => <div key={i} style={{ height: 44, borderRadius: 8, background: '#f1f5f9' }} />)}</div>
-          ) : rankingMode === 'matriculas' ? (
-            userRankings.length === 0 ? (
+          ) : (() => {
+            const medals = ['🥇', '🥈', '🥉']
+            const avatarColors = ['#00A896', '#8B5CF6', '#F59E0B', '#EF4444', '#3B82F6']
+            const teamStats = userRankings.map(u => {
+              const waData = waTeamRanking.find(w => w.name === u.full_name)
+              const satisfData = waSatisfStats?.byAttendant.find(a => a.name === u.full_name)
+              const avgResp = avgResponseByAttendant[u.full_name] ?? null
+              return {
+                ...u,
+                wa_count: waData?.count ?? 0,
+                satisf_score: satisfData ? satisfData.sum / satisfData.total : null,
+                satisf_count: satisfData?.total ?? 0,
+                avg_response: avgResp,
+              }
+            })
+            const sortedTeam = [...teamStats].sort((a, b) => {
+              if (rankingMode === 'matriculas') return b.enrollments_count - a.enrollments_count
+              if (rankingMode === 'whatsapp') return b.wa_count - a.wa_count
+              return (b.satisf_score ?? 0) - (a.satisf_score ?? 0)
+            })
+            return sortedTeam.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '20px 0', color: '#94a3b8' }}>
                 <Users size={28} strokeWidth={1.5} style={{ margin: '0 auto 8px' }} />
-                <p style={{ margin: 0, fontSize: 13 }}>Nenhum dado de equipe disponível</p>
+                <p style={{ margin: 0, fontSize: 13 }}>Nenhum dado disponível</p>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {userRankings.map((u, i) => {
-                  const medals = ['🥇', '🥈', '🥉']
-                  const medalColors = ['#F59E0B', '#94A3B8', '#CD7F32']
-                  const isTop = i < 3
+                {sortedTeam.map((u, i) => {
                   const initials = u.full_name.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
-                  const avatarColors = ['#00A896', '#8B5CF6', '#F59E0B', '#EF4444', '#3B82F6']
                   const avatarColor = avatarColors[i % avatarColors.length]
-                  const attendantSatisf = waSatisfStats?.byAttendant.find(a => a.name === u.full_name)
-                  const satisfPct = attendantSatisf ? Math.round((attendantSatisf.sum / attendantSatisf.total / 3) * 100) : null
+                  const satisfPct = u.satisf_score ? Math.round((u.satisf_score / 3) * 100) : null
+                  const mainValue = rankingMode === 'matriculas'
+                    ? u.enrollments_count
+                    : rankingMode === 'whatsapp'
+                    ? u.wa_count
+                    : u.satisf_score ? u.satisf_score.toFixed(1) + '/3' : '—'
                   return (
-                    <div key={u.user_id} style={{ padding: '12px 14px', borderRadius: 12, background: i === 0 ? '#FFFBEB' : '#F8FAFC', border: `1px solid ${i === 0 ? '#FDE68A' : '#F1F5F9'}` }}>
+                    <div key={u.user_id} style={{ padding: '12px 14px', borderRadius: 12, background: i === 0 ? '#FFFBEB' : '#F8FAFC', border: `1px solid ${i === 0 ? '#FDE68A' : '#F1F5F9'}`, marginBottom: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: satisfPct !== null ? 8 : 0 }}>
-                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 12, fontWeight: 700, color: '#fff' }}>
+                        <div style={{ width: 36, height: 36, borderRadius: '50%', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 13, fontWeight: 700, color: '#fff' }}>
                           {initials}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            {isTop && <span style={{ fontSize: 14 }}>{medals[i]}</span>}
+                            {i < 3 && <span style={{ fontSize: 14 }}>{medals[i]}</span>}
                             <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1e2d6b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.full_name}</p>
                           </div>
-                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2, flexWrap: 'wrap' }}>
                             <span style={{ fontSize: 11, color: '#6B7280' }}>{u.enrollments_count} matrículas</span>
-                            {attendantSatisf && <span style={{ fontSize: 11, color: '#10B981' }}>⭐ {(attendantSatisf.sum / attendantSatisf.total).toFixed(1)}/3</span>}
-                            {waAvgResponse !== null && <span style={{ fontSize: 11, color: '#6366F1' }}>⚡ {waAvgResponse}min</span>}
+                            <span style={{ fontSize: 11, color: '#00A896' }}>💬 {u.wa_count} conv.</span>
+                            {u.satisf_score && <span style={{ fontSize: 11, color: '#F59E0B' }}>⭐ {u.satisf_score.toFixed(1)}</span>}
+                            {u.avg_response && <span style={{ fontSize: 11, color: '#6366F1' }}>⚡ {u.avg_response}min</span>}
                           </div>
                         </div>
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: i === 0 ? '#F59E0B' : '#1e2d6b' }}>{u.enrollments_count}</p>
+                          <p style={{ margin: 0, fontSize: 20, fontWeight: 800, color: i === 0 ? '#F59E0B' : '#1e2d6b' }}>{mainValue}</p>
                         </div>
                       </div>
                       {satisfPct !== null && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ fontSize: 11, color: '#94a3b8', minWidth: 16 }}>😊</span>
                           <div style={{ flex: 1, height: 6, borderRadius: 3, background: '#F3F4F6', overflow: 'hidden' }}>
-                            <div style={{ width: `${satisfPct}%`, height: '100%', background: satisfPct >= 80 ? '#10B981' : satisfPct >= 50 ? '#F59E0B' : '#EF4444', borderRadius: 3, transition: 'width 0.8s ease' }}/>
+                            <div style={{ width: `${satisfPct}%`, height: '100%', background: satisfPct >= 80 ? '#10B981' : satisfPct >= 50 ? '#F59E0B' : '#EF4444', borderRadius: 3, transition: 'width 0.8s ease' }} />
                           </div>
                           <span style={{ fontSize: 11, color: '#374151', fontWeight: 600, minWidth: 32 }}>{satisfPct}%</span>
                         </div>
@@ -1244,58 +1427,7 @@ export default function GestorHome() {
                 })}
               </div>
             )
-          ) : (
-            waTeamRanking.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '20px 0', color: '#94a3b8' }}>
-                <MessageCircle size={28} strokeWidth={1.5} style={{ margin: '0 auto 8px' }} />
-                <p style={{ margin: 0, fontSize: 13 }}>Nenhum atendimento fechado ainda</p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {waTeamRanking.map(({ name, count }, i) => {
-                  const medals = ['🥇', '🥈', '🥉']
-                  const isTop = i < 3
-                  const initials = name.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
-                  const avatarColors = ['#00A896', '#8B5CF6', '#F59E0B', '#EF4444', '#3B82F6']
-                  const avatarColor = avatarColors[i % avatarColors.length]
-                  const attendantSatisf = waSatisfStats?.byAttendant.find(a => a.name === name)
-                  const satisfPct = attendantSatisf ? Math.round((attendantSatisf.sum / attendantSatisf.total / 3) * 100) : null
-                  return (
-                    <div key={name} style={{ padding: '12px 14px', borderRadius: 12, background: i === 0 ? '#FFFBEB' : '#F8FAFC', border: `1px solid ${i === 0 ? '#FDE68A' : '#F1F5F9'}` }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: satisfPct !== null ? 8 : 0 }}>
-                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 12, fontWeight: 700, color: '#fff' }}>
-                          {initials}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            {isTop && <span style={{ fontSize: 14 }}>{medals[i]}</span>}
-                            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1e2d6b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</p>
-                          </div>
-                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
-                            <span style={{ fontSize: 11, color: '#6B7280' }}>{count} conversas</span>
-                            {attendantSatisf && <span style={{ fontSize: 11, color: '#10B981' }}>⭐ {(attendantSatisf.sum / attendantSatisf.total).toFixed(1)}/3</span>}
-                            {waAvgResponse !== null && <span style={{ fontSize: 11, color: '#6366F1' }}>⚡ {waAvgResponse}min</span>}
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: i === 0 ? '#F59E0B' : '#1e2d6b' }}>{count}</p>
-                        </div>
-                      </div>
-                      {satisfPct !== null && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: 11, color: '#94a3b8', minWidth: 16 }}>😊</span>
-                          <div style={{ flex: 1, height: 6, borderRadius: 3, background: '#F3F4F6', overflow: 'hidden' }}>
-                            <div style={{ width: `${satisfPct}%`, height: '100%', background: satisfPct >= 80 ? '#10B981' : satisfPct >= 50 ? '#F59E0B' : '#EF4444', borderRadius: 3, transition: 'width 0.8s ease' }}/>
-                          </div>
-                          <span style={{ fontSize: 11, color: '#374151', fontWeight: 600, minWidth: 32 }}>{satisfPct}%</span>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )
-          )}
+          })()}
         </SectionCard>
       </div>
 
@@ -1412,6 +1544,58 @@ export default function GestorHome() {
             )}
           </SectionCard>
         )}
+
+        {/* Mapa de calor */}
+        {waConvsRaw.length > 0 && (() => {
+          const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+          const heatmap = DAYS.map((day, idx) => {
+            const dayConvs = waConvsRaw.filter(c => new Date(c.created_at).getDay() === idx)
+            return {
+              day,
+              manha: dayConvs.filter(c => { const h = new Date(c.created_at).getHours(); return h >= 6 && h < 12 }).length,
+              tarde: dayConvs.filter(c => { const h = new Date(c.created_at).getHours(); return h >= 12 && h < 18 }).length,
+              noite: dayConvs.filter(c => { const h = new Date(c.created_at).getHours(); return h >= 18 || h < 6 }).length,
+            }
+          })
+          const maxH = Math.max(...heatmap.flatMap(d => [d.manha, d.tarde, d.noite]), 1)
+          const getColor = (val: number) => {
+            const i = val / maxH
+            if (i > 0.7) return { bg: '#00A896', color: '#fff' }
+            if (i > 0.4) return { bg: '#7dd3ca', color: '#fff' }
+            if (i > 0.1) return { bg: '#ccf2ee', color: '#0F6E56' }
+            return { bg: '#F8FAFC', color: '#94a3b8' }
+          }
+          return (
+            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px 24px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>📊 Horários de maior movimento</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '70px repeat(7,1fr)', gap: 4 }}>
+                <div />
+                {DAYS.map(d => (
+                  <div key={d} style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#94a3b8', padding: '4px 0' }}>{d}</div>
+                ))}
+                {(['manha', 'tarde', 'noite'] as const).map(period => (
+                  <React.Fragment key={period}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      {period === 'manha' ? '🌅 Manhã' : period === 'tarde' ? '☀️ Tarde' : '🌙 Noite'}
+                    </div>
+                    {heatmap.map(d => {
+                      const val = d[period]
+                      const { bg, color } = getColor(val)
+                      return (
+                        <div key={d.day}
+                          title={`${d.day} — ${period === 'manha' ? 'Manhã' : period === 'tarde' ? 'Tarde' : 'Noite'}: ${val}`}
+                          style={{ background: bg, borderRadius: 6, padding: '10px 4px', textAlign: 'center', fontSize: 11, fontWeight: 600, color, transition: 'all 0.2s' }}>
+                          {val > 0 ? val : ''}
+                        </div>
+                      )
+                    })}
+                  </React.Fragment>
+                ))}
+              </div>
+              <p style={{ margin: '10px 0 0', fontSize: 11, color: '#94a3b8' }}>Baseado nas conversas do período selecionado</p>
+            </div>
+          )
+        })()}
 
         {/* Transferências */}
         <SectionCard title="Transferências recentes" subtitle="Saídas registradas" icon={<AlertTriangle />} iconBg="#FFE4E6" iconColor="#F43F5E" action={() => navigate('/reports')} actionLabel="Ver todas">
