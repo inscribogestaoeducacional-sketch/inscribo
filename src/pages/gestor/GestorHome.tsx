@@ -1400,23 +1400,23 @@ export default function GestorHome() {
           <SectionCard title="Satisfação dos Atendimentos" subtitle="Últimos 30 dias" icon={<Star />} iconBg="#FEF3C7" iconColor="#F59E0B" action={() => navigate('/surveys')} actionLabel="Ver pesquisas">
             <div style={{ textAlign: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 48, fontWeight: 800, color: waSatisfStats.avgScore >= 2.5 ? '#00A896' : waSatisfStats.avgScore >= 1.5 ? '#F59E0B' : '#EF4444', lineHeight: 1 }}>
-                {waSatisfStats.avgScore.toFixed(1)}
+                {waSatisfStats.avgScore.toFixed(1)}<span style={{ fontSize: 22, fontWeight: 600, color: '#94a3b8' }}>/3</span>
               </div>
               <div style={{ color: '#6B7280', fontSize: 14, marginTop: 4 }}>
-                de 3.0 • {surveyScoresList.length} avaliações
+                {surveyScoresList.length} avaliações
               </div>
             </div>
             <div style={{ marginBottom: 16 }}>
               {[
                 { emoji: '😊', label: 'Ótimo', score: 3, color: '#10B981' },
                 { emoji: '😐', label: 'Regular', score: 2, color: '#F59E0B' },
-                { emoji: '😞', label: 'Ruim', score: 1, color: '#EF4444' },
+                { emoji: '😟', label: 'Ruim', score: 1, color: '#EF4444' },
               ].map(item => {
                 const count = surveyScoresList.filter(c => c.satisfaction_score === item.score).length
                 const pct = surveyScoresList.length > 0 ? Math.round(count / surveyScoresList.length * 100) : 0
                 return (
                   <div key={item.score} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                    <span style={{ fontSize: 20, minWidth: 24 }}>{item.emoji}</span>
+                    <span style={{ fontSize: 16, minWidth: 60, color: '#374151', fontWeight: 500 }}>{item.emoji} {item.label}</span>
                     <div style={{ flex: 1, height: 8, borderRadius: 4, background: '#F3F4F6', overflow: 'hidden' }}>
                       <div style={{ width: `${pct}%`, height: '100%', background: item.color, borderRadius: 4, transition: 'width 0.8s ease' }}/>
                     </div>
@@ -1435,7 +1435,7 @@ export default function GestorHome() {
                       <span style={{ fontSize: 12, color: '#1e2d6b', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#10b981' }}>{(sum / t).toFixed(1)}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#10b981' }}>{(sum / t).toFixed(1)}/3</span>
                       <span style={{ fontSize: 10, color: '#94a3b8' }}>({t} av.)</span>
                     </div>
                   </div>
