@@ -415,11 +415,12 @@ export default function GestorHome() {
         const { data: schoolsData } = await supabase
           .from('inep_escolas')
           .select('co_entidade,no_entidade,tp_dependencia,tp_situacao_funcionamento,qt_mat_total,no_municipio,sg_uf,ano_censo')
-          .ilike('no_municipio', inepCity)
-          .eq('sg_uf', inepState.toUpperCase())
+          .ilike('no_municipio', `%${inepCity}%`)
+          .eq('sg_uf', inepState?.toUpperCase() ?? '')
           .eq('tp_situacao_funcionamento', 1)
           .order('ano_censo', { ascending: false })
         setMarketSchools((schoolsData ?? []) as MarketSchool[])
+        console.log('[INEP] cidade buscada:', inepCity, '| UF:', inepState, '| resultados:', schoolsData?.length ?? 0)
       } else {
         setMarketSchools([])
       }
