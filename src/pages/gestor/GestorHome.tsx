@@ -282,7 +282,7 @@ export default function GestorHome() {
         supabase.from('enrollments').select('id,user_id,created_at').eq('institution_id', institutionId),
         supabase.from('users').select('id,full_name,role').eq('institution_id', institutionId),
         supabase.from('whatsapp_phone_numbers').select('phone_number,display_name').eq('institution_id', institutionId).limit(1).maybeSingle(),
-        supabase.from('whatsapp_conversations').select('id,created_at,status,assigned_user_name,assigned_user_id,bot_active,satisfaction_score,first_response_at,remote_jid').eq('institution_id', institutionId).gte('created_at', start),
+        supabase.from('whatsapp_conversations').select('id,created_at,status,assigned_user_name,assigned_user_id,bot_active,satisfaction_score,first_response_at,remote_jid').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end),
       ])
 
       const loadedCycles = (cyclesRes.data ?? []) as CampaignCycle[]
@@ -801,7 +801,7 @@ export default function GestorHome() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 0, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: '#111827', margin: 0 }}>
-            {getGreeting()}, {user?.full_name?.split(' ')[0] || 'Gestor'}! 👋
+            {getGreeting()}, {user?.full_name?.split(' ')[0] || 'Gestor'}!
           </h1>
           <p style={{ color: '#6B7280', fontSize: 14, margin: '4px 0 0' }}>
             {schoolName} • {formatDate(new Date())}
@@ -851,9 +851,9 @@ export default function GestorHome() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {alerts.map((a, i) => {
             const cfg = {
-              warning: { bg: '#FEF2F2', border: '#FECACA', color: '#991B1B', icon: '⚠️', badge: 'Atenção' },
-              success: { bg: '#F0FDF4', border: '#BBF7D0', color: '#166534', icon: '✅', badge: 'Ótimo' },
-              info: { bg: '#EFF6FF', border: '#BFDBFE', color: '#1E40AF', icon: 'ℹ️', badge: 'Info' },
+              warning: { bg: '#FEF2F2', border: '#FECACA', color: '#991B1B', icon: <i className="ti ti-alert-triangle" />, badge: 'Atenção' },
+              success: { bg: '#F0FDF4', border: '#BBF7D0', color: '#166534', icon: <i className="ti ti-circle-check" />, badge: 'Ótimo' },
+              info: { bg: '#EFF6FF', border: '#BFDBFE', color: '#1E40AF', icon: <i className="ti ti-info-circle" />, badge: 'Info' },
             }[a.type]
             return (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 14, background: cfg.bg, border: `1px solid ${cfg.border}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
@@ -874,12 +874,12 @@ export default function GestorHome() {
       {!loading && (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(6,1fr)', gap: 12 }}>
           {[
-            { label: 'Leads no período', value: leads.length, prev: prevLeadsCount, icon: '👤', color: '#8B5CF6', bg: '#F5F3FF', path: '/leads' },
-            { label: 'Conversas WhatsApp', value: waConvsRaw.length, prev: null as number | null, icon: '💬', color: '#00A896', bg: '#F0FDFA', path: '/whatsapp' },
-            { label: 'Matrículas', value: totalEnrolled, prev: prevEnrolled, icon: '🎓', color: '#F59E0B', bg: '#FFFBEB', path: '/enrollments' },
-            { label: 'Taxa de conversão', value: conversionRateNum.toFixed(1) + '%', prev: null as number | null, icon: '📈', color: '#10B981', bg: '#ECFDF5', path: '/leads' },
-            { label: 'Satisfação média', value: waSatisfStats ? waSatisfStats.avgScore.toFixed(1) + '/3' : '—', prev: null as number | null, icon: '⭐', color: '#F59E0B', bg: '#FFFBEB', path: '/surveys' },
-            { label: 'Tempo de resposta', value: waAvgResponse !== null ? (waAvgResponse < 60 ? `${waAvgResponse}min` : `${Math.floor(waAvgResponse / 60)}h ${waAvgResponse % 60}m`) : '—', prev: null as number | null, icon: '⚡', color: '#EF4444', bg: '#FEF2F2', path: '/whatsapp' },
+            { label: 'Leads no período', value: leads.length, prev: prevLeadsCount, icon: <i className="ti ti-users" />, color: '#8B5CF6', bg: '#F5F3FF', path: '/leads' },
+            { label: 'Conversas WhatsApp', value: waConvsRaw.length, prev: null as number | null, icon: <i className="ti ti-message-circle" />, color: '#00A896', bg: '#F0FDFA', path: '/whatsapp' },
+            { label: 'Matrículas', value: totalEnrolled, prev: prevEnrolled, icon: <i className="ti ti-school" />, color: '#F59E0B', bg: '#FFFBEB', path: '/enrollments' },
+            { label: 'Taxa de conversão', value: conversionRateNum.toFixed(1) + '%', prev: null as number | null, icon: <i className="ti ti-trending-up" />, color: '#10B981', bg: '#ECFDF5', path: '/leads' },
+            { label: 'Satisfação média', value: waSatisfStats ? waSatisfStats.avgScore.toFixed(1) + '/3' : '—', prev: null as number | null, icon: <i className="ti ti-star" />, color: '#F59E0B', bg: '#FFFBEB', path: '/surveys' },
+            { label: 'Tempo de resposta', value: waAvgResponse !== null ? (waAvgResponse < 60 ? `${waAvgResponse}min` : `${Math.floor(waAvgResponse / 60)}h ${waAvgResponse % 60}m`) : '—', prev: null as number | null, icon: <i className="ti ti-bolt" />, color: '#EF4444', bg: '#FEF2F2', path: '/whatsapp' },
           ].map(card => {
             const variation = card.prev !== null && card.prev > 0
               ? Math.round((Number(card.value) - card.prev) / card.prev * 100)
@@ -1261,7 +1261,11 @@ export default function GestorHome() {
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{[...Array(4)].map((_, i) => <div key={i} style={{ height: 44, borderRadius: 8, background: '#f1f5f9' }} />)}</div>
           ) : (() => {
-            const medals = ['🥇', '🥈', '🥉']
+            const medals = [
+              <i className="ti ti-trophy" style={{ fontSize: 14, color: '#F59E0B' }} />,
+              <i className="ti ti-medal" style={{ fontSize: 14, color: '#94a3b8' }} />,
+              <i className="ti ti-medal" style={{ fontSize: 14, color: '#CD7F32' }} />,
+            ]
             const avatarColors = ['#00A896', '#8B5CF6', '#F59E0B', '#EF4444', '#3B82F6']
             const teamStats = userRankings.map(u => {
               const waData = waTeamRanking.find(w => w.userId === u.user_id)
@@ -1322,11 +1326,11 @@ export default function GestorHome() {
                           </div>
                           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2, flexWrap: 'wrap' }}>
                             <span style={{ fontSize: 11, color: '#6B7280' }}>{u.enrollments_count} matrículas</span>
-                            <span style={{ fontSize: 11, color: '#00A896' }}>💬 {u.wa_count} conv.</span>
-                            {u.satisf_score && <span style={{ fontSize: 11, color: '#F59E0B' }}>⭐ {u.satisf_score.toFixed(1)}</span>}
+                            <span style={{ fontSize: 11, color: '#00A896' }}><i className="ti ti-message-circle" /> {u.wa_count} conv.</span>
+                            {u.satisf_score && <span style={{ fontSize: 11, color: '#F59E0B' }}><i className="ti ti-star" /> {u.satisf_score.toFixed(1)}</span>}
                             {rankingMode === 'whatsapp' && (
                               <span style={{ fontSize: 11, color: '#6366F1' }}>
-                                ⚡ {u.avg_response !== null ? (u.avg_response < 60 ? `${u.avg_response}m` : `${Math.floor(u.avg_response / 60)}h ${u.avg_response % 60}m`) : '—'}
+                                <i className="ti ti-bolt" /> {u.avg_response !== null ? (u.avg_response < 60 ? `${u.avg_response}m` : `${Math.floor(u.avg_response / 60)}h ${u.avg_response % 60}m`) : '—'}
                               </span>
                             )}
                           </div>
@@ -1337,7 +1341,7 @@ export default function GestorHome() {
                       </div>
                       {satisfPct !== null && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: 11, color: '#94a3b8', minWidth: 16 }}>😊</span>
+                          <i className="ti ti-mood-smile" style={{ fontSize: 13, color: '#94a3b8', minWidth: 16, flexShrink: 0 }} />
                           <div style={{ flex: 1, height: 6, borderRadius: 3, background: '#F3F4F6', overflow: 'hidden' }}>
                             <div style={{ width: `${satisfPct}%`, height: '100%', background: satisfPct >= 80 ? '#10B981' : satisfPct >= 50 ? '#F59E0B' : '#EF4444', borderRadius: 3, transition: 'width 0.8s ease' }} />
                           </div>
@@ -1379,7 +1383,7 @@ export default function GestorHome() {
                 const total = waConvsRaw.length
                 const botResp = waConvsRaw.filter(c => !c.assigned_user_id && hadResponseByJid[c.remote_jid] === true).length
                 const teamResp = waConvsRaw.filter(c => !!c.assigned_user_id && hadResponseByJid[c.remote_jid] === true).length
-                const noResp = waConvsRaw.filter(c => !hadResponseByJid[c.remote_jid] && c.status === 'closed').length
+                const noResp = waConvsRaw.filter(c => !hadResponseByJid[c.remote_jid]).length
                 const closedCount = waConvsRaw.filter(c => c.status === 'closed').length
                 return (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 6 }}>
@@ -1418,7 +1422,7 @@ export default function GestorHome() {
                 )}
                 {waSatisfStats && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#FFFBEB', borderRadius: 8, padding: '5px 10px', border: '1px solid #FDE68A' }}>
-                    <span style={{ fontSize: 12 }}>⭐</span>
+                    <i className="ti ti-star" style={{ fontSize: 14, color: '#D97706' }} />
                     <p style={{ margin: 0, fontSize: 11, color: '#92400E', fontWeight: 600 }}>{waSatisfStats.avgScore.toFixed(1)}/3 satisfação</p>
                   </div>
                 )}
@@ -1440,18 +1444,12 @@ export default function GestorHome() {
               const sc = waSatisfStats.avgScore
               const pct = (sc / 3) * 100
               const scColor = sc >= 2.5 ? '#10B981' : sc >= 1.5 ? '#F59E0B' : '#EF4444'
-              const scEmoji = sc >= 2.5 ? '😊' : sc >= 1.5 ? '😐' : '😟'
-              const r = 34, circ = 2 * Math.PI * r
+              const scIcon = sc >= 2.5 ? 'ti-mood-smile' : sc >= 1.5 ? 'ti-mood-neutral' : 'ti-mood-sad'
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 16, gap: 4 }}>
-                  <svg width={80} height={80} viewBox="0 0 80 80">
-                    <circle cx={40} cy={40} r={r} fill="none" stroke="#F3F4F6" strokeWidth={8} />
-                    <circle cx={40} cy={40} r={r} fill="none" stroke={scColor} strokeWidth={8}
-                      strokeDasharray={circ} strokeDashoffset={circ - (pct / 100) * circ}
-                      strokeLinecap="round" transform="rotate(-90 40 40)"
-                      style={{ transition: 'stroke-dashoffset 0.8s ease' }} />
-                    <text x={40} y={46} textAnchor="middle" fontSize={22}>{scEmoji}</text>
-                  </svg>
+                  <div style={{ width: 80, height: 80, borderRadius: '50%', border: `6px solid ${scColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <i className={`ti ${scIcon}`} style={{ fontSize: 32, color: scColor }} />
+                  </div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: scColor }}>{sc.toFixed(1)}/3</div>
                   <div style={{ color: '#6B7280', fontSize: 12 }}>{surveyScoresList.length} avaliações</div>
                 </div>
@@ -1459,15 +1457,15 @@ export default function GestorHome() {
             })()}
             <div style={{ marginBottom: 16 }}>
               {[
-                { emoji: '😊', label: 'Ótimo', score: 3, color: '#10B981' },
-                { emoji: '😐', label: 'Regular', score: 2, color: '#F59E0B' },
-                { emoji: '😟', label: 'Ruim', score: 1, color: '#EF4444' },
+                { icon: 'ti-mood-smile', label: 'Ótimo', score: 3, color: '#10B981' },
+                { icon: 'ti-mood-neutral', label: 'Regular', score: 2, color: '#F59E0B' },
+                { icon: 'ti-mood-sad', label: 'Ruim', score: 1, color: '#EF4444' },
               ].map(item => {
                 const count = surveyScoresList.filter(c => c.satisfaction_score === item.score).length
                 const pct = surveyScoresList.length > 0 ? Math.round(count / surveyScoresList.length * 100) : 0
                 return (
                   <div key={item.score} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                    <span style={{ fontSize: 16, minWidth: 60, color: '#374151', fontWeight: 500 }}>{item.emoji} {item.label}</span>
+                    <span style={{ fontSize: 13, minWidth: 68, color: item.color, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}><i className={`ti ${item.icon}`} style={{ fontSize: 16 }} />{item.label}</span>
                     <div style={{ flex: 1, height: 8, borderRadius: 4, background: '#F3F4F6', overflow: 'hidden' }}>
                       <div style={{ width: `${pct}%`, height: '100%', background: item.color, borderRadius: 4, transition: 'width 0.8s ease' }}/>
                     </div>
@@ -1482,7 +1480,7 @@ export default function GestorHome() {
                 {waSatisfStats.byAttendant.map(({ name, total: t, sum }, i) => (
                   <div key={name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f1f5f9' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 12 }}>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
+                      {i === 0 ? <i className="ti ti-trophy" style={{ fontSize: 13, color: '#F59E0B' }} /> : i === 1 ? <i className="ti ti-medal" style={{ fontSize: 13, color: '#94a3b8' }} /> : i === 2 ? <i className="ti ti-medal" style={{ fontSize: 13, color: '#CD7F32' }} /> : <span style={{ fontSize: 12 }}>#{i + 1}</span>}
                       <span style={{ fontSize: 12, color: '#1e2d6b', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1521,7 +1519,7 @@ export default function GestorHome() {
           }
           return (
             <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px 24px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>📊 Horários de maior movimento</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Horários de maior movimento</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '70px repeat(7,1fr)', gap: 4 }}>
                 <div />
                 {DAYS.map(d => (
@@ -1530,7 +1528,7 @@ export default function GestorHome() {
                 {(['manha', 'tarde', 'noite'] as const).map(period => (
                   <React.Fragment key={period}>
                     <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {period === 'manha' ? '🌅 Manhã' : period === 'tarde' ? '☀️ Tarde' : '🌙 Noite'}
+                      {period === 'manha' ? <><i className="ti ti-sunrise" /> Manhã</> : period === 'tarde' ? <><i className="ti ti-sun" /> Tarde</> : <><i className="ti ti-moon" /> Noite</>}
                     </div>
                     {heatmap.map(d => {
                       const val = d[period]
