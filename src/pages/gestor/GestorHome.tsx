@@ -215,7 +215,6 @@ export default function GestorHome() {
   const [waTeamRanking, setWaTeamRanking] = useState<{ userId: string; count: number }[]>([])
   const [waAvgResponse, setWaAvgResponse] = useState<number | null>(null)
   const [waSatisfStats, setWaSatisfStats] = useState<{ total: number; ruim: number; regular: number; otimo: number; avgScore: number; byAttendant: { name: string; total: number; sum: number }[] } | null>(null)
-  const [rankingMode, setRankingMode] = useState<'matriculas' | 'whatsapp' | 'satisfacao'>('matriculas')
   const [userRankings, setUserRankings] = useState<UserRanking[]>([])
   const [marketData, setMarketData] = useState<MarketData | null>(null)
   const [marketLoading, setMarketLoading] = useState(false)
@@ -841,7 +840,7 @@ export default function GestorHome() {
             </div>
           )}
           <button onClick={handleExportPDF} style={{ padding: '6px 16px', borderRadius: 20, border: '1px solid #E5E7EB', background: 'white', color: '#374151', fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-            ↓ Exportar PDF
+            <i className="ti ti-download" style={{ fontSize: 14 }} /> Exportar PDF
           </button>
         </div>
       </div>
@@ -874,12 +873,12 @@ export default function GestorHome() {
       {!loading && (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(6,1fr)', gap: 12 }}>
           {[
-            { label: 'Leads no período', value: leads.length, prev: prevLeadsCount, icon: <i className="ti ti-users" />, color: '#8B5CF6', bg: '#F5F3FF', path: '/leads' },
-            { label: 'Conversas WhatsApp', value: waConvsRaw.length, prev: null as number | null, icon: <i className="ti ti-message-circle" />, color: '#00A896', bg: '#F0FDFA', path: '/whatsapp' },
-            { label: 'Matrículas', value: totalEnrolled, prev: prevEnrolled, icon: <i className="ti ti-school" />, color: '#F59E0B', bg: '#FFFBEB', path: '/enrollments' },
-            { label: 'Taxa de conversão', value: conversionRateNum.toFixed(1) + '%', prev: null as number | null, icon: <i className="ti ti-trending-up" />, color: '#10B981', bg: '#ECFDF5', path: '/leads' },
-            { label: 'Satisfação média', value: waSatisfStats ? waSatisfStats.avgScore.toFixed(1) + '/3' : '—', prev: null as number | null, icon: <i className="ti ti-star" />, color: '#F59E0B', bg: '#FFFBEB', path: '/surveys' },
-            { label: 'Tempo de resposta', value: waAvgResponse !== null ? (waAvgResponse < 60 ? `${waAvgResponse}min` : `${Math.floor(waAvgResponse / 60)}h ${waAvgResponse % 60}m`) : '—', prev: null as number | null, icon: <i className="ti ti-bolt" />, color: '#EF4444', bg: '#FEF2F2', path: '/whatsapp' },
+            { label: 'Leads no período', value: leads.length, prev: prevLeadsCount, icon: <i className="ti ti-users" style={{ fontSize: 20, color: '#00A896' }} />, color: '#00A896', bg: '#F0FDFA', path: '/leads' },
+            { label: 'Conversas WhatsApp', value: waConvsRaw.length, prev: null as number | null, icon: <i className="ti ti-brand-whatsapp" style={{ fontSize: 20, color: '#25D366' }} />, color: '#25D366', bg: '#F0FDF4', path: '/whatsapp' },
+            { label: 'Matrículas', value: totalEnrolled, prev: prevEnrolled, icon: <i className="ti ti-school" style={{ fontSize: 20, color: '#7C3AED' }} />, color: '#7C3AED', bg: '#F5F3FF', path: '/enrollments' },
+            { label: 'Taxa de conversão', value: conversionRateNum.toFixed(1) + '%', prev: null as number | null, icon: <i className="ti ti-trending-up" style={{ fontSize: 20, color: '#F59E0B' }} />, color: '#F59E0B', bg: '#FFFBEB', path: '/leads' },
+            { label: 'Satisfação média', value: waSatisfStats ? waSatisfStats.avgScore.toFixed(1) + '/3' : '—', prev: null as number | null, icon: <i className="ti ti-star" style={{ fontSize: 20, color: '#F59E0B' }} />, color: '#F59E0B', bg: '#FFFBEB', path: '/surveys' },
+            { label: 'Tempo de resposta', value: waAvgResponse !== null ? (waAvgResponse < 60 ? `${waAvgResponse}min` : `${Math.floor(waAvgResponse / 60)}h ${waAvgResponse % 60}m`) : '—', prev: null as number | null, icon: <i className="ti ti-clock" style={{ fontSize: 20, color: '#EF4444' }} />, color: '#EF4444', bg: '#FEF2F2', path: '/whatsapp' },
           ].map(card => {
             const variation = card.prev !== null && card.prev > 0
               ? Math.round((Number(card.value) - card.prev) / card.prev * 100)
@@ -896,7 +895,7 @@ export default function GestorHome() {
                 <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>{card.label}</div>
                 {variation !== null && (
                   <div style={{ marginTop: 6, fontSize: 11, fontWeight: 600, color: variation >= 0 ? '#16a34a' : '#dc2626', display: 'flex', alignItems: 'center', gap: 3 }}>
-                    {variation >= 0 ? '↑' : '↓'}{Math.abs(variation)}% vs anterior
+                    <i className={variation >= 0 ? 'ti ti-arrow-up' : 'ti ti-arrow-down'} style={{ fontSize: 11 }} />{Math.abs(variation)}% vs anterior
                   </div>
                 )}
               </div>
@@ -965,9 +964,9 @@ export default function GestorHome() {
             </div>
           </div>
 
-          {/* Mercado + Diagnóstico INEP */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 18, flex: 1 }}>
+          {/* Mercado + Diagnóstico INEP lado a lado */}
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
+            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 18, height: 220, overflowY: 'auto', scrollbarWidth: 'thin' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                 <div style={{ width: 30, height: 30, borderRadius: 9, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <MapPin size={14} color="#F59E0B" />
@@ -1014,37 +1013,45 @@ export default function GestorHome() {
                 </div>
               )}
             </div>
-            {marketData?.inep_data && (
-              <div style={{ background: 'linear-gradient(135deg, #1e2d6b, #2d4494)', borderRadius: 14, padding: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <GraduationCap size={15} color="#fff" />
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Diagnóstico INEP</span>
+            <div style={{ background: marketData?.inep_data ? 'linear-gradient(135deg, #1e2d6b, #2d4494)' : '#fff', borderRadius: 16, border: marketData?.inep_data ? 'none' : '1px solid #e2e8f0', padding: 18, height: 220, overflowY: 'auto', scrollbarWidth: 'thin' }}>
+              {marketData?.inep_data ? (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <GraduationCap size={15} color="#fff" />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Diagnóstico INEP</span>
+                  </div>
+                  {marketData.inep_data.school_classification && (
+                    <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: '8px 12px', marginBottom: 10 }}>
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>Classificação: </span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{marketData.inep_data.school_classification}</span>
+                    </div>
+                  )}
+                  {marketData.inep_data.main_competitors && marketData.inep_data.main_competitors.length > 0 && (
+                    <div style={{ marginBottom: 8 }}>
+                      <p style={{ margin: '0 0 6px', fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>Principais concorrentes</p>
+                      {marketData.inep_data.main_competitors.slice(0, 3).map((c, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                          <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#60a5fa', flexShrink: 0 }} />
+                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>{c}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {marketData.inep_data.market_opportunity && (
+                    <div style={{ background: 'rgba(0,168,150,0.2)', borderRadius: 8, padding: '7px 10px', marginTop: 8 }}>
+                      <p style={{ margin: '0 0 2px', fontSize: 10, fontWeight: 600, color: '#5eead4', textTransform: 'uppercase' }}>Oportunidade</p>
+                      <p style={{ margin: 0, fontSize: 11, color: '#ccfbf1', lineHeight: 1.4 }}>{marketData.inep_data.market_opportunity}</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 8, color: '#94a3b8', textAlign: 'center' }}>
+                  <i className="ti ti-building-community" style={{ fontSize: 28 }} />
+                  <p style={{ margin: 0, fontSize: 12 }}>Diagnóstico INEP não disponível</p>
+                  <p style={{ margin: 0, fontSize: 11 }}>Configure a localização da escola</p>
                 </div>
-                {marketData.inep_data.school_classification && (
-                  <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: '8px 12px', marginBottom: 10 }}>
-                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>Classificação: </span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{marketData.inep_data.school_classification}</span>
-                  </div>
-                )}
-                {marketData.inep_data.main_competitors && marketData.inep_data.main_competitors.length > 0 && (
-                  <div style={{ marginBottom: 8 }}>
-                    <p style={{ margin: '0 0 6px', fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>Principais concorrentes</p>
-                    {marketData.inep_data.main_competitors.slice(0, 3).map((c, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#60a5fa', flexShrink: 0 }} />
-                        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>{c}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {marketData.inep_data.market_opportunity && (
-                  <div style={{ background: 'rgba(0,168,150,0.2)', borderRadius: 8, padding: '7px 10px', marginTop: 8 }}>
-                    <p style={{ margin: '0 0 2px', fontSize: 10, fontWeight: 600, color: '#5eead4', textTransform: 'uppercase' }}>Oportunidade</p>
-                    <p style={{ margin: 0, fontSize: 11, color: '#ccfbf1', lineHeight: 1.4 }}>{marketData.inep_data.market_opportunity}</p>
-                  </div>
-                )}
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1061,7 +1068,7 @@ export default function GestorHome() {
         <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
       </div>
 
-      {/* Linha A: Leads por dia | Leads por origem */}
+      {/* Grid 3 colunas: Leads por dia | Leads por origem | Funil */}
       {(() => {
         const { start } = getPeriodRange()
         const days: { date: string; count: number }[] = []
@@ -1076,32 +1083,32 @@ export default function GestorHome() {
           })
           cur.setDate(cur.getDate() + 1)
         }
-        return (days.length > 1 || sourceSorted.length > 0) ? (
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
-            {days.length > 1 && (
-              <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Leads por dia</h3>
-                <div style={{ flex: 1, minHeight: 120 }}><ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={days} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="gradLeads" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                    <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} formatter={(v) => [v, 'Leads']} />
-                    <Area type="monotone" dataKey="count" name="Leads" stroke="#8B5CF6" strokeWidth={2} fill="url(#gradLeads)" />
-                  </AreaChart>
-                </ResponsiveContainer></div>
-              </div>
-            )}
-            {sourceSorted.length > 0 && (
-              <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Leads por origem</h3>
-                <div style={{ flex: 1, minHeight: 120 }}><ResponsiveContainer width="100%" height="100%">
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 16, alignItems: 'stretch' }}>
+            {/* Col 1: Leads por dia */}
+            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Leads por dia</h3>
+              <div style={{ flex: 1, minHeight: 160 }}><ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={days} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gradLeads" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#00A896" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#00A896" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                  <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} formatter={(v) => [v, 'Leads']} />
+                  <Area type="monotone" dataKey="count" name="Leads" stroke="#00A896" strokeWidth={2} fill="url(#gradLeads)" />
+                </AreaChart>
+              </ResponsiveContainer></div>
+            </div>
+            {/* Col 2: Leads por origem */}
+            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Leads por origem</h3>
+              {sourceSorted.length > 0 ? (
+                <div style={{ flex: 1, minHeight: 160 }}><ResponsiveContainer width="100%" height="100%">
                   <BarChart data={sourceSorted} margin={{ top: 0, right: 20, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6"/>
                     <XAxis dataKey="name" tick={{ fontSize: 11 }}/>
@@ -1114,75 +1121,88 @@ export default function GestorHome() {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer></div>
-              </div>
-            )}
-          </div>
-        ) : null
-      })()}
-
-      {/* Linha B: Funil + Ranking */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
-
-        {/* Funil de leads */}
-        <SectionCard title="Funil de Leads" subtitle="Conversão atual" icon={<Activity />} iconBg="#EDE9FE" iconColor="#8B5CF6" action={() => navigate('/leads')} actionLabel="Ver leads">
-          {loading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 36, borderRadius: 8, background: '#f1f5f9' }} />)}</div>
-          ) : totalLeads === 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '16px 0', textAlign: 'center' }}>
-              <Users size={28} color="#cbd5e1" strokeWidth={1.5} />
-              <p style={{ margin: 0, fontSize: 13, color: '#94a3b8', lineHeight: 1.5 }}>Nenhum lead cadastrado ainda.<br />Comece captando interessados.</p>
-              <button onClick={() => navigate('/leads')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, background: '#EDE9FE', color: '#8B5CF6', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                Ir para Leads <ArrowRight size={12} />
-              </button>
+              ) : (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 13 }}>Sem dados de origem</div>
+              )}
             </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <PieChart width={160} height={160}>
-                <Pie data={pieData} cx={80} cy={80} innerRadius={46} outerRadius={72} dataKey="value" paddingAngle={3}>
-                  {pieData.map((d, i) => <Cell key={i} fill={d.fill} />)}
-                </Pie>
-                <Tooltip formatter={(value, name) => [fmt(Number(value)), name]} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
-              </PieChart>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-                {pieData.map(d => {
-                  const pct = totalLeads > 0 ? Math.round((d.value / totalLeads) * 100) : 0
-                  return (
-                    <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 3, background: d.fill, flexShrink: 0 }} />
-                      <div style={{ flex: 1 }}>
-                        <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#1e293b' }}>{d.name}</p>
-                        <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>{fmt(d.value)} · {pct}%</p>
+            {/* Col 3: Funil */}
+            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 10, background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <i className="ti ti-filter" style={{ fontSize: 16, color: '#8B5CF6' }} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Funil de Leads</h3>
+                    <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Conversão atual</p>
+                  </div>
+                </div>
+                <button onClick={() => navigate('/leads')} style={{ fontSize: 11, color: '#8B5CF6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  Ver leads <i className="ti ti-chevron-right" style={{ fontSize: 12 }} />
+                </button>
+              </div>
+              <div style={{ padding: 20 }}>
+                {loading ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 36, borderRadius: 8, background: '#f1f5f9' }} />)}</div>
+                ) : totalLeads === 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '16px 0', textAlign: 'center' }}>
+                    <i className="ti ti-users" style={{ fontSize: 28, color: '#cbd5e1' }} />
+                    <p style={{ margin: 0, fontSize: 13, color: '#94a3b8', lineHeight: 1.5 }}>Nenhum lead cadastrado ainda.</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <PieChart width={130} height={130}>
+                      <Pie data={pieData} cx={65} cy={65} innerRadius={38} outerRadius={60} dataKey="value" paddingAngle={3}>
+                        {pieData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                      </Pie>
+                      <Tooltip formatter={(value, name) => [fmt(Number(value)), name]} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
+                    </PieChart>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+                      {pieData.map(d => {
+                        const pct = totalLeads > 0 ? Math.round((d.value / totalLeads) * 100) : 0
+                        return (
+                          <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div style={{ width: 8, height: 8, borderRadius: 2, background: d.fill, flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</p>
+                              <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>{fmt(d.value)} · {pct}%</p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      <div style={{ background: '#f0fdf9', borderRadius: 8, padding: '6px 10px', marginTop: 2 }}>
+                        <p style={{ margin: 0, fontSize: 10, color: '#065f46' }}>Taxa lead → matrícula</p>
+                        <p style={{ margin: '1px 0 0', fontSize: 18, fontWeight: 700, color: '#00A896' }}>{conversionRateNum.toFixed(1)}%</p>
                       </div>
                     </div>
-                  )
-                })}
-                <div style={{ background: '#f0fdf9', borderRadius: 8, padding: '8px 12px', marginTop: 4 }}>
-                  <p style={{ margin: 0, fontSize: 11, color: '#065f46' }}>Taxa lead → matrícula</p>
-                  <p style={{ margin: '2px 0 0', fontSize: 20, fontWeight: 700, color: '#00A896' }}>{conversionRateNum.toFixed(1)}%</p>
-                </div>
+                  </div>
+                )}
               </div>
             </div>
-          )}
-        </SectionCard>
-
-        {/* Ranking de usuários */}
-        <SectionCard title="Ranking da Equipe" subtitle={rankingMode === 'matriculas' ? 'Por matrículas confirmadas' : rankingMode === 'whatsapp' ? 'Por atendimentos WhatsApp' : 'Por satisfação'} icon={<Trophy />} iconBg="#FEF3C7" iconColor="#F59E0B" action={() => navigate('/reports')} actionLabel="Ver relatórios">
-          <div style={{ display: 'flex', gap: 4, marginBottom: 12, background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
-            {(['matriculas', 'whatsapp', 'satisfacao'] as const).map(mode => (
-              <button key={mode} onClick={() => setRankingMode(mode)} style={{ flex: 1, padding: '5px 0', borderRadius: 6, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', background: rankingMode === mode ? '#fff' : 'transparent', color: rankingMode === mode ? '#1e2d6b' : '#94a3b8', boxShadow: rankingMode === mode ? '0 1px 4px rgba(0,0,0,0.08)' : 'none' }}>
-                {mode === 'matriculas' ? 'Matrículas' : mode === 'whatsapp' ? 'WhatsApp' : 'Satisfação'}
-              </button>
-            ))}
           </div>
+        )
+      })()}
+
+      {/* Ranking da Equipe — tabela unificada */}
+      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 10, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <i className="ti ti-trophy" style={{ fontSize: 16, color: '#F59E0B' }} />
+            </div>
+            <div>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Ranking da Equipe</h3>
+              <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Todas as métricas</p>
+            </div>
+          </div>
+          <button onClick={() => navigate('/reports')} style={{ fontSize: 11, color: '#F59E0B', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+            Ver relatórios <i className="ti ti-chevron-right" style={{ fontSize: 12 }} />
+          </button>
+        </div>
+        <div style={{ padding: '0 20px 20px' }}>
           {loading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{[...Array(4)].map((_, i) => <div key={i} style={{ height: 44, borderRadius: 8, background: '#f1f5f9' }} />)}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 16 }}>{[...Array(4)].map((_, i) => <div key={i} style={{ height: 36, borderRadius: 8, background: '#f1f5f9' }} />)}</div>
           ) : (() => {
-            const medals = [
-              <i className="ti ti-trophy" style={{ fontSize: 14, color: '#F59E0B' }} />,
-              <i className="ti ti-medal" style={{ fontSize: 14, color: '#94a3b8' }} />,
-              <i className="ti ti-medal" style={{ fontSize: 14, color: '#CD7F32' }} />,
-            ]
-            const avatarColors = ['#00A896', '#8B5CF6', '#F59E0B', '#EF4444', '#3B82F6']
             const teamStats = userRankings.map(u => {
               const waData = waTeamRanking.find(w => w.userId === u.user_id)
               const satisfConvs = waConvsRaw.filter(c =>
@@ -1200,77 +1220,59 @@ export default function GestorHome() {
               const avgResp = respDiffs.length > 0
                 ? Math.round(respDiffs.reduce((s, v) => s + v, 0) / respDiffs.length)
                 : null
-              return {
-                ...u,
-                wa_count: waData?.count ?? 0,
-                satisf_score: satisfScore,
-                satisf_count: satisfConvs.length,
-                avg_response: avgResp,
-              }
-            })
-            const sortedTeam = [...teamStats].sort((a, b) => {
-              if (rankingMode === 'matriculas') return b.enrollments_count - a.enrollments_count
-              if (rankingMode === 'whatsapp') return b.wa_count - a.wa_count
-              return (b.satisf_score ?? 0) - (a.satisf_score ?? 0)
-            })
-            return sortedTeam.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '20px 0', color: '#94a3b8' }}>
-                <Users size={28} strokeWidth={1.5} style={{ margin: '0 auto 8px' }} />
-                <p style={{ margin: 0, fontSize: 13 }}>Nenhum dado disponível</p>
+              return { ...u, wa_count: waData?.count ?? 0, satisf_score: satisfScore, avg_response: avgResp }
+            }).sort((a, b) => b.enrollments_count - a.enrollments_count)
+            if (teamStats.length === 0) return (
+              <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8' }}>
+                <i className="ti ti-users" style={{ fontSize: 28 }} />
+                <p style={{ margin: '8px 0 0', fontSize: 13 }}>Nenhum dado disponível</p>
               </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {sortedTeam.map((u, i) => {
-                  const initials = u.full_name.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
-                  const avatarColor = avatarColors[i % avatarColors.length]
-                  const satisfPct = u.satisf_score ? Math.round((u.satisf_score / 3) * 100) : null
-                  const mainValue = rankingMode === 'matriculas'
-                    ? u.enrollments_count
-                    : rankingMode === 'whatsapp'
-                    ? u.wa_count
-                    : u.satisf_score ? u.satisf_score.toFixed(1) + '/3' : '—'
-                  return (
-                    <div key={u.user_id} style={{ padding: '12px 14px', borderRadius: 12, background: i === 0 ? '#FFFBEB' : '#F8FAFC', border: `1px solid ${i === 0 ? '#FDE68A' : '#F1F5F9'}`, marginBottom: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: satisfPct !== null ? 8 : 0 }}>
-                        <div style={{ width: 36, height: 36, borderRadius: '50%', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 13, fontWeight: 700, color: '#fff' }}>
-                          {initials}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            {i < 3 && <span style={{ fontSize: 14 }}>{medals[i]}</span>}
-                            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1e2d6b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.full_name}</p>
-                          </div>
-                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 11, color: '#6B7280' }}>{u.enrollments_count} matrículas</span>
-                            <span style={{ fontSize: 11, color: '#00A896' }}><i className="ti ti-message-circle" /> {u.wa_count} conv.</span>
-                            {u.satisf_score && <span style={{ fontSize: 11, color: '#F59E0B' }}><i className="ti ti-star" /> {u.satisf_score.toFixed(1)}</span>}
-                            {rankingMode === 'whatsapp' && (
-                              <span style={{ fontSize: 11, color: '#6366F1' }}>
-                                <i className="ti ti-bolt" /> {u.avg_response !== null ? (u.avg_response < 60 ? `${u.avg_response}m` : `${Math.floor(u.avg_response / 60)}h ${u.avg_response % 60}m`) : '—'}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <p style={{ margin: 0, fontSize: 20, fontWeight: 800, color: i === 0 ? '#F59E0B' : '#1e2d6b' }}>{mainValue}</p>
-                        </div>
-                      </div>
-                      {satisfPct !== null && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <i className="ti ti-mood-smile" style={{ fontSize: 13, color: '#94a3b8', minWidth: 16, flexShrink: 0 }} />
-                          <div style={{ flex: 1, height: 6, borderRadius: 3, background: '#F3F4F6', overflow: 'hidden' }}>
-                            <div style={{ width: `${satisfPct}%`, height: '100%', background: satisfPct >= 80 ? '#10B981' : satisfPct >= 50 ? '#F59E0B' : '#EF4444', borderRadius: 3, transition: 'width 0.8s ease' }} />
-                          </div>
-                          <span style={{ fontSize: 11, color: '#374151', fontWeight: 600, minWidth: 32 }}>{satisfPct}%</span>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
+            )
+            return (
+              <div style={{ maxHeight: 240, overflowY: 'auto', scrollbarWidth: 'thin' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
+                      {[
+                        { icon: 'ti-award', label: '#' },
+                        { icon: 'ti-user', label: 'Atendente' },
+                        { icon: 'ti-school', label: 'Matrículas' },
+                        { icon: 'ti-brand-whatsapp', label: 'Conv. WA' },
+                        { icon: 'ti-clock', label: 'T. Resposta' },
+                        { icon: 'ti-star', label: 'Satisfação' },
+                      ].map(h => (
+                        <th key={h.label} style={{ padding: '10px 8px', textAlign: h.label === '#' ? 'center' : 'left', fontWeight: 600, color: '#6b7280', fontSize: 11, whiteSpace: 'nowrap' }}>
+                          <i className={`ti ${h.icon}`} style={{ marginRight: 4 }} />{h.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {teamStats.map((u, i) => (
+                      <tr key={u.user_id} style={{ background: i % 2 === 1 ? '#f8fafc' : '#fff', borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '9px 8px', textAlign: 'center', width: 36 }}>
+                          {i === 0 ? <i className="ti ti-trophy" style={{ color: '#F59E0B', fontSize: 14 }} />
+                            : i === 1 ? <i className="ti ti-medal" style={{ color: '#94a3b8', fontSize: 14 }} />
+                            : i === 2 ? <i className="ti ti-medal" style={{ color: '#CD7F32', fontSize: 14 }} />
+                            : <span style={{ color: '#94a3b8', fontWeight: 600 }}>#{i + 1}</span>}
+                        </td>
+                        <td style={{ padding: '9px 8px', fontWeight: 600, color: '#1e2d6b', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.full_name}</td>
+                        <td style={{ padding: '9px 8px', fontWeight: 700, color: '#7C3AED' }}>{u.enrollments_count}</td>
+                        <td style={{ padding: '9px 8px', fontWeight: 700, color: '#25D366' }}>{u.wa_count}</td>
+                        <td style={{ padding: '9px 8px', color: '#EF4444', fontWeight: 600 }}>
+                          {u.avg_response !== null ? (u.avg_response < 60 ? `${u.avg_response}m` : `${Math.floor(u.avg_response / 60)}h${u.avg_response % 60}m`) : '—'}
+                        </td>
+                        <td style={{ padding: '9px 8px', color: '#F59E0B', fontWeight: 600 }}>
+                          {u.satisf_score !== null ? u.satisf_score!.toFixed(1) + '/3' : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )
           })()}
-        </SectionCard>
+        </div>
       </div>
 
       {/* ── BLOCO 2: WhatsApp ────────────────────────────────────────────────── */}
@@ -1449,23 +1451,6 @@ export default function GestorHome() {
                 )
               })}
             </div>
-            {waSatisfStats.byAttendant.length > 0 && (
-              <div>
-                <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Ranking por atendente</p>
-                {waSatisfStats.byAttendant.map(({ name, total: t, sum }, i) => (
-                  <div key={name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f1f5f9' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {i === 0 ? <i className="ti ti-trophy" style={{ fontSize: 13, color: '#F59E0B' }} /> : i === 1 ? <i className="ti ti-medal" style={{ fontSize: 13, color: '#94a3b8' }} /> : i === 2 ? <i className="ti ti-medal" style={{ fontSize: 13, color: '#CD7F32' }} /> : <span style={{ fontSize: 12 }}>#{i + 1}</span>}
-                      <span style={{ fontSize: 12, color: '#1e2d6b', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#10b981' }}>{(sum / t).toFixed(1)}/3</span>
-                      <span style={{ fontSize: 10, color: '#94a3b8' }}>({t} av.)</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </SectionCard>
         )}
       </div>
@@ -1476,144 +1461,152 @@ export default function GestorHome() {
         <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
       </div>
 
-      {/* Linha A: Histórico full width */}
-      {hasHistory && (
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Histórico de alunos por ano</h3>
-          <div style={{ flex: 1, minHeight: 120 }}><ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartDataWithTotal} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gradVet" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#00A896" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#00A896" stopOpacity={0}/>
-                </linearGradient>
-                <linearGradient id="gradNov" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6"/>
-              <XAxis dataKey="year" tick={{ fontSize: 12 }}/>
-              <YAxis tick={{ fontSize: 12 }}/>
-              <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} formatter={(value, name) => [fmt(Number(value)), name === 'novatos' ? 'Novatos' : name === 'veteranos' ? 'Veteranos' : 'Total']} />
-              <Legend/>
-              <Area type="monotone" dataKey="veteranos" name="Veteranos" stroke="#00A896" strokeWidth={2} fill="url(#gradVet)"/>
-              <Area type="monotone" dataKey="novatos" name="Novatos" stroke="#8B5CF6" strokeWidth={2} fill="url(#gradNov)"/>
-            </AreaChart>
-          </ResponsiveContainer></div>
+      {/* Linha A: Evolução de matrículas — placeholder */}
+      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <i className="ti ti-chart-area" style={{ fontSize: 16, color: '#1e2d6b' }} />
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Evolução de matrículas</span>
         </div>
-      )}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 0' }}>
+          <i className="ti ti-file-upload" style={{ fontSize: 48, color: '#9ca3af' }} />
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151' }}>Importe o relatório do seu sistema de gestão</p>
+          <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', textAlign: 'center', maxWidth: 360 }}>Envie um PDF exportado do seu sistema para visualizar a evolução histórica de matrículas por ano.</p>
+          <button onClick={() => navigate('/settings')}
+            style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1e2d6b', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
+            <i className="ti ti-settings" style={{ fontSize: 14 }} /> Ir para configurações
+          </button>
+        </div>
+      </div>
 
-      {/* Linha B: Transferências | AI Insight */}
+      {/* Linha B: Pesquisa de satisfação | Transferências por motivo */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
-        <SectionCard title="Transferências recentes" subtitle="Saídas registradas" icon={<AlertTriangle />} iconBg="#FFE4E6" iconColor="#F43F5E" action={() => navigate('/reports')} actionLabel="Ver todas">
-          {loading ? (
-            <div style={{ color: '#94a3b8', fontSize: 13 }}>Carregando...</div>
-          ) : transfers.length === 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '20px 0', color: '#94a3b8' }}>
-              <CheckCircle size={28} strokeWidth={1.5} color="#22c55e" />
+        {/* Card A — Pesquisa de satisfação */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <i className="ti ti-clipboard-check" style={{ fontSize: 16, color: '#1e2d6b' }} />
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Pesquisa de satisfação</span>
+          </div>
+          {surveyScoresList.length === 0 ? (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '20px 0', color: '#94a3b8' }}>
+              <i className="ti ti-clipboard-x" style={{ fontSize: 32 }} />
+              <p style={{ margin: 0, fontSize: 13 }}>Nenhuma avaliação no período</p>
+            </div>
+          ) : (() => {
+            const total = surveyScoresList.length
+            const avg = total > 0 ? surveyScoresList.reduce((s, c) => s + (c.satisfaction_score ?? 0), 0) / total : 0
+            const pieData = [
+              { name: 'Ótimo', value: surveyScoresList.filter(c => c.satisfaction_score === 3).length, fill: '#10B981' },
+              { name: 'Regular', value: surveyScoresList.filter(c => c.satisfaction_score === 2).length, fill: '#F59E0B' },
+              { name: 'Ruim', value: surveyScoresList.filter(c => c.satisfaction_score === 1).length, fill: '#EF4444' },
+            ]
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                <div style={{ position: 'relative', width: 140, height: 140 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={pieData} cx="50%" cy="50%" innerRadius={42} outerRadius={62} dataKey="value" strokeWidth={0}>
+                        {pieData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                    <span style={{ fontSize: 20, fontWeight: 800, color: '#1e2d6b', lineHeight: 1 }}>{total}</span>
+                    <span style={{ fontSize: 10, color: '#94a3b8' }}>respostas</span>
+                  </div>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: avg >= 2.5 ? '#10B981' : avg >= 1.5 ? '#F59E0B' : '#EF4444' }}>
+                  Média: {avg.toFixed(1)}/3
+                </div>
+                <div style={{ display: 'flex', gap: 12, fontSize: 11 }}>
+                  {pieData.map(d => (
+                    <span key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#374151' }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: d.fill, display: 'inline-block' }} />
+                      {d.name} ({d.value})
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+        </div>
+
+        {/* Card B — Transferências por motivo */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <i className="ti ti-arrows-transfer-up" style={{ fontSize: 16, color: '#1e2d6b' }} />
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Transferências por motivo</span>
+          </div>
+          {transfers.length === 0 ? (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '20px 0', color: '#94a3b8' }}>
+              <i className="ti ti-circle-check" style={{ fontSize: 32, color: '#22c55e' }} />
               <p style={{ margin: 0, fontSize: 13, color: '#166534', fontWeight: 600 }}>Nenhuma transferência registrada</p>
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {transfers.map(t => {
-                const REASON_COLORS: Record<string, { bg: string; color: string }> = {
-                  financial: { bg: '#FEE2E2', color: '#DC2626' },
-                  competition: { bg: '#FEF3C7', color: '#D97706' },
-                  pedagogical: { bg: '#DBEAFE', color: '#2563EB' },
-                  relocation: { bg: '#F3F4F6', color: '#6B7280' },
-                  distance: { bg: '#FEF9C3', color: '#854D0E' },
-                  other: { bg: '#F3F4F6', color: '#6B7280' },
-                }
-                const rc = t.reason_category ? (REASON_COLORS[t.reason_category] ?? { bg: '#F3F4F6', color: '#6B7280' }) : null
-                return (
-                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: '#fff', border: '1px solid #f1f5f9', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-                    <ArrowRight size={14} color="#F43F5E" style={{ flexShrink: 0 }} />
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.student_name}</p>
-                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#94a3b8' }}>{t.course_grade}</p>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
-                      <span style={{ fontSize: 10, color: '#94a3b8' }}>{new Date(t.transfer_date).toLocaleDateString('pt-BR')}</span>
-                      {t.reason_category && rc && (
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: rc.bg, color: rc.color }}>
-                          {REASON_LABELS[t.reason_category] || t.reason_category}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </SectionCard>
-        {(aiInsightLoading || aiInsight) && (
-          <div style={{ background: '#F8FAFC', borderRadius: 14, border: '1px solid #E2E8F0', padding: '10px 14px', minHeight: 64, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <Sparkles size={13} color="#6366F1" />
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#374151', flex: 1 }}>Análise da IA</span>
-              {aiLastUpdated && !aiExpanded && (
-                <span style={{ fontSize: 10, color: '#94a3b8' }}>{new Date(aiLastUpdated).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-              )}
-              {latestFunnel && (
-                <button onClick={() => { aiInsightFetched.current = false; fetchAiInsight(latestFunnel, true) }} disabled={aiInsightLoading}
-                  style={{ padding: '2px 4px', borderRadius: 6, background: 'none', border: '1px solid #E2E8F0', cursor: aiInsightLoading ? 'not-allowed' : 'pointer', opacity: aiInsightLoading ? 0.5 : 1, display: 'flex', alignItems: 'center' }}>
-                  <RefreshCw size={16} color="#94a3b8" />
-                </button>
-              )}
-            </div>
-            {aiInsightLoading ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                {[...Array(2)].map((_, i) => <div key={i} style={{ height: 10, borderRadius: 4, background: '#E2E8F0' }} />)}
+          ) : (() => {
+            const grouped = Object.entries(
+              transfers.reduce<Record<string, number>>((acc, t) => {
+                const key = t.reason_category ?? 'other'
+                acc[key] = (acc[key] ?? 0) + 1
+                return acc
+              }, {})
+            ).map(([key, value]) => ({ reason: REASON_LABELS[key] ?? key, value }))
+              .sort((a, b) => b.value - a.value)
+            return (
+              <div style={{ flex: 1, minHeight: 140 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart layout="vertical" data={grouped} margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+                    <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <YAxis type="category" dataKey="reason" tick={{ fontSize: 11 }} width={90} />
+                    <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }} />
+                    <Bar dataKey="value" name="Transferências" fill="#00A896" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
-            ) : aiExpanded ? (
-              <div style={{ marginTop: 4 }}>
-                {aiInsight?.split('\n').filter(p => p.trim()).map((para, i) => (
-                  <p key={i} style={{ margin: i === 0 ? 0 : '6px 0 0', fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{para}</p>
-                ))}
-                <button onClick={() => setAiExpanded(false)} style={{ marginTop: 8, fontSize: 11, color: '#6366F1', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600 }}>
-                  Ver menos
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-                <p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.5, flex: 1, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, textOverflow: 'ellipsis' }}>
-                  {aiInsight?.split('\n').filter(p => p.trim())[0] ?? ''}
-                </p>
-                <button onClick={() => setAiExpanded(true)} style={{ fontSize: 11, color: '#6366F1', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>
-                  Ver análise completa
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* ── L9: Acesso rápido ────────────────────────────────────────────────── */}
-      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 14px' }}>Acesso rápido</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
-          {[
-            { label: 'Leads', desc: 'Funil de captação', icon: <Users size={18} color="#8B5CF6" />, bg: '#EDE9FE', path: '/leads' },
-            { label: 'Visitas', desc: 'Agendar e acompanhar', icon: <BarChart3 size={18} color="#F59E0B" />, bg: '#FEF3C7', path: '/visits' },
-            { label: 'WhatsApp', desc: 'Central de mensagens', icon: <MessageCircle size={18} color="#10B981" />, bg: '#D1FAE5', path: '/whatsapp' },
-            { label: 'Relatórios', desc: 'Análise completa', icon: <TrendingUp size={18} color="#3B82F6" />, bg: '#DBEAFE', path: '/reports' },
-            { label: 'Matrículas', desc: 'Controle de alunos', icon: <GraduationCap size={18} color="#00A896" />, bg: '#E6F7F5', path: '/enrollments' },
-          ].map(item => (
-            <button key={item.path} onClick={() => navigate(item.path)}
-              style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6, padding: '12px 14px', borderRadius: 12, background: item.bg, border: 'none', cursor: 'pointer', textAlign: 'left', transition: 'opacity 0.15s' }}
-              onMouseEnter={e => (e.currentTarget.style.opacity = '0.8')}
-              onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
-            >
-              {item.icon}
-              <div>
-                <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1e293b' }}>{item.label}</p>
-                <p style={{ margin: 0, fontSize: 11, color: '#64748b' }}>{item.desc}</p>
-              </div>
-            </button>
-          ))}
+            )
+          })()}
         </div>
       </div>
+
+      {/* AI Insight */}
+      {(aiInsightLoading || aiInsight) && (
+        <div style={{ background: '#F8FAFC', borderRadius: 14, border: '1px solid #E2E8F0', padding: '10px 14px', minHeight: 64, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <Sparkles size={13} color="#6366F1" />
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#374151', flex: 1 }}>Análise da IA</span>
+            {aiLastUpdated && !aiExpanded && (
+              <span style={{ fontSize: 10, color: '#94a3b8' }}>{new Date(aiLastUpdated).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+            )}
+            {latestFunnel && (
+              <button onClick={() => { aiInsightFetched.current = false; fetchAiInsight(latestFunnel, true) }} disabled={aiInsightLoading}
+                style={{ padding: '2px 4px', borderRadius: 6, background: 'none', border: '1px solid #E2E8F0', cursor: aiInsightLoading ? 'not-allowed' : 'pointer', opacity: aiInsightLoading ? 0.5 : 1, display: 'flex', alignItems: 'center' }}>
+                <RefreshCw size={16} color="#94a3b8" />
+              </button>
+            )}
+          </div>
+          {aiInsightLoading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {[...Array(2)].map((_, i) => <div key={i} style={{ height: 10, borderRadius: 4, background: '#E2E8F0' }} />)}
+            </div>
+          ) : aiExpanded ? (
+            <div style={{ marginTop: 4 }}>
+              {aiInsight?.split('\n').filter(p => p.trim()).map((para, i) => (
+                <p key={i} style={{ margin: i === 0 ? 0 : '6px 0 0', fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{para}</p>
+              ))}
+              <button onClick={() => setAiExpanded(false)} style={{ marginTop: 8, fontSize: 11, color: '#6366F1', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600 }}>
+                Ver menos
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+              <p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.5, flex: 1, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, textOverflow: 'ellipsis' }}>
+                {aiInsight?.split('\n').filter(p => p.trim())[0] ?? ''}
+              </p>
+              <button onClick={() => setAiExpanded(true)} style={{ fontSize: 11, color: '#6366F1', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                Ver análise completa
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <CampaignGeneratorModal
         isOpen={showModal}
