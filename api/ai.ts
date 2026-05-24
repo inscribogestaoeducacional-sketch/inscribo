@@ -640,6 +640,47 @@ Comentários: ${JSON.stringify(comments)}
       return res.json({ result: parsed })
     }
 
+    // ── INTELIGÊNCIA DE MERCADO (INEP) ────────────────────────────────────────
+    if (action === 'market_insight') {
+      const { marketShare, myRank, totalSchools, totalStudents, myStudents, city, state, schoolName } = payload as {
+        marketShare: number; myRank: number | null; totalSchools: number
+        totalStudents: number; myStudents: number; city: string; state: string; schoolName?: string
+      }
+      const name = schoolName || 'a escola'
+      const systemPrompt = `Você é um consultor estratégico especialista em gestão escolar no Brasil.
+Seja direto, prático e use linguagem simples. Máximo 150 palavras no total.`
+      const userPrompt = `Análise de mercado para ${name} em ${city}/${state}:
+- Market share: ${marketShare}% (posição #${myRank ?? '?'} de ${totalSchools} escolas privadas)
+- Total de alunos na rede privada da cidade: ${totalStudents}
+- Alunos da escola: ${myStudents}
+- Média por escola: ${totalSchools > 0 ? Math.round(totalStudents / totalSchools) : 0} alunos
+
+Gere uma análise em 3 parágrafos curtos:
+1. Posição atual no mercado (1-2 frases)
+2. Principal oportunidade identificada (1-2 frases)
+3. Recomendação prática para os próximos 3 meses (1-2 frases)`
+      const response = await fetch(ANTHROPIC_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.ANTHROPIC_API_KEY!,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 300,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userPrompt }]
+        })
+      })
+      if (!response.ok) {
+        const err = await response.text()
+        throw new Error(`Anthropic API error ${response.status}: ${err}`)
+      }
+      const data = await response.json() as { content: { text: string }[] }
+      return res.json({ result: data.content[0].text })
+    }
+
     return res.status(400).json({ error: `Action desconhecida: ${action}` })
 
   } catch (error) {

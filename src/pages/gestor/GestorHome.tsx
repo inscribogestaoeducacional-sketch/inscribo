@@ -72,6 +72,13 @@ interface StudentTransfer {
   transfer_date: string; reason_category: string | null
 }
 
+interface MarketSchool {
+  co_entidade: string; no_entidade: string
+  tp_dependencia: number | null; tp_situacao_funcionamento: number | null
+  qt_mat_total: number | null; no_municipio: string | null
+  sg_uf: string | null; ano_censo: number
+}
+
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const MONTH_NAMES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 const MONTH_SHORT: Record<number, string> = { 1:'Jan',2:'Fev',3:'Mar',4:'Abr',5:'Mai',6:'Jun',7:'Jul',8:'Ago',9:'Set',10:'Out',11:'Nov',12:'Dez' }
@@ -240,6 +247,11 @@ export default function GestorHome() {
   const [avgResponseByAttendant, setAvgResponseByAttendant] = useState<Record<string,number>>({})
   const [badgeTooltip, setBadgeTooltip] = useState(false)
   const [allEnrollments, setAllEnrollments] = useState<{ id: string; user_id: string; created_at: string }[]>([])
+  const [institutionData, setInstitutionData] = useState<{ inep_code: string | null } | null>(null)
+  const [marketSchools, setMarketSchools] = useState<MarketSchool[]>([])
+  const [marketInsight, setMarketInsight] = useState<string | null>(null)
+  const [marketInsightLoading, setMarketInsightLoading] = useState(false)
+  const marketInsightFetched = useRef(false)
 
   const getPeriodRange = () => {
     const now = new Date()
@@ -387,6 +399,32 @@ export default function GestorHome() {
       setPrevEnrolled((prevLeadsRes.data ?? []).filter(l =>
         l.status === 'enrolled' || l.status === 'matriculado').length)
 
+      // Institution data (inep_code)
+      const { data: instData } = await supabase
+        .from('institutions')
+        .select('inep_code')
+        .eq('id', institutionId)
+        .single()
+      setInstitutionData((instData as { inep_code: string | null } | null) ?? null)
+
+      // INEP market schools — match by city name and UF from setup cycle
+      const cycleWithCity = loadedCycles.find(c => c.school_data?.city && c.school_data?.state)
+      const inepCity = cycleWithCity?.school_data?.city as string | undefined
+      const inepState = cycleWithCity?.school_data?.state as string | undefined
+      if (inepCity && inepState) {
+        const { data: schoolsData } = await supabase
+          .from('inep_escolas')
+          .select('co_entidade,no_entidade,tp_dependencia,tp_situacao_funcionamento,qt_mat_total,no_municipio,sg_uf,ano_censo')
+          .ilike('no_municipio', inepCity)
+          .eq('sg_uf', inepState.toUpperCase())
+          .eq('tp_situacao_funcionamento', 1)
+          .order('ano_censo', { ascending: false })
+        setMarketSchools((schoolsData ?? []) as MarketSchool[])
+      } else {
+        setMarketSchools([])
+      }
+      marketInsightFetched.current = false
+
       const alreadySetup = loadedCycles.some(c => ['setup','draft','active','completed','released'].includes(c.status ?? ''))
       if (!alreadySetup) setShowSetup(true)
 
@@ -509,6 +547,53 @@ export default function GestorHome() {
     } catch { } finally { setAiInsightLoading(false) }
   }
 
+  const MARKET_CACHE_KEY = `market_insight_${institutionId}`
+  const MARKET_CACHE_TTL = 24 * 60 * 60 * 1000
+
+  async function fetchMarketInsight(schools: MarketSchool[], myStudents: number, forceRefresh = false) {
+    if (marketInsightFetched.current && !forceRefresh) return
+    marketInsightFetched.current = true
+    if (!forceRefresh) {
+      try {
+        const cached = localStorage.getItem(MARKET_CACHE_KEY)
+        if (cached) {
+          const { text, timestamp } = JSON.parse(cached)
+          if (Date.now() - timestamp < MARKET_CACHE_TTL) { setMarketInsight(text); return }
+        }
+      } catch { }
+    }
+    const maxYear = schools.length > 0 ? Math.max(...schools.map(s => s.ano_censo)) : null
+    if (!maxYear) return
+    const privateSchools = schools.filter(s => s.ano_censo === maxYear && s.tp_dependencia === 4)
+    if (privateSchools.length === 0) return
+    setMarketInsightLoading(true)
+    try {
+      const totalStudents = privateSchools.reduce((s, sch) => s + (sch.qt_mat_total ?? 0), 0)
+      const competitors = [...privateSchools]
+        .sort((a, b) => (b.qt_mat_total ?? 0) - (a.qt_mat_total ?? 0))
+        .slice(0, 5)
+        .map(s => ({ name: s.no_entidade, students: s.qt_mat_total ?? 0 }))
+      const res = await fetch('/api/ai', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'market_insight',
+          payload: {
+            city: marketCity, state: marketState, year: maxYear,
+            totalPrivateSchools: privateSchools.length,
+            totalPrivateStudents: totalStudents,
+            myStudents,
+            competitors,
+          }
+        }),
+      })
+      const json = await res.json()
+      if (json.result) {
+        setMarketInsight(json.result)
+        try { localStorage.setItem(MARKET_CACHE_KEY, JSON.stringify({ text: json.result, timestamp: Date.now() })) } catch { }
+      }
+    } catch { } finally { setMarketInsightLoading(false) }
+  }
+
   function getGreeting() {
     const h = new Date().getHours()
     if (h < 12) return 'Bom dia'
@@ -587,6 +672,28 @@ export default function GestorHome() {
 
   const marketCity = setupCycle?.school_data?.city ?? ''
   const marketState = setupCycle?.school_data?.state ?? ''
+
+  // ── Inteligência de Mercado (INEP) ────────────────────────────────────────
+  const inepMaxYear = marketSchools.length > 0 ? Math.max(...marketSchools.map(s => s.ano_censo)) : null
+  const inepPrivate = inepMaxYear ? marketSchools.filter(s => s.ano_censo === inepMaxYear && s.tp_dependencia === 4) : []
+  const inepTotalSchools = inepPrivate.length
+  const inepTotalStudents = inepPrivate.reduce((s, sch) => s + (sch.qt_mat_total ?? 0), 0)
+  const inepMyCode = institutionData?.inep_code ?? null
+  const inepMySchool = inepMyCode ? inepPrivate.find(s => s.co_entidade === inepMyCode) ?? null : null
+  const inepMyStudents = inepMySchool?.qt_mat_total ?? totalStudents
+  const inepSharePct = inepTotalStudents > 0 ? +((inepMyStudents / inepTotalStudents) * 100).toFixed(1) : null
+  const inepRanked = [...inepPrivate].sort((a, b) => (b.qt_mat_total ?? 0) - (a.qt_mat_total ?? 0))
+  const inepMyRank = inepMyCode ? inepRanked.findIndex(s => s.co_entidade === inepMyCode) + 1 : null
+  const inepAvgStudents = inepTotalSchools > 0 ? Math.round(inepTotalStudents / inepTotalSchools) : null
+  const inepCompetitors = inepRanked.filter(s => s.co_entidade !== inepMyCode).slice(0, 5)
+  const inepHasData = inepTotalSchools > 0
+  const inepShareBadge = inepSharePct !== null
+    ? inepSharePct >= 25 ? { label: 'Líder de mercado', bg: '#dcfce7', color: '#15803d' }
+    : inepSharePct >= 15 ? { label: 'Top 3', bg: '#dbeafe', color: '#1d4ed8' }
+    : inepSharePct >= 5 ? { label: 'Top 10', bg: '#fef3c7', color: '#b45309' }
+    : { label: 'Em crescimento', bg: '#f3f4f6', color: '#6b7280' }
+    : null
+
   const totalPrivateStudents = marketData ? Number(marketData.school_age_population ?? 0) * (Number(marketData.private_school_rate ?? 18) / 100) : 0
   const marketSharePct = totalPrivateStudents > 0 && totalStudents > 0 ? +((totalStudents / totalPrivateStudents) * 100).toFixed(1) : null
   const avgStudentsPerSchoolVal = Number(marketData?.avg_students_per_school ?? marketData?.average_students_per_school ?? 500)
@@ -668,6 +775,10 @@ export default function GestorHome() {
   const defaultSeasonality: Record<number, number> = { 1: 12, 2: 7, 8: 12, 9: 15, 10: 20, 11: 18, 12: 16 }
   const calendarMax = Math.max(...campaignMonthsList.map(m => defaultSeasonality[m] ?? 10))
   const peakMonth = campaignMonthsList.reduce((best, m) => (defaultSeasonality[m] ?? 0) > (defaultSeasonality[best] ?? 0) ? m : best, campaignMonthsList[0])
+
+  useEffect(() => {
+    if (inepHasData && !marketInsightFetched.current) fetchMarketInsight(marketSchools, inepMyStudents)
+  }, [marketSchools.length, inepHasData])
 
   // Salvar score
   useEffect(() => {
@@ -1600,6 +1711,147 @@ export default function GestorHome() {
             </LineChart>
           </ResponsiveContainer>
         )}
+      </div>
+
+      {/* Linha A2: Inteligência de Mercado (INEP) */}
+      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <i className="ti ti-building-store" style={{ fontSize: 16, color: '#6366f1' }} />
+            <div>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Inteligência de Mercado</span>
+              <span style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginTop: 1 }}>
+                {inepHasData ? `Censo INEP ${inepMaxYear} — ${marketCity}/${marketState}` : 'Dados do Censo Escolar INEP'}
+              </span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {inepShareBadge && (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: inepShareBadge.bg, color: inepShareBadge.color }}>
+                {inepShareBadge.label}
+              </span>
+            )}
+            {inepHasData && (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: '#f0f4ff', color: '#6366f1', border: '1px solid #e0e7ff' }}>
+                {inepTotalSchools} escolas
+              </span>
+            )}
+          </div>
+        </div>
+
+        {!inepHasData && !loading ? (
+          /* Estado vazio — cidade não encontrada no INEP */
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 0' }}>
+            <i className="ti ti-database-off" style={{ fontSize: 48, color: '#9ca3af' }} />
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151' }}>Dados INEP não encontrados</p>
+            <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', textAlign: 'center', maxWidth: 380 }}>
+              {marketCity ? `Nenhuma escola encontrada para "${marketCity}" no Censo Escolar.` : 'Configure a cidade da escola em Configurações.'}{' '}
+              Importe os microdados em <strong>Super Admin → Intel. Mercado</strong>.
+            </p>
+            <button onClick={() => navigate('/settings')}
+              style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1e2d6b', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
+              <i className="ti ti-settings" style={{ fontSize: 14 }} /> Configurar escola
+            </button>
+          </div>
+        ) : inepHasData ? (
+          /* Layout 2 colunas */
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20 }}>
+
+            {/* Coluna esquerda — métricas */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {[
+                  { label: 'Escolas privadas', value: fmt(inepTotalSchools), icon: 'ti-building-community', color: '#6366f1', bg: '#f0f4ff' },
+                  { label: 'Alunos no setor', value: fmt(inepTotalStudents), icon: 'ti-users', color: '#0891b2', bg: '#e0f2fe' },
+                  { label: 'Média por escola', value: inepAvgStudents ? fmt(inepAvgStudents) : '—', icon: 'ti-chart-bar', color: '#059669', bg: '#d1fae5' },
+                  { label: 'Market share', value: inepSharePct !== null ? `${inepSharePct}%` : '—', icon: 'ti-target', color: '#d97706', bg: '#fef3c7' },
+                ].map(item => (
+                  <div key={item.label} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 30, height: 30, borderRadius: 8, background: item.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <i className={`ti ${item.icon}`} style={{ fontSize: 14, color: item.color }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: '#1e2d6b', lineHeight: 1.1 }}>{item.value}</div>
+                      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{item.label}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Ranking / Posição */}
+              {(inepMyRank !== null && inepMyRank > 0) && (
+                <div style={{ background: '#fafafa', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <i className="ti ti-trophy" style={{ fontSize: 18, color: '#d97706' }} />
+                  <div>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b' }}>
+                      {inepMyRank}º lugar
+                    </span>
+                    <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 6 }}>entre {inepTotalSchools} escolas privadas</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Top concorrentes */}
+              {inepCompetitors.length > 0 && (
+                <div>
+                  <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Principais concorrentes
+                  </p>
+                  {inepCompetitors.map((sch, i) => {
+                    const pct = inepTotalStudents > 0 ? Math.round(((sch.qt_mat_total ?? 0) / inepTotalStudents) * 100) : 0
+                    return (
+                      <div key={sch.co_entidade} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', minWidth: 16 }}>{i + 1}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: '#374151', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {sch.no_entidade}
+                          </div>
+                          <div style={{ height: 4, background: '#e5e7eb', borderRadius: 9999 }}>
+                            <div style={{ height: 4, width: `${pct}%`, background: '#6366f1', borderRadius: 9999 }} />
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: '#6366f1', minWidth: 44, textAlign: 'right' }}>{fmt(sch.qt_mat_total ?? 0)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Coluna direita — análise IA */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                <i className="ti ti-sparkles" style={{ fontSize: 14, color: '#6366f1' }} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>Análise estratégica</span>
+                <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 2 }}>via IA</span>
+                {inepHasData && (
+                  <button
+                    onClick={() => { marketInsightFetched.current = false; fetchMarketInsight(marketSchools, inepMyStudents, true) }}
+                    style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 6, background: 'none', border: '1px solid #e5e7eb', cursor: 'pointer', fontSize: 11, color: '#6b7280' }}>
+                    <i className="ti ti-refresh" style={{ fontSize: 12 }} /> Atualizar
+                  </button>
+                )}
+              </div>
+
+              {marketInsightLoading ? (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '24px 0', color: '#94a3b8' }}>
+                  <div style={{ width: 28, height: 28, border: '3px solid #e5e7eb', borderTopColor: '#6366f1', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                  <span style={{ fontSize: 12 }}>Analisando mercado...</span>
+                </div>
+              ) : marketInsight ? (
+                <div style={{ background: '#f5f3ff', borderRadius: 12, padding: '14px 16px', border: '1px solid #e0e7ff', flex: 1 }}>
+                  <p style={{ margin: 0, fontSize: 12.5, color: '#374151', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{marketInsight}</p>
+                </div>
+              ) : (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '20px 0', color: '#94a3b8' }}>
+                  <i className="ti ti-robot" style={{ fontSize: 28 }} />
+                  <span style={{ fontSize: 12, textAlign: 'center' }}>Clique em Atualizar para gerar análise estratégica</span>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Linha B: Pesquisa de satisfação | Transferências por motivo */}

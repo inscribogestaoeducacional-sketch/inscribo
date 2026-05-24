@@ -104,23 +104,29 @@ function progress(processed, inserted, errors) {
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 async function main() {
-  const [, , csvArg, anoArg] = process.argv
+  const args = process.argv.slice(2)
+  const fileIndex = args.indexOf('--file')
+  const tipoIndex = args.indexOf('--tipo')
+  const anoIndex  = args.indexOf('--ano')
 
-  if (!csvArg || !anoArg) {
-    console.error('\nUso: node scripts/import-inep.js <arquivo.csv> <ano>')
-    console.error('Ex:  node scripts/import-inep.js ./microdados_ed_basica_2023.csv 2023\n')
+  const filePath = fileIndex !== -1 ? args[fileIndex + 1] : null
+  const tipo     = tipoIndex !== -1 ? args[tipoIndex + 1] : null
+  const ano      = anoIndex  !== -1 ? parseInt(args[anoIndex + 1]) : null
+
+  if (!filePath || !tipo || !ano) {
+    console.error('Uso: node import-inep.js --file "caminho.csv" --tipo escola --ano 2025')
     process.exit(1)
   }
 
-  const csvPath = resolve(csvArg)
-  const anoCenso = parseInt(anoArg)
+  const csvPath = resolve(filePath)
+  const anoCenso = ano
 
   if (!existsSync(csvPath)) {
     console.error(`Arquivo não encontrado: ${csvPath}`)
     process.exit(1)
   }
   if (isNaN(anoCenso) || anoCenso < 2010 || anoCenso > 2030) {
-    console.error(`Ano inválido: ${anoArg}  (esperado entre 2010 e 2030)`)
+    console.error(`Ano inválido: ${ano}  (esperado entre 2010 e 2030)`)
     process.exit(1)
   }
 
