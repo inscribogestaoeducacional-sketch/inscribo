@@ -239,6 +239,7 @@ export default function GestorHome() {
   const [activeConvsNow, setActiveConvsNow] = useState(0)
   const [avgResponseByAttendant, setAvgResponseByAttendant] = useState<Record<string,number>>({})
   const [badgeTooltip, setBadgeTooltip] = useState(false)
+  const [allEnrollments, setAllEnrollments] = useState<{ id: string; user_id: string; created_at: string }[]>([])
 
   const getPeriodRange = () => {
     const now = new Date()
@@ -310,6 +311,7 @@ export default function GestorHome() {
       })).sort((a, b) => b.enrollments_count - a.enrollments_count).slice(0, 5)
 
       setUserRankings(rankings)
+      setAllEnrollments(enrollments)
 
       // WhatsApp phone record (detection)
       setWaPhoneRecord((waPhoneRes.data as { phone_number: string; display_name: string } | null) ?? null)
@@ -607,6 +609,45 @@ export default function GestorHome() {
   const radius = 54; const circumference = 2 * Math.PI * radius; const offset = circumference - (score / 100) * circumference
 
   const chartDataWithTotal = chartData.map(d => ({ ...d, total: (d.veteranos || 0) + (d.novatos || 0) }))
+
+  // ── Evolução histórica de matrículas ──────────────────────────────────────
+  const currentYear = new Date().getFullYear()
+  const histYears = sorted.map(e => entryYear(e)).filter(y => y > 0 && y < currentYear)
+  const lastHistYear = histYears.length > 0 ? histYears[histYears.length - 1] : null
+  const olderHistYears = histYears.slice(0, -1)
+  const histGrays = ['#d1d5db', '#9ca3af', '#6b7280', '#4b5563']
+
+  const enrollByMonthCurrent = allEnrollments.reduce<Record<number, number>>((acc, e) => {
+    const d = new Date(e.created_at)
+    if (d.getFullYear() === currentYear) { const m = d.getMonth() + 1; acc[m] = (acc[m] || 0) + 1 }
+    return acc
+  }, {})
+
+  const historicalChartYears = [...histYears, currentYear]
+  const historicalChartData: Array<Record<string, string | number>> =
+    ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'].map((mes, idx) => {
+      const month = idx + 1
+      const row: Record<string, string | number> = { mes }
+      sorted.forEach(e => {
+        const yr = entryYear(e)
+        if (yr > 0 && yr < currentYear) row[String(yr)] = Math.round(entryTotal(e) / 12)
+      })
+      row[String(currentYear)] = enrollByMonthCurrent[month] || 0
+      return row
+    })
+
+  const hasCurrentYearEnrollData = Object.values(enrollByMonthCurrent).some(v => v > 0)
+  const yearsWithData = historicalChartYears.filter(yr =>
+    yr === currentYear ? hasCurrentYearEnrollData : sorted.some(e => entryYear(e) === yr && entryTotal(e) > 0)
+  ).length
+  const hasHistoricalChart = histYears.length > 0 || hasCurrentYearEnrollData
+
+  const getYearLineProps = (yr: number): { stroke: string; strokeWidth: number; strokeDasharray?: string } => {
+    if (yr === currentYear) return { stroke: '#00A896', strokeWidth: 2.5 }
+    if (yr === lastHistYear) return { stroke: 'rgba(0,168,150,0.45)', strokeWidth: 1.5, strokeDasharray: '5 5' }
+    const idx = olderHistYears.indexOf(yr)
+    return { stroke: histGrays[Math.min(idx, histGrays.length - 1)] || '#d1d5db', strokeWidth: 1.5 }
+  }
 
   const gradeData = leads.filter(l => l.grade_interest).reduce((acc, l) => {
     acc[l.grade_interest!] = (acc[l.grade_interest!] || 0) + 1; return acc
@@ -1461,21 +1502,104 @@ export default function GestorHome() {
         <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
       </div>
 
-      {/* Linha A: Evolução de matrículas — placeholder */}
+      {/* Linha A: Evolução de matrículas */}
       <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <i className="ti ti-chart-area" style={{ fontSize: 16, color: '#1e2d6b' }} />
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Evolução de matrículas</span>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <i className="ti ti-chart-area" style={{ fontSize: 16, color: '#00A896' }} />
+            <div>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Evolução de matrículas</span>
+              <span style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginTop: 1 }}>Histórico importado vs. matrículas do CRM</span>
+            </div>
+          </div>
+          {yearsWithData > 0 && (
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>
+              {yearsWithData} {yearsWithData === 1 ? 'ano' : 'anos'} de dados
+            </span>
+          )}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 0' }}>
-          <i className="ti ti-file-upload" style={{ fontSize: 48, color: '#9ca3af' }} />
-          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151' }}>Importe o relatório do seu sistema de gestão</p>
-          <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', textAlign: 'center', maxWidth: 360 }}>Envie um PDF exportado do seu sistema para visualizar a evolução histórica de matrículas por ano.</p>
-          <button onClick={() => navigate('/settings')}
-            style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1e2d6b', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
-            <i className="ti ti-settings" style={{ fontSize: 14 }} /> Ir para configurações
-          </button>
-        </div>
+
+        {!hasHistoricalChart ? (
+          /* Estado vazio */
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 0' }}>
+            <i className="ti ti-file-upload" style={{ fontSize: 48, color: '#9ca3af' }} />
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151' }}>Nenhum histórico importado ainda</p>
+            <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', textAlign: 'center', maxWidth: 360 }}>
+              Configure os dados históricos no primeiro acesso ou em Configurações
+            </p>
+            <button onClick={() => navigate('/settings')}
+              style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1e2d6b', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
+              <i className="ti ti-settings" style={{ fontSize: 14 }} /> Ir para configurações
+            </button>
+          </div>
+        ) : (
+          /* Gráfico */
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={historicalChartData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} width={36} />
+              <Tooltip
+                content={(rawProps: unknown) => {
+                  const { active, payload, label } = rawProps as {
+                    active?: boolean
+                    payload?: Array<{ name: string; value: number; stroke: string; dataKey: string }>
+                    label?: string
+                  }
+                  if (!active || !payload?.length) return null
+                  const sortedPayload = [...payload].sort((a, b) => parseInt(b.dataKey) - parseInt(a.dataKey))
+                  return (
+                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '10px 14px', boxShadow: '0 4px 20px rgba(0,0,0,0.10)', minWidth: 160 }}>
+                      <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, color: '#374151' }}>{label}</p>
+                      {sortedPayload.map((entry, i) => {
+                        const prevEntry = sortedPayload[i + 1]
+                        const variation = prevEntry && prevEntry.value > 0
+                          ? (((entry.value - prevEntry.value) / prevEntry.value) * 100).toFixed(1)
+                          : null
+                        const isPositive = variation !== null && parseFloat(variation) >= 0
+                        return (
+                          <div key={entry.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: entry.stroke, display: 'inline-block', flexShrink: 0 }} />
+                            <span style={{ fontSize: 12, color: '#374151', flex: 1 }}>
+                              {entry.dataKey === String(currentYear) ? `${entry.dataKey} (atual)` : entry.dataKey}:{' '}
+                              <strong>{entry.value}</strong>
+                            </span>
+                            {variation !== null && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: isPositive ? '#10b981' : '#ef4444' }}>
+                                {isPositive ? '+' : ''}{variation}%
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                }}
+              />
+              <Legend
+                wrapperStyle={{ paddingTop: 12, fontSize: 12 }}
+                formatter={(value: string) => value === String(currentYear) ? `${value} (atual)` : value}
+              />
+              {historicalChartYears.map(yr => {
+                const props = getYearLineProps(yr)
+                return (
+                  <Line
+                    key={yr}
+                    type="monotone"
+                    dataKey={String(yr)}
+                    name={String(yr)}
+                    stroke={props.stroke}
+                    strokeWidth={props.strokeWidth}
+                    strokeDasharray={props.strokeDasharray}
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 0 }}
+                  />
+                )
+              })}
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </div>
 
       {/* Linha B: Pesquisa de satisfação | Transferências por motivo */}
