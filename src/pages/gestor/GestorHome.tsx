@@ -1055,35 +1055,13 @@ export default function GestorHome() {
         </div>
       )}
 
-      {/* ── L3: Histórico de alunos ──────────────────────────────────────────── */}
-      {hasHistory && (
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Histórico de alunos por ano</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={chartDataWithTotal} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gradVet" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#00A896" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#00A896" stopOpacity={0}/>
-                </linearGradient>
-                <linearGradient id="gradNov" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6"/>
-              <XAxis dataKey="year" tick={{ fontSize: 12 }}/>
-              <YAxis tick={{ fontSize: 12 }}/>
-              <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} formatter={(value, name) => [fmt(Number(value)), name === 'novatos' ? 'Novatos' : name === 'veteranos' ? 'Veteranos' : 'Total']} />
-              <Legend/>
-              <Area type="monotone" dataKey="veteranos" name="Veteranos" stroke="#00A896" strokeWidth={2} fill="url(#gradVet)"/>
-              <Area type="monotone" dataKey="novatos" name="Novatos" stroke="#8B5CF6" strokeWidth={2} fill="url(#gradNov)"/>
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+      {/* ── BLOCO 1: Leads & Matrículas ──────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0' }}>
+        <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Leads & Matrículas</span>
+        <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
+      </div>
 
-      {/* ── Gráficos: Leads por dia + WhatsApp por dia ──────────────────────── */}
+      {/* Linha A: Leads por dia | Leads por origem */}
       {(() => {
         const { start } = getPeriodRange()
         const days: { date: string; count: number }[] = []
@@ -1098,12 +1076,12 @@ export default function GestorHome() {
           })
           cur.setDate(cur.getDate() + 1)
         }
-        return (days.length > 1 || (waConvStats?.daily?.length ?? 0) > 0) ? (
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
+        return (days.length > 1 || sourceSorted.length > 0) ? (
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
             {days.length > 1 && (
-              <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+              <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
                 <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Leads por dia</h3>
-                <ResponsiveContainer width="100%" height={200}>
+                <div style={{ flex: 1, minHeight: 120 }}><ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={days} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="gradLeads" x1="0" y1="0" x2="0" y2="1">
@@ -1117,95 +1095,33 @@ export default function GestorHome() {
                     <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} formatter={(v) => [v, 'Leads']} />
                     <Area type="monotone" dataKey="count" name="Leads" stroke="#8B5CF6" strokeWidth={2} fill="url(#gradLeads)" />
                   </AreaChart>
-                </ResponsiveContainer>
+                </ResponsiveContainer></div>
               </div>
             )}
-            {waConvStats?.daily && (
-              <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>WhatsApp por dia</h3>
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={waConvStats.daily} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                    <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                    <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} formatter={(v) => [v, 'Conversas']} />
-                    <Bar dataKey="count" name="Conversas" fill="#00A896" radius={[6, 6, 0, 0]} />
+            {sourceSorted.length > 0 && (
+              <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Leads por origem</h3>
+                <div style={{ flex: 1, minHeight: 120 }}><ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={sourceSorted} margin={{ top: 0, right: 20, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6"/>
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }}/>
+                    <YAxis tick={{ fontSize: 11 }}/>
+                    <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}/>
+                    <Bar dataKey="value" name="Leads" radius={[6, 6, 0, 0]}>
+                      {sourceSorted.map((entry, index) => (
+                        <Cell key={index} fill={entry.fill}/>
+                      ))}
+                    </Bar>
                   </BarChart>
-                </ResponsiveContainer>
+                </ResponsiveContainer></div>
               </div>
             )}
           </div>
         ) : null
       })()}
 
-      {/* ── L5: Leads por origem | Insights IA compacto ─────────────────────── */}
-      {(sourceSorted.length > 0 || aiInsight || aiInsightLoading) && (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
-          {sourceSorted.length > 0 && (
-            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Leads por origem</h3>
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={sourceSorted} margin={{ top: 0, right: 20, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6"/>
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }}/>
-                  <YAxis tick={{ fontSize: 11 }}/>
-                  <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}/>
-                  <Bar dataKey="value" name="Leads" radius={[6, 6, 0, 0]}>
-                    {sourceSorted.map((entry, index) => (
-                      <Cell key={index} fill={entry.fill}/>
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-          {(aiInsightLoading || aiInsight) && (
-            <div style={{ background: '#F8FAFC', borderRadius: 14, border: '1px solid #E2E8F0', padding: '10px 14px', minHeight: 64, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <Sparkles size={13} color="#6366F1" />
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#374151', flex: 1 }}>Análise da IA</span>
-                {aiLastUpdated && !aiExpanded && (
-                  <span style={{ fontSize: 10, color: '#94a3b8' }}>{new Date(aiLastUpdated).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-                )}
-                {latestFunnel && (
-                  <button onClick={() => { aiInsightFetched.current = false; fetchAiInsight(latestFunnel, true) }} disabled={aiInsightLoading}
-                    style={{ padding: '2px 4px', borderRadius: 6, background: 'none', border: '1px solid #E2E8F0', cursor: aiInsightLoading ? 'not-allowed' : 'pointer', opacity: aiInsightLoading ? 0.5 : 1, display: 'flex', alignItems: 'center' }}>
-                    <RefreshCw size={16} color="#94a3b8" />
-                  </button>
-                )}
-              </div>
-              {aiInsightLoading ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {[...Array(2)].map((_, i) => <div key={i} style={{ height: 10, borderRadius: 4, background: '#E2E8F0' }} />)}
-                </div>
-              ) : aiExpanded ? (
-                <div style={{ marginTop: 4 }}>
-                  {aiInsight?.split('\n').filter(p => p.trim()).map((para, i) => (
-                    <p key={i} style={{ margin: i === 0 ? 0 : '6px 0 0', fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{para}</p>
-                  ))}
-                  <button onClick={() => setAiExpanded(false)} style={{ marginTop: 8, fontSize: 11, color: '#6366F1', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600 }}>
-                    Ver menos
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-                  <p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.5, flex: 1, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, textOverflow: 'ellipsis' }}>
-                    {aiInsight?.split('\n').filter(p => p.trim())[0] ?? ''}
-                  </p>
-                  <button onClick={() => setAiExpanded(true)} style={{ fontSize: 11, color: '#6366F1', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>
-                    Ver análise completa
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-
-
-      {/* ── Linha 3: Funil leads + Ranking usuários ──────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
+      {/* Linha B: Funil + Ranking */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
 
         {/* Funil de leads */}
         <SectionCard title="Funil de Leads" subtitle="Conversão atual" icon={<Activity />} iconBg="#EDE9FE" iconColor="#8B5CF6" action={() => navigate('/leads')} actionLabel="Ver leads">
@@ -1357,11 +1273,29 @@ export default function GestorHome() {
         </SectionCard>
       </div>
 
-      {/* ── L7: WhatsApp | Satisfação dos Atendimentos ──────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
+      {/* ── BLOCO 2: WhatsApp ────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0' }}>
+        <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>WhatsApp</span>
+        <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
+      </div>
 
-        {/* WhatsApp */}
-        <SectionCard title="WhatsApp" subtitle="Últimos 30 dias" icon={<MessageCircle />} iconBg="#D1FAE5" iconColor="#10B981" action={() => navigate('/whatsapp')} actionLabel="Ver central">
+      {/* Linha A: WA por dia | métricas + rodapé */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
+        {waConvStats?.daily && (
+          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>WhatsApp por dia</h3>
+            <div style={{ flex: 1, minHeight: 120 }}><ResponsiveContainer width="100%" height="100%">
+              <BarChart data={waConvStats.daily} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} formatter={(v) => [v, 'Conversas']} />
+                <Bar dataKey="count" name="Conversas" fill="#00A896" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer></div>
+          </div>
+        )}
+        <SectionCard title="WhatsApp" subtitle="Período selecionado" icon={<MessageCircle />} iconBg="#D1FAE5" iconColor="#10B981" action={() => navigate('/whatsapp')} actionLabel="Ver central">
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 48, borderRadius: 10, background: '#f1f5f9' }} />)}</div>
           ) : !waPhoneRecord ? (
@@ -1403,16 +1337,6 @@ export default function GestorHome() {
                   </div>
                 )
               })()}
-              <div>
-                <p style={{ margin: '0 0 6px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Conversas — últimos 7 dias</p>
-                <ResponsiveContainer width="100%" height={72}>
-                  <BarChart data={waConvStats.daily} margin={{ top: 0, right: 0, bottom: 0, left: -28 }}>
-                    <XAxis dataKey="day" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ borderRadius: 8, fontSize: 11, border: '1px solid #e2e8f0' }} formatter={(v) => [v, 'Conversas']} />
-                    <Bar dataKey="count" fill="#10B981" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 {waAvgResponse !== null && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#F0FDF4', borderRadius: 8, padding: '5px 10px' }}>
@@ -1436,13 +1360,64 @@ export default function GestorHome() {
             </div>
           )}
         </SectionCard>
+      </div>
 
-        {/* Satisfação */}
+      {/* Linha B: Heatmap | Satisfação */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : waConvsRaw.length > 0 ? '1fr 1fr' : '1fr', gap: 16, alignItems: 'stretch' }}>
+        {waConvsRaw.length > 0 && (() => {
+          const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+          const heatmap = DAYS.map((day, idx) => {
+            const dayConvs = waConvsRaw.filter(c => new Date(c.created_at).getDay() === idx)
+            return {
+              day,
+              manha: dayConvs.filter(c => { const h = new Date(c.created_at).getHours(); return h >= 6 && h < 12 }).length,
+              tarde: dayConvs.filter(c => { const h = new Date(c.created_at).getHours(); return h >= 12 && h < 18 }).length,
+              noite: dayConvs.filter(c => { const h = new Date(c.created_at).getHours(); return h >= 18 || h < 6 }).length,
+            }
+          })
+          const maxH = Math.max(...heatmap.flatMap(d => [d.manha, d.tarde, d.noite]), 1)
+          const getColor = (val: number) => {
+            const i = val / maxH
+            if (i > 0.7) return { bg: '#00A896', color: '#fff' }
+            if (i > 0.4) return { bg: '#7dd3ca', color: '#fff' }
+            if (i > 0.1) return { bg: '#ccf2ee', color: '#0F6E56' }
+            return { bg: '#F8FAFC', color: '#94a3b8' }
+          }
+          return (
+            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px 24px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Horários de maior movimento</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '70px repeat(7,1fr)', gap: 4 }}>
+                <div />
+                {DAYS.map(d => (
+                  <div key={d} style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#94a3b8', padding: '4px 0' }}>{d}</div>
+                ))}
+                {(['manha', 'tarde', 'noite'] as const).map(period => (
+                  <React.Fragment key={period}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      {period === 'manha' ? <><i className="ti ti-sunrise" /> Manhã</> : period === 'tarde' ? <><i className="ti ti-sun" /> Tarde</> : <><i className="ti ti-moon" /> Noite</>}
+                    </div>
+                    {heatmap.map(d => {
+                      const val = d[period]
+                      const { bg, color } = getColor(val)
+                      return (
+                        <div key={d.day}
+                          title={`${d.day} — ${period === 'manha' ? 'Manhã' : period === 'tarde' ? 'Tarde' : 'Noite'}: ${val}`}
+                          style={{ background: bg, borderRadius: 6, padding: '10px 4px', textAlign: 'center', fontSize: 11, fontWeight: 600, color, transition: 'all 0.2s' }}>
+                          {val > 0 ? val : ''}
+                        </div>
+                      )
+                    })}
+                  </React.Fragment>
+                ))}
+              </div>
+              <p style={{ margin: '10px 0 0', fontSize: 11, color: '#94a3b8' }}>Baseado nas conversas do período selecionado</p>
+            </div>
+          )
+        })()}
         {waSatisfStats && (
-          <SectionCard title="Satisfação dos Atendimentos" subtitle="Últimos 30 dias" icon={<Star />} iconBg="#FEF3C7" iconColor="#F59E0B" action={() => navigate('/surveys')} actionLabel="Ver pesquisas">
+          <SectionCard title="Satisfação dos Atendimentos" subtitle="Período selecionado" icon={<Star />} iconBg="#FEF3C7" iconColor="#F59E0B" action={() => navigate('/surveys')} actionLabel="Ver pesquisas">
             {(() => {
               const sc = waSatisfStats.avgScore
-              const pct = (sc / 3) * 100
               const scColor = sc >= 2.5 ? '#10B981' : sc >= 1.5 ? '#F59E0B' : '#EF4444'
               const scIcon = sc >= 2.5 ? 'ti-mood-smile' : sc >= 1.5 ? 'ti-mood-neutral' : 'ti-mood-sad'
               return (
@@ -1495,61 +1470,42 @@ export default function GestorHome() {
         )}
       </div>
 
-      {/* ── L8: Horários de maior movimento | Transferências recentes ────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : waConvsRaw.length > 0 ? '1fr 1fr' : '1fr', gap: 16 }}>
-        {/* Mapa de calor */}
-        {waConvsRaw.length > 0 && (() => {
-          const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
-          const heatmap = DAYS.map((day, idx) => {
-            const dayConvs = waConvsRaw.filter(c => new Date(c.created_at).getDay() === idx)
-            return {
-              day,
-              manha: dayConvs.filter(c => { const h = new Date(c.created_at).getHours(); return h >= 6 && h < 12 }).length,
-              tarde: dayConvs.filter(c => { const h = new Date(c.created_at).getHours(); return h >= 12 && h < 18 }).length,
-              noite: dayConvs.filter(c => { const h = new Date(c.created_at).getHours(); return h >= 18 || h < 6 }).length,
-            }
-          })
-          const maxH = Math.max(...heatmap.flatMap(d => [d.manha, d.tarde, d.noite]), 1)
-          const getColor = (val: number) => {
-            const i = val / maxH
-            if (i > 0.7) return { bg: '#00A896', color: '#fff' }
-            if (i > 0.4) return { bg: '#7dd3ca', color: '#fff' }
-            if (i > 0.1) return { bg: '#ccf2ee', color: '#0F6E56' }
-            return { bg: '#F8FAFC', color: '#94a3b8' }
-          }
-          return (
-            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px 24px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Horários de maior movimento</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '70px repeat(7,1fr)', gap: 4 }}>
-                <div />
-                {DAYS.map(d => (
-                  <div key={d} style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#94a3b8', padding: '4px 0' }}>{d}</div>
-                ))}
-                {(['manha', 'tarde', 'noite'] as const).map(period => (
-                  <React.Fragment key={period}>
-                    <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {period === 'manha' ? <><i className="ti ti-sunrise" /> Manhã</> : period === 'tarde' ? <><i className="ti ti-sun" /> Tarde</> : <><i className="ti ti-moon" /> Noite</>}
-                    </div>
-                    {heatmap.map(d => {
-                      const val = d[period]
-                      const { bg, color } = getColor(val)
-                      return (
-                        <div key={d.day}
-                          title={`${d.day} — ${period === 'manha' ? 'Manhã' : period === 'tarde' ? 'Tarde' : 'Noite'}: ${val}`}
-                          style={{ background: bg, borderRadius: 6, padding: '10px 4px', textAlign: 'center', fontSize: 11, fontWeight: 600, color, transition: 'all 0.2s' }}>
-                          {val > 0 ? val : ''}
-                        </div>
-                      )
-                    })}
-                  </React.Fragment>
-                ))}
-              </div>
-              <p style={{ margin: '10px 0 0', fontSize: 11, color: '#94a3b8' }}>Baseado nas conversas do período selecionado</p>
-            </div>
-          )
-        })()}
+      {/* ── BLOCO 3: Escola & Mercado ─────────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0' }}>
+        <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Escola & Mercado</span>
+        <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
+      </div>
 
-        {/* Transferências */}
+      {/* Linha A: Histórico full width */}
+      {hasHistory && (
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Histórico de alunos por ano</h3>
+          <div style={{ flex: 1, minHeight: 120 }}><ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartDataWithTotal} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gradVet" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#00A896" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="#00A896" stopOpacity={0}/>
+                </linearGradient>
+                <linearGradient id="gradNov" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6"/>
+              <XAxis dataKey="year" tick={{ fontSize: 12 }}/>
+              <YAxis tick={{ fontSize: 12 }}/>
+              <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} formatter={(value, name) => [fmt(Number(value)), name === 'novatos' ? 'Novatos' : name === 'veteranos' ? 'Veteranos' : 'Total']} />
+              <Legend/>
+              <Area type="monotone" dataKey="veteranos" name="Veteranos" stroke="#00A896" strokeWidth={2} fill="url(#gradVet)"/>
+              <Area type="monotone" dataKey="novatos" name="Novatos" stroke="#8B5CF6" strokeWidth={2} fill="url(#gradNov)"/>
+            </AreaChart>
+          </ResponsiveContainer></div>
+        </div>
+      )}
+
+      {/* Linha B: Transferências | AI Insight */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
         <SectionCard title="Transferências recentes" subtitle="Saídas registradas" icon={<AlertTriangle />} iconBg="#FFE4E6" iconColor="#F43F5E" action={() => navigate('/reports')} actionLabel="Ver todas">
           {loading ? (
             <div style={{ color: '#94a3b8', fontSize: 13 }}>Carregando...</div>
@@ -1591,6 +1547,46 @@ export default function GestorHome() {
             </div>
           )}
         </SectionCard>
+        {(aiInsightLoading || aiInsight) && (
+          <div style={{ background: '#F8FAFC', borderRadius: 14, border: '1px solid #E2E8F0', padding: '10px 14px', minHeight: 64, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <Sparkles size={13} color="#6366F1" />
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#374151', flex: 1 }}>Análise da IA</span>
+              {aiLastUpdated && !aiExpanded && (
+                <span style={{ fontSize: 10, color: '#94a3b8' }}>{new Date(aiLastUpdated).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+              )}
+              {latestFunnel && (
+                <button onClick={() => { aiInsightFetched.current = false; fetchAiInsight(latestFunnel, true) }} disabled={aiInsightLoading}
+                  style={{ padding: '2px 4px', borderRadius: 6, background: 'none', border: '1px solid #E2E8F0', cursor: aiInsightLoading ? 'not-allowed' : 'pointer', opacity: aiInsightLoading ? 0.5 : 1, display: 'flex', alignItems: 'center' }}>
+                  <RefreshCw size={16} color="#94a3b8" />
+                </button>
+              )}
+            </div>
+            {aiInsightLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {[...Array(2)].map((_, i) => <div key={i} style={{ height: 10, borderRadius: 4, background: '#E2E8F0' }} />)}
+              </div>
+            ) : aiExpanded ? (
+              <div style={{ marginTop: 4 }}>
+                {aiInsight?.split('\n').filter(p => p.trim()).map((para, i) => (
+                  <p key={i} style={{ margin: i === 0 ? 0 : '6px 0 0', fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{para}</p>
+                ))}
+                <button onClick={() => setAiExpanded(false)} style={{ marginTop: 8, fontSize: 11, color: '#6366F1', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600 }}>
+                  Ver menos
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                <p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.5, flex: 1, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, textOverflow: 'ellipsis' }}>
+                  {aiInsight?.split('\n').filter(p => p.trim())[0] ?? ''}
+                </p>
+                <button onClick={() => setAiExpanded(true)} style={{ fontSize: 11, color: '#6366F1', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                  Ver análise completa
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── L9: Acesso rápido ────────────────────────────────────────────────── */}
