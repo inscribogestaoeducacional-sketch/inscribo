@@ -160,9 +160,25 @@ async function main() {
 
   const flush = async () => {
     if (batch.length === 0) return
-    const { error } = await supabase
-      .from('inep_escolas')
-      .upsert(batch, { onConflict: 'co_entidade,ano_censo', ignoreDuplicates: false })
+    let error
+    if (tipo === 'matricula') {
+      const { error: rpcError } = await supabase.rpc('update_matriculas_batch', {
+        records: JSON.stringify(batch.map(r => ({
+          co_entidade:  r.co_entidade,
+          qt_mat_total: r.qt_mat_total,
+          qt_mat_inf:   r.qt_mat_inf,
+          qt_mat_fund:  r.qt_mat_fund,
+          qt_mat_med:   r.qt_mat_med,
+          ano_censo:    anoCenso,
+        })))
+      })
+      error = rpcError
+    } else {
+      const { error: upsertError } = await supabase
+        .from('inep_escolas')
+        .upsert(batch, { onConflict: 'co_entidade,ano_censo', ignoreDuplicates: false })
+      error = upsertError
+    }
     if (error) {
       console.error(`\n  Erro no lote: ${error.message}`)
       totalErrors++
