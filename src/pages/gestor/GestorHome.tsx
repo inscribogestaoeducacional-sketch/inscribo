@@ -239,6 +239,7 @@ export default function GestorHome() {
   const [prevEnrolled, setPrevEnrolled] = useState(0)
   const [activeConvsNow, setActiveConvsNow] = useState(0)
   const [avgResponseByAttendant, setAvgResponseByAttendant] = useState<Record<string,number>>({})
+  const [badgeTooltip, setBadgeTooltip] = useState(false)
 
   const getPeriodRange = () => {
     const now = new Date()
@@ -826,9 +827,17 @@ export default function GestorHome() {
             </div>
           )}
           {activeConvsNow > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 20, background: '#F0FDF4', border: '1px solid #BBF7D0' }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#166534' }}>{activeConvsNow} ativas agora</span>
+            <div style={{ position: 'relative' }} onMouseEnter={() => setBadgeTooltip(true)} onMouseLeave={() => setBadgeTooltip(false)}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 20, background: '#F0FDF4', border: '1px solid #BBF7D0', cursor: 'default' }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#166534' }}>{activeConvsNow} conversas abertas</span>
+              </div>
+              {badgeTooltip && (
+                <div style={{ position: 'absolute', right: 0, top: '110%', zIndex: 999, background: '#1e2d6b', color: 'white', fontSize: 12, lineHeight: 1.4, padding: '8px 12px', borderRadius: 8, whiteSpace: 'nowrap', boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
+                  Conversas WhatsApp com status aberto ou pendente agora
+                  <div style={{ position: 'absolute', right: 18, bottom: '100%', borderWidth: '5px', borderStyle: 'solid', borderColor: 'transparent transparent #1e2d6b transparent' }} />
+                </div>
+              )}
             </div>
           )}
           <button onClick={handleExportPDF} style={{ padding: '6px 16px', borderRadius: 20, border: '1px solid #E5E7EB', background: 'white', color: '#374151', fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -914,89 +923,50 @@ export default function GestorHome() {
         </div>
       )}
 
-      {/* ── Score + KPIs ─────────────────────────────────────────────────────── */}
+      {/* ── L2: Card escola + Mercado local ─────────────────────────────────── */}
       {!loading && hasHistory && (
-        <div style={{ display: 'flex', gap: 16, alignItems: 'stretch', flexDirection: isMobile ? 'column' : 'row' }}>
-          {/* Score gauge */}
-          <div style={{ background: '#fff', borderRadius: 20, border: '1px solid #e2e8f0', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', borderTop: `4px solid ${score >= 80 ? '#10B981' : score >= 60 ? '#F59E0B' : score >= 40 ? '#EF4444' : '#7F1D1D'}` }}>
-            <svg width="140" height="140" viewBox="0 0 140 140">
-              <circle cx="70" cy="70" r={radius} fill="none" stroke="#e5e7eb" strokeWidth="12"/>
-              <circle cx="70" cy="70" r={radius} fill="none" stroke={scoreColor} strokeWidth="12" strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" transform="rotate(-90 70 70)" style={{ transition: 'stroke-dashoffset 1s ease' }}/>
-              <text x="70" y="64" textAnchor="middle" fontSize="28" fontWeight="700" fill={scoreColor}>{score}</text>
-              <text x="70" y="82" textAnchor="middle" fontSize="10" fill="#6b7280">score</text>
-            </svg>
-            <div style={{ minWidth: 160 }}>
-              <p style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 800, color: '#1e2d6b', lineHeight: 1.2 }}>{user?.institution_name || 'Sua escola'}</p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: scoreBg, color: scoreColor }}>{scoreLabel}</span>
-                <div style={{ position: 'relative', cursor: 'default' }} onMouseEnter={() => setScoreTooltip(true)} onMouseLeave={() => setScoreTooltip(false)}>
-                  <Info size={13} color="#94a3b8" />
-                  {scoreTooltip && (
-                    <div style={{ position: 'absolute', left: 0, top: '120%', zIndex: 999, background: '#1e2d6b', color: '#fff', fontSize: 11, lineHeight: 1.6, padding: '10px 14px', borderRadius: 10, width: 280, boxShadow: '0 4px 20px rgba(0,0,0,0.18)' }}>
-                      Score baseado em crescimento de novatos, taxa de rematrícula, market share e conversão de leads.
-                    </div>
-                  )}
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 380px', gap: 16, alignItems: 'start' }}>
+
+          {/* Card escola: Score + KPIs */}
+          <div style={{ display: 'flex', gap: 16, alignItems: 'stretch', flexDirection: isMobile ? 'column' : 'row' }}>
+            <div style={{ background: '#fff', borderRadius: 20, border: '1px solid #e2e8f0', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', borderTop: `4px solid ${score >= 80 ? '#10B981' : score >= 60 ? '#F59E0B' : score >= 40 ? '#EF4444' : '#7F1D1D'}` }}>
+              <svg width="140" height="140" viewBox="0 0 140 140">
+                <circle cx="70" cy="70" r={radius} fill="none" stroke="#e5e7eb" strokeWidth="12"/>
+                <circle cx="70" cy="70" r={radius} fill="none" stroke={scoreColor} strokeWidth="12" strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" transform="rotate(-90 70 70)" style={{ transition: 'stroke-dashoffset 1s ease' }}/>
+                <text x="70" y="64" textAnchor="middle" fontSize="28" fontWeight="700" fill={scoreColor}>{score}</text>
+                <text x="70" y="82" textAnchor="middle" fontSize="10" fill="#6b7280">score</text>
+              </svg>
+              <div style={{ minWidth: 160 }}>
+                <p style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 800, color: '#1e2d6b', lineHeight: 1.2 }}>{user?.institution_name || 'Sua escola'}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                  <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: scoreBg, color: scoreColor }}>{scoreLabel}</span>
+                  <div style={{ position: 'relative', cursor: 'default' }} onMouseEnter={() => setScoreTooltip(true)} onMouseLeave={() => setScoreTooltip(false)}>
+                    <Info size={13} color="#94a3b8" />
+                    {scoreTooltip && (
+                      <div style={{ position: 'absolute', left: 0, top: '120%', zIndex: 999, background: '#1e2d6b', color: '#fff', fontSize: 11, lineHeight: 1.6, padding: '10px 14px', borderRadius: 10, width: 280, boxShadow: '0 4px 20px rgba(0,0,0,0.18)' }}>
+                        Score baseado em crescimento de novatos, taxa de rematrícula, market share e conversão de leads.
+                      </div>
+                    )}
+                  </div>
                 </div>
+                {avgFee && <p style={{ margin: '0 0 4px', fontSize: 12, color: '#64748b' }}>Mensalidade média: <strong>{fmtBRL(avgFee)}</strong></p>}
+                {(marketCity || marketState) && (
+                  <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <MapPin size={11} /> {marketCity}{marketCity && marketState ? ', ' : ''}{marketState}
+                  </p>
+                )}
               </div>
-              {avgFee && <p style={{ margin: '0 0 4px', fontSize: 12, color: '#64748b' }}>Mensalidade média: <strong>{fmtBRL(avgFee)}</strong></p>}
-              {(marketCity || marketState) && (
-                <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <MapPin size={11} /> {marketCity}{marketCity && marketState ? ', ' : ''}{marketState}
-                </p>
-              )}
             </div>
-          </div>
-
-          {/* 4 KPIs */}
-          <div style={{ ...(isMobile ? {} : { flex: 1 }), display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 14 }}>
-            <KpiCard label={`Alunos ${latestYear ?? ''}`} value={fmt(totalStudents)} icon={<Users size={20} color="#00A896" />} iconBg="#E6F7F5" variation={totalVariation} />
-            <KpiCard label="Novatos" value={fmt(newStudents)} icon={<TrendingUp size={20} color="#8B5CF6" />} iconBg="#EDE9FE" variation={newVariation} sub={totalStudents > 0 ? `${Math.round((newStudents / totalStudents) * 100)}% do total` : undefined} />
-            <KpiCard label="Market share" value={marketSharePct !== null ? `${marketSharePct}%` : (marketLoading ? '…' : '—')} icon={<BarChart3 size={20} color="#F59E0B" />} iconBg="#FEF3C7" sub={estimatedSchools ? `~${estimatedSchools} escolas na cidade` : undefined} />
-            <KpiCard label="Próxima campanha" value={monthsUntil > 0 ? `${monthsUntil} ${monthsUntil === 1 ? 'mês' : 'meses'}` : 'Ativa'} icon={<Calendar size={20} color="#3B82F6" />} iconBg="#DBEAFE" sub={`Ano letivo ${campaignYear}`} onClick={() => navigate('/reports')} />
-          </div>
-        </div>
-      )}
-
-      {loading && (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 14 }}>
-          {[...Array(4)].map((_, i) => <div key={i} style={{ background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '16px 18px', height: 90 }} />)}
-        </div>
-      )}
-
-      {/* ── Linha 2: Histórico + Mercado + Diagnóstico INEP ──────────────────── */}
-      {hasHistory && (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 380px', gap: 16 }}>
-
-          {/* Histórico de alunos */}
-          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Histórico de alunos por ano</h3>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={chartDataWithTotal} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="gradVet" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#00A896" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#00A896" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="gradNov" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6"/>
-                <XAxis dataKey="year" tick={{ fontSize: 12 }}/>
-                <YAxis tick={{ fontSize: 12 }}/>
-                <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} formatter={(value, name) => [fmt(Number(value)), name === 'novatos' ? 'Novatos' : name === 'veteranos' ? 'Veteranos' : 'Total']} />
-                <Legend/>
-                <Area type="monotone" dataKey="veteranos" name="Veteranos" stroke="#00A896" strokeWidth={2} fill="url(#gradVet)"/>
-                <Area type="monotone" dataKey="novatos" name="Novatos" stroke="#8B5CF6" strokeWidth={2} fill="url(#gradNov)"/>
-              </AreaChart>
-            </ResponsiveContainer>
+            <div style={{ ...(isMobile ? {} : { flex: 1 }), display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+              <KpiCard label={`Alunos ${latestYear ?? ''}`} value={fmt(totalStudents)} icon={<Users size={20} color="#00A896" />} iconBg="#E6F7F5" variation={totalVariation} />
+              <KpiCard label="Novatos" value={fmt(newStudents)} icon={<TrendingUp size={20} color="#8B5CF6" />} iconBg="#EDE9FE" variation={newVariation} sub={totalStudents > 0 ? `${Math.round((newStudents / totalStudents) * 100)}% do total` : undefined} />
+              <KpiCard label="Market share" value={marketSharePct !== null ? `${marketSharePct}%` : (marketLoading ? '…' : '—')} icon={<BarChart3 size={20} color="#F59E0B" />} iconBg="#FEF3C7" sub={estimatedSchools ? `~${estimatedSchools} escolas na cidade` : undefined} />
+              <KpiCard label="Próxima campanha" value={monthsUntil > 0 ? `${monthsUntil} ${monthsUntil === 1 ? 'mês' : 'meses'}` : 'Ativa'} icon={<Calendar size={20} color="#3B82F6" />} iconBg="#DBEAFE" sub={`Ano letivo ${campaignYear}`} onClick={() => navigate('/reports')} />
+            </div>
           </div>
 
           {/* Mercado + Diagnóstico INEP */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-            {/* Market share card */}
             <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 18, flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                 <div style={{ width: 30, height: 30, borderRadius: 9, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1007,7 +977,6 @@ export default function GestorHome() {
                   <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>Estimado via Censo Escolar / IBGE</p>
                 </div>
               </div>
-
               {marketLoading ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 36, borderRadius: 9, background: '#f1f5f9' }} />)}</div>
               ) : marketData && marketSharePct !== null ? (
@@ -1045,8 +1014,6 @@ export default function GestorHome() {
                 </div>
               )}
             </div>
-
-            {/* Diagnóstico INEP */}
             {marketData?.inep_data && (
               <div style={{ background: 'linear-gradient(135deg, #1e2d6b, #2d4494)', borderRadius: 14, padding: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
@@ -1079,6 +1046,40 @@ export default function GestorHome() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {loading && (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 14 }}>
+          {[...Array(4)].map((_, i) => <div key={i} style={{ background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0', padding: '16px 18px', height: 90 }} />)}
+        </div>
+      )}
+
+      {/* ── L3: Histórico de alunos ──────────────────────────────────────────── */}
+      {hasHistory && (
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Histórico de alunos por ano</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={chartDataWithTotal} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gradVet" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#00A896" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="#00A896" stopOpacity={0}/>
+                </linearGradient>
+                <linearGradient id="gradNov" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6"/>
+              <XAxis dataKey="year" tick={{ fontSize: 12 }}/>
+              <YAxis tick={{ fontSize: 12 }}/>
+              <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} formatter={(value, name) => [fmt(Number(value)), name === 'novatos' ? 'Novatos' : name === 'veteranos' ? 'Veteranos' : 'Total']} />
+              <Legend/>
+              <Area type="monotone" dataKey="veteranos" name="Veteranos" stroke="#00A896" strokeWidth={2} fill="url(#gradVet)"/>
+              <Area type="monotone" dataKey="novatos" name="Novatos" stroke="#8B5CF6" strokeWidth={2} fill="url(#gradNov)"/>
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
       )}
 
@@ -1137,23 +1138,9 @@ export default function GestorHome() {
         ) : null
       })()}
 
-      {/* ── Gráficos: Séries + Origens ──────────────────────────────────────── */}
-      {(gradeSorted.length > 0 || sourceSorted.length > 0) && (
+      {/* ── L5: Leads por origem | Insights IA compacto ─────────────────────── */}
+      {(sourceSorted.length > 0 || aiInsight || aiInsightLoading) && (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
-          {gradeSorted.length > 0 && (
-            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Séries mais procuradas</h3>
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={gradeSorted} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" horizontal={false}/>
-                  <XAxis type="number" tick={{ fontSize: 11 }}/>
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={80}/>
-                  <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}/>
-                  <Bar dataKey="value" name="Leads" fill="#00A896" radius={[0, 6, 6, 0]}/>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
           {sourceSorted.length > 0 && (
             <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
               <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Leads por origem</h3>
@@ -1170,6 +1157,46 @@ export default function GestorHome() {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+            </div>
+          )}
+          {(aiInsightLoading || aiInsight) && (
+            <div style={{ background: '#F8FAFC', borderRadius: 14, border: '1px solid #E2E8F0', padding: '10px 14px', minHeight: 64, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <Sparkles size={13} color="#6366F1" />
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#374151', flex: 1 }}>Análise da IA</span>
+                {aiLastUpdated && !aiExpanded && (
+                  <span style={{ fontSize: 10, color: '#94a3b8' }}>{new Date(aiLastUpdated).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                )}
+                {latestFunnel && (
+                  <button onClick={() => { aiInsightFetched.current = false; fetchAiInsight(latestFunnel, true) }} disabled={aiInsightLoading}
+                    style={{ padding: '2px 4px', borderRadius: 6, background: 'none', border: '1px solid #E2E8F0', cursor: aiInsightLoading ? 'not-allowed' : 'pointer', opacity: aiInsightLoading ? 0.5 : 1, display: 'flex', alignItems: 'center' }}>
+                    <RefreshCw size={16} color="#94a3b8" />
+                  </button>
+                )}
+              </div>
+              {aiInsightLoading ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {[...Array(2)].map((_, i) => <div key={i} style={{ height: 10, borderRadius: 4, background: '#E2E8F0' }} />)}
+                </div>
+              ) : aiExpanded ? (
+                <div style={{ marginTop: 4 }}>
+                  {aiInsight?.split('\n').filter(p => p.trim()).map((para, i) => (
+                    <p key={i} style={{ margin: i === 0 ? 0 : '6px 0 0', fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{para}</p>
+                  ))}
+                  <button onClick={() => setAiExpanded(false)} style={{ marginTop: 8, fontSize: 11, color: '#6366F1', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600 }}>
+                    Ver menos
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                  <p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.5, flex: 1, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, textOverflow: 'ellipsis' }}>
+                    {aiInsight?.split('\n').filter(p => p.trim())[0] ?? ''}
+                  </p>
+                  <button onClick={() => setAiExpanded(true)} style={{ fontSize: 11, color: '#6366F1', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    Ver análise completa
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1326,7 +1353,7 @@ export default function GestorHome() {
         </SectionCard>
       </div>
 
-      {/* ── Linha 4: WhatsApp + Transferências ──────────────────────────────── */}
+      {/* ── L7: WhatsApp | Satisfação dos Atendimentos ──────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
 
         {/* WhatsApp */}
@@ -1409,14 +1436,27 @@ export default function GestorHome() {
         {/* Satisfação */}
         {waSatisfStats && (
           <SectionCard title="Satisfação dos Atendimentos" subtitle="Últimos 30 dias" icon={<Star />} iconBg="#FEF3C7" iconColor="#F59E0B" action={() => navigate('/surveys')} actionLabel="Ver pesquisas">
-            <div style={{ textAlign: 'center', marginBottom: 16 }}>
-              <div style={{ fontSize: 48, fontWeight: 800, color: waSatisfStats.avgScore >= 2.5 ? '#00A896' : waSatisfStats.avgScore >= 1.5 ? '#F59E0B' : '#EF4444', lineHeight: 1 }}>
-                {waSatisfStats.avgScore.toFixed(1)}<span style={{ fontSize: 22, fontWeight: 600, color: '#94a3b8' }}>/3</span>
-              </div>
-              <div style={{ color: '#6B7280', fontSize: 14, marginTop: 4 }}>
-                {surveyScoresList.length} avaliações
-              </div>
-            </div>
+            {(() => {
+              const sc = waSatisfStats.avgScore
+              const pct = (sc / 3) * 100
+              const scColor = sc >= 2.5 ? '#10B981' : sc >= 1.5 ? '#F59E0B' : '#EF4444'
+              const scEmoji = sc >= 2.5 ? '😊' : sc >= 1.5 ? '😐' : '😟'
+              const r = 34, circ = 2 * Math.PI * r
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 16, gap: 4 }}>
+                  <svg width={80} height={80} viewBox="0 0 80 80">
+                    <circle cx={40} cy={40} r={r} fill="none" stroke="#F3F4F6" strokeWidth={8} />
+                    <circle cx={40} cy={40} r={r} fill="none" stroke={scColor} strokeWidth={8}
+                      strokeDasharray={circ} strokeDashoffset={circ - (pct / 100) * circ}
+                      strokeLinecap="round" transform="rotate(-90 40 40)"
+                      style={{ transition: 'stroke-dashoffset 0.8s ease' }} />
+                    <text x={40} y={46} textAnchor="middle" fontSize={22}>{scEmoji}</text>
+                  </svg>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: scColor }}>{sc.toFixed(1)}/3</div>
+                  <div style={{ color: '#6B7280', fontSize: 12 }}>{surveyScoresList.length} avaliações</div>
+                </div>
+              )
+            })()}
             <div style={{ marginBottom: 16 }}>
               {[
                 { emoji: '😊', label: 'Ótimo', score: 3, color: '#10B981' },
@@ -1455,7 +1495,10 @@ export default function GestorHome() {
             )}
           </SectionCard>
         )}
+      </div>
 
+      {/* ── L8: Horários de maior movimento | Transferências recentes ────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : waConvsRaw.length > 0 ? '1fr 1fr' : '1fr', gap: 16 }}>
         {/* Mapa de calor */}
         {waConvsRaw.length > 0 && (() => {
           const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -1552,41 +1595,7 @@ export default function GestorHome() {
         </SectionCard>
       </div>
 
-      {/* ── AI Insight ───────────────────────────────────────────────────────── */}
-      {(aiInsightLoading || aiInsight) && (
-        <div style={{ background: '#F8FAFC', borderRadius: 14, border: '1px solid #E2E8F0', padding: '12px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Sparkles size={13} color="#6366F1" />
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#374151', flex: 1 }}>Análise da IA</span>
-            {aiLastUpdated && <span style={{ fontSize: 10, color: '#94a3b8' }}>{new Date(aiLastUpdated).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>}
-            {latestFunnel && (
-              <button onClick={() => { aiInsightFetched.current = false; fetchAiInsight(latestFunnel, true) }} disabled={aiInsightLoading}
-                style={{ padding: '3px 6px', borderRadius: 6, background: 'none', border: '1px solid #E2E8F0', cursor: aiInsightLoading ? 'not-allowed' : 'pointer', opacity: aiInsightLoading ? 0.5 : 1, display: 'flex', alignItems: 'center' }}>
-                <RefreshCw size={11} color="#94a3b8" />
-              </button>
-            )}
-          </div>
-          {aiInsightLoading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
-              {[...Array(2)].map((_, i) => <div key={i} style={{ height: 12, borderRadius: 4, background: '#E2E8F0' }} />)}
-            </div>
-          ) : (
-            <div style={{ marginTop: 8 }}>
-              <div style={{ maxHeight: aiExpanded ? 'none' : 80, overflow: 'hidden', position: 'relative' }}>
-                {aiInsight?.split('\n').filter(p => p.trim()).map((para, i) => (
-                  <p key={i} style={{ margin: i === 0 ? 0 : '6px 0 0', fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{para}</p>
-                ))}
-                {!aiExpanded && <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 28, background: 'linear-gradient(transparent, #F8FAFC)' }} />}
-              </div>
-              <button onClick={() => setAiExpanded(e => !e)} style={{ marginTop: 4, fontSize: 11, color: '#6366F1', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600 }}>
-                {aiExpanded ? 'Ver menos' : 'Ver mais'}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Acesso rápido ────────────────────────────────────────────────────── */}
+      {/* ── L9: Acesso rápido ────────────────────────────────────────────────── */}
       <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20 }}>
         <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 14px' }}>Acesso rápido</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
