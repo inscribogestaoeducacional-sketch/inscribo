@@ -1246,12 +1246,19 @@ export default function GestorHome() {
               const satisfScore = satisfConvs.length > 0
                 ? satisfConvs.reduce((s, c) => s + (c.satisfaction_score || 0), 0) / satisfConvs.length
                 : null
+              const respDiffs = waConvsRaw
+                .filter(c => c.assigned_user_id === u.user_id && c.first_response_at)
+                .map(c => (new Date(c.first_response_at!).getTime() - new Date(c.created_at).getTime()) / 60000)
+                .filter(d => d > 0 && d < 1440)
+              const avgResp = respDiffs.length > 0
+                ? Math.round(respDiffs.reduce((s, v) => s + v, 0) / respDiffs.length)
+                : null
               return {
                 ...u,
                 wa_count: waData?.count ?? 0,
                 satisf_score: satisfScore,
                 satisf_count: satisfConvs.length,
-                avg_response: avgResponseByAttendant[u.user_id] ?? null,
+                avg_response: avgResp,
               }
             })
             const sortedTeam = [...teamStats].sort((a, b) => {
@@ -1290,7 +1297,11 @@ export default function GestorHome() {
                             <span style={{ fontSize: 11, color: '#6B7280' }}>{u.enrollments_count} matrículas</span>
                             <span style={{ fontSize: 11, color: '#00A896' }}>💬 {u.wa_count} conv.</span>
                             {u.satisf_score && <span style={{ fontSize: 11, color: '#F59E0B' }}>⭐ {u.satisf_score.toFixed(1)}</span>}
-                            {u.avg_response && <span style={{ fontSize: 11, color: '#6366F1' }}>⚡ {u.avg_response}min</span>}
+                            {rankingMode === 'whatsapp' && (
+                              <span style={{ fontSize: 11, color: '#6366F1' }}>
+                                ⚡ {u.avg_response !== null ? (u.avg_response < 60 ? `${u.avg_response}m` : `${Math.floor(u.avg_response / 60)}h ${u.avg_response % 60}m`) : '—'}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
