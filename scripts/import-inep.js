@@ -169,8 +169,8 @@ async function main() {
           qt_mat_inf:   r.qt_mat_inf,
           qt_mat_fund:  r.qt_mat_fund,
           qt_mat_med:   r.qt_mat_med,
-          ano_censo:    anoCenso,
-        }))
+        })),
+        p_ano: anoCenso,
       })
       error = rpcError
     } else {
