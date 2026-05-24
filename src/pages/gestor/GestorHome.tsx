@@ -419,7 +419,9 @@ export default function GestorHome() {
           .eq('sg_uf', inepState?.toUpperCase() ?? '')
           .order('ano_censo', { ascending: false })
         setMarketSchools((schoolsData ?? []) as MarketSchool[])
-        console.log('[INEP] cidade buscada:', inepCity, '| UF:', inepState, '| resultados:', schoolsData?.length ?? 0)
+        console.log('[INEP DEBUG] inepCity:', inepCity)
+        console.log('[INEP DEBUG] inepState:', inepState)
+        console.log('[INEP DEBUG] query result:', schoolsData?.length, schoolsData?.[0])
       } else {
         setMarketSchools([])
       }
