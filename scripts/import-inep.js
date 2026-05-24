@@ -64,6 +64,7 @@ const INEP_COL_MAP = {
   TP_DEPENDENCIA:            'tp_dependencia',
   TP_SITUACAO_FUNCIONAMENTO: 'tp_situacao_funcionamento',
   QT_MAT_TOTAL:              'qt_mat_total',
+  QT_MAT_BAS:               'qt_mat_total',  // Tabela_Matricula: total geral
   QT_MAT_FUND:               'qt_mat_fund',
   QT_MAT_MED:                'qt_mat_med',
   QT_MAT_INF:                'qt_mat_inf',
@@ -161,7 +162,7 @@ async function main() {
     if (batch.length === 0) return
     const { error } = await supabase
       .from('inep_escolas')
-      .upsert(batch, { onConflict: 'co_entidade,ano_censo' })
+      .upsert(batch, { onConflict: 'co_entidade,ano_censo', ignoreDuplicates: false })
     if (error) {
       console.error(`\n  Erro no lote: ${error.message}`)
       totalErrors++
@@ -216,10 +217,9 @@ async function main() {
       return v || null
     }
     const toInt = (key) => {
-      const v = g(key)
-      if (!v) return null
-      const n = parseInt(v)
-      return isNaN(n) ? null : n
+      const v = g(key) ?? ''
+      const n = parseInt(v, 10)
+      return isNaN(n) ? 0 : n
     }
     const toFloat = (key) => {
       const v = g(key)
@@ -231,6 +231,15 @@ async function main() {
     const coEntidade = g('co_entidade')
     if (!coEntidade) continue
 
+    const qt_mat_total = toInt('qt_mat_total')
+    const qt_mat_inf   = toInt('qt_mat_inf')
+    const qt_mat_fund  = toInt('qt_mat_fund')
+    const qt_mat_med   = toInt('qt_mat_med')
+
+    if (totalProcessed === 0) {
+      console.log('[DEBUG] primeira linha:', { co_entidade: coEntidade, qt_mat_total, qt_mat_inf, qt_mat_fund, qt_mat_med })
+    }
+
     batch.push({
       co_entidade:               coEntidade,
       no_entidade:               g('no_entidade'),
@@ -239,10 +248,10 @@ async function main() {
       sg_uf:                     g('sg_uf'),
       tp_dependencia:            toInt('tp_dependencia'),
       tp_situacao_funcionamento: toInt('tp_situacao_funcionamento'),
-      qt_mat_total:              toInt('qt_mat_total'),
-      qt_mat_fund:               toInt('qt_mat_fund'),
-      qt_mat_med:                toInt('qt_mat_med'),
-      qt_mat_inf:                toInt('qt_mat_inf'),
+      qt_mat_total,
+      qt_mat_fund,
+      qt_mat_med,
+      qt_mat_inf,
       lat:                       toFloat('lat'),
       lng:                       toFloat('lng'),
       ano_censo:                 anoCenso,
