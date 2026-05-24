@@ -412,16 +412,15 @@ export default function GestorHome() {
       const inepCity = cycleWithCity?.school_data?.city as string | undefined
       const inepState = cycleWithCity?.school_data?.state as string | undefined
       if (inepCity && inepState) {
-        const { data: schoolsData } = await supabase
+        const { data: marketSchoolsData, error: marketError } = await supabase
           .from('inep_escolas')
-          .select('co_entidade,no_entidade,tp_dependencia,tp_situacao_funcionamento,qt_mat_total,no_municipio,sg_uf,ano_censo')
-          .ilike('no_municipio', `%${inepCity}%`)
+          .select('co_entidade, no_entidade, tp_dependencia, qt_mat_total, qt_mat_fund, qt_mat_med, qt_mat_inf')
+          .eq('no_municipio', inepCity)
           .eq('sg_uf', inepState?.toUpperCase() ?? '')
-          .order('ano_censo', { ascending: false })
-        setMarketSchools((schoolsData ?? []) as MarketSchool[])
-        console.log('[INEP DEBUG] inepCity:', inepCity)
-        console.log('[INEP DEBUG] inepState:', inepState)
-        console.log('[INEP DEBUG] query result:', schoolsData?.length, schoolsData?.[0])
+          .eq('ano_censo', 2025)
+        console.log('[INEP ERROR]', marketError)
+        console.log('[INEP RESULT]', marketSchoolsData?.length)
+        setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
       } else {
         setMarketSchools([])
       }
