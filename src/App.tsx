@@ -55,8 +55,9 @@ import AdminConsultants from './components/superadmin/AdminConsultants'
 import AdminUpdates     from './components/superadmin/AdminUpdates'
 import AdminProfile     from './components/superadmin/AdminProfile.tsx'
 import AdminWhatsApp    from './components/superadmin/AdminWhatsApp'
-import AdminAionInbox   from './components/superadmin/AdminAionInbox'
-import ConsultantDetails from './components/superadmin/ConsultantDetails'
+import AdminAionInbox          from './components/superadmin/AdminAionInbox'
+import AdminMarketIntelligence from './components/superadmin/AdminMarketIntelligence'
+import ConsultantDetails       from './components/superadmin/ConsultantDetails'
 
 // ── Pending screen ────────────────────────────────────────────────────────
 import PendingScreen from './components/PendingScreen'
@@ -262,8 +263,9 @@ function AppContent() {
         <Route path="/super-admin"                    element={<AdminHome />} />
         <Route path="/super-admin/crm"                element={<AdminCRM />} />
         <Route path="/super-admin/onboarding"         element={<AdminOnboarding />} />
-        <Route path="/super-admin/schools"            element={<AdminSchools />} />
+        <Route path="/super-admin/schools"              element={<AdminSchools />} />
         <Route path="/super-admin/schools/:id"        element={<InstitutionDetails />} />
+        <Route path="/super-admin/market-intelligence" element={<AdminMarketIntelligence />} />
         <Route path="/super-admin/consultants"        element={<AdminConsultants />} />
         <Route path="/super-admin/consultants/:id"    element={<ConsultantDetails />} />
         <Route path="/super-admin/financial"          element={<AdminFinancial />} />

@@ -25,6 +25,7 @@ interface SchoolData {
   grades: string[]
   avgFee: number
   currentStudents: number
+  inep_code?: string
 }
 
 interface ExistingCycle {
@@ -69,7 +70,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
   const [error, setError] = useState<string | null>(null)
 
   const [schoolData, setSchoolData] = useState<SchoolData>({
-    name: '', city: '', state: '', grades: [], avgFee: 0, currentStudents: 0
+    name: '', city: '', state: '', grades: [], avgFee: 0, currentStudents: 0, inep_code: ''
   })
 
   const [processedFiles, setProcessedFiles] = useState<ProcessedFile[]>([])
@@ -83,7 +84,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
     const fetchInstitution = async () => {
       const { data, error: fetchErr } = await supabase
         .from('institutions')
-        .select('name, city, state')
+        .select('name, city, state, inep_code')
         .eq('id', institutionId)
         .single()
       console.log('[SchoolSetupModal] institution:', data, fetchErr)
@@ -93,6 +94,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
         name: (data.name as string) ?? prev.name,
         city: (data.city as string) || prev.city,
         state: (data.state as string) || prev.state,
+        inep_code: ((data as Record<string, unknown>).inep_code as string) || prev.inep_code,
       }))
     }
     fetchInstitution()
@@ -285,7 +287,7 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
       // Atualiza city/state na tabela institutions
       const { error: instError } = await supabase
         .from('institutions')
-        .update({ city: schoolData.city, state: schoolData.state })
+        .update({ city: schoolData.city, state: schoolData.state, inep_code: schoolData.inep_code || null })
         .eq('id', institutionId)
       console.log('[SchoolSetupModal] institution error:', instError)
 
@@ -430,6 +432,24 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
                     {STATES.map(uf => <option key={uf} value={uf}>{uf}</option>)}
                   </select>
                 </div>
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={labelStyle}>Código INEP da escola</label>
+                <input
+                  style={inputStyle}
+                  type="text"
+                  placeholder="Ex: 2501203 (7 dígitos)"
+                  maxLength={7}
+                  value={schoolData.inep_code || ''}
+                  onChange={e => setSchoolData(s => ({ ...s, inep_code: e.target.value.replace(/\D/g, '') }))}
+                />
+                <p style={{ margin: '5px 0 0', fontSize: 11, color: '#6b7280' }}>
+                  Encontre em:{' '}
+                  <a href="https://inepdata.inep.gov.br" target="_blank" rel="noreferrer" style={{ color: '#00A896' }}>
+                    inepdata.inep.gov.br
+                  </a>
+                </p>
               </div>
 
               <div style={{ marginBottom: 14 }}>

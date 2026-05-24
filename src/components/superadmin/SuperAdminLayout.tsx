@@ -7,7 +7,7 @@ import {
   Home, Building2, DollarSign, FileText, Settings,
   Bell, LogOut, UserCog, ChevronDown, X, Menu,
   TrendingUp, AlertCircle, CheckCircle2,
-  AlertTriangle, Info, BookOpen, Users, MessageCircle, Inbox
+  AlertTriangle, Info, BookOpen, Users, MessageCircle, Inbox, BarChart3
 } from 'lucide-react'
 
 // ─── tipos ────────────────────────────────────────────────────────────────
@@ -24,8 +24,9 @@ interface Notification {
 const ADMIN_MENU = [
   { path: '/super-admin',              label: 'Dashboard',     icon: Home,        exact: true },
   { path: '/super-admin/crm',          label: 'CRM Comercial', icon: TrendingUp               },
-  { path: '/super-admin/schools',      label: 'Escolas',       icon: Building2                },
-  { path: '/super-admin/financial',    label: 'Financeiro',    icon: DollarSign               },
+  { path: '/super-admin/schools',               label: 'Escolas',           icon: Building2  },
+  { path: '/super-admin/market-intelligence',   label: 'Intel. Mercado',    icon: BarChart3  },
+  { path: '/super-admin/financial',             label: 'Financeiro',        icon: DollarSign },
   { path: '/super-admin/whatsapp',     label: 'WhatsApp',      icon: MessageCircle            },
   { path: '/super-admin/aion-inbox',   label: 'Inbox Áion',    icon: Inbox                    },
   { path: '/super-admin/consultants',  label: 'Consultores',   icon: Users                    },
