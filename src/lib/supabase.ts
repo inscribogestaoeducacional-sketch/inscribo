@@ -59,6 +59,8 @@ export interface Enrollment {
   enrollment_date?: string
   institution_id: string
   created_at: string
+  user_id?: string
+  responsible_name?: string
 }
 
 export interface MarketingCampaign {

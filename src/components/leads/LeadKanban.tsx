@@ -1360,6 +1360,16 @@ export default function LeadKanban() {
         })
         await logAudit({ institution_id: user!.institution_id, module: 'leads', record_id: leadId, action: 'status_changed', old_value: previousStatus, new_value: newStatus, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
         if (newStatus === 'enrolled') {
+          const { supabase: db2 } = await import('../../lib/supabase')
+          await db2.from('enrollments').insert({
+            institution_id: user!.institution_id,
+            lead_id: currentLead.id,
+            student_name: currentLead.student_name || currentLead.responsible_name,
+            course_grade: currentLead.grade_interest,
+            enrollment_date: new Date().toISOString(),
+            user_id: (currentLead as Lead & { responsible_id?: string }).responsible_id ?? user!.id,
+            responsible_name: currentLead.responsible_name,
+          })
           createNotification({
             institution_id: user!.institution_id,
             type: 'milestone',

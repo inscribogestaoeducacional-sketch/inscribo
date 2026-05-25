@@ -247,6 +247,7 @@ export default function GestorHome() {
   const [avgResponseByAttendant, setAvgResponseByAttendant] = useState<Record<string,number>>({})
   const [badgeTooltip, setBadgeTooltip] = useState(false)
   const [allEnrollments, setAllEnrollments] = useState<{ id: string; user_id: string; created_at: string }[]>([])
+  const [npsData, setNpsData] = useState<{ id: string; title: string; created_at: string; satisfaction_responses: { score: number | null }[] } | null>(null)
   const [institutionData, setInstitutionData] = useState<{ inep_code: string | null } | null>(null)
   const [marketSchools, setMarketSchools] = useState<MarketSchool[]>([])
   const [marketInsight, setMarketInsight] = useState<string | null>(null)
@@ -291,7 +292,7 @@ export default function GestorHome() {
         supabase.from('leads').select('id,status,created_at,grade_interest,source').eq('institution_id', institutionId).gte('created_at', start),
         supabase.from('visits').select('id,status,created_at').eq('institution_id', institutionId).gte('created_at', start),
         supabase.from('whatsapp_messages').select('id,created_at,from_me,remote_jid').eq('institution_id', institutionId).gte('created_at', start),
-        supabase.from('enrollments').select('id,user_id,created_at').eq('institution_id', institutionId),
+        supabase.from('enrollments').select('id,user_id,created_at').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end),
         supabase.from('users').select('id,full_name,role').eq('institution_id', institutionId),
         supabase.from('whatsapp_phone_numbers').select('phone_number,display_name').eq('institution_id', institutionId).limit(1).maybeSingle(),
         supabase.from('whatsapp_conversations').select('id,created_at,status,assigned_user_name,assigned_user_id,bot_active,satisfaction_score,first_response_at,remote_jid').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end),
@@ -398,6 +399,16 @@ export default function GestorHome() {
       setPrevLeadsCount(prevLeadsRes.data?.length ?? 0)
       setPrevEnrolled((prevLeadsRes.data ?? []).filter(l =>
         l.status === 'enrolled' || l.status === 'matriculado').length)
+
+      // NPS data — última pesquisa de satisfação
+      const { data: npsRes } = await supabase
+        .from('satisfaction_surveys')
+        .select('id, title, created_at, satisfaction_responses(score)')
+        .eq('institution_id', institutionId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      setNpsData((npsRes as typeof npsData) ?? null)
 
       // Institution data (inep_code)
       const { data: instData } = await supabase
@@ -657,7 +668,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
 
   const totalLeads = leads.length
   const totalVisitsCount = visits.length
-  const totalEnrolled = leads.filter(l => l.status === 'matriculado' || l.status === 'enrolled').length
+  const totalEnrolled = allEnrollments.length
   const conversionRateNum = totalLeads > 0 ? +((totalEnrolled / totalLeads) * 100).toFixed(1) : 0
   const totalMessages = waMessages.length
   const waSent = waMessages.filter(m => m.from_me === true).length
@@ -736,7 +747,18 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
       const row: Record<string, string | number> = { mes }
       sorted.forEach(e => {
         const yr = entryYear(e)
-        if (yr > 0 && yr < currentYear) row[String(yr)] = Math.round(entryTotal(e) / 12)
+        if (yr > 0 && yr < currentYear) {
+          const funnel = e.historical_funnel
+          if (funnel && Object.keys(funnel).length > 0) {
+            const key = Object.keys(funnel).find(k => {
+              const m = k.includes('-') ? parseInt(k.split('-')[1]) : parseInt(k)
+              return m === month
+            })
+            row[String(yr)] = key ? Number(funnel[key]) : 0
+          } else {
+            row[String(yr)] = Math.round(entryTotal(e) / 12)
+          }
+        }
       })
       row[String(currentYear)] = enrollByMonthCurrent[month] || 0
       return row
@@ -769,6 +791,9 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
   const schoolName = user?.institution_name || 'Sua escola'
   const avgSatisfaction = waConvStats?.avgSatisfaction ?? null
   const avgResponseTime = waAvgResponse
+  const toSatisfPct = (score: number | null) => score !== null ? Math.round(((score - 1) / 2) * 100) : null
+  const satisfPct = toSatisfPct(avgSatisfaction)
+  const satisfPctColor = (pct: number | null) => pct !== null ? pct >= 75 ? '#00A896' : pct >= 40 ? '#F59E0B' : '#EF4444' : '#94a3b8'
 
   const campaignMonthsList = getCampaignMonthsList(activeCycle?.start_date ?? anyCycle?.start_date, activeCycle?.end_date ?? anyCycle?.end_date)
   const defaultSeasonality: Record<number, number> = { 1: 12, 2: 7, 8: 12, 9: 15, 10: 20, 11: 18, 12: 16 }
@@ -1026,9 +1051,9 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
           {[
             { label: 'Leads no período', value: leads.length, prev: prevLeadsCount, icon: <i className="ti ti-users" style={{ fontSize: 20, color: '#00A896' }} />, color: '#00A896', bg: '#F0FDFA', path: '/leads' },
             { label: 'Conversas WhatsApp', value: waConvsRaw.length, prev: null as number | null, icon: <i className="ti ti-brand-whatsapp" style={{ fontSize: 20, color: '#25D366' }} />, color: '#25D366', bg: '#F0FDF4', path: '/whatsapp' },
-            { label: 'Matrículas', value: totalEnrolled, prev: prevEnrolled, icon: <i className="ti ti-school" style={{ fontSize: 20, color: '#7C3AED' }} />, color: '#7C3AED', bg: '#F5F3FF', path: '/enrollments' },
+            { label: 'Matrículas', value: totalEnrolled, prev: prevEnrolled, icon: <i className="ti ti-school" style={{ fontSize: 20, color: '#7C3AED' }} />, color: '#7C3AED', bg: '#F5F3FF', path: '/leads' },
             { label: 'Taxa de conversão', value: conversionRateNum.toFixed(1) + '%', prev: null as number | null, icon: <i className="ti ti-trending-up" style={{ fontSize: 20, color: '#F59E0B' }} />, color: '#F59E0B', bg: '#FFFBEB', path: '/leads' },
-            { label: 'Satisfação média', value: waSatisfStats ? waSatisfStats.avgScore.toFixed(1) + '/3' : '—', prev: null as number | null, icon: <i className="ti ti-star" style={{ fontSize: 20, color: '#F59E0B' }} />, color: '#F59E0B', bg: '#FFFBEB', path: '/surveys' },
+            { label: 'Satisfação média', value: satisfPct !== null ? `${satisfPct}%` : '—', prev: null as number | null, icon: <i className="ti ti-star" style={{ fontSize: 20, color: satisfPctColor(satisfPct) }} />, color: satisfPctColor(satisfPct), bg: '#FFFBEB', path: '/surveys' },
             { label: 'Tempo de resposta', value: waAvgResponse !== null ? (waAvgResponse < 60 ? `${waAvgResponse}min` : `${Math.floor(waAvgResponse / 60)}h ${waAvgResponse % 60}m`) : '—', prev: null as number | null, icon: <i className="ti ti-clock" style={{ fontSize: 20, color: '#EF4444' }} />, color: '#EF4444', bg: '#FEF2F2', path: '/whatsapp' },
           ].map(card => {
             const variation = card.prev !== null && card.prev > 0
@@ -1379,47 +1404,57 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
                 <p style={{ margin: '8px 0 0', fontSize: 13 }}>Nenhum dado disponível</p>
               </div>
             )
+            const leader = teamStats[0]?.enrollments_count ?? 0
+            const medalColors = ['#F59E0B', '#9CA3AF', '#CD7C4B']
+            const medalIcons = ['ti-trophy', 'ti-medal', 'ti-medal']
             return (
-              <div style={{ maxHeight: 240, overflowY: 'auto', scrollbarWidth: 'thin' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                  <thead>
-                    <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
-                      {[
-                        { icon: 'ti-award', label: '#' },
-                        { icon: 'ti-user', label: 'Atendente' },
-                        { icon: 'ti-school', label: 'Matrículas' },
-                        { icon: 'ti-brand-whatsapp', label: 'Conv. WA' },
-                        { icon: 'ti-clock', label: 'T. Resposta' },
-                        { icon: 'ti-star', label: 'Satisfação' },
-                      ].map(h => (
-                        <th key={h.label} style={{ padding: '10px 8px', textAlign: h.label === '#' ? 'center' : 'left', fontWeight: 600, color: '#6b7280', fontSize: 11, whiteSpace: 'nowrap' }}>
-                          <i className={`ti ${h.icon}`} style={{ marginRight: 4 }} />{h.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {teamStats.map((u, i) => (
-                      <tr key={u.user_id} style={{ background: i % 2 === 1 ? '#f8fafc' : '#fff', borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '9px 8px', textAlign: 'center', width: 36 }}>
-                          {i === 0 ? <i className="ti ti-trophy" style={{ color: '#F59E0B', fontSize: 14 }} />
-                            : i === 1 ? <i className="ti ti-medal" style={{ color: '#94a3b8', fontSize: 14 }} />
-                            : i === 2 ? <i className="ti ti-medal" style={{ color: '#CD7F32', fontSize: 14 }} />
-                            : <span style={{ color: '#94a3b8', fontWeight: 600 }}>#{i + 1}</span>}
-                        </td>
-                        <td style={{ padding: '9px 8px', fontWeight: 600, color: '#1e2d6b', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.full_name}</td>
-                        <td style={{ padding: '9px 8px', fontWeight: 700, color: '#7C3AED' }}>{u.enrollments_count}</td>
-                        <td style={{ padding: '9px 8px', fontWeight: 700, color: '#25D366' }}>{u.wa_count}</td>
-                        <td style={{ padding: '9px 8px', color: '#EF4444', fontWeight: 600 }}>
-                          {u.avg_response !== null ? (u.avg_response < 60 ? `${u.avg_response}m` : `${Math.floor(u.avg_response / 60)}h${u.avg_response % 60}m`) : '—'}
-                        </td>
-                        <td style={{ padding: '9px 8px', color: '#F59E0B', fontWeight: 600 }}>
-                          {u.satisf_score !== null ? u.satisf_score!.toFixed(1) + '/3' : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div style={{ maxHeight: 320, overflowY: 'auto', scrollbarWidth: 'thin', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 52px 52px 64px 56px', gap: 4, padding: '4px 8px 8px', borderBottom: '1px solid #f1f5f9', marginBottom: 4 }}>
+                  {[
+                    { icon: 'ti-award', label: '' },
+                    { icon: 'ti-user', label: 'Atendente' },
+                    { icon: 'ti-school', label: 'Mat.' },
+                    { icon: 'ti-brand-whatsapp', label: 'WA' },
+                    { icon: 'ti-clock', label: 'T. Resp.' },
+                    { icon: 'ti-star', label: 'Satisf.' },
+                  ].map(h => (
+                    <div key={h.label} style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap' }}>
+                      <i className={`ti ${h.icon}`} style={{ fontSize: 11 }} />{h.label}
+                    </div>
+                  ))}
+                </div>
+                {teamStats.map((u, i) => {
+                  const barPct = leader > 0 ? Math.round((u.enrollments_count / leader) * 100) : 0
+                  const initials = (u.full_name || '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
+                  return (
+                    <div key={u.user_id} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 52px 52px 64px 56px', gap: 4, alignItems: 'center', padding: '7px 8px', borderRadius: 8, background: i % 2 === 1 ? '#f8fafc' : '#fff' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {i < 3
+                          ? <i className={`ti ${medalIcons[i]}`} style={{ color: medalColors[i], fontSize: 15 }} />
+                          : <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700 }}>#{i + 1}</span>}
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#4f46e5', flexShrink: 0 }}>{initials}</div>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: '#1e2d6b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.full_name}</span>
+                        </div>
+                        {leader > 0 && (
+                          <div style={{ height: 3, background: '#f1f5f9', borderRadius: 9999, marginTop: 4, marginLeft: 28 }}>
+                            <div style={{ height: 3, width: `${barPct}%`, background: i === 0 ? '#F59E0B' : '#6366f1', borderRadius: 9999, transition: 'width 0.6s ease' }} />
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#7C3AED', textAlign: 'center' }}>{u.enrollments_count}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#25D366', textAlign: 'center' }}>{u.wa_count}</div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#EF4444', textAlign: 'center' }}>
+                        {u.avg_response !== null ? (u.avg_response < 60 ? `${u.avg_response}m` : `${Math.floor(u.avg_response / 60)}h${u.avg_response % 60}m`) : '—'}
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: satisfPctColor(toSatisfPct(u.satisf_score)), textAlign: 'center' }}>
+                        {u.satisf_score !== null ? `${toSatisfPct(u.satisf_score)}%` : '—'}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )
           })()}
@@ -1500,7 +1535,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
                 {waSatisfStats && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#FFFBEB', borderRadius: 8, padding: '5px 10px', border: '1px solid #FDE68A' }}>
                     <i className="ti ti-star" style={{ fontSize: 14, color: '#D97706' }} />
-                    <p style={{ margin: 0, fontSize: 11, color: '#92400E', fontWeight: 600 }}>{waSatisfStats.avgScore.toFixed(1)}/3 satisfação</p>
+                    <p style={{ margin: 0, fontSize: 11, color: '#92400E', fontWeight: 600 }}>{toSatisfPct(waSatisfStats.avgScore)}% satisfação</p>
                   </div>
                 )}
                 <p style={{ margin: 0, fontSize: 10, color: '#94a3b8', marginLeft: 'auto' }}>{waPhoneRecord.display_name || waPhoneRecord.phone_number}</p>
@@ -1571,14 +1606,21 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
           <SectionCard title="Satisfação dos Atendimentos" subtitle="Período selecionado" icon={<Star />} iconBg="#FEF3C7" iconColor="#F59E0B" action={() => navigate('/surveys')} actionLabel="Ver pesquisas">
             {(() => {
               const sc = waSatisfStats.avgScore
-              const scColor = sc >= 2.5 ? '#10B981' : sc >= 1.5 ? '#F59E0B' : '#EF4444'
-              const scIcon = sc >= 2.5 ? 'ti-mood-smile' : sc >= 1.5 ? 'ti-mood-neutral' : 'ti-mood-sad'
+              const scPct = toSatisfPct(sc) ?? 0
+              const scColor = satisfPctColor(scPct)
+              const circ = 2 * Math.PI * 34
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 16, gap: 4 }}>
-                  <div style={{ width: 80, height: 80, borderRadius: '50%', border: `6px solid ${scColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <i className={`ti ${scIcon}`} style={{ fontSize: 32, color: scColor }} />
+                  <div style={{ position: 'relative', width: 80, height: 80 }}>
+                    <svg width={80} height={80} style={{ transform: 'rotate(-90deg)' }}>
+                      <circle cx={40} cy={40} r={34} fill="none" stroke="#f1f5f9" strokeWidth={7} />
+                      <circle cx={40} cy={40} r={34} fill="none" stroke={scColor} strokeWidth={7}
+                        strokeDasharray={`${(scPct / 100) * circ} ${circ}`} strokeLinecap="round" />
+                    </svg>
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: scColor }}>{scPct}%</span>
+                    </div>
                   </div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: scColor }}>{sc.toFixed(1)}/3</div>
                   <div style={{ color: '#6B7280', fontSize: 12 }}>{surveyScoresList.length} avaliações</div>
                 </div>
               )
@@ -1855,50 +1897,66 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
 
       {/* Linha B: Pesquisa de satisfação | Transferências por motivo */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
-        {/* Card A — Pesquisa de satisfação */}
+        {/* Card A — Pesquisa NPS */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <i className="ti ti-clipboard-check" style={{ fontSize: 16, color: '#1e2d6b' }} />
-            <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Pesquisa de satisfação</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <i className="ti ti-clipboard-check" style={{ fontSize: 16, color: '#1e2d6b' }} />
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Pesquisa de satisfação</span>
+            </div>
+            <button onClick={() => navigate('/pesquisas')} style={{ fontSize: 11, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+              Ver pesquisas <i className="ti ti-chevron-right" style={{ fontSize: 12 }} />
+            </button>
           </div>
-          {surveyScoresList.length === 0 ? (
+          {!npsData ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '20px 0', color: '#94a3b8' }}>
               <i className="ti ti-clipboard-x" style={{ fontSize: 32 }} />
-              <p style={{ margin: 0, fontSize: 13 }}>Nenhuma avaliação no período</p>
+              <p style={{ margin: 0, fontSize: 13 }}>Nenhuma pesquisa NPS criada ainda</p>
+              <button onClick={() => navigate('/pesquisas')}
+                style={{ marginTop: 4, padding: '7px 14px', borderRadius: 8, background: '#6366f1', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 12, fontWeight: 600 }}>
+                Criar pesquisa
+              </button>
             </div>
           ) : (() => {
-            const total = surveyScoresList.length
-            const avg = total > 0 ? surveyScoresList.reduce((s, c) => s + (c.satisfaction_score ?? 0), 0) / total : 0
-            const pieData = [
-              { name: 'Ótimo', value: surveyScoresList.filter(c => c.satisfaction_score === 3).length, fill: '#10B981' },
-              { name: 'Regular', value: surveyScoresList.filter(c => c.satisfaction_score === 2).length, fill: '#F59E0B' },
-              { name: 'Ruim', value: surveyScoresList.filter(c => c.satisfaction_score === 1).length, fill: '#EF4444' },
-            ]
+            const responses = npsData.satisfaction_responses ?? []
+            const total = responses.length
+            const validScores = responses.filter(r => typeof r.score === 'number') as { score: number }[]
+            const avg = validScores.length > 0 ? validScores.reduce((s, r) => s + r.score, 0) / validScores.length : 0
+            const avgPct = toSatisfPct(avg) ?? 0
+            const pieNps = [
+              { name: 'Ótimo', value: validScores.filter(r => r.score >= 4).length, fill: '#10B981' },
+              { name: 'Regular', value: validScores.filter(r => r.score === 3).length, fill: '#F59E0B' },
+              { name: 'Ruim', value: validScores.filter(r => r.score <= 2).length, fill: '#EF4444' },
+            ].filter(d => d.value > 0)
             return (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                <div style={{ position: 'relative', width: 140, height: 140 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={pieData} cx="50%" cy="50%" innerRadius={42} outerRadius={62} dataKey="value" strokeWidth={0}>
-                        {pieData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                    <span style={{ fontSize: 20, fontWeight: 800, color: '#1e2d6b', lineHeight: 1 }}>{total}</span>
-                    <span style={{ fontSize: 10, color: '#94a3b8' }}>respostas</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>{npsData.title} · {new Date(npsData.created_at).toLocaleDateString('pt-BR')}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ position: 'relative', width: 120, height: 120, flexShrink: 0 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={pieNps.length > 0 ? pieNps : [{ name: 'Sem dados', value: 1, fill: '#f1f5f9' }]}
+                          cx="50%" cy="50%" innerRadius={36} outerRadius={52} dataKey="value" strokeWidth={0}>
+                          {(pieNps.length > 0 ? pieNps : [{ fill: '#f1f5f9' }]).map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                      <span style={{ fontSize: 17, fontWeight: 800, color: '#1e2d6b', lineHeight: 1 }}>{total}</span>
+                      <span style={{ fontSize: 9, color: '#94a3b8' }}>respostas</span>
+                    </div>
                   </div>
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: avg >= 2.5 ? '#10B981' : avg >= 1.5 ? '#F59E0B' : '#EF4444' }}>
-                  Média: {avg.toFixed(1)}/3
-                </div>
-                <div style={{ display: 'flex', gap: 12, fontSize: 11 }}>
-                  {pieData.map(d => (
-                    <span key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#374151' }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: d.fill, display: 'inline-block' }} />
-                      {d.name} ({d.value})
-                    </span>
-                  ))}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: satisfPctColor(avgPct), lineHeight: 1 }}>{avgPct}%</div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>satisfação média</div>
+                    {pieNps.map(d => (
+                      <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: d.fill, flexShrink: 0 }} />
+                        <span style={{ fontSize: 11, color: '#374151', flex: 1 }}>{d.name}</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>{d.value}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )

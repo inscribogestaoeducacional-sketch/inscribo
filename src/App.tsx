@@ -30,7 +30,6 @@ import GestorSurveys     from './pages/gestor/GestorSurveys'
 import GestorEmbed       from './pages/gestor/GestorEmbed'
 import LeadKanban        from './components/leads/LeadKanban'
 import VisitCalendar     from './components/calendar/VisitCalendar'
-import EnrollmentManager from './components/enrollments/EnrollmentManager'
 import WhatsAppHub       from './components/whatsapp/WhatsAppHub'
 import GestorReports     from './components/reports/GestorReports'
 import ClientsModule    from './components/clients/ClientsModule'
@@ -317,7 +316,6 @@ function AppContent() {
             <Route path="/clients"        element={<ClientsModule />} />
             <Route path="/contacts"       element={<PermissionRoute module="contatos"><ContactsModule /></PermissionRoute>} />
             <Route path="/visits"         element={<PermissionRoute module="visitas"><VisitCalendar /></PermissionRoute>} />
-            <Route path="/enrollments"    element={<EnrollmentManager />} />
             <Route path="/whatsapp"       element={<PermissionRoute module="whatsapp"><WhatsAppHub /></PermissionRoute>} />
             <Route path="/transferencias" element={<PermissionRoute module="transferencias"><GestorTransfers /></PermissionRoute>} />
             <Route path="/updates"        element={<GestorUpdates />} />
