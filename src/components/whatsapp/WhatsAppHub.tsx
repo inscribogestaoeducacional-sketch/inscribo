@@ -438,6 +438,18 @@ function getMediaUrl(message: any, instanceName?: string): string | null {
   return `/api/evolution/media-proxy?url=${encodeURIComponent(raw)}${idParam}${instParam}`
 }
 
+function DownloadIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+      strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="7 10 12 15 17 10"/>
+      <line x1="12" y1="15" x2="12" y2="3"/>
+    </svg>
+  )
+}
+
 async function handleDownload(url: string, filename: string) {
   try {
     const response = await fetch(url)
@@ -528,7 +540,7 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
             style={{ position: 'absolute', bottom: 6, right: 6, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}
             title="Baixar"
           >
-            <i className="ti ti-download" style={{ fontSize: 14 }} />
+            <DownloadIcon />
           </button>
         </div>
         {caption && <p style={{ fontSize: 13, color: fromMe ? 'rgba(255,255,255,0.85)' : '#64748B', marginTop: 6 }}>{caption}</p>}
@@ -2177,6 +2189,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   }
 
   const handleTransfer = async () => {
+    console.warn('🔄 TRANSFER INICIADO', new Date().toISOString())
     if (!activeId || !effectiveInstitutionId || !transferTarget) return
     const targetUser = users.find(u => u.id === transferTarget)
     if (!targetUser) return
