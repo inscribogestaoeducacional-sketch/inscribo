@@ -519,10 +519,10 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
           />
           <button
             onClick={() => handleDownload(mediaUrl, `imagem_${Date.now()}.jpg`)}
-            style={{ position: 'absolute', bottom: 6, right: 6, background: 'rgba(0,0,0,0.55)', border: 'none', borderRadius: 8, padding: '4px 8px', cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center' }}
-            title="Baixar imagem"
+            style={{ position: 'absolute', bottom: 6, right: 6, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}
+            title="Baixar"
           >
-            <i className="ti ti-download" style={{ fontSize: 16 }} />
+            <i className="ti ti-download" style={{ fontSize: 14 }} />
           </button>
         </div>
         {caption && <p style={{ fontSize: 13, color: fromMe ? 'rgba(255,255,255,0.85)' : '#64748B', marginTop: 6 }}>{caption}</p>}
@@ -555,10 +555,10 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
         </video>
         <button
           onClick={() => handleDownload(mediaUrl, `video_${Date.now()}.mp4`)}
-          style={{ position: 'absolute', bottom: 6, right: 6, background: 'rgba(0,0,0,0.55)', border: 'none', borderRadius: 8, padding: '4px 8px', cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center' }}
-          title="Baixar vídeo"
+          style={{ position: 'absolute', bottom: 6, right: 6, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}
+          title="Baixar"
         >
-          <i className="ti ti-download" style={{ fontSize: 16 }} />
+          <i className="ti ti-download" style={{ fontSize: 14 }} />
         </button>
       </div>
     )
@@ -570,10 +570,12 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
         <AudioPlayer duration={message.duration} from={fromMe ? 'me' : 'them'} mediaUrl={mediaUrl} isDark={fromMe} />
         <button
           onClick={() => handleDownload(mediaUrl, `audio_${Date.now()}.mp3`)}
-          style={{ background: 'rgba(0,0,0,0.08)', border: 'none', borderRadius: 8, padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-          title="Baixar áudio"
+          style={{ background: 'transparent', border: 'none', borderRadius: '50%', width: 26, height: 26, cursor: 'pointer', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.6 }}
+          onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+          onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}
+          title="Baixar"
         >
-          <i className="ti ti-download" style={{ fontSize: 16 }} />
+          <i className="ti ti-download" style={{ fontSize: 14 }} />
         </button>
       </div>
     )
@@ -2140,8 +2142,23 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (!targetUser) return
     const fromName = activeConv?.assigned_user_name || user.full_name || user.email
     const rJid = rawJid(activeId)
+    console.log('[TRANSFER] activeId:', activeId)
+    console.log('[TRANSFER] rawJid:', rJid)
     console.log('[TRANSFER] transferindo para:', targetUser.full_name, targetUser.id)
-    console.log('[TRANSFER] remote_jid:', rJid)
+    const { data: convData } = await supabase
+      .from('whatsapp_conversations')
+      .select('id, remote_jid, assigned_user_id, assigned_user_name')
+      .eq('institution_id', effectiveInstitutionId)
+      .eq('remote_jid', rJid)
+    console.log('[TRANSFER] conversa encontrada:', convData)
+    if (!convData || convData.length === 0) {
+      const { data: convData2 } = await supabase
+        .from('whatsapp_conversations')
+        .select('id, remote_jid, assigned_user_id')
+        .eq('institution_id', effectiveInstitutionId)
+        .ilike('remote_jid', `%${rJid}%`)
+      console.log('[TRANSFER] busca ampla:', convData2)
+    }
     await DatabaseService.transferConversation(effectiveInstitutionId, rJid, targetUser.id, targetUser.full_name, fromName)
     await DatabaseService.logConversationEvent({
       institution_id: effectiveInstitutionId,
