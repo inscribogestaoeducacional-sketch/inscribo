@@ -1893,6 +1893,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
     setSendingTemplate(true)
     try {
+      console.log('[SEND-TEMPLATE] to:', to, 'template:', tmpl.name, 'components:', JSON.stringify(components))
       const res = await fetch('/api/whatsapp/send-template', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1904,7 +1905,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           components,
         }),
       })
-      if (!res.ok) throw new Error('Erro ao enviar template')
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        console.error('❌ Template error:', errorData)
+        setSendError(errorData.error || 'Erro ao enviar template')
+        return
+      }
       const optimistic: Message = {
         id: `temp-tmpl-${Date.now()}`,
         type: 'text',

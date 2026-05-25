@@ -118,6 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const wamid   = metaData.messages?.[0]?.id
+    console.log('✅ Template enviado:', { wamid, to, template_name, metaData })
     const preview = `[Template: ${template_name}]`
 
     // ── Persist message ──
