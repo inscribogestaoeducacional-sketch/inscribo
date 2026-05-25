@@ -57,6 +57,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Número WhatsApp não configurado para esta escola' })
     }
 
+    // ── Fetch access token (per-platform, with env fallback) ──
+    const { data: tokenData } = await supabase
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'wa_access_token')
+      .single()
+    const accessToken = tokenData?.value || process.env.WA_ACCESS_TOKEN
+
     // ── Check monthly conversation limit before sending ──
     const monthYear = new Date().toISOString().slice(0, 7)
     const { data: usageRow } = await supabase
@@ -87,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const metaRes = await fetch(`${GRAPH_URL}/${phoneRecord.phone_number_id}/messages`, {
       method:  'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.WA_ACCESS_TOKEN}`,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type':  'application/json',
       },
       body: JSON.stringify({
@@ -102,7 +110,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const metaData = await metaRes.json()
     if (!metaRes.ok) {
       console.error('❌ Meta template error:', metaData)
-      return res.status(500).json({ error: metaData.error?.message || 'Erro ao enviar template' })
+      return res.status(500).json({
+        error:   metaData.error?.message || 'Erro ao enviar template',
+        code:    metaData.error?.code,
+        details: metaData.error,
+      })
     }
 
     const wamid   = metaData.messages?.[0]?.id
