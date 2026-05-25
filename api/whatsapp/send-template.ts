@@ -88,7 +88,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       language: { code: language },
     }
     if (Array.isArray(components) && components.length > 0) {
-      templatePayload.components = components
+      templatePayload.components = components.map((c: any) => ({
+        ...c,
+        type: c.type?.toUpperCase(),
+        parameters: c.parameters?.map((p: any) => ({
+          ...p,
+          type: p.type?.toLowerCase(),
+        })),
+      }))
     }
 
     // ── Send via Meta Cloud API ──
