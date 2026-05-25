@@ -645,42 +645,45 @@ export default function InstitutionDetails() {
   const loadWaTemplates = async () => {
     setLoadingTemplates(true)
     try {
-      console.log('[TEMPLATES] iniciando...')
-
       const { data: waPhoneRow } = await supabase
         .from('whatsapp_phone_numbers')
         .select('waba_id')
         .eq('institution_id', id)
         .maybeSingle()
-
-      console.log('[TEMPLATES] wabaId:', waPhoneRow?.waba_id)
+      const wabaId = waPhoneRow?.waba_id
+      if (!wabaId) { setWaTemplates([]); return }
 
       const { data: tokenRow } = await supabase
-        .from('platform_settings')
-        .select('value')
-        .eq('key', 'wa_access_token')
-        .maybeSingle()
+        .from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
+      const token = tokenRow?.value || ''
+      if (!token) return
 
-      console.log('[TEMPLATES] token:', tokenRow?.value ? 'existe' : 'NULL')
-
-      if (!waPhoneRow?.waba_id || !tokenRow?.value) {
-        console.log('[TEMPLATES] ERRO: waba_id ou token ausente')
-        setWaTemplates([])
-        return
-      }
-
-      const url = `https://graph.facebook.com/v18.0/${waPhoneRow.waba_id}/message_templates?limit=50`
-      console.log('[TEMPLATES] fetching:', url)
-
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${tokenRow.value}` },
-      })
-
+      const res = await fetch(
+        `https://graph.facebook.com/v18.0/${wabaId}/message_templates?limit=50`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
       const data = await res.json()
-      console.log('[TEMPLATES] resposta Meta:', res.status, data)
+      const metaTemplates: any[] = data.data || []
+      setWaTemplates(metaTemplates)
 
-    } catch (err) {
-      console.error('[TEMPLATES] erro:', err)
+      if (metaTemplates.length > 0 && id) {
+        const toUpsert = metaTemplates.map((t: any) => ({
+          institution_id: id,
+          name: t.name,
+          language: t.language || 'pt_BR',
+          category: t.category || 'UTILITY',
+          components: t.components || [],
+          template_id: t.id,
+          status: t.status?.toLowerCase() === 'approved' ? 'approved'
+                : t.status?.toLowerCase() === 'rejected' ? 'rejected'
+                : 'pending',
+        }))
+        await supabase
+          .from('whatsapp_templates')
+          .upsert(toUpsert, { onConflict: 'institution_id,name' })
+      }
+    } catch (e) {
+      console.error('[templates] erro ao carregar:', e)
     } finally {
       setLoadingTemplates(false)
     }
