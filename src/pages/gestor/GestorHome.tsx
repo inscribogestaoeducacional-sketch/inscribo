@@ -688,6 +688,7 @@ export default function GestorHome() {
   const inepAvgStudents = inepTotalSchools > 0 ? Math.round(inepTotalStudents / inepTotalSchools) : null
   const inepCompetitors = inepRanked.filter(s => s.co_entidade !== inepMyCode).slice(0, 5)
   const inepHasData = inepTotalSchools > 0
+  console.log('[INEP HAS DATA]', inepHasData, 'private:', inepPrivate?.length, 'maxYear:', inepMaxYear, 'raw:', marketSchools.length)
   const inepShareBadge = inepSharePct !== null
     ? inepSharePct >= 25 ? { label: 'Líder de mercado', bg: '#dcfce7', color: '#15803d' }
     : inepSharePct >= 15 ? { label: 'Top 3', bg: '#dbeafe', color: '#1d4ed8' }
