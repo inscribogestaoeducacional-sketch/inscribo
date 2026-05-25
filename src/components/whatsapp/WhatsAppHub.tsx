@@ -2208,6 +2208,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       user_id: user.id,
       user_name: user.full_name || user.email,
     })
+    await loadMessages()
     setConversations(prev => prev.map(c => c.id === activeId
       ? { ...c, assigned_user_id: targetUser.id, assigned_user_name: targetUser.full_name }
       : c
