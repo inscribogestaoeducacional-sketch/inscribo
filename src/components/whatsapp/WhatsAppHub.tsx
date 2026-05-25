@@ -631,7 +631,7 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
 }
 
 // ─── MessageBubble ────────────────────────────────────────────────────────────
-function MessageBubble({ msg, onImageClick, instanceName }: { msg: Message; onImageClick?: (url: string) => void; instanceName?: string }) {
+function MessageBubble({ msg, onImageClick, instanceName, contactName }: { msg: Message; onImageClick?: (url: string) => void; instanceName?: string; contactName?: string }) {
   const isMe = msg.from === 'me'
 
   return (
@@ -674,36 +674,32 @@ function MessageBubble({ msg, onImageClick, instanceName }: { msg: Message; onIm
         )}
         {msg.quoted_content && (
           <div style={{
-            borderLeft: `3px solid ${isMe ? 'rgba(255,255,255,0.5)' : '#0d9488'}`,
-            background: isMe ? 'rgba(0,0,0,0.15)' : 'rgba(13,148,136,0.07)',
-            borderRadius: '0 6px 6px 0',
-            padding: '5px 8px',
+            borderLeft: '3px solid',
+            borderColor: isMe ? 'rgba(255,255,255,0.6)' : '#00A896',
+            background: isMe ? 'rgba(0,0,0,0.15)' : 'rgba(0,168,150,0.08)',
+            borderRadius: '4px',
+            padding: '6px 10px',
             marginBottom: 6,
-            maxWidth: '100%',
-            overflow: 'hidden',
+            cursor: 'default',
           }}>
-            <span style={{
-              display: 'block',
-              fontSize: 11,
-              fontWeight: 700,
-              color: isMe ? 'rgba(255,255,255,0.7)' : '#0d9488',
+            <div style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: isMe ? 'rgba(255,255,255,0.9)' : '#00A896',
               marginBottom: 2,
             }}>
-              {msg.quoted_from_me ? 'Você' : 'Contato'}
-            </span>
-            <span style={{
-              display: 'block',
+              {msg.quoted_from_me ? 'Você' : (contactName || 'Contato')}
+            </div>
+            <div style={{
               fontSize: 12,
-              color: isMe ? 'rgba(255,255,255,0.85)' : '#475569',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              overflow: 'hidden',
+              color: isMe ? 'rgba(255,255,255,0.75)' : 'var(--color-text-secondary)',
               display: '-webkit-box',
-              WebkitLineClamp: 3,
-              WebkitBoxOrient: 'vertical',
-            } as React.CSSProperties}>
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical' as any,
+              overflow: 'hidden',
+            }}>
               {msg.quoted_content}
-            </span>
+            </div>
           </div>
         )}
         <RenderMessageContent message={msg} fromMe={isMe} instanceName={instanceName} onImageClick={onImageClick} />
@@ -3451,7 +3447,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   <div style={{ flex: 1, height: 1, background: 'linear-gradient(to left, transparent, #D1FAE5, transparent)' }} />
                 </div>
                 {group.msgs.map(msg => (
-                  <MessageBubble key={msg.id} msg={msg} onImageClick={url => setLightboxUrl(url)} instanceName={instance} />
+                  <MessageBubble key={msg.id} msg={msg} onImageClick={url => setLightboxUrl(url)} instanceName={instance} contactName={activeConv?.name || 'Contato'} />
                 ))}
               </div>
             ))}

@@ -127,7 +127,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const wamid   = metaData.messages?.[0]?.id
     console.log('✅ Template enviado:', { wamid, to, template_name, metaData })
-    const preview = `[Template: ${template_name}]`
+
+    // ── Build real preview text from template body ──
+    const bodyComp = components?.find((c: any) => c.type?.toUpperCase() === 'BODY')
+    let preview = `[Template: ${template_name}]`
+    if (bodyComp?.parameters) {
+      const { data: tmplData } = await supabase
+        .from('whatsapp_templates')
+        .select('components')
+        .eq('institution_id', institution_id)
+        .eq('name', template_name)
+        .single()
+      if (tmplData?.components) {
+        const bodyTmpl = (tmplData.components as any[]).find((c: any) => c.type === 'BODY')
+        if (bodyTmpl?.text) {
+          let text: string = bodyTmpl.text
+          ;(bodyComp.parameters as any[]).forEach((p: any, i: number) => {
+            text = text.replace(`{{${i + 1}}}`, p.text || '')
+          })
+          preview = text
+        }
+      }
+    }
 
     // ── Persist message ──
     await supabase.from('whatsapp_messages').insert({
