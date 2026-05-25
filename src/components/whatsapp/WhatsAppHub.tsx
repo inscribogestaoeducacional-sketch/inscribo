@@ -1934,6 +1934,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         return
       }
       const preview = buildTemplatePreview(tmpl, templateVars)
+      if (!preview || preview.startsWith('[Template')) {
+        console.log('[PREVIEW]', preview, 'tmpl:', tmpl?.name, 'vars:', templateVars, 'components:', JSON.stringify(tmpl?.components))
+      }
       const optimistic: Message = {
         id: `temp-tmpl-${Date.now()}`,
         type: 'text',
