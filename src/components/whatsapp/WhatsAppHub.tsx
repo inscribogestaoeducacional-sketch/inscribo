@@ -483,21 +483,33 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
   if (msgType === 'image' && mediaUrl) {
     return (
       <div>
-        <img
-          src={mediaUrl}
-          alt="imagem"
-          style={{ maxWidth: 260, maxHeight: 320, width: '100%', borderRadius: 10, display: 'block', cursor: 'pointer', objectFit: 'cover' }}
-          onClick={() => onImageClick ? onImageClick(mediaUrl) : window.open(mediaUrl, '_blank')}
-          onError={(e) => {
-            const t = e.currentTarget
-            t.style.display = 'none'
-            const fb = document.createElement('div')
-            fb.style.cssText = 'padding:10px 14px;background:#F1F5F9;border-radius:10px;cursor:pointer;color:#64748B;font-size:13px;display:flex;gap:8px;align-items:center'
-            fb.innerHTML = '🖼️ Imagem (clique para abrir)'
-            fb.onclick = () => window.open(mediaUrl, '_blank')
-            t.parentElement?.appendChild(fb)
-          }}
-        />
+        <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
+          <img
+            src={mediaUrl}
+            alt="imagem"
+            style={{ maxWidth: 260, maxHeight: 320, width: '100%', borderRadius: 10, display: 'block', cursor: 'pointer', objectFit: 'cover' }}
+            onClick={() => onImageClick ? onImageClick(mediaUrl) : window.open(mediaUrl, '_blank')}
+            onError={(e) => {
+              const t = e.currentTarget
+              t.style.display = 'none'
+              const fb = document.createElement('div')
+              fb.style.cssText = 'padding:10px 14px;background:#F1F5F9;border-radius:10px;cursor:pointer;color:#64748B;font-size:13px;display:flex;gap:8px;align-items:center'
+              fb.innerHTML = '🖼️ Imagem (clique para abrir)'
+              fb.onclick = () => window.open(mediaUrl, '_blank')
+              t.parentElement?.appendChild(fb)
+            }}
+          />
+          <a
+            href={mediaUrl}
+            download
+            target="_blank"
+            rel="noreferrer"
+            style={{ position: 'absolute', bottom: 6, right: 6, background: 'rgba(0,0,0,0.55)', borderRadius: 6, padding: '4px 6px', color: '#fff', fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center' }}
+            title="Baixar imagem"
+          >
+            <i className="ti ti-download" style={{ fontSize: 16 }} />
+          </a>
+        </div>
         {caption && <p style={{ fontSize: 13, color: fromMe ? 'rgba(255,255,255,0.85)' : '#64748B', marginTop: 6 }}>{caption}</p>}
       </div>
     )
@@ -532,7 +544,19 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
 
   if ((msgType === 'audio' || msgType === 'ptt') && mediaUrl) {
     return (
-      <AudioPlayer duration={message.duration} from={fromMe ? 'me' : 'them'} mediaUrl={mediaUrl} isDark={fromMe} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <AudioPlayer duration={message.duration} from={fromMe ? 'me' : 'them'} mediaUrl={mediaUrl} isDark={fromMe} />
+        <a
+          href={mediaUrl}
+          download
+          target="_blank"
+          rel="noreferrer"
+          style={{ background: 'rgba(0,0,0,0.08)', borderRadius: 6, padding: '4px 6px', color: '#374151', fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center' }}
+          title="Baixar áudio"
+        >
+          <i className="ti ti-download" style={{ fontSize: 16 }} />
+        </a>
+      </div>
     )
   }
 
@@ -898,6 +922,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
       setRecorderState('recording')
     } catch (err: any) {
+      console.error('[AUDIO] getUserMedia error:', err?.name, err?.message, err)
       if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
         setSendError('Permissão de microfone negada. Clique no 🔒 na barra de endereço e permita.')
       } else if (err?.name === 'NotFoundError' || err?.name === 'DevicesNotFoundError') {
@@ -971,6 +996,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           .replace(/@s\.whatsapp\.net$/, '')
           .replace(/@.*/, '')
           .replace(/\D/g, '')
+        console.log('[AUDIO] enviando para /api/whatsapp/send, to:', to)
         const sendRes = await fetch('/api/whatsapp/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1439,8 +1465,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             contact_type: payload.new?.contact_type || c.contact_type,
             lead_id: payload.new?.lead_id || c.lead_id,
             tags: payload.new?.tags || c.tags,
-            assigned_user_id: payload.new?.assigned_user_id || c.assigned_user_id,
-            assigned_user_name: payload.new?.assigned_user_name || c.assigned_user_name,
+            assigned_user_id:   'assigned_user_id'   in payload.new ? payload.new.assigned_user_id   : c.assigned_user_id,
+            assigned_user_name: 'assigned_user_name' in payload.new ? payload.new.assigned_user_name : c.assigned_user_name,
           }
         }))
       })
@@ -1820,8 +1846,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       if (statusFilter === 'abertos'  && c.status === 'closed') return false
       if (statusFilter === 'concluido' && c.status !== 'closed') return false
       // read filter
-      if (readFilter === 'read'   && (c.unreadCount || 0) > 0) return false
-      if (readFilter === 'unread' && (c.unreadCount || 0) === 0) return false
+      if (readFilter === 'read' && (c.unreadCount || 0) > 0) return false
+      if (readFilter === 'unread') {
+        if ((c.unreadCount || 0) === 0) return false
+        if (user?.role !== 'gestor' && user?.role !== 'admin' && user?.role !== 'superadmin') {
+          if (c.assigned_user_id !== user?.id) return false
+        }
+      }
       // assign filter
       if (assignFilter === 'mine' && c.assigned_user_id !== user?.id) return false
       if (assignFilter === 'none' && c.assigned_user_id != null) return false
