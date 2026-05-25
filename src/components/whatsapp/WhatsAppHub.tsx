@@ -573,10 +573,10 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
         </video>
         <button
           onClick={() => handleDownload(mediaUrl, `video_${Date.now()}.mp4`)}
-          style={{ position: 'absolute', bottom: 6, right: 6, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}
-          title="Baixar"
+          style={{ position: 'absolute', bottom: 6, right: 6, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          title="Baixar vídeo"
         >
-          <i className="ti ti-download" style={{ fontSize: 14 }} />
+          <DownloadIcon />
         </button>
       </div>
     )
@@ -584,16 +584,14 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
 
   if ((msgType === 'audio' || msgType === 'ptt') && mediaUrl) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
         <AudioPlayer duration={message.duration} from={fromMe ? 'me' : 'them'} mediaUrl={mediaUrl} isDark={fromMe} />
         <button
           onClick={() => handleDownload(mediaUrl, `audio_${Date.now()}.mp3`)}
-          style={{ background: 'transparent', border: 'none', borderRadius: '50%', width: 26, height: 26, cursor: 'pointer', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.6 }}
-          onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-          onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}
-          title="Baixar"
+          style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+          title="Baixar áudio"
         >
-          <i className="ti ti-download" style={{ fontSize: 14 }} />
+          <DownloadIcon />
         </button>
       </div>
     )
