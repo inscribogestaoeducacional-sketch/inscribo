@@ -1628,6 +1628,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         const effectiveText = interactiveReply || text
 
+        // ── Extract quoted/reply context ──
+        const quotedMsgId: string | null = (msg.context as any)?.id || null
+        let quotedContent: string | null = null
+        let quotedFromMe: boolean | null = null
+
+        if (quotedMsgId) {
+          const { data: qMsg } = await supabase
+            .from('whatsapp_messages')
+            .select('content, from_me')
+            .eq('message_id', quotedMsgId)
+            .eq('institution_id', institutionId)
+            .maybeSingle()
+          if (qMsg) {
+            quotedContent = qMsg.content
+            quotedFromMe  = qMsg.from_me
+          }
+        }
+
         // ── Resolve media URL (download + re-upload to Storage) ──
         let mediaUrl: string | null = null
 
@@ -1757,12 +1775,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             content:        interactiveTitle || text || contentPreview,
             message_type:   msgType,
             media_url:      mediaUrl,
-            from_me:        false,
-            contact_name:   contactName,
+            from_me:           false,
+            contact_name:      contactName,
             timestamp,
-            status:         'received',
-            direction:      'inbound',
-            raw_data:       msg,
+            status:            'received',
+            direction:         'inbound',
+            raw_data:          msg,
+            quoted_message_id: quotedMsgId,
+            quoted_content:    quotedContent,
+            quoted_from_me:    quotedFromMe,
           })
 
         if (msgErr) console.error('❌ msg insert error:', msgErr.message)

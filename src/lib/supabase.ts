@@ -207,6 +207,9 @@ export interface WhatsappMessage {
   created_at: string
   status?: string
   direction?: string
+  quoted_message_id?: string
+  quoted_content?: string
+  quoted_from_me?: boolean
 }
 
 export interface WhatsappConversation {

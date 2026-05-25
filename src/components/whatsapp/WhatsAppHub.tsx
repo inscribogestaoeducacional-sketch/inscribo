@@ -29,6 +29,9 @@ interface Message {
   message_id?: string
   senderName?: string
   isTemplate?: boolean
+  quoted_message_id?: string
+  quoted_content?: string
+  quoted_from_me?: boolean
 }
 
 interface Label { text: string; color: string }
@@ -208,6 +211,9 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
             media_url: m.media_url,
             message_id: m.message_id,
             senderName: m.from_me ? (m.contact_name || undefined) : undefined,
+            quoted_message_id: m.quoted_message_id,
+            quoted_content:    m.quoted_content,
+            quoted_from_me:    m.quoted_from_me,
           }
         }),
     }
@@ -655,6 +661,40 @@ function MessageBubble({ msg, onImageClick, instanceName }: { msg: Message; onIm
           <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: isMe ? 'rgba(255,255,255,0.6)' : '#0d9488', background: isMe ? 'rgba(255,255,255,0.15)' : '#ccfbf1', borderRadius: 4, padding: '1px 5px', marginBottom: 4 }}>
             🔖 Template
           </span>
+        )}
+        {msg.quoted_content && (
+          <div style={{
+            borderLeft: `3px solid ${isMe ? 'rgba(255,255,255,0.5)' : '#0d9488'}`,
+            background: isMe ? 'rgba(0,0,0,0.15)' : 'rgba(13,148,136,0.07)',
+            borderRadius: '0 6px 6px 0',
+            padding: '5px 8px',
+            marginBottom: 6,
+            maxWidth: '100%',
+            overflow: 'hidden',
+          }}>
+            <span style={{
+              display: 'block',
+              fontSize: 11,
+              fontWeight: 700,
+              color: isMe ? 'rgba(255,255,255,0.7)' : '#0d9488',
+              marginBottom: 2,
+            }}>
+              {msg.quoted_from_me ? 'Você' : 'Contato'}
+            </span>
+            <span style={{
+              display: 'block',
+              fontSize: 12,
+              color: isMe ? 'rgba(255,255,255,0.85)' : '#475569',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              overflow: 'hidden',
+              display: '-webkit-box',
+              WebkitLineClamp: 3,
+              WebkitBoxOrient: 'vertical',
+            } as React.CSSProperties}>
+              {msg.quoted_content}
+            </span>
+          </div>
         )}
         <RenderMessageContent message={msg} fromMe={isMe} instanceName={instanceName} onImageClick={onImageClick} />
         <div style={{
