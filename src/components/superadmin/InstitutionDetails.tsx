@@ -658,6 +658,10 @@ export default function InstitutionDetails() {
       const token = tokenRow?.value || ''
       if (!token) return
 
+      console.log('[TEMPLATES] wabaId:', wabaId)
+      console.log('[TEMPLATES] accessToken:', token ? 'existe' : 'NULL')
+      console.log('[TEMPLATES] url:', `https://graph.facebook.com/v18.0/${wabaId}/message_templates?limit=50`)
+
       const res = await fetch(
         `https://graph.facebook.com/v18.0/${wabaId}/message_templates?limit=50`,
         { headers: { Authorization: `Bearer ${token}` } }
