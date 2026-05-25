@@ -92,6 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ── Send via Meta Cloud API ──
+    console.log('📤 Payload Meta:', JSON.stringify({ to, template: templatePayload }, null, 2))
     const metaRes = await fetch(`${GRAPH_URL}/${phoneRecord.phone_number_id}/messages`, {
       method:  'POST',
       headers: {
