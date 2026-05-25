@@ -1939,7 +1939,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       setTemplateError(null)
       setHubToast('✅ Template enviado!')
       setTimeout(() => setHubToast(null), 3000)
-      setTimeout(() => { loadMessages() }, 2000)
+      const jidSnapshot = activeId
+      setTimeout(async () => {
+        console.log('[RELOAD] recarregando para jid:', jidSnapshot)
+        await loadMessages()
+      }, 2500)
     } catch (err: any) {
       setTemplateError(err.message || 'Erro ao enviar template')
     } finally {
