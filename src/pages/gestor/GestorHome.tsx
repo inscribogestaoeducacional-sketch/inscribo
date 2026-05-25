@@ -414,13 +414,11 @@ export default function GestorHome() {
       if (inepCity && inepState) {
         const { data: marketSchoolsData, error: marketError } = await supabase
           .from('inep_escolas')
-          .select('co_entidade, no_entidade, tp_dependencia, qt_mat_total, qt_mat_fund, qt_mat_med, qt_mat_inf')
+          .select('co_entidade, no_entidade, tp_dependencia, qt_mat_total, qt_mat_fund, qt_mat_med, qt_mat_inf, ano_censo')
           .eq('no_municipio', inepCity)
           .eq('sg_uf', inepState?.toUpperCase() ?? '')
           .eq('ano_censo', 2025)
-        console.log('[INEP ERROR]', marketError)
-        console.log('[INEP RESULT]', marketSchoolsData?.length)
-        setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
+setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
       } else {
         setMarketSchools([])
       }
@@ -688,7 +686,6 @@ export default function GestorHome() {
   const inepAvgStudents = inepTotalSchools > 0 ? Math.round(inepTotalStudents / inepTotalSchools) : null
   const inepCompetitors = inepRanked.filter(s => s.co_entidade !== inepMyCode).slice(0, 5)
   const inepHasData = inepTotalSchools > 0
-  console.log('[INEP HAS DATA]', inepHasData, 'private:', inepPrivate?.length, 'maxYear:', inepMaxYear, 'raw:', marketSchools.length)
   const inepShareBadge = inepSharePct !== null
     ? inepSharePct >= 25 ? { label: 'Líder de mercado', bg: '#dcfce7', color: '#15803d' }
     : inepSharePct >= 15 ? { label: 'Top 3', bg: '#dbeafe', color: '#1d4ed8' }
