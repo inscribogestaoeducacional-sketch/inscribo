@@ -859,13 +859,31 @@ export class DatabaseService {
   }
 
   static async transferConversation(institutionId: string, remoteJid: string, newUserId: string, newUserName: string, fromUserName: string): Promise<void> {
-    const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
-    const { data, error } = await supabase.from('whatsapp_conversations')
-      .update({ assigned_user_id: newUserId, assigned_user_name: newUserName, transferred_from: fromUserName, transferred_at: new Date().toISOString() })
-      .eq('institution_id', institutionId)
-      .eq('remote_jid', raw)
-      .select()
-    console.log('[TRANSFER] resultado:', data, error)
+    const raw  = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
+    const norm = `${raw}@s.whatsapp.net`
+
+    const updatePayload = {
+      assigned_user_id:   newUserId,
+      assigned_user_name: newUserName,
+      transferred_from:   fromUserName,
+      transferred_at:     new Date().toISOString(),
+    }
+
+    const [r1, r2] = await Promise.all([
+      supabase.from('whatsapp_conversations')
+        .update(updatePayload)
+        .eq('institution_id', institutionId)
+        .eq('remote_jid', raw)
+        .select(),
+      supabase.from('whatsapp_conversations')
+        .update(updatePayload)
+        .eq('institution_id', institutionId)
+        .eq('remote_jid', norm)
+        .select(),
+    ])
+
+    console.log('[TRANSFER] raw result:', r1.data, r1.error)
+    console.log('[TRANSFER] norm result:', r2.data, r2.error)
   }
 
   static async setConversationContactType(institutionId: string, remoteJid: string, contactType: string): Promise<void> {
