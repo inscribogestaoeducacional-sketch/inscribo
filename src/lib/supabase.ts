@@ -857,10 +857,12 @@ export class DatabaseService {
 
   static async transferConversation(institutionId: string, remoteJid: string, newUserId: string, newUserName: string, fromUserName: string): Promise<void> {
     const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
-    await supabase.from('whatsapp_conversations')
+    const { data, error } = await supabase.from('whatsapp_conversations')
       .update({ assigned_user_id: newUserId, assigned_user_name: newUserName, transferred_from: fromUserName, transferred_at: new Date().toISOString() })
       .eq('institution_id', institutionId)
       .eq('remote_jid', raw)
+      .select()
+    console.log('[TRANSFER] resultado:', data, error)
   }
 
   static async setConversationContactType(institutionId: string, remoteJid: string, contactType: string): Promise<void> {

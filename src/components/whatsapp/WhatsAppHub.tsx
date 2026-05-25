@@ -28,6 +28,7 @@ interface Message {
   media_url?: string
   message_id?: string
   senderName?: string
+  isTemplate?: boolean
 }
 
 interface Label { text: string; color: string }
@@ -431,6 +432,23 @@ function getMediaUrl(message: any, instanceName?: string): string | null {
   return `/api/evolution/media-proxy?url=${encodeURIComponent(raw)}${idParam}${instParam}`
 }
 
+async function handleDownload(url: string, filename: string) {
+  try {
+    const response = await fetch(url)
+    const blob = await response.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(blobUrl)
+  } catch {
+    window.open(url, '_blank')
+  }
+}
+
 // ─── RenderMessageContent ─────────────────────────────────────────────────────
 function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: { message: any; fromMe: boolean; instanceName?: string; onImageClick?: (url: string) => void }) {
   const msgType = (
@@ -499,16 +517,13 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
               t.parentElement?.appendChild(fb)
             }}
           />
-          <a
-            href={mediaUrl}
-            download
-            target="_blank"
-            rel="noreferrer"
-            style={{ position: 'absolute', bottom: 6, right: 6, background: 'rgba(0,0,0,0.55)', borderRadius: 6, padding: '4px 6px', color: '#fff', fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center' }}
+          <button
+            onClick={() => handleDownload(mediaUrl, `imagem_${Date.now()}.jpg`)}
+            style={{ position: 'absolute', bottom: 6, right: 6, background: 'rgba(0,0,0,0.55)', border: 'none', borderRadius: 8, padding: '4px 8px', cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center' }}
             title="Baixar imagem"
           >
             <i className="ti ti-download" style={{ fontSize: 16 }} />
-          </a>
+          </button>
         </div>
         {caption && <p style={{ fontSize: 13, color: fromMe ? 'rgba(255,255,255,0.85)' : '#64748B', marginTop: 6 }}>{caption}</p>}
       </div>
@@ -521,7 +536,7 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
 
   if (msgType === 'video' && mediaUrl) {
     return (
-      <div style={{ maxWidth: 260, borderRadius: 10, overflow: 'hidden' }}>
+      <div style={{ maxWidth: 260, borderRadius: 10, overflow: 'hidden', position: 'relative' }}>
         <video
           controls preload="metadata"
           style={{ width: '100%', maxHeight: 200, display: 'block', background: '#000', borderRadius: 10 }}
@@ -538,6 +553,13 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
           <source src={mediaUrl} type="video/mp4" />
           <source src={mediaUrl} type="video/webm" />
         </video>
+        <button
+          onClick={() => handleDownload(mediaUrl, `video_${Date.now()}.mp4`)}
+          style={{ position: 'absolute', bottom: 6, right: 6, background: 'rgba(0,0,0,0.55)', border: 'none', borderRadius: 8, padding: '4px 8px', cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center' }}
+          title="Baixar vídeo"
+        >
+          <i className="ti ti-download" style={{ fontSize: 16 }} />
+        </button>
       </div>
     )
   }
@@ -546,16 +568,13 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <AudioPlayer duration={message.duration} from={fromMe ? 'me' : 'them'} mediaUrl={mediaUrl} isDark={fromMe} />
-        <a
-          href={mediaUrl}
-          download
-          target="_blank"
-          rel="noreferrer"
-          style={{ background: 'rgba(0,0,0,0.08)', borderRadius: 6, padding: '4px 6px', color: '#374151', fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center' }}
+        <button
+          onClick={() => handleDownload(mediaUrl, `audio_${Date.now()}.mp3`)}
+          style={{ background: 'rgba(0,0,0,0.08)', border: 'none', borderRadius: 8, padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
           title="Baixar áudio"
         >
           <i className="ti ti-download" style={{ fontSize: 16 }} />
-        </a>
+        </button>
       </div>
     )
   }
@@ -629,6 +648,11 @@ function MessageBubble({ msg, onImageClick, instanceName }: { msg: Message; onIm
           }}>
             {msg.senderName === '_bot_' ? '🤖 Robô:' : `${msg.senderName}:`}
           </p>
+        )}
+        {msg.isTemplate && (
+          <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: isMe ? 'rgba(255,255,255,0.6)' : '#0d9488', background: isMe ? 'rgba(255,255,255,0.15)' : '#ccfbf1', borderRadius: 4, padding: '1px 5px', marginBottom: 4 }}>
+            🔖 Template
+          </span>
         )}
         <RenderMessageContent message={msg} fromMe={isMe} instanceName={instanceName} onImageClick={onImageClick} />
         <div style={{
@@ -1958,6 +1982,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
     setTemplateError(null)
     setSendingTemplate(true)
+    const preview = buildTemplatePreview(tmpl, templateVars)
+    console.log('[TEMPLATE PREVIEW]', { tmpl: tmpl?.name, components: tmpl?.components, vars: templateVars, preview })
     try {
       console.log('[SEND-TEMPLATE] to:', to, 'template:', tmpl.name, 'components:', JSON.stringify(components))
       const res = await fetch('/api/whatsapp/send-template', {
@@ -1977,6 +2003,21 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         setTemplateError(errorData.error || 'Erro ao enviar template')
         return
       }
+      const optimistic: Message = {
+        id: `temp-tmpl-${Date.now()}`,
+        type: 'text',
+        content: preview,
+        from: 'me',
+        ts: new Date(),
+        status: 'sent',
+        senderName: user?.full_name || undefined,
+        isTemplate: true,
+      }
+      setConversations(prev => prev.map(c =>
+        c.id === activeId
+          ? { ...c, messages: [...c.messages, optimistic], lastMessage: preview, lastTime: optimistic.ts }
+          : c
+      ))
       setShowTemplateModal(false)
       setSelectedTemplate('')
       setTemplateVars({})
@@ -2099,6 +2140,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (!targetUser) return
     const fromName = activeConv?.assigned_user_name || user.full_name || user.email
     const rJid = rawJid(activeId)
+    console.log('[TRANSFER] transferindo para:', targetUser.full_name, targetUser.id)
+    console.log('[TRANSFER] remote_jid:', rJid)
     await DatabaseService.transferConversation(effectiveInstitutionId, rJid, targetUser.id, targetUser.full_name, fromName)
     await DatabaseService.logConversationEvent({
       institution_id: effectiveInstitutionId,
