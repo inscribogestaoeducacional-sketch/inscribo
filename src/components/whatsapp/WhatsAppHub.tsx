@@ -723,6 +723,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [selectedTemplate, setSelectedTemplate] = useState('')
   const [templateVars, setTemplateVars] = useState<Record<string, string>>({})
   const [sendingTemplate, setSendingTemplate] = useState(false)
+  const [templateError, setTemplateError] = useState<string | null>(null)
   const [sendingReactivate, setSendingReactivate] = useState(false)
   const [hubToast, setHubToast] = useState<string | null>(null)
 
@@ -1891,6 +1892,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       ? [{ type: 'body', parameters: varKeys.map(k => ({ type: 'text', text: templateVars[k] })) }]
       : tmpl.components ?? []
 
+    setTemplateError(null)
     setSendingTemplate(true)
     try {
       console.log('[SEND-TEMPLATE] to:', to, 'template:', tmpl.name, 'components:', JSON.stringify(components))
@@ -1908,28 +1910,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
         console.error('❌ Template error:', errorData)
-        setSendError(errorData.error || 'Erro ao enviar template')
+        setTemplateError(errorData.error || 'Erro ao enviar template')
         return
       }
-      const optimistic: Message = {
-        id: `temp-tmpl-${Date.now()}`,
-        type: 'text',
-        content: `[Template] ${tmpl.name}`,
-        from: 'me',
-        ts: new Date(),
-        status: 'sent',
-        senderName: user?.full_name || undefined,
-      }
-      setConversations(prev => prev.map(c =>
-        c.id === activeId
-          ? { ...c, messages: [...c.messages, optimistic], lastMessage: optimistic.content, lastTime: optimistic.ts }
-          : c
-      ))
       setShowTemplateModal(false)
       setSelectedTemplate('')
       setTemplateVars({})
+      setTemplateError(null)
+      setHubToast('✅ Template enviado! Aguardando resposta...')
+      setTimeout(() => setHubToast(null), 3000)
     } catch (err: any) {
-      setSendError(err.message || 'Erro ao enviar template')
+      setTemplateError(err.message || 'Erro ao enviar template')
     } finally {
       setSendingTemplate(false)
     }
@@ -2817,74 +2808,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               }}
                 className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81]">
                 Confirmar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Template Modal */}
-      {showTemplateModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 w-96 shadow-2xl border border-[#E2E8F0] max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-[#1A2B4A]">Enviar Template</h3>
-              <button onClick={() => { setShowTemplateModal(false); setSelectedTemplate(''); setTemplateVars({}) }} className="p-1 text-[#64748B] hover:text-[#1A2B4A]">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            {templates.length === 0 ? (
-              <p className="text-xs text-[#94A3B8] italic mb-4">
-                Nenhum template aprovado.{' '}
-                <span className="text-[#00A896] cursor-pointer" onClick={() => { setShowTemplateModal(false); navigate('/settings?tab=whatsapp') }}>
-                  Configurar em Configurações → WhatsApp
-                </span>
-              </p>
-            ) : (
-              <div className="flex flex-col gap-2 mb-4 max-h-52 overflow-y-auto">
-                {templates.map(tpl => {
-                  const bodyText = tpl.components?.find((c: any) => c.type === 'BODY')?.text || tpl.name
-                  const isSelected = selectedTemplate === tpl.id
-                  return (
-                    <button key={tpl.id} onClick={() => { setSelectedTemplate(tpl.id); setTemplateVars({}) }}
-                      style={{ textAlign: 'left', padding: '10px 12px', background: isSelected ? '#CCFBF1' : '#F8FAFB', border: `1.5px solid ${isSelected ? '#0d9488' : '#E2E8F0'}`, borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s' }}>
-                      <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{tpl.name}</p>
-                      <p style={{ margin: '3px 0 0', fontSize: 11, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bodyText}</p>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-            {selectedTemplate && (() => {
-              const tmpl = templates.find(t => t.id === selectedTemplate)
-              if (!tmpl) return null
-              const bodyComp = tmpl.components?.find((c: any) => c.type === 'BODY')
-              if (!bodyComp?.text) return null
-              const matches = [...bodyComp.text.matchAll(/\{\{(\d+)\}\}/g)]
-              if (matches.length === 0) return null
-              return (
-                <div className="flex flex-col gap-2 mb-4">
-                  <p className="text-xs font-semibold text-[#64748B]">Variáveis:</p>
-                  {matches.map(([, n]) => (
-                    <div key={n} className="flex items-center gap-2">
-                      <span className="text-xs text-[#94A3B8] whitespace-nowrap">{`{{${n}}}`}</span>
-                      <input value={templateVars[n] || ''}
-                        onChange={e => setTemplateVars(v => ({ ...v, [n]: e.target.value }))}
-                        placeholder={`Variável ${n}`}
-                        className="flex-1 px-2 py-1.5 text-xs bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
-                    </div>
-                  ))}
-                </div>
-              )
-            })()}
-            <div className="flex gap-2 mt-2">
-              <button onClick={() => { setShowTemplateModal(false); setSelectedTemplate(''); setTemplateVars({}) }}
-                className="flex-1 py-2.5 text-xs font-medium text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
-                Cancelar
-              </button>
-              <button onClick={handleSendTemplate} disabled={sendingTemplate || !selectedTemplate}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
-                {sendingTemplate ? 'Enviando...' : 'Enviar Template'}
               </button>
             </div>
           </div>
@@ -4519,8 +4442,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 </p>
               )}
             </div>
+            {templateError && (
+              <div className="mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                {templateError}
+              </div>
+            )}
             <div className="flex gap-2 mt-4">
-              <button onClick={() => { setShowTemplateModal(false); setSelectedTemplate(''); setTemplateVars({}) }}
+              <button onClick={() => { setShowTemplateModal(false); setSelectedTemplate(''); setTemplateVars({}); setTemplateError(null) }}
                 className="flex-1 py-2.5 text-xs font-medium text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
                 Cancelar
               </button>
