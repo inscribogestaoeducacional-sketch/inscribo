@@ -1933,30 +1933,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         setTemplateError(errorData.error || 'Erro ao enviar template')
         return
       }
-      const preview = buildTemplatePreview(tmpl, templateVars)
-      if (!preview || preview.startsWith('[Template')) {
-        console.log('[PREVIEW]', preview, 'tmpl:', tmpl?.name, 'vars:', templateVars, 'components:', JSON.stringify(tmpl?.components))
-      }
-      const optimistic: Message = {
-        id: `temp-tmpl-${Date.now()}`,
-        type: 'text',
-        content: preview,
-        from: 'me',
-        ts: new Date(),
-        status: 'sent',
-        senderName: user?.full_name || undefined,
-      }
-      setConversations(prev => prev.map(c =>
-        c.id === activeId
-          ? { ...c, messages: [...c.messages, optimistic], lastMessage: preview, lastTime: optimistic.ts }
-          : c
-      ))
       setShowTemplateModal(false)
       setSelectedTemplate('')
       setTemplateVars({})
       setTemplateError(null)
       setHubToast('✅ Template enviado!')
       setTimeout(() => setHubToast(null), 3000)
+      setTimeout(() => { loadMessages() }, 2000)
     } catch (err: any) {
       setTemplateError(err.message || 'Erro ao enviar template')
     } finally {
