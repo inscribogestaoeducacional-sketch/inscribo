@@ -279,6 +279,17 @@ function groupByDate(msgs: Message[]): { label: string; msgs: Message[] }[] {
   return Array.from(map.entries()).map(([, ms]) => ({ label: fmtDateSep(ms[0].ts), msgs: ms }))
 }
 
+function buildTemplatePreview(tmpl: any, vars: Record<string, string>): string {
+  if (!tmpl) return '[Template]'
+  const bodyComp = tmpl.components?.find((c: any) => c.type === 'BODY')
+  if (!bodyComp?.text) return `[Template: ${tmpl.name}]`
+  let text: string = bodyComp.text
+  Object.entries(vars).forEach(([n, val]) => {
+    text = text.replace(new RegExp(`\\{\\{${n}\\}\\}`, 'g'), val)
+  })
+  return text
+}
+
 function getLastMsgPreview(lastMessage: string): { icon?: string; text: string } {
   if (lastMessage === '[Imagem]')    return { icon: '🖼️', text: 'Imagem' }
   if (lastMessage === '[Áudio]')     return { icon: '🎵', text: 'Áudio' }
@@ -1740,6 +1751,15 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   const activeConv = conversations.find(c => c.id === activeId) ?? null
 
+  const getDefaultVarValue = (index: number): string => {
+    const defaults: Record<number, string> = {
+      1: activeConv?.name || '',
+      2: 'Colégio',
+      3: new Date().toLocaleDateString('pt-BR'),
+    }
+    return defaults[index] || ''
+  }
+
   // Load lead data when active conversation or its lead_id changes
   useEffect(() => {
     const leadId = activeConv?.lead_id
@@ -1913,11 +1933,26 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         setTemplateError(errorData.error || 'Erro ao enviar template')
         return
       }
+      const preview = buildTemplatePreview(tmpl, templateVars)
+      const optimistic: Message = {
+        id: `temp-tmpl-${Date.now()}`,
+        type: 'text',
+        content: preview,
+        from: 'me',
+        ts: new Date(),
+        status: 'sent',
+        senderName: user?.full_name || undefined,
+      }
+      setConversations(prev => prev.map(c =>
+        c.id === activeId
+          ? { ...c, messages: [...c.messages, optimistic], lastMessage: preview, lastTime: optimistic.ts }
+          : c
+      ))
       setShowTemplateModal(false)
       setSelectedTemplate('')
       setTemplateVars({})
       setTemplateError(null)
-      setHubToast('✅ Template enviado! Aguardando resposta...')
+      setHubToast('✅ Template enviado!')
       setTimeout(() => setHubToast(null), 3000)
     } catch (err: any) {
       setTemplateError(err.message || 'Erro ao enviar template')
@@ -4399,7 +4434,16 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-[#64748B] mb-1">Template</label>
-                <select value={selectedTemplate} onChange={e => { setSelectedTemplate(e.target.value); setTemplateVars({}) }}
+                <select value={selectedTemplate} onChange={e => {
+                  const id = e.target.value
+                  setSelectedTemplate(id)
+                  const tmpl = templates.find(t => t.id === id)
+                  const bodyComp = tmpl?.components?.find((c: any) => c.type === 'BODY')
+                  const matches = bodyComp?.text ? [...bodyComp.text.matchAll(/\{\{(\d+)\}\}/g)] : []
+                  const autoVars: Record<string, string> = {}
+                  matches.forEach(([, n]) => { autoVars[n] = getDefaultVarValue(parseInt(n)) })
+                  setTemplateVars(autoVars)
+                }}
                   className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
                   <option value="">Selecionar template...</option>
                   {templates.length === 0 && (
