@@ -735,6 +735,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [templateVars, setTemplateVars] = useState<Record<string, string>>({})
   const [sendingTemplate, setSendingTemplate] = useState(false)
   const [templateError, setTemplateError] = useState<string | null>(null)
+  const [institutionName, setInstitutionName] = useState('')
   const [sendingReactivate, setSendingReactivate] = useState(false)
   const [hubToast, setHubToast] = useState<string | null>(null)
 
@@ -1286,6 +1287,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       if (!isAionInbox) DatabaseService.getUsers(effectiveInstitutionId).then(setUsers).catch(() => {})
 
       if (!isAionInbox) {
+        // Load institution name for template variables
+        ;(async () => {
+          try {
+            const { data: instData } = await supabase
+              .from('institutions')
+              .select('name')
+              .eq('id', effectiveInstitutionId)
+              .single()
+            if (instData?.name) setInstitutionName(instData.name)
+          } catch {}
+        })()
+
         // Load approved templates
         ;(async () => {
           try {
@@ -1754,7 +1767,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const getDefaultVarValue = (index: number): string => {
     const defaults: Record<number, string> = {
       1: activeConv?.name || '',
-      2: 'Colégio Ágape',
+      2: institutionName || 'Colégio',
       3: new Date().toLocaleDateString('pt-BR'),
     }
     return defaults[index] || ''
@@ -1944,8 +1957,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         console.log('[RELOAD] recarregando para jid:', jidSnapshot)
         await loadMessages()
         setTimeout(() => {
-          const chatContainer = document.querySelector('.messages-container')
-          if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
         }, 500)
       }, 2500)
     } catch (err: any) {
