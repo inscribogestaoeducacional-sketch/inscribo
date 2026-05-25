@@ -663,7 +663,25 @@ export default function InstitutionDetails() {
         { headers: { Authorization: `Bearer ${token}` } }
       )
       const data = await res.json()
-      setWaTemplates(data.data || [])
+      const metaTemplates: any[] = data.data || []
+      setWaTemplates(metaTemplates)
+
+      if (metaTemplates.length > 0 && id) {
+        const toUpsert = metaTemplates.map((t: any) => ({
+          institution_id: id,
+          name: t.name,
+          language: t.language || 'pt_BR',
+          category: t.category || 'UTILITY',
+          components: t.components || [],
+          template_id: t.id,
+          status: t.status?.toLowerCase() === 'approved' ? 'approved'
+                : t.status?.toLowerCase() === 'rejected' ? 'rejected'
+                : 'pending',
+        }))
+        await supabase
+          .from('whatsapp_templates')
+          .upsert(toUpsert, { onConflict: 'institution_id,name' })
+      }
     } catch (e) {
       console.error('[templates] erro ao carregar:', e)
     } finally {
@@ -1650,12 +1668,20 @@ export default function InstitutionDetails() {
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <p className="text-sm font-semibold text-gray-700">Templates WhatsApp</p>
-                    <button
-                      onClick={() => setShowAddTemplate(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded-xl text-xs font-semibold hover:bg-cyan-100"
-                    >
-                      <Plus className="w-3 h-3" /> Adicionar template
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => loadWaTemplates()}
+                        className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-xl text-xs font-semibold hover:bg-gray-50"
+                      >
+                        <RefreshCw className="w-3 h-3" /> Sincronizar com Meta
+                      </button>
+                      <button
+                        onClick={() => setShowAddTemplate(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded-xl text-xs font-semibold hover:bg-cyan-100"
+                      >
+                        <Plus className="w-3 h-3" /> Adicionar template
+                      </button>
+                    </div>
                   </div>
 
                   {loadingTemplates ? (
