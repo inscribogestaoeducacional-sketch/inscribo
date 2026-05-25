@@ -2182,8 +2182,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (!targetUser) return
     const fromName = activeConv?.assigned_user_name || user.full_name || user.email
     const rJid = rawJid(activeId)
-    console.log('[TRANSFER] activeId:', activeId)
-    console.log('[TRANSFER] rawJid:', rJid)
+    console.log('[TRANSFER] activeId completo:', activeId)
+    console.log('[TRANSFER] rawJid resultado:', rJid)
     console.log('[TRANSFER] transferindo para:', targetUser.full_name, targetUser.id)
     const { data: convData } = await supabase
       .from('whatsapp_conversations')
