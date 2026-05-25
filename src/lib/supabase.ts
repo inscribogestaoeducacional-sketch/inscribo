@@ -858,15 +858,17 @@ export class DatabaseService {
       .upsert({ institution_id: institutionId, remote_jid: raw, assigned_user_id: userId, assigned_user_name: userName }, { onConflict: 'institution_id,remote_jid' })
   }
 
-  static async transferConversation(institutionId: string, remoteJid: string, newUserId: string, newUserName: string, fromUserName: string): Promise<void> {
+  static async transferConversation(institutionId: string, remoteJid: string, newUserId: string, newUserName: string, fromUserName: string, fromUserId?: string): Promise<void> {
     const raw  = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     const norm = `${raw}@s.whatsapp.net`
 
-    const updatePayload = {
+    const updatePayload: Record<string, any> = {
       assigned_user_id:   newUserId,
       assigned_user_name: newUserName,
-      transferred_from:   fromUserName,
       transferred_at:     new Date().toISOString(),
+    }
+    if (fromUserId) {
+      updatePayload.transferred_from = fromUserId
     }
 
     const [r1, r2] = await Promise.all([

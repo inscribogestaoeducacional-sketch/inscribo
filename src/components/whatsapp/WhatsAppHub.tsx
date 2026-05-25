@@ -2212,7 +2212,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         .ilike('remote_jid', `%${rJid}%`)
       console.log('[TRANSFER] busca ampla:', convData2)
     }
-    await DatabaseService.transferConversation(effectiveInstitutionId, rJid, targetUser.id, targetUser.full_name, fromName)
+    const fromUserId = activeConv?.assigned_user_id
+    await DatabaseService.transferConversation(effectiveInstitutionId, rJid, targetUser.id, targetUser.full_name, fromName, fromUserId)
     await DatabaseService.logConversationEvent({
       institution_id: effectiveInstitutionId,
       remote_jid: rJid,
