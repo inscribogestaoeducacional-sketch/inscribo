@@ -1754,7 +1754,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const getDefaultVarValue = (index: number): string => {
     const defaults: Record<number, string> = {
       1: activeConv?.name || '',
-      2: 'Colégio',
+      2: 'Colégio Ágape',
       3: new Date().toLocaleDateString('pt-BR'),
     }
     return defaults[index] || ''
@@ -1943,6 +1943,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       setTimeout(async () => {
         console.log('[RELOAD] recarregando para jid:', jidSnapshot)
         await loadMessages()
+        setTimeout(() => {
+          const chatContainer = document.querySelector('.messages-container')
+          if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight
+        }, 500)
       }, 2500)
     } catch (err: any) {
       setTemplateError(err.message || 'Erro ao enviar template')
