@@ -448,8 +448,8 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
                 <input
                   style={inputStyle}
                   type="text"
-                  placeholder="Ex: 2501203 (7 dígitos)"
-                  maxLength={7}
+                  placeholder="Ex: 25226800 (8 dígitos)"
+                  maxLength={8}
                   value={schoolData.inep_code || ''}
                   onChange={e => setSchoolData(s => ({ ...s, inep_code: e.target.value.replace(/\D/g, '') }))}
                 />

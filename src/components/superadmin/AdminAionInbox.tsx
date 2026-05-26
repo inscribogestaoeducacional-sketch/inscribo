@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
-import WhatsAppHub from '../whatsapp/WhatsAppHub'
+import AionInboxHub from './AionInboxHub'
 import {
   Settings, MessageCircle, GitBranch, QrCode,
   Plus, Trash2, Copy, Check, ToggleLeft, ToggleRight, Save, Loader2,
@@ -621,7 +621,7 @@ export default function AdminAionInbox() {
 
         {/* Tab content */}
         <div style={{ flex: 1, overflow: 'hidden', display: tab === 'inbox' ? 'flex' : 'block', flexDirection: 'column' }}>
-          {tab === 'inbox'   && <WhatsAppHub isAionInbox={true} />}
+          {tab === 'inbox'   && <AionInboxHub />}
           {tab === 'flow'    && <div style={{ overflowY: 'auto', height: '100%' }}><FlowTab /></div>}
           {tab === 'qrcodes' && <div style={{ overflowY: 'auto', height: '100%' }}><QRCodesTab /></div>}
         </div>
