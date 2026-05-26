@@ -12,7 +12,10 @@ import {
   GraduationCap, ArrowUpRight, ArrowDownRight, Zap,
   Building2, CheckCircle, Bell, ChevronRight, Star,
   TrendingDown, Eye, Clock, Award, BarChart2,
-  Filter, ClipboardCheck, ArrowLeftRight
+  Filter, ClipboardCheck, ArrowLeftRight,
+  Smile, Meh, Frown, Sunrise, Sun, Moon, Bot, Database,
+  ClipboardX, Download, ArrowUp, ArrowDown,
+  PieChart as LucidePieChart
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -825,14 +828,24 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
   const chartDataWithTotal = chartData.map(d => ({ ...d, total: (d.veteranos || 0) + (d.novatos || 0) }))
 
   // ── Evolução histórica de matrículas ──────────────────────────────────────
-  const chartActiveCycle = cycles.find(c => c.status === 'active') ?? null
-  const histYears = sorted.map(e => entryYear(e)).filter(y => y > 0)
-  const histYearsFiltered = chartActiveCycle
-    ? histYears.filter(y => y !== chartActiveCycle.year)
+  const activeCycleForChart = cycles.find(c => c.status === 'active') ?? null
+  const activeCycleYear = activeCycleForChart?.year ?? null
+
+  // Todos os anos do ERP (historical_data) viram linhas cinzas
+  const histYears = Array.from(histByYear.keys()).sort((a, b) => a - b)
+
+  // Linha ativa só aparece se: ciclo active existe E seu ano NÃO está no historical_data
+  const showActiveLine = activeCycleForChart !== null
+    && activeCycleYear !== null
+    && !histByYear.has(activeCycleYear)
+
+  const lastHistYear = histYears.length > 0 ? histYears[histYears.length - 1] : null
+  const olderHistYears = histYears.slice(0, -1)
+
+  // Anos para o gráfico
+  const historicalChartYears = showActiveLine
+    ? [...histYears, activeCycleYear as number]
     : histYears
-  const lastHistYear = histYearsFiltered.length > 0 ? histYearsFiltered[histYearsFiltered.length - 1] : null
-  const olderHistYears = histYearsFiltered.slice(0, -1)
-  const histGrays = ['#d1d5db', '#9ca3af', '#6b7280', '#4b5563']
 
   const activeByMonth: Record<number, number> = {}
   activeLeadsData.forEach(l => {
@@ -844,9 +857,6 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
     activeByMonth[month] = (activeByMonth[month] || 0) + (r.confirmed || 0)
   })
 
-  const historicalChartYears = chartActiveCycle
-    ? [...histYearsFiltered, chartActiveCycle.year]
-    : histYearsFiltered
   const historicalChartData: Array<Record<string, string | number>> =
     ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'].map((mes, idx) => {
       const month = idx + 1
@@ -866,25 +876,25 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
           }
         }
       })
-      if (chartActiveCycle) row[String(chartActiveCycle.year)] = activeByMonth[month] || 0
+      if (showActiveLine && activeCycleYear !== null) row[String(activeCycleYear)] = activeByMonth[month] || 0
       return row
     })
 
-  const hasActiveData = chartActiveCycle ? Object.values(activeByMonth).some(v => v > 0) : false
+  const hasActiveData = showActiveLine ? Object.values(activeByMonth).some(v => v > 0) : false
   const yearsWithData = historicalChartYears.filter(yr =>
-    yr === chartActiveCycle?.year ? hasActiveData : sorted.some(e => entryYear(e) === yr && entryTotal(e) > 0)
+    yr === activeCycleYear && showActiveLine ? hasActiveData : sorted.some(e => entryYear(e) === yr && entryTotal(e) > 0)
   ).length
-  const hasHistoricalChart = histYears.length > 0 || !!chartActiveCycle
+  const hasHistoricalChart = histYears.length > 0 || showActiveLine
   const histHasEstimated = sorted.some(e => {
     const yr = entryYear(e)
     return yr > 0 && (!e.historical_funnel || Object.keys(e.historical_funnel).length === 0)
   })
 
   const getYearLineProps = (yr: number): { stroke: string; strokeWidth: number; strokeDasharray?: string } => {
-    if (chartActiveCycle && yr === chartActiveCycle.year) return { stroke: '#00A896', strokeWidth: 2.5 }
+    if (showActiveLine && yr === activeCycleYear) return { stroke: '#00A896', strokeWidth: 2.5 }
     if (yr === lastHistYear) return { stroke: '#9ca3af', strokeWidth: 1.5, strokeDasharray: '4 4' }
     const idx = olderHistYears.indexOf(yr)
-    return { stroke: histGrays[Math.min(idx, histGrays.length - 1)] || '#d1d5db', strokeWidth: 1.5 }
+    return { stroke: '#d1d5db', strokeWidth: 1.5, ...(idx < 0 ? {} : {}) }
   }
 
 
@@ -1198,7 +1208,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             </div>
           )}
           <button onClick={handleExportPDF} style={{ padding: '6px 16px', borderRadius: 20, border: '1px solid #E5E7EB', background: 'white', color: '#374151', fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <i className="ti ti-download" style={{ fontSize: 14 }} /> Exportar PDF
+            <Download size={14} /> Exportar PDF
           </button>
         </div>
       </div>
@@ -1208,9 +1218,9 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {alerts.map((a, i) => {
             const cfg = {
-              warning: { bg: '#FEF2F2', border: '#FECACA', color: '#991B1B', icon: <i className="ti ti-alert-triangle" />, badge: 'Atenção' },
-              success: { bg: '#F0FDF4', border: '#BBF7D0', color: '#166534', icon: <i className="ti ti-circle-check" />, badge: 'Ótimo' },
-              info: { bg: '#EFF6FF', border: '#BFDBFE', color: '#1E40AF', icon: <i className="ti ti-info-circle" />, badge: 'Info' },
+              warning: { bg: '#FEF2F2', border: '#FECACA', color: '#991B1B', icon: <AlertTriangle size={16} />, badge: 'Atenção' },
+              success: { bg: '#F0FDF4', border: '#BBF7D0', color: '#166534', icon: <CheckCircle size={16} />, badge: 'Ótimo' },
+              info: { bg: '#EFF6FF', border: '#BFDBFE', color: '#1E40AF', icon: <Info size={16} />, badge: 'Info' },
             }[a.type]
             return (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 14, background: cfg.bg, border: `1px solid ${cfg.border}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
@@ -1231,12 +1241,12 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
       {!loading && (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(6,1fr)', gap: 12 }}>
           {[
-            { label: 'Leads no período', value: leads.length, prev: prevLeadsCount, icon: <i className="ti ti-users" style={{ fontSize: 20, color: '#00A896' }} />, color: '#00A896', bg: '#F0FDFA', path: '/leads' },
-            { label: 'Conversas WhatsApp', value: waConvsRaw.length, prev: null as number | null, icon: <i className="ti ti-brand-whatsapp" style={{ fontSize: 20, color: '#25D366' }} />, color: '#25D366', bg: '#F0FDF4', path: '/whatsapp' },
-            { label: 'Matrículas', value: totalEnrolled, prev: prevEnrolled, icon: <i className="ti ti-school" style={{ fontSize: 20, color: '#7C3AED' }} />, color: '#7C3AED', bg: '#F5F3FF', path: '/leads' },
-            { label: 'Taxa de conversão', value: conversionRateNum.toFixed(1) + '%', prev: null as number | null, icon: <i className="ti ti-trending-up" style={{ fontSize: 20, color: '#F59E0B' }} />, color: '#F59E0B', bg: '#FFFBEB', path: '/leads' },
-            { label: 'Satisfação média', value: satisfPct !== null ? `${satisfPct}%` : '—', prev: null as number | null, icon: <i className="ti ti-star" style={{ fontSize: 20, color: satisfPctColor(satisfPct) }} />, color: satisfPctColor(satisfPct), bg: '#FFFBEB', path: '/surveys' },
-            { label: 'Tempo de resposta', value: waAvgResponse !== null ? (waAvgResponse < 60 ? (waAvgResponse === 0 ? '< 1min' : `${waAvgResponse}min`) : `${Math.floor(waAvgResponse / 60)}h ${waAvgResponse % 60}m`) : '—', prev: null as number | null, icon: <i className="ti ti-clock" style={{ fontSize: 20, color: '#EF4444' }} />, color: '#EF4444', bg: '#FEF2F2', path: '/whatsapp' },
+            { label: 'Leads no período', value: leads.length, prev: prevLeadsCount, icon: <Users size={20} color="#00A896" />, color: '#00A896', bg: '#F0FDFA', path: '/leads' },
+            { label: 'Conversas WhatsApp', value: waConvsRaw.length, prev: null as number | null, icon: <MessageCircle size={20} color="#25D366" />, color: '#25D366', bg: '#F0FDF4', path: '/whatsapp' },
+            { label: 'Matrículas', value: totalEnrolled, prev: prevEnrolled, icon: <GraduationCap size={20} color="#7C3AED" />, color: '#7C3AED', bg: '#F5F3FF', path: '/leads' },
+            { label: 'Taxa de conversão', value: conversionRateNum.toFixed(1) + '%', prev: null as number | null, icon: <TrendingUp size={20} color="#F59E0B" />, color: '#F59E0B', bg: '#FFFBEB', path: '/leads' },
+            { label: 'Satisfação média', value: satisfPct !== null ? `${satisfPct}%` : '—', prev: null as number | null, icon: <Star size={20} color={satisfPctColor(satisfPct)} />, color: satisfPctColor(satisfPct), bg: '#FFFBEB', path: '/surveys' },
+            { label: 'Tempo de resposta', value: waAvgResponse !== null ? (waAvgResponse < 60 ? (waAvgResponse === 0 ? '< 1min' : `${waAvgResponse}min`) : `${Math.floor(waAvgResponse / 60)}h ${waAvgResponse % 60}m`) : '—', prev: null as number | null, icon: <Clock size={20} color="#EF4444" />, color: '#EF4444', bg: '#FEF2F2', path: '/whatsapp' },
           ].map(card => {
             const variation = card.prev !== null && card.prev > 0
               ? Math.round((Number(card.value) - card.prev) / card.prev * 100)
@@ -1253,7 +1263,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
                 <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>{card.label}</div>
                 {variation !== null && (
                   <div style={{ marginTop: 6, fontSize: 11, fontWeight: 600, color: variation >= 0 ? '#16a34a' : '#dc2626', display: 'flex', alignItems: 'center', gap: 3 }}>
-                    <i className={variation >= 0 ? 'ti ti-arrow-up' : 'ti ti-arrow-down'} style={{ fontSize: 11 }} />{Math.abs(variation)}% vs anterior
+                    {variation >= 0 ? <ArrowUp size={11} /> : <ArrowDown size={11} />}{Math.abs(variation)}% vs anterior
                   </div>
                 )}
               </div>
@@ -1333,7 +1343,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
 
       {/* ── BLOCO 1: Leads & Matrículas ──────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0' }}>
-        <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}><i className="ti ti-users" style={{ marginRight: 2, color: '#6b7280' }} />Leads & Matrículas</span>
+        <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}><Users size={11} color="#6b7280" style={{marginRight:2}} />Leads & Matrículas</span>
         <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
       </div>
 
@@ -1356,7 +1366,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 16, alignItems: 'stretch' }}>
             {/* Col 1: Leads por dia */}
             <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><i className="ti ti-chart-bar" style={{ fontSize: 16, color: '#7C3AED', marginRight: 6 }} />Leads por dia</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><BarChart3 size={16} color="#7C3AED" style={{marginRight:6}} />Leads por dia</h3>
               <div style={{ flex: 1, minHeight: 160 }}><ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={days} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                   <defs>
@@ -1375,7 +1385,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             </div>
             {/* Col 2: Leads por origem */}
             <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><i className="ti ti-chart-donut" style={{ fontSize: 16, color: '#F59E0B', marginRight: 6 }} />Leads por origem</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><LucidePieChart size={16} color="#F59E0B" style={{marginRight:6}} />Leads por origem</h3>
               {sourceSorted.length > 0 ? (
                 <div style={{ flex: 1, minHeight: 160 }}><ResponsiveContainer width="100%" height="100%">
                   <BarChart data={sourceSorted} margin={{ top: 0, right: 20, left: -10, bottom: 0 }}>
@@ -1407,7 +1417,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
                   </div>
                 </div>
                 <button onClick={() => navigate('/leads')} style={{ fontSize: 11, color: '#8B5CF6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                  Ver leads <i className="ti ti-chevron-right" style={{ fontSize: 12 }} />
+                  Ver leads <ChevronRight size={12} />
                 </button>
               </div>
               <div style={{ padding: 20 }}>
@@ -1415,7 +1425,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 36, borderRadius: 8, background: '#f1f5f9' }} />)}</div>
                 ) : totalLeads === 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '16px 0', textAlign: 'center' }}>
-                    <i className="ti ti-users" style={{ fontSize: 28, color: '#cbd5e1' }} />
+                    <Users size={28} color="#cbd5e1" />
                     <p style={{ margin: 0, fontSize: 13, color: '#94a3b8', lineHeight: 1.5 }}>Nenhum lead cadastrado ainda.</p>
                   </div>
                 ) : (
@@ -1465,7 +1475,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             </div>
           </div>
           <button onClick={() => navigate('/reports')} style={{ fontSize: 11, color: '#F59E0B', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-            Ver relatórios <i className="ti ti-chevron-right" style={{ fontSize: 12 }} />
+            Ver relatórios <ChevronRight size={12} />
           </button>
         </div>
         <div style={{ padding: '0 20px 20px' }}>
@@ -1493,7 +1503,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             }).sort((a, b) => b.enrollments_count - a.enrollments_count)
             if (teamStats.length === 0) return (
               <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8' }}>
-                <i className="ti ti-users" style={{ fontSize: 28 }} />
+                <Users size={28} />
                 <p style={{ margin: '8px 0 0', fontSize: 13 }}>Nenhum dado disponível</p>
               </div>
             )
@@ -1557,7 +1567,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
 
       {/* ── BLOCO 2: WhatsApp ────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0' }}>
-        <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}><i className="ti ti-brand-whatsapp" style={{ marginRight: 2, color: '#6b7280' }} />WhatsApp</span>
+        <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}><MessageCircle size={11} color="#6b7280" style={{marginRight:2}} />WhatsApp</span>
         <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
       </div>
 
@@ -1565,7 +1575,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
         {waConvStats?.daily && (
           <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><i className="ti ti-brand-whatsapp" style={{ marginRight: 6, color: '#25D366' }} />WhatsApp por dia</h3>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><MessageCircle size={16} color="#25D366" style={{marginRight:6}} />WhatsApp por dia</h3>
             <div style={{ flex: 1, minHeight: 120 }}><ResponsiveContainer width="100%" height="100%">
               <BarChart data={waConvStats.daily} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
@@ -1630,7 +1640,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
                 )}
                 {waSatisfStats && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#FFFBEB', borderRadius: 8, padding: '5px 10px', border: '1px solid #FDE68A' }}>
-                    <i className="ti ti-star" style={{ fontSize: 14, color: '#D97706' }} />
+                    <Star size={14} color="#D97706" />
                     <p style={{ margin: 0, fontSize: 11, color: '#92400E', fontWeight: 600 }}>{toSatisfPct(waSatisfStats.avgScore)}% satisfação</p>
                   </div>
                 )}
@@ -1669,7 +1679,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
           }
           return (
             <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px 24px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><i className="ti ti-clock" style={{ marginRight: 6, color: '#00A896' }} />Horários de maior movimento</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><Clock size={16} color="#00A896" style={{marginRight:6}} />Horários de maior movimento</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '70px repeat(7,1fr)', gap: 4 }}>
                 <div />
                 {DAYS.map(d => (
@@ -1678,7 +1688,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
                 {(['manha', 'tarde', 'noite'] as const).map(period => (
                   <React.Fragment key={period}>
                     <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {period === 'manha' ? <><i className="ti ti-sunrise" /> Manhã</> : period === 'tarde' ? <><i className="ti ti-sun" /> Tarde</> : <><i className="ti ti-moon" /> Noite</>}
+                      {period === 'manha' ? <><Sunrise size={14} /> Manhã</> : period === 'tarde' ? <><Sun size={14} /> Tarde</> : <><Moon size={14} /> Noite</>}
                     </div>
                     {heatmap.map(d => {
                       const val = d[period]
@@ -1746,7 +1756,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
 
       {/* ── BLOCO 3: Escola & Mercado ─────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0' }}>
-        <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}><i className="ti ti-building-school" style={{ marginRight: 2, color: '#6b7280' }} />Escola & Mercado</span>
+        <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}><Building2 size={11} color="#6b7280" style={{marginRight:2}} />Escola & Mercado</span>
         <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
       </div>
 
@@ -1755,19 +1765,19 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <i className="ti ti-chart-area" style={{ fontSize: 16, color: '#00A896' }} />
+            <TrendingUp size={16} color="#00A896" />
             <div>
               <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Evolução de matrículas</span>
               <span style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginTop: 1 }}>Histórico importado vs. matrículas do CRM</span>
             </div>
           </div>
-          {chartActiveCycle ? (
+          {showActiveLine ? (
             <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>
-              Campanha {chartActiveCycle.year} ativa
+              Campanha {activeCycleYear} ativa
             </span>
-          ) : historicalSource.length > 0 ? (
+          ) : histYears.length > 0 ? (
             <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
-              {historicalSource.length} {historicalSource.length === 1 ? 'ano' : 'anos'} de dados
+              {histYears.length} {histYears.length === 1 ? 'ano' : 'anos'} de dados
             </span>
           ) : null}
         </div>
@@ -1775,14 +1785,14 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
         {!hasHistoricalChart ? (
           /* Estado vazio */
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 0' }}>
-            <i className="ti ti-file-upload" style={{ fontSize: 48, color: '#9ca3af' }} />
+            <Upload size={48} color="#9ca3af" />
             <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151' }}>Nenhum histórico importado ainda</p>
             <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', textAlign: 'center', maxWidth: 360 }}>
               Configure os dados históricos no primeiro acesso ou em Configurações
             </p>
             <button onClick={() => navigate('/settings')}
               style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1e2d6b', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
-              <i className="ti ti-settings" style={{ fontSize: 14 }} /> Ir para configurações
+              <Settings size={14} /> Ir para configurações
             </button>
           </div>
         ) : (
@@ -1814,7 +1824,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
                           <div key={entry.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                             <span style={{ width: 8, height: 8, borderRadius: '50%', background: entry.stroke, display: 'inline-block', flexShrink: 0 }} />
                             <span style={{ fontSize: 12, color: '#374151', flex: 1 }}>
-                              {chartActiveCycle && entry.dataKey === String(chartActiveCycle.year) ? `Captação ${chartActiveCycle.year} (em andamento)` : entry.dataKey}:{' '}
+                              {showActiveLine && entry.dataKey === String(activeCycleYear) ? `Captação ${activeCycleYear} (em andamento)` : entry.dataKey}:{' '}
                               <strong>{entry.value}</strong>
                             </span>
                             {variation !== null && (
@@ -1836,7 +1846,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
               />
               <Legend
                 wrapperStyle={{ paddingTop: 12, fontSize: 12 }}
-                formatter={(value: string) => chartActiveCycle && value === String(chartActiveCycle.year) ? `Captação ${chartActiveCycle.year} (em andamento)` : value}
+                formatter={(value: string) => showActiveLine && value === String(activeCycleYear) ? `Captação ${activeCycleYear} (em andamento)` : value}
               />
               {historicalChartYears.map(yr => {
                 const props = getYearLineProps(yr)
@@ -1864,7 +1874,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <i className="ti ti-building-store" style={{ fontSize: 16, color: '#6366f1' }} />
+            <Building2 size={16} color="#6366f1" />
             <div>
               <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Inteligência de Mercado</span>
               <span style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginTop: 1 }}>
@@ -1889,7 +1899,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
         {!inepHasData && !loading ? (
           /* Estado vazio — cidade não encontrada no INEP */
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 0' }}>
-            <i className="ti ti-database-off" style={{ fontSize: 48, color: '#9ca3af' }} />
+            <Database size={48} color="#9ca3af" />
             <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151' }}>Dados INEP não encontrados</p>
             <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', textAlign: 'center', maxWidth: 380 }}>
               {marketCity ? `Nenhuma escola encontrada para "${marketCity}" no Censo Escolar.` : 'Configure a cidade da escola em Configurações.'}{' '}
@@ -1897,33 +1907,33 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             </p>
             <button onClick={() => navigate('/settings')}
               style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1e2d6b', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
-              <i className="ti ti-settings" style={{ fontSize: 14 }} /> Configurar escola
+              <Settings size={14} /> Configurar escola
             </button>
           </div>
         ) : inepHasData && !inepMyCode ? (
           /* Estado vazio — INEP carregado mas escola sem código INEP cadastrado */
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 0' }}>
-            <i className="ti ti-id-badge-off" style={{ fontSize: 48, color: '#f59e0b' }} />
+            <AlertTriangle size={48} color="#f59e0b" />
             <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151' }}>Código INEP não cadastrado</p>
             <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', textAlign: 'center', maxWidth: 380 }}>
               Cadastre o código INEP nas configurações da escola para ver o market share real.
             </p>
             <button onClick={() => navigate('/settings')}
               style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1e2d6b', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
-              <i className="ti ti-settings" style={{ fontSize: 14 }} /> Configurar código INEP
+              <Settings size={14} /> Configurar código INEP
             </button>
           </div>
         ) : inepHasData && inepMyCode && !inepMySchool ? (
           /* Estado vazio — código cadastrado mas não encontrado no censo */
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 0' }}>
-            <i className="ti ti-building-off" style={{ fontSize: 48, color: '#f59e0b' }} />
+            <Building2 size={48} color="#f59e0b" />
             <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151' }}>Escola não encontrada no Censo INEP {inepMaxYear ?? 2025}</p>
             <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', textAlign: 'center', maxWidth: 380 }}>
               O código INEP <strong>{inepMyCode}</strong> não foi localizado entre as escolas privadas de {marketCity || 'sua cidade'}. Verifique o código nas configurações.
             </p>
             <button onClick={() => navigate('/settings')}
               style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1e2d6b', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
-              <i className="ti ti-settings" style={{ fontSize: 14 }} /> Verificar código INEP
+              <Settings size={14} /> Verificar código INEP
             </button>
           </div>
         ) : inepHasData ? (
@@ -1954,7 +1964,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
               {/* Ranking / Posição */}
               {(inepMyRank !== null && inepMyRank > 0) && (
                 <div style={{ background: '#fafafa', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <i className="ti ti-trophy" style={{ fontSize: 18, color: '#d97706' }} />
+                  <Trophy size={18} color="#d97706" />
                   <div>
                     <span style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b' }}>
                       {inepMyRank}º lugar
@@ -1994,14 +2004,14 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             {/* Coluna direita — análise IA */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                <i className="ti ti-sparkles" style={{ fontSize: 14, color: '#6366f1' }} />
+                <Sparkles size={14} color="#6366f1" />
                 <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>Análise estratégica</span>
                 <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 2 }}>via IA</span>
                 {inepHasData && (
                   <button
                     onClick={() => { marketInsightFetched.current = false; fetchMarketInsight(marketSchools, inepMyStudents ?? totalStudents, true) }}
                     style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 6, background: 'none', border: '1px solid #e5e7eb', cursor: 'pointer', fontSize: 11, color: '#6b7280' }}>
-                    <i className="ti ti-refresh" style={{ fontSize: 12 }} /> Atualizar
+                    <RefreshCw size={12} /> Atualizar
                   </button>
                 )}
               </div>
@@ -2017,7 +2027,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
                 </div>
               ) : (
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '20px 0', color: '#94a3b8' }}>
-                  <i className="ti ti-robot" style={{ fontSize: 28 }} />
+                  <Bot size={28} />
                   <span style={{ fontSize: 12, textAlign: 'center' }}>Clique em Atualizar para gerar análise estratégica</span>
                 </div>
               )}
@@ -2052,7 +2062,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
         ) : (
           /* Estado vazio inteligente */
           <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-            <i className="ti ti-map-2" style={{ fontSize: 48, color: '#9ca3af' }} />
+            <MapPin size={48} color="#9ca3af" />
             <h3 style={{ fontSize: 16, fontWeight: 700, color: '#374151', margin: '12px 0 6px' }}>Mapa de Oportunidades</h3>
             <p style={{ margin: '0 0 16px', fontSize: 13, color: '#6b7280' }}>
               Visualize escolas concorrentes e potencial de mercado{marketCity && marketState ? ` em ${marketCity}/${marketState}` : ''}
@@ -2088,12 +2098,12 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
               <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Pesquisa de satisfação</span>
             </div>
             <button onClick={() => navigate('/pesquisas')} style={{ fontSize: 11, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-              Ver pesquisas <i className="ti ti-chevron-right" style={{ fontSize: 12 }} />
+              Ver pesquisas <ChevronRight size={12} />
             </button>
           </div>
           {!npsData ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '20px 0', color: '#94a3b8' }}>
-              <i className="ti ti-clipboard-x" style={{ fontSize: 32 }} />
+              <ClipboardX size={32} />
               <p style={{ margin: 0, fontSize: 13 }}>Nenhuma pesquisa NPS criada ainda</p>
               <button onClick={() => navigate('/pesquisas')}
                 style={{ marginTop: 4, padding: '7px 14px', borderRadius: 8, background: '#6366f1', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 12, fontWeight: 600 }}>
@@ -2154,7 +2164,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
           </div>
           {transfers.length === 0 ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '20px 0', color: '#94a3b8' }}>
-              <i className="ti ti-circle-check" style={{ fontSize: 32, color: '#22c55e' }} />
+              <CheckCircle size={32} color="#22c55e" />
               <p style={{ margin: 0, fontSize: 13, color: '#166534', fontWeight: 600 }}>Nenhuma transferência registrada</p>
             </div>
           ) : (() => {
