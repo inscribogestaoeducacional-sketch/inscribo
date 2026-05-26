@@ -11,7 +11,8 @@ import {
   MapPin, Activity, Settings, Calendar, Trophy, Medal,
   GraduationCap, ArrowUpRight, ArrowDownRight, Zap,
   Building2, CheckCircle, Bell, ChevronRight, Star,
-  TrendingDown, Eye, Clock, Award, BarChart2
+  TrendingDown, Eye, Clock, Award, BarChart2,
+  Filter, ClipboardCheck, ArrowLeftRight
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -826,8 +827,11 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
   // ── Evolução histórica de matrículas ──────────────────────────────────────
   const chartActiveCycle = cycles.find(c => c.status === 'active') ?? null
   const histYears = sorted.map(e => entryYear(e)).filter(y => y > 0)
-  const lastHistYear = histYears.length > 0 ? histYears[histYears.length - 1] : null
-  const olderHistYears = histYears.slice(0, -1)
+  const histYearsFiltered = chartActiveCycle
+    ? histYears.filter(y => y !== chartActiveCycle.year)
+    : histYears
+  const lastHistYear = histYearsFiltered.length > 0 ? histYearsFiltered[histYearsFiltered.length - 1] : null
+  const olderHistYears = histYearsFiltered.slice(0, -1)
   const histGrays = ['#d1d5db', '#9ca3af', '#6b7280', '#4b5563']
 
   const activeByMonth: Record<number, number> = {}
@@ -841,8 +845,8 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
   })
 
   const historicalChartYears = chartActiveCycle
-    ? [...histYears, chartActiveCycle.year]
-    : histYears
+    ? [...histYearsFiltered, chartActiveCycle.year]
+    : histYearsFiltered
   const historicalChartData: Array<Record<string, string | number>> =
     ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'].map((mes, idx) => {
       const month = idx + 1
@@ -883,10 +887,6 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
     return { stroke: histGrays[Math.min(idx, histGrays.length - 1)] || '#d1d5db', strokeWidth: 1.5 }
   }
 
-  console.log('[HIST] anos:', historicalSource.map(e => e.detected_year || (e as any).year))
-  console.log('[CHART] activeCycle:', chartActiveCycle?.year, chartActiveCycle?.status)
-  console.log('[HIST] histYears:', histYears)
-  console.log('[LINES] anos para linhas:', [...histYears, ...(chartActiveCycle ? [chartActiveCycle.year] : [])])
 
   const gradeData = leads.filter(l => l.grade_interest).reduce((acc, l) => {
     acc[l.grade_interest!] = (acc[l.grade_interest!] || 0) + 1; return acc
@@ -1375,7 +1375,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             </div>
             {/* Col 2: Leads por origem */}
             <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><i className="ti ti-source-code" style={{ fontSize: 16, color: '#F59E0B', marginRight: 6 }} />Leads por origem</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><i className="ti ti-chart-donut" style={{ fontSize: 16, color: '#F59E0B', marginRight: 6 }} />Leads por origem</h3>
               {sourceSorted.length > 0 ? (
                 <div style={{ flex: 1, minHeight: 160 }}><ResponsiveContainer width="100%" height="100%">
                   <BarChart data={sourceSorted} margin={{ top: 0, right: 20, left: -10, bottom: 0 }}>
@@ -1399,7 +1399,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ width: 32, height: 32, borderRadius: 10, background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <i className="ti ti-filter" style={{ fontSize: 16, color: '#8B5CF6' }} />
+                    <Filter size={16} color="#00A896" />
                   </div>
                   <div>
                     <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Funil de Leads</h3>
@@ -1457,7 +1457,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 32, height: 32, borderRadius: 10, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <i className="ti ti-trophy" style={{ fontSize: 16, color: '#F59E0B' }} />
+              <Trophy size={16} color="#F59E0B" />
             </div>
             <div>
               <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Ranking da Equipe</h3>
@@ -2031,7 +2031,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <i className="ti ti-map-pin" style={{ fontSize: 16, color: '#00A896' }} />
+            <MapPin size={16} color="#00A896" />
             <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Mapa de Oportunidades</span>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
@@ -2084,7 +2084,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <i className="ti ti-clipboard-check" style={{ fontSize: 16, color: '#00A896' }} />
+              <ClipboardCheck size={16} color="#00A896" />
               <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Pesquisa de satisfação</span>
             </div>
             <button onClick={() => navigate('/pesquisas')} style={{ fontSize: 11, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -2149,7 +2149,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
         {/* Card B — Transferências por motivo */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <i className="ti ti-arrows-transfer-up" style={{ fontSize: 16, color: '#EF4444' }} />
+            <ArrowLeftRight size={16} color="#EF4444" />
             <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Transferências por motivo</span>
           </div>
           {transfers.length === 0 ? (
