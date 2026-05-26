@@ -1627,11 +1627,35 @@ async function processAionMessage({
 
     const queue = await detectAionQueue(rawPhone, supabase)
 
-    // Upsert conversation
-    const { data: conv, error: convErr } = await supabase
+    // Select or create conversation
+    const { data: existingConv } = await supabase
       .from('whatsapp_conversations')
-      .upsert(
-        {
+      .select('id')
+      .eq('remote_jid', remoteJid)
+      .is('institution_id', null)
+      .maybeSingle()
+
+    let conv: { id: string } | null = null
+
+    if (existingConv) {
+      const { data: updated } = await supabase
+        .from('whatsapp_conversations')
+        .update({
+          contact_name:    contactName,
+          queue,
+          status:          'waiting',
+          last_message:    text || `[${msgType}]`,
+          last_message_at: timestamp,
+          is_aion_inbox:   true,
+        })
+        .eq('id', existingConv.id)
+        .select('id')
+        .maybeSingle()
+      conv = updated
+    } else {
+      const { data: created } = await supabase
+        .from('whatsapp_conversations')
+        .insert({
           remote_jid:      remoteJid,
           institution_id:  null,
           is_aion_inbox:   true,
@@ -1640,15 +1664,10 @@ async function processAionMessage({
           status:          'waiting',
           last_message:    text || `[${msgType}]`,
           last_message_at: timestamp,
-        },
-        { onConflict: 'remote_jid,institution_id' }
-      )
-      .select('id')
-      .maybeSingle()
-
-    if (convErr) {
-      console.error('❌ [aion] conv upsert error:', convErr.message)
-      return
+        })
+        .select('id')
+        .maybeSingle()
+      conv = created
     }
 
     // Increment unread
@@ -1832,18 +1851,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log('[WEBHOOK RAW] rawBody preview:', rawBody?.toString()?.slice(0, 200) || 'empty')
     }
 
-    let _debugBody: any
-    try { _debugBody = JSON.parse(rawBody.toString()) } catch {}
-    console.log('[DEBUG-1] chegou no processamento principal')
-    console.log('[DEBUG-2] body parsed, entry count:', _debugBody?.entry?.length)
-    console.log('[DEBUG-3] field:', _debugBody?.entry?.[0]?.changes?.[0]?.field)
-    console.log('[DEBUG-4] value existe:', !!_debugBody?.entry?.[0]?.changes?.[0]?.value)
-    console.log('[DEBUG-5] phoneNumberId:', _debugBody?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id)
-
     // HMAC-SHA256 validation (timing-safe)
     const signature = req.headers['x-hub-signature-256'] as string | undefined
     if (waConfig.appSecret) {
-      console.log('[DEBUG-HMAC] validando assinatura...')
       if (!signature) return res.status(401).json({ error: 'Missing x-hub-signature-256' })
 
       const expected = `sha256=${crypto
@@ -1851,7 +1861,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .update(rawBody)
         .digest('hex')}`
 
-      console.log('[DEBUG-HMAC] signature match:', signature === expected)
       if (
         signature.length !== expected.length ||
         !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
