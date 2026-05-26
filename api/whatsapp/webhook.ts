@@ -1832,6 +1832,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log('[WEBHOOK RAW] rawBody preview:', rawBody?.toString()?.slice(0, 200) || 'empty')
     }
 
+    console.log('[DEBUG-1] chegou no processamento principal')
+
     // HMAC-SHA256 validation (timing-safe)
     const signature = req.headers['x-hub-signature-256'] as string | undefined
     if (waConfig.appSecret) {
@@ -1853,6 +1855,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
       const body  = JSON.parse(rawBody.toString())
+      console.log('[DEBUG-2] body parsed, entry count:', body?.entry?.length)
+      console.log('[DEBUG-3] changes:', JSON.stringify(body?.entry?.[0]?.changes?.[0]?.field))
+      console.log('[DEBUG-4] value:', body?.entry?.[0]?.changes?.[0]?.value ? 'existe' : 'undefined')
       console.log('[WEBHOOK] changes[0]:',
         JSON.stringify(body?.entry?.[0]?.changes?.[0]))
       console.log('[WEBHOOK] field:',
@@ -1872,6 +1877,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         value?.statuses?.length || 0)
 
       const phoneNumberId = value.metadata?.phone_number_id
+      console.log('[DEBUG-5] phoneNumberId:', value?.metadata?.phone_number_id)
 
       // Check if this is the Áion platform inbox number
       const { data: platformWA } = await supabase
@@ -1879,6 +1885,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .select('phone_number_id')
         .eq('connected', true)
         .maybeSingle()
+      console.log('[DEBUG-6] platformWA:', platformWA?.phone_number_id ?? 'null')
+      console.log('[DEBUG-7] match:', platformWA?.phone_number_id === value?.metadata?.phone_number_id)
 
       if (platformWA?.phone_number_id && platformWA.phone_number_id === phoneNumberId) {
         // Process messages for the Áion corporate inbox
