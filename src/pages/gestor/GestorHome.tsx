@@ -11,7 +11,7 @@ import {
   MapPin, Activity, Settings, Calendar, Trophy, Medal,
   GraduationCap, ArrowUpRight, ArrowDownRight, Zap,
   Building2, CheckCircle, Bell, ChevronRight, Star,
-  TrendingDown, Eye, Clock, Award
+  TrendingDown, Eye, Clock, Award, BarChart2
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -883,6 +883,11 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
     return { stroke: histGrays[Math.min(idx, histGrays.length - 1)] || '#d1d5db', strokeWidth: 1.5 }
   }
 
+  console.log('[HIST] anos:', historicalSource.map(e => e.detected_year || (e as any).year))
+  console.log('[CHART] activeCycle:', chartActiveCycle?.year, chartActiveCycle?.status)
+  console.log('[HIST] histYears:', histYears)
+  console.log('[LINES] anos para linhas:', [...histYears, ...(chartActiveCycle ? [chartActiveCycle.year] : [])])
+
   const gradeData = leads.filter(l => l.grade_interest).reduce((acc, l) => {
     acc[l.grade_interest!] = (acc[l.grade_interest!] || 0) + 1; return acc
   }, {} as Record<string, number>)
@@ -1351,7 +1356,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 16, alignItems: 'stretch' }}>
             {/* Col 1: Leads por dia */}
             <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Leads por dia</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><i className="ti ti-chart-bar" style={{ fontSize: 16, color: '#7C3AED', marginRight: 6 }} />Leads por dia</h3>
               <div style={{ flex: 1, minHeight: 160 }}><ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={days} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                   <defs>
@@ -1370,7 +1375,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             </div>
             {/* Col 2: Leads por origem */}
             <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Leads por origem</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><i className="ti ti-source-code" style={{ fontSize: 16, color: '#F59E0B', marginRight: 6 }} />Leads por origem</h3>
               {sourceSorted.length > 0 ? (
                 <div style={{ flex: 1, minHeight: 160 }}><ResponsiveContainer width="100%" height="100%">
                   <BarChart data={sourceSorted} margin={{ top: 0, right: 20, left: -10, bottom: 0 }}>
@@ -1929,14 +1934,14 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 {[
-                  { label: 'Escolas privadas', value: fmt(inepTotalSchools), icon: 'ti-building-school', color: '#7C3AED', bg: '#f5f3ff' },
-                  { label: 'Alunos no setor', value: fmt(inepTotalStudents), icon: 'ti-users', color: '#00A896', bg: '#e6f7f5' },
-                  { label: 'Média por escola', value: inepAvgStudents ? fmt(inepAvgStudents) : '—', icon: 'ti-chart-bar', color: '#F59E0B', bg: '#fef3c7' },
-                  { label: 'Market share', value: inepSharePct !== null ? `${inepSharePct}%` : '—', icon: 'ti-trophy', color: '#00A896', bg: '#e6f7f5' },
+                  { label: 'Escolas privadas', value: fmt(inepTotalSchools), icon: <Building2 size={16} color="#7C3AED" />, bg: '#f5f3ff' },
+                  { label: 'Alunos no setor', value: fmt(inepTotalStudents), icon: <Users size={16} color="#00A896" />, bg: '#e6f7f5' },
+                  { label: 'Média por escola', value: inepAvgStudents ? fmt(inepAvgStudents) : '—', icon: <BarChart2 size={16} color="#F59E0B" />, bg: '#fef3c7' },
+                  { label: 'Market share', value: inepSharePct !== null ? `${inepSharePct}%` : '—', icon: <Trophy size={16} color="#00A896" />, bg: '#e6f7f5' },
                 ].map(item => (
                   <div key={item.label} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ width: 30, height: 30, borderRadius: 8, background: item.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <i className={`ti ${item.icon}`} style={{ fontSize: 14, color: item.color }} />
+                      {item.icon}
                     </div>
                     <div>
                       <div style={{ fontSize: 16, fontWeight: 700, color: '#1e2d6b', lineHeight: 1.1 }}>{item.value}</div>
@@ -2079,7 +2084,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <i className="ti ti-clipboard-check" style={{ fontSize: 16, color: '#1e2d6b' }} />
+              <i className="ti ti-clipboard-check" style={{ fontSize: 16, color: '#00A896' }} />
               <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Pesquisa de satisfação</span>
             </div>
             <button onClick={() => navigate('/pesquisas')} style={{ fontSize: 11, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -2144,7 +2149,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
         {/* Card B — Transferências por motivo */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <i className="ti ti-arrows-transfer-up" style={{ fontSize: 16, color: '#1e2d6b' }} />
+            <i className="ti ti-arrows-transfer-up" style={{ fontSize: 16, color: '#EF4444' }} />
             <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Transferências por motivo</span>
           </div>
           {transfers.length === 0 ? (
