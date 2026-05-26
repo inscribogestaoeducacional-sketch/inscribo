@@ -60,6 +60,7 @@ interface Conversation {
   profile_picture_url?: string
   bot_active?: boolean
   satisfaction_score?: number | null
+  queue?: string
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -197,6 +198,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
       profile_picture_url: convData?.profile_picture_url,
       bot_active: (convData as any)?.bot_active ?? false,
       satisfaction_score: (convData as any)?.satisfaction_score ?? null,
+      queue: (convData as any)?.queue,
       messages: sorted
         .filter((m, idx, self) => idx === self.findIndex(t => (t.message_id && t.message_id === m.message_id) || t.id === m.id))
         .map(m => {
@@ -772,6 +774,7 @@ export default function AionWhatsAppHub() {
   const [isConnected, setIsConnected] = useState<boolean | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<'abertos' | 'concluido' | 'ambos'>('abertos')
+  const [queueFilter, setQueueFilter] = useState<'all' | 'leads' | 'schools' | 'general'>('all')
   const [readFilter, setReadFilter] = useState<'all' | 'read' | 'unread'>('all')
   const [assignFilter, setAssignFilter] = useState<'all' | 'mine' | 'none'>('all')
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('details')
@@ -1092,23 +1095,23 @@ export default function AionWhatsAppHub() {
   }
 
   const handleLinkLead = async (leadId: string) => {
-    if (!activeId || !effectiveInstitutionId) return
+    if (!activeId) return
     const rJid = rawJid(activeId)
-    await DatabaseService.updateWhatsappMessageLead(rJid, effectiveInstitutionId, leadId)
-    await DatabaseService.linkConversationLead(effectiveInstitutionId, rJid, leadId)
+    await supabase.from('whatsapp_conversations')
+      .update({ lead_id: leadId, updated_at: new Date().toISOString() })
+      .eq('is_aion_inbox', true)
+      .eq('remote_jid', rJid)
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, lead_id: leadId } : c))
     const found = leadResults.find(l => l.id === leadId)
     if (found) setConversations(prev => prev.map(c =>
       c.id === activeId ? { ...c, name: found.responsible_name || found.student_name || c.name } : c
     ))
-    // Carregar dados do lead imediatamente no painel direito
     const { data: lead } = await supabase
-      .from('leads')
-      .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at')
+      .from('crm_leads')
+      .select('id, name, phone, email, stage, origin, created_at')
       .eq('id', leadId)
       .single()
     if (lead) {
-      console.log('[LEAD PANEL] linked & loaded:', lead.responsible_name)
       setLeadData(lead)
       setLeadEditForm(lead)
     }
@@ -1119,15 +1122,19 @@ export default function AionWhatsAppHub() {
 
   const searchLeads = async (q: string) => {
     setLeadSearch(q)
-    if (!effectiveInstitutionId || q.length < 2) { setLeadResults([]); return }
-    const results = await DatabaseService.searchLeadsByPhone(effectiveInstitutionId, q)
-    const allLeads = await DatabaseService.getLeads(effectiveInstitutionId)
-    const byName = allLeads.filter(l =>
-      l.responsible_name?.toLowerCase().includes(q.toLowerCase()) ||
-      l.student_name?.toLowerCase().includes(q.toLowerCase())
-    )
-    const combined = [...results, ...byName.filter(l => !results.find(r => r.id === l.id))].slice(0, 8)
-    setLeadResults(combined)
+    if (q.length < 2) { setLeadResults([]); return }
+    const { data } = await supabase
+      .from('crm_leads')
+      .select('id, name, phone, email, stage, origin')
+      .or(`name.ilike.%${q}%,phone.ilike.%${q}%`)
+      .limit(8)
+    setLeadResults((data || []).map((l: any) => ({
+      id: l.id,
+      responsible_name: l.name,
+      student_name: l.name,
+      phone: l.phone,
+      email: l.email,
+    })))
   }
 
   const addMessageToConversations = (newMsg: WhatsappMessage) => {
@@ -1266,10 +1273,16 @@ export default function AionWhatsAppHub() {
   }
 
   const loadHistory = async (jid: string) => {
-    if (!effectiveInstitutionId || !jid) return
+    if (!jid) return
     setHistoryLoading(true)
-    const events = await DatabaseService.getConversationEvents(effectiveInstitutionId, jid)
-    setConvHistory(events)
+    const { data } = await supabase
+      .from('whatsapp_conversation_events')
+      .select('*')
+      .is('institution_id', null)
+      .eq('remote_jid', jid)
+      .order('created_at', { ascending: false })
+      .limit(50)
+    setConvHistory(data || [])
     setHistoryLoading(false)
   }
 
@@ -1533,30 +1546,17 @@ export default function AionWhatsAppHub() {
 
   // Reset unread, auto-assign, auto-link lead, auto-transition waiting→open when opening conversation
   useEffect(() => {
-    if (!activeId || !effectiveInstitutionId) return
+    if (!activeId) return
     // Reset unread
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, unreadCount: 0 } : c))
     const rJid = rawJid(activeId)
-    DatabaseService.resetConversationUnread(effectiveInstitutionId, rJid).catch(() => {})
+    supabase.from('whatsapp_conversations')
+      .update({ unread_count: 0 })
+      .eq('is_aion_inbox', true)
+      .eq('remote_jid', rJid)
+      .then(() => {}, () => {})
 
     const conv = conversations.find(c => c.id === activeId)
-
-    // Auto-link lead if not linked
-    if (conv && !conv.lead_id && !conv.isGroup && effectiveInstitutionId) {
-      DatabaseService.searchLeadsByPhone(effectiveInstitutionId, conv.phone)
-        .then(leads => {
-          if (leads.length > 0) {
-            const lead = leads[0]
-            DatabaseService.updateWhatsappMessageLead(rJid, effectiveInstitutionId, lead.id)
-            DatabaseService.linkConversationLead(effectiveInstitutionId, rJid, lead.id)
-            setConversations(prev => prev.map(c => c.id === activeId
-              ? { ...c, lead_id: lead.id, name: c.name === formatPhone(activeId) ? (lead.responsible_name || lead.student_name || c.name) : c.name }
-              : c
-            ))
-          }
-        })
-        .catch(() => {})
-    }
 
   }, [activeId])
 
@@ -1683,9 +1683,11 @@ export default function AionWhatsAppHub() {
           labels: [], isGroup: false, tags: [],
           messages: [],
         }
-        if (effectiveInstitutionId) {
-          DatabaseService.upsertConversationStatus(effectiveInstitutionId, jid, 'open').catch(() => {})
-        }
+        supabase.from('whatsapp_conversations')
+          .update({ status: 'open', updated_at: new Date().toISOString() })
+          .eq('is_aion_inbox', true)
+          .eq('remote_jid', jid)
+          .then(() => {}, () => {})
         setConversations(prev => [newConv, ...prev])
         setActiveId(jid)
         if (isMobile) setMobilePanel('chat')
@@ -1812,11 +1814,15 @@ export default function AionWhatsAppHub() {
       // status filter
       if (statusFilter === 'abertos'  && c.status === 'closed') return false
       if (statusFilter === 'concluido' && c.status !== 'closed') return false
+      // queue filter
+      if (queueFilter === 'leads'   && c.queue !== 'leads')   return false
+      if (queueFilter === 'schools' && c.queue !== 'schools') return false
+      if (queueFilter === 'general' && c.queue !== 'general') return false
       // read filter
       if (readFilter === 'read' && (c.unreadCount || 0) > 0) return false
       if (readFilter === 'unread') {
         if ((c.unreadCount || 0) === 0) return false
-        if (user?.role !== 'gestor' && user?.role !== 'admin' && user?.role !== 'superadmin') {
+        if (!(['gestor', 'admin', 'superadmin'] as string[]).includes(user?.role ?? '')) {
           if (c.assigned_user_id !== user?.id) return false
         }
       }
@@ -1887,7 +1893,7 @@ export default function AionWhatsAppHub() {
 
       // Promote to open + assign on first send by atendente
       const conv = conversationsRef.current.find(c => c.id === activeId)
-      if (conv && (conv.status === 'waiting' || !conv.assigned_user_id) && effectiveInstitutionId && user?.id) {
+      if (conv && (conv.status === 'waiting' || !conv.assigned_user_id) && user?.id) {
         const rJid = rawJid(activeId)
         await supabase.from('whatsapp_conversations')
           .update({
@@ -1895,7 +1901,7 @@ export default function AionWhatsAppHub() {
             assigned_user_id:   user!.id,
             assigned_user_name: user!.full_name || user!.email,
           })
-          .eq('institution_id', effectiveInstitutionId)
+          .eq('is_aion_inbox', true)
           .eq('remote_jid', rJid)
         setConversations(prev => prev.map(c => c.id === activeId
           ? { ...c, status: 'open' as ConvStatus, assigned_user_id: user!.id, assigned_user_name: user!.full_name || user!.email }
@@ -1914,7 +1920,7 @@ export default function AionWhatsAppHub() {
   }
 
   const handleSendTemplate = async () => {
-    if (!activeId || !effectiveInstitutionId || !selectedTemplate) return
+    if (!activeId || !selectedTemplate) return
     const tmpl = templates.find(t => t.id === selectedTemplate) ||
       { id: '', name: selectedTemplate, language: 'pt_BR', components: [] }
     const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
@@ -1933,7 +1939,8 @@ export default function AionWhatsAppHub() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          institution_id: effectiveInstitutionId,
+          institution_id: effectiveInstitutionId || undefined,
+          isAionSend: true,
           to,
           template_name: tmpl.name,
           language: tmpl.language || 'pt_BR',
@@ -1983,17 +1990,16 @@ export default function AionWhatsAppHub() {
   }
 
   const handleReactivate = async () => {
-    if (!activeId || !effectiveInstitutionId || sendingReactivate) return
+    if (!activeId || sendingReactivate) return
     setSendingReactivate(true)
     try {
       const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
       const contactName = activeConv?.name || to
 
       const { data: phoneData } = await supabase
-        .from('whatsapp_phone_numbers')
+        .from('platform_whatsapp')
         .select('phone_number_id, waba_id')
-        .eq('institution_id', effectiveInstitutionId)
-        .eq('is_active', true)
+        .eq('connected', true)
         .maybeSingle()
 
       const { data: tokenRow } = await supabase
@@ -2063,53 +2069,45 @@ export default function AionWhatsAppHub() {
   }
 
   const handleStatusChange = async (status: ConvStatus) => {
-    if (!activeId || !effectiveInstitutionId) return
+    if (!activeId) return
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, status } : c))
     const rJid = rawJid(activeId)
-    await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, status)
-    DatabaseService.logConversationEvent({
-      institution_id: effectiveInstitutionId,
+    await supabase.from('whatsapp_conversations')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('is_aion_inbox', true)
+      .eq('remote_jid', rJid)
+    supabase.from('whatsapp_conversation_events').insert({
+      institution_id: null,
       remote_jid: rJid,
       event_type: 'status_change',
       description: `Status alterado para: ${safeStatusCfg(status).label}`,
-      user_id: user.id,
-      user_name: user.full_name || user.email,
-    }).catch(() => {})
+      user_id: user?.id,
+      user_name: user?.full_name || user?.email,
+    }).then(() => {}, () => {})
   }
 
   const handleTransfer = async () => {
-    console.warn('🔄 TRANSFER INICIADO', new Date().toISOString())
-    if (!activeId || !effectiveInstitutionId || !transferTarget) return
+    if (!activeId || !transferTarget) return
     const targetUser = users.find(u => u.id === transferTarget)
     if (!targetUser) return
-    const fromName = activeConv?.assigned_user_name || user.full_name || user.email
+    const fromName = activeConv?.assigned_user_name || user?.full_name || user?.email
     const rJid = rawJid(activeId)
-    console.log('[TRANSFER] activeId completo:', activeId)
-    console.log('[TRANSFER] rawJid resultado:', rJid)
-    console.log('[TRANSFER] transferindo para:', targetUser.full_name, targetUser.id)
-    const { data: convData } = await supabase
-      .from('whatsapp_conversations')
-      .select('id, remote_jid, assigned_user_id, assigned_user_name')
-      .eq('institution_id', effectiveInstitutionId)
+    await supabase.from('whatsapp_conversations')
+      .update({
+        assigned_user_id: targetUser.id,
+        assigned_user_name: targetUser.full_name,
+        status: 'open',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('is_aion_inbox', true)
       .eq('remote_jid', rJid)
-    console.log('[TRANSFER] conversa encontrada:', convData)
-    if (!convData || convData.length === 0) {
-      const { data: convData2 } = await supabase
-        .from('whatsapp_conversations')
-        .select('id, remote_jid, assigned_user_id')
-        .eq('institution_id', effectiveInstitutionId)
-        .ilike('remote_jid', `%${rJid}%`)
-      console.log('[TRANSFER] busca ampla:', convData2)
-    }
-    const fromUserId = activeConv?.assigned_user_id
-    await DatabaseService.transferConversation(effectiveInstitutionId, rJid, targetUser.id, targetUser.full_name, fromName, fromUserId)
-    await DatabaseService.logConversationEvent({
-      institution_id: effectiveInstitutionId,
+    await supabase.from('whatsapp_conversation_events').insert({
+      institution_id: null,
       remote_jid: rJid,
       event_type: 'transfer',
       description: `Transferido de ${fromName} para ${targetUser.full_name}`,
-      user_id: user.id,
-      user_name: user.full_name || user.email,
+      user_id: user?.id,
+      user_name: user?.full_name || user?.email,
     })
     await loadMessages()
     setConversations(prev => prev.map(c => c.id === activeId
@@ -2121,8 +2119,7 @@ export default function AionWhatsAppHub() {
   }
 
   const handleContactType = async (type: string) => {
-    console.log('[CONTACT TYPE] chamada com:', type, '| activeId:', activeId, '| institution:', effectiveInstitutionId)
-    if (!activeId || !effectiveInstitutionId) return
+    if (!activeId) return
     if (type === 'lead') {
       setLeadForm(prev => ({
         ...prev,
@@ -2137,40 +2134,19 @@ export default function AionWhatsAppHub() {
       return
     }
     const rJid = rawJid(activeId)
-    await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, type)
-    // Sync whatsapp_contacts.type — normalize to canonical 13-digit format
-    const normContactPhone = (() => {
-      let d = rJid.replace(/@.*/, '').replace(/\D/g, '')
-      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-      if (d.length === 11) d = '55' + d
-      return d
-    })()
-    console.log('[SYNC] normPhone:', normContactPhone)
-    console.log('[SYNC] institutionId:', effectiveInstitutionId)
-    const { data: contactRow, error: contactErr } = await supabase
-      .from('whatsapp_contacts')
-      .select('id, phone, type')
-      .eq('institution_id', effectiveInstitutionId)
-      .eq('phone', normContactPhone)
-      .maybeSingle()
-    console.log('[SYNC] contact found:', contactRow, 'error:', contactErr)
-    if (contactRow) {
-      const { error: updateErr } = await supabase
-        .from('whatsapp_contacts')
-        .update({ type, updated_at: new Date().toISOString() })
-        .eq('id', contactRow.id)
-      console.log('[SYNC] update error:', updateErr)
-    }
+    await supabase.from('whatsapp_conversations')
+      .update({ contact_type: type, updated_at: new Date().toISOString() })
+      .eq('is_aion_inbox', true)
+      .eq('remote_jid', rJid)
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, contact_type: type } : c))
-    await DatabaseService.logConversationEvent({
-      institution_id: effectiveInstitutionId,
+    await supabase.from('whatsapp_conversation_events').insert({
+      institution_id: null,
       remote_jid: rJid,
       event_type: 'contact_identified',
       description: `Contato identificado como: ${type === 'lead' ? 'Lead' : type === 'client' ? 'Cliente' : type === 'supplier' ? 'Fornecedor' : 'Outro'}`,
-      user_id: user.id,
-      user_name: user.full_name || user.email,
-    })
+      user_id: user?.id,
+      user_name: user?.full_name || user?.email,
+    }).then(() => {}, () => {})
   }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2231,7 +2207,7 @@ export default function AionWhatsAppHub() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          institution_id: effectiveInstitutionId,
+          institution_id: effectiveInstitutionId || undefined,
           base64,
           mimetype: fileToSend.type || pendingFile.type,
           filename: pendingFile.name,
@@ -2299,9 +2275,11 @@ export default function AionWhatsAppHub() {
         labels: [], isGroup: false, tags: [],
         messages: [],
       }
-      if (effectiveInstitutionId) {
-        DatabaseService.upsertConversationStatus(effectiveInstitutionId, jid, 'open').catch(() => {})
-      }
+      supabase.from('whatsapp_conversations')
+        .update({ status: 'open', updated_at: new Date().toISOString() })
+        .eq('is_aion_inbox', true)
+        .eq('remote_jid', jid)
+        .then(() => {}, () => {})
       setConversations(prev => [newConv, ...prev])
       setActiveId(jid)
       // Show template panel for new outbound conversations
@@ -2354,7 +2332,7 @@ export default function AionWhatsAppHub() {
   }
 
   const handleSendNewConvTemplate = async () => {
-    if (!activeId || !effectiveInstitutionId || !selectedTemplate) return
+    if (!activeId || !selectedTemplate) return
     const tmpl = templates.find(t => t.id === selectedTemplate) ||
       { id: '', name: selectedTemplate, language: 'pt_BR', components: [] }
     const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
@@ -2369,7 +2347,8 @@ export default function AionWhatsAppHub() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          institution_id: effectiveInstitutionId,
+          institution_id: effectiveInstitutionId || undefined,
+          isAionSend: true,
           to,
           template_name: tmpl.name,
           language: tmpl.language || 'pt_BR',
@@ -2409,17 +2388,8 @@ export default function AionWhatsAppHub() {
           assigned_user_name: user?.full_name,
           bot_active: false,
         })
-        .eq('institution_id', effectiveInstitutionId)
+        .eq('is_aion_inbox', true)
         .eq('remote_jid', rawJid(activeId))
-
-      // Increment outbound initiated count
-      const monthYear = new Date().toISOString().slice(0, 7)
-      try {
-        await supabase.rpc('increment_initiated_count', {
-          p_institution_id: effectiveInstitutionId,
-          p_month_year: monthYear,
-        })
-      } catch {}
 
       setShowTemplatePanel(false)
       setSelectedTemplate('')
@@ -2434,85 +2404,62 @@ export default function AionWhatsAppHub() {
   }
 
   const handleAddTag = async (tag: string) => {
-    if (!tag.trim() || !activeId || !effectiveInstitutionId) return
+    if (!tag.trim() || !activeId) return
     const currentTags = activeConv?.tags || []
     if (currentTags.includes(tag.trim())) return
     const newTags = [...currentTags, tag.trim()]
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, tags: newTags } : c))
-    await DatabaseService.updateConversationTags(effectiveInstitutionId, rawJid(activeId), newTags)
-    // Sync tags to whatsapp_contacts
-    const normPhone = (() => {
-      let d = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
-      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-      if (d.length === 11) d = '55' + d
-      return d
-    })()
-    await supabase.from('whatsapp_contacts')
-      .update({ tags: newTags })
-      .eq('institution_id', effectiveInstitutionId)
-      .eq('phone', normPhone)
+    await supabase.from('whatsapp_conversations')
+      .update({ tags: newTags, updated_at: new Date().toISOString() })
+      .eq('is_aion_inbox', true)
+      .eq('remote_jid', rawJid(activeId))
     setAddingTag(false)
     setNewTag('')
   }
 
   const handleRemoveTag = async (tag: string) => {
-    if (!activeId || !effectiveInstitutionId) return
+    if (!activeId) return
     const newTags = (activeConv?.tags || []).filter(t => t !== tag)
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, tags: newTags } : c))
-    await DatabaseService.updateConversationTags(effectiveInstitutionId, rawJid(activeId), newTags)
-    // Sync tags to whatsapp_contacts
-    const normPhone = (() => {
-      let d = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
-      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-      if (d.length === 11) d = '55' + d
-      return d
-    })()
-    await supabase.from('whatsapp_contacts')
-      .update({ tags: newTags })
-      .eq('institution_id', effectiveInstitutionId)
-      .eq('phone', normPhone)
+    await supabase.from('whatsapp_conversations')
+      .update({ tags: newTags, updated_at: new Date().toISOString() })
+      .eq('is_aion_inbox', true)
+      .eq('remote_jid', rawJid(activeId))
   }
 
   const handleCloseConversation = async () => {
-    if (!activeId || !effectiveInstitutionId) return
+    if (!activeId) return
     const convId = activeId
     const rJid   = rawJid(convId)
 
-    console.log('[CLOSE 1] iniciando fechamento', rJid, '| convId:', convId)
-
     // 1. Guard all Realtime events for this JID before any async operation
-    console.log('[CLOSE 2] adicionando ao AION_CLOSING_IDS', rJid, convId)
     AION_CLOSING_IDS.add(rJid)
     AION_CLOSING_IDS.add(convId)
-    console.log('[CLOSE 2] AION_CLOSING_IDS agora:', [...AION_CLOSING_IDS])
 
     // 2. Mark as closed locally (filter hides it for 'abertos', keeps it for 'ambos')
-    console.log('[CLOSE 3] marcando como closed no estado local')
     setConversations(prev => prev.map(c =>
       c.id === convId
         ? { ...c, status: 'closed' as ConvStatus, bot_active: false, assigned_user_id: undefined, assigned_user_name: undefined }
         : c
     ))
-    console.log('[CLOSE 4] setActiveId null')
     setActiveId(null)
 
     // 3. Persist to DB (triggers Realtime — guarded above)
-    console.log('[CLOSE 5] salvando no banco | institutionId:', effectiveInstitutionId, '| rJid:', rJid)
-    const closeResult = await DatabaseService.closeConversation(effectiveInstitutionId, rJid)
-    console.log('[CLOSE 5] resultado banco:', JSON.stringify(closeResult))
-    if (closeResult.count === 0) {
-      console.warn('[CLOSE 5] AVISO: 0 linhas atualizadas — possível problema de RLS ou formato do JID')
+    const { count } = await supabase.from('whatsapp_conversations')
+      .update({ status: 'closed', bot_active: false, assigned_user_id: null, assigned_user_name: null, updated_at: new Date().toISOString() })
+      .eq('is_aion_inbox', true)
+      .eq('remote_jid', rJid)
+    if ((count ?? 0) === 0) {
+      console.warn('[CLOSE] 0 linhas atualizadas — verificar formato do JID:', rJid)
     }
-    DatabaseService.logConversationEvent({
-      institution_id: effectiveInstitutionId,
+    supabase.from('whatsapp_conversation_events').insert({
+      institution_id: null,
       remote_jid: rJid,
       event_type: 'status_change',
       description: 'Conversa concluída',
       user_id: user!.id,
       user_name: user!.full_name || user!.email,
-    }).catch(() => {})
+    }).then(() => {}, () => {})
     console.log('[CLOSE 6] concluído — aguardando Realtime (guard 5s)')
 
     // 4. Release guard after 10s (long enough for all Realtime events to arrive)
@@ -2528,10 +2475,9 @@ export default function AionWhatsAppHub() {
       const surveyMsg = flowConfig.satisfaction_message || 'Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊'
       try {
         const { data: phoneData } = await supabase
-          .from('whatsapp_phone_numbers')
+          .from('platform_whatsapp')
           .select('phone_number_id')
-          .eq('institution_id', effectiveInstitutionId)
-          .eq('is_active', true)
+          .eq('connected', true)
           .maybeSingle()
 
         const { data: settings } = await supabase
@@ -2606,19 +2552,21 @@ export default function AionWhatsAppHub() {
   }
 
   const handleAssignFromClosed = async () => {
-    if (!activeId || !effectiveInstitutionId || !transferTarget) return
+    if (!activeId || !transferTarget) return
     const targetUser = users.find(u => u.id === transferTarget)
     if (!targetUser) return
     const rJid = rawJid(activeId)
-    await DatabaseService.assignConversation(effectiveInstitutionId, rJid, targetUser.id, targetUser.full_name)
-    await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, 'open')
-    await DatabaseService.logConversationEvent({
-      institution_id: effectiveInstitutionId,
+    await supabase.from('whatsapp_conversations')
+      .update({ assigned_user_id: targetUser.id, assigned_user_name: targetUser.full_name, status: 'open', updated_at: new Date().toISOString() })
+      .eq('is_aion_inbox', true)
+      .eq('remote_jid', rJid)
+    await supabase.from('whatsapp_conversation_events').insert({
+      institution_id: null,
       remote_jid: rJid,
       event_type: 'assignment',
       description: `Atribuído para ${targetUser.full_name}`,
-      user_id: user.id,
-      user_name: user.full_name || user.email,
+      user_id: user?.id,
+      user_name: user?.full_name || user?.email,
     })
     setConversations(prev => prev.map(c => c.id === activeId
       ? { ...c, assigned_user_id: targetUser.id, assigned_user_name: targetUser.full_name, status: 'open' as ConvStatus }
@@ -2629,22 +2577,24 @@ export default function AionWhatsAppHub() {
   }
 
   const handleLeaveConversation = async () => {
-    if (!activeId || !effectiveInstitutionId) return
+    if (!activeId) return
+    const rJid = rawJid(activeId)
     setConversations(prev => prev.map(c => c.id === activeId
       ? { ...c, status: 'waiting' as ConvStatus, assigned_user_id: undefined, assigned_user_name: undefined }
       : c
     ))
-    await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rawJid(activeId), 'waiting')
-    await supabase.from('whatsapp_conversations').update({ assigned_user_id: null, assigned_user_name: null })
-      .eq('institution_id', effectiveInstitutionId).eq('remote_jid', rawJid(activeId))
-    DatabaseService.logConversationEvent({
-      institution_id: effectiveInstitutionId,
-      remote_jid: rawJid(activeId),
+    await supabase.from('whatsapp_conversations')
+      .update({ status: 'waiting', assigned_user_id: null, assigned_user_name: null, updated_at: new Date().toISOString() })
+      .eq('is_aion_inbox', true)
+      .eq('remote_jid', rJid)
+    supabase.from('whatsapp_conversation_events').insert({
+      institution_id: null,
+      remote_jid: rJid,
       event_type: 'transfer',
-      description: `${user.full_name || user.email} saiu do atendimento`,
-      user_id: user.id,
-      user_name: user.full_name || user.email,
-    }).catch(() => {})
+      description: `${user?.full_name || user?.email} saiu do atendimento`,
+      user_id: user?.id,
+      user_name: user?.full_name || user?.email,
+    }).then(() => {}, () => {})
   }
 
   const handleCreateLead = async () => {
@@ -2854,18 +2804,21 @@ export default function AionWhatsAppHub() {
                 Cancelar
               </button>
               <button onClick={async () => {
-                if (!activeId || !effectiveInstitutionId) return
+                if (!activeId) return
                 const rJid = rawJid(activeId)
-                await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, 'client')
+                await supabase.from('whatsapp_conversations')
+                  .update({ contact_type: 'client', updated_at: new Date().toISOString() })
+                  .eq('is_aion_inbox', true)
+                  .eq('remote_jid', rJid)
                 setConversations(prev => prev.map(c => c.id === activeId ? { ...c, contact_type: 'client' } : c))
-                await DatabaseService.logConversationEvent({
-                  institution_id: effectiveInstitutionId,
+                supabase.from('whatsapp_conversation_events').insert({
+                  institution_id: null,
                   remote_jid: rJid,
                   event_type: 'contact_identified',
                   description: 'Contato identificado como: Cliente',
-                  user_id: user.id,
-                  user_name: user.full_name || user.email,
-                })
+                  user_id: user?.id,
+                  user_name: user?.full_name || user?.email,
+                }).then(() => {}, () => {})
                 setShowClientModal(false)
               }}
                 className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81]">
@@ -2979,7 +2932,26 @@ export default function AionWhatsAppHub() {
                 </select>
               </div>
             </div>
-            {/* Row 2: Read sub-filter pills */}
+            {/* Row 2: Queue filter pills */}
+            <div style={{ display: 'flex', padding: '0 12px 6px', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              {([
+                { key: 'all',     label: 'Todas'   },
+                { key: 'leads',   label: 'Vendas'  },
+                { key: 'schools', label: 'Suporte' },
+                { key: 'general', label: 'Geral'   },
+              ] as { key: typeof queueFilter; label: string }[]).map(f => (
+                <button key={f.key} onClick={() => setQueueFilter(f.key)} style={{
+                  padding: '3px 10px', borderRadius: 9999, fontSize: 12, border: 'none',
+                  cursor: 'pointer', fontWeight: queueFilter === f.key ? 600 : 400,
+                  background: queueFilter === f.key ? '#D1FAE5' : '#F0FDFB',
+                  color: queueFilter === f.key ? '#059669' : '#64748B',
+                  transition: 'all 0.15s',
+                }}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            {/* Row 3: Read sub-filter pills */}
             <div style={{ display: 'flex', padding: '0 12px 8px', gap: 6, alignItems: 'center' }}>
               {([
                 { key: 'all',    label: 'Tudo',     count: 0        },
@@ -3237,10 +3209,10 @@ export default function AionWhatsAppHub() {
                     if (!window.confirm('Isso apagará todas as mensagens permanentemente. Continuar?')) return
                     setConversations(prev => prev.map(c => c.id === activeId ? {...c, messages: []} : c))
                     setShowMoreMenu(false)
-                    if (activeId && effectiveInstitutionId) {
+                    if (activeId) {
                       await supabase.from('whatsapp_messages')
                         .delete()
-                        .eq('institution_id', effectiveInstitutionId)
+                        .eq('is_aion_inbox', true)
                         .eq('remote_jid', activeId)
                     }
                   }}
@@ -3252,7 +3224,7 @@ export default function AionWhatsAppHub() {
                   <button onClick={async () => {
                     if (!window.confirm('Bloquear este contato? Mensagens futuras serão ignoradas.')) return
                     setShowMoreMenu(false)
-                    if (!activeId || !effectiveInstitutionId) return
+                    if (!activeId) return
                     const normPhone = (() => {
                       let d = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
                       if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
@@ -3262,7 +3234,7 @@ export default function AionWhatsAppHub() {
                     })()
                     try {
                       await supabase.from('whatsapp_blacklist').insert({
-                        institution_id: effectiveInstitutionId,
+                        institution_id: null,
                         phone: normPhone,
                         blocked_at: new Date().toISOString()
                       })
@@ -3813,34 +3785,26 @@ export default function AionWhatsAppHub() {
                             </div>
                             <div style={{ display: 'flex', gap: 6 }}>
                               <button onClick={async () => {
-                                if (!activeId || !effectiveInstitutionId) return
+                                if (!activeId) return
+                                const rJid = rawJid(activeId)
                                 if (editForm.name && editForm.name !== activeConv.name) {
                                   skipNextNameUpdateRef.current = activeId
                                   setConversations(prev => prev.map(c => c.id === activeId ? {...c, name: editForm.name} : c))
                                   await supabase.from('whatsapp_conversations').update({ contact_name: editForm.name })
-                                    .eq('institution_id', effectiveInstitutionId).eq('remote_jid', rawJid(activeId))
-                                  const normPhone = (() => {
-                                    let d = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
-                                    if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-                                    if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-                                    if (d.length === 11) d = '55' + d
-                                    return d
-                                  })()
-                                  await supabase.from('whatsapp_contacts')
-                                    .update({ name: editForm.name })
-                                    .eq('institution_id', effectiveInstitutionId)
-                                    .eq('phone', normPhone)
-                                  console.log('[SYNC NAME] atualizado em whatsapp_contacts:', normPhone)
+                                    .eq('is_aion_inbox', true).eq('remote_jid', rJid)
                                 }
                                 if (editForm.contact_type && editForm.contact_type !== (activeConv.contact_type || '')) {
-                                  await DatabaseService.setConversationContactType(effectiveInstitutionId, rawJid(activeId), editForm.contact_type)
+                                  await supabase.from('whatsapp_conversations')
+                                    .update({ contact_type: editForm.contact_type, updated_at: new Date().toISOString() })
+                                    .eq('is_aion_inbox', true)
+                                    .eq('remote_jid', rJid)
                                   setConversations(prev => prev.map(c => c.id === activeId ? {...c, contact_type: editForm.contact_type} : c))
                                 }
                                 if (editForm.notes !== undefined) {
                                   await supabase.from('whatsapp_conversations')
                                     .update({ notes: editForm.notes })
-                                    .eq('institution_id', effectiveInstitutionId)
-                                    .eq('remote_jid', rawJid(activeId))
+                                    .eq('is_aion_inbox', true)
+                                    .eq('remote_jid', rJid)
                                 }
                                 setEditingContact(false)
                               }}
@@ -3996,14 +3960,14 @@ export default function AionWhatsAppHub() {
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Robô</label>
                         <button
                           onClick={async () => {
-                            if (!activeId || !effectiveInstitutionId) return
+                            if (!activeId) return
                             const newBotActive = !activeConv.bot_active
                             await supabase.from('whatsapp_conversations')
                               .update(newBotActive
                                 ? { bot_active: true, assigned_user_id: null, assigned_user_name: null }
                                 : { bot_active: false, assigned_user_id: user?.id, assigned_user_name: user?.full_name || user?.email, status: 'open' }
                               )
-                              .eq('institution_id', effectiveInstitutionId)
+                              .eq('is_aion_inbox', true)
                               .eq('remote_jid', rawJid(activeId))
                             setConversations(prev => prev.map(c =>
                               c.id === activeId
