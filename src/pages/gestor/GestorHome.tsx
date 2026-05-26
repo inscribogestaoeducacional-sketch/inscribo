@@ -795,7 +795,8 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
   const chartDataWithTotal = chartData.map(d => ({ ...d, total: (d.veteranos || 0) + (d.novatos || 0) }))
 
   // ── Evolução histórica de matrículas ──────────────────────────────────────
-  const currentYear = new Date().getFullYear()
+  const activeCycleYear = activeCycle?.year ?? cycles[0]?.year ?? new Date().getFullYear()
+  const currentYear = activeCycleYear - 1
   const histYears = sorted.map(e => entryYear(e)).filter(y => y > 0 && y < currentYear)
   const lastHistYear = histYears.length > 0 ? histYears[histYears.length - 1] : null
   const olderHistYears = histYears.slice(0, -1)
@@ -1277,7 +1278,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             <div style={{ ...(isMobile ? {} : { flex: 1 }), display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
               <KpiCard label={`Alunos ${latestYear ?? ''}`} value={fmt(totalStudents)} icon={<Users size={20} color="#00A896" />} iconBg="#E6F7F5" variation={totalVariation} />
               <KpiCard label="Novatos" value={fmt(newStudents)} icon={<TrendingUp size={20} color="#8B5CF6" />} iconBg="#EDE9FE" variation={newVariation} sub={totalStudents > 0 ? `${Math.round((newStudents / totalStudents) * 100)}% do total` : undefined} />
-              <KpiCard label="Market share" value={marketSharePct !== null ? `${marketSharePct}%` : (marketLoading ? '…' : '—')} icon={<BarChart3 size={20} color="#F59E0B" />} iconBg="#FEF3C7" sub={estimatedSchools ? `~${estimatedSchools} escolas na cidade` : undefined} />
+              <KpiCard label="Market share" value={inepSharePct !== null ? `${inepSharePct}%` : (inepMyStudents === null ? '—' : '…')} icon={<BarChart3 size={20} color="#F59E0B" />} iconBg="#FEF3C7" sub={estimatedSchools ? `~${estimatedSchools} escolas na cidade` : undefined} />
               <KpiCard label="Próxima campanha" value={monthsUntil > 0 ? `${monthsUntil} ${monthsUntil === 1 ? 'mês' : 'meses'}` : 'Ativa'} icon={<Calendar size={20} color="#3B82F6" />} iconBg="#DBEAFE" sub={`Ano letivo ${campaignYear}`} onClick={() => navigate('/reports')} />
             </div>
           </div>
@@ -1293,7 +1294,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
 
       {/* ── BLOCO 1: Leads & Matrículas ──────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0' }}>
-        <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Leads & Matrículas</span>
+        <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}><i className="ti ti-users" style={{ marginRight: 2, color: '#6b7280' }} />Leads & Matrículas</span>
         <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
       </div>
 
@@ -1517,7 +1518,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
 
       {/* ── BLOCO 2: WhatsApp ────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0' }}>
-        <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>WhatsApp</span>
+        <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}><i className="ti ti-brand-whatsapp" style={{ marginRight: 2, color: '#6b7280' }} />WhatsApp</span>
         <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
       </div>
 
@@ -1525,7 +1526,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
         {waConvStats?.daily && (
           <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>WhatsApp por dia</h3>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><i className="ti ti-brand-whatsapp" style={{ marginRight: 6, color: '#25D366' }} />WhatsApp por dia</h3>
             <div style={{ flex: 1, minHeight: 120 }}><ResponsiveContainer width="100%" height="100%">
               <BarChart data={waConvStats.daily} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
@@ -1629,7 +1630,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
           }
           return (
             <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px 24px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px' }}>Horários de maior movimento</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><i className="ti ti-clock" style={{ marginRight: 6, color: '#00A896' }} />Horários de maior movimento</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '70px repeat(7,1fr)', gap: 4 }}>
                 <div />
                 {DAYS.map(d => (
@@ -1706,7 +1707,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
 
       {/* ── BLOCO 3: Escola & Mercado ─────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0' }}>
-        <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>Escola & Mercado</span>
+        <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}><i className="ti ti-building-school" style={{ marginRight: 2, color: '#6b7280' }} />Escola & Mercado</span>
         <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
       </div>
 
