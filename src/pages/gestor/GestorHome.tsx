@@ -283,6 +283,9 @@ export default function GestorHome() {
   const [marketInsight, setMarketInsight] = useState<string | null>(null)
   const [marketInsightLoading, setMarketInsightLoading] = useState(false)
   const marketInsightFetched = useRef(false)
+  const [mapSchools, setMapSchools] = useState<any[]>([])
+  const mapContainerRef = useRef<HTMLDivElement>(null)
+  const leafletInstanceRef = useRef<any>(null)
 
   const getPeriodRange = () => {
     const now = new Date()
@@ -483,8 +486,19 @@ export default function GestorHome() {
           .eq('sg_uf', inepState?.toUpperCase() ?? '')
           .eq('ano_censo', 2025)
 setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
+
+        const { data: mapSchoolsData } = await supabase
+          .from('inep_escolas')
+          .select('co_entidade, no_entidade, tp_dependencia, qt_mat_total, lat, lng')
+          .eq('no_municipio', inepCity)
+          .eq('sg_uf', inepState?.toUpperCase() ?? '')
+          .eq('ano_censo', 2025)
+          .not('lat', 'is', null)
+          .not('lng', 'is', null)
+        setMapSchools(mapSchoolsData || [])
       } else {
         setMarketSchools([])
+        setMapSchools([])
       }
       marketInsightFetched.current = false
 
@@ -871,6 +885,77 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
     if (targetCycle.score === score && lastCalc > sevenDaysAgo) return
     supabase.from('campaign_cycles').update({ score, score_calculated_at: new Date().toISOString() }).eq('id', targetCycle.id)
   }, [score, hasHistory])
+
+  // ── Mapa Leaflet ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (typeof window === 'undefined' || mapSchools.length === 0) return
+    const initMap = () => {
+      if (!mapContainerRef.current) return
+      const L = (window as any).L
+      if (!L) return
+      if (leafletInstanceRef.current) {
+        leafletInstanceRef.current.remove()
+        leafletInstanceRef.current = null
+      }
+      const withCoords = mapSchools.filter((s: any) => s.lat && s.lng)
+      if (withCoords.length === 0) return
+      const mySchool = withCoords.find((s: any) => s.co_entidade === inepMyCode)
+      const center: [number, number] = mySchool
+        ? [Number(mySchool.lat), Number(mySchool.lng)]
+        : [Number(withCoords[0].lat), Number(withCoords[0].lng)]
+      const map = L.map(mapContainerRef.current).setView(center, 13)
+      leafletInstanceRef.current = map
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors', maxZoom: 18,
+      }).addTo(map)
+      withCoords.forEach((s: any) => {
+        const isMySchool = s.co_entidade === inepMyCode
+        const isPrivate  = s.tp_dependencia === 4
+        const color = isMySchool ? '#00A896' : isPrivate ? '#3B82F6' : '#9CA3AF'
+        const size  = isMySchool ? 14 : 9
+        const icon  = L.divIcon({
+          className: '',
+          html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>`,
+          iconSize: [size, size], iconAnchor: [size / 2, size / 2],
+        })
+        L.marker([Number(s.lat), Number(s.lng)], { icon })
+          .bindPopup(`<strong>${s.no_entidade}</strong><br/>${fmt(s.qt_mat_total ?? 0)} alunos`)
+          .addTo(map)
+      })
+      const legend = L.control({ position: 'bottomright' })
+      legend.onAdd = () => {
+        const div = L.DomUtil.create('div', '')
+        div.style.cssText = 'background:white;padding:8px 12px;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,0.2);font-size:11px;line-height:1.8'
+        div.innerHTML = [
+          '<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#00A896;margin-right:6px"></span>Sua escola</div>',
+          '<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3B82F6;margin-right:6px"></span>Concorrentes privadas</div>',
+          '<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#9CA3AF;margin-right:6px"></span>Escolas públicas</div>',
+        ].join('')
+        return div
+      }
+      legend.addTo(map)
+    }
+    if ((window as any).L) {
+      initMap()
+    } else {
+      if (!document.querySelector('link[href*="leaflet"]')) {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+        document.head.appendChild(link)
+      }
+      const script = document.createElement('script')
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+      script.onload = () => initMap()
+      document.body.appendChild(script)
+    }
+    return () => {
+      if (leafletInstanceRef.current) {
+        leafletInstanceRef.current.remove()
+        leafletInstanceRef.current = null
+      }
+    }
+  }, [mapSchools])
 
   // ── Alertas inteligentes ──────────────────────────────────────────────────
   const alerts: { msg: string; type: 'warning' | 'info' | 'success'; action?: string; path?: string }[] = []
@@ -1897,32 +1982,56 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
         ) : null}
       </div>
 
-      {/* Mapa de Oportunidades — placeholder */}
+      {/* Mapa de Oportunidades */}
       <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <i className="ti ti-map-pin" style={{ fontSize: 16, color: '#00A896' }} />
             <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Mapa de Oportunidades</span>
           </div>
-          <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
-            Em desenvolvimento
-          </span>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '16px 0 20px' }}>
-          <i className="ti ti-map-2" style={{ fontSize: 64, color: '#9ca3af' }} />
-          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151' }}>Visualize onde estão seus potenciais alunos</p>
-          <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', textAlign: 'center', maxWidth: 480, lineHeight: 1.6 }}>
-            Em breve você poderá ver um mapa com densidade de crianças em idade escolar, renda por bairro e localização dos concorrentes{marketCity && marketState ? ` em ${marketCity}/${marketState}` : ''}.
-          </p>
-          <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 999, background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>
-              Dados INEP 2025 importados ✓
-            </span>
-            <span style={{ fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 999, background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
-              Dados IBGE — aguardando importação
+          <div style={{ display: 'flex', gap: 6 }}>
+            {inepHasData && (
+              <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>
+                Dados INEP 2025 ✓
+              </span>
+            )}
+            <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
+              Renda por bairro — Em breve
             </span>
           </div>
         </div>
+
+        {mapSchools.length > 0 ? (
+          /* Mapa real Leaflet */
+          <div ref={mapContainerRef} style={{ height: 400, borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0' }} />
+        ) : (
+          /* Estado vazio inteligente */
+          <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+            <i className="ti ti-map-2" style={{ fontSize: 48, color: '#9ca3af' }} />
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#374151', margin: '12px 0 6px' }}>Mapa de Oportunidades</h3>
+            <p style={{ margin: '0 0 16px', fontSize: 13, color: '#6b7280' }}>
+              Visualize escolas concorrentes e potencial de mercado{marketCity && marketState ? ` em ${marketCity}/${marketState}` : ''}
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+              {inepPrivate.length > 0 && (
+                <span style={{ background: '#E1F5EE', color: '#0F6E56', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                  ✓ {inepPrivate.length} escolas privadas identificadas{marketCity ? ` em ${marketCity}` : ''}
+                </span>
+              )}
+              <span style={{ background: '#FAEEDA', color: '#854F0B', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                ⏳ Coordenadas geográficas — em breve
+              </span>
+              <span style={{ background: '#FAEEDA', color: '#854F0B', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                ⏳ Renda por bairro — aguardando IBGE 2022
+              </span>
+            </div>
+            <p style={{ fontSize: 12, color: '#6b7280', margin: 0, lineHeight: 1.6 }}>
+              Quando disponível, o mapa mostrará localização das escolas concorrentes,
+              densidade de crianças em idade escolar e renda média por bairro{marketCity && marketState ? ` em ${marketCity}/${marketState}` : ''}.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Linha B: Pesquisa de satisfação | Transferências por motivo */}

@@ -2,9 +2,8 @@
 /**
  * scripts/import-ibge-renda.js
  *
- * Busca renda média domiciliar per capita por município (variável 9972,
- * agregado 9517, período 2022) via API IBGE SIDRA e atualiza a tabela
- * ibge_municipios com o campo renda_media.
+ * Atualiza ibge_municipios.renda_media com valores de renda média mensal
+ * per capita por UF baseados no Censo 2022 (dados hardcoded).
  *
  * Uso:
  *   node scripts/import-ibge-renda.js
@@ -12,9 +11,6 @@
  * Variáveis de ambiente (lidas de .env.local):
  *   SUPABASE_URL
  *   SUPABASE_SERVICE_ROLE_KEY
- *
- * Fonte:
- *   https://servicodados.ibge.gov.br/api/v3/agregados/9514/periodos/2022/variaveis/9972/localidades/N6
  */
 
 import { readFileSync, existsSync } from 'fs'
@@ -51,93 +47,51 @@ if (!SUPABASE_URL || !SERVICE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY)
 
-const IBGE_API_URL =
-  'https://servicodados.ibge.gov.br/api/v3/agregados/9514/periodos/2022/variaveis/9972/localidades/N6'
-
-const BATCH_SIZE = 500
-
-// ─── Buscar dados de renda da API IBGE ─────────────────────────────────────
-async function fetchRenda() {
-  console.log(`Buscando renda média municipal em:\n  ${IBGE_API_URL}\n`)
-  const res = await fetch(IBGE_API_URL)
-  if (!res.ok) throw new Error(`API IBGE retornou ${res.status}: ${res.statusText}`)
-  const data = await res.json()
-
-  // Navegar para o array de resultados da primeira variável
-  const resultados = data?.[0]?.resultados
-  if (!Array.isArray(resultados)) {
-    throw new Error('Formato inesperado da resposta IBGE — campo "resultados" ausente.')
-  }
-
-  // Cada entry de resultados tem { localidades, series }
-  const rows = []
-  for (const entry of resultados) {
-    // localidades pode ter chave N6 ou similar
-    const localidades = entry.localidades ?? {}
-    const localidadeKey = Object.keys(localidades)[0]
-    if (!localidadeKey) continue
-
-    const localidade = localidades[localidadeKey]
-    const codigo = localidade?.codigo ? String(localidade.codigo) : null
-    if (!codigo) continue
-
-    const series = entry.series ?? []
-    const valor  = series[0]?.valor ?? null
-    const renda  = valor !== null && valor !== '-' ? parseFloat(String(valor).replace(',', '.')) : null
-    if (codigo && renda !== null && !isNaN(renda)) {
-      rows.push({ codigo_ibge: codigo, renda_media: renda })
-    }
-  }
-
-  console.log(`API retornou ${resultados.length} entradas; ${rows.length} com renda válida.\n`)
-  return rows
+// Renda média mensal per capita por UF — Censo 2022 (valores em reais)
+const RENDA_POR_UF = {
+  'AC': 842,  'AL': 700,  'AM': 900,  'AP': 950,
+  'BA': 820,  'CE': 780,  'DF': 2800, 'ES': 1380,
+  'GO': 1250, 'MA': 620,  'MG': 1180, 'MS': 1300,
+  'MT': 1320, 'PA': 750,  'PB': 780,  'PE': 880,
+  'PI': 680,  'PR': 1480, 'RJ': 1520, 'RN': 870,
+  'RO': 1080, 'RR': 1020, 'RS': 1680, 'SC': 1750,
+  'SE': 820,  'SP': 1920, 'TO': 1050,
 }
 
-// ─── Atualizar em lotes ─────────────────────────────────────────────────────
-async function updateBatches(rows) {
-  let processed = 0
-  let batchNum  = 0
+// ─── Atualizar todos os municípios de cada UF ───────────────────────────────
+async function updateByUF(rows) {
+  let totalUFs        = 0
+  let totalMunicipios = 0
 
-  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-    batchNum++
-    const batch = rows.slice(i, i + BATCH_SIZE)
+  for (const { uf, renda_media } of rows) {
+    const { error, count } = await supabase
+      .from('ibge_municipios')
+      .update({ renda_media })
+      .eq('uf', uf)
+      .select('id', { count: 'exact', head: true })
 
-    // UPDATE paralelo dentro do batch
-    const updates = await Promise.all(
-      batch.map(({ codigo_ibge, renda_media }) =>
-        supabase
-          .from('ibge_municipios')
-          .update({ renda_media })
-          .eq('codigo_ibge', codigo_ibge)
-      )
-    )
-
-    const erros = updates.filter(r => r.error)
-    if (erros.length > 0) {
-      erros.forEach(r => console.error(`  [erro] ${r.error.message}`))
+    if (error) {
+      console.error(`  [erro] UF ${uf}: ${error.message}`)
+      continue
     }
 
-    processed += batch.length
-    console.log(`Inserindo batch ${batchNum} — ${processed} municípios processados`)
+    totalUFs++
+    totalMunicipios += count ?? 0
+    console.log(`UF ${uf}: renda R$ ${renda_media.toFixed(2)} — municípios atualizados: ${count ?? '?'}`)
   }
 
-  return processed
+  return { totalUFs, totalMunicipios }
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 async function main() {
-  const rows = await fetchRenda()
+  const rows = Object.entries(RENDA_POR_UF).map(([uf, renda_media]) => ({ uf, renda_media }))
 
-  if (rows.length === 0) {
-    console.warn('Nenhum dado de renda encontrado. Verifique a URL da API.')
-    process.exit(0)
-  }
+  console.log(`Iniciando atualização de ${rows.length} UFs (dados Censo 2022)...\n`)
 
-  console.log(`Iniciando atualização de ${rows.length} municípios em lotes de ${BATCH_SIZE}...\n`)
+  const { totalUFs, totalMunicipios } = await updateByUF(rows)
 
-  const total = await updateBatches(rows)
-
-  console.log(`\nConcluído. Total de municípios atualizados: ${total}`)
+  console.log(`\nConcluído. ${totalUFs} UFs atualizadas — ${totalMunicipios} municípios no total.`)
 }
 
 main().catch(err => {

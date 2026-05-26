@@ -133,7 +133,7 @@ function Hero() {
               <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.85)', letterSpacing: '.04em' }}>CRM · WhatsApp Oficial Meta · IA · Pipeline · Relatórios</span>
             </div>
             <h1 className="s-title" style={{ fontSize: 'clamp(36px,5.5vw,72px)', color: '#fff', marginBottom: 28, animation: 'fadeUp .9s ease .1s both', lineHeight: 1.05, letterSpacing: '-0.03em', maxWidth: 640 }}>
-              O futuro da campanha<br />de matrícula e do atendimento<br />da sua escola <span style={{ color: '#0DD3BF' }}>começa agora.</span>
+              A campanha de matrículas da sua escola começa <span style={{ color: '#0DD3BF' }}>AGORA</span> com a <span style={{ color: '#0DD3BF' }}>ÁION EDU!</span>
             </h1>
             <p style={{ fontSize: 17, color: 'rgba(255,255,255,.75)', lineHeight: 1.8, marginBottom: 40, maxWidth: 520, animation: 'fadeUp .9s ease .2s both' }}>
               A ÁION EDU lê os dados da sua escola, cria um plano de campanha com metas e ações, centraliza o atendimento das famílias e entrega ao gestor visibilidade total — do primeiro contato até a matrícula assinada.
