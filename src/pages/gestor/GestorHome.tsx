@@ -368,6 +368,7 @@ export default function GestorHome() {
         .select('id')
         .eq('institution_id', institutionId)
         .in('status', ['open', 'waiting'])
+        .not('remote_jid', 'ilike', '%@g.us')
       setActiveConvsNow(openConvs?.length ?? 0)
       const respTimes: number[] = []
       waConvs.forEach(c => {
