@@ -86,6 +86,36 @@ const MONTH_SHORT: Record<number, string> = { 1:'Jan',2:'Fev',3:'Mar',4:'Abr',5:
 function fmt(n: number) { return new Intl.NumberFormat('pt-BR').format(n) }
 function fmtBRL(n: number) { return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }) }
 
+function renderMarkdown(text: string): JSX.Element {
+  const lines = text.split('\n')
+  const elements: JSX.Element[] = []
+  let key = 0
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    if (trimmed.startsWith('## ')) {
+      elements.push(
+        <h3 key={key++} style={{ fontSize: 13, fontWeight: 600, color: '#00A896', margin: '8px 0 4px' }}>
+          {trimmed.replace(/^##\s*/, '')}
+        </h3>
+      )
+    } else {
+      const parts = trimmed.split(/(\*\*[^*]+\*\*)/)
+      const rendered = parts.map((part, j) =>
+        part.startsWith('**') && part.endsWith('**')
+          ? <strong key={j}>{part.slice(2, -2)}</strong>
+          : <React.Fragment key={j}>{part}</React.Fragment>
+      )
+      elements.push(
+        <p key={key++} style={{ fontSize: 13, lineHeight: 1.6, margin: '0 0 8px' }}>
+          {rendered}
+        </p>
+      )
+    }
+  }
+  return <>{elements}</>
+}
+
 function greeting() {
   const h = new Date().getHours()
   if (h < 12) return 'Bom dia'
@@ -1736,10 +1766,10 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 {[
-                  { label: 'Escolas privadas', value: fmt(inepTotalSchools), icon: 'ti-building-community', color: '#6366f1', bg: '#f0f4ff' },
-                  { label: 'Alunos no setor', value: fmt(inepTotalStudents), icon: 'ti-users', color: '#0891b2', bg: '#e0f2fe' },
-                  { label: 'Média por escola', value: inepAvgStudents ? fmt(inepAvgStudents) : '—', icon: 'ti-chart-bar', color: '#059669', bg: '#d1fae5' },
-                  { label: 'Market share', value: inepSharePct !== null ? `${inepSharePct}%` : '—', icon: 'ti-target', color: '#d97706', bg: '#fef3c7' },
+                  { label: 'Escolas privadas', value: fmt(inepTotalSchools), icon: 'ti-building-school', color: '#7C3AED', bg: '#f5f3ff' },
+                  { label: 'Alunos no setor', value: fmt(inepTotalStudents), icon: 'ti-users', color: '#00A896', bg: '#e6f7f5' },
+                  { label: 'Média por escola', value: inepAvgStudents ? fmt(inepAvgStudents) : '—', icon: 'ti-chart-bar', color: '#F59E0B', bg: '#fef3c7' },
+                  { label: 'Market share', value: inepSharePct !== null ? `${inepSharePct}%` : '—', icon: 'ti-trophy', color: '#00A896', bg: '#e6f7f5' },
                 ].map(item => (
                   <div key={item.label} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ width: 30, height: 30, borderRadius: 8, background: item.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1815,7 +1845,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
                 </div>
               ) : marketInsight ? (
                 <div style={{ background: '#f5f3ff', borderRadius: 12, padding: '14px 16px', border: '1px solid #e0e7ff', flex: 1 }}>
-                  <p style={{ margin: 0, fontSize: 12.5, color: '#374151', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{marketInsight}</p>
+                  {renderMarkdown(marketInsight)}
                 </div>
               ) : (
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '20px 0', color: '#94a3b8' }}>
@@ -1826,6 +1856,34 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             </div>
           </div>
         ) : null}
+      </div>
+
+      {/* Mapa de Oportunidades — placeholder */}
+      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <i className="ti ti-map-pin" style={{ fontSize: 16, color: '#00A896' }} />
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b' }}>Mapa de Oportunidades</span>
+          </div>
+          <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
+            Em desenvolvimento
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '16px 0 20px' }}>
+          <i className="ti ti-map-2" style={{ fontSize: 64, color: '#9ca3af' }} />
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151' }}>Visualize onde estão seus potenciais alunos</p>
+          <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', textAlign: 'center', maxWidth: 480, lineHeight: 1.6 }}>
+            Em breve você poderá ver um mapa com densidade de crianças em idade escolar, renda por bairro e localização dos concorrentes{marketCity && marketState ? ` em ${marketCity}/${marketState}` : ''}.
+          </p>
+          <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <span style={{ fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 999, background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>
+              Dados INEP 2025 importados ✓
+            </span>
+            <span style={{ fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 999, background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
+              Dados IBGE — aguardando importação
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Linha B: Pesquisa de satisfação | Transferências por motivo */}
