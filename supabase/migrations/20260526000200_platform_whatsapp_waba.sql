@@ -1,0 +1,2 @@
+ALTER TABLE platform_whatsapp ADD COLUMN IF NOT EXISTS waba_id TEXT;
+ALTER TABLE platform_whatsapp ADD COLUMN IF NOT EXISTS webhook_verified BOOLEAN DEFAULT FALSE;

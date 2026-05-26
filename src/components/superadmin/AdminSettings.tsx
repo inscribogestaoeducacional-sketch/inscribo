@@ -355,10 +355,12 @@ Contratante                        Contratada — Áion Edu`
 interface AionWAConfig {
   id?: string
   phone_number_id: string
+  waba_id?: string
   access_token: string
   phone_number: string
   display_name: string
   connected: boolean
+  webhook_verified?: boolean
 }
 
 export default function AdminSettings() {
@@ -368,7 +370,7 @@ export default function AdminSettings() {
   const [saved, setSaved] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
 
-  const [aionWA, setAionWA]           = useState<AionWAConfig>({ phone_number_id: '', access_token: '', phone_number: '', display_name: '', connected: false })
+  const [aionWA, setAionWA]           = useState<AionWAConfig>({ phone_number_id: '', waba_id: '', access_token: '', phone_number: '', display_name: '', connected: false, webhook_verified: false })
   const [aionSaving, setAionSaving]   = useState(false)
   const [aionTesting, setAionTesting] = useState(false)
 
@@ -438,6 +440,7 @@ export default function AdminSettings() {
     }
     setAionTesting(true)
     try {
+      // 1. Validar credenciais
       const res = await fetch(
         `https://graph.facebook.com/v19.0/${aionWA.phone_number_id}?fields=display_phone_number,verified_name`,
         { headers: { Authorization: `Bearer ${aionWA.access_token}` } }
@@ -445,11 +448,34 @@ export default function AdminSettings() {
       const data = await res.json()
       if (!res.ok || !data.display_phone_number) throw new Error(data.error?.message || 'Credenciais inválidas')
 
+      // 2. Registrar app no WABA (assinatura de webhook)
+      let webhookVerified = false
+      if (aionWA.waba_id) {
+        const subRes = await fetch(
+          `https://graph.facebook.com/v19.0/${aionWA.waba_id}/subscribed_apps`,
+          { method: 'POST', headers: { Authorization: `Bearer ${aionWA.access_token}` } }
+        )
+        const subData = await subRes.json()
+        if (subRes.ok && subData.success) webhookVerified = true
+      }
+
+      // 3. Registrar número no Cloud API (ignorar se já registrado)
+      await fetch(
+        `https://graph.facebook.com/v19.0/${aionWA.phone_number_id}/register`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${aionWA.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messaging_product: 'whatsapp', pin: '000000' }),
+        }
+      ).catch(() => {})
+
       const updated: AionWAConfig = {
         ...aionWA,
+        waba_id: aionWA.waba_id,
         phone_number: data.display_phone_number,
         display_name: data.verified_name || '',
         connected: true,
+        webhook_verified: webhookVerified,
       }
       if (aionWA.id) {
         await supabase.from('platform_whatsapp').update(updated).eq('id', aionWA.id)
@@ -457,7 +483,10 @@ export default function AdminSettings() {
         await supabase.from('platform_whatsapp').insert(updated)
       }
       setAionWA(updated)
-      showToast(`WhatsApp Áion conectado: ${data.verified_name} (${data.display_phone_number})`)
+      showToast(
+        `WhatsApp Áion conectado: ${data.verified_name} (${data.display_phone_number})` +
+        (webhookVerified ? ' — Webhook registrado ✓' : '')
+      )
     } catch (e: any) {
       showToast(e.message || 'Erro ao verificar credenciais.', false)
     } finally {
@@ -471,11 +500,13 @@ export default function AdminSettings() {
       if (aionWA.id) {
         await supabase.from('platform_whatsapp').update({
           phone_number_id: aionWA.phone_number_id,
+          waba_id: aionWA.waba_id || null,
           access_token: aionWA.access_token,
         }).eq('id', aionWA.id)
       } else {
         const { data } = await supabase.from('platform_whatsapp').insert({
           phone_number_id: aionWA.phone_number_id,
+          waba_id: aionWA.waba_id || null,
           access_token: aionWA.access_token,
           connected: false,
         }).select().single()
@@ -623,6 +654,11 @@ export default function AdminSettings() {
                     <p className="text-sm font-semibold text-green-700">Conectado</p>
                     <p className="text-xs text-green-600">{aionWA.display_name} · {aionWA.phone_number}</p>
                   </div>
+                  {aionWA.webhook_verified && (
+                    <span className="flex items-center gap-1 px-2.5 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full border border-green-200">
+                      <CheckCircle2 className="w-3 h-3" /> Webhook verificado ✓
+                    </span>
+                  )}
                   <button onClick={disconnectAionWA} className="ml-auto text-xs text-red-500 hover:text-red-700 font-medium">Desconectar</button>
                 </>
               : <><div className="w-2.5 h-2.5 rounded-full bg-gray-300 flex-shrink-0" />
@@ -640,14 +676,21 @@ export default function AdminSettings() {
               <p className={hint}>Obtido no Meta for Developers → WhatsApp → Phone numbers</p>
             </div>
             <div>
-              <label className={lbl}>Access Token (permanente)</label>
-              <SecretInput
-                value={aionWA.access_token}
-                onChange={v => setAionWA(p => ({ ...p, access_token: v }))}
-                placeholder="EAAxxxxxxx..."
-              />
-              <p className={hint}>Token de sistema com permissão whatsapp_business_messaging</p>
+              <label className={lbl}>WABA ID</label>
+              <input className={inp} placeholder="Ex: 1222972209822315"
+                value={aionWA.waba_id || ''}
+                onChange={e => setAionWA(p => ({ ...p, waba_id: e.target.value }))} />
+              <p className={hint}>WhatsApp Business Account ID — usado para registrar o webhook automaticamente</p>
             </div>
+          </div>
+          <div>
+            <label className={lbl}>Access Token (permanente)</label>
+            <SecretInput
+              value={aionWA.access_token}
+              onChange={v => setAionWA(p => ({ ...p, access_token: v }))}
+              placeholder="EAAxxxxxxx..."
+            />
+            <p className={hint}>Token de sistema com permissão whatsapp_business_messaging</p>
           </div>
           {/* URL do webhook */}
           <div>
