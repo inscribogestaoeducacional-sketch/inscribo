@@ -350,6 +350,8 @@ export default function ContactsModule() {
         .from('whatsapp_contacts')
         .select(selectStr, { count: 'exact' })
         .eq('institution_id', institutionId)
+        .not('phone', 'ilike', '%@g.us%')
+        .filter('phone', 'not.ilike', '%1491304248%')
         .range(from, to)
         .order(sc, { ascending: sd === 'asc', nullsFirst: false })
 
@@ -370,7 +372,13 @@ export default function ContactsModule() {
         return
       }
 
-      const newList    = (data || []).map(mapContact)
+      const validData  = (data || []).filter((c: any) =>
+        c.phone &&
+        c.phone.replace(/\D/g, '').length <= 13 &&
+        !c.phone.includes('@g.us') &&
+        !c.phone.includes('-')
+      )
+      const newList    = validData.map(mapContact)
       const newOffset  = from + newList.length
       const totalCount = count || 0
 
