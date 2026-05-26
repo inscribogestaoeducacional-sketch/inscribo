@@ -178,9 +178,9 @@ function KpiCard({ label, value, icon, iconBg, variation, sub, onClick }: {
     <div
       onClick={onClick}
       style={{
-        background: '#fff', borderRadius: 14, border: '1px solid #e2e8f0',
+        background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0',
         padding: '16px 18px', cursor: onClick ? 'pointer' : 'default',
-        transition: 'box-shadow 0.15s'
+        boxShadow: '0 2px 12px rgba(0,0,0,0.06)', transition: 'box-shadow 0.15s'
       }}
       onMouseEnter={e => onClick && ((e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)')}
       onMouseLeave={e => onClick && ((e.currentTarget as HTMLDivElement).style.boxShadow = 'none')}
@@ -205,7 +205,7 @@ function SectionCard({ title, subtitle, icon, iconBg, iconColor, action, actionL
   action?: () => void; actionLabel?: string; children: React.ReactNode
 }) {
   return (
-    <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+    <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 32, height: 32, borderRadius: 10, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -286,6 +286,8 @@ export default function GestorHome() {
   const [mapSchools, setMapSchools] = useState<any[]>([])
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const leafletInstanceRef = useRef<any>(null)
+  const [activeLeadsData, setActiveLeadsData] = useState<{ id: string; updated_at: string }[]>([])
+  const [activeReenrollData, setActiveReenrollData] = useState<{ period: string; confirmed: number }[]>([])
 
   const getPeriodRange = () => {
     const now = new Date()
@@ -333,6 +335,28 @@ export default function GestorHome() {
 
       const loadedCycles = (cyclesRes.data ?? []) as CampaignCycle[]
       setCycles(loadedCycles)
+
+      // Dados da campanha ativa para o gráfico de evolução
+      const chartActive = loadedCycles.find(c => c.status === 'active') ?? null
+      if (chartActive) {
+        const [leadsAtivosRes, reenrollRes] = await Promise.all([
+          supabase.from('leads').select('id, updated_at')
+            .eq('institution_id', institutionId)
+            .eq('status', 'matriculado')
+            .gte('updated_at', `${chartActive.year}-01-01`)
+            .lte('updated_at', `${chartActive.year}-12-31`),
+          supabase.from('monthly_reenrollments').select('period, confirmed')
+            .eq('institution_id', institutionId)
+            .gte('period', `${chartActive.year}-01`)
+            .lte('period', `${chartActive.year}-12`),
+        ])
+        setActiveLeadsData((leadsAtivosRes.data ?? []) as { id: string; updated_at: string }[])
+        setActiveReenrollData((reenrollRes.data ?? []) as { period: string; confirmed: number }[])
+      } else {
+        setActiveLeadsData([])
+        setActiveReenrollData([])
+      }
+
       setFunnelData(funnelRes.data ?? [])
       setTransfers((transferRes.data ?? []) as StudentTransfer[])
       setLeads((leadsRes.data ?? []) as { id: string; status: string; created_at: string }[])
@@ -702,11 +726,16 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
   const setupCycle = cycles.find(c => c.school_data?.city) ?? null
   const campaignUnlocked = !!(activeCycle || releasedCycle)
 
-  const historicalSource = (
-    cycles.find(c => c.historical_data?.length)?.historical_data ??
-    (cycles.find(c => (c.erp_files as HistoricalEntry[] | null)?.filter(f => !f.error).length)?.erp_files as HistoricalEntry[] | null) ??
-    []
-  ).filter((e: HistoricalEntry) => !e.error)
+  const allHistoricalEntries = cycles
+    .flatMap(c => (c.historical_data || []) as HistoricalEntry[])
+    .filter(e => !e.error)
+  const histByYear = new Map<number, HistoricalEntry>()
+  allHistoricalEntries.forEach(e => {
+    const yr = e.detected_year || e.year
+    if (yr && !histByYear.has(yr)) histByYear.set(yr, e)
+  })
+  const historicalSource = Array.from(histByYear.values())
+    .sort((a, b) => ((a.detected_year || a.year) || 0) - ((b.detected_year || b.year) || 0))
 
   const sorted = [...historicalSource].sort((a: HistoricalEntry, b: HistoricalEntry) => entryYear(a) - entryYear(b))
   const latest = sorted[sorted.length - 1] ?? null
@@ -786,7 +815,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
     : null
 
   const reenrollRateNum = totalStudents > 0 && newStudents < totalStudents ? +((returningStudents / (totalStudents - newStudents + returningStudents)) * 100).toFixed(1) : 75
-  const score = calculateScore({ growthTrend: newVariation ?? 0, reenrollRate: reenrollRateNum, marketShare: marketSharePct ?? 0, conversionRate: conversionRateNum, hasHistorical: hasHistory })
+  const score = calculateScore({ growthTrend: newVariation ?? 0, reenrollRate: reenrollRateNum, marketShare: inepSharePct ?? marketSharePct ?? 0, conversionRate: conversionRateNum, hasHistorical: hasHistory })
   const scoreLabel = score >= 80 ? 'Alto Desempenho' : score >= 60 ? 'Desempenho Regular' : score >= 40 ? 'Atenção Necessária' : 'Situação Crítica'
   const scoreColor = score >= 80 ? '#0F6E56' : score >= 60 ? '#BA7517' : '#E24B4A'
   const scoreBg = score >= 80 ? '#f0fdf4' : score >= 60 ? '#fffbeb' : '#fef2f2'
@@ -795,27 +824,32 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
   const chartDataWithTotal = chartData.map(d => ({ ...d, total: (d.veteranos || 0) + (d.novatos || 0) }))
 
   // ── Evolução histórica de matrículas ──────────────────────────────────────
-  const activeCycleYear = activeCycle?.year ?? cycles[0]?.year ?? new Date().getFullYear()
-  const currentYear = activeCycleYear - 1
-  const histYears = sorted.map(e => entryYear(e)).filter(y => y > 0 && y < currentYear)
+  const chartActiveCycle = cycles.find(c => c.status === 'active') ?? null
+  const histYears = sorted.map(e => entryYear(e)).filter(y => y > 0)
   const lastHistYear = histYears.length > 0 ? histYears[histYears.length - 1] : null
   const olderHistYears = histYears.slice(0, -1)
   const histGrays = ['#d1d5db', '#9ca3af', '#6b7280', '#4b5563']
 
-  const enrollByMonthCurrent = allEnrollments.reduce<Record<number, number>>((acc, e) => {
-    const d = new Date(e.created_at)
-    if (d.getFullYear() === currentYear) { const m = d.getMonth() + 1; acc[m] = (acc[m] || 0) + 1 }
-    return acc
-  }, {})
+  const activeByMonth: Record<number, number> = {}
+  activeLeadsData.forEach(l => {
+    const month = new Date(l.updated_at).getMonth() + 1
+    activeByMonth[month] = (activeByMonth[month] || 0) + 1
+  })
+  activeReenrollData.forEach(r => {
+    const month = parseInt(r.period.split('-')[1])
+    activeByMonth[month] = (activeByMonth[month] || 0) + (r.confirmed || 0)
+  })
 
-  const historicalChartYears = [...histYears, currentYear]
+  const historicalChartYears = chartActiveCycle
+    ? [...histYears, chartActiveCycle.year]
+    : histYears
   const historicalChartData: Array<Record<string, string | number>> =
     ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'].map((mes, idx) => {
       const month = idx + 1
       const row: Record<string, string | number> = { mes }
       sorted.forEach(e => {
         const yr = entryYear(e)
-        if (yr > 0 && yr < currentYear) {
+        if (yr > 0) {
           const funnel = e.historical_funnel
           if (funnel && Object.keys(funnel).length > 0) {
             const key = Object.keys(funnel).find(k => {
@@ -828,23 +862,23 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
           }
         }
       })
-      row[String(currentYear)] = enrollByMonthCurrent[month] || 0
+      if (chartActiveCycle) row[String(chartActiveCycle.year)] = activeByMonth[month] || 0
       return row
     })
 
-  const hasCurrentYearEnrollData = Object.values(enrollByMonthCurrent).some(v => v > 0)
+  const hasActiveData = chartActiveCycle ? Object.values(activeByMonth).some(v => v > 0) : false
   const yearsWithData = historicalChartYears.filter(yr =>
-    yr === currentYear ? hasCurrentYearEnrollData : sorted.some(e => entryYear(e) === yr && entryTotal(e) > 0)
+    yr === chartActiveCycle?.year ? hasActiveData : sorted.some(e => entryYear(e) === yr && entryTotal(e) > 0)
   ).length
-  const hasHistoricalChart = histYears.length > 0 || hasCurrentYearEnrollData
+  const hasHistoricalChart = histYears.length > 0 || !!chartActiveCycle
   const histHasEstimated = sorted.some(e => {
     const yr = entryYear(e)
-    return yr > 0 && yr < currentYear && (!e.historical_funnel || Object.keys(e.historical_funnel).length === 0)
+    return yr > 0 && (!e.historical_funnel || Object.keys(e.historical_funnel).length === 0)
   })
 
   const getYearLineProps = (yr: number): { stroke: string; strokeWidth: number; strokeDasharray?: string } => {
-    if (yr === currentYear) return { stroke: '#00A896', strokeWidth: 2.5 }
-    if (yr === lastHistYear) return { stroke: 'rgba(0,168,150,0.45)', strokeWidth: 1.5, strokeDasharray: '5 5' }
+    if (chartActiveCycle && yr === chartActiveCycle.year) return { stroke: '#00A896', strokeWidth: 2.5 }
+    if (yr === lastHistYear) return { stroke: '#9ca3af', strokeWidth: 1.5, strokeDasharray: '4 4' }
     const idx = olderHistYears.indexOf(yr)
     return { stroke: histGrays[Math.min(idx, histGrays.length - 1)] || '#d1d5db', strokeWidth: 1.5 }
   }
@@ -1247,7 +1281,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
 
           {/* Card escola: Score + KPIs */}
           <div style={{ display: 'flex', gap: 16, alignItems: 'stretch', flexDirection: isMobile ? 'column' : 'row' }}>
-            <div style={{ background: '#fff', borderRadius: 20, border: '1px solid #e2e8f0', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', borderTop: `4px solid ${score >= 80 ? '#10B981' : score >= 60 ? '#F59E0B' : score >= 40 ? '#EF4444' : '#7F1D1D'}` }}>
+            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', borderTop: `4px solid ${score >= 80 ? '#10B981' : score >= 60 ? '#F59E0B' : score >= 40 ? '#EF4444' : '#7F1D1D'}` }}>
               <svg width="140" height="140" viewBox="0 0 140 140">
                 <circle cx="70" cy="70" r={radius} fill="none" stroke="#e5e7eb" strokeWidth="12"/>
                 <circle cx="70" cy="70" r={radius} fill="none" stroke={scoreColor} strokeWidth="12" strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" transform="rotate(-90 70 70)" style={{ transition: 'stroke-dashoffset 1s ease' }}/>
@@ -1356,7 +1390,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
               )}
             </div>
             {/* Col 3: Funil */}
-            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ width: 32, height: 32, borderRadius: 10, background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1414,7 +1448,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
       })()}
 
       {/* Ranking da Equipe — tabela unificada */}
-      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 32, height: 32, borderRadius: 10, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1722,11 +1756,15 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
               <span style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginTop: 1 }}>Histórico importado vs. matrículas do CRM</span>
             </div>
           </div>
-          {yearsWithData > 0 && (
-            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: histHasEstimated ? '#fef3c7' : '#f0fdf4', color: histHasEstimated ? '#b45309' : '#15803d', border: `1px solid ${histHasEstimated ? '#fde68a' : '#bbf7d0'}` }}>
-              {histHasEstimated ? 'Dados estimados' : `${yearsWithData} ${yearsWithData === 1 ? 'ano' : 'anos'} de dados`}
+          {chartActiveCycle ? (
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>
+              Campanha {chartActiveCycle.year} ativa
             </span>
-          )}
+          ) : historicalSource.length > 0 ? (
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
+              {historicalSource.length} {historicalSource.length === 1 ? 'ano' : 'anos'} de dados
+            </span>
+          ) : null}
         </div>
 
         {!hasHistoricalChart ? (
@@ -1771,7 +1809,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
                           <div key={entry.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                             <span style={{ width: 8, height: 8, borderRadius: '50%', background: entry.stroke, display: 'inline-block', flexShrink: 0 }} />
                             <span style={{ fontSize: 12, color: '#374151', flex: 1 }}>
-                              {entry.dataKey === String(currentYear) ? `${entry.dataKey} (atual)` : entry.dataKey}:{' '}
+                              {chartActiveCycle && entry.dataKey === String(chartActiveCycle.year) ? `Captação ${chartActiveCycle.year} (em andamento)` : entry.dataKey}:{' '}
                               <strong>{entry.value}</strong>
                             </span>
                             {variation !== null && (
@@ -1793,7 +1831,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
               />
               <Legend
                 wrapperStyle={{ paddingTop: 12, fontSize: 12 }}
-                formatter={(value: string) => value === String(currentYear) ? `${value} (atual)` : value}
+                formatter={(value: string) => chartActiveCycle && value === String(chartActiveCycle.year) ? `Captação ${chartActiveCycle.year} (em andamento)` : value}
               />
               {historicalChartYears.map(yr => {
                 const props = getYearLineProps(yr)
