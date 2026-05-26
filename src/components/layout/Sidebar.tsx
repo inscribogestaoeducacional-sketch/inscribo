@@ -9,7 +9,8 @@ import {
 } from 'lucide-react'
 
 const NAV_CFG = [
-  { path: '/home',            label: 'Início',          iconBg: '#E6F7F5', iconColor: '#00A896', Icon: LayoutDashboard, roles: ['admin','manager','user'], module: 'inicio' },
+  { path: '/home',            label: 'Início',          iconBg: '#E6F7F5', iconColor: '#00A896', Icon: LayoutDashboard, roles: ['admin','manager'],        module: 'inicio' },
+  { path: '/atendente',      label: 'Início',          iconBg: '#E6F7F5', iconColor: '#00A896', Icon: LayoutDashboard, roles: ['user'],                   module: 'inicio' },
   { path: '/leads',           label: 'Leads',           iconBg: '#EDE9FE', iconColor: '#8B5CF6', Icon: Users,           roles: ['admin','manager','user'], module: 'leads' },
   { path: '/contacts',        label: 'Contatos',        iconBg: '#EFF6FF', iconColor: '#3B82F6', Icon: BookUser,        roles: ['admin','manager','user'], module: 'contatos' },
   { path: '/visits',          label: 'Visitas',         iconBg: '#FEF3C7', iconColor: '#F59E0B', Icon: Calendar,        roles: ['admin','manager','user'], module: 'visitas' },
