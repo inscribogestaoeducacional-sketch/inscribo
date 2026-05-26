@@ -1278,6 +1278,297 @@ async function processFlow(
   }
 }
 
+// ── Send text message via Áion platform_whatsapp ────────────────────────────
+async function sendAionMessage(to: string, text: string): Promise<void> {
+  try {
+    const { data: platformWA } = await supabase
+      .from('platform_whatsapp')
+      .select('phone_number_id, access_token')
+      .eq('connected', true)
+      .maybeSingle()
+
+    if (!platformWA?.phone_number_id || !platformWA.access_token) return
+
+    const resp = await fetch(`${GRAPH_URL}/${platformWA.phone_number_id}/messages`, {
+      method:  'POST',
+      headers: {
+        'Authorization': `Bearer ${platformWA.access_token}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to,
+        type: 'text',
+        text: { body: text },
+      }),
+    })
+
+    if (resp.ok) {
+      const d = await resp.json()
+      await supabase.from('whatsapp_messages').insert({
+        institution_id: null,
+        remote_jid:     to,
+        message_id:     d.messages?.[0]?.id,
+        instance_name:  'cloud-api',
+        content:        text,
+        message_type:   'text',
+        from_me:        true,
+        contact_name:   '_bot_',
+        status:         'sent',
+        direction:      'outbound',
+        is_aion_inbox:  true,
+        timestamp:      new Date().toISOString(),
+      })
+    }
+  } catch (e) {
+    console.error('❌ sendAionMessage error:', e)
+  }
+}
+
+// ── Send interactive menu via Áion platform_whatsapp ─────────────────────────
+async function sendAionInteractiveMenu(
+  to:         string,
+  headerText: string,
+  bodyText:   string,
+  options:    Array<{ text: string }>
+): Promise<void> {
+  const fallbackText = [headerText, options.map((o, i) => `${i + 1}. ${o.text}`).join('\n')]
+    .filter(Boolean).join('\n\n')
+
+  try {
+    const { data: platformWA } = await supabase
+      .from('platform_whatsapp')
+      .select('phone_number_id, access_token')
+      .eq('connected', true)
+      .maybeSingle()
+
+    if (!platformWA?.phone_number_id || !platformWA.access_token) {
+      if (fallbackText.trim()) await sendAionMessage(to, fallbackText)
+      return
+    }
+
+    const count = Math.min(options.length, 10)
+    let interactive: any
+
+    if (count <= 3) {
+      interactive = {
+        type: 'button',
+        body: { text: (bodyText || headerText).slice(0, 1024) },
+        action: {
+          buttons: options.slice(0, 3).map((o, i) => ({
+            type:  'reply',
+            reply: { id: `opt_${i}`, title: o.text.slice(0, 20) },
+          })),
+        },
+      }
+      if (headerText && bodyText && headerText !== bodyText) {
+        interactive.header = { type: 'text', text: headerText.slice(0, 60) }
+      }
+    } else {
+      interactive = {
+        type: 'list',
+        body: { text: (bodyText || headerText).slice(0, 1024) },
+        action: {
+          button: 'Ver opções',
+          sections: [{
+            title: 'Opções',
+            rows: options.slice(0, 10).map((o, i) => ({
+              id:    `opt_${i}`,
+              title: o.text.slice(0, 24),
+            })),
+          }],
+        },
+      }
+      if (headerText && bodyText && headerText !== bodyText) {
+        interactive.header = { type: 'text', text: headerText.slice(0, 60) }
+      }
+    }
+
+    const resp = await fetch(`${GRAPH_URL}/${platformWA.phone_number_id}/messages`, {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${platformWA.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type:    'individual',
+        to,
+        type:              'interactive',
+        interactive,
+      }),
+    })
+
+    if (resp.ok) {
+      const d = await resp.json()
+      await supabase.from('whatsapp_messages').insert({
+        institution_id: null,
+        remote_jid:     to,
+        message_id:     d.messages?.[0]?.id,
+        instance_name:  'cloud-api',
+        content:        fallbackText,
+        message_type:   'interactive',
+        from_me:        true,
+        contact_name:   '_bot_',
+        status:         'sent',
+        direction:      'outbound',
+        is_aion_inbox:  true,
+        timestamp:      new Date().toISOString(),
+      })
+    } else {
+      if (fallbackText.trim()) await sendAionMessage(to, fallbackText)
+    }
+  } catch (e) {
+    console.error('❌ sendAionInteractiveMenu error:', e)
+    try { if (fallbackText.trim()) await sendAionMessage(to, fallbackText) } catch {}
+  }
+}
+
+// ── Simplified flow processor for the Áion inbox ─────────────────────────────
+// Handles node types: start, message, menu, transfer, end
+async function processAionFlow(
+  flow:               any,
+  remoteJid:          string,
+  text:               string,
+  interactiveChoiceId: string,
+  isNewConversation:  boolean
+): Promise<void> {
+  const bf = flow.bot_flow as { nodes: any[]; edges: any[] } | null
+  if (!bf?.nodes?.length) return
+
+  // Fetch current conversation state
+  const { data: conv } = await supabase
+    .from('whatsapp_conversations')
+    .select('bot_current_node, bot_variables')
+    .eq('is_aion_inbox', true)
+    .eq('remote_jid', remoteJid)
+    .maybeSingle()
+
+  let currentNodeId: string = isNewConversation ? 'start' : (conv?.bot_current_node || 'start')
+  let variables: Record<string, string> = isNewConversation ? {} : ((conv?.bot_variables as Record<string, string>) || {})
+
+  const findNode = (id: string) => bf.nodes.find((n: any) => n.id === id)
+
+  const PORT_ALIASES: Record<string, string> = { output: 'out', input: 'in', true: 'yes', false: 'no' }
+  const normalizePort = (p: string) => PORT_ALIASES[p] ?? p
+
+  const edgesFrom = (fromId: string, port?: string): any[] => {
+    const normPort = port ? normalizePort(port) : undefined
+    return bf.edges.filter((e: any) => {
+      const eFrom = e.fromNodeId ?? e.from
+      const ePort = normalizePort(e.fromPortId ?? e.fromPort ?? '')
+      return eFrom === fromId && (!normPort || ePort === normPort)
+    })
+  }
+  const nextId = (e: any): string => e.toNodeId ?? e.to
+
+  let current = findNode(currentNodeId)
+  if (!current) {
+    current = bf.nodes.find((n: any) => n.type === 'start')
+    currentNodeId = current?.id ?? 'start'
+  }
+
+  // Handle user reply to a pending menu
+  if (current?.type === 'menu' && variables[`__menu_sent_${currentNodeId}`]) {
+    const options    = current.data?.options || []
+    const menuHeader = current.data?.menuText || current.data?.text || 'Escolha uma opção:'
+
+    let optIdx = -1
+    if (/^opt_\d+$/.test(interactiveChoiceId)) {
+      const parsed = parseInt(interactiveChoiceId.replace('opt_', ''), 10)
+      if (parsed >= 0 && parsed < options.length) optIdx = parsed
+    }
+    if (optIdx < 0) {
+      const choice = parseInt(text.trim(), 10)
+      if (!isNaN(choice)) {
+        optIdx = options.findIndex((_: any, i: number) => i + 1 === choice)
+      }
+    }
+
+    if (optIdx >= 0) {
+      let nexts = edgesFrom(currentNodeId, `opt-${optIdx}`)
+      if (!nexts.length && options[optIdx]?.id) nexts = edgesFrom(currentNodeId, options[optIdx].id)
+      if (nexts.length) {
+        delete variables[`__menu_sent_${currentNodeId}`]
+        currentNodeId = nextId(nexts[0])
+        current       = findNode(currentNodeId)
+      } else {
+        await sendAionMessage(remoteJid, 'Não entendi sua resposta 😊 Por favor escolha uma das opções abaixo:')
+        await sendAionInteractiveMenu(remoteJid, menuHeader, menuHeader, options)
+        await supabase.from('whatsapp_conversations')
+          .update({ bot_current_node: currentNodeId, bot_variables: variables })
+          .eq('is_aion_inbox', true).eq('remote_jid', remoteJid)
+        return
+      }
+    } else {
+      await sendAionMessage(remoteJid, 'Não entendi sua resposta 😊 Por favor escolha uma das opções abaixo:')
+      await sendAionInteractiveMenu(remoteJid, menuHeader, menuHeader, options)
+      await supabase.from('whatsapp_conversations')
+        .update({ bot_current_node: currentNodeId, bot_variables: variables })
+        .eq('is_aion_inbox', true).eq('remote_jid', remoteJid)
+      return
+    }
+  }
+
+  // Execute nodes until user input required or end reached
+  let guard = 20
+  while (current && guard-- > 0) {
+    const node = current
+
+    if (node.type === 'start') {
+      const nexts = edgesFrom(node.id)
+      if (!nexts.length) break
+      currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId); continue
+    }
+
+    if (node.type === 'message') {
+      const msg = node.data?.text || ''
+      if (msg) await sendAionMessage(remoteJid, msg)
+      const nexts = edgesFrom(node.id, 'out')
+      if (!nexts.length) break
+      currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId); continue
+    }
+
+    if (node.type === 'menu') {
+      const menuHeader = node.data?.menuText || node.data?.text || ''
+      const options    = node.data?.options || []
+      if (options.length > 0) {
+        await sendAionInteractiveMenu(remoteJid, menuHeader, menuHeader, options)
+      } else if (menuHeader.trim()) {
+        await sendAionMessage(remoteJid, menuHeader)
+      }
+      variables[`__menu_sent_${node.id}`] = 'true'
+      break
+    }
+
+    if (node.type === 'transfer') {
+      const transferMsg = node.data?.message || node.data?.transferMessage
+      if (transferMsg) await sendAionMessage(remoteJid, transferMsg)
+      await supabase.from('whatsapp_conversations')
+        .update({ bot_active: false, status: 'open' })
+        .eq('is_aion_inbox', true).eq('remote_jid', remoteJid)
+      currentNodeId = 'end'
+      break
+    }
+
+    if (node.type === 'end') {
+      if (node.data?.message) await sendAionMessage(remoteJid, node.data.message)
+      await supabase.from('whatsapp_conversations')
+        .update({ bot_active: false, status: 'open' })
+        .eq('is_aion_inbox', true).eq('remote_jid', remoteJid)
+      currentNodeId = 'end'
+      break
+    }
+
+    // Skip unknown node types — advance via 'out' port
+    const nexts = edgesFrom(node.id, 'out')
+    if (!nexts.length) break
+    currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId); continue
+  }
+
+  // Persist flow state
+  await supabase.from('whatsapp_conversations')
+    .update({ bot_current_node: currentNodeId, bot_variables: variables })
+    .eq('is_aion_inbox', true).eq('remote_jid', remoteJid)
+}
+
 // ── Áion corporate inbox processor ──────────────────────────────────────────
 async function detectAionQueue(rawPhone: string, supabase: ReturnType<typeof createClient>): Promise<string> {
   const phone = rawPhone.replace(/\D/g, '').replace(/^55/, '')
@@ -1323,6 +1614,17 @@ async function processAionMessage({
       msg.document?.caption ||
       ''
 
+    // Extract interactive reply ID for bot menu routing
+    let interactiveChoiceId = ''
+    if (msgType === 'interactive') {
+      const ia = msg.interactive
+      if (ia?.type === 'button_reply') {
+        interactiveChoiceId = (ia.button_reply?.id as string) || ''
+      } else if (ia?.type === 'list_reply') {
+        interactiveChoiceId = (ia.list_reply?.id as string) || ''
+      }
+    }
+
     const queue = await detectAionQueue(rawPhone, supabase)
 
     // Upsert conversation
@@ -1359,23 +1661,135 @@ async function processAionMessage({
 
     // Insert message
     await supabase.from('whatsapp_messages').insert({
-      institution_id: null,
+      institution_id:  null,
       conversation_id: conv?.id || null,
-      remote_jid:     remoteJid,
-      message_id:     msg.id,
-      instance_name:  'cloud-api',
-      content:        text || `[${msgType}]`,
-      message_type:   msgType,
-      from_me:        false,
-      contact_name:   contactName,
+      remote_jid:      remoteJid,
+      message_id:      msg.id,
+      instance_name:   'cloud-api',
+      content:         text || `[${msgType}]`,
+      message_type:    msgType,
+      from_me:         false,
+      contact_name:    contactName,
       timestamp,
-      status:         'received',
-      direction:      'inbound',
-      is_aion_inbox:  true,
-      raw_data:       msg,
+      status:          'received',
+      direction:       'inbound',
+      is_aion_inbox:   true,
+      raw_data:        msg,
     })
 
     console.log('[aion] mensagem recebida de', rawPhone, '→ fila:', queue)
+
+    // ── Bot processing ────────────────────────────────────────────────────────
+    const { data: aionFlow } = await supabase
+      .from('aion_flows')
+      .select('*')
+      .eq('is_active', true)
+      .eq('bot_enabled', true)
+      .maybeSingle()
+
+    if (!aionFlow?.bot_flow?.nodes?.length) return
+
+    // Keyword / QR Code detection
+    const trimmedText = text.trim().toUpperCase()
+    if (trimmedText) {
+      const { data: keyword } = await supabase
+        .from('aion_keywords')
+        .select('*')
+        .eq('keyword', trimmedText)
+        .eq('is_active', true)
+        .maybeSingle()
+
+      if (keyword) {
+        if (keyword.create_lead) {
+          const cleanPhone = rawPhone.replace(/^55/, '')
+          const { data: existingLead } = await supabase
+            .from('crm_leads')
+            .select('id')
+            .or(`phone.ilike.%${cleanPhone}%`)
+            .maybeSingle()
+          if (!existingLead) {
+            await supabase.from('crm_leads').insert({
+              name:       contactName,
+              phone:      rawPhone.startsWith('55') ? rawPhone : `55${cleanPhone}`,
+              origin:     keyword.source || 'whatsapp',
+              stage:      'interesse',
+              notes:      `Veio via QR Code: ${keyword.label}`,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+          }
+        }
+        if (keyword.tag) {
+          const { data: convTagData } = await supabase
+            .from('whatsapp_conversations')
+            .select('tags')
+            .eq('is_aion_inbox', true)
+            .eq('remote_jid', remoteJid)
+            .maybeSingle()
+          const tags: string[] = (convTagData?.tags as string[]) || []
+          if (!tags.includes(keyword.tag)) {
+            await supabase.from('whatsapp_conversations')
+              .update({ tags: [...tags, keyword.tag] })
+              .eq('is_aion_inbox', true).eq('remote_jid', remoteJid)
+          }
+        }
+        if (keyword.auto_response) {
+          await sendAionMessage(remoteJid, keyword.auto_response)
+        }
+        return
+      }
+    }
+
+    // Auto-create lead for new general-queue contacts
+    if (queue === 'general') {
+      const cleanPhone = rawPhone.replace(/^55/, '')
+      const { data: existingLead } = await supabase
+        .from('crm_leads')
+        .select('id')
+        .or(`phone.ilike.%${cleanPhone}%`)
+        .maybeSingle()
+      if (!existingLead) {
+        await supabase.from('crm_leads').insert({
+          name:       contactName,
+          phone:      rawPhone.startsWith('55') ? rawPhone : `55${cleanPhone}`,
+          origin:     'whatsapp',
+          stage:      'interesse',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+      }
+    }
+
+    // Fetch conversation bot state
+    const { data: convState } = await supabase
+      .from('whatsapp_conversations')
+      .select('bot_active, bot_variables')
+      .eq('is_aion_inbox', true)
+      .eq('remote_jid', remoteJid)
+      .maybeSingle()
+
+    const botVars = (convState?.bot_variables as Record<string, string>) || {}
+    const hasMenuPending = !!interactiveChoiceId &&
+      Object.keys(botVars).some(k => k.startsWith('__menu_sent_'))
+
+    // Count messages to detect truly new conversations
+    const { count: msgCount } = await supabase
+      .from('whatsapp_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_aion_inbox', true)
+      .eq('remote_jid', remoteJid)
+
+    const isNewConv = (msgCount ?? 0) <= 1
+
+    if (isNewConv) {
+      await supabase.from('whatsapp_conversations')
+        .update({ bot_active: true, bot_current_node: null, bot_variables: {} })
+        .eq('is_aion_inbox', true).eq('remote_jid', remoteJid)
+      await processAionFlow(aionFlow, remoteJid, text, interactiveChoiceId, true)
+    } else if (hasMenuPending || convState?.bot_active === true) {
+      await processAionFlow(aionFlow, remoteJid, text, interactiveChoiceId, false)
+    }
+
   } catch (e) {
     console.error('❌ [aion] processAionMessage error:', e)
   }
