@@ -14,7 +14,7 @@
  *   SUPABASE_SERVICE_ROLE_KEY
  *
  * Fonte:
- *   https://servicodados.ibge.gov.br/api/v3/agregados/9517/periodos/2022/variaveis/9972/localidades/N6|all
+ *   https://servicodados.ibge.gov.br/api/v3/agregados/9514/periodos/2022/variaveis/9972/localidades/N6
  */
 
 import { readFileSync, existsSync } from 'fs'
@@ -52,7 +52,7 @@ if (!SUPABASE_URL || !SERVICE_KEY) {
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY)
 
 const IBGE_API_URL =
-  'https://servicodados.ibge.gov.br/api/v3/agregados/9517/periodos/2022/variaveis/9972/localidades/N6|all'
+  'https://servicodados.ibge.gov.br/api/v3/agregados/9514/periodos/2022/variaveis/9972/localidades/N6'
 
 const BATCH_SIZE = 500
 
