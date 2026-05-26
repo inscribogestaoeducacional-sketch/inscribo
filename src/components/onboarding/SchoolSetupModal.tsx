@@ -14,6 +14,9 @@ interface ProcessedFile {
   new_students: number
   returning_students: number
   avg_monthly_fee: number | null
+  historical_funnel?: Record<string, number> | null
+  new_students_by_month?: Record<string, number> | null
+  returning_students_by_month?: Record<string, number> | null
   error?: boolean
   errorMsg?: string
 }
@@ -189,6 +192,9 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
           new_students: (r.new_students as number) || 0,
           returning_students: (r.returning_students as number) || 0,
           avg_monthly_fee: (r.avg_monthly_fee as number | null) || null,
+          historical_funnel: (r.historical_funnel as Record<string, number> | null) || null,
+          new_students_by_month: (r.new_students_by_month as Record<string, number> | null) || null,
+          returning_students_by_month: (r.returning_students_by_month as Record<string, number> | null) || null,
         })
       } catch (err) {
         results.push({
@@ -237,6 +243,9 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
         new_students: f.new_students ?? 0,
         returning_students: f.returning_students ?? 0,
         avg_monthly_fee: f.avg_monthly_fee ?? null,
+        historical_funnel: f.historical_funnel || null,
+        new_students_by_month: f.new_students_by_month || null,
+        returning_students_by_month: f.returning_students_by_month || null,
       }))
 
       // Verifica se já existe ciclo de setup (busca por institution_id + year para evitar

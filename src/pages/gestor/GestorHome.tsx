@@ -342,8 +342,24 @@ export default function GestorHome() {
       const users = (usersRes.data ?? []) as { id: string; full_name: string; role: string }[]
       const leadsData = (leadsRes.data ?? []) as { id: string; status: string; created_at: string }[]
 
+      const { data: leadsForEnrollData } = await supabase
+        .from('leads')
+        .select('id, responsible_id')
+        .eq('institution_id', institutionId)
+        .eq('status', 'matriculado')
+        .gte('updated_at', start)
+        .lte('updated_at', end)
+      const leadsForEnroll = (leadsForEnrollData ?? []) as { id: string; responsible_id: string | null }[]
+
       const enrollCountByUser: Record<string, number> = {}
-      enrollments.forEach(e => { if (e.user_id) enrollCountByUser[e.user_id] = (enrollCountByUser[e.user_id] || 0) + 1 })
+      enrollments.forEach(e => {
+        if (e.user_id) enrollCountByUser[e.user_id] = (enrollCountByUser[e.user_id] || 0) + 1
+      })
+      leadsForEnroll.forEach(l => {
+        if (l.responsible_id && !enrollments.find(e => e.user_id === l.responsible_id)) {
+          enrollCountByUser[l.responsible_id] = (enrollCountByUser[l.responsible_id] || 0) + 1
+        }
+      })
 
       const rankings: UserRanking[] = users.map(u => ({
         user_id: u.id,
@@ -418,11 +434,10 @@ export default function GestorHome() {
         setWaSatisfStats({ total: surveyScores.length, ruim, regular, otimo, avgScore, byAttendant })
       }
 
-      // WA team ranking by closed conversations (keyed by assigned_user_id)
+      // WA team ranking by all assigned conversations in period
       const waRankMap: Record<string, number> = {}
-      waConvs.filter(c => c.status === 'closed' && c.assigned_user_id).forEach(c => {
-        const uid = c.assigned_user_id!
-        waRankMap[uid] = (waRankMap[uid] || 0) + 1
+      waConvs.filter(c => c.assigned_user_id).forEach(c => {
+        waRankMap[c.assigned_user_id!] = (waRankMap[c.assigned_user_id!] || 0) + 1
       })
       setWaTeamRanking(Object.entries(waRankMap).map(([userId, count]) => ({ userId, count })).sort((a, b) => b.count - a.count).slice(0, 5))
 
@@ -728,8 +743,8 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
   const inepTotalStudents = inepPrivate.reduce((s, sch) => s + (sch.qt_mat_total ?? 0), 0)
   const inepMyCode = institutionData?.inep_code ?? null
   const inepMySchool = inepMyCode ? inepPrivate.find(s => s.co_entidade === inepMyCode) ?? null : null
-  const inepMyStudents = inepMySchool?.qt_mat_total ?? totalStudents
-  const inepSharePct = inepTotalStudents > 0 ? +((inepMyStudents / inepTotalStudents) * 100).toFixed(1) : null
+  const inepMyStudents = inepMySchool?.qt_mat_total ?? null
+  const inepSharePct = inepMyStudents !== null && inepTotalStudents > 0 ? +((inepMyStudents / inepTotalStudents) * 100).toFixed(1) : null
   const inepRanked = [...inepPrivate].sort((a, b) => (b.qt_mat_total ?? 0) - (a.qt_mat_total ?? 0))
   const inepMyRank = inepMyCode ? inepRanked.findIndex(s => s.co_entidade === inepMyCode) + 1 : null
   const inepAvgStudents = inepTotalSchools > 0 ? Math.round(inepTotalStudents / inepTotalSchools) : null
@@ -807,6 +822,10 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
     yr === currentYear ? hasCurrentYearEnrollData : sorted.some(e => entryYear(e) === yr && entryTotal(e) > 0)
   ).length
   const hasHistoricalChart = histYears.length > 0 || hasCurrentYearEnrollData
+  const histHasEstimated = sorted.some(e => {
+    const yr = entryYear(e)
+    return yr > 0 && yr < currentYear && (!e.historical_funnel || Object.keys(e.historical_funnel).length === 0)
+  })
 
   const getYearLineProps = (yr: number): { stroke: string; strokeWidth: number; strokeDasharray?: string } => {
     if (yr === currentYear) return { stroke: '#00A896', strokeWidth: 2.5 }
@@ -839,7 +858,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
   const peakMonth = campaignMonthsList.reduce((best, m) => (defaultSeasonality[m] ?? 0) > (defaultSeasonality[best] ?? 0) ? m : best, campaignMonthsList[0])
 
   useEffect(() => {
-    if (inepHasData && !marketInsightFetched.current) fetchMarketInsight(marketSchools, inepMyStudents)
+    if (inepHasData && !marketInsightFetched.current) fetchMarketInsight(marketSchools, inepMyStudents ?? totalStudents)
   }, [marketSchools.length, inepHasData])
 
   // Salvar score
@@ -1355,7 +1374,6 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             )
             const leader = teamStats[0]?.enrollments_count ?? 0
             const medalColors = ['#F59E0B', '#9CA3AF', '#CD7C4B']
-            const medalIcons = ['ti-trophy', 'ti-medal', 'ti-medal']
             return (
               <div style={{ maxHeight: 320, overflowY: 'auto', scrollbarWidth: 'thin', display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 52px 52px 64px 56px', gap: 4, padding: '4px 8px 8px', borderBottom: '1px solid #f1f5f9', marginBottom: 4 }}>
@@ -1379,7 +1397,9 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
                     <div key={u.user_id} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 52px 52px 64px 56px', gap: 4, alignItems: 'center', padding: '7px 8px', borderRadius: 8, background: i % 2 === 1 ? '#f8fafc' : '#fff' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {i < 3
-                          ? <i className={`ti ${medalIcons[i]}`} style={{ color: medalColors[i], fontSize: 15 }} />
+                          ? i === 0
+                            ? <Trophy size={15} color={medalColors[0]} />
+                            : <Medal size={15} color={medalColors[i]} />
                           : <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700 }}>#{i + 1}</span>}
                       </div>
                       <div>
@@ -1617,8 +1637,8 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             </div>
           </div>
           {yearsWithData > 0 && (
-            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>
-              {yearsWithData} {yearsWithData === 1 ? 'ano' : 'anos'} de dados
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: histHasEstimated ? '#fef3c7' : '#f0fdf4', color: histHasEstimated ? '#b45309' : '#15803d', border: `1px solid ${histHasEstimated ? '#fde68a' : '#bbf7d0'}` }}>
+              {histHasEstimated ? 'Dados estimados' : `${yearsWithData} ${yearsWithData === 1 ? 'ano' : 'anos'} de dados`}
             </span>
           )}
         </div>
@@ -1676,6 +1696,11 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
                           </div>
                         )
                       })}
+                      {histHasEstimated && (
+                        <p style={{ margin: '8px 0 0', fontSize: 10, color: '#94a3b8', borderTop: '1px solid #f1f5f9', paddingTop: 6 }}>
+                          Dados históricos estimados — importe o ERP com detalhamento mensal para dados precisos
+                        </p>
+                      )}
                     </div>
                   )
                 }}
@@ -1759,6 +1784,19 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
               <i className="ti ti-settings" style={{ fontSize: 14 }} /> Configurar código INEP
             </button>
           </div>
+        ) : inepHasData && inepMyCode && !inepMySchool ? (
+          /* Estado vazio — código cadastrado mas não encontrado no censo */
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 0' }}>
+            <i className="ti ti-building-off" style={{ fontSize: 48, color: '#f59e0b' }} />
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151' }}>Escola não encontrada no Censo INEP {inepMaxYear ?? 2025}</p>
+            <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', textAlign: 'center', maxWidth: 380 }}>
+              O código INEP <strong>{inepMyCode}</strong> não foi localizado entre as escolas privadas de {marketCity || 'sua cidade'}. Verifique o código nas configurações.
+            </p>
+            <button onClick={() => navigate('/settings')}
+              style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1e2d6b', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
+              <i className="ti ti-settings" style={{ fontSize: 14 }} /> Verificar código INEP
+            </button>
+          </div>
         ) : inepHasData ? (
           /* Layout 2 colunas */
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20 }}>
@@ -1832,7 +1870,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
                 <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 2 }}>via IA</span>
                 {inepHasData && (
                   <button
-                    onClick={() => { marketInsightFetched.current = false; fetchMarketInsight(marketSchools, inepMyStudents, true) }}
+                    onClick={() => { marketInsightFetched.current = false; fetchMarketInsight(marketSchools, inepMyStudents ?? totalStudents, true) }}
                     style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 6, background: 'none', border: '1px solid #e5e7eb', cursor: 'pointer', fontSize: 11, color: '#6b7280' }}>
                     <i className="ti ti-refresh" style={{ fontSize: 12 }} /> Atualizar
                   </button>

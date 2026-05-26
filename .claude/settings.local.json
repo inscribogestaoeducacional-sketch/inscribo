@@ -6,7 +6,9 @@
       "Bash(findstr /i \"html2canvas\\\\|jspdf\\\\|react-router\")",
       "Bash(Get-Content package.json)",
       "Bash(Select-String -Pattern \"html2canvas|jspdf|react-router\")",
-      "Bash(npm list *)"
+      "Bash(npm list *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Victor Almeida\\\\AIONEDU\" -Force)",
+      "Bash(Select-Object Name, FullName)"
     ]
   }
 }
