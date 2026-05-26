@@ -291,7 +291,7 @@ export default function GestorHome() {
         supabase.from('student_transfers').select('id,student_name,course_grade,transfer_date,reason_category').eq('institution_id', institutionId).is('deleted_at', null).order('transfer_date', { ascending: false }).limit(5),
         supabase.from('leads').select('id,status,created_at,grade_interest,source').eq('institution_id', institutionId).gte('created_at', start),
         supabase.from('visits').select('id,status,created_at').eq('institution_id', institutionId).gte('created_at', start),
-        supabase.from('whatsapp_messages').select('id,created_at,from_me,remote_jid').eq('institution_id', institutionId).gte('created_at', start),
+        supabase.from('whatsapp_messages').select('id,created_at,from_me,remote_jid').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end),
         supabase.from('enrollments').select('id,user_id,created_at').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end),
         supabase.from('users').select('id,full_name,role').eq('institution_id', institutionId),
         supabase.from('whatsapp_phone_numbers').select('phone_number,display_name').eq('institution_id', institutionId).limit(1).maybeSingle(),
@@ -331,7 +331,14 @@ export default function GestorHome() {
 
       // WA conversation stats (last 30 days)
       const waConvs = (waConvsRes.data ?? []) as { id: string; created_at: string; status: string; assigned_user_name: string | null; assigned_user_id: string | null; bot_active: boolean | null; satisfaction_score: number | null; first_response_at: string | null; remote_jid: string }[]
-      setActiveConvsNow(waConvs.filter(c => c.status === 'open' || c.status === 'waiting').length)
+
+      // Open convs count — sem filtro de data (todas as conversas ativas agora)
+      const { data: openConvs } = await supabase
+        .from('whatsapp_conversations')
+        .select('id')
+        .eq('institution_id', institutionId)
+        .in('status', ['open', 'waiting'])
+      setActiveConvsNow(openConvs?.length ?? 0)
       const respTimes: number[] = []
       waConvs.forEach(c => {
         if (c.first_response_at && c.created_at) {
@@ -1054,7 +1061,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             { label: 'Matrículas', value: totalEnrolled, prev: prevEnrolled, icon: <i className="ti ti-school" style={{ fontSize: 20, color: '#7C3AED' }} />, color: '#7C3AED', bg: '#F5F3FF', path: '/leads' },
             { label: 'Taxa de conversão', value: conversionRateNum.toFixed(1) + '%', prev: null as number | null, icon: <i className="ti ti-trending-up" style={{ fontSize: 20, color: '#F59E0B' }} />, color: '#F59E0B', bg: '#FFFBEB', path: '/leads' },
             { label: 'Satisfação média', value: satisfPct !== null ? `${satisfPct}%` : '—', prev: null as number | null, icon: <i className="ti ti-star" style={{ fontSize: 20, color: satisfPctColor(satisfPct) }} />, color: satisfPctColor(satisfPct), bg: '#FFFBEB', path: '/surveys' },
-            { label: 'Tempo de resposta', value: waAvgResponse !== null ? (waAvgResponse < 60 ? `${waAvgResponse}min` : `${Math.floor(waAvgResponse / 60)}h ${waAvgResponse % 60}m`) : '—', prev: null as number | null, icon: <i className="ti ti-clock" style={{ fontSize: 20, color: '#EF4444' }} />, color: '#EF4444', bg: '#FEF2F2', path: '/whatsapp' },
+            { label: 'Tempo de resposta', value: waAvgResponse !== null ? (waAvgResponse < 60 ? (waAvgResponse === 0 ? '< 1min' : `${waAvgResponse}min`) : `${Math.floor(waAvgResponse / 60)}h ${waAvgResponse % 60}m`) : '—', prev: null as number | null, icon: <i className="ti ti-clock" style={{ fontSize: 20, color: '#EF4444' }} />, color: '#EF4444', bg: '#FEF2F2', path: '/whatsapp' },
           ].map(card => {
             const variation = card.prev !== null && card.prev > 0
               ? Math.round((Number(card.value) - card.prev) / card.prev * 100)
@@ -1100,7 +1107,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
 
       {/* ── L2: Card escola + Mercado local ─────────────────────────────────── */}
       {!loading && hasHistory && (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 380px', gap: 16, alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16, alignItems: 'start' }}>
 
           {/* Card escola: Score + KPIs */}
           <div style={{ display: 'flex', gap: 16, alignItems: 'stretch', flexDirection: isMobile ? 'column' : 'row' }}>
@@ -1140,95 +1147,6 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             </div>
           </div>
 
-          {/* Mercado + Diagnóstico INEP lado a lado */}
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
-            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 18, height: 220, overflowY: 'auto', scrollbarWidth: 'thin' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                <div style={{ width: 30, height: 30, borderRadius: 9, background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <MapPin size={14} color="#F59E0B" />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Mercado local{marketCity ? ` — ${marketCity}` : ''}</h3>
-                  <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>Estimado via Censo Escolar / IBGE</p>
-                </div>
-              </div>
-              {marketLoading ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{[...Array(3)].map((_, i) => <div key={i} style={{ height: 36, borderRadius: 9, background: '#f1f5f9' }} />)}</div>
-              ) : marketData && marketSharePct !== null ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ background: '#f0fdf9', borderRadius: 11, padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div>
-                      <p style={{ margin: '0 0 2px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Market share</p>
-                      <p style={{ margin: 0, fontSize: 26, fontWeight: 800, color: '#0F6E56', lineHeight: 1 }}>{marketSharePct}%</p>
-                    </div>
-                    {marketBadge && <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: marketBadge.bg, color: marketBadge.color }}>{marketBadge.label}</span>}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {estimatedRank && estimatedSchools && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#64748b' }}>
-                        <span>Ranking estimado</span><span style={{ fontWeight: 700, color: '#1e2d6b' }}>#{estimatedRank} de ~{estimatedSchools}</span>
-                      </div>
-                    )}
-                    {totalPrivateStudents > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#64748b' }}>
-                        <span>Total rede privada</span><span style={{ fontWeight: 700, color: '#1e2d6b' }}>{fmt(Math.round(totalPrivateStudents))}</span>
-                      </div>
-                    )}
-                    {sectorGrowth != null && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#64748b' }}>
-                        <span>Crescimento setor</span><span style={{ fontWeight: 700, color: '#0d9488' }}>+{sectorGrowth}%/ano</span>
-                      </div>
-                    )}
-                  </div>
-                  {marketData.notes && <p style={{ margin: 0, fontSize: 10, color: '#94a3b8', display: 'flex', gap: 4, alignItems: 'flex-start' }}><Info size={10} style={{ marginTop: 2, flexShrink: 0 }} />{String(marketData.notes)}</p>}
-                </div>
-              ) : (
-                <div style={{ textAlign: 'center', padding: '12px 0', color: '#94a3b8' }}>
-                  <MapPin size={24} strokeWidth={1.5} style={{ margin: '0 auto 8px' }} />
-                  <p style={{ margin: 0, fontSize: 12 }}>Dados de mercado não disponíveis</p>
-                </div>
-              )}
-            </div>
-            <div style={{ background: marketData?.inep_data ? 'linear-gradient(135deg, #1e2d6b, #2d4494)' : '#fff', borderRadius: 16, border: marketData?.inep_data ? 'none' : '1px solid #e2e8f0', padding: 18, height: 220, overflowY: 'auto', scrollbarWidth: 'thin' }}>
-              {marketData?.inep_data ? (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                    <GraduationCap size={15} color="#fff" />
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Diagnóstico INEP</span>
-                  </div>
-                  {marketData.inep_data.school_classification && (
-                    <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: '8px 12px', marginBottom: 10 }}>
-                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>Classificação: </span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{marketData.inep_data.school_classification}</span>
-                    </div>
-                  )}
-                  {marketData.inep_data.main_competitors && marketData.inep_data.main_competitors.length > 0 && (
-                    <div style={{ marginBottom: 8 }}>
-                      <p style={{ margin: '0 0 6px', fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>Principais concorrentes</p>
-                      {marketData.inep_data.main_competitors.slice(0, 3).map((c, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                          <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#60a5fa', flexShrink: 0 }} />
-                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>{c}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {marketData.inep_data.market_opportunity && (
-                    <div style={{ background: 'rgba(0,168,150,0.2)', borderRadius: 8, padding: '7px 10px', marginTop: 8 }}>
-                      <p style={{ margin: '0 0 2px', fontSize: 10, fontWeight: 600, color: '#5eead4', textTransform: 'uppercase' }}>Oportunidade</p>
-                      <p style={{ margin: 0, fontSize: 11, color: '#ccfbf1', lineHeight: 1.4 }}>{marketData.inep_data.market_opportunity}</p>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 8, color: '#94a3b8', textAlign: 'center' }}>
-                  <i className="ti ti-building-community" style={{ fontSize: 28 }} />
-                  <p style={{ margin: 0, fontSize: 12 }}>Diagnóstico INEP não disponível</p>
-                  <p style={{ margin: 0, fontSize: 11 }}>Configure a localização da escola</p>
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       )}
 
@@ -1497,15 +1415,17 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
           ) : waConvStats ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {(() => {
+                const normalizeJid = (jid: string) => jid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
                 const hadResponseByJid: Record<string, boolean> = {}
                 waMessages.forEach(m => {
-                  if (m.from_me) hadResponseByJid[m.remote_jid] = true
-                  else if (hadResponseByJid[m.remote_jid] === undefined) hadResponseByJid[m.remote_jid] = false
+                  const key = normalizeJid(m.remote_jid)
+                  if (m.from_me) hadResponseByJid[key] = true
+                  else if (hadResponseByJid[key] === undefined) hadResponseByJid[key] = false
                 })
                 const total = waConvsRaw.length
-                const botResp = waConvsRaw.filter(c => !c.assigned_user_id && hadResponseByJid[c.remote_jid] === true).length
-                const teamResp = waConvsRaw.filter(c => !!c.assigned_user_id && hadResponseByJid[c.remote_jid] === true).length
-                const noResp = waConvsRaw.filter(c => !hadResponseByJid[c.remote_jid]).length
+                const botResp = waConvsRaw.filter(c => !c.assigned_user_id && hadResponseByJid[normalizeJid(c.remote_jid)] === true).length
+                const teamResp = waConvsRaw.filter(c => !!c.assigned_user_id && hadResponseByJid[normalizeJid(c.remote_jid)] === true).length
+                const noResp = waConvsRaw.filter(c => !hadResponseByJid[normalizeJid(c.remote_jid)]).length
                 const closedCount = waConvsRaw.filter(c => c.status === 'closed').length
                 return (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 6 }}>
@@ -1529,7 +1449,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
                 {waAvgResponse !== null && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#F0FDF4', borderRadius: 8, padding: '5px 10px' }}>
                     <Clock size={12} color="#10B981" />
-                    <p style={{ margin: 0, fontSize: 11, color: '#065f46' }}>Resp. média: <strong>{waAvgResponse < 60 ? `${waAvgResponse}min` : `${Math.round(waAvgResponse / 60)}h`}</strong></p>
+                    <p style={{ margin: 0, fontSize: 11, color: '#065f46' }}>Resp. média: <strong>{waAvgResponse < 60 ? (waAvgResponse === 0 ? '< 1min' : `${waAvgResponse}min`) : `${Math.round(waAvgResponse / 60)}h`}</strong></p>
                   </div>
                 )}
                 {waSatisfStats && (
@@ -1793,6 +1713,19 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             <button onClick={() => navigate('/settings')}
               style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1e2d6b', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
               <i className="ti ti-settings" style={{ fontSize: 14 }} /> Configurar escola
+            </button>
+          </div>
+        ) : inepHasData && !inepMyCode ? (
+          /* Estado vazio — INEP carregado mas escola sem código INEP cadastrado */
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 0' }}>
+            <i className="ti ti-id-badge-off" style={{ fontSize: 48, color: '#f59e0b' }} />
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151' }}>Código INEP não cadastrado</p>
+            <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', textAlign: 'center', maxWidth: 380 }}>
+              Cadastre o código INEP nas configurações da escola para ver o market share real.
+            </p>
+            <button onClick={() => navigate('/settings')}
+              style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#1e2d6b', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600 }}>
+              <i className="ti ti-settings" style={{ fontSize: 14 }} /> Configurar código INEP
             </button>
           </div>
         ) : inepHasData ? (
