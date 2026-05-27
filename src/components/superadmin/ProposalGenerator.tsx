@@ -154,30 +154,83 @@ export default function ProposalGenerator({ lead, consultant, onClose, onSave }:
       const id = await saveProposal()
       if (!id) throw new Error('Falha ao salvar proposta')
 
+      // 1. Aguardar fontes
       await document.fonts.ready
 
-      const pages = previewRef.current.querySelectorAll<HTMLElement>('[data-proposal-page]')
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      // 2. Aguardar todas as imagens nas páginas
+      const imgs = Array.from(
+        document.querySelectorAll<HTMLImageElement>('[data-proposal-page] img')
+      )
+      await Promise.all(
+        imgs.map(img =>
+          img.complete
+            ? Promise.resolve()
+            : new Promise<void>(res => {
+                img.addEventListener('load',  () => res())
+                img.addEventListener('error', () => res())
+              })
+        )
+      )
+
+      // 3. Pausa para SVGs e layout estabilizarem
+      await new Promise(res => setTimeout(res, 800))
+
+      const pages   = previewRef.current.querySelectorAll<HTMLElement>('[data-proposal-page]')
+      const pdf     = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const preview = previewRef.current
+
+      // 4. Temporariamente remover overflow para captura fiel
+      const prevOverflow = preview.style.overflow
+      preview.style.overflow = 'visible'
+
+      const FONTS_URL =
+        'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800;12..96,900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap'
 
       for (let i = 0; i < pages.length; i++) {
-        const canvas = await html2canvas(pages[i], {
+        // Pausa entre páginas para o DOM estabilizar
+        await new Promise(res => setTimeout(res, 300))
+
+        const pg = pages[i]
+        pg.scrollIntoView({ block: 'start' })
+        await new Promise(res => setTimeout(res, 200))
+
+        const canvas = await html2canvas(pg, {
           scale: 2,
           useCORS: true,
-          width: pages[i].offsetWidth,
-          height: pages[i].offsetHeight,
+          allowTaint: true,
+          logging: false,
+          imageTimeout: 15000,
+          removeContainer: false,
+          foreignObjectRendering: false,
           backgroundColor: null,
+          onclone: (clonedDoc) => {
+            // Garantir dimensões explícitas em todos os SVGs inline
+            clonedDoc.querySelectorAll('svg').forEach(svg => {
+              if (!svg.getAttribute('width'))  svg.setAttribute('width',  '24')
+              if (!svg.getAttribute('height')) svg.setAttribute('height', '24')
+            })
+            // Injetar Google Fonts no documento clonado
+            const link = clonedDoc.createElement('link')
+            link.rel  = 'stylesheet'
+            link.href = FONTS_URL
+            clonedDoc.head.appendChild(link)
+          },
         })
-        const imgData = canvas.toDataURL('image/jpeg', 0.95)
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.97)
         if (i > 0) pdf.addPage()
         pdf.addImage(imgData, 'JPEG', 0, 0, 297, 210)
       }
+
+      // Restaurar overflow
+      preview.style.overflow = prevOverflow
 
       const pdfBlob  = pdf.output('blob')
       const safeName = form.school_name.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || id
       const dateStr  = new Date().toISOString().slice(0, 10)
       const fileName = `${id}/${safeName}_${dateStr}.pdf`
 
-      // Ensure bucket exists before uploading
+      // Garantir que o bucket existe
       const { data: buckets } = await supabase.storage.listBuckets()
       const bucketExists = buckets?.some(b => b.name === 'proposals')
       if (!bucketExists) {
