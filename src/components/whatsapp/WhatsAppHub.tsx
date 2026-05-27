@@ -5,7 +5,7 @@ import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight, ChevronLeft,
   CheckCheck, Check, Zap, Settings, User, Users, Download,
-  X, MoreVertical, CornerUpLeft
+  X, MoreVertical, CornerUpLeft, SmilePlus
 } from 'lucide-react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -33,6 +33,7 @@ interface Message {
   quoted_content?: string
   quoted_from_me?: boolean
   reaction?: string | null
+  reaction_attendant?: string | null
 }
 
 interface Label { text: string; color: string }
@@ -215,7 +216,8 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
             quoted_message_id: m.quoted_message_id,
             quoted_content:    m.quoted_content,
             quoted_from_me:    m.quoted_from_me,
-            reaction:          (m as any).reaction || null,
+            reaction:           (m as any).reaction || null,
+            reaction_attendant: (m as any).reaction_attendant || null,
           }
         }),
     }
@@ -632,18 +634,38 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
   return <span style={{ fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{body}</span>
 }
 
+// ─── Quick emoji set for reaction picker ────────────────────────────────────
+const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'] as const
+
 // ─── MessageBubble ────────────────────────────────────────────────────────────
 function MessageBubble({
-  msg, onImageClick, instanceName, contactName, onReply,
+  msg, onImageClick, instanceName, contactName, onReply, onReact,
 }: {
   msg: Message
   onImageClick?: (url: string) => void
   instanceName?: string
   contactName?: string
   onReply?: (m: Message) => void
+  onReact?: (m: Message, emoji: string) => void
 }) {
   const isMe = msg.from === 'me'
-  const [hovered, setHovered] = useState(false)
+  const [hovered, setHovered]           = useState(false)
+  const [showReactPicker, setShowReactPicker] = useState(false)
+  const pickRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!showReactPicker) return
+    const handler = (e: MouseEvent) => {
+      if (pickRef.current && !pickRef.current.contains(e.target as Node)) {
+        setShowReactPicker(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showReactPicker])
+
+  const hasAnyReaction = !!(msg.reaction || msg.reaction_attendant)
+  const reactionBadge  = [msg.reaction, msg.reaction_attendant].filter(Boolean).join(' ')
 
   return (
     <div
@@ -652,24 +674,70 @@ function MessageBubble({
       style={{
       display: 'flex',
       justifyContent: isMe ? 'flex-end' : 'flex-start',
-      marginBottom: msg.reaction ? 18 : 3,
+      marginBottom: hasAnyReaction ? 18 : 3,
       paddingLeft: isMe ? '15%' : 0,
       paddingRight: isMe ? 0 : '15%',
       position: 'relative',
     }}>
-      {hovered && msg.type !== 'deleted' && (
+      {(hovered || showReactPicker) && msg.type !== 'deleted' && (
         <div style={{
           position: 'absolute',
           top: '50%', transform: 'translateY(-50%)',
           [isMe ? 'left' : 'right']: 'calc(100% - 10px)',
           display: 'flex', flexDirection: 'column', gap: 4, zIndex: 10,
         }}>
+          {showReactPicker && (
+            <div ref={pickRef} style={{
+              position: 'absolute',
+              bottom: '100%',
+              [isMe ? 'left' : 'right']: 0,
+              marginBottom: 4,
+              background: '#fff',
+              border: '1px solid #E2E8F0',
+              borderRadius: 20,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.14)',
+              display: 'flex',
+              alignItems: 'center',
+              padding: '4px 6px',
+              gap: 2,
+              zIndex: 20,
+              whiteSpace: 'nowrap',
+            }}>
+              {QUICK_EMOJIS.map(e => (
+                <button
+                  key={e}
+                  onClick={ev => { ev.stopPropagation(); onReact?.(msg, e); setShowReactPicker(false) }}
+                  title={e}
+                  style={{
+                    background: msg.reaction_attendant === e ? '#E6F7F4' : 'transparent',
+                    border: 'none',
+                    borderRadius: 8,
+                    fontSize: 20,
+                    cursor: 'pointer',
+                    padding: '2px 4px',
+                    lineHeight: 1,
+                    transform: msg.reaction_attendant === e ? 'scale(1.2)' : 'scale(1)',
+                    transition: 'transform 0.1s',
+                  }}
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+          )}
           <button
             onClick={() => onReply?.(msg)}
             title="Responder"
             style={{ width: 28, height: 28, borderRadius: '50%', background: '#F0FDFB', border: '1px solid #B2E8E2', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00A896' }}
           >
             <CornerUpLeft size={13} />
+          </button>
+          <button
+            onClick={ev => { ev.stopPropagation(); setShowReactPicker(v => !v) }}
+            title="Reagir"
+            style={{ width: 28, height: 28, borderRadius: '50%', background: '#FFFBF0', border: '1px solid #FDE68A', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D97706' }}
+          >
+            <SmilePlus size={13} />
           </button>
         </div>
       )}
@@ -765,7 +833,7 @@ function MessageBubble({
             )
           })()}
         </div>
-        {msg.reaction && (
+        {hasAnyReaction && (
           <div style={{
             position: 'absolute',
             bottom: -12,
@@ -780,7 +848,7 @@ function MessageBubble({
             lineHeight: 1.5,
             whiteSpace: 'nowrap',
           }}>
-            {msg.reaction}
+            {reactionBadge}
           </div>
         )}
       </div>
@@ -1266,7 +1334,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       quoted_message_id: newMsg.quoted_message_id,
       quoted_content:    newMsg.quoted_content,
       quoted_from_me:    newMsg.quoted_from_me,
-      reaction:          (newMsg as any).reaction || null,
+      reaction:           (newMsg as any).reaction || null,
+      reaction_attendant: (newMsg as any).reaction_attendant || null,
     }
     setConversations(prev => {
       const normJid = normalizeJid(newMsg.remote_jid)
@@ -1560,7 +1629,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         event: 'UPDATE', schema: 'public', table: 'whatsapp_messages',
         filter: msgFilter
       }, (payload) => {
-        const updated = payload.new as WhatsappMessage & { reaction?: string | null }
+        const updated = payload.new as WhatsappMessage & { reaction?: string | null; reaction_attendant?: string | null }
         setConversations(prev => prev.map(conv => {
           const normJid = normalizeJid(updated.remote_jid)
           if (conv.id !== normJid) return conv
@@ -1570,8 +1639,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               m.id === updated.id || m.id === updated.message_id
                 ? {
                     ...m,
-                    status:   (updated.status as Message['status']) || m.status,
-                    reaction: updated.reaction !== undefined ? updated.reaction : m.reaction,
+                    status:             (updated.status as Message['status']) || m.status,
+                    reaction:           updated.reaction           !== undefined ? updated.reaction           : m.reaction,
+                    reaction_attendant: updated.reaction_attendant !== undefined ? updated.reaction_attendant : m.reaction_attendant,
                   }
                 : m
             ),
@@ -1798,7 +1868,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           quoted_message_id: m.quoted_message_id,
           quoted_content:    m.quoted_content,
           quoted_from_me:    m.quoted_from_me,
-          reaction:          (m as any).reaction || null,
+          reaction:           (m as any).reaction || null,
+          reaction_attendant: (m as any).reaction_attendant || null,
         }))
 
       setConversations(prev => prev.map(c =>
@@ -2928,6 +2999,35 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }).catch(() => {})
   }
 
+  const handleReact = async (msg: Message, emoji: string) => {
+    if (!msg.message_id || !activeId) return
+    const rJid = rawJid(activeId)
+    // Toggle: clicking the same emoji removes the reaction
+    const emojiToSend = msg.reaction_attendant === emoji ? '' : emoji
+
+    // Optimistic update
+    setConversations(prev => prev.map(c =>
+      c.id === activeId
+        ? { ...c, messages: c.messages.map(m => m.id === msg.id ? { ...m, reaction_attendant: emojiToSend || null } : m) }
+        : c
+    ))
+
+    try {
+      await fetch('/api/whatsapp/send-reaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          institution_id: effectiveInstitutionId || null,
+          message_id:     msg.message_id,
+          emoji:          emojiToSend,
+          remote_jid:     rJid,
+        }),
+      })
+    } catch (err) {
+      console.error('[handleReact]', err)
+    }
+  }
+
   const handleCreateLead = async () => {
     if (!effectiveInstitutionId || !leadForm.responsible_name) return
     try {
@@ -3623,7 +3723,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   <div style={{ flex: 1, height: 1, background: 'linear-gradient(to left, transparent, #D1FAE5, transparent)' }} />
                 </div>
                 {group.msgs.map(msg => (
-                  <MessageBubble key={msg.id} msg={msg} onImageClick={url => setLightboxUrl(url)} instanceName={instance} contactName={activeConv?.name || 'Contato'} onReply={m => { setReplyTo(m); inputRef.current?.focus() }} />
+                  <MessageBubble key={msg.id} msg={msg} onImageClick={url => setLightboxUrl(url)} instanceName={instance} contactName={activeConv?.name || 'Contato'} onReply={m => { setReplyTo(m); inputRef.current?.focus() }} onReact={handleReact} />
                 ))}
               </div>
             ))}
