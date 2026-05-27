@@ -210,6 +210,7 @@ export interface WhatsappMessage {
   quoted_message_id?: string
   quoted_content?: string
   quoted_from_me?: boolean
+  reaction?: string | null
 }
 
 export interface WhatsappConversation {

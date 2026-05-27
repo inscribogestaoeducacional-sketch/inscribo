@@ -2048,6 +2048,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
           continue
         }
+
+        // ── Reaction message — update the original message, do NOT insert a new row ──
+        if ((msg.type as string) === 'reaction') {
+          const { message_id: reactionTargetId, emoji } = (msg as any).reaction || {}
+          if (reactionTargetId) {
+            const emojiValue = emoji || null // null means the reaction was removed
+            await supabase
+              .from('whatsapp_messages')
+              .update({ reaction: emojiValue })
+              .eq('message_id', reactionTargetId)
+              .eq('institution_id', institutionId)
+            console.log('[WEBHOOK] reaction', emojiValue, 'on', reactionTargetId)
+          }
+          continue
+        }
+
         const timestamp   = new Date(parseInt(msg.timestamp) * 1000).toISOString()
         const contactName = (value.contacts?.[0]?.profile?.name as string | undefined) || remoteJid
         console.log('[WEBHOOK] institutionId:', institutionId)

@@ -5,7 +5,7 @@ import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight, ChevronLeft,
   CheckCheck, Check, Zap, Settings, User, Users, Download,
-  X, MoreVertical, CornerUpLeft, Trash2
+  X, MoreVertical, CornerUpLeft
 } from 'lucide-react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -32,6 +32,7 @@ interface Message {
   quoted_message_id?: string
   quoted_content?: string
   quoted_from_me?: boolean
+  reaction?: string | null
 }
 
 interface Label { text: string; color: string }
@@ -214,6 +215,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
             quoted_message_id: m.quoted_message_id,
             quoted_content:    m.quoted_content,
             quoted_from_me:    m.quoted_from_me,
+            reaction:          (m as any).reaction || null,
           }
         }),
     }
@@ -632,14 +634,13 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
 
 // ─── MessageBubble ────────────────────────────────────────────────────────────
 function MessageBubble({
-  msg, onImageClick, instanceName, contactName, onReply, onDelete,
+  msg, onImageClick, instanceName, contactName, onReply,
 }: {
   msg: Message
   onImageClick?: (url: string) => void
   instanceName?: string
   contactName?: string
   onReply?: (m: Message) => void
-  onDelete?: (m: Message) => void
 }) {
   const isMe = msg.from === 'me'
   const [hovered, setHovered] = useState(false)
@@ -651,12 +652,11 @@ function MessageBubble({
       style={{
       display: 'flex',
       justifyContent: isMe ? 'flex-end' : 'flex-start',
-      marginBottom: 3,
+      marginBottom: msg.reaction ? 18 : 3,
       paddingLeft: isMe ? '15%' : 0,
       paddingRight: isMe ? 0 : '15%',
       position: 'relative',
     }}>
-      {/* [FIX P3] Hover action buttons — reply (both sides) + delete (own msgs) */}
       {hovered && msg.type !== 'deleted' && (
         <div style={{
           position: 'absolute',
@@ -671,15 +671,6 @@ function MessageBubble({
           >
             <CornerUpLeft size={13} />
           </button>
-          {isMe && (
-            <button
-              onClick={() => onDelete?.(msg)}
-              title="Apagar mensagem"
-              style={{ width: 28, height: 28, borderRadius: '50%', background: '#FEF2F2', border: '1px solid #FECACA', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444' }}
-            >
-              <Trash2 size={13} />
-            </button>
-          )}
         </div>
       )}
       <div style={{
@@ -774,6 +765,24 @@ function MessageBubble({
             )
           })()}
         </div>
+        {msg.reaction && (
+          <div style={{
+            position: 'absolute',
+            bottom: -12,
+            [isMe ? 'right' : 'left']: 4,
+            background: '#fff',
+            border: '1px solid #E2E8F0',
+            borderRadius: 999,
+            padding: '1px 5px',
+            fontSize: 14,
+            boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
+            zIndex: 2,
+            lineHeight: 1.5,
+            whiteSpace: 'nowrap',
+          }}>
+            {msg.reaction}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -1257,6 +1266,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       quoted_message_id: newMsg.quoted_message_id,
       quoted_content:    newMsg.quoted_content,
       quoted_from_me:    newMsg.quoted_from_me,
+      reaction:          (newMsg as any).reaction || null,
     }
     setConversations(prev => {
       const normJid = normalizeJid(newMsg.remote_jid)
@@ -1550,7 +1560,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         event: 'UPDATE', schema: 'public', table: 'whatsapp_messages',
         filter: msgFilter
       }, (payload) => {
-        const updated = payload.new as WhatsappMessage
+        const updated = payload.new as WhatsappMessage & { reaction?: string | null }
         setConversations(prev => prev.map(conv => {
           const normJid = normalizeJid(updated.remote_jid)
           if (conv.id !== normJid) return conv
@@ -1558,7 +1568,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             ...conv,
             messages: conv.messages.map(m =>
               m.id === updated.id || m.id === updated.message_id
-                ? { ...m, status: (updated.status as Message['status']) || m.status }
+                ? {
+                    ...m,
+                    status:   (updated.status as Message['status']) || m.status,
+                    reaction: updated.reaction !== undefined ? updated.reaction : m.reaction,
+                  }
                 : m
             ),
           }
@@ -1784,6 +1798,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           quoted_message_id: m.quoted_message_id,
           quoted_content:    m.quoted_content,
           quoted_from_me:    m.quoted_from_me,
+          reaction:          (m as any).reaction || null,
         }))
 
       setConversations(prev => prev.map(c =>
@@ -2913,26 +2928,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }).catch(() => {})
   }
 
-  // [FIX P3] Delete a sent message — mark deleted in DB + notify Meta Cloud API
-  const handleDeleteMessage = async (msg: Message) => {
-    if (!msg.message_id || !effectiveInstitutionId) return
-    // Optimistic update
-    setConversations(prev => prev.map(c =>
-      c.id === activeId
-        ? { ...c, messages: c.messages.map(m => m.id === msg.id ? { ...m, type: 'deleted' as MsgType, content: '🚫 Mensagem apagada' } : m) }
-        : c
-    ))
-    try {
-      await fetch('/api/whatsapp/delete-message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ institution_id: effectiveInstitutionId, message_id: msg.message_id }),
-      })
-    } catch (err) {
-      console.error('[deleteMsg]', err)
-    }
-  }
-
   const handleCreateLead = async () => {
     if (!effectiveInstitutionId || !leadForm.responsible_name) return
     try {
@@ -3628,7 +3623,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   <div style={{ flex: 1, height: 1, background: 'linear-gradient(to left, transparent, #D1FAE5, transparent)' }} />
                 </div>
                 {group.msgs.map(msg => (
-                  <MessageBubble key={msg.id} msg={msg} onImageClick={url => setLightboxUrl(url)} instanceName={instance} contactName={activeConv?.name || 'Contato'} onReply={m => { setReplyTo(m); inputRef.current?.focus() }} onDelete={handleDeleteMessage} />
+                  <MessageBubble key={msg.id} msg={msg} onImageClick={url => setLightboxUrl(url)} instanceName={instance} contactName={activeConv?.name || 'Contato'} onReply={m => { setReplyTo(m); inputRef.current?.focus() }} />
                 ))}
               </div>
             ))}
