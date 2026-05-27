@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Download, ThumbsUp, Clock, Loader2, AlertCircle, MessageCircle, Copy } from 'lucide-react'
-import jsPDF from 'jspdf'
-import html2canvas from 'html2canvas'
+import { pdf } from '@react-pdf/renderer'
 import ProposalContent, { PW } from '../components/superadmin/ProposalContent'
+import ProposalPdfDocument from '../lib/proposalPdf'
 
 const VM = '#00A896'
 
@@ -56,28 +56,33 @@ export default function ProposalView() {
 
   const handleDownloadPdf = async () => {
     if (proposal?.pdf_url) { window.open(proposal.pdf_url, '_blank'); return }
-    if (!previewRef.current) return
     setGeneratingPdf(true)
     try {
-      await document.fonts.ready
-      const pages = previewRef.current.querySelectorAll<HTMLElement>('[data-proposal-page]')
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-
-      for (let i = 0; i < pages.length; i++) {
-        const canvas = await html2canvas(pages[i], {
-          scale: 2,
-          useCORS: true,
-          width: pages[i].offsetWidth,
-          height: pages[i].offsetHeight,
-          backgroundColor: null,
-        })
-        const imgData = canvas.toDataURL('image/jpeg', 0.95)
-        if (i > 0) pdf.addPage()
-        pdf.addImage(imgData, 'JPEG', 0, 0, 297, 210)
-      }
+      const blob = await pdf(
+        <ProposalPdfDocument data={{
+          client_name:            proposal.client_name,
+          school_name:            proposal.school_name,
+          created_at:             proposal.created_at,
+          implementation_normal:  proposal.implementation_normal,
+          implementation_special: proposal.implementation_special,
+          monthly_normal:         proposal.monthly_normal,
+          monthly_special:        proposal.monthly_special,
+          special_deadline:       proposal.special_deadline,
+          validity_days:          proposal.validity_days,
+          consultant_name:        proposal.consultant_name,
+          consultant_phone:       proposal.consultant_phone,
+          consultant_email:       proposal.consultant_email,
+          consultant_site:        proposal.consultant_site,
+        }} />
+      ).toBlob()
 
       const safeName = proposal.school_name?.replace(/\s+/g, '_') || 'Aion'
-      pdf.save(`proposta-${safeName}.pdf`)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `proposta-${safeName}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
     } finally { setGeneratingPdf(false) }
   }
 

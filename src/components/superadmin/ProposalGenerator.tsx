@@ -5,9 +5,9 @@ import {
   X, Save, Download, Send, MessageCircle,
   CheckCircle2, AlertCircle, Loader2, ExternalLink, Copy,
 } from 'lucide-react'
-import jsPDF from 'jspdf'
-import html2canvas from 'html2canvas'
+import { pdf } from '@react-pdf/renderer'
 import ProposalContent, { ProposalData, PW } from './ProposalContent'
+import ProposalPdfDocument from '../../lib/proposalPdf'
 
 export interface ProposalGeneratorProps {
   lead: {
@@ -148,89 +148,17 @@ export default function ProposalGenerator({ lead, consultant, onClose, onSave }:
   }
 
   const handleGeneratePdf = async () => {
-    if (!previewRef.current) return
     setGeneratingPdf(true)
     try {
       const id = await saveProposal()
       if (!id) throw new Error('Falha ao salvar proposta')
 
-      // 1. Aguardar fontes
-      await document.fonts.ready
+      const blob = await pdf(<ProposalPdfDocument data={form} />).toBlob()
 
-      // 2. Aguardar todas as imagens nas páginas
-      const imgs = Array.from(
-        document.querySelectorAll<HTMLImageElement>('[data-proposal-page] img')
-      )
-      await Promise.all(
-        imgs.map(img =>
-          img.complete
-            ? Promise.resolve()
-            : new Promise<void>(res => {
-                img.addEventListener('load',  () => res())
-                img.addEventListener('error', () => res())
-              })
-        )
-      )
-
-      // 3. Pausa para SVGs e layout estabilizarem
-      await new Promise(res => setTimeout(res, 800))
-
-      const pages   = previewRef.current.querySelectorAll<HTMLElement>('[data-proposal-page]')
-      const pdf     = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-      const preview = previewRef.current
-
-      // 4. Temporariamente remover overflow para captura fiel
-      const prevOverflow = preview.style.overflow
-      preview.style.overflow = 'visible'
-
-      const FONTS_URL =
-        'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800;12..96,900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap'
-
-      for (let i = 0; i < pages.length; i++) {
-        // Pausa entre páginas para o DOM estabilizar
-        await new Promise(res => setTimeout(res, 300))
-
-        const pg = pages[i]
-        pg.scrollIntoView({ block: 'start' })
-        await new Promise(res => setTimeout(res, 200))
-
-        const canvas = await html2canvas(pg, {
-          scale: 2,
-          useCORS: true,
-          allowTaint: true,
-          logging: false,
-          imageTimeout: 15000,
-          removeContainer: false,
-          foreignObjectRendering: false,
-          backgroundColor: null,
-          onclone: (clonedDoc) => {
-            // Garantir dimensões explícitas em todos os SVGs inline
-            clonedDoc.querySelectorAll('svg').forEach(svg => {
-              if (!svg.getAttribute('width'))  svg.setAttribute('width',  '24')
-              if (!svg.getAttribute('height')) svg.setAttribute('height', '24')
-            })
-            // Injetar Google Fonts no documento clonado
-            const link = clonedDoc.createElement('link')
-            link.rel  = 'stylesheet'
-            link.href = FONTS_URL
-            clonedDoc.head.appendChild(link)
-          },
-        })
-
-        const imgData = canvas.toDataURL('image/jpeg', 0.97)
-        if (i > 0) pdf.addPage()
-        pdf.addImage(imgData, 'JPEG', 0, 0, 297, 210)
-      }
-
-      // Restaurar overflow
-      preview.style.overflow = prevOverflow
-
-      const pdfBlob  = pdf.output('blob')
       const safeName = form.school_name.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || id
       const dateStr  = new Date().toISOString().slice(0, 10)
       const fileName = `${id}/${safeName}_${dateStr}.pdf`
 
-      // Garantir que o bucket existe
       const { data: buckets } = await supabase.storage.listBuckets()
       const bucketExists = buckets?.some(b => b.name === 'proposals')
       if (!bucketExists) {
@@ -239,19 +167,23 @@ export default function ProposalGenerator({ lead, consultant, onClose, onSave }:
 
       const { error: upErr } = await supabase.storage
         .from('proposals')
-        .upload(fileName, pdfBlob, { contentType: 'application/pdf', upsert: true })
+        .upload(fileName, blob, { contentType: 'application/pdf', upsert: true })
 
       if (upErr) {
-        console.warn('Storage upload falhou, baixando direto:', upErr.message)
-        pdf.save(`proposta-${safeName}-${dateStr}.pdf`)
-        showToast('PDF baixado (armazenamento indisponível).')
-        return
+        console.warn('Storage upload falhou:', upErr.message)
+      } else {
+        const { data: { publicUrl } } = supabase.storage.from('proposals').getPublicUrl(fileName)
+        setPdfUrl(publicUrl)
+        await supabase.from('proposals').update({ pdf_url: publicUrl }).eq('id', id)
       }
 
-      const { data: { publicUrl } } = supabase.storage.from('proposals').getPublicUrl(fileName)
-      setPdfUrl(publicUrl)
-      await supabase.from('proposals').update({ pdf_url: publicUrl }).eq('id', id)
-      pdf.save(`proposta-${safeName}-${dateStr}.pdf`)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `proposta-${safeName}-${dateStr}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+
       showToast('PDF gerado com sucesso!')
     } catch (e: any) {
       showToast(e?.message || 'Erro ao gerar PDF.', false)
