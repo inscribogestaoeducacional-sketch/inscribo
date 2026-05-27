@@ -1,4 +1,12 @@
-import { useEffect } from 'react'
+import React, { useEffect } from 'react'
+import {
+  IcoHome, IcoUsers, IcoAddressBook, IcoCalendar, IcoBrandWhatsapp,
+  IcoChartBar, IcoArrowsTransferDown, IcoMoodSmile, IcoUserCircle, IcoSettings,
+  IcoAdjustmentsH, IcoPlugConnected, IcoPalette, IcoTarget, IcoSchool, IcoHeartHandshake,
+  IcoClock, IcoRocket, IcoStar, IcoHeadset, IcoRefresh, IcoChartLine,
+  IcoPhone, IcoMail, IcoWorld, IcoCircleCheckFilled,
+  IconProps,
+} from '../../lib/tablerIcons'
 
 export interface ProposalData {
   client_name: string
@@ -37,38 +45,37 @@ const fmtBRL = (v: number) =>
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 export const MODULE_LIST = [
-  { icon: 'ti-home',                 name: 'Início / Dashboard', desc: 'Visão geral da campanha, metas e indicadores em tempo real.' },
-  { icon: 'ti-users',                name: 'Leads',              desc: 'Pipeline completo do lead até a matrícula, com histórico.' },
-  { icon: 'ti-address-book',         name: 'Contatos',           desc: 'Cadastro centralizado de famílias e responsáveis.' },
-  { icon: 'ti-calendar',             name: 'Visitas',            desc: 'Agendamento, confirmação e taxa de comparecimento.' },
-  { icon: 'ti-brand-whatsapp',       name: 'WhatsApp',           desc: 'Equipe toda atendendo no número oficial Meta da escola.' },
-  { icon: 'ti-chart-bar',            name: 'Relatórios',         desc: 'Conversão, CPA, desempenho por consultor e rematrícula.' },
-  { icon: 'ti-arrows-transfer-down', name: 'Transferências',     desc: 'Rastreia motivo real da saída e oportunidades de retenção.' },
-  { icon: 'ti-mood-smile',           name: 'Pesquisas',          desc: 'NPS e satisfação das famílias organizados por IA.' },
-  { icon: 'ti-user-circle',          name: 'Usuários',           desc: 'Gestão de equipe com permissões e produtividade.' },
-  { icon: 'ti-settings',             name: 'Configurações',      desc: 'Personalização completa dos fluxos da escola.' },
+  { Icon: IcoHome,               name: 'Início / Dashboard', desc: 'Visão geral da campanha, metas e indicadores em tempo real.' },
+  { Icon: IcoUsers,              name: 'Leads',              desc: 'Pipeline completo do lead até a matrícula, com histórico.' },
+  { Icon: IcoAddressBook,        name: 'Contatos',           desc: 'Cadastro centralizado de famílias e responsáveis.' },
+  { Icon: IcoCalendar,           name: 'Visitas',            desc: 'Agendamento, confirmação e taxa de comparecimento.' },
+  { Icon: IcoBrandWhatsapp,      name: 'WhatsApp',           desc: 'Equipe toda atendendo no número oficial Meta da escola.' },
+  { Icon: IcoChartBar,           name: 'Relatórios',         desc: 'Conversão, CPA, desempenho por consultor e rematrícula.' },
+  { Icon: IcoArrowsTransferDown, name: 'Transferências',     desc: 'Rastreia motivo real da saída e oportunidades de retenção.' },
+  { Icon: IcoMoodSmile,          name: 'Pesquisas',          desc: 'NPS e satisfação das famílias organizados por IA.' },
+  { Icon: IcoUserCircle,         name: 'Usuários',           desc: 'Gestão de equipe com permissões e produtividade.' },
+  { Icon: IcoSettings,           name: 'Configurações',      desc: 'Personalização completa dos fluxos da escola.' },
 ]
 
-// 3 steps only (Diagnóstico removido)
 const HOW_IT_WORKS = [
-  { icon: 'ti-settings',  title: 'Implantação', desc: 'Configuramos tudo em até 2 dias úteis' },
-  { icon: 'ti-school',    title: 'Treinamento', desc: 'Sua equipe aprende na prática, com suporte direto' },
-  { icon: 'ti-handshake', title: 'Suporte',     desc: 'Acompanhamento contínuo durante toda a campanha' },
+  { Icon: IcoSettings,       title: 'Implantação', desc: 'Configuramos tudo em até 5 dias úteis' },
+  { Icon: IcoSchool,         title: 'Treinamento', desc: 'Sua equipe aprende na prática, com suporte direto' },
+  { Icon: IcoHeartHandshake, title: 'Suporte',     desc: 'Acompanhamento contínuo durante toda a campanha' },
 ]
 
-const INCLUDES = [
-  { icon: 'ti-adjustments-horizontal', text: 'Configuração completa da conta' },
-  { icon: 'ti-plug-connected',         text: 'Integração com ERP da escola' },
-  { icon: 'ti-brand-whatsapp',         text: 'Homologação WhatsApp Oficial Meta' },
-  { icon: 'ti-palette',                text: 'Personalização dos fluxos' },
-  { icon: 'ti-target',                 text: 'Definição das metas iniciais' },
-  { icon: 'ti-school',                 text: 'Treinamento da equipe' },
+const INCLUDES: { Icon: (p: IconProps) => React.ReactElement; text: string }[] = [
+  { Icon: IcoAdjustmentsH,  text: 'Configuração completa da conta' },
+  { Icon: IcoPlugConnected, text: 'Integração com ERP da escola' },
+  { Icon: IcoBrandWhatsapp, text: 'Homologação WhatsApp Oficial Meta' },
+  { Icon: IcoPalette,       text: 'Personalização dos fluxos' },
+  { Icon: IcoTarget,        text: 'Definição das metas iniciais' },
+  { Icon: IcoSchool,        text: 'Treinamento da equipe' },
 ]
 
-const ALSO_INCLUDED = [
-  { icon: 'ti-headset',    label: 'Suporte via WhatsApp' },
-  { icon: 'ti-chart-line', label: 'Relatório mensal' },
-  { icon: 'ti-refresh',    label: 'Atualizações gratuitas' },
+const ALSO_INCLUDED: { Icon: (p: IconProps) => React.ReactElement; label: string }[] = [
+  { Icon: IcoHeadset,   label: 'Suporte via WhatsApp' },
+  { Icon: IcoChartLine, label: 'Relatório mensal' },
+  { Icon: IcoRefresh,   label: 'Atualizações gratuitas' },
 ]
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -113,14 +120,6 @@ const page: React.CSSProperties = {
 
 export default function ProposalContent({ data }: { data: ProposalData }) {
   useEffect(() => {
-    // Tabler Icons — versão 3.x com path correto
-    if (!document.querySelector('#tabler-icons-css')) {
-      const el = document.createElement('link')
-      el.id = 'tabler-icons-css'
-      el.rel = 'stylesheet'
-      el.href = 'https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.x/dist/tabler-icons.min.css'
-      document.head.appendChild(el)
-    }
     if (!document.querySelector('#aion-proposal-fonts')) {
       const el = document.createElement('link')
       el.id = 'aion-proposal-fonts'
@@ -192,7 +191,6 @@ export default function ProposalContent({ data }: { data: ProposalData }) {
         entregamos ao gestor visibilidade total — do primeiro contato até a matrícula assinada.
       </p>
 
-      {/* Sub-título dos módulos */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 12 }}>
         <h3 style={{ fontSize: 18, fontWeight: 800, color: AZUL, margin: 0, fontFamily: "'Bricolage Grotesque', sans-serif", letterSpacing: '-0.2px' }}>
           10 módulos. Em um só lugar.
@@ -205,7 +203,7 @@ export default function ProposalContent({ data }: { data: ProposalData }) {
         {MODULE_LIST.map(mod => (
           <div key={mod.name} style={{ background: '#F8FAFC', border: `1px solid ${BORDA}`, borderRadius: 14, padding: '12px 8px', textAlign: 'center' }}>
             <div style={{ width: 42, height: 42, borderRadius: 12, background: 'linear-gradient(135deg,#e8f7f4,#c8ede7)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}>
-              <i className={`ti ${mod.icon}`} style={{ fontSize: 20, color: VM }} />
+              <mod.Icon size={20} color={VM} />
             </div>
             <div style={{ fontSize: 11, fontWeight: 800, color: AZUL, fontFamily: "'Bricolage Grotesque', sans-serif", lineHeight: 1.25, marginBottom: 4 }}>{mod.name}</div>
             <div style={{ fontSize: 10, color: CMID, lineHeight: 1.45 }}>{mod.desc}</div>
@@ -215,7 +213,7 @@ export default function ProposalContent({ data }: { data: ProposalData }) {
 
       {/* Banner verde */}
       <div style={{ background: GRAD, borderRadius: 12, padding: '12px 20px', color: '#fff', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <i className="ti ti-circle-check-filled" style={{ fontSize: 18, flexShrink: 0 }} />
+        <IcoCircleCheckFilled size={18} color="#fff" style={{ flexShrink: 0 }} />
         <span style={{ fontSize: 13, fontWeight: 600 }}>Sua secretaria configura em 2 dias. Sem projeto, sem TI, sem custo oculto.</span>
       </div>
     </div>
@@ -232,23 +230,17 @@ export default function ProposalContent({ data }: { data: ProposalData }) {
         </h2>
       </div>
 
-      {/* 3 cards com linha conectora */}
       <div style={{ position: 'relative' }}>
-        {/* Linha dashed conectando os cards no nível dos números */}
         <div style={{ position: 'absolute', top: 76, left: '14%', right: '14%', borderTop: '2px dashed rgba(0,168,150,0.3)', zIndex: 0 }} />
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, position: 'relative', zIndex: 1 }}>
           {HOW_IT_WORKS.map((step, i) => (
             <div key={step.title} style={{ background: '#fff', border: `1px solid ${BORDA}`, borderRadius: 20, padding: '40px 28px 36px', display: 'flex', flexDirection: 'column' }}>
-              {/* Número */}
               <div style={{ fontSize: 72, fontWeight: 900, color: VC, fontFamily: "'Bricolage Grotesque', sans-serif", lineHeight: 1, marginBottom: 20 }}>
                 {String(i + 1).padStart(2, '0')}
               </div>
-              {/* Ícone */}
-              <i className={`ti ${step.icon}`} style={{ fontSize: 52, color: VM, marginBottom: 20, lineHeight: 1 }} />
-              {/* Título */}
+              <step.Icon size={52} color={VM} style={{ marginBottom: 20 }} />
               <div style={{ fontSize: 22, fontWeight: 800, color: AZUL, fontFamily: "'Bricolage Grotesque', sans-serif", marginBottom: 12 }}>{step.title}</div>
-              {/* Descrição */}
               <div style={{ fontSize: 16, color: CMID, lineHeight: 1.65 }}>{step.desc}</div>
             </div>
           ))}
@@ -261,10 +253,9 @@ export default function ProposalContent({ data }: { data: ProposalData }) {
   const page4 = (
     <div className="proposal-page" data-proposal-page
       style={{ ...page, background: '#F0F4F8', padding: '26px 40px' }}>
-      {/* Banner de prazo especial */}
       {deadline && (
         <div style={{ background: GRAD, borderRadius: 12, padding: '16px 28px', color: '#fff', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 4px 18px rgba(0,82,60,0.22)' }}>
-          <i className="ti ti-clock" style={{ fontSize: 22, flexShrink: 0 }} />
+          <IcoClock size={22} color="#fff" style={{ flexShrink: 0 }} />
           <div>
             <div style={{ fontWeight: 700, fontSize: 14, fontFamily: "'Bricolage Grotesque', sans-serif" }}>Condição especial válida até {deadline}</div>
             <div style={{ fontSize: 12, opacity: 0.85, marginTop: 2 }}>Garanta agora — após essa data os valores retornam ao normal.</div>
@@ -279,10 +270,10 @@ export default function ProposalContent({ data }: { data: ProposalData }) {
         </h2>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
         {/* Card Implantação */}
         <div style={{ background: 'linear-gradient(135deg,#f0faf8,#e6f7f4)', border: '2px solid rgba(0,168,150,0.3)', borderRadius: 20, padding: '24px 28px' }}>
-          <i className="ti ti-rocket" style={{ fontSize: 22, color: VM, display: 'block', marginBottom: 10 }} />
+          <IcoRocket size={22} color={VM} style={{ display: 'block', marginBottom: 10 }} />
           <div style={{ fontSize: 10, fontWeight: 700, color: CMID, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 5 }}>Taxa de Implantação</div>
           <div style={{ fontSize: 13, color: CLIGHT, textDecoration: 'line-through', marginBottom: 10 }}>De: {fmtBRL(data.implementation_normal)}</div>
           {isFreeImpl ? (
@@ -304,7 +295,7 @@ export default function ProposalContent({ data }: { data: ProposalData }) {
           <div style={{ position: 'absolute', top: 16, right: 16, background: GRAD2, borderRadius: 100, padding: '4px 12px' }}>
             <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: 0.5 }}>ESPECIAL</span>
           </div>
-          <i className="ti ti-star" style={{ fontSize: 22, color: VM, display: 'block', marginBottom: 10 }} />
+          <IcoStar size={22} color={VM} style={{ display: 'block', marginBottom: 10 }} />
           <div style={{ fontSize: 10, fontWeight: 700, color: CMID, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 5 }}>Mensalidade da Plataforma</div>
           <div style={{ fontSize: 13, color: CLIGHT, textDecoration: 'line-through', marginBottom: 10 }}>De: {fmtBRL(data.monthly_normal)}/mês</div>
           <div style={{ fontSize: 68, fontWeight: 900, color: VD, fontFamily: "'Bricolage Grotesque', sans-serif", lineHeight: 1, letterSpacing: '-2px', marginBottom: 8 }}>
@@ -314,20 +305,6 @@ export default function ProposalContent({ data }: { data: ProposalData }) {
           <div style={{ fontSize: 12, color: CMID }}>Acesso completo · Todos os 10 módulos</div>
         </div>
       </div>
-
-      {/* 3 micro-badges */}
-      <div style={{ display: 'flex', gap: 10 }}>
-        {[
-          { icon: 'ti-shield-check', label: 'Sem fidelidade' },
-          { icon: 'ti-headset',      label: 'Suporte incluso' },
-          { icon: 'ti-refresh',      label: 'Atualizações gratuitas' },
-        ].map(b => (
-          <div key={b.label} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: `1px solid ${BORDA}`, borderRadius: 10, padding: '10px 14px' }}>
-            <i className={`ti ${b.icon}`} style={{ fontSize: 16, color: VM, flexShrink: 0 }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: AZUL }}>{b.label}</span>
-          </div>
-        ))}
-      </div>
     </div>
   )
 
@@ -335,19 +312,17 @@ export default function ProposalContent({ data }: { data: ProposalData }) {
   const page5 = (
     <div className="proposal-page" data-proposal-page
       style={{ ...page, background: '#fff', padding: '30px 48px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-      {/* Cabeçalho */}
       <div>
         <Tag>Incluso</Tag>
         <h2 style={{ fontSize: 26, fontWeight: 800, color: AZUL, margin: '2px 0 18px', fontFamily: "'Bricolage Grotesque', sans-serif" }}>
           O que está incluso na implantação
         </h2>
 
-        {/* Checklist 3×2 com ícones Tabler específicos */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
           {INCLUDES.map(item => (
             <div key={item.text} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: '#F8FAFC', border: `1px solid ${BORDA}`, borderRadius: 12 }}>
               <div style={{ width: 28, height: 28, borderRadius: '50%', background: GRAD, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <i className={`ti ${item.icon}`} style={{ fontSize: 14, color: '#fff' }} />
+                <item.Icon size={14} color="#fff" />
               </div>
               <span style={{ fontSize: 13, color: AZUL, fontWeight: 500, lineHeight: 1.3 }}>{item.text}</span>
             </div>
@@ -355,21 +330,19 @@ export default function ProposalContent({ data }: { data: ProposalData }) {
         </div>
       </div>
 
-      {/* Também incluso */}
       <div>
         <div style={{ fontSize: 13, fontWeight: 700, color: CMID, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>Também incluso:</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 18 }}>
           {ALSO_INCLUDED.map(item => (
             <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F8FAFC', border: `1px solid ${BORDA}`, borderRadius: 12, padding: '14px 16px' }}>
-              <i className={`ti ${item.icon}`} style={{ fontSize: 20, color: VM, flexShrink: 0 }} />
+              <item.Icon size={20} color={VM} style={{ flexShrink: 0 }} />
               <span style={{ fontSize: 13, fontWeight: 600, color: AZUL }}>{item.label}</span>
             </div>
           ))}
         </div>
 
-        {/* Banner de validade */}
         <div style={{ background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 14, padding: '18px 24px', display: 'flex', gap: 16, alignItems: 'center' }}>
-          <i className="ti ti-clock" style={{ fontSize: 30, color: '#92400E', flexShrink: 0 }} />
+          <IcoClock size={30} color="#92400E" style={{ flexShrink: 0 }} />
           <div>
             <div style={{ fontSize: 15, fontWeight: 800, color: '#92400E', fontFamily: "'Bricolage Grotesque', sans-serif", marginBottom: 4 }}>
               Proposta válida por {data.validity_days} dias
@@ -400,10 +373,10 @@ export default function ProposalContent({ data }: { data: ProposalData }) {
         </h2>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 28 }}>
-          {['Mais Controle', 'Mais Previsibilidade', 'Mais Matrículas'].map((p, i) => (
-            <div key={p} style={{ display: 'flex', alignItems: 'center' }}>
+          {['Mais Controle', 'Mais Previsibilidade', 'Mais Matrículas'].map((label, i) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center' }}>
               {i > 0 && <div style={{ width: 1, height: 26, background: 'rgba(255,255,255,0.3)', margin: '0 20px' }} />}
-              <span style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{p}</span>
+              <span style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{label}</span>
             </div>
           ))}
         </div>
@@ -415,13 +388,13 @@ export default function ProposalContent({ data }: { data: ProposalData }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {data.consultant_phone && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
-                  <i className="ti ti-phone" style={{ fontSize: 13, color: VC }} />
+                  <IcoPhone size={13} color={VC} />
                   <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)' }}>{data.consultant_phone}</span>
                 </div>
               )}
               {data.consultant_email && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
-                  <i className="ti ti-mail" style={{ fontSize: 13, color: VC }} />
+                  <IcoMail size={13} color={VC} />
                   <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)' }}>{data.consultant_email}</span>
                 </div>
               )}
@@ -430,7 +403,7 @@ export default function ProposalContent({ data }: { data: ProposalData }) {
         )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
-          <i className="ti ti-world" style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }} />
+          <IcoWorld size={13} color="rgba(255,255,255,0.4)" />
           <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
             {data.consultant_site || 'aionedu.com.br'} · Todos os direitos reservados
           </span>

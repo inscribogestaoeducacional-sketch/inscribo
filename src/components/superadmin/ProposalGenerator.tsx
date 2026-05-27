@@ -172,17 +172,30 @@ export default function ProposalGenerator({ lead, consultant, onClose, onSave }:
         pdf.addImage(imgData, 'JPEG', 0, 0, 297, 210)
       }
 
-      const pdfBlob   = pdf.output('blob')
-      const safeName  = form.school_name.replace(/[^a-zA-Z0-9À-ÿ\s]/g, '').replace(/\s+/g, '_') || id
-      const dateStr   = new Date().toISOString().slice(0, 10)
-      const storagePath = `${id}/${safeName}_${dateStr}.pdf`
+      const pdfBlob  = pdf.output('blob')
+      const safeName = form.school_name.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || id
+      const dateStr  = new Date().toISOString().slice(0, 10)
+      const fileName = `${id}/${safeName}_${dateStr}.pdf`
+
+      // Ensure bucket exists before uploading
+      const { data: buckets } = await supabase.storage.listBuckets()
+      const bucketExists = buckets?.some(b => b.name === 'proposals')
+      if (!bucketExists) {
+        await supabase.storage.createBucket('proposals', { public: true })
+      }
 
       const { error: upErr } = await supabase.storage
         .from('proposals')
-        .upload(storagePath, pdfBlob, { contentType: 'application/pdf', upsert: true })
-      if (upErr) throw new Error(`Upload falhou: ${upErr.message}`)
+        .upload(fileName, pdfBlob, { contentType: 'application/pdf', upsert: true })
 
-      const { data: { publicUrl } } = supabase.storage.from('proposals').getPublicUrl(storagePath)
+      if (upErr) {
+        console.warn('Storage upload falhou, baixando direto:', upErr.message)
+        pdf.save(`proposta-${safeName}-${dateStr}.pdf`)
+        showToast('PDF baixado (armazenamento indisponível).')
+        return
+      }
+
+      const { data: { publicUrl } } = supabase.storage.from('proposals').getPublicUrl(fileName)
       setPdfUrl(publicUrl)
       await supabase.from('proposals').update({ pdf_url: publicUrl }).eq('id', id)
       pdf.save(`proposta-${safeName}-${dateStr}.pdf`)
