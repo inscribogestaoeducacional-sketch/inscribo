@@ -687,8 +687,15 @@ async function processCustomFlow(
       if (!withinHours) {
         console.log('[flow] transfer bloqueado — fora do horário:', curDay, `${nowTz.getHours()}:${String(nowTz.getMinutes()).padStart(2,'0')}`)
         if (outsideMsg) await sendAutoMessage(institutionId, remoteJid, outsideMsg)
+        // [FIX P5] Set status to 'waiting' (not 'open') and preserve / assign default attendant
+        const offHoursUpdate: Record<string, any> = { bot_active: false, status: 'waiting' }
+        const defAssignee = (flow as any).default_assignee_id
+        if (defAssignee) {
+          offHoursUpdate.assigned_user_id   = defAssignee
+          console.log('[flow] fora do horário — atribuindo atendente padrão:', defAssignee)
+        }
         await supabase.from('whatsapp_conversations')
-          .update({ bot_active: false, status: 'open' })
+          .update(offHoursUpdate)
           .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
         currentNodeId = 'end'; break
       }
@@ -798,8 +805,12 @@ async function processCustomFlow(
         } else if (cond.conditionType === 'first_message') {
           r = isNewConversation
         } else if (cond.conditionType === 'has_tag') {
-          const tag   = (cond.tag || '').trim()
+          // [FIX P4] Case-insensitive + trimmed comparison (was .includes which is exact-match)
+          const tag   = (cond.tag || '').trim().toLowerCase()
           const scope = cond.tagScope || 'conversation'
+          const tagMatch = (arr: string[]) =>
+            arr.some(t => t.trim().toLowerCase() === tag)
+          console.log('[FLOW CONDITION] has_tag', { tag, scope })
           if (tag) {
             if (scope === 'conversation' || scope === 'both') {
               const { data: convTagData } = await supabase
@@ -808,7 +819,8 @@ async function processCustomFlow(
                 .eq('institution_id', institutionId)
                 .eq('remote_jid', remoteJid)
                 .maybeSingle()
-              r = ((convTagData?.tags as string[]) || []).includes(tag)
+              r = tagMatch((convTagData?.tags as string[]) || [])
+              console.log('[FLOW CONDITION] conv tags:', convTagData?.tags, '→', r)
             }
             if (!r && (scope === 'lead' || scope === 'both')) {
               const { data: convLead } = await supabase
@@ -823,7 +835,8 @@ async function processCustomFlow(
                   .select('tags')
                   .eq('id', convLead.lead_id)
                   .maybeSingle()
-                r = (((leadTagData as any)?.tags as string[]) || []).includes(tag)
+                r = tagMatch(((leadTagData as any)?.tags as string[]) || [])
+                console.log('[FLOW CONDITION] lead tags:', (leadTagData as any)?.tags, '→', r)
               }
             }
           }
@@ -1173,6 +1186,16 @@ async function processFlow(
     if (!isOpen) {
       if (isNewConversation && flow.off_hours_message) {
         await sendAutoMessage(institutionId, remoteJid, flow.off_hours_message)
+        // [FIX P5] Assign default attendant and mark as waiting so agents can pick up
+        const offStdUpdate: Record<string, any> = { bot_active: false, status: 'waiting' }
+        const defAssigneeStd = (flow as any).default_assignee_id
+        if (defAssigneeStd) {
+          offStdUpdate.assigned_user_id = defAssigneeStd
+          console.log('[flow] fora do expediente — atribuindo atendente padrão:', defAssigneeStd)
+        }
+        await supabase.from('whatsapp_conversations')
+          .update(offStdUpdate)
+          .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
       }
       return
     }
@@ -2253,7 +2276,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // ── Automated flow ──
-        await processFlow(institutionId, remoteJid, effectiveText, isNewConversation, interactiveChoiceId)
+        // [FIX P2] If the last outbound message was a template the conversation was
+        // re-engaged by the agent; the bot must NOT restart — mark bot off and wait
+        // for a human agent to respond.
+        const { data: lastOut } = await supabase
+          .from('whatsapp_messages')
+          .select('message_type')
+          .eq('institution_id', institutionId)
+          .eq('remote_jid', remoteJid)
+          .eq('from_me', true)
+          .order('timestamp', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (lastOut?.message_type === 'template') {
+          console.log('[flow] última mensagem saída era template — aguardando atendente, robô não ativado')
+          await supabase.from('whatsapp_conversations')
+            .update({ bot_active: false, status: 'waiting' })
+            .eq('institution_id', institutionId)
+            .eq('remote_jid', remoteJid)
+        } else {
+          await processFlow(institutionId, remoteJid, effectiveText, isNewConversation, interactiveChoiceId)
+        }
       }
 
       // ── Process delivery/read status updates ──────────────────────────────

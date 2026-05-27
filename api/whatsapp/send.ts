@@ -28,13 +28,14 @@ type MsgType = 'text' | 'image' | 'video' | 'audio' | 'document'
 function buildPayload(
   to: string,
   type: MsgType,
-  opts: { message?: string; mediaUrl?: string; caption?: string; filename?: string }
+  opts: { message?: string; mediaUrl?: string; caption?: string; filename?: string; quotedMessageId?: string }
 ): object {
   const base = { messaging_product: 'whatsapp', recipient_type: 'individual', to, type }
+  const context = opts.quotedMessageId ? { context: { message_id: opts.quotedMessageId } } : {}
 
   switch (type) {
     case 'text':
-      return { ...base, text: { body: opts.message!, preview_url: false } }
+      return { ...base, ...context, text: { body: opts.message!, preview_url: false } }
     case 'image':
       return { ...base, image: { link: opts.mediaUrl!, ...(opts.caption ? { caption: opts.caption } : {}) } }
     case 'video':
@@ -126,17 +127,18 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
 
   const {
     institution_id,
-    isAionSend   = false,
+    isAionSend      = false,
     to,
-    type         = 'text' as MsgType,
+    type            = 'text' as MsgType,
     message,
     mediaUrl,
     base64,
     mimetype,
-    filename    = '',
-    caption     = '',
-    sender_name = '',
+    filename        = '',
+    caption         = '',
+    sender_name     = '',
     conversation_id,
+    quoted_message_id,
   } = req.body ?? {}
 
   // ── Validation ──
@@ -206,9 +208,10 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
     // ── Send via Meta Cloud API ──
     const payload = buildPayload(to, type as MsgType, {
       message,
-      mediaUrl: resolvedMediaUrl,
-      caption:  caption || undefined,
-      filename: filename || undefined,
+      mediaUrl:       resolvedMediaUrl,
+      caption:        caption || undefined,
+      filename:       filename || undefined,
+      quotedMessageId: quoted_message_id || undefined,
     })
 
     console.log('send.ts - payload:', JSON.stringify(payload))
@@ -235,20 +238,21 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
 
     // ── Persist message ──
     await supabase.from('whatsapp_messages').insert({
-      institution_id:  isAionSend ? null : institution_id,
-      remote_jid:      to,
-      message_id:      wamid,
-      instance_name:   'cloud-api',
-      content:         type === 'text' ? message : (caption || preview),
-      message_type:    type,
-      media_url:       resolvedMediaUrl || null,
-      from_me:         true,
-      contact_name:    sender_name || null,
-      status:          'sent',
-      direction:       'outbound',
-      is_aion_inbox:   isAionSend,
-      timestamp:       new Date().toISOString(),
-      ...(conversation_id ? { conversation_id } : {}),
+      institution_id:    isAionSend ? null : institution_id,
+      remote_jid:        to,
+      message_id:        wamid,
+      instance_name:     'cloud-api',
+      content:           type === 'text' ? message : (caption || preview),
+      message_type:      type,
+      media_url:         resolvedMediaUrl || null,
+      from_me:           true,
+      contact_name:      sender_name || null,
+      status:            'sent',
+      direction:         'outbound',
+      is_aion_inbox:     isAionSend,
+      timestamp:         new Date().toISOString(),
+      ...(conversation_id    ? { conversation_id }    : {}),
+      ...(quoted_message_id  ? { quoted_message_id }  : {}),
     })
 
     // ── Update conversation last_message ──

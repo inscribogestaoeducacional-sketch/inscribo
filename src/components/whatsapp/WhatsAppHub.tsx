@@ -5,7 +5,7 @@ import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight, ChevronLeft,
   CheckCheck, Check, Zap, Settings, User, Users, Download,
-  X, MoreVertical
+  X, MoreVertical, CornerUpLeft, Trash2
 } from 'lucide-react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -631,17 +631,57 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
 }
 
 // ─── MessageBubble ────────────────────────────────────────────────────────────
-function MessageBubble({ msg, onImageClick, instanceName, contactName }: { msg: Message; onImageClick?: (url: string) => void; instanceName?: string; contactName?: string }) {
+function MessageBubble({
+  msg, onImageClick, instanceName, contactName, onReply, onDelete,
+}: {
+  msg: Message
+  onImageClick?: (url: string) => void
+  instanceName?: string
+  contactName?: string
+  onReply?: (m: Message) => void
+  onDelete?: (m: Message) => void
+}) {
   const isMe = msg.from === 'me'
+  const [hovered, setHovered] = useState(false)
 
   return (
-    <div style={{
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
       display: 'flex',
       justifyContent: isMe ? 'flex-end' : 'flex-start',
       marginBottom: 3,
       paddingLeft: isMe ? '15%' : 0,
       paddingRight: isMe ? 0 : '15%',
+      position: 'relative',
     }}>
+      {/* [FIX P3] Hover action buttons — reply (both sides) + delete (own msgs) */}
+      {hovered && msg.type !== 'deleted' && (
+        <div style={{
+          position: 'absolute',
+          top: '50%', transform: 'translateY(-50%)',
+          [isMe ? 'left' : 'right']: 'calc(100% - 10px)',
+          display: 'flex', flexDirection: 'column', gap: 4, zIndex: 10,
+        }}>
+          <button
+            onClick={() => onReply?.(msg)}
+            title="Responder"
+            style={{ width: 28, height: 28, borderRadius: '50%', background: '#F0FDFB', border: '1px solid #B2E8E2', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00A896' }}
+          >
+            <CornerUpLeft size={13} />
+          </button>
+          {isMe && (
+            <button
+              onClick={() => onDelete?.(msg)}
+              title="Apagar mensagem"
+              style={{ width: 28, height: 28, borderRadius: '50%', background: '#FEF2F2', border: '1px solid #FECACA', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444' }}
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
+        </div>
+      )}
       <div style={{
         maxWidth: '100%',
         padding: '9px 13px',
@@ -871,6 +911,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [mobilePanel, setMobilePanel] = useState<'list' | 'chat'>('list')
 
+  // [FIX P3] Reply-to state
+  const [replyTo, setReplyTo] = useState<Message | null>(null)
+
   useEffect(() => {
     const handler = () => { const m = window.innerWidth < 768; setIsMobile(m); if (!m) setMobilePanel('list') }
     window.addEventListener('resize', handler)
@@ -927,6 +970,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     } catch {}
   }, [])
 
+  // [FIX P1] Stop mic stream only on unmount — keep it alive between recordings so Chrome
+  // doesn't lose the permission grant after the first stopRecordingForPreview call.
+  useEffect(() => {
+    return () => { audioStreamRef.current?.getTracks().forEach(t => t.stop()) }
+  }, [])
+
   const startRecording = async () => {
     if (!activeId) return
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -934,10 +983,14 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       return
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true }
-      })
-      audioStreamRef.current = stream
+      // Reuse existing stream if still active — avoids repeated permission prompts in Chrome
+      let stream = audioStreamRef.current
+      if (!stream || !stream.active) {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true }
+        })
+        audioStreamRef.current = stream
+      }
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
         : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
@@ -1011,7 +1064,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const recorder = mediaRecorderRef.current
     if (!recorder || recorder.state === 'inactive') return
     recorder.stop()
-    audioStreamRef.current?.getTracks().forEach(t => t.stop())
+    // [FIX P1] Do NOT stop the stream here — keep it alive so the next startRecording
+    // can reuse it without triggering a new Chrome permission prompt.
     if (recordingTimerRef.current) { clearInterval(recordingTimerRef.current); recordingTimerRef.current = null }
   }
 
@@ -1936,6 +1990,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const handleSend = async () => {
     if (!inputText.trim() || !activeId) return
     const text = inputText.trim()
+    const quotedMsg = replyTo
     const tempId = `temp-${Date.now()}`
     const tempMsg: Message = {
       id: tempId,
@@ -1945,6 +2000,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       ts: new Date(),
       status: 'sent',
       senderName: user?.full_name || undefined,
+      ...(quotedMsg ? {
+        quoted_message_id: quotedMsg.message_id,
+        quoted_content: quotedMsg.content,
+        quoted_from_me: quotedMsg.from === 'me',
+      } : {}),
     }
 
     setConversations(prev => prev.map(c =>
@@ -1953,6 +2013,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         : c
     ))
     setInputText('')
+    setReplyTo(null)
     setShowQuickReplies(false)
 
     try {
@@ -1971,6 +2032,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           type: 'text',
           message: text,
           sender_name: user?.full_name,
+          ...(quotedMsg?.message_id ? { quoted_message_id: quotedMsg.message_id } : {}),
         }),
       })
 
@@ -2752,6 +2814,26 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }).catch(() => {})
   }
 
+  // [FIX P3] Delete a sent message — mark deleted in DB + notify Meta Cloud API
+  const handleDeleteMessage = async (msg: Message) => {
+    if (!msg.message_id || !effectiveInstitutionId) return
+    // Optimistic update
+    setConversations(prev => prev.map(c =>
+      c.id === activeId
+        ? { ...c, messages: c.messages.map(m => m.id === msg.id ? { ...m, type: 'deleted' as MsgType, content: '🚫 Mensagem apagada' } : m) }
+        : c
+    ))
+    try {
+      await fetch('/api/whatsapp/delete-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ institution_id: effectiveInstitutionId, message_id: msg.message_id }),
+      })
+    } catch (err) {
+      console.error('[deleteMsg]', err)
+    }
+  }
+
   const handleCreateLead = async () => {
     if (!effectiveInstitutionId || !leadForm.responsible_name) return
     try {
@@ -3447,7 +3529,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   <div style={{ flex: 1, height: 1, background: 'linear-gradient(to left, transparent, #D1FAE5, transparent)' }} />
                 </div>
                 {group.msgs.map(msg => (
-                  <MessageBubble key={msg.id} msg={msg} onImageClick={url => setLightboxUrl(url)} instanceName={instance} contactName={activeConv?.name || 'Contato'} />
+                  <MessageBubble key={msg.id} msg={msg} onImageClick={url => setLightboxUrl(url)} instanceName={instance} contactName={activeConv?.name || 'Contato'} onReply={m => { setReplyTo(m); inputRef.current?.focus() }} onDelete={handleDeleteMessage} />
                 ))}
               </div>
             ))}
@@ -3642,6 +3724,24 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     <X style={{ width: 14, height: 14 }} />
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* [FIX P3] Reply preview bar */}
+            {replyTo && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F0FDFB', border: '1px solid #B2E8E2', borderRadius: 10, padding: '6px 12px', marginBottom: 8 }}>
+                <CornerUpLeft size={14} color="#00A896" style={{ flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#00A896', marginBottom: 1 }}>
+                    {replyTo.from === 'me' ? 'Você' : (activeConv?.name || 'Contato')}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {replyTo.content}
+                  </div>
+                </div>
+                <button onClick={() => setReplyTo(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: 2 }}>
+                  <X size={14} />
+                </button>
               </div>
             )}
 
