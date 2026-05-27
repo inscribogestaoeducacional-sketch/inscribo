@@ -1407,6 +1407,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }
     const convMap = new Map(convs.map((c: any) => [c.remote_jid, c]))
     const built = buildConversations(msgs, convMap)
+    const timestamps = msgs.map(m => new Date(m.timestamp).getTime()).filter(Boolean)
+    console.log(`[loadMessages] total=${msgs.length} oldest=${timestamps.length ? new Date(Math.min(...timestamps)).toISOString() : 'n/a'} newest=${timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : 'n/a'}`)
     setConversations(built)
     return built
   }
@@ -1738,6 +1740,60 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         .catch(() => {})
     }
 
+  }, [activeId])
+
+  // Lazy-load messages for conversations that had none after the initial bulk fetch
+  useEffect(() => {
+    if (!activeId) return
+    const conv = conversations.find(c => c.id === activeId)
+    if (!conv || conv.messages.length > 0) return
+
+    const institutionIdForLoad = isAionInbox ? null : effectiveInstitutionId
+    if (!institutionIdForLoad && !isAionInbox) return
+
+    const fetch = async () => {
+      let rows: WhatsappMessage[]
+      if (isAionInbox) {
+        const { data } = await supabase
+          .from('whatsapp_messages')
+          .select('*')
+          .eq('is_aion_inbox', true)
+          .or(`remote_jid.eq.${rawJid(activeId)},remote_jid.eq.${activeId}`)
+          .order('timestamp', { ascending: false })
+          .limit(200)
+        rows = data || []
+      } else {
+        rows = await DatabaseService.getConversationMessages(institutionIdForLoad!, activeId)
+      }
+
+      if (rows.length === 0) return
+
+      const sorted = [...rows].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+      const messages = sorted
+        .filter((m, idx, self) => idx === self.findIndex(t => (t.message_id && t.message_id === m.message_id) || t.id === m.id))
+        .map(m => ({
+          id: m.id,
+          type: mapMsgType(m.message_type),
+          content: m.content,
+          from: (m.from_me ? 'me' : 'them') as 'me' | 'them',
+          ts: new Date(m.timestamp),
+          status: (m.status as Message['status']) || 'sent',
+          media_url: m.media_url,
+          message_id: m.message_id,
+          senderName: m.from_me ? (m.contact_name || undefined) : undefined,
+          quoted_message_id: m.quoted_message_id,
+          quoted_content:    m.quoted_content,
+          quoted_from_me:    m.quoted_from_me,
+        }))
+
+      setConversations(prev => prev.map(c =>
+        c.id === activeId && c.messages.length === 0
+          ? { ...c, messages }
+          : c
+      ))
+    }
+
+    fetch().catch(() => {})
   }, [activeId])
 
   // Load history when switching to history tab (conv events + CRM events)

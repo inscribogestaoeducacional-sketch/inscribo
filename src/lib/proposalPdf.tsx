@@ -7,24 +7,25 @@ if (typeof globalThis !== 'undefined' && !(globalThis as any).Buffer) {
 import React from 'react'
 import { Document, Page, View, Text, Image, Font, StyleSheet } from '@react-pdf/renderer'
 import type { ProposalData } from '../components/superadmin/ProposalContent'
+import AION_LOGO_B64 from './aionLogo'
 
-// ─── Local fonts (served from /public/fonts/) ─────────────────────────────────
+// ─── Local fonts — WOFF (fontkit in react-pdf doesn't support woff2) ──────────
 Font.register({
   family: 'BricolageGrotesque',
   fonts: [
-    { src: '/fonts/BricolageGrotesque-Bold.woff2',      fontWeight: 700 },
-    { src: '/fonts/BricolageGrotesque-ExtraBold.woff2', fontWeight: 800 },
-    { src: '/fonts/BricolageGrotesque-ExtraBold.woff2', fontWeight: 900 },
+    { src: '/fonts/bricolage-grotesque-latin-ext-700-normal.woff', fontWeight: 700 },
+    { src: '/fonts/bricolage-grotesque-latin-ext-800-normal.woff', fontWeight: 800 },
+    { src: '/fonts/bricolage-grotesque-latin-ext-800-normal.woff', fontWeight: 900 },
   ],
 })
 Font.register({
   family: 'PlusJakartaSans',
   fonts: [
-    { src: '/fonts/PlusJakartaSans-Regular.woff2',   fontWeight: 400 },
-    { src: '/fonts/PlusJakartaSans-Medium.woff2',    fontWeight: 500 },
-    { src: '/fonts/PlusJakartaSans-SemiBold.woff2',  fontWeight: 600 },
-    { src: '/fonts/PlusJakartaSans-Bold.woff2',      fontWeight: 700 },
-    { src: '/fonts/PlusJakartaSans-ExtraBold.woff2', fontWeight: 800 },
+    { src: '/fonts/plus-jakarta-sans-latin-ext-400-normal.woff', fontWeight: 400 },
+    { src: '/fonts/plus-jakarta-sans-latin-ext-500-normal.woff', fontWeight: 500 },
+    { src: '/fonts/plus-jakarta-sans-latin-ext-600-normal.woff', fontWeight: 600 },
+    { src: '/fonts/plus-jakarta-sans-latin-ext-700-normal.woff', fontWeight: 700 },
+    { src: '/fonts/plus-jakarta-sans-latin-ext-800-normal.woff', fontWeight: 800 },
   ],
 })
 
@@ -73,7 +74,7 @@ function SectionBar({ text }: { text: string }) {
 function LogoPill({ height = 22 }: { height?: number }) {
   return (
     <View style={{ backgroundColor: '#fff', borderRadius: 10, paddingVertical: 7, paddingHorizontal: 18, alignSelf: 'flex-start' }}>
-      <Image src="/aion-logo-full.png" style={{ height }} />
+      <Image src={AION_LOGO_B64} style={{ height }} />
     </View>
   )
 }
@@ -182,7 +183,7 @@ function Page2() {
       {/* Banner */}
       <View style={{ backgroundColor: VD, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center' }}>
         <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
-          <Text style={{ fontSize: 9, fontWeight: 700, color: VD, fontFamily: 'PlusJakartaSans' }}>✓</Text>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: VD }} />
         </View>
         <Text style={{ fontSize: 11, fontWeight: 700, color: '#fff', fontFamily: 'PlusJakartaSans' }}>Sua secretaria configura em 2 dias. Sem projeto, sem TI, sem custo oculto.</Text>
       </View>
@@ -279,7 +280,7 @@ function Page5({ data, deadline }: { data: ProposalData; deadline: string | null
   const includeItem = (item: string) => (
     <View key={item} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: BORDA, borderRadius: 10 }}>
       <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: VD, alignItems: 'center', justifyContent: 'center', marginRight: 10, flexShrink: 0 }}>
-        <Text style={{ fontSize: 10, color: '#fff', fontWeight: 700, fontFamily: 'PlusJakartaSans' }}>✓</Text>
+        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#fff' }} />
       </View>
       <Text style={{ fontSize: 11, color: AZUL, fontWeight: 500, lineHeight: 1.3, fontFamily: 'PlusJakartaSans' }}>{item}</Text>
     </View>

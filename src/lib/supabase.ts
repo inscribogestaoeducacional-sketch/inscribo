@@ -701,9 +701,29 @@ export class DatabaseService {
       .select('*')
       .eq('institution_id', institutionId)
       .order('timestamp', { ascending: false })
+      .limit(10000)
 
     if (error) {
       console.error('Error loading whatsapp messages:', error)
+      return []
+    }
+    return data || []
+  }
+
+  static async getConversationMessages(institutionId: string, remoteJid: string, limit = 200): Promise<WhatsappMessage[]> {
+    // Match both raw phone ("551199...") and normalized ("551199...@s.whatsapp.net") formats
+    const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
+    const normalized = remoteJid.includes('@') ? remoteJid : `${remoteJid}@s.whatsapp.net`
+    const { data, error } = await supabase
+      .from('whatsapp_messages')
+      .select('*')
+      .eq('institution_id', institutionId)
+      .or(`remote_jid.eq.${raw},remote_jid.eq.${normalized}`)
+      .order('timestamp', { ascending: false })
+      .limit(limit)
+
+    if (error) {
+      console.error('Error loading conversation messages:', error)
       return []
     }
     return data || []
