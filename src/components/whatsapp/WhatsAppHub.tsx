@@ -649,9 +649,11 @@ function MessageBubble({
   onReact?: (m: Message, emoji: string) => void
 }) {
   const isMe = msg.from === 'me'
-  const [hovered, setHovered]           = useState(false)
+  const [hovered, setHovered]                 = useState(false)
   const [showReactPicker, setShowReactPicker] = useState(false)
-  const pickRef = useRef<HTMLDivElement>(null)
+  const [pickerBelow, setPickerBelow]         = useState(false)
+  const pickRef  = useRef<HTMLDivElement>(null)
+  const smileRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!showReactPicker) return
@@ -663,6 +665,16 @@ function MessageBubble({
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [showReactPicker])
+
+  const handleTogglePicker = (ev: React.MouseEvent) => {
+    ev.stopPropagation()
+    if (!showReactPicker) {
+      // If bubble is near the top of the viewport, open downward instead
+      const rect = smileRef.current?.getBoundingClientRect()
+      setPickerBelow(rect ? rect.top < 120 : false)
+    }
+    setShowReactPicker(v => !v)
+  }
 
   const hasAnyReaction = !!(msg.reaction || msg.reaction_attendant)
   const reactionBadge  = [msg.reaction, msg.reaction_attendant].filter(Boolean).join(' ')
@@ -686,45 +698,6 @@ function MessageBubble({
           [isMe ? 'left' : 'right']: 'calc(100% - 10px)',
           display: 'flex', flexDirection: 'column', gap: 4, zIndex: 10,
         }}>
-          {showReactPicker && (
-            <div ref={pickRef} style={{
-              position: 'absolute',
-              bottom: '100%',
-              [isMe ? 'left' : 'right']: 0,
-              marginBottom: 4,
-              background: '#fff',
-              border: '1px solid #E2E8F0',
-              borderRadius: 20,
-              boxShadow: '0 4px 16px rgba(0,0,0,0.14)',
-              display: 'flex',
-              alignItems: 'center',
-              padding: '4px 6px',
-              gap: 2,
-              zIndex: 20,
-              whiteSpace: 'nowrap',
-            }}>
-              {QUICK_EMOJIS.map(e => (
-                <button
-                  key={e}
-                  onClick={ev => { ev.stopPropagation(); onReact?.(msg, e); setShowReactPicker(false) }}
-                  title={e}
-                  style={{
-                    background: msg.reaction_attendant === e ? '#E6F7F4' : 'transparent',
-                    border: 'none',
-                    borderRadius: 8,
-                    fontSize: 20,
-                    cursor: 'pointer',
-                    padding: '2px 4px',
-                    lineHeight: 1,
-                    transform: msg.reaction_attendant === e ? 'scale(1.2)' : 'scale(1)',
-                    transition: 'transform 0.1s',
-                  }}
-                >
-                  {e}
-                </button>
-              ))}
-            </div>
-          )}
           <button
             onClick={() => onReply?.(msg)}
             title="Responder"
@@ -733,7 +706,8 @@ function MessageBubble({
             <CornerUpLeft size={13} />
           </button>
           <button
-            onClick={ev => { ev.stopPropagation(); setShowReactPicker(v => !v) }}
+            ref={smileRef}
+            onClick={handleTogglePicker}
             title="Reagir"
             style={{ width: 28, height: 28, borderRadius: '50%', background: '#FFFBF0', border: '1px solid #FDE68A', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D97706' }}
           >
@@ -754,7 +728,48 @@ function MessageBubble({
           ? '0 2px 10px rgba(13,148,136,0.30)'
           : '0 1px 4px rgba(0,0,0,0.06)',
         position: 'relative',
+        overflow: 'visible',
       }}>
+        {/* Reaction picker — anchored to bubble, opens above (or below near top of screen) */}
+        {showReactPicker && (
+          <div ref={pickRef} style={{
+            position: 'absolute',
+            [pickerBelow ? 'top' : 'bottom']: '100%',
+            [isMe ? 'right' : 'left']: 0,
+            [pickerBelow ? 'marginTop' : 'marginBottom']: 4,
+            background: '#fff',
+            border: '1px solid #E2E8F0',
+            borderRadius: 20,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.14)',
+            display: 'flex',
+            alignItems: 'center',
+            padding: '4px 6px',
+            gap: 2,
+            zIndex: 9999,
+            whiteSpace: 'nowrap',
+          }}>
+            {QUICK_EMOJIS.map(e => (
+              <button
+                key={e}
+                onClick={ev => { ev.stopPropagation(); onReact?.(msg, e); setShowReactPicker(false) }}
+                title={e}
+                style={{
+                  background: msg.reaction_attendant === e ? '#E6F7F4' : 'transparent',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: 20,
+                  cursor: 'pointer',
+                  padding: '2px 4px',
+                  lineHeight: 1,
+                  transform: msg.reaction_attendant === e ? 'scale(1.2)' : 'scale(1)',
+                  transition: 'transform 0.1s',
+                }}
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        )}
         {isMe && msg.senderName && (
           <p style={{
             margin: '0 0 4px',
