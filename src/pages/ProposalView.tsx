@@ -118,8 +118,8 @@ export default function ProposalView() {
       <div style={{ position: 'sticky', top: 0, zIndex: 50, background: '#001a12', borderBottom: '1px solid #0a3d28' }}>
         <div style={{ maxWidth: PW + 48, margin: '0 auto', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 28, height: 28, background: 'linear-gradient(135deg,#00523C,#00A896)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ color: '#fff', fontSize: 13, fontWeight: 900, fontFamily: 'sans-serif' }}>A</span>
+            <div style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 10, padding: '5px 14px', display: 'inline-flex', alignItems: 'center' }}>
+              <img src="/aion-logo-full.png" alt="ÁION EDU" style={{ height: 26, display: 'block' }} />
             </div>
             <div>
               <span style={{ fontSize: 14, fontWeight: 700, color: '#d0ede5' }}>Proposta Comercial</span>
