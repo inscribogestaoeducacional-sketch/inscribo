@@ -983,6 +983,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       return
     }
     try {
+      // [FIX P4] Pre-check: verify at least one audio input device exists before calling
+      // getUserMedia — avoids a confusing NotFoundError when the device is disconnected.
+      if (navigator.mediaDevices.enumerateDevices) {
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        const hasAudio = devices.some(d => d.kind === 'audioinput')
+        if (!hasAudio) {
+          setSendError('Nenhum microfone encontrado. Conecte um microfone e tente novamente.')
+          return
+        }
+      }
+
       // Reuse existing stream if still active — avoids repeated permission prompts in Chrome
       let stream = audioStreamRef.current
       if (!stream || !stream.active) {
@@ -1048,14 +1059,19 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       setRecorderState('recording')
     } catch (err: any) {
       console.error('[AUDIO] getUserMedia error:', err?.name, err?.message, err)
+      // [FIX P4] Clear the stream ref so it isn't reused next time if it's invalid
+      audioStreamRef.current?.getTracks().forEach(t => t.stop())
+      audioStreamRef.current = null
       if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
-        setSendError('Permissão de microfone negada. Clique no 🔒 na barra de endereço e permita.')
+        setSendError('Permissão de microfone negada. Clique no 🔒 na barra de endereço e permita o acesso ao microfone.')
       } else if (err?.name === 'NotFoundError' || err?.name === 'DevicesNotFoundError') {
-        setSendError('Microfone não encontrado.')
+        setSendError('Microfone não encontrado. Verifique se há um microfone conectado ao dispositivo.')
       } else if (err?.name === 'NotReadableError' || err?.name === 'TrackStartError') {
-        setSendError('Microfone em uso por outro aplicativo.')
+        setSendError('Microfone em uso por outro aplicativo. Feche outros apps e tente novamente.')
+      } else if (err?.name === 'OverconstrainedError') {
+        setSendError('Configurações de áudio não suportadas pelo microfone. Tente novamente.')
       } else {
-        setSendError('Erro ao gravar: ' + (err?.message || 'desconhecido'))
+        setSendError('Erro ao acessar microfone: ' + (err?.message || 'desconhecido'))
       }
     }
   }
@@ -1238,6 +1254,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       status: (newMsg.status as Message['status']) || 'sent',
       media_url: newMsg.media_url,
       message_id: newMsg.message_id,
+      quoted_message_id: newMsg.quoted_message_id,
+      quoted_content:    newMsg.quoted_content,
+      quoted_from_me:    newMsg.quoted_from_me,
     }
     setConversations(prev => {
       const normJid = normalizeJid(newMsg.remote_jid)
@@ -2032,7 +2051,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           type: 'text',
           message: text,
           sender_name: user?.full_name,
-          ...(quotedMsg?.message_id ? { quoted_message_id: quotedMsg.message_id } : {}),
+          ...(quotedMsg?.message_id ? {
+            quoted_message_id: quotedMsg.message_id,
+            quoted_content:    quotedMsg.content,
+            quoted_from_me:    quotedMsg.from === 'me',
+          } : {}),
         }),
       })
 
@@ -2128,6 +2151,26 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           ? { ...c, messages: [...c.messages, optimistic], lastMessage: preview, lastTime: optimistic.ts }
           : c
       ))
+
+      // [FIX P3] Assign current attendant + disable bot so customer reply goes to them
+      if (effectiveInstitutionId && user?.id && activeId) {
+        const rJid = rawJid(activeId)
+        await supabase.from('whatsapp_conversations')
+          .update({
+            assigned_user_id:   user.id,
+            assigned_user_name: user.full_name || user.email,
+            bot_active:         false,
+            status:             'waiting',
+          })
+          .eq('institution_id', effectiveInstitutionId)
+          .eq('remote_jid', rJid)
+        setConversations(prev => prev.map(c =>
+          c.id === activeId
+            ? { ...c, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email, bot_active: false, status: 'waiting' as ConvStatus }
+            : c
+        ))
+      }
+
       setShowTemplateModal(false)
       setSelectedTemplate('')
       setTemplateVars({})

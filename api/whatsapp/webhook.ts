@@ -2197,15 +2197,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (convErr) console.error('❌ conv upsert error:', convErr.message)
 
-        // ── Re-open: clear assignee and reset bot so flow restarts clean ──
+        // ── Check if last outbound was a template (used in re-open block AND flow decision) ──
+        // [FIX P3 / P2] Query BEFORE re-open block so we can preserve assignee when needed.
+        const { data: lastOut } = await supabase
+          .from('whatsapp_messages')
+          .select('message_type')
+          .eq('institution_id', institutionId)
+          .eq('remote_jid', remoteJid)
+          .eq('from_me', true)
+          .order('timestamp', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        const lastWasTemplate = lastOut?.message_type === 'template'
+        console.log('[WEBHOOK] lastOut:', lastOut?.message_type, '| lastWasTemplate:', lastWasTemplate)
+
+        // ── Re-open: reset bot and clear assignee — UNLESS last outbound was a template ──
+        // When last msg was a template the attendant sent it intentionally to re-engage
+        // the customer; preserve that assignment so the attendant stays on the conversation.
         if (isNewConversation && existingConv) {
           await supabase.from('whatsapp_conversations')
             .update({
-              assigned_user_id: null,
-              assigned_user_name: null,
-              bot_active: true,
-              bot_current_node: null,
-              bot_variables: {},
+              assigned_user_id:   lastWasTemplate ? (existingConv as any).assigned_user_id   : null,
+              assigned_user_name: lastWasTemplate ? (existingConv as any).assigned_user_name : null,
+              bot_active:         !lastWasTemplate,
+              bot_current_node:   null,
+              bot_variables:      {},
             })
             .eq('institution_id', institutionId)
             .eq('remote_jid', remoteJid)
@@ -2276,20 +2292,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // ── Automated flow ──
-        // [FIX P2] If the last outbound message was a template the conversation was
-        // re-engaged by the agent; the bot must NOT restart — mark bot off and wait
-        // for a human agent to respond.
-        const { data: lastOut } = await supabase
-          .from('whatsapp_messages')
-          .select('message_type')
-          .eq('institution_id', institutionId)
-          .eq('remote_jid', remoteJid)
-          .eq('from_me', true)
-          .order('timestamp', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-
-        if (lastOut?.message_type === 'template') {
+        // [FIX P2 / P3] lastWasTemplate computed before the re-open block above.
+        // When the customer responds to a template, keep the conversation waiting for
+        // the attendant who sent it — do NOT restart the bot.
+        if (lastWasTemplate) {
           console.log('[flow] última mensagem saída era template — aguardando atendente, robô não ativado')
           await supabase.from('whatsapp_conversations')
             .update({ bot_active: false, status: 'waiting' })

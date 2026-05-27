@@ -127,18 +127,20 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
 
   const {
     institution_id,
-    isAionSend      = false,
+    isAionSend       = false,
     to,
-    type            = 'text' as MsgType,
+    type             = 'text' as MsgType,
     message,
     mediaUrl,
     base64,
     mimetype,
-    filename        = '',
-    caption         = '',
-    sender_name     = '',
+    filename         = '',
+    caption          = '',
+    sender_name      = '',
     conversation_id,
     quoted_message_id,
+    quoted_content,
+    quoted_from_me,
   } = req.body ?? {}
 
   // ── Validation ──
@@ -251,8 +253,8 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
       direction:         'outbound',
       is_aion_inbox:     isAionSend,
       timestamp:         new Date().toISOString(),
-      ...(conversation_id    ? { conversation_id }    : {}),
-      ...(quoted_message_id  ? { quoted_message_id }  : {}),
+      ...(conversation_id   ? { conversation_id }   : {}),
+      ...(quoted_message_id ? { quoted_message_id, quoted_content: quoted_content || null, quoted_from_me: quoted_from_me ?? null } : {}),
     })
 
     // ── Update conversation last_message ──
