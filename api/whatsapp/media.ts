@@ -40,9 +40,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { institution_id, base64, mimetype, filename } = req.body
 
-  if (!institution_id || !base64 || !mimetype) {
-    return res.status(400).json({ error: 'institution_id, base64 e mimetype são obrigatórios' })
+  if (!base64 || !mimetype) {
+    return res.status(400).json({ error: 'base64 e mimetype são obrigatórios' })
   }
+
+  // institution_id é opcional: null/undefined → usa 'aion' como prefixo de pasta
+  const pathPrefix = institution_id || 'aion'
 
   try {
     const buffer   = Buffer.from(base64, 'base64')
@@ -50,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const safeName = (filename || `upload.${ext}`)
       .replace(/[^a-zA-Z0-9._-]/g, '_')
       .slice(0, 100) // cap length
-    const storagePath = `${institution_id}/${Date.now()}_${safeName}`
+    const storagePath = `${pathPrefix}/${Date.now()}_${safeName}`
 
     const { error: uploadErr } = await supabase.storage
       .from('whatsapp-media')

@@ -231,6 +231,7 @@ function AudioPlayer({ duration = 15, mediaUrl, isDark = true }: { duration?: nu
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => () => { if (itvRef.current) clearInterval(itvRef.current) }, [])
+  useEffect(() => { console.log('[AUDIO] mediaUrl:', mediaUrl) }, [mediaUrl])
 
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`
   const elapsed = Math.round((progress / 100) * duration)
@@ -663,6 +664,7 @@ export default function AionInboxHub() {
       .channel('aion-messages-rt')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'whatsapp_messages', filter: 'is_aion_inbox=eq.true' }, (payload) => {
         const msg = payload.new as AionMessage
+        console.log('[RT MSG]', msg.message_type, 'media_url:', msg.media_url)
         if (activeJidRef.current && msg.remote_jid === activeJidRef.current) {
           setMessages(prev => {
             if (prev.some(m => m.id === msg.id || (msg.message_id && m.id === msg.message_id))) return prev
@@ -827,7 +829,7 @@ export default function AionInboxHub() {
     try {
       const uploadRes = await fetch('/api/whatsapp/media', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ institution_id: 'aion', base64, mimetype: fileToSend.type, filename: pendingFile.name }),
+        body: JSON.stringify({ institution_id: null, base64, mimetype: fileToSend.type, filename: pendingFile.name }),
       })
       setUploadProgress(65)
       if (!uploadRes.ok) throw new Error(`Upload HTTP ${uploadRes.status}`)
@@ -942,7 +944,7 @@ export default function AionInboxHub() {
       try {
         const uploadRes = await fetch('/api/whatsapp/media', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ institution_id: 'aion', base64, mimetype: mimeType, filename: `audio-${Date.now()}.${mimeType.includes('webm') ? 'webm' : 'mp4'}` }),
+          body: JSON.stringify({ institution_id: null, base64, mimetype: mimeType, filename: `audio-${Date.now()}.${mimeType.includes('webm') ? 'webm' : 'mp4'}` }),
         })
         if (!uploadRes.ok) throw new Error(`Upload HTTP ${uploadRes.status}`)
         const { url: mediaUrl } = await uploadRes.json()
