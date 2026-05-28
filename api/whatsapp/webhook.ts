@@ -686,17 +686,29 @@ async function processCustomFlow(
 
       if (!withinHours) {
         console.log('[flow] transfer bloqueado — fora do horário:', curDay, `${nowTz.getHours()}:${String(nowTz.getMinutes()).padStart(2,'0')}`)
-        if (outsideMsg) await sendAutoMessage(institutionId, remoteJid, outsideMsg)
-        // [FIX P5] Set status to 'waiting' (not 'open') and preserve / assign default attendant
-        const offHoursUpdate: Record<string, any> = { bot_active: false, status: 'waiting' }
-        const defAssignee = (flow as any).default_assignee_id
-        if (defAssignee) {
-          offHoursUpdate.assigned_user_id   = defAssignee
-          console.log('[flow] fora do horário — atribuindo atendente padrão:', defAssignee)
+        const assigneeId = (flow as any).default_assignee_id || (flow as any).timeout_assignee_id || null
+        let assigneeName: string | null = null
+        if (assigneeId) {
+          const { data: assigneeUser } = await supabase
+            .from('users').select('full_name').eq('id', assigneeId).single()
+          assigneeName = (assigneeUser as any)?.full_name || null
         }
         await supabase.from('whatsapp_conversations')
-          .update(offHoursUpdate)
+          .update({
+            status:             'waiting',
+            bot_active:         false,
+            assigned_user_id:   assigneeId,
+            assigned_user_name: assigneeName,
+            last_message_at:    new Date().toISOString(),
+          })
           .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+        if (outsideMsg) await sendAutoMessage(institutionId, remoteJid, outsideMsg)
+        await supabase.from('whatsapp_conversation_events').insert({
+          institution_id: institutionId,
+          remote_jid:     remoteJid,
+          event_type:     'assignment',
+          description:    `Atribuído automaticamente fora do horário para ${assigneeName || 'fila geral'}`,
+        })
         currentNodeId = 'end'; break
       }
 
@@ -1185,17 +1197,29 @@ async function processFlow(
     // Off-hours: only notify on new conversations
     if (!isOpen) {
       if (isNewConversation && flow.off_hours_message) {
-        await sendAutoMessage(institutionId, remoteJid, flow.off_hours_message)
-        // [FIX P5] Assign default attendant and mark as waiting so agents can pick up
-        const offStdUpdate: Record<string, any> = { bot_active: false, status: 'waiting' }
-        const defAssigneeStd = (flow as any).default_assignee_id
-        if (defAssigneeStd) {
-          offStdUpdate.assigned_user_id = defAssigneeStd
-          console.log('[flow] fora do expediente — atribuindo atendente padrão:', defAssigneeStd)
+        const assigneeId = (flow as any).default_assignee_id || (flow as any).timeout_assignee_id || null
+        let assigneeName: string | null = null
+        if (assigneeId) {
+          const { data: assigneeUser } = await supabase
+            .from('users').select('full_name').eq('id', assigneeId).single()
+          assigneeName = (assigneeUser as any)?.full_name || null
         }
         await supabase.from('whatsapp_conversations')
-          .update(offStdUpdate)
+          .update({
+            status:             'waiting',
+            bot_active:         false,
+            assigned_user_id:   assigneeId,
+            assigned_user_name: assigneeName,
+            last_message_at:    new Date().toISOString(),
+          })
           .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+        await sendAutoMessage(institutionId, remoteJid, flow.off_hours_message)
+        await supabase.from('whatsapp_conversation_events').insert({
+          institution_id: institutionId,
+          remote_jid:     remoteJid,
+          event_type:     'assignment',
+          description:    `Atribuído automaticamente fora do horário para ${assigneeName || 'fila geral'}`,
+        })
       }
       return
     }
