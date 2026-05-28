@@ -443,9 +443,10 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [timeoutMessage, setTimeoutMessage]     = useState('Um momento, estou te conectando com um atendente! 👋')
 
   // Bot timeout (inatividade do bot — transferência automática via pg_cron)
-  const [botTimeoutMinutes, setBotTimeoutMinutes]       = useState(10)
-  const [botTimeoutMessage, setBotTimeoutMessage]       = useState('')
-  const [botTimeoutAssigneeId, setBotTimeoutAssigneeId] = useState('')
+  const [botTimeoutMinutes, setBotTimeoutMinutes]           = useState(10)
+  const [botTimeoutMessage, setBotTimeoutMessage]           = useState('')
+  const [botTimeoutAssigneeId, setBotTimeoutAssigneeId]     = useState('')
+  const [botTimeoutAssigneeType, setBotTimeoutAssigneeType] = useState<'user' | 'group'>('user')
 
   // Outside hours & lunch messages
   const [outsideHoursMsg, setOutsideHoursMsg] = useState('Olá! Nosso horário de atendimento é de {horario}. Sua mensagem foi registrada e retornaremos em breve! 👋')
@@ -499,9 +500,10 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
         if (flowData.timeout_message)      setTimeoutMessage(flowData.timeout_message)
         if (flowData.outside_hours_message) setOutsideHoursMsg(flowData.outside_hours_message)
         if (flowData.lunch_message)         setLunchMsg(flowData.lunch_message)
-        if (flowData.bot_timeout_minutes)     setBotTimeoutMinutes(flowData.bot_timeout_minutes)
-        if (flowData.bot_timeout_message)     setBotTimeoutMessage(flowData.bot_timeout_message)
-        if (flowData.bot_timeout_assignee_id) setBotTimeoutAssigneeId(flowData.bot_timeout_assignee_id)
+        if (flowData.bot_timeout_minutes)       setBotTimeoutMinutes(flowData.bot_timeout_minutes)
+        if (flowData.bot_timeout_message)       setBotTimeoutMessage(flowData.bot_timeout_message)
+        if (flowData.bot_timeout_assignee_id)   setBotTimeoutAssigneeId(flowData.bot_timeout_assignee_id)
+        if (flowData.bot_timeout_assignee_type) setBotTimeoutAssigneeType(flowData.bot_timeout_assignee_type)
       }
     } catch {}
     try {
@@ -617,6 +619,7 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
         bot_timeout_minutes:         botTimeoutMinutes,
         bot_timeout_message:         botTimeoutMessage || null,
         bot_timeout_assignee_id:     botTimeoutAssigneeId || null,
+        bot_timeout_assignee_type:   botTimeoutAssigneeId ? botTimeoutAssigneeType : null,
       }
 
       console.log('[SAVE FLOW] dados:', JSON.stringify(saveData))
@@ -945,16 +948,49 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                 </div>
 
                 <div style={{ marginBottom: 16 }}>
-                  <label style={dLabel}>Atendente padrão ao transferir (opcional)</label>
-                  <select
-                    value={botTimeoutAssigneeId}
-                    onChange={e => setBotTimeoutAssigneeId(e.target.value)}
-                    style={{ ...dInput }}>
-                    <option value="">— Fila geral —</option>
-                    {flowUsers.map(u => (
-                      <option key={u.id} value={u.id}>{u.full_name}</option>
+                  <label style={dLabel}>Destino ao transferir (opcional)</label>
+                  {/* Toggle: Atendente / Equipe */}
+                  <div style={{ display: 'flex', gap: 0, marginBottom: 10, borderRadius: 8, overflow: 'hidden', border: '1px solid #E2E8F0', width: 'fit-content' }}>
+                    {(['user', 'group'] as const).map((type, i) => (
+                      <button
+                        key={type}
+                        onClick={() => { setBotTimeoutAssigneeType(type); setBotTimeoutAssigneeId('') }}
+                        style={{
+                          padding: '7px 16px',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          border: 'none',
+                          borderRight: i === 0 ? '1px solid #E2E8F0' : 'none',
+                          background: botTimeoutAssigneeType === type ? '#00A896' : '#F8FAFC',
+                          color: botTimeoutAssigneeType === type ? '#fff' : '#64748B',
+                          cursor: 'pointer',
+                        }}>
+                        {type === 'user' ? '👤 Atendente' : '👥 Equipe'}
+                      </button>
                     ))}
-                  </select>
+                  </div>
+
+                  {botTimeoutAssigneeType === 'user' ? (
+                    <select
+                      value={botTimeoutAssigneeId}
+                      onChange={e => setBotTimeoutAssigneeId(e.target.value)}
+                      style={{ ...dInput }}>
+                      <option value="">— Fila geral —</option>
+                      {flowUsers.map(u => (
+                        <option key={u.id} value={u.id}>{u.full_name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <select
+                      value={botTimeoutAssigneeId}
+                      onChange={e => setBotTimeoutAssigneeId(e.target.value)}
+                      style={{ ...dInput }}>
+                      <option value="">— Fila geral —</option>
+                      {groups.map(g => (
+                        <option key={g.id} value={g.id}>{g.emoji} {g.name}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <button onClick={handleSaveFlow} disabled={savingFlow}

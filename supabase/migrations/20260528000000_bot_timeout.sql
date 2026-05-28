@@ -9,9 +9,10 @@
 -- 1. Colunas de bot timeout em whatsapp_flows
 -- ─────────────────────────────────────────────────────────────────────────────
 ALTER TABLE whatsapp_flows
-  ADD COLUMN IF NOT EXISTS bot_timeout_minutes     INTEGER DEFAULT 10,
-  ADD COLUMN IF NOT EXISTS bot_timeout_message     TEXT,
-  ADD COLUMN IF NOT EXISTS bot_timeout_assignee_id UUID;
+  ADD COLUMN IF NOT EXISTS bot_timeout_minutes       INTEGER DEFAULT 10,
+  ADD COLUMN IF NOT EXISTS bot_timeout_message       TEXT,
+  ADD COLUMN IF NOT EXISTS bot_timeout_assignee_id   UUID,
+  ADD COLUMN IF NOT EXISTS bot_timeout_assignee_type TEXT    DEFAULT 'user';
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 2. Tabela de fila: bot_timeout_queue
@@ -58,6 +59,7 @@ BEGIN
       bot_timeout_minutes,
       bot_timeout_message,
       bot_timeout_assignee_id,
+      bot_timeout_assignee_type,
       default_assignee_id
     FROM whatsapp_flows
     WHERE bot_enabled = true
@@ -84,10 +86,27 @@ BEGIN
         )
     LOOP
       -- Determinar atendente responsável
-      assignee_id := COALESCE(
-        flow_rec.bot_timeout_assignee_id,
-        flow_rec.default_assignee_id
-      );
+      assignee_id := NULL;
+      IF flow_rec.bot_timeout_assignee_type = 'group'
+         AND flow_rec.bot_timeout_assignee_id IS NOT NULL THEN
+        -- Grupo: pegar primeiro membro disponível
+        SELECT member_ids[1] INTO assignee_id
+        FROM whatsapp_groups
+        WHERE id              = flow_rec.bot_timeout_assignee_id
+          AND institution_id  = flow_rec.institution_id
+          AND cardinality(member_ids) > 0
+        LIMIT 1;
+        -- Fallback: atendente padrão do flow se grupo estiver vazio
+        IF assignee_id IS NULL THEN
+          assignee_id := flow_rec.default_assignee_id;
+        END IF;
+      ELSE
+        -- Atendente direto ou padrão do flow
+        assignee_id := COALESCE(
+          flow_rec.bot_timeout_assignee_id,
+          flow_rec.default_assignee_id
+        );
+      END IF;
 
       -- Buscar nome do atendente (se houver)
       assignee_nm := NULL;
