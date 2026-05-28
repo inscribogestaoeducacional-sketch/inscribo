@@ -442,6 +442,11 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [timeoutAssigneeId, setTimeoutAssigneeId] = useState('')
   const [timeoutMessage, setTimeoutMessage]     = useState('Um momento, estou te conectando com um atendente! 👋')
 
+  // Bot timeout (inatividade do bot — transferência automática via pg_cron)
+  const [botTimeoutMinutes, setBotTimeoutMinutes]       = useState(10)
+  const [botTimeoutMessage, setBotTimeoutMessage]       = useState('')
+  const [botTimeoutAssigneeId, setBotTimeoutAssigneeId] = useState('')
+
   // Outside hours & lunch messages
   const [outsideHoursMsg, setOutsideHoursMsg] = useState('Olá! Nosso horário de atendimento é de {horario}. Sua mensagem foi registrada e retornaremos em breve! 👋')
   const [lunchMsg, setLunchMsg]               = useState('Olá! No momento nossa equipe está no horário de almoço. Retornaremos em breve! 🍽️')
@@ -494,6 +499,9 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
         if (flowData.timeout_message)      setTimeoutMessage(flowData.timeout_message)
         if (flowData.outside_hours_message) setOutsideHoursMsg(flowData.outside_hours_message)
         if (flowData.lunch_message)         setLunchMsg(flowData.lunch_message)
+        if (flowData.bot_timeout_minutes)     setBotTimeoutMinutes(flowData.bot_timeout_minutes)
+        if (flowData.bot_timeout_message)     setBotTimeoutMessage(flowData.bot_timeout_message)
+        if (flowData.bot_timeout_assignee_id) setBotTimeoutAssigneeId(flowData.bot_timeout_assignee_id)
       }
     } catch {}
     try {
@@ -606,6 +614,9 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
           ? (flowUsers.find(u => u.id === timeoutAssigneeId)?.full_name || null)
           : null,
         timeout_message:             timeoutMessage,
+        bot_timeout_minutes:         botTimeoutMinutes,
+        bot_timeout_message:         botTimeoutMessage || null,
+        bot_timeout_assignee_id:     botTimeoutAssigneeId || null,
       }
 
       console.log('[SAVE FLOW] dados:', JSON.stringify(saveData))
@@ -899,6 +910,56 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                 <button onClick={handleSaveMsgs} disabled={savingMsgs}
                   style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: msgsSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingMsgs ? 0.7 : 1 }}>
                   {savingMsgs ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : msgsSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar mensagens</>}
+                </button>
+              </div>
+
+              {/* ─── Bot Timeout ──────────────────────────────────────────── */}
+              <div style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '18px 20px' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 16 }}>⏱ Tempo de Inatividade do Bot</div>
+                <p style={{ margin: '0 0 16px', fontSize: 12, color: '#64748B', lineHeight: 1.6 }}>
+                  Quando o bot está ativo e o cliente não responde por X minutos, o sistema envia uma mensagem e transfere para atendimento humano automaticamente.
+                </p>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                  <label style={dLabel}>Transferir após</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={1440}
+                    value={botTimeoutMinutes}
+                    onChange={e => setBotTimeoutMinutes(Math.max(1, Math.min(1440, parseInt(e.target.value) || 1)))}
+                    style={{ width: 72, padding: '7px 10px', fontSize: 13, border: '1px solid #E2E8F0', borderRadius: 8, outline: 'none', textAlign: 'center', color: '#1A2B4A' }}
+                  />
+                  <span style={{ fontSize: 13, color: '#64748B' }}>minutos sem resposta</span>
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <label style={dLabel}>Mensagem ao transferir para atendimento</label>
+                  <textarea
+                    rows={3}
+                    value={botTimeoutMessage}
+                    onChange={e => setBotTimeoutMessage(e.target.value)}
+                    placeholder={'Olá! Vou te conectar com um de nossos atendentes. Aguarde um momento. 😊'}
+                    style={{ ...dInput, resize: 'vertical' as const }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <label style={dLabel}>Atendente padrão ao transferir (opcional)</label>
+                  <select
+                    value={botTimeoutAssigneeId}
+                    onChange={e => setBotTimeoutAssigneeId(e.target.value)}
+                    style={{ ...dInput }}>
+                    <option value="">— Fila geral —</option>
+                    {flowUsers.map(u => (
+                      <option key={u.id} value={u.id}>{u.full_name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <button onClick={handleSaveFlow} disabled={savingFlow}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: flowSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
+                  {savingFlow ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : flowSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar timeout do bot</>}
                 </button>
               </div>
             </div>
