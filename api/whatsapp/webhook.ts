@@ -1618,10 +1618,12 @@ async function processAionMessage({
   msg,
   value,
   supabase,
+  platformWAId = '',
 }: {
   msg: any
   value: any
   supabase: ReturnType<typeof createClient>
+  platformWAId?: string
 }): Promise<void> {
   try {
     const remoteJid   = msg.from as string
@@ -1722,12 +1724,28 @@ async function processAionMessage({
     console.log('[aion] mensagem recebida de', rawPhone, '→ fila:', queue)
 
     // ── Bot processing ────────────────────────────────────────────────────────
-    const { data: aionFlow } = await supabase
-      .from('aion_flows')
-      .select('*')
-      .eq('is_active', true)
-      .eq('bot_enabled', true)
-      .maybeSingle()
+    // Priority: whatsapp_flows (FlowEditor) keyed by platform_whatsapp.id
+    let aionFlow: any = null
+    if (platformWAId) {
+      const { data: wflow } = await supabase
+        .from('whatsapp_flows')
+        .select('*')
+        .eq('institution_id', platformWAId)
+        .maybeSingle()
+      if (wflow?.is_active && wflow?.bot_enabled && wflow?.bot_flow?.nodes?.length) {
+        aionFlow = wflow
+      }
+    }
+    // Fallback: legacy aion_flows table
+    if (!aionFlow) {
+      const { data: legacyFlow } = await supabase
+        .from('aion_flows')
+        .select('*')
+        .eq('is_active', true)
+        .eq('bot_enabled', true)
+        .maybeSingle()
+      aionFlow = legacyFlow
+    }
 
     if (!aionFlow?.bot_flow?.nodes?.length) return
 
@@ -1918,13 +1936,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Check if this is the Áion platform inbox number
       const { data: platformWA } = await supabase
         .from('platform_whatsapp')
-        .select('phone_number_id')
+        .select('id, phone_number_id')
         .eq('connected', true)
         .maybeSingle()
       if (platformWA?.phone_number_id && platformWA.phone_number_id === phoneNumberId) {
         // Process messages for the Áion corporate inbox
         for (const msg of value.messages || []) {
-          await processAionMessage({ msg, value, supabase })
+          await processAionMessage({ msg, value, supabase, platformWAId: platformWA.id ?? '' })
         }
         for (const status of value.statuses || []) {
           await supabase.from('whatsapp_messages')

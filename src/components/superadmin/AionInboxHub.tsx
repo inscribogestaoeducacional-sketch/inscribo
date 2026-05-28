@@ -25,6 +25,8 @@ interface AionConversation {
   bot_active?: boolean
   queue?: string
   tags?: string[]
+  contact_type?: string
+  lead_id?: string
   created_at: string
   is_aion_inbox?: boolean
 }
@@ -574,6 +576,17 @@ export default function AionInboxHub() {
   const [loadingLead, setLoadingLead]               = useState(false)
   const [creatingLead, setCreatingLead]             = useState(false)
   const [loadingConvs, setLoadingConvs]             = useState(true)
+  // tags + lead + contact type
+  const [aionTags, setAionTags]                     = useState<{id:string;name:string;color:string}[]>([])
+  const [addingTag, setAddingTag]                   = useState(false)
+  const [newTag, setNewTag]                         = useState('')
+  const [showLeadModal, setShowLeadModal]           = useState(false)
+  const [leadForm, setLeadForm]                     = useState({ name: '', phone: '', email: '', grade_interest: '' })
+  const [savingLead, setSavingLead]                 = useState(false)
+  const [linkingLead, setLinkingLead]               = useState(false)
+  const [leadSearch, setLeadSearch]                 = useState('')
+  const [leadResults, setLeadResults]               = useState<{id:string;name:string;phone:string}[]>([])
+  const [searchingLeads, setSearchingLeads]         = useState(false)
   // media state
   const [replyTo, setReplyTo]                       = useState<AionMessage | null>(null)
   const [pendingFile, setPendingFile]               = useState<File | null>(null)
@@ -614,6 +627,12 @@ export default function AionInboxHub() {
   }, [])
 
   useEffect(() => { loadConversations() }, [loadConversations])
+
+  // ── load aion_tags ──
+  useEffect(() => {
+    supabase.from('aion_tags').select('*').order('name')
+      .then(({ data }) => setAionTags(data ?? []))
+  }, [])
 
   // ── load consultants ──
   useEffect(() => {
@@ -1010,6 +1029,94 @@ export default function AionInboxHub() {
     setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, bot_active: newVal } : c))
   }
 
+  // ── tags ──
+  const handleAddTag = async (tag: string) => {
+    if (!activeConv || !tag.trim()) return
+    const tags = [...(activeConv.tags || []).filter(t => t !== tag), tag]
+    await supabase.from('whatsapp_conversations').update({ tags }).eq('id', activeConv.id)
+    setActiveConv(prev => prev ? { ...prev, tags } : prev)
+    setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, tags } : c))
+    setAddingTag(false); setNewTag('')
+  }
+
+  const handleRemoveTag = async (tag: string) => {
+    if (!activeConv) return
+    const tags = (activeConv.tags || []).filter(t => t !== tag)
+    await supabase.from('whatsapp_conversations').update({ tags }).eq('id', activeConv.id)
+    setActiveConv(prev => prev ? { ...prev, tags } : prev)
+    setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, tags } : c))
+  }
+
+  // ── contact type ──
+  const updateContactType = async (type: string) => {
+    if (!activeConv) return
+    await supabase.from('whatsapp_conversations').update({ contact_type: type }).eq('id', activeConv.id)
+    setActiveConv(prev => prev ? { ...prev, contact_type: type } : prev)
+    setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, contact_type: type } : c))
+  }
+
+  // ── atendimento ──
+  const handleCloseConversation = async () => {
+    if (!activeConv) return
+    await supabase.from('whatsapp_conversations').update({ status: 'closed' }).eq('id', activeConv.id)
+    setActiveConv(prev => prev ? { ...prev, status: 'closed' } : prev)
+    setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, status: 'closed' } : c))
+  }
+
+  const handleLeaveConversation = async () => {
+    if (!activeConv) return
+    await supabase.from('whatsapp_conversations').update({ status: 'waiting', assigned_user_id: null, assigned_user_name: null }).eq('id', activeConv.id)
+    setActiveConv(prev => prev ? { ...prev, status: 'waiting', assigned_user_id: undefined, assigned_user_name: undefined } : prev)
+    setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, status: 'waiting', assigned_user_id: undefined, assigned_user_name: undefined } : c))
+  }
+
+  // ── lead modal ──
+  const handleCreateLead = async () => {
+    if (!activeConv || !leadForm.name.trim() || savingLead) return
+    setSavingLead(true)
+    try {
+      const phone = leadForm.phone || rawPhone(activeConv.remote_jid)
+      const { data: newLead } = await supabase.from('crm_leads').insert({
+        name: leadForm.name.trim(),
+        phone,
+        email: leadForm.email.trim() || null,
+        grade_interest: leadForm.grade_interest.trim() || null,
+        origin: 'whatsapp',
+        stage: 'interesse',
+      }).select().maybeSingle()
+      if (newLead) {
+        setLead(newLead as AionLead)
+        await supabase.from('whatsapp_conversations')
+          .update({ contact_type: 'lead', lead_id: newLead.id }).eq('id', activeConv.id)
+        setActiveConv(prev => prev ? { ...prev, contact_type: 'lead', lead_id: (newLead as AionLead).id } : prev)
+      }
+    } finally {
+      setSavingLead(false)
+      setShowLeadModal(false)
+      setLeadForm({ name: '', phone: '', email: '', grade_interest: '' })
+    }
+  }
+
+  const searchLeads = async (q: string) => {
+    setLeadSearch(q)
+    if (!q || q.length < 2) { setLeadResults([]); return }
+    setSearchingLeads(true)
+    const { data } = await supabase.from('crm_leads').select('id, name, phone')
+      .or(`name.ilike.%${q}%,phone.ilike.%${q}%`).limit(5)
+    setLeadResults(data ?? [])
+    setSearchingLeads(false)
+  }
+
+  const handleLinkLead = async (leadId: string) => {
+    if (!activeConv) return
+    const { data: linkedLead } = await supabase.from('crm_leads').select('*').eq('id', leadId).maybeSingle()
+    if (linkedLead) setLead(linkedLead as AionLead)
+    await supabase.from('whatsapp_conversations')
+      .update({ lead_id: leadId, contact_type: 'lead' }).eq('id', activeConv.id)
+    setActiveConv(prev => prev ? { ...prev, lead_id: leadId, contact_type: 'lead' } : prev)
+    setLinkingLead(false); setLeadSearch(''); setLeadResults([])
+  }
+
   const filteredConvs = conversations.filter(c => {
     if (filter === 'unread') return (c.unread_count ?? 0) > 0
     if (filter === 'leads') return c.queue === 'leads'
@@ -1307,6 +1414,40 @@ export default function AionInboxHub() {
       </div>
 
       {/* ── Col 3: Contact / Lead panel ───────────────────────────────────── */}
+
+      {/* Lead modal */}
+      {showLeadModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: '28px 28px 24px', width: 420, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', marginBottom: 20 }}>Criar Lead no CRM</div>
+            {([
+              { label: 'Nome *', key: 'name', placeholder: 'Nome do responsável' },
+              { label: 'Telefone', key: 'phone', placeholder: activeConv ? formatPhone(activeConv.remote_jid) : '' },
+              { label: 'E-mail', key: 'email', placeholder: 'email@exemplo.com' },
+              { label: 'Série de interesse', key: 'grade_interest', placeholder: 'Ex: 1º ano EF' },
+            ] as const).map(f => (
+              <div key={f.key} style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, display: 'block' }}>{f.label}</label>
+                <input value={leadForm[f.key]} onChange={e => setLeadForm(p => ({ ...p, [f.key]: e.target.value }))}
+                  placeholder={f.placeholder}
+                  style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #E2E8F0', borderRadius: 8, fontSize: 14, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button onClick={handleCreateLead} disabled={savingLead || !leadForm.name.trim()}
+                style={{ flex: 1, padding: '10px 0', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 9, border: 'none', cursor: (savingLead || !leadForm.name.trim()) ? 'not-allowed' : 'pointer', opacity: (savingLead || !leadForm.name.trim()) ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                {savingLead ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> : <UserPlus style={{ width: 14, height: 14 }} />}
+                Criar Lead
+              </button>
+              <button onClick={() => { setShowLeadModal(false); setLeadForm({ name: '', phone: '', email: '', grade_interest: '' }) }}
+                style={{ padding: '10px 16px', background: '#F1F5F9', color: '#64748B', fontSize: 13, fontWeight: 600, borderRadius: 9, border: 'none', cursor: 'pointer' }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ width: 320, flexShrink: 0, borderLeft: '1px solid #E2E8F0', background: '#fff', overflowY: 'auto' }}>
         {!activeConv ? (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8 }}>
@@ -1329,17 +1470,73 @@ export default function AionInboxHub() {
                   </div>
                 </div>
               </div>
+              {/* Contact type badges */}
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 8 }}>
+                {([
+                  { key: 'lead',     label: 'Nova Família', bg: '#E6F7F5', color: '#0d9488' },
+                  { key: 'client',   label: 'Cliente',      bg: '#D1FAE5', color: '#059669' },
+                  { key: 'supplier', label: 'Fornecedor',   bg: '#EDE9FE', color: '#7C3AED' },
+                  { key: 'other',    label: 'Outro',        bg: '#F1F5F9', color: '#64748B' },
+                ] as const).map(ct => {
+                  const active = activeConv.contact_type === ct.key
+                  return (
+                    <button key={ct.key} onClick={() => updateContactType(active ? '' : ct.key)}
+                      style={{ fontSize: 11, padding: '2px 9px', borderRadius: 9999, fontWeight: 600, cursor: 'pointer', border: `1.5px solid ${active ? ct.color : '#E2E8F0'}`, background: active ? ct.bg : '#fff', color: active ? ct.color : '#94A3B8', transition: 'all 0.15s' }}>
+                      {ct.label}
+                    </button>
+                  )
+                })}
+              </div>
+              {/* Tags */}
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5, display: 'block' }}>Etiquetas</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {(activeConv.tags || []).map(tag => {
+                    const color = aionTags.find(t => t.name === tag)?.color || '#6366F1'
+                    return (
+                      <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 11, padding: '2px 7px', borderRadius: 9999, fontWeight: 600, color: '#fff', background: color }}>
+                        {tag}
+                        <button onClick={() => handleRemoveTag(tag)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)', padding: '0 0 0 2px', lineHeight: 1, fontSize: 13 }}>×</button>
+                      </span>
+                    )
+                  })}
+                  {addingTag ? (
+                    aionTags.length > 0 ? (
+                      <select autoFocus value={newTag}
+                        onChange={e => { if (e.target.value) handleAddTag(e.target.value); else { setAddingTag(false); setNewTag('') } }}
+                        onBlur={() => { setAddingTag(false); setNewTag('') }}
+                        style={{ fontSize: 11, padding: '2px 7px', borderRadius: 9999, border: '1px dashed #D1FAE5', background: '#fff', color: '#1A2B4A', outline: 'none', cursor: 'pointer' }}>
+                        <option value="">Selecionar etiqueta...</option>
+                        {aionTags.filter(t => !(activeConv.tags || []).includes(t.name)).map(t => (
+                          <option key={t.id} value={t.name}>{t.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input autoFocus value={newTag} onChange={e => setNewTag(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleAddTag(newTag); if (e.key === 'Escape') { setAddingTag(false); setNewTag('') } }}
+                        onBlur={() => { if (newTag.trim()) handleAddTag(newTag); else { setAddingTag(false); setNewTag('') } }}
+                        placeholder="Nova etiqueta..." maxLength={20}
+                        style={{ fontSize: 11, padding: '2px 7px', borderRadius: 9999, border: '1px dashed #D1FAE5', background: 'transparent', color: '#1A2B4A', outline: 'none', width: 110 }} />
+                    )
+                  ) : (
+                    <button onClick={() => setAddingTag(true)}
+                      style={{ fontSize: 11, padding: '2px 9px', borderRadius: 9999, border: '1px dashed #D1FAE5', color: '#00A896', background: 'transparent', cursor: 'pointer' }}>
+                      + Etiqueta
+                    </button>
+                  )}
+                </div>
+              </div>
               {lead && (
-                <a href={`/super-admin/crm?lead=${lead.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#00A896', fontWeight: 600, textDecoration: 'none' }}>
+                <a href={`/super-admin/crm?lead=${lead.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#00A896', fontWeight: 600, textDecoration: 'none', marginTop: 8 }}>
                   <ExternalLink style={{ width: 12, height: 12 }} />Ver no CRM
                 </a>
               )}
             </PanelSection>
 
-            {/* LEAD CRM */}
-            <PanelSection title="Lead CRM">
+            {/* LEAD VINCULADO */}
+            <PanelSection title="Lead Vinculado">
               {loadingLead ? (
-                <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 12 }}>
                   <Loader2 style={{ width: 18, height: 18, color: '#00A896', animation: 'spin 1s linear infinite' }} />
                 </div>
               ) : lead ? (
@@ -1371,26 +1568,77 @@ export default function AionInboxHub() {
                   )}
                 </div>
               ) : (
-                <div style={{ textAlign: 'center', padding: '10px 0' }}>
-                  <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 10 }}>Nenhum lead vinculado a este contato.</div>
-                  <button onClick={createLead} disabled={creatingLead}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: '#00A896', color: '#fff', fontSize: 12, fontWeight: 700, borderRadius: 8, border: 'none', cursor: creatingLead ? 'not-allowed' : 'pointer', opacity: creatingLead ? 0.7 : 1 }}>
-                    {creatingLead ? <Loader2 style={{ width: 13, height: 13, animation: 'spin 1s linear infinite' }} /> : <UserPlus style={{ width: 13, height: 13 }} />}
-                    Criar Lead no CRM
-                  </button>
+                <div>
+                  {/* Link lead search */}
+                  {linkingLead ? (
+                    <div style={{ marginBottom: 10 }}>
+                      <input value={leadSearch} onChange={e => searchLeads(e.target.value)}
+                        placeholder="Buscar por nome ou telefone…" autoFocus
+                        style={{ width: '100%', padding: '8px 10px', border: '1.5px solid #E2E8F0', borderRadius: 8, fontSize: 13, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
+                      {searchingLeads && <div style={{ fontSize: 12, color: '#94A3B8', padding: '4px 0' }}>Buscando…</div>}
+                      {leadResults.length > 0 && (
+                        <div style={{ border: '1px solid #E2E8F0', borderRadius: 8, marginTop: 4, overflow: 'hidden' }}>
+                          {leadResults.map(r => (
+                            <button key={r.id} onClick={() => handleLinkLead(r.id)}
+                              style={{ width: '100%', textAlign: 'left', padding: '8px 12px', background: '#fff', border: 'none', borderBottom: '1px solid #F1F5F9', cursor: 'pointer', fontSize: 13 }}
+                              onMouseEnter={e => (e.currentTarget.style.background = '#F0FDFB')}
+                              onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
+                              <div style={{ fontWeight: 600, color: '#1A2B4A' }}>{r.name}</div>
+                              <div style={{ fontSize: 11, color: '#94A3B8' }}>{r.phone}</div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <button onClick={() => { setLinkingLead(false); setLeadSearch(''); setLeadResults([]) }}
+                        style={{ marginTop: 6, fontSize: 12, color: '#94A3B8', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 10, textAlign: 'center' }}>
+                      Nenhum lead vinculado a este contato.
+                    </div>
+                  )}
+                  {!linkingLead && (
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                      <button onClick={() => setShowLeadModal(true)}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 14px', background: '#00A896', color: '#fff', fontSize: 12, fontWeight: 700, borderRadius: 8, border: 'none', cursor: 'pointer' }}>
+                        <UserPlus style={{ width: 12, height: 12 }} /> Criar Lead
+                      </button>
+                      <button onClick={() => setLinkingLead(true)}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 14px', background: '#F1F5F9', color: '#64748B', fontSize: 12, fontWeight: 700, borderRadius: 8, border: 'none', cursor: 'pointer' }}>
+                        Vincular
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </PanelSection>
 
             {/* ATENDIMENTO */}
             <PanelSection title="Atendimento">
+              {/* Concluir / Sair */}
+              {activeConv.status !== 'closed' && (
+                <div style={{ marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  <button onClick={handleCloseConversation}
+                    style={{ width: '100%', padding: '10px 0', fontSize: 13, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 3px 10px rgba(13,148,136,0.3)' }}>
+                    ✅ Concluir Atendimento
+                  </button>
+                  {activeConv.assigned_user_id && (
+                    <button onClick={handleLeaveConversation}
+                      style={{ width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, color: '#92400E', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 10, cursor: 'pointer' }}>
+                      🚪 Sair do Atendimento
+                    </button>
+                  )}
+                </div>
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div>
                   <label style={panelLabelStyle}>Status</label>
                   <select value={activeConv.status} onChange={e => updateStatus(e.target.value)} style={panelSelectStyle}>
                     <option value="waiting">Aguardando</option>
-                    <option value="open">Aberta</option>
-                    <option value="closed">Fechada</option>
+                    <option value="open">Em Atendimento</option>
+                    <option value="closed">Concluído</option>
                   </select>
                 </div>
                 <div>
@@ -1419,14 +1667,6 @@ export default function AionInboxHub() {
                   <span style={{ fontSize: 11, color: '#64748B', fontWeight: 600 }}>Fila:</span>
                   <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 20, padding: '2px 10px', background: queueColor(activeConv.queue).bg, color: queueColor(activeConv.queue).text }}>{queueLabel(activeConv.queue)}</span>
                 </div>
-                {activeConv.tags && activeConv.tags.length > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                    <Tag style={{ width: 11, height: 11, color: '#94A3B8' }} />
-                    {activeConv.tags.map((t, i) => (
-                      <span key={i} style={{ fontSize: 11, background: '#F1F5F9', color: '#64748B', borderRadius: 20, padding: '1px 8px' }}>{t}</span>
-                    ))}
-                  </div>
-                )}
                 <div style={{ fontSize: 12, color: '#94A3B8', display: 'flex', alignItems: 'center', gap: 4 }}>
                   <Clock style={{ width: 11, height: 11 }} />
                   Iniciado em {new Date(activeConv.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
