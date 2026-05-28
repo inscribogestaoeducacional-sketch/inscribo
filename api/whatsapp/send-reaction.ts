@@ -32,32 +32,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     // ── Resolve phone_number_id ──
     let phoneNumberId: string
+    let accessToken: string
 
-    const { data: phoneRecord } = await supabase
-      .from('whatsapp_phone_numbers')
-      .select('phone_number_id')
-      .eq('institution_id', institution_id)
-      .eq('is_active', true)
-      .maybeSingle()
+    if (!institution_id) {
+      // AionInbox path: use platform_whatsapp
+      const { data: platformWA, error: platformErr } = await supabase
+        .from('platform_whatsapp')
+        .select('phone_number_id, access_token')
+        .eq('connected', true)
+        .single()
 
-    if (phoneRecord?.phone_number_id) {
-      phoneNumberId = phoneRecord.phone_number_id
+      if (platformErr || !platformWA) {
+        return res.status(400).json({ error: 'WhatsApp da Áion não configurado ou desconectado' })
+      }
+
+      phoneNumberId = platformWA.phone_number_id
+      accessToken   = platformWA.access_token
     } else {
-      const { data: instRecord } = await supabase
-        .from('institutions')
-        .select('whatsapp_phone_id')
-        .eq('id', institution_id)
+      const { data: phoneRecord } = await supabase
+        .from('whatsapp_phone_numbers')
+        .select('phone_number_id')
+        .eq('institution_id', institution_id)
+        .eq('is_active', true)
         .maybeSingle()
 
-      if (!instRecord?.whatsapp_phone_id) {
-        return res.status(400).json({ error: 'Número WhatsApp não configurado para esta escola' })
-      }
-      phoneNumberId = instRecord.whatsapp_phone_id
-    }
+      if (phoneRecord?.phone_number_id) {
+        phoneNumberId = phoneRecord.phone_number_id
+      } else {
+        const { data: instRecord } = await supabase
+          .from('institutions')
+          .select('whatsapp_phone_id')
+          .eq('id', institution_id)
+          .maybeSingle()
 
-    const accessToken = await getAccessToken(supabase)
-    if (!accessToken) {
-      return res.status(500).json({ error: 'Access token do WhatsApp não configurado' })
+        if (!instRecord?.whatsapp_phone_id) {
+          return res.status(400).json({ error: 'Número WhatsApp não configurado para esta escola' })
+        }
+        phoneNumberId = instRecord.whatsapp_phone_id
+      }
+
+      accessToken = await getAccessToken(supabase)
+      if (!accessToken) {
+        return res.status(500).json({ error: 'Access token do WhatsApp não configurado' })
+      }
     }
 
     // Strip @-suffix — Meta API expects plain phone number
