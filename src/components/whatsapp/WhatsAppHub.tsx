@@ -5,7 +5,7 @@ import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight, ChevronLeft,
   CheckCheck, Check, Zap, Settings, User, Users, Download,
-  X, MoreVertical, CornerUpLeft, SmilePlus
+  X, MoreVertical, CornerUpLeft, SmilePlus, Edit, Trash2
 } from 'lucide-react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -892,6 +892,131 @@ interface WhatsAppHubProps {
 // Module-level set so it survives re-renders and StrictMode double-mounts
 const CLOSING_IDS = new Set<string>()
 
+// ─── Gerenciador de respostas rápidas pessoais do atendente ────────────────────
+interface PersonalQuickReply {
+  id: string
+  title: string
+  message: string
+  shortcut: string | null
+  order_index: number
+}
+
+function QuickReplyManagerModal({ isOpen, onClose, institutionId, userId, onSaved }: {
+  isOpen: boolean; onClose: () => void; institutionId: string; userId: string; onSaved: () => void
+}) {
+  const [items, setItems] = useState<PersonalQuickReply[]>([])
+  const [loading, setLoading] = useState(false)
+  const [editing, setEditing] = useState<PersonalQuickReply | null>(null)
+  const [form, setForm] = useState({ shortcut: '', title: '', message: '' })
+  const [showForm, setShowForm] = useState(false)
+  const [error, setError] = useState('')
+
+  const load = async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('whatsapp_quick_replies')
+      .select('id, title, message, shortcut, order_index')
+      .eq('institution_id', institutionId)
+      .eq('user_id', userId)
+      .order('order_index', { ascending: true })
+    setItems(data || [])
+    setLoading(false)
+  }
+
+  useEffect(() => { if (isOpen) load() }, [isOpen])
+
+  const startNew = () => { setEditing(null); setForm({ shortcut: '', title: '', message: '' }); setShowForm(true); setError('') }
+  const startEdit = (item: PersonalQuickReply) => { setEditing(item); setForm({ shortcut: item.shortcut || '', title: item.title, message: item.message }); setShowForm(true); setError('') }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    const shortcut = form.shortcut.trim() ? (form.shortcut.trim().startsWith('/') ? form.shortcut.trim() : `/${form.shortcut.trim()}`) : null
+    const payload = { institution_id: institutionId, user_id: userId, title: form.title.trim(), message: form.message.trim(), shortcut }
+    const { error: err } = editing
+      ? await supabase.from('whatsapp_quick_replies').update(payload).eq('id', editing.id)
+      : await supabase.from('whatsapp_quick_replies').insert(payload)
+    if (err) { setError(err.message || 'Erro ao salvar'); return }
+    setShowForm(false)
+    await load()
+    onSaved()
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Excluir esta resposta rápida?')) return
+    await supabase.from('whatsapp_quick_replies').delete().eq('id', id)
+    await load()
+    onSaved()
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: '#fff', borderRadius: 20, padding: 24, width: '100%', maxWidth: 480, maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 24px 80px rgba(0,0,0,0.25)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>⚡ Minhas Respostas Rápidas</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><X size={20} /></button>
+        </div>
+
+        {showForm ? (
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {error && <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '8px 12px', fontSize: 12, color: '#DC2626' }}>{error}</div>}
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Atalho (opcional, ex: /oi)</label>
+              <input value={form.shortcut} onChange={e => setForm(f => ({ ...f, shortcut: e.target.value }))} placeholder="/oi"
+                style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Título *</label>
+              <input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Saudação inicial"
+                style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Conteúdo *</label>
+              <textarea required rows={3} value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))} placeholder="Texto completo da resposta"
+                style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, outline: 'none', resize: 'vertical' as const, boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setShowForm(false)} style={{ padding: '8px 16px', borderRadius: 9, border: '1.5px solid #E2E8F0', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#64748B' }}>Cancelar</button>
+              <button type="submit" style={{ padding: '8px 16px', borderRadius: 9, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Salvar</button>
+            </div>
+          </form>
+        ) : (
+          <>
+            <button onClick={startNew} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginBottom: 14 }}>
+              <Plus size={14} /> Nova resposta
+            </button>
+            {loading ? (
+              <p style={{ fontSize: 13, color: '#94A3B8', textAlign: 'center' }}>Carregando...</p>
+            ) : items.length === 0 ? (
+              <p style={{ fontSize: 13, color: '#94A3B8', textAlign: 'center', padding: '20px 0' }}>Nenhuma resposta pessoal cadastrada.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {items.map(item => (
+                  <div key={item.id} style={{ border: '1px solid #E2E8F0', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {item.shortcut && <span style={{ fontSize: 10, fontWeight: 700, color: '#1D4ED8', background: '#EFF6FF', padding: '1px 6px', borderRadius: 999 }}>{item.shortcut}</span>}
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A' }}>{item.title}</span>
+                      </div>
+                      <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{item.message}</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                      <button onClick={() => startEdit(item)} title="Editar" style={{ width: 26, height: 26, borderRadius: 7, border: 'none', background: '#EFF6FF', color: '#3B82F6', cursor: 'pointer' }}><Edit size={12} /></button>
+                      <button onClick={() => handleDelete(item.id)} title="Excluir" style={{ width: 26, height: 26, borderRadius: 7, border: 'none', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer' }}><Trash2 size={12} /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function WhatsAppHub({ institutionId: propInstitutionId, isAionInbox = false }: WhatsAppHubProps = {}) {
   const { user } = useAuth()
   const effectiveInstitutionId = propInstitutionId ?? user?.institution_id ?? ''
@@ -950,7 +1075,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [addingTag, setAddingTag] = useState(false)
   const [newTag, setNewTag] = useState('')
   const [hubTags, setHubTags] = useState<{ id: string; name: string; color: string }[]>([])
-  const [quickReplies, setQuickReplies] = useState<{ id: string; label: string; text: string }[]>([])
+  const [quickReplies, setQuickReplies] = useState<{ id: string; label: string; text: string; shortcut: string | null; user_id: string | null }[]>([])
+  const [showQRManager, setShowQRManager] = useState(false)
+  const [slashMenuDismissed, setSlashMenuDismissed] = useState(false)
+  const [slashHighlightIndex, setSlashHighlightIndex] = useState(0)
   const [flowConfig, setFlowConfig] = useState<{ satisfaction_survey_enabled: boolean; satisfaction_message: string } | null>(null)
 
   // Edit contact inline form
@@ -1272,12 +1400,15 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             type: 'audio',
             mediaUrl,
             sender_name: user?.full_name,
+            sender_user_id: user?.id,
           }),
         })
         if (!sendRes.ok) {
           const err = await sendRes.json().catch(() => ({}))
           console.error('[send-audio] error:', err)
           setSendError('Erro ao enviar áudio.')
+        } else {
+          await stopBotIfActive(activeId)
         }
       } catch (e) {
         console.error('[send-audio] error:', e)
@@ -1616,15 +1747,20 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           } catch {}
         })()
 
-        // Load quick replies from DB
+        // Load quick replies from DB (globais + pessoais — RLS já filtra;
+        // aqui só ordenamos pessoais primeiro, depois globais)
         ;(async () => {
           try {
             const { data } = await supabase
               .from('whatsapp_quick_replies')
-              .select('id, title, message, order_index')
+              .select('id, title, message, order_index, user_id, shortcut')
               .eq('institution_id', effectiveInstitutionId)
               .order('order_index', { ascending: true })
-            if (data) setQuickReplies(data.map((r: any) => ({ id: r.id, label: r.title, text: r.message })))
+            if (data) {
+              const mapped = data.map((r: any) => ({ id: r.id, label: r.title, text: r.message, shortcut: r.shortcut ?? null, user_id: r.user_id ?? null }))
+              mapped.sort((a, b) => (a.user_id ? 0 : 1) - (b.user_id ? 0 : 1))
+              setQuickReplies(mapped)
+            }
           } catch {}
         })()
 
@@ -2446,6 +2582,62 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     setTimeout(() => setHubToast(null), 3000)
   }
 
+  // Ao enviar uma mensagem humana, se o robô ainda estiver ativo na conversa,
+  // desativa e assume — evita o robô responder em seguida gerando conflito
+  // com o que o atendente acabou de escrever. UPDATE com WHERE bot_active =
+  // true evita sobrescrever à toa quando o robô já tiver sido desativado.
+  const stopBotIfActive = async (convId: string) => {
+    if (!effectiveInstitutionId || !user?.id) return
+    const conv = conversationsRef.current.find(c => c.id === convId)
+    if (!conv?.bot_active) return
+
+    const rJid = rawJid(convId)
+    const { data, error } = await supabase
+      .from('whatsapp_conversations')
+      .update({
+        bot_active:         false,
+        assigned_user_id:   user.id,
+        assigned_user_name: user.full_name || user.email,
+        status:             'open',
+      })
+      .eq('institution_id', effectiveInstitutionId)
+      .eq('remote_jid', rJid)
+      .eq('bot_active', true)
+      .select('id')
+
+    if (error || !data || data.length === 0) return
+
+    setConversations(prev => prev.map(c => c.id === convId
+      ? { ...c, bot_active: false, status: 'open' as ConvStatus, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email }
+      : c
+    ))
+
+    await DatabaseService.logConversationEvent({
+      institution_id: effectiveInstitutionId,
+      remote_jid: rJid,
+      event_type: 'bot_stopped',
+      description: `Robô desativado — ${user.full_name || user.email} entrou na conversa`,
+      user_id: user.id,
+      metadata: { triggered_by: 'human_message' },
+    })
+  }
+
+  // Menu "/" de respostas rápidas: ativo enquanto o campo inteiro for só
+  // "/algo" (sem espaço) — some assim que o usuário digita um espaço ou
+  // apaga a barra. Filtra por atalho ou título; só entram itens com atalho.
+  const slashMatch = /^\/(\S*)$/.exec(inputText)
+  const showSlashMenu = !!slashMatch && !slashMenuDismissed
+  const slashQuery = (slashMatch?.[1] || '').toLowerCase()
+  const slashResults = quickReplies
+    .filter(qr => qr.shortcut && (qr.shortcut.toLowerCase().replace(/^\//, '').includes(slashQuery) || qr.label.toLowerCase().includes(slashQuery)))
+    .slice(0, 8)
+
+  const applyQuickReply = (qr: { text: string }) => {
+    setInputText(qr.text)
+    setSlashMenuDismissed(true)
+    inputRef.current?.focus()
+  }
+
   const handleSend = async () => {
     if (!inputText.trim() || !activeId) return
 
@@ -2500,6 +2692,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           type: 'text',
           message: text,
           sender_name: user?.full_name,
+          sender_user_id: user?.id,
           ...(quotedMsg?.message_id ? {
             quoted_message_id: quotedMsg.message_id,
             quoted_content:    quotedMsg.content,
@@ -2523,6 +2716,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             }
           : c
       ))
+
+      await stopBotIfActive(activeId)
 
     } catch (err: any) {
       setConversations(prev => prev.map(c =>
@@ -2559,6 +2754,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           template_name: tmpl.name,
           language: tmpl.language || 'pt_BR',
           components,
+          sender_user_id: user?.id,
         }),
       })
       if (!res.ok) {
@@ -2897,6 +3093,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           filename: pendingFile.name,
           caption: '',
           conversation_id: undefined,
+          sender_name: user?.full_name,
+          sender_user_id: user?.id,
         }),
       })
       setUploadProgress(100)
@@ -2907,6 +3105,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           ? { ...c, messages: c.messages.map(m => m.id === tempId ? { ...m, status: 'sent' as const, media_url: mediaUrl } : m) }
           : c
       ))
+      if (activeId) await stopBotIfActive(activeId)
       setTimeout(() => { setPendingFile(null); setPendingFilePreview(null); setUploadProgress(0) }, 800)
     } catch (err) {
       console.error('[sendPendingFile] error:', err)
@@ -3029,6 +3228,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           template_name: tmpl.name,
           language: tmpl.language || 'pt_BR',
           components,
+          sender_user_id: user?.id,
         }),
       })
       if (!res.ok) throw new Error('Erro ao enviar template')
@@ -4041,9 +4241,14 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               <div style={{ marginBottom: 8, background: '#F0FDFB', borderRadius: 12, border: '1px solid #D1FAE5', padding: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: '#64748B' }}>Respostas rápidas</span>
-                  <button onClick={() => setShowQuickReplies(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: 2 }}>
-                    <X style={{ width: 14, height: 14 }} />
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <button onClick={() => { setShowQuickReplies(false); setShowQRManager(true) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#00A896', fontSize: 11, fontWeight: 600 }}>
+                      Gerenciar minhas
+                    </button>
+                    <button onClick={() => setShowQuickReplies(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: 2 }}>
+                      <X style={{ width: 14, height: 14 }} />
+                    </button>
+                  </div>
                 </div>
                 {quickReplies.length === 0 ? (
                   <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '12px 0' }}>
@@ -4062,7 +4267,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                         onMouseEnter={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#E6F7F5' }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#FFFFFF' }}
                       >
-                        <p style={{ fontSize: 12, fontWeight: 600, color: '#1A2B4A', margin: 0 }}>{qr.label}</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <p style={{ fontSize: 12, fontWeight: 600, color: '#1A2B4A', margin: 0 }}>{qr.label}</p>
+                          <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 999, background: qr.user_id ? '#EFF6FF' : '#ECFDF5', color: qr.user_id ? '#1D4ED8' : '#059669' }}>
+                            {qr.user_id ? 'Pessoal' : 'Global'}
+                          </span>
+                        </div>
                         <p style={{ fontSize: 11, color: '#64748B', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{qr.text}</p>
                       </button>
                     ))}
@@ -4158,6 +4368,30 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   previewPosition="none"
                   skinTonePosition="none"
                 />
+              </div>
+            )}
+
+            {/* Menu "/" de respostas rápidas */}
+            {showSlashMenu && slashResults.length > 0 && (
+              <div style={{ position: 'absolute', bottom: 72, left: 0, right: 0, zIndex: 45, background: '#fff', border: '1px solid #D1FAE5', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', maxHeight: 220, overflowY: 'auto' }}>
+                {slashResults.map((qr, i) => (
+                  <div
+                    key={qr.id}
+                    onMouseDown={e => { e.preventDefault(); applyQuickReply(qr) }}
+                    onMouseEnter={() => setSlashHighlightIndex(i)}
+                    style={{ padding: '9px 14px', cursor: 'pointer', background: i === slashHighlightIndex ? '#F0FDFB' : '#fff', borderBottom: i < slashResults.length - 1 ? '1px solid #F1F5F9' : 'none' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{qr.label}</span>
+                      <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 999, background: qr.user_id ? '#EFF6FF' : '#ECFDF5', color: qr.user_id ? '#1D4ED8' : '#059669' }}>
+                        {qr.user_id ? 'Pessoal' : 'Global'}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: 11, color: '#64748B', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {qr.text.slice(0, 60)}
+                    </p>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -4279,6 +4513,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   onChange={e => {
                     if (windowExpired) return
                     setInputText(e.target.value)
+                    setSlashMenuDismissed(false)
+                    setSlashHighlightIndex(0)
                     if (presenceChannelRef.current && user?.id) {
                       presenceChannelRef.current.track({ userId: user.id, typing: true }).catch(() => {})
                       if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
@@ -4287,7 +4523,15 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                       }, 3000)
                     }
                   }}
-                  onKeyDown={e => { if (!windowExpired && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+                  onKeyDown={e => {
+                    if (showSlashMenu && slashResults.length > 0) {
+                      if (e.key === 'ArrowDown') { e.preventDefault(); setSlashHighlightIndex(i => Math.min(i + 1, slashResults.length - 1)); return }
+                      if (e.key === 'ArrowUp')   { e.preventDefault(); setSlashHighlightIndex(i => Math.max(i - 1, 0)); return }
+                      if (e.key === 'Escape')    { e.preventDefault(); setSlashMenuDismissed(true); return }
+                      if (e.key === 'Enter')     { e.preventDefault(); applyQuickReply(slashResults[slashHighlightIndex] || slashResults[0]); return }
+                    }
+                    if (!windowExpired && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
+                  }}
                   placeholder={windowExpired ? 'Janela de 24h expirada' : 'Digite uma mensagem...'}
                   rows={1}
                   style={{
@@ -5187,6 +5431,26 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         </div>
       )}
 
+      {effectiveInstitutionId && user?.id && (
+        <QuickReplyManagerModal
+          isOpen={showQRManager}
+          onClose={() => setShowQRManager(false)}
+          institutionId={effectiveInstitutionId}
+          userId={user.id}
+          onSaved={() => {
+            supabase.from('whatsapp_quick_replies')
+              .select('id, title, message, order_index, user_id, shortcut')
+              .eq('institution_id', effectiveInstitutionId)
+              .order('order_index', { ascending: true })
+              .then(({ data }) => {
+                if (!data) return
+                const mapped = data.map((r: any) => ({ id: r.id, label: r.title, text: r.message, shortcut: r.shortcut ?? null, user_id: r.user_id ?? null }))
+                mapped.sort((a, b) => (a.user_id ? 0 : 1) - (b.user_id ? 0 : 1))
+                setQuickReplies(mapped)
+              })
+          }}
+        />
+      )}
     </>
   )
 }

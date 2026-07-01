@@ -1107,15 +1107,28 @@ async function processFlow(
       return
     }
 
+    // Humano já atendendo (bot desativado quando o atendente respondeu) —
+    // nunca deixa o robô processar essa conversa, nem no fluxo customizado
+    // nem no fluxo padrão (menu_enabled). Sem isso, a seção "Menu choice"
+    // do fluxo padrão respondia e podia até reatribuir a conversa mesmo com
+    // um atendente humano já conversando (race condition cliente↔atendente↔bot).
+    const { data: guardConvState } = await supabase
+      .from('whatsapp_conversations')
+      .select('bot_active, assigned_user_id, bot_variables')
+      .eq('institution_id', institutionId)
+      .eq('remote_jid', remoteJid)
+      .maybeSingle()
+
+    if (guardConvState?.bot_active === false && guardConvState?.assigned_user_id) {
+      console.log('[flow] humano atendendo, robô pausado (guard global)')
+      return
+    }
+
     // c) Custom bot_flow — highest priority, bypasses working-hours gate entirely.
     //    The flow itself can handle off-hours via condition nodes.
     if (flow.bot_enabled && flow.bot_flow?.nodes?.length) {
-      const { data: convState } = await supabase
-        .from('whatsapp_conversations')
-        .select('bot_active, assigned_user_id, bot_variables')
-        .eq('institution_id', institutionId)
-        .eq('remote_jid', remoteJid)
-        .maybeSingle()
+      // Reaproveita a leitura do guard acima — mesma linha, sem round-trip extra.
+      const convState = guardConvState
 
       console.log('[FLOW] convState:', { bot_active: convState?.bot_active, assigned_user_id: convState?.assigned_user_id })
 

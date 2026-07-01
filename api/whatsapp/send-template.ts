@@ -38,6 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     language       = 'pt_BR',
     components     = [],
     conversation_id,
+    sender_user_id,
   } = req.body
 
   if (!institution_id || !to || !template_name) {
@@ -159,6 +160,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       content:       preview,
       message_type:  'template',
       from_me:       true,
+      sender_user_id: sender_user_id || null,
       status:        'sent',
       direction:     'outbound',
       timestamp:     new Date().toISOString(),
