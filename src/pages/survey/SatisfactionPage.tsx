@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { createNotification } from '../../lib/notifications'
+import SurveyQuestion, { SurveyQuestionData } from '../../components/survey/SurveyQuestion'
 
 // ─── tipos ──────────────────────────────────────────────────
 interface Survey {
@@ -13,6 +14,8 @@ interface Survey {
   status: 'draft' | 'active' | 'closed'
   survey_token: string
   response_count: number
+  survey_mode: 'default' | 'custom'
+  redirect_url: string | null
 }
 
 interface Institution {
@@ -149,6 +152,10 @@ export default function SatisfactionPage() {
   const [answers, setAnswers] = useState<Answers>({})
   const [animating, setAnimating] = useState(false)
 
+  // pesquisa customizada por instituição
+  const [customQuestions, setCustomQuestions] = useState<SurveyQuestionData[]>([])
+  const [customAnswers, setCustomAnswers] = useState<Answers>({})
+
   useEffect(() => {
     if (!token) { setStatus('invalid'); return }
     loadSurvey()
@@ -163,6 +170,16 @@ export default function SatisfactionPage() {
 
     if (error || !data) { setStatus('invalid'); return }
     if (data.status === 'closed') { setStatus('closed'); return }
+
+    if (data.survey_mode === 'custom') {
+      const { data: questions } = await supabase
+        .from('satisfaction_questions')
+        .select('*')
+        .eq('survey_id', data.id)
+        .order('order_index', { ascending: true })
+      if (!questions || questions.length === 0) { setStatus('invalid'); return }
+      setCustomQuestions(questions)
+    }
 
     setSurvey(data)
 
@@ -179,23 +196,30 @@ export default function SatisfactionPage() {
   }
 
   const brandColor = institution?.primary_color || '#F97316'
+  const isCustom = survey?.survey_mode === 'custom'
+  const activeQuestions: (Question | SurveyQuestionData)[] = isCustom ? customQuestions : QUESTIONS
 
-  const current = QUESTIONS[currentIndex]
-  const isLast = currentIndex === QUESTIONS.length - 1
-  const progress = Math.round((currentIndex / QUESTIONS.length) * 100)
+  const current = activeQuestions[currentIndex]
+  const isLast = currentIndex === activeQuestions.length - 1
+  const progress = activeQuestions.length > 0 ? Math.round((currentIndex / activeQuestions.length) * 100) : 0
+  const currentLabel = current ? (isCustom ? (current as SurveyQuestionData).title : (current as Question).text) : ''
+  const currentOptional = current ? (isCustom ? !(current as SurveyQuestionData).required : (current as Question).optional) : true
 
   function setAnswer(value: number | string) {
-    setAnswers(prev => ({ ...prev, [current.id]: value }))
+    if (!current) return
+    if (isCustom) setCustomAnswers(prev => ({ ...prev, [current.id]: value }))
+    else setAnswers(prev => ({ ...prev, [current.id]: value }))
   }
 
   function canAdvance() {
-    if (current.optional) return true
-    const val = answers[current.id]
+    if (!current) return false
+    if (currentOptional) return true
+    const val = isCustom ? customAnswers[current.id] : answers[current.id]
     return val !== undefined && val !== null && val !== ''
   }
 
   function advance() {
-    if (currentIndex < QUESTIONS.length - 1) {
+    if (currentIndex < activeQuestions.length - 1) {
       setAnimating(true)
       setTimeout(() => {
         setCurrentIndex(i => i + 1)
@@ -224,7 +248,8 @@ export default function SatisfactionPage() {
         institution_id: survey.institution_id,
         respondent_name: idName.trim() || null,
         respondent_grade: idGrade || null,
-        answers,
+        answers: isCustom ? {} : answers,
+        custom_answers: isCustom ? customAnswers : null,
       })
 
       await supabase
@@ -246,6 +271,11 @@ export default function SatisfactionPage() {
           severity: 'info',
           action_url: '/surveys',
         })
+      }
+
+      if (survey.redirect_url) {
+        window.location.href = survey.redirect_url
+        return
       }
 
       setStatus('done')
@@ -426,18 +456,27 @@ export default function SatisfactionPage() {
             transition: 'opacity 0.2s, transform 0.2s',
           }}>
             <p style={{ fontSize: 11, color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', margin: '0 0 12px' }}>
-              Pergunta {currentIndex + 1} de {QUESTIONS.length}
+              Pergunta {currentIndex + 1} de {activeQuestions.length}
             </p>
             <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1E2D6B', margin: '0 0 28px', lineHeight: 1.4 }}>
-              {current.text}
-              {current.optional && <span style={{ fontSize: 12, color: '#CBD5E1', fontWeight: 400, marginLeft: 8 }}>(opcional)</span>}
+              {currentLabel}
+              {currentOptional && <span style={{ fontSize: 12, color: '#CBD5E1', fontWeight: 400, marginLeft: 8 }}>(opcional)</span>}
             </h2>
 
+            {isCustom && current && (
+              <SurveyQuestion
+                question={current as SurveyQuestionData}
+                value={customAnswers[current.id]}
+                onChange={setAnswer}
+                brandColor={brandColor}
+              />
+            )}
+
             {/* scale — 5 botões grandes lado a lado */}
-            {current.type === 'scale' && (
+            {!isCustom && (current as Question).type === 'scale' && (
               <div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 16 }}>
-                  {Array.from({ length: (current.max ?? 5) - (current.min ?? 1) + 1 }, (_, i) => i + (current.min ?? 1)).map(n => {
+                  {Array.from({ length: ((current as Question).max ?? 5) - ((current as Question).min ?? 1) + 1 }, (_, i) => i + ((current as Question).min ?? 1)).map(n => {
                     const selected = answers[current.id] === n
                     return (
                       <button
@@ -459,9 +498,9 @@ export default function SatisfactionPage() {
                   })}
                 </div>
                 {/* labels embaixo dos botões */}
-                {current.labels && (
+                {(current as Question).labels && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
-                    {current.labels.map((label, i) => (
+                    {(current as Question).labels!.map((label, i) => (
                       <div key={i} style={{ textAlign: 'center', fontSize: 10, color: '#94A3B8', lineHeight: 1.3, padding: '0 2px' }}>
                         {label}
                       </div>
@@ -472,9 +511,9 @@ export default function SatisfactionPage() {
             )}
 
             {/* select — opções como botões */}
-            {current.type === 'select' && (
+            {!isCustom && (current as Question).type === 'select' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {current.options?.map(opt => {
+                {(current as Question).options?.map(opt => {
                   const selected = answers[current.id] === opt
                   return (
                     <button
@@ -498,7 +537,7 @@ export default function SatisfactionPage() {
             )}
 
             {/* text */}
-            {current.type === 'text' && (
+            {!isCustom && (current as Question).type === 'text' && (
               <textarea
                 value={(answers[current.id] as string) || ''}
                 onChange={e => setAnswer(e.target.value)}
@@ -533,7 +572,7 @@ export default function SatisfactionPage() {
       </div>
 
       {/* Botão FIXO no rodapé — sempre visível */}
-      {(canAdvance() || current.optional) && (
+      {(canAdvance() || currentOptional) && (
         <div style={{ position: 'sticky', bottom: 0, background: 'white', borderTop: '1px solid #E2E8F0', padding: '16px 24px' }}>
           <div style={{ maxWidth: 560, margin: '0 auto' }}>
             {status === 'submitting' ? (
@@ -561,7 +600,7 @@ export default function SatisfactionPage() {
       )}
 
       {/* Botão skip para opcionais sem resposta */}
-      {!canAdvance() && current.optional && !isLast && (
+      {!canAdvance() && currentOptional && !isLast && (
         <div style={{ position: 'sticky', bottom: 0, background: 'white', borderTop: '1px solid #E2E8F0', padding: '16px 24px' }}>
           <div style={{ maxWidth: 560, margin: '0 auto' }}>
             <button

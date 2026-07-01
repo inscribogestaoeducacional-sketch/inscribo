@@ -603,31 +603,57 @@ Máximo 400 palavras. Direto e prático.`
 
     // ── PESQUISA DE SATISFAÇÃO ────────────────────────────────────────────────
     if (action === 'survey_report') {
-      const { responses, surveyTitle, institutionName } = payload as {
-        responses: { answers: Record<string, unknown> }[]
+      const { responses, surveyTitle, institutionName, surveyMode, questions } = payload as {
+        responses: { answers: Record<string, unknown>; custom_answers?: Record<string, unknown> | null }[]
         surveyTitle: string; institutionName: string
+        surveyMode?: 'default' | 'custom'
+        questions?: { id: string; title: string; question_type: string; options?: { options?: string[] } | null }[]
       }
       function avg(nums: number[]) {
         const valid = nums.filter(n => typeof n === 'number' && !isNaN(n))
         return valid.length > 0 ? valid.reduce((a, b) => a + b, 0) / valid.length : 0
       }
-      const avgScores = {
-        general:        avg(responses.map(r => r.answers.general as number)),
-        teaching:       avg(responses.map(r => r.answers.teaching as number)),
-        communication:  avg(responses.map(r => r.answers.communication as number)),
-        infrastructure: avg(responses.map(r => r.answers.infrastructure as number)),
-        cost_benefit:   avg(responses.map(r => r.answers.cost_benefit as number)),
-      }
-      const reenrollmentDist = responses.reduce((acc: Record<string, number>, r) => {
-        const key = r.answers.reenrollment as string
-        if (key) acc[key] = (acc[key] ?? 0) + 1
-        return acc
-      }, {})
-      const comments = responses.filter(r => r.answers.comment).map(r => r.answers.comment as string).slice(0, 10)
-      const prompt = `Especialista em gestão escolar brasileira. Analise "${surveyTitle}" do ${institutionName}. Retorne APENAS JSON.
+
+      let prompt: string
+      if (surveyMode === 'custom' && questions && questions.length > 0) {
+        const perQuestion = questions.map(q => {
+          const values = responses.map(r => r.custom_answers?.[q.id]).filter(v => v !== undefined && v !== null && v !== '')
+          if (q.question_type === 'scale' || q.question_type === 'nps') {
+            return { title: q.title, type: q.question_type, average: avg(values.filter(v => typeof v === 'number') as number[]), n: values.length }
+          }
+          if (q.question_type === 'multiple_choice') {
+            const dist = (q.options?.options || []).reduce((acc: Record<string, number>, opt) => {
+              acc[opt] = values.filter(v => v === opt).length
+              return acc
+            }, {})
+            return { title: q.title, type: q.question_type, distribution: dist }
+          }
+          return { title: q.title, type: q.question_type, samples: (values as string[]).slice(0, 8) }
+        })
+        prompt = `Especialista em gestão escolar brasileira. Analise a pesquisa customizada "${surveyTitle}" do ${institutionName}, com ${responses.length} respostas. Retorne APENAS JSON.
+Esta pesquisa tem perguntas próprias da escola (não as 7 perguntas padrão) — interprete cada pergunta pelo seu título e tipo.
+Perguntas e agregados: ${JSON.stringify(perQuestion)}
+Se não houver pergunta sobre rematrícula/renovação, estime "reenrollment_risk" como "médio" e diga em "reenrollment_analysis" que a pesquisa não perguntou diretamente sobre isso.
+{ "overall_score": <0-10>, "summary": "<2-3 frases>", "strengths": ["<1>","<2>","<3>"], "weaknesses": ["<1>","<2>"], "reenrollment_risk": "<baixo|médio|alto>", "reenrollment_analysis": "<2 frases>", "priority_actions": ["<1>","<2>","<3>"], "retention_opportunities": "<1 frase>" }`
+      } else {
+        const avgScores = {
+          general:        avg(responses.map(r => r.answers.general as number)),
+          teaching:       avg(responses.map(r => r.answers.teaching as number)),
+          communication:  avg(responses.map(r => r.answers.communication as number)),
+          infrastructure: avg(responses.map(r => r.answers.infrastructure as number)),
+          cost_benefit:   avg(responses.map(r => r.answers.cost_benefit as number)),
+        }
+        const reenrollmentDist = responses.reduce((acc: Record<string, number>, r) => {
+          const key = r.answers.reenrollment as string
+          if (key) acc[key] = (acc[key] ?? 0) + 1
+          return acc
+        }, {})
+        const comments = responses.filter(r => r.answers.comment).map(r => r.answers.comment as string).slice(0, 10)
+        prompt = `Especialista em gestão escolar brasileira. Analise "${surveyTitle}" do ${institutionName}. Retorne APENAS JSON.
 Médias (1-5): ${JSON.stringify(avgScores)} | Rematrícula: ${JSON.stringify(reenrollmentDist)} | Respostas: ${responses.length}
 Comentários: ${JSON.stringify(comments)}
 { "overall_score": <0-10>, "summary": "<2-3 frases>", "strengths": ["<1>","<2>","<3>"], "weaknesses": ["<1>","<2>"], "reenrollment_risk": "<baixo|médio|alto>", "reenrollment_analysis": "<2 frases>", "priority_actions": ["<1>","<2>","<3>"], "retention_opportunities": "<1 frase>" }`
+      }
       const raw = await callClaude(prompt, 800)
       let parsed
       try {
