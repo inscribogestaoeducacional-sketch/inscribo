@@ -2277,6 +2277,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             })
             .eq('institution_id', institutionId)
             .eq('remote_jid', remoteJid)
+
+          // Só registra "reaberta" quando o dono foi de fato limpo (voltou pra
+          // fila geral) — no caso lastWasTemplate o atendente é mantido, não
+          // é uma reabertura para a fila.
+          if (!lastWasTemplate) {
+            await supabase.from('whatsapp_conversation_events').insert({
+              institution_id: institutionId,
+              remote_jid:     remoteJid,
+              event_type:     'reopened',
+              description:    'Cliente enviou mensagem — conversa reaberta e voltou para fila',
+              metadata:       { previous_status: 'closed' },
+            })
+          }
         }
 
         // ── Increment unread count (notification badge) ──

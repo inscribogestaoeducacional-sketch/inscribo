@@ -880,6 +880,38 @@ export class DatabaseService {
       .upsert({ institution_id: institutionId, remote_jid: raw, assigned_user_id: userId, assigned_user_name: userName }, { onConflict: 'institution_id,remote_jid' })
   }
 
+  // Tenta atribuir a conversa ao usuário atual se ainda não tiver dono.
+  // O UPDATE com WHERE assigned_user_id IS NULL é atômico no Postgres — evita
+  // que dois atendentes assumam a mesma conversa ao mesmo tempo (race condition).
+  // Retorna true se conseguiu assumir, false se outro atendente já pegou antes.
+  static async claimConversationIfUnassigned(
+    institutionId: string,
+    remoteJid: string,
+    userId: string,
+    userName: string
+  ): Promise<boolean> {
+    const raw  = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
+    const norm = `${raw}@s.whatsapp.net`
+
+    // remote_jid é gravado raw para conversas Meta Cloud API (provedor ativo)
+    // e com sufixo "@s.whatsapp.net" para conversas Evolution/Baileys —
+    // uma única query casando os dois formatos cobre ambos os provedores.
+    const { data, error } = await supabase
+      .from('whatsapp_conversations')
+      .update({
+        assigned_user_id:   userId,
+        assigned_user_name: userName,
+        status:             'open',
+      })
+      .eq('institution_id', institutionId)
+      .in('remote_jid', [raw, norm])
+      .is('assigned_user_id', null)
+      .select('id')
+
+    if (error) throw error
+    return (data?.length ?? 0) > 0
+  }
+
   static async transferConversation(institutionId: string, remoteJid: string, newUserId: string, newUserName: string, fromUserName: string, fromUserId?: string): Promise<void> {
     const raw  = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     const norm = `${raw}@s.whatsapp.net`
@@ -893,21 +925,18 @@ export class DatabaseService {
       updatePayload.transferred_from = fromUserId
     }
 
-    const [r1, r2] = await Promise.all([
-      supabase.from('whatsapp_conversations')
-        .update(updatePayload)
-        .eq('institution_id', institutionId)
-        .eq('remote_jid', raw)
-        .select(),
-      supabase.from('whatsapp_conversations')
-        .update(updatePayload)
-        .eq('institution_id', institutionId)
-        .eq('remote_jid', norm)
-        .select(),
-    ])
+    // A trigger trg_snapshot_visibility_on_transfer cuida de preservar o
+    // acesso do atendente anterior ao histórico — nenhuma lógica de
+    // visibilidade é necessária aqui.
+    // remote_jid é gravado raw para conversas Meta Cloud API (provedor ativo)
+    // e no formato "...@s.whatsapp.net" para conversas Evolution/Baileys —
+    // uma única query casando os dois formatos cobre ambos os provedores.
+    const { error } = await supabase.from('whatsapp_conversations')
+      .update(updatePayload)
+      .eq('institution_id', institutionId)
+      .in('remote_jid', [raw, norm])
 
-    console.log('[TRANSFER] raw result:', r1.data, r1.error)
-    console.log('[TRANSFER] norm result:', r2.data, r2.error)
+    if (error) throw error
   }
 
   static async setConversationContactType(institutionId: string, remoteJid: string, contactType: string): Promise<void> {

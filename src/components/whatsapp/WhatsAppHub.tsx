@@ -2148,6 +2148,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   const naoLidas = conversations.filter(c => !c.isGroup && (c.unreadCount || 0) > 0).length
 
+  // Fila de "aguardando": sem atendente e status waiting — visível a todos os
+  // atendentes da instituição (RLS já garante isso; aqui é só organização visual).
+  const waitingQueueConvs = conversations.filter(c => !c.isGroup && !c.assigned_user_id && c.status === 'waiting')
+
   const filteredConvs = conversations.filter(c => {
     if (c.isGroup) return false
     if (!search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search)) {
@@ -2170,8 +2174,209 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     return false
   })
 
+  // Agrupamento visual da lista (respeita os filtros de busca/status já aplicados
+  // em filteredConvs). RLS já garante que um atendente comum nunca recebe do
+  // backend conversas de outro atendente — "outras conversas" só é populado
+  // de fato para quem tem user_can_see_all_conversations() = true (admin etc).
+  const filteredWaitingConvs = filteredConvs.filter(c => !c.assigned_user_id && c.status === 'waiting')
+  const filteredMyConvs      = filteredConvs.filter(c => c.assigned_user_id === user?.id)
+  const filteredOtherConvs   = filteredConvs.filter(c =>
+    !(!c.assigned_user_id && c.status === 'waiting') && c.assigned_user_id !== user?.id
+  )
+
+  const renderConvItem = (conv: Conversation) => {
+    const isActive = conv.id === activeId
+    const preview = getLastMsgPreview(conv.lastMessage)
+    const isFree = !conv.assigned_user_id && conv.status === 'waiting'
+    // Inline status colors
+    const statusColors: Record<string, { bg: string; dot: string; text: string }> = {
+      waiting: { bg: '#FEF3C7', dot: '#D97706', text: '#D97706' },
+      open:    { bg: '#D1FAE5', dot: '#059669', text: '#059669' },
+      closed:  { bg: '#E2E8F0', dot: '#94A3B8', text: '#64748B' },
+    }
+    const sc = statusColors[conv.status] ?? statusColors['waiting']
+    return (
+      <div
+        key={conv.id}
+        onClick={() => { setActiveId(conv.id); if (isMobile) setMobilePanel('chat') }}
+        style={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 10,
+          padding: '11px 14px',
+          cursor: 'pointer',
+          borderLeft: isActive ? '3px solid #00A896' : isFree ? '3px solid #F59E0B' : '3px solid transparent',
+          borderBottom: '1px solid #F0FDFB',
+          background: isActive ? 'linear-gradient(135deg, #E6F7F5 0%, #F0FDFB 100%)' : isFree ? '#FFFBEB' : 'transparent',
+          transition: 'all 0.15s',
+        }}
+        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = isFree ? '#FEF3C7' : '#F8FAFC' }}
+        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = isFree ? '#FFFBEB' : 'transparent' }}
+      >
+        {/* Avatar com ring colorido quando ativo */}
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: '50%',
+            background: isActive
+              ? 'linear-gradient(135deg, #00A896, #0DD3BF)'
+              : getAvatarBgColor(conv.name),
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 16, fontWeight: 700, color: 'white',
+            border: isActive ? '2px solid #00A896' : '2px solid transparent',
+            boxShadow: isActive ? '0 0 0 3px rgba(0,168,150,0.15)' : 'none',
+            transition: 'all 0.2s',
+            overflow: 'hidden',
+          }}>
+            {conv.profile_picture_url
+              ? <img src={conv.profile_picture_url} alt={conv.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              : conv.isGroup
+              ? <Users style={{ width: 20, height: 20, color: 'rgba(255,255,255,0.9)' }} />
+              : getInitials(conv.name)
+            }
+          </div>
+          {/* Badge do atendente */}
+          {conv.assigned_user_name && (
+            <div style={{
+              position: 'absolute', bottom: -1, right: -1,
+              width: 16, height: 16, borderRadius: '50%',
+              background: '#1A2B4A', border: '2px solid white',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 7, fontWeight: 700, color: 'white',
+            }}>
+              {getInitials(conv.assigned_user_name).slice(0, 1)}
+            </div>
+          )}
+        </div>
+
+        {/* Conteúdo */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+            <span style={{
+              fontSize: 13, fontWeight: 700,
+              color: isActive ? '#007A6E' : '#1A2B4A',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              maxWidth: 160,
+            }}>
+              {conv.name}
+            </span>
+            <span style={{ fontSize: 10, color: '#94A3B8', flexShrink: 0 }}>
+              {fmtConvTime(conv.lastTime)}
+            </span>
+          </div>
+
+          <p style={{
+            fontSize: 12, color: '#64748B', margin: '0 0 5px',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {preview.icon ? (
+              <span style={{ color: '#00A896', fontStyle: 'italic' }}>
+                {preview.icon} {preview.text}
+              </span>
+            ) : preview.text}
+          </p>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            {/* Badge de status */}
+            <span style={{
+              fontSize: 10, fontWeight: 600,
+              padding: '2px 8px', borderRadius: 999,
+              background: sc.bg,
+              color: sc.text,
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+            }}>
+              <span style={{
+                width: 5, height: 5, borderRadius: '50%', display: 'inline-block',
+                background: sc.dot,
+              }} />
+              {safeStatusCfg(conv.status).label}
+            </span>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {/* Badge "Livre" para conversas sem atendente na fila */}
+              {isFree && (
+                <span style={{
+                  fontSize: 9, fontWeight: 700, color: '#B45309',
+                  background: '#FEF3C7', border: '1px solid #FCD34D',
+                  padding: '2px 6px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '0.03em',
+                }}>
+                  Livre
+                </span>
+              )}
+
+              {/* Unread badge */}
+              {conv.unreadCount > 0 && (
+                <span style={{
+                  background: '#00A896', color: 'white',
+                  fontSize: 10, fontWeight: 700,
+                  minWidth: 20, height: 20, borderRadius: 999,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: '0 5px',
+                  boxShadow: '0 2px 6px rgba(0,168,150,0.4)',
+                  animation: 'pulse 2s infinite',
+                }}>
+                  {conv.unreadCount > 99 ? '99+' : conv.unreadCount}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Tenta assumir uma conversa da fila (sem atendente, waiting). Usada tanto
+  // no envio da primeira mensagem quanto no botão "Assumir conversa" — mesmo
+  // comportamento nos dois casos. UPDATE atômico (WHERE assigned_user_id IS
+  // NULL): se outro atendente já respondeu/assumiu primeiro, retorna false.
+  const claimActiveConversation = async (convId: string): Promise<boolean> => {
+    if (!effectiveInstitutionId || !user?.id) return false
+    const rJid = rawJid(convId)
+    const claimed = await DatabaseService.claimConversationIfUnassigned(
+      effectiveInstitutionId, rJid, user.id, user.full_name || user.email
+    )
+
+    if (!claimed) {
+      setSendError('Essa conversa já foi assumida por outro atendente.')
+      await loadMessages()
+      return false
+    }
+
+    await DatabaseService.logConversationEvent({
+      institution_id: effectiveInstitutionId,
+      remote_jid: rJid,
+      event_type: 'assignment',
+      description: `${user.full_name || user.email} assumiu a conversa`,
+      user_id: user.id,
+    })
+
+    setConversations(prev => prev.map(c => c.id === convId
+      ? { ...c, status: 'open' as ConvStatus, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email }
+      : c
+    ))
+    return true
+  }
+
+  const handleClaimConversation = async () => {
+    if (!activeId) return
+    const claimed = await claimActiveConversation(activeId)
+    if (claimed) {
+      setHubToast('Conversa assumida!')
+      setTimeout(() => setHubToast(null), 3000)
+    }
+  }
+
   const handleSend = async () => {
     if (!inputText.trim() || !activeId) return
+
+    // Conversa na fila (sem atendente, aguardando) — tenta assumir antes de
+    // enviar, bloqueando o envio se outro atendente já tiver assumido.
+    const convBeforeSend = conversationsRef.current.find(c => c.id === activeId)
+    if (convBeforeSend && !convBeforeSend.assigned_user_id && convBeforeSend.status === 'waiting') {
+      const claimed = await claimActiveConversation(activeId)
+      if (!claimed) return
+    }
+
     const text = inputText.trim()
     const quotedMsg = replyTo
     const tempId = `temp-${Date.now()}`
@@ -2238,24 +2443,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             }
           : c
       ))
-
-      // Promote to open + assign on first send by atendente
-      const conv = conversationsRef.current.find(c => c.id === activeId)
-      if (conv && (conv.status === 'waiting' || !conv.assigned_user_id) && effectiveInstitutionId && user?.id) {
-        const rJid = rawJid(activeId)
-        await supabase.from('whatsapp_conversations')
-          .update({
-            status: 'open',
-            assigned_user_id:   user!.id,
-            assigned_user_name: user!.full_name || user!.email,
-          })
-          .eq('institution_id', effectiveInstitutionId)
-          .eq('remote_jid', rJid)
-        setConversations(prev => prev.map(c => c.id === activeId
-          ? { ...c, status: 'open' as ConvStatus, assigned_user_id: user!.id, assigned_user_name: user!.full_name || user!.email }
-          : c
-        ))
-      }
 
     } catch (err: any) {
       setConversations(prev => prev.map(c =>
@@ -2484,6 +2671,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       description: `Transferido de ${fromName} para ${targetUser.full_name}`,
       user_id: user.id,
       user_name: user.full_name || user.email,
+      metadata: { from_user_id: fromUserId || null, to_user_id: targetUser.id },
     })
     await loadMessages()
     setConversations(prev => prev.map(c => c.id === activeId
@@ -3340,6 +3528,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   {totalUnread}
                 </span>
               )}
+              {waitingQueueConvs.length > 0 && (
+                <span title="Conversas aguardando atendimento" style={{ background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999, minWidth: 20, textAlign: 'center', display: 'flex', alignItems: 'center', gap: 3 }}>
+                  ⏳ {waitingQueueConvs.length}
+                </span>
+              )}
             </div>
             <button
               style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00A896', border: 'none', cursor: 'pointer', color: '#fff', transition: 'background 0.15s' }}
@@ -3427,132 +3620,33 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 <p style={{ fontSize: 12, color: '#94A3B8' }}>Nenhuma conversa encontrada</p>
               </div>
             ) : (
-              filteredConvs.map(conv => {
-                const isActive = conv.id === activeId
-                const preview = getLastMsgPreview(conv.lastMessage)
-                // Inline status colors
-                const statusColors: Record<string, { bg: string; dot: string; text: string }> = {
-                  waiting: { bg: '#FEF3C7', dot: '#D97706', text: '#D97706' },
-                  open:    { bg: '#D1FAE5', dot: '#059669', text: '#059669' },
-                  closed:  { bg: '#E2E8F0', dot: '#94A3B8', text: '#64748B' },
-                }
-                const sc = statusColors[conv.status] ?? statusColors['waiting']
-                return (
-                  <div
-                    key={conv.id}
-                    onClick={() => { setActiveId(conv.id); if (isMobile) setMobilePanel('chat') }}
-                    style={{
-                      position: 'relative',
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: 10,
-                      padding: '11px 14px',
-                      cursor: 'pointer',
-                      borderLeft: isActive ? '3px solid #00A896' : '3px solid transparent',
-                      borderBottom: '1px solid #F0FDFB',
-                      background: isActive ? 'linear-gradient(135deg, #E6F7F5 0%, #F0FDFB 100%)' : 'transparent',
-                      transition: 'all 0.15s',
-                    }}
-                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#F8FAFC' }}
-                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
-                  >
-                    {/* Avatar com ring colorido quando ativo */}
-                    <div style={{ position: 'relative', flexShrink: 0 }}>
-                      <div style={{
-                        width: 44, height: 44, borderRadius: '50%',
-                        background: isActive
-                          ? 'linear-gradient(135deg, #00A896, #0DD3BF)'
-                          : getAvatarBgColor(conv.name),
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 16, fontWeight: 700, color: 'white',
-                        border: isActive ? '2px solid #00A896' : '2px solid transparent',
-                        boxShadow: isActive ? '0 0 0 3px rgba(0,168,150,0.15)' : 'none',
-                        transition: 'all 0.2s',
-                        overflow: 'hidden',
-                      }}>
-                        {conv.profile_picture_url
-                          ? <img src={conv.profile_picture_url} alt={conv.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                          : conv.isGroup
-                          ? <Users style={{ width: 20, height: 20, color: 'rgba(255,255,255,0.9)' }} />
-                          : getInitials(conv.name)
-                        }
-                      </div>
-                      {/* Badge do atendente */}
-                      {conv.assigned_user_name && (
-                        <div style={{
-                          position: 'absolute', bottom: -1, right: -1,
-                          width: 16, height: 16, borderRadius: '50%',
-                          background: '#1A2B4A', border: '2px solid white',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 7, fontWeight: 700, color: 'white',
-                        }}>
-                          {getInitials(conv.assigned_user_name).slice(0, 1)}
-                        </div>
-                      )}
+              <>
+                {filteredWaitingConvs.length > 0 && (
+                  <>
+                    <div style={{ padding: '8px 14px 4px', fontSize: 11, fontWeight: 700, color: '#D97706', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      ⏳ Aguardando atendimento
+                      <span style={{ background: '#EF4444', color: '#fff', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>{filteredWaitingConvs.length}</span>
                     </div>
-
-                    {/* Conteúdo */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                        <span style={{
-                          fontSize: 13, fontWeight: 700,
-                          color: isActive ? '#007A6E' : '#1A2B4A',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          maxWidth: 160,
-                        }}>
-                          {conv.name}
-                        </span>
-                        <span style={{ fontSize: 10, color: '#94A3B8', flexShrink: 0 }}>
-                          {fmtConvTime(conv.lastTime)}
-                        </span>
-                      </div>
-
-                      <p style={{
-                        fontSize: 12, color: '#64748B', margin: '0 0 5px',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}>
-                        {preview.icon ? (
-                          <span style={{ color: '#00A896', fontStyle: 'italic' }}>
-                            {preview.icon} {preview.text}
-                          </span>
-                        ) : preview.text}
-                      </p>
-
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        {/* Badge de status */}
-                        <span style={{
-                          fontSize: 10, fontWeight: 600,
-                          padding: '2px 8px', borderRadius: 999,
-                          background: sc.bg,
-                          color: sc.text,
-                          display: 'inline-flex', alignItems: 'center', gap: 4,
-                        }}>
-                          <span style={{
-                            width: 5, height: 5, borderRadius: '50%', display: 'inline-block',
-                            background: sc.dot,
-                          }} />
-                          {safeStatusCfg(conv.status).label}
-                        </span>
-
-                        {/* Unread badge */}
-                        {conv.unreadCount > 0 && (
-                          <span style={{
-                            background: '#00A896', color: 'white',
-                            fontSize: 10, fontWeight: 700,
-                            minWidth: 20, height: 20, borderRadius: 999,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            padding: '0 5px',
-                            boxShadow: '0 2px 6px rgba(0,168,150,0.4)',
-                            animation: 'pulse 2s infinite',
-                          }}>
-                            {conv.unreadCount > 99 ? '99+' : conv.unreadCount}
-                          </span>
-                        )}
-                      </div>
+                    {filteredWaitingConvs.map(conv => renderConvItem(conv))}
+                  </>
+                )}
+                {filteredMyConvs.length > 0 && (
+                  <>
+                    <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#00A896', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Minhas conversas
                     </div>
-                  </div>
-                )
-              })
+                    {filteredMyConvs.map(conv => renderConvItem(conv))}
+                  </>
+                )}
+                {filteredOtherConvs.length > 0 && (
+                  <>
+                    <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Outras conversas
+                    </div>
+                    {filteredOtherConvs.map(conv => renderConvItem(conv))}
+                  </>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -3991,6 +4085,22 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 </button>
               </div>
             ) : null}
+
+            {/* Conversa livre na fila — permite reservar antes de digitar */}
+            {activeConv && !activeConv.assigned_user_id && activeConv.status === 'waiting' && (
+              <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#92400E', margin: 0 }}>⏳ Conversa aguardando atendimento</p>
+                  <p style={{ fontSize: 11, color: '#B45309', margin: '2px 0 0' }}>Assuma para reservar antes de responder, ou envie a mensagem que ela é atribuída a você automaticamente.</p>
+                </div>
+                <button
+                  onClick={handleClaimConversation}
+                  style={{ background: '#F59E0B', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}
+                >
+                  Assumir conversa
+                </button>
+              </div>
+            )}
 
             {/* Input row */}
             {recorderState === 'recording' ? (

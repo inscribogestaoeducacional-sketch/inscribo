@@ -31,6 +31,7 @@ import GestorEmbed       from './pages/gestor/GestorEmbed'
 import LeadKanban        from './components/leads/LeadKanban'
 import VisitCalendar     from './components/calendar/VisitCalendar'
 import WhatsAppHub       from './components/whatsapp/WhatsAppHub'
+import WhatsAppPermissionsPanel from './components/whatsapp/WhatsAppPermissionsPanel'
 import GestorReports     from './components/reports/GestorReports'
 import ClientsModule    from './components/clients/ClientsModule'
 import ContactsModule  from './components/contacts/ContactsModule'
@@ -324,6 +325,7 @@ function AppContent() {
             <Route path="/reports" element={<ProtectedRoute allowedRoles={['manager','admin']}><ReportsPage /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute allowedRoles={['admin']}><UserManagement /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin']}><SystemSettings /></ProtectedRoute>} />
+            <Route path="/settings/whatsapp/permissions" element={<RequireRole roles={['admin','admin_geral']}><WhatsAppPermissionsPanel /></RequireRole>} />
             <Route path="/profile"      element={<UserProfile />} />
             <Route path="/setup"        element={<InitialSetup />} />
             <Route path="/login"        element={<Navigate to={schoolDefault} replace />} />
