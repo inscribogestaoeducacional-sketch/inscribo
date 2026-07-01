@@ -448,6 +448,10 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [botTimeoutAssigneeId, setBotTimeoutAssigneeId]     = useState('')
   const [botTimeoutAssigneeType, setBotTimeoutAssigneeType] = useState<'user' | 'group'>('user')
 
+  // Conversa parada (atribuída a um atendente, sem atividade há X horas —
+  // volta a ficar visível/resgatável para todos os atendentes via RLS)
+  const [staleConversationHours, setStaleConversationHours] = useState(24)
+
   // Outside hours & lunch messages
   const [outsideHoursMsg, setOutsideHoursMsg] = useState('Olá! Nosso horário de atendimento é de {horario}. Sua mensagem foi registrada e retornaremos em breve! 👋')
   const [lunchMsg, setLunchMsg]               = useState('Olá! No momento nossa equipe está no horário de almoço. Retornaremos em breve! 🍽️')
@@ -504,6 +508,7 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
         if (flowData.bot_timeout_message)       setBotTimeoutMessage(flowData.bot_timeout_message)
         if (flowData.bot_timeout_assignee_id)   setBotTimeoutAssigneeId(flowData.bot_timeout_assignee_id)
         if (flowData.bot_timeout_assignee_type) setBotTimeoutAssigneeType(flowData.bot_timeout_assignee_type)
+        if (flowData.stale_conversation_hours)  setStaleConversationHours(flowData.stale_conversation_hours)
       }
     } catch {}
     try {
@@ -620,6 +625,7 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
         bot_timeout_message:         botTimeoutMessage || null,
         bot_timeout_assignee_id:     botTimeoutAssigneeId || null,
         bot_timeout_assignee_type:   botTimeoutAssigneeId ? botTimeoutAssigneeType : null,
+        stale_conversation_hours:    staleConversationHours,
       }
 
       console.log('[SAVE FLOW] dados:', JSON.stringify(saveData))
@@ -996,6 +1002,33 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                 <button onClick={handleSaveFlow} disabled={savingFlow}
                   style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: flowSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
                   {savingFlow ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : flowSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar timeout do bot</>}
+                </button>
+              </div>
+
+              {/* ─── Conversas Paradas ────────────────────────────────────── */}
+              <div style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '18px 20px' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 16 }}>⏰ Conversas Paradas</div>
+                <p style={{ margin: '0 0 16px', fontSize: 12, color: '#64748B', lineHeight: 1.6 }}>
+                  Se um atendente ficar ausente (férias, folga etc.), as conversas atribuídas a ele voltam a
+                  ficar visíveis e resgatáveis por qualquer atendente após ficarem paradas por este período.
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                  <label style={dLabel}>Tempo para considerar parada</label>
+                  <select
+                    value={staleConversationHours}
+                    onChange={e => setStaleConversationHours(parseInt(e.target.value))}
+                    style={{ ...dInput, width: 160 }}
+                  >
+                    <option value={4}>4 horas</option>
+                    <option value={8}>8 horas</option>
+                    <option value={12}>12 horas</option>
+                    <option value={24}>24 horas</option>
+                    <option value={48}>48 horas</option>
+                  </select>
+                </div>
+                <button onClick={handleSaveFlow} disabled={savingFlow}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, border: 'none', background: flowSaved ? '#16a34a' : '#00A896', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingFlow ? 0.7 : 1 }}>
+                  {savingFlow ? <><Loader2 size={13} className="animate-spin" />Salvando...</> : flowSaved ? <><Check size={13} />Salvo!</> : <><Save size={13} />Salvar</>}
                 </button>
               </div>
             </div>

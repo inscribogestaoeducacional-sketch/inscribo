@@ -912,6 +912,53 @@ export class DatabaseService {
     return (data?.length ?? 0) > 0
   }
 
+  // Resgata uma conversa parada (atribuída a outro atendente, sem atividade
+  // recente). Só funciona se a conversa ainda estiver com previousUserId no
+  // banco — WHERE assigned_user_id = previousUserId evita resgatar a
+  // conversa errada caso ela já tenha sido resgatada/transferida por outra
+  // pessoa entre o carregamento da lista e o clique no botão.
+  // staleHours é opcional, só para deixar a descrição do evento mais clara.
+  static async rescueConversation(
+    institutionId: string,
+    remoteJid: string,
+    userId: string,
+    userName: string,
+    previousUserId: string,
+    previousUserName: string,
+    staleHours?: number
+  ): Promise<{ error: string | null }> {
+    const raw  = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
+    const norm = `${raw}@s.whatsapp.net`
+
+    const { data, error } = await supabase
+      .from('whatsapp_conversations')
+      .update({
+        assigned_user_id:   userId,
+        assigned_user_name: userName,
+        transferred_at:     new Date().toISOString(),
+        transferred_from:   previousUserId,
+      })
+      .eq('institution_id', institutionId)
+      .in('remote_jid', [raw, norm])
+      .eq('assigned_user_id', previousUserId)
+      .select('id')
+
+    if (error) return { error: error.message }
+    if (!data || data.length === 0) return { error: 'Conversa não disponível para resgate' }
+
+    const inactivityLabel = staleHours ? `inativa há mais de ${staleHours}h` : 'inativa há um bom tempo'
+    await this.logConversationEvent({
+      institution_id: institutionId,
+      remote_jid: raw,
+      event_type: 'rescue',
+      description: `Conversa resgatada de ${previousUserName} por ${userName} (${inactivityLabel})`,
+      user_id: userId,
+      metadata: { from_user_id: previousUserId, to_user_id: userId },
+    })
+
+    return { error: null }
+  }
+
   static async transferConversation(institutionId: string, remoteJid: string, newUserId: string, newUserName: string, fromUserName: string, fromUserId?: string): Promise<void> {
     const raw  = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     const norm = `${raw}@s.whatsapp.net`

@@ -910,6 +910,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [statusFilter, setStatusFilter] = useState<'abertos' | 'concluido' | 'ambos'>('abertos')
   const [readFilter, setReadFilter] = useState<'all' | 'read' | 'unread'>('all')
   const [assignFilter, setAssignFilter] = useState<'all' | 'mine' | 'none'>('all')
+  const [canSeeAllConversations, setCanSeeAllConversations] = useState(false)
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('details')
   const [convHistory, setConvHistory] = useState<WhatsappConversationEvent[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -1035,6 +1036,36 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // Keep refs in sync so realtime handlers can read the latest values
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
   useEffect(() => { conversationsRef.current = conversations }, [conversations])
+
+  // Permissão de visibilidade ampla do usuário logado — controla o dropdown
+  // de atribuição e o grupo "Outras conversas" (o RLS no banco já bloqueia
+  // os dados; isso é só para não exibir um filtro/grupo que não teria efeito).
+  useEffect(() => {
+    if (!user?.id) return
+    supabase.from('users').select('can_see_all_conversations').eq('id', user.id).maybeSingle()
+      .then(({ data }) => setCanSeeAllConversations(!!data?.can_see_all_conversations))
+  }, [user?.id])
+
+  const isPrivilegedRole = user?.role === 'admin' || user?.role === 'manager' || user?.user_type === 'admin_geral'
+  const canSeeAll = isPrivilegedRole || canSeeAllConversations
+
+  // Limite (em horas) configurado pela instituição para considerar uma
+  // conversa atribuída "parada" — usado só para exibir "Parada há Xh" e
+  // decidir o agrupamento no cliente; a regra de fato é aplicada no RLS.
+  const [staleHours, setStaleHours] = useState(24)
+  useEffect(() => {
+    if (!effectiveInstitutionId) return
+    supabase.from('whatsapp_flows').select('stale_conversation_hours').eq('institution_id', effectiveInstitutionId).maybeSingle()
+      .then(({ data }) => setStaleHours(data?.stale_conversation_hours ?? 24))
+  }, [effectiveInstitutionId])
+
+  const isConvStale = (conv: Conversation) =>
+    !!conv.assigned_user_id &&
+    conv.assigned_user_id !== user?.id &&
+    conv.status === 'waiting' &&
+    (Date.now() - conv.lastTime.getTime()) > staleHours * 3600 * 1000
+
+  const hoursSince = (date: Date) => Math.max(1, Math.floor((Date.now() - date.getTime()) / 3600000))
 
   // (leadData useEffect moved below activeConv definition — see below)
 
@@ -2178,16 +2209,21 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // em filteredConvs). RLS já garante que um atendente comum nunca recebe do
   // backend conversas de outro atendente — "outras conversas" só é populado
   // de fato para quem tem user_can_see_all_conversations() = true (admin etc).
+  // "Paradas" é visível pra todo mundo (RLS libera isso à parte do canSeeAll).
   const filteredWaitingConvs = filteredConvs.filter(c => !c.assigned_user_id && c.status === 'waiting')
   const filteredMyConvs      = filteredConvs.filter(c => c.assigned_user_id === user?.id)
+  const filteredStaleConvs   = filteredConvs.filter(c => isConvStale(c))
   const filteredOtherConvs   = filteredConvs.filter(c =>
-    !(!c.assigned_user_id && c.status === 'waiting') && c.assigned_user_id !== user?.id
+    !(!c.assigned_user_id && c.status === 'waiting') &&
+    c.assigned_user_id !== user?.id &&
+    !isConvStale(c)
   )
 
   const renderConvItem = (conv: Conversation) => {
     const isActive = conv.id === activeId
     const preview = getLastMsgPreview(conv.lastMessage)
     const isFree = !conv.assigned_user_id && conv.status === 'waiting'
+    const isStale = isConvStale(conv)
     // Inline status colors
     const statusColors: Record<string, { bg: string; dot: string; text: string }> = {
       waiting: { bg: '#FEF3C7', dot: '#D97706', text: '#D97706' },
@@ -2206,13 +2242,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           gap: 10,
           padding: '11px 14px',
           cursor: 'pointer',
-          borderLeft: isActive ? '3px solid #00A896' : isFree ? '3px solid #F59E0B' : '3px solid transparent',
+          borderLeft: isActive ? '3px solid #00A896' : isStale ? '3px solid #F97316' : isFree ? '3px solid #F59E0B' : '3px solid transparent',
           borderBottom: '1px solid #F0FDFB',
-          background: isActive ? 'linear-gradient(135deg, #E6F7F5 0%, #F0FDFB 100%)' : isFree ? '#FFFBEB' : 'transparent',
+          background: isActive ? 'linear-gradient(135deg, #E6F7F5 0%, #F0FDFB 100%)' : isStale ? '#FFF7ED' : isFree ? '#FFFBEB' : 'transparent',
           transition: 'all 0.15s',
         }}
-        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = isFree ? '#FEF3C7' : '#F8FAFC' }}
-        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = isFree ? '#FFFBEB' : 'transparent' }}
+        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = isStale ? '#FFEDD5' : isFree ? '#FEF3C7' : '#F8FAFC' }}
+        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = isStale ? '#FFF7ED' : isFree ? '#FFFBEB' : 'transparent' }}
       >
         {/* Avatar com ring colorido quando ativo */}
         <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -2276,6 +2312,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             ) : preview.text}
           </p>
 
+          {isStale && conv.assigned_user_name && (
+            <p style={{ fontSize: 11, color: '#C2410C', margin: '0 0 5px', fontWeight: 600 }}>
+              Era de: {conv.assigned_user_name}
+            </p>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             {/* Badge de status */}
             <span style={{
@@ -2293,6 +2335,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             </span>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {/* Badge "Parada há Xh" para conversas atribuídas a outro atendente sem atividade recente */}
+              {isStale && (
+                <span title={`Parada há ${hoursSince(conv.lastTime)}h`} style={{
+                  fontSize: 9, fontWeight: 700, color: '#C2410C',
+                  background: '#FFEDD5', border: '1px solid #FDBA74',
+                  padding: '2px 6px', borderRadius: 999, whiteSpace: 'nowrap',
+                }}>
+                  ⏰ Parada há {hoursSince(conv.lastTime)}h
+                </span>
+              )}
+
               {/* Badge "Livre" para conversas sem atendente na fila */}
               {isFree && (
                 <span style={{
@@ -2364,6 +2417,33 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       setHubToast('Conversa assumida!')
       setTimeout(() => setHubToast(null), 3000)
     }
+  }
+
+  const handleRescueConversation = async () => {
+    if (!activeId || !effectiveInstitutionId || !user?.id) return
+    const conv = conversationsRef.current.find(c => c.id === activeId)
+    if (!conv || !conv.assigned_user_id) return
+    const hours = hoursSince(conv.lastTime)
+    if (!window.confirm(`Deseja resgatar essa conversa? Ela estava com ${conv.assigned_user_name || 'outro atendente'} há ${hours}h.`)) return
+
+    const rJid = rawJid(activeId)
+    const { error } = await DatabaseService.rescueConversation(
+      effectiveInstitutionId, rJid, user.id, user.full_name || user.email,
+      conv.assigned_user_id, conv.assigned_user_name || 'outro atendente', hours
+    )
+
+    if (error) {
+      setSendError(error)
+      await loadMessages()
+      return
+    }
+
+    setConversations(prev => prev.map(c => c.id === activeId
+      ? { ...c, status: 'open' as ConvStatus, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email }
+      : c
+    ))
+    setHubToast('Conversa resgatada!')
+    setTimeout(() => setHubToast(null), 3000)
   }
 
   const handleSend = async () => {
@@ -3577,18 +3657,20 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   <option value="ambos">Ambos</option>
                 </select>
               </div>
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Atribuição</span>
-                <select
-                  value={assignFilter}
-                  onChange={e => setAssignFilter(e.target.value as typeof assignFilter)}
-                  style={{ width: '100%', padding: '5px 8px', fontSize: 12, border: '1px solid #D1FAE5', borderRadius: 8, background: '#F0FDFB', color: '#1A2B4A', cursor: 'pointer', outline: 'none' }}
-                >
-                  <option value="all">Todos</option>
-                  <option value="mine">Meus chats</option>
-                  <option value="none">Não atribuídos</option>
-                </select>
-              </div>
+              {canSeeAll && (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Atribuição</span>
+                  <select
+                    value={assignFilter}
+                    onChange={e => setAssignFilter(e.target.value as typeof assignFilter)}
+                    style={{ width: '100%', padding: '5px 8px', fontSize: 12, border: '1px solid #D1FAE5', borderRadius: 8, background: '#F0FDFB', color: '#1A2B4A', cursor: 'pointer', outline: 'none' }}
+                  >
+                    <option value="all">Todos</option>
+                    <option value="mine">Meus chats</option>
+                    <option value="none">Não atribuídos</option>
+                  </select>
+                </div>
+              )}
             </div>
             {/* Row 2: Read sub-filter pills */}
             <div style={{ display: 'flex', padding: '0 12px 8px', gap: 6, alignItems: 'center' }}>
@@ -3638,7 +3720,16 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     {filteredMyConvs.map(conv => renderConvItem(conv))}
                   </>
                 )}
-                {filteredOtherConvs.length > 0 && (
+                {filteredStaleConvs.length > 0 && (
+                  <>
+                    <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#C2410C', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      ⏰ Conversas paradas
+                      <span style={{ background: '#F97316', color: '#fff', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>{filteredStaleConvs.length}</span>
+                    </div>
+                    {filteredStaleConvs.map(conv => renderConvItem(conv))}
+                  </>
+                )}
+                {canSeeAll && filteredOtherConvs.length > 0 && (
                   <>
                     <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Outras conversas
@@ -4098,6 +4189,24 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   style={{ background: '#F59E0B', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}
                 >
                   Assumir conversa
+                </button>
+              </div>
+            )}
+
+            {/* Conversa parada de outro atendente — permite resgatar */}
+            {activeConv && isConvStale(activeConv) && (
+              <div style={{ background: '#FFF7ED', border: '1px solid #FDBA74', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#9A3412', margin: 0 }}>⏰ Conversa parada</p>
+                  <p style={{ fontSize: 11, color: '#C2410C', margin: '2px 0 0' }}>
+                    Era de {activeConv.assigned_user_name || 'outro atendente'}, sem resposta há {hoursSince(activeConv.lastTime)}h.
+                  </p>
+                </div>
+                <button
+                  onClick={handleRescueConversation}
+                  style={{ background: '#F97316', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}
+                >
+                  Resgatar
                 </button>
               </div>
             )}

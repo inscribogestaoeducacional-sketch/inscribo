@@ -30,13 +30,14 @@ interface AppUser {
   active: boolean
   created_at: string
   institutions?: { name: string }
+  can_see_all_conversations?: boolean
 }
 
 // ─── Modal Novo/Editar Usuário ────────────────────────────────────────────────
 function UserModal({ isOpen, onClose, onSave, editingUser }: {
   isOpen: boolean; onClose: () => void; onSave: (data: any) => Promise<void>; editingUser?: AppUser | null
 }) {
-  const [formData, setFormData] = useState({ full_name: '', email: '', role: 'user' as any, password: '', confirmPassword: '', active: true })
+  const [formData, setFormData] = useState({ full_name: '', email: '', role: 'user' as any, password: '', confirmPassword: '', active: true, can_see_all_conversations: false })
   const [showPwd, setShowPwd] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -47,7 +48,7 @@ function UserModal({ isOpen, onClose, onSave, editingUser }: {
 
   useEffect(() => {
     if (editingUser) {
-      setFormData({ full_name: editingUser.full_name, email: editingUser.email, role: editingUser.role, password: '', confirmPassword: '', active: editingUser.active })
+      setFormData({ full_name: editingUser.full_name, email: editingUser.email, role: editingUser.role, password: '', confirmPassword: '', active: editingUser.active, can_see_all_conversations: editingUser.can_see_all_conversations ?? false })
       if (isConsultor(editingUser.role)) {
         setLoadingPerms(true)
         supabase.from('user_permissions').select('module, enabled').eq('user_id', editingUser.id)
@@ -62,7 +63,7 @@ function UserModal({ isOpen, onClose, onSave, editingUser }: {
         setPermMap({})
       }
     } else {
-      setFormData({ full_name: '', email: '', role: 'user', password: '', confirmPassword: '', active: true })
+      setFormData({ full_name: '', email: '', role: 'user', password: '', confirmPassword: '', active: true, can_see_all_conversations: false })
       const map: Record<string, boolean> = {}
       PERM_MODULES.forEach(m => { map[m.id] = true })
       setPermMap(map)
@@ -153,6 +154,21 @@ function UserModal({ isOpen, onClose, onSave, editingUser }: {
             <input type="checkbox" id="active" checked={formData.active} onChange={e => setFormData({ ...formData, active: e.target.checked })} style={{ width: 16, height: 16, accentColor: '#00A896' }} />
             <label htmlFor="active" style={{ fontSize: 13, color: '#475569', cursor: 'pointer' }}>Usuário ativo no sistema</label>
           </div>
+
+          {showPerms && (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0' }}>
+              <div
+                onClick={() => setFormData(f => ({ ...f, can_see_all_conversations: !f.can_see_all_conversations }))}
+                style={{ width: 36, height: 20, borderRadius: 999, background: formData.can_see_all_conversations ? '#00A896' : '#CBD5E1', flexShrink: 0, position: 'relative', transition: 'background 0.2s', cursor: 'pointer', marginTop: 2 }}
+              >
+                <span style={{ position: 'absolute', top: 2, left: formData.can_see_all_conversations ? 18 : 2, width: 16, height: 16, background: '#fff', borderRadius: '50%', transition: 'left 0.2s', display: 'block' }} />
+              </div>
+              <div onClick={() => setFormData(f => ({ ...f, can_see_all_conversations: !f.can_see_all_conversations }))} style={{ cursor: 'pointer' }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A', margin: 0 }}>Pode ver todas as conversas do WhatsApp</p>
+                <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0' }}>Quando ativado, este usuário enxerga todas as conversas da instituição, incluindo as atribuídas a outros atendentes.</p>
+              </div>
+            </div>
+          )}
 
           {showPerms && (
             <div style={{ border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden' }}>
@@ -326,7 +342,7 @@ export default function UserManagement() {
     if (editingUser) {
       const { error } = await supabase
         .from('users')
-        .update({ full_name: userData.full_name, role: userData.role, active: userData.active })
+        .update({ full_name: userData.full_name, role: userData.role, active: userData.active, can_see_all_conversations: !!userData.can_see_all_conversations })
         .eq('id', editingUser.id)
       if (error) throw error
 
@@ -365,7 +381,8 @@ export default function UserManagement() {
           full_name: userData.full_name,
           role: userData.role,
           institution_id: user!.institution_id,
-          active: userData.active
+          active: userData.active,
+          can_see_all_conversations: !!userData.can_see_all_conversations
         }, { onConflict: 'id' })
       if (profileError) throw profileError
 
