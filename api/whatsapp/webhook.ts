@@ -352,30 +352,24 @@ async function autoLinkLead(institutionId: string, remoteJid: string): Promise<v
   }
 }
 
-// ── Phone normalization: always returns 13-digit BR format (55+DDD+9+8digits)
+// Normalizes a Meta Cloud API wa_id (already E.164 without '+').
+// Brazilian numbers from Meta always include country code 55; non-Brazilian numbers
+// (US +1, Portugal +351, UK +44, etc.) arrive with their own country code and must
+// NOT be modified — prepending 55 would corrupt them.
 function normalizePhone(raw: string): string {
   let digits = raw.replace(/\D/g, '')
 
-  // Remove código do país 55 se tiver 12 ou 13 dígitos
-  if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {
-    digits = digits.slice(2)
+  // Brazilian number already has country code: 55 + DDD(2) + [9] + local(8) = 12-13 digits
+  if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
+    if (digits.length === 12) {
+      // Old 8-digit local format: insert the mandatory 9th digit after DDD
+      digits = digits.slice(0, 4) + '9' + digits.slice(4)
+    }
+    return digits
   }
 
-  // Agora deve ter 10 ou 11 dígitos
-  // Se tiver 10: DDD(2) + número(8) → adicionar 9 após DDD
-  if (digits.length === 10) {
-    const ddd = digits.slice(0, 2)
-    const num = digits.slice(2)
-    digits = ddd + '9' + num
-  }
-
-  // Se tiver 11: DDD(2) + 9 + número(8) → correto
-  // Adicionar código do país 55
-  if (digits.length === 11) {
-    digits = '55' + digits
-  }
-
-  // Se ainda não tiver 13 dígitos, retornar como está
+  // Any other number: already international (Meta always sends full E.164).
+  // Return unchanged — do NOT prepend 55.
   console.log('[NORMALIZE]', 'raw:', raw, 'result:', digits, 'length:', digits.length)
   return digits
 }
@@ -888,7 +882,7 @@ async function processCustomFlow(
           if (!existing) {
             await supabase.from('leads').insert({
               institution_id: institutionId,
-              phone: phone.startsWith('55') ? phone : `55${noCode}`,
+              phone: phone,
               student_name: variables.nome_aluno || variables.nome || '',
               status: 'novo',
             })
@@ -927,7 +921,7 @@ async function processCustomFlow(
           } else {
             await supabase.from('leads').insert({
               institution_id: institutionId,
-              phone:          phone.startsWith('55') ? phone : `55${noCode}`,
+              phone:          phone,
               student_name:   leadFields.student_name || variables.nome_aluno || variables.nome || '',
               status:         action.status || 'novo',
               ...(leadFields.email ? { email: leadFields.email } : {}),
@@ -1794,7 +1788,7 @@ async function processAionMessage({
           if (!existingLead) {
             await supabase.from('crm_leads').insert({
               name:       contactName,
-              phone:      rawPhone.startsWith('55') ? rawPhone : `55${cleanPhone}`,
+              phone:      rawPhone,
               origin:     keyword.source || 'whatsapp',
               stage:      'interesse',
               notes:      `Veio via QR Code: ${keyword.label}`,
@@ -1835,7 +1829,7 @@ async function processAionMessage({
       if (!existingLead) {
         await supabase.from('crm_leads').insert({
           name:       contactName,
-          phone:      rawPhone.startsWith('55') ? rawPhone : `55${cleanPhone}`,
+          phone:      rawPhone,
           origin:     'whatsapp',
           stage:      'interesse',
           created_at: new Date().toISOString(),

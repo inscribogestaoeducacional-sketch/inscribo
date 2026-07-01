@@ -1445,9 +1445,16 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       if (form.responsible_name && effectiveInstitutionId) {
         const normPhone = (() => {
           let d = (form.phone || '').replace(/\D/g, '')
-          if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-          if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-          if (d.length === 11) d = '55' + d
+          // Brazilian with CC: 55 + DDD(2) + [9] + local
+          if (d.startsWith('55') && (d.length === 12 || d.length === 13)) {
+            return d.length === 12 ? d.slice(0, 4) + '9' + d.slice(4) : d
+          }
+          // 10-digit bare Brazilian (no valid E.164 is 10 digits globally)
+          if (d.length === 10) return '55' + d.slice(0, 2) + '9' + d.slice(2)
+          // 11-digit NOT starting with '1': unambiguous Brazilian DDD (21-99)
+          if (d.length === 11 && !d.startsWith('1')) return '55' + d
+          // 11-digit starting with '1': could be US/CA (+1) — preserve as-is
+          // 12+ digits: already has a country code — preserve as-is
           return d
         })()
 
@@ -2646,8 +2653,21 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   const handleNewConv = async () => {
     if (!newConvPhone.trim()) return
-    const digits = newConvPhone.replace(/\D/g, '')
-    const normalized = digits.startsWith('55') ? digits : `55${digits}`
+    const raw = newConvPhone.trim()
+    const digits = raw.replace(/\D/g, '')
+    // Detect explicit international format typed by the user (+ or 00 prefix)
+    const isExplicitIntl = raw.startsWith('+') || raw.startsWith('00')
+    const hasBrCC = digits.startsWith('55') && (digits.length === 12 || digits.length === 13)
+    let normalized: string
+    if (hasBrCC) {
+      normalized = digits.length === 12 ? digits.slice(0, 4) + '9' + digits.slice(4) : digits
+    } else if (!isExplicitIntl && digits.length <= 11) {
+      // Bare number entered without '+' prefix: treat as Brazilian
+      normalized = '55' + (digits.length === 10 ? digits.slice(0, 2) + '9' + digits.slice(2) : digits)
+    } else {
+      // User typed '+' or '00' prefix, or number is 12+ digits: already has country code
+      normalized = digits
+    }
     const jid = `${normalized}@s.whatsapp.net`
     const existing = conversations.find(c => c.id === jid)
     if (existing) {
@@ -2807,14 +2827,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const newTags = [...currentTags, tag.trim()]
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, tags: newTags } : c))
     await DatabaseService.updateConversationTags(effectiveInstitutionId, rawJid(activeId), newTags)
-    // Sync tags to whatsapp_contacts
-    const normPhone = (() => {
-      let d = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
-      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-      if (d.length === 11) d = '55' + d
-      return d
-    })()
+    // Sync tags to whatsapp_contacts — phone stored = digits of the wa_id (exact match)
+    const normPhone = rawJid(activeId).replace(/\D/g, '')
     await supabase.from('whatsapp_contacts')
       .update({ tags: newTags })
       .eq('institution_id', effectiveInstitutionId)
@@ -2828,14 +2842,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const newTags = (activeConv?.tags || []).filter(t => t !== tag)
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, tags: newTags } : c))
     await DatabaseService.updateConversationTags(effectiveInstitutionId, rawJid(activeId), newTags)
-    // Sync tags to whatsapp_contacts
-    const normPhone = (() => {
-      let d = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
-      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-      if (d.length === 11) d = '55' + d
-      return d
-    })()
+    // Sync tags to whatsapp_contacts — phone stored = digits of the wa_id (exact match)
+    const normPhone = rawJid(activeId).replace(/\D/g, '')
     await supabase.from('whatsapp_contacts')
       .update({ tags: newTags })
       .eq('institution_id', effectiveInstitutionId)
