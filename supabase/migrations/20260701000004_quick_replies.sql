@@ -34,6 +34,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_quick_replies_shortcut_unique
 -- policies por operação, respeitando pessoal x global.
 -- ─────────────────────────────────────────────────────────────────────────────
 DROP POLICY IF EXISTS "institution_isolation" ON whatsapp_quick_replies;
+DROP POLICY IF EXISTS "quick_replies_select" ON whatsapp_quick_replies;
+DROP POLICY IF EXISTS "quick_replies_insert" ON whatsapp_quick_replies;
+DROP POLICY IF EXISTS "quick_replies_update" ON whatsapp_quick_replies;
+DROP POLICY IF EXISTS "quick_replies_delete" ON whatsapp_quick_replies;
 
 CREATE POLICY "quick_replies_select" ON whatsapp_quick_replies
   FOR SELECT
