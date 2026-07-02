@@ -8,6 +8,7 @@ interface AttendantRow {
   full_name: string
   email: string
   can_see_all_conversations: boolean
+  can_see_full_history: boolean
 }
 
 export default function WhatsAppPermissionsPanel() {
@@ -26,7 +27,7 @@ export default function WhatsAppPermissionsPanel() {
     try {
       const { data, error: fetchError } = await supabase
         .from('users')
-        .select('id, full_name, email, can_see_all_conversations')
+        .select('id, full_name, email, can_see_all_conversations, can_see_full_history')
         .eq('institution_id', user.institution_id)
         .eq('role', 'user')
         .order('full_name', { ascending: true })
@@ -52,6 +53,24 @@ export default function WhatsAppPermissionsPanel() {
       if (updateError) throw updateError
     } catch (e) {
       setAttendants(prev => prev.map(a => a.id === attendantId ? { ...a, can_see_all_conversations: current } : a))
+      setError(e instanceof Error ? e.message : 'Erro ao atualizar permissão')
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
+  const handleToggleFullHistory = async (attendantId: string, current: boolean) => {
+    setTogglingId(attendantId)
+    setError('')
+    setAttendants(prev => prev.map(a => a.id === attendantId ? { ...a, can_see_full_history: !current } : a))
+    try {
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ can_see_full_history: !current })
+        .eq('id', attendantId)
+      if (updateError) throw updateError
+    } catch (e) {
+      setAttendants(prev => prev.map(a => a.id === attendantId ? { ...a, can_see_full_history: current } : a))
       setError(e instanceof Error ? e.message : 'Erro ao atualizar permissão')
     } finally {
       setTogglingId(null)
@@ -91,7 +110,7 @@ export default function WhatsAppPermissionsPanel() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                {['Atendente', 'Vê todas as conversas'].map(h => (
+                {['Atendente', 'Vê todas as conversas', 'Vê histórico completo em transferência'].map(h => (
                   <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '.05em', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -124,6 +143,22 @@ export default function WhatsAppPermissionsPanel() {
                     >
                       {togglingId === a.id ? <Loader2 size={11} className="animate-spin" /> : null}
                       {a.can_see_all_conversations ? 'Liberado' : 'Restrito'}
+                    </button>
+                  </td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <button
+                      onClick={() => handleToggleFullHistory(a.id, a.can_see_full_history)}
+                      disabled={togglingId === a.id}
+                      style={{
+                        padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600, border: 'none',
+                        cursor: togglingId === a.id ? 'wait' : 'pointer',
+                        background: a.can_see_full_history ? '#D1FAE5' : '#F1F5F9',
+                        color: a.can_see_full_history ? '#16a34a' : '#64748B',
+                        display: 'flex', alignItems: 'center', gap: 4, opacity: togglingId === a.id ? 0.6 : 1,
+                      }}
+                    >
+                      {togglingId === a.id ? <Loader2 size={11} className="animate-spin" /> : null}
+                      {a.can_see_full_history ? 'Liberado' : 'Restrito'}
                     </button>
                   </td>
                 </tr>
