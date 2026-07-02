@@ -162,12 +162,21 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
     byJid.get(m.remote_jid)!.push(m)
   })
 
-  const result: Conversation[] = Array.from(byJid.entries()).map(([jid, jidMsgs]) => {
+  const result: Conversation[] = Array.from(byJid.entries()).flatMap(([jid, jidMsgs]) => {
     const sorted = [...jidMsgs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
     const last = sorted[sorted.length - 1]
     const normJid = normalizeJid(jid)
     const isGroup = normJid.endsWith('@g.us')
     const convData = convMap?.get(normJid) || convMap?.get(jid)
+
+    // Sem row correspondente em whatsapp_conversations visível pra mim: não listar
+    // como conversa. Mensagens do cliente (from_me=false) ficam visíveis pra
+    // qualquer atendente da instituição por regra de negócio, mas isso não quer
+    // dizer que a conversa é minha pra atender — sem este corte, cada JID "órfão"
+    // (mensagem visível, linha da conversa não visível via RLS) virava uma entrada
+    // fantasma com status 'waiting' e sem atendente, poluindo a fila de "Aguardando
+    // atendimento" com conversas de outros atendentes que eu nem deveria ver ali.
+    if (!convData) return []
 
     let name: string
     if (isGroup) {
@@ -180,7 +189,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
       console.log('[BUILD CONV] nome:', convData?.contact_name, '| jid:', normJid)
     }
 
-    return {
+    return [{
       id: normJid,
       name,
       phone: isGroup ? normJid.replace(/@g\.us$/, '') : formatPhone(normJid),
@@ -222,7 +231,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
             reaction_attendant: (m as any).reaction_attendant || null,
           }
         }),
-    }
+    }]
   })
 
   // Include conversations that exist in whatsapp_conversations but have no messages loaded
