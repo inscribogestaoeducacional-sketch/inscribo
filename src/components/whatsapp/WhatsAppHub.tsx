@@ -2779,7 +2779,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           : c
       ))
 
-      // [FIX P3] Assign current attendant + disable bot so customer reply goes to them
+      // [FIX P3] Assign current attendant + disable bot so customer reply goes to them.
+      // status: 'open', não 'waiting' — 'waiting' significa "sem atendente" em todo o
+      // resto do sistema (fila, RLS de resgate de conversa parada); usar aqui fazia essa
+      // conversa (já atribuída) ser tratada como abandonada depois de staleHours sem
+      // resposta do cliente, aparecendo pra outros atendentes na fila de "Paradas".
       if (effectiveInstitutionId && user?.id && activeId) {
         const rJid = rawJid(activeId)
         await supabase.from('whatsapp_conversations')
@@ -2787,13 +2791,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             assigned_user_id:   user.id,
             assigned_user_name: user.full_name || user.email,
             bot_active:         false,
-            status:             'waiting',
+            status:             'open',
           })
           .eq('institution_id', effectiveInstitutionId)
           .eq('remote_jid', rJid)
         setConversations(prev => prev.map(c =>
           c.id === activeId
-            ? { ...c, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email, bot_active: false, status: 'waiting' as ConvStatus }
+            ? { ...c, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email, bot_active: false, status: 'open' as ConvStatus }
             : c
         ))
       }

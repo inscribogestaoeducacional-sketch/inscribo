@@ -689,9 +689,12 @@ async function processCustomFlow(
             .from('users').select('full_name').eq('id', assigneeId).single()
           assigneeName = (assigneeUser as any)?.full_name || null
         }
+        // status: 'open' — a conversa já está sendo atribuída a assigneeId aqui, então
+        // 'waiting' (reservado para assigned_user_id IS NULL) a deixaria elegível pra
+        // fila de resgate de outros atendentes assim que ficasse "parada".
         await supabase.from('whatsapp_conversations')
           .update({
-            status:             'waiting',
+            status:             'open',
             bot_active:         false,
             assigned_user_id:   assigneeId,
             assigned_user_name: assigneeName,
@@ -1213,9 +1216,12 @@ async function processFlow(
             .from('users').select('full_name').eq('id', assigneeId).single()
           assigneeName = (assigneeUser as any)?.full_name || null
         }
+        // status: 'open' — a conversa já está sendo atribuída a assigneeId aqui, então
+        // 'waiting' (reservado para assigned_user_id IS NULL) a deixaria elegível pra
+        // fila de resgate de outros atendentes assim que ficasse "parada".
         await supabase.from('whatsapp_conversations')
           .update({
-            status:             'waiting',
+            status:             'open',
             bot_active:         false,
             assigned_user_id:   assigneeId,
             assigned_user_name: assigneeName,
@@ -2379,8 +2385,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // the attendant who sent it — do NOT restart the bot.
         if (lastWasTemplate) {
           console.log('[flow] última mensagem saída era template — aguardando atendente, robô não ativado')
+          // status: 'open' — a conversa continua atribuída ao atendente que mandou o
+          // template; 'waiting' é reservado para assigned_user_id IS NULL, senão essa
+          // conversa vira elegível pra fila de resgate de outros atendentes.
           await supabase.from('whatsapp_conversations')
-            .update({ bot_active: false, status: 'waiting' })
+            .update({ bot_active: false, status: 'open' })
             .eq('institution_id', institutionId)
             .eq('remote_jid', remoteJid)
         } else {
