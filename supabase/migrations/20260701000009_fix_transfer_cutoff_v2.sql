@@ -55,10 +55,16 @@
 -- investigação (podem ser não relacionados a este bug específico).
 -- =============================================================================
 
+-- normalize_phone_br() é chamada com o schema qualificado (public.) de
+-- propósito: quando esta função SQL é usada dentro de uma expressão de
+-- índice (20260701000012), o Postgres faz "inlining" do corpo dela, e essa
+-- resolução usa o search_path vigente no momento da criação do índice, que
+-- pode não incluir "public" primeiro — sem qualificar, o CREATE INDEX falha
+-- com "function normalize_phone_br(text) does not exist".
 CREATE OR REPLACE FUNCTION whatsapp_base_jid(p_jid TEXT)
 RETURNS TEXT
 LANGUAGE sql
 IMMUTABLE
 AS $$
-  SELECT normalize_phone_br(regexp_replace(p_jid, '@(s\.whatsapp\.net|g\.us)$', ''));
+  SELECT public.normalize_phone_br(regexp_replace(p_jid, '@(s\.whatsapp\.net|g\.us)$', ''));
 $$;
