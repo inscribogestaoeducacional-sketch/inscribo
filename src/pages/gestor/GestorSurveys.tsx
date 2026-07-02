@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -36,6 +36,8 @@ interface Survey {
   response_count: number
   survey_mode: 'default' | 'custom'
   redirect_url: string | null
+  ai_analysis: AiReport | null
+  ai_analysis_generated_at: string | null
 }
 
 interface QuestionRow extends SurveyQuestionData {
@@ -79,6 +81,69 @@ function avg(nums: number[]) {
 
 function scaleToTen(val: number) {
   return Math.round(((val - 1) / 4) * 10 * 10) / 10
+}
+
+// Nota geral (0–10) de UM respondente, a partir das 5 categorias fixas do
+// modo default. Usado tanto pra ordenar a tabela quanto pra exibir na linha.
+function respondentOverallScore10(r: SurveyResponse): number {
+  const a = r.answers || {}
+  const nums = [a.general, a.teaching, a.communication, a.infrastructure, a.cost_benefit]
+    .filter((v): v is number => typeof v === 'number')
+  return nums.length > 0 ? scaleToTen(avg(nums)) : 0
+}
+
+// NPS clássico (%promotores − %detratores) a partir de notas 0–10.
+// Serve tanto pra "nota geral" do modo default (reaproveitada como proxy de
+// NPS, já que o modo default não tem uma pergunta 0–10 nativa) quanto pra
+// perguntas do tipo `nps` no modo custom (que já são 0–10 de verdade).
+function npsFromScores(scores: number[]): number {
+  if (scores.length === 0) return 0
+  const promoters  = scores.filter(s => s >= 9).length
+  const detractors = scores.filter(s => s <= 6).length
+  return Math.round(((promoters - detractors) / scores.length) * 100)
+}
+
+type ReenrollBucket = 'sim' | 'nao' | 'talvez'
+
+function reenrollBucket(value: string | undefined | null): ReenrollBucket | null {
+  if (!value) return null
+  if (value === 'Com certeza vou rematricular' || value === 'Provavelmente sim') return 'sim'
+  if (value === 'Não vou rematricular' || value === 'Provavelmente não') return 'nao'
+  if (value === 'Ainda não decidi') return 'talvez'
+  return null
+}
+
+function reenrollmentBreakdown(responses: SurveyResponse[]) {
+  const buckets = responses.map(r => reenrollBucket(r.answers?.reenrollment as string | undefined)).filter((b): b is ReenrollBucket => b !== null)
+  const total = buckets.length
+  const pct = (b: ReenrollBucket) => total > 0 ? Math.round((buckets.filter(x => x === b).length / total) * 100) : 0
+  return { total, yesPct: pct('sim'), noPct: pct('nao'), maybePct: pct('talvez') }
+}
+
+const REENROLL_BADGE_STYLE: Record<ReenrollBucket, { bg: string; color: string }> = {
+  sim:    { bg: '#D1FAE5', color: '#065F46' },
+  nao:    { bg: '#FEE2E2', color: '#991B1B' },
+  talvez: { bg: '#FEF3C7', color: '#92400E' },
+}
+
+function ReenrollmentBadge({ value }: { value: string | undefined | null }) {
+  const bucket = reenrollBucket(value)
+  if (!bucket) return <span style={{ color: '#CBD5E1' }}>—</span>
+  const s = REENROLL_BADGE_STYLE[bucket]
+  return (
+    <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: s.bg, color: s.color, whiteSpace: 'nowrap' }}>
+      {value}
+    </span>
+  )
+}
+
+// últimos 30 dias — default do filtro de período
+function defaultDateRange() {
+  const to = new Date()
+  const from = new Date()
+  from.setDate(from.getDate() - 30)
+  const iso = (d: Date) => d.toISOString().slice(0, 10)
+  return { from: iso(from), to: iso(to) }
 }
 
 const REENROLL_OPTIONS = [
@@ -127,6 +192,8 @@ const inputStyle: React.CSSProperties = {
 
 // ─── relatório por pergunta (pesquisas custom) ─────────────────
 function CustomSurveyReport({ questions, responses }: { questions: QuestionRow[]; responses: SurveyResponse[] }) {
+  const [expandedText, setExpandedText] = useState<Record<string, boolean>>({})
+
   if (questions.length === 0) {
     return (
       <div style={{ ...card, textAlign: 'center', padding: 64 }}>
@@ -136,6 +203,11 @@ function CustomSurveyReport({ questions, responses }: { questions: QuestionRow[]
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={card}>
+        <p style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 6px' }}>Total de respostas</p>
+        <p style={{ fontSize: 30, fontWeight: 900, color: '#1A2B4A', margin: 0 }}>{responses.length}</p>
+      </div>
+
       {questions.map(q => {
         const values = responses
           .map(r => r.custom_answers?.[q.id])
@@ -155,12 +227,21 @@ function CustomSurveyReport({ questions, responses }: { questions: QuestionRow[]
               const buckets = Array.from({ length: max - min + 1 }, (_, i) => i + min)
               const barData = buckets.map(n => ({ name: String(n), value: nums.filter(v => v === n).length }))
               const average = avg(nums)
+              // Pergunta nps é 0–10 de verdade (não precisa reescalar) — dá pra
+              // calcular o NPS real (%promotores − %detratores) direto.
+              const nps = q.question_type === 'nps' ? npsFromScores(nums) : null
               return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
                   <div style={{ textAlign: 'center', minWidth: 80 }}>
                     <div style={{ fontSize: 32, fontWeight: 900, color: '#1A2B4A' }}>{average.toFixed(1)}</div>
                     <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>média (0–{max})</p>
                   </div>
+                  {nps !== null && (
+                    <div style={{ textAlign: 'center', minWidth: 80 }}>
+                      <div style={{ fontSize: 32, fontWeight: 900, color: nps >= 0 ? '#10B981' : '#EF4444' }}>{nps >= 0 ? '+' : ''}{nps}</div>
+                      <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>NPS</p>
+                    </div>
+                  )}
                   <ResponsiveContainer width="100%" height={120} minWidth={240}>
                     <BarChart data={barData} margin={{ left: 0, right: 8, top: 0, bottom: 0 }}>
                       <XAxis dataKey="name" tick={{ fontSize: 11 }} />
@@ -202,18 +283,311 @@ function CustomSurveyReport({ questions, responses }: { questions: QuestionRow[]
               )
             })()}
 
-            {q.question_type === 'text' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 220, overflowY: 'auto' }}>
-                {values.length === 0 ? (
-                  <p style={{ fontSize: 13, color: '#94A3B8' }}>Sem respostas ainda.</p>
-                ) : (values as string[]).map((t, i) => (
-                  <p key={i} style={{ fontSize: 13, color: '#374151', background: '#F8FAFC', borderRadius: 8, padding: '8px 12px', margin: 0, fontStyle: 'italic' }}>"{t}"</p>
-                ))}
-              </div>
-            )}
+            {q.question_type === 'text' && (() => {
+              const isExpanded = !!expandedText[q.id]
+              const texts = values as string[]
+              const visible = isExpanded ? texts : texts.slice(0, 5)
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {texts.length === 0 ? (
+                    <p style={{ fontSize: 13, color: '#94A3B8' }}>Sem respostas ainda.</p>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: isExpanded ? 400 : undefined, overflowY: isExpanded ? 'auto' : undefined }}>
+                        {visible.map((t, i) => (
+                          <p key={i} style={{ fontSize: 13, color: '#374151', background: '#F8FAFC', borderRadius: 8, padding: '8px 12px', margin: 0, fontStyle: 'italic' }}>"{t}"</p>
+                        ))}
+                      </div>
+                      {texts.length > 5 && (
+                        <button
+                          onClick={() => setExpandedText(prev => ({ ...prev, [q.id]: !isExpanded }))}
+                          style={{ alignSelf: 'flex-start', background: 'none', border: 'none', cursor: 'pointer', color: '#00A896', fontSize: 12, fontWeight: 600, padding: '4px 0' }}
+                        >
+                          {isExpanded ? 'Mostrar menos' : `Ver todas (${texts.length})`}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ─── tabela de respostas individuais (Aba "Respostas") ─────────
+type SortColumn = 'name' | 'grade' | 'score' | 'reenrollment' | 'date'
+
+function SortableTh({ label, column, sortColumn, sortDir, onSort }: {
+  label: string; column: SortColumn | null; sortColumn: SortColumn; sortDir: 'asc' | 'desc'; onSort: (c: SortColumn) => void
+}) {
+  const active = column !== null && column === sortColumn
+  return (
+    <th
+      onClick={column ? () => onSort(column) : undefined}
+      style={{
+        padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: active ? '#00A896' : '#64748B',
+        borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap', cursor: column ? 'pointer' : 'default', userSelect: 'none',
+      }}
+    >
+      {label}{active && (sortDir === 'asc' ? ' ▲' : ' ▼')}
+    </th>
+  )
+}
+
+function ResponsesTable({
+  isDefault, loading, rows, questions, sortColumn, sortDir, onSort,
+  expandedRowId, onToggleExpand, onViewContact, page, pageSize, totalCount, onPageChange,
+}: {
+  isDefault: boolean
+  loading: boolean
+  rows: SurveyResponse[]
+  questions: QuestionRow[]
+  sortColumn: SortColumn
+  sortDir: 'asc' | 'desc'
+  onSort: (c: SortColumn) => void
+  expandedRowId: string | null
+  onToggleExpand: (id: string) => void
+  onViewContact: (name: string) => void
+  page: number
+  pageSize: number
+  totalCount: number
+  onPageChange: (p: number) => void
+}) {
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
+  const categoryLabels: { key: 'general' | 'teaching' | 'communication' | 'infrastructure' | 'cost_benefit'; label: string }[] = [
+    { key: 'general', label: 'Satisfação geral' },
+    { key: 'teaching', label: 'Ensino' },
+    { key: 'communication', label: 'Atendimento' },
+    { key: 'infrastructure', label: 'Infraestrutura' },
+    { key: 'cost_benefit', label: 'Custo-benefício' },
+  ]
+
+  return (
+    <div style={card}>
+      <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 16, marginTop: 0 }}>
+        Respostas individuais ({totalCount})
+      </p>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 40, color: '#94A3B8' }}>Carregando...</div>
+      ) : rows.length === 0 ? (
+        <p style={{ textAlign: 'center', color: '#94A3B8', padding: 32 }}>Nenhuma resposta com os filtros atuais.</p>
+      ) : (
+        <>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#F8FAFC' }}>
+                  <th style={{ width: 28, borderBottom: '1px solid #E2E8F0' }} />
+                  <SortableTh label="Nome" column="name" sortColumn={sortColumn} sortDir={sortDir} onSort={onSort} />
+                  <SortableTh label="Série" column="grade" sortColumn={sortColumn} sortDir={sortDir} onSort={onSort} />
+                  {isDefault && <SortableTh label="Nota geral" column="score" sortColumn={sortColumn} sortDir={sortDir} onSort={onSort} />}
+                  {isDefault && <SortableTh label="Rematrícula" column="reenrollment" sortColumn={sortColumn} sortDir={sortDir} onSort={onSort} />}
+                  <SortableTh label="Data" column="date" sortColumn={sortColumn} sortDir={sortDir} onSort={onSort} />
+                  <SortableTh label="" column={null} sortColumn={sortColumn} sortDir={sortDir} onSort={onSort} />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(r => {
+                  const isExpanded = expandedRowId === r.id
+                  const score10 = respondentOverallScore10(r)
+                  const scoreColor = score10 >= 8 ? '#10B981' : score10 >= 6 ? '#F59E0B' : '#EF4444'
+                  return (
+                    <React.Fragment key={r.id}>
+                      <tr
+                        onClick={() => onToggleExpand(r.id)}
+                        style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer', background: isExpanded ? '#F0FDFB' : undefined }}
+                      >
+                        <td style={{ padding: '10px 14px', color: '#CBD5E1' }}>{isExpanded ? '▾' : '▸'}</td>
+                        <td style={{ padding: '10px 14px', color: '#1A2B4A', fontWeight: 500 }}>
+                          {r.respondent_name || <span style={{ color: '#CBD5E1', fontStyle: 'italic' }}>Anônimo</span>}
+                        </td>
+                        <td style={{ padding: '10px 14px', color: '#64748B' }}>{r.respondent_grade || '—'}</td>
+                        {isDefault && (
+                          <td style={{ padding: '10px 14px' }}>
+                            <span style={{ fontWeight: 700, color: scoreColor }}>{score10.toFixed(1)}</span>
+                          </td>
+                        )}
+                        {isDefault && (
+                          <td style={{ padding: '10px 14px' }}>
+                            <ReenrollmentBadge value={r.answers?.reenrollment as string | undefined} />
+                          </td>
+                        )}
+                        <td style={{ padding: '10px 14px', color: '#94A3B8', whiteSpace: 'nowrap' }}>{fmt(r.created_at)}</td>
+                        <td style={{ padding: '10px 14px' }} onClick={e => e.stopPropagation()}>
+                          {r.respondent_name && (
+                            <button
+                              onClick={() => onViewContact(r.respondent_name!)}
+                              style={{ padding: '4px 10px', borderRadius: 8, background: '#EFF6FF', color: '#3B82F6', border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                            >
+                              Ver em Contatos
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr style={{ background: '#FAFCFC' }}>
+                          <td colSpan={isDefault ? 7 : 5} style={{ padding: '4px 14px 18px 42px' }}>
+                            {isDefault ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 420 }}>
+                                {categoryLabels.map(c => {
+                                  const val = r.answers?.[c.key] as number | undefined
+                                  return (
+                                    <div key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                      <span style={{ fontSize: 12, color: '#64748B', width: 130, flexShrink: 0 }}>{c.label}</span>
+                                      <div style={{ flex: 1, height: 6, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden' }}>
+                                        <div style={{ width: `${typeof val === 'number' ? (val / 5) * 100 : 0}%`, height: '100%', background: '#F97316' }} />
+                                      </div>
+                                      <span style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A', width: 24, textAlign: 'right' }}>{typeof val === 'number' ? val : '—'}</span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 520 }}>
+                                {questions.map(q => {
+                                  const val = r.custom_answers?.[q.id]
+                                  return (
+                                    <div key={q.id}>
+                                      <p style={{ fontSize: 11, color: '#94A3B8', margin: '0 0 4px', fontWeight: 600, textTransform: 'uppercase' }}>{q.title}</p>
+                                      {val === undefined || val === null || val === '' ? (
+                                        <span style={{ fontSize: 13, color: '#CBD5E1' }}>Não respondida</span>
+                                      ) : q.question_type === 'scale' || q.question_type === 'nps' ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                          <div style={{ flex: 1, height: 6, background: '#E2E8F0', borderRadius: 999, overflow: 'hidden', maxWidth: 200 }}>
+                                            <div style={{ width: `${(Number(val) / (q.question_type === 'nps' ? 10 : (q.options?.max ?? 5))) * 100}%`, height: '100%', background: '#F97316' }} />
+                                          </div>
+                                          <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{String(val)}</span>
+                                        </div>
+                                      ) : q.question_type === 'multiple_choice' ? (
+                                        <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, background: '#EFF6FF', color: '#3B82F6' }}>{String(val)}</span>
+                                      ) : (
+                                        <p style={{ fontSize: 13, color: '#374151', margin: 0, fontStyle: 'italic' }}>"{String(val)}"</p>
+                                      )}
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 20 }}>
+              <button onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page <= 1}
+                style={{ ...btn('#F1F5F9', '#374151'), opacity: page <= 1 ? 0.5 : 1, cursor: page <= 1 ? 'not-allowed' : 'pointer' }}>
+                ← Anterior
+              </button>
+              <span style={{ fontSize: 13, color: '#64748B' }}>Página {page} de {totalPages}</span>
+              <button onClick={() => onPageChange(Math.min(totalPages, page + 1))} disabled={page >= totalPages}
+                style={{ ...btn('#F1F5F9', '#374151'), opacity: page >= totalPages ? 0.5 : 1, cursor: page >= totalPages ? 'not-allowed' : 'pointer' }}>
+                Próximo →
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── aba "Relatório IA" ──────────────────────────────────────
+function AiReportTab({ survey, report, generating, hasResponses, onGenerate }: {
+  survey: Survey; report: AiReport | null; generating: boolean; hasResponses: boolean; onGenerate: () => void
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <p style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Análise gerada por IA</p>
+          {survey.ai_analysis_generated_at && (
+            <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>Gerada em {fmt(survey.ai_analysis_generated_at)}</p>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {report && (
+            <button onClick={() => window.print()} style={btn('#1A2B4A')}>Exportar PDF</button>
+          )}
+          <button onClick={onGenerate} disabled={generating || !hasResponses} style={{ ...btn('#8B5CF6'), opacity: generating || !hasResponses ? 0.6 : 1 }}>
+            <Brain size={15} /> {generating ? 'Gerando...' : report ? 'Gerar novamente' : 'Gerar relatório'}
+          </button>
+        </div>
+      </div>
+
+      {generating ? (
+        <div style={{ ...card, textAlign: 'center', padding: 48 }}>
+          <div style={{ width: 40, height: 40, border: '3px solid #8B5CF6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 16px' }} />
+          <p style={{ color: '#8B5CF6', fontWeight: 600 }}>Analisando respostas com IA...</p>
+        </div>
+      ) : !report ? (
+        <div style={{ ...card, textAlign: 'center', padding: 64 }}>
+          <Brain size={40} color="#CBD5E1" style={{ margin: '0 auto 16px', display: 'block' }} />
+          <p style={{ color: '#94A3B8', fontSize: 15, margin: '0 0 4px' }}>Nenhuma análise gerada ainda.</p>
+          {!hasResponses && <p style={{ color: '#CBD5E1', fontSize: 13 }}>É preciso ter respostas no período filtrado.</p>}
+        </div>
+      ) : (
+        <div style={card}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ textAlign: 'center', padding: '20px 0' }}>
+              {(() => {
+                const sc = report.overall_score
+                const c = sc >= 8 ? '#10B981' : sc >= 6 ? '#F59E0B' : '#EF4444'
+                const riskCfg = { baixo: { bg: '#D1FAE5', color: '#065F46' }, médio: { bg: '#FEF3C7', color: '#92400E' }, alto: { bg: '#FEE2E2', color: '#991B1B' } }
+                const rc = riskCfg[report.reenrollment_risk as keyof typeof riskCfg] ?? riskCfg.médio
+                return (
+                  <>
+                    <div style={{ fontSize: 64, fontWeight: 900, color: c, lineHeight: 1 }}>{Number(sc).toFixed(1)}</div>
+                    <p style={{ color: '#94A3B8', marginTop: 4, marginBottom: 12 }}>/ 10</p>
+                    <span style={{ padding: '4px 14px', borderRadius: 999, fontSize: 13, fontWeight: 700, background: rc.bg, color: rc.color }}>
+                      Risco de rematrícula: {report.reenrollment_risk}
+                    </span>
+                  </>
+                )
+              })()}
+            </div>
+            <div style={{ background: '#F8FAFC', borderRadius: 12, padding: 16 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 8px' }}>Resumo executivo</p>
+              <p style={{ fontSize: 14, color: '#374151', margin: 0, lineHeight: 1.6 }}>{report.summary}</p>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div>
+                <p style={{ fontSize: 12, fontWeight: 700, color: '#065F46', textTransform: 'uppercase', margin: '0 0 10px' }}>Pontos fortes</p>
+                {report.strengths.map((s, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, fontSize: 13, color: '#374151', marginBottom: 6 }}>
+                    <Check size={14} color="#10B981" style={{ flexShrink: 0, marginTop: 2 }} /> {s}
+                  </div>
+                ))}
+              </div>
+              <div>
+                <p style={{ fontSize: 12, fontWeight: 700, color: '#991B1B', textTransform: 'uppercase', margin: '0 0 10px' }}>Pontos fracos</p>
+                {report.weaknesses.map((w, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, fontSize: 13, color: '#374151', marginBottom: 6 }}>
+                    <X size={14} color="#EF4444" style={{ flexShrink: 0, marginTop: 2 }} /> {w}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p style={{ fontSize: 12, fontWeight: 700, color: '#1E40AF', textTransform: 'uppercase', margin: '0 0 10px' }}>Ações prioritárias</p>
+              {report.priority_actions.map((a, i) => (
+                <div key={i} style={{ display: 'flex', gap: 10, fontSize: 13, color: '#374151', marginBottom: 6 }}>
+                  <span style={{ fontWeight: 700, color: '#3B82F6', flexShrink: 0 }}>{i + 1}.</span> {a}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -274,13 +648,34 @@ export default function GestorSurveys() {
   const [redirectDraft, setRedirectDraft] = useState('')
 
   const [viewingSurvey, setViewingSurvey] = useState<Survey | null>(null)
+  // responses = conjunto agregado (respeita filtro de data/série, até 500
+  // linhas) usado pela aba "Visão Geral" e por CustomSurveyReport — não é
+  // paginado, é só pra cálculo de médias/gráficos.
   const [responses, setResponses] = useState<SurveyResponse[]>([])
   const [reportQuestions, setReportQuestions] = useState<QuestionRow[]>([])
   const [loadingResponses, setLoadingResponses] = useState(false)
 
   const [aiReport, setAiReport] = useState<AiReport | null>(null)
   const [generatingReport, setGeneratingReport] = useState(false)
-  const [showReportModal, setShowReportModal] = useState(false)
+
+  // ── painel de respostas: abas, filtros, tabela paginada, ordenação ──
+  const [activeTab, setActiveTab] = useState<'overview' | 'responses' | 'ai'>('overview')
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo, setFilterDateTo] = useState('')
+  const [filterGrade, setFilterGrade] = useState('')
+  const [filterName, setFilterName] = useState('')
+  const [filterReenrollment, setFilterReenrollment] = useState('')
+  const [gradeOptions, setGradeOptions] = useState<string[]>([])
+
+  const TABLE_PAGE_SIZE = 20
+  const [tableResponses, setTableResponses] = useState<SurveyResponse[]>([])
+  const [tableTotalCount, setTableTotalCount] = useState(0)
+  const [tablePage, setTablePage] = useState(1)
+  const [loadingTable, setLoadingTable] = useState(false)
+
+  const [sortColumn, setSortColumn] = useState<SortColumn>('date')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null)
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
@@ -376,26 +771,141 @@ export default function GestorSurveys() {
     setOpenMenu(null)
   }
 
-  async function openResponses(survey: Survey) {
-    setViewingSurvey(survey)
+  // Datas do filtro vêm de <input type="date"> (yyyy-mm-dd) — "De" cobre o
+  // dia inteiro a partir de 00:00, "Até" cobre até 23:59:59 do dia informado.
+  function applyDateFilter(q: any, dateFrom: string, dateTo: string) {
+    if (dateFrom) q = q.gte('created_at', `${dateFrom}T00:00:00`)
+    if (dateTo) q = q.lte('created_at', `${dateTo}T23:59:59.999`)
+    return q
+  }
+
+  async function fetchGradeOptions(surveyId: string) {
+    const { data } = await supabase
+      .from('satisfaction_responses')
+      .select('respondent_grade')
+      .eq('survey_id', surveyId)
+      .not('respondent_grade', 'is', null)
+    if (!mountedRef.current) return
+    const uniq = Array.from(new Set((data ?? []).map(r => r.respondent_grade).filter((g): g is string => !!g)))
+    setGradeOptions(uniq.sort((a, b) => a.localeCompare(b, 'pt-BR')))
+  }
+
+  // Conjunto agregado pra Visão Geral — respeita data/série, capado em 500
+  // pra não puxar uma pesquisa inteira de uma escola grande de uma vez só;
+  // a contagem exata (pro card "Respostas" e pro NPS/% de rematrícula) usa
+  // tableTotalCount, que vem de uma query separada com count exato.
+  async function fetchOverview(surveyId: string, dateFrom: string, dateTo: string, grade: string) {
     setLoadingResponses(true)
-    const [{ data }, { data: qData }] = await Promise.all([
-      supabase.from('satisfaction_responses').select('*').eq('survey_id', survey.id).order('created_at', { ascending: false }),
-      survey.survey_mode === 'custom'
-        ? supabase.from('satisfaction_questions').select('*').eq('survey_id', survey.id).order('order_index', { ascending: true })
-        : Promise.resolve({ data: [] as QuestionRow[] }),
-    ])
+    let q = supabase.from('satisfaction_responses').select('*').eq('survey_id', surveyId).order('created_at', { ascending: false }).limit(500)
+    q = applyDateFilter(q, dateFrom, dateTo)
+    if (grade) q = q.eq('respondent_grade', grade)
+    const { data } = await q
     if (mountedRef.current) {
       setResponses(data ?? [])
-      setReportQuestions(qData ?? [])
       setLoadingResponses(false)
     }
   }
 
+  async function fetchTablePage(surveyId: string, dateFrom: string, dateTo: string, grade: string, page: number) {
+    setLoadingTable(true)
+    const from = (page - 1) * TABLE_PAGE_SIZE
+    const to = from + TABLE_PAGE_SIZE - 1
+    let q = supabase.from('satisfaction_responses').select('*', { count: 'exact' }).eq('survey_id', surveyId).order('created_at', { ascending: false }).range(from, to)
+    q = applyDateFilter(q, dateFrom, dateTo)
+    if (grade) q = q.eq('respondent_grade', grade)
+    const { data, count } = await q
+    if (mountedRef.current) {
+      setTableResponses(data ?? [])
+      setTableTotalCount(count ?? 0)
+      setLoadingTable(false)
+    }
+  }
+
+  async function openResponses(survey: Survey) {
+    setViewingSurvey(survey)
+    setActiveTab('overview')
+    setSortColumn('date')
+    setSortDir('desc')
+    setExpandedRowId(null)
+    setAiReport(survey.ai_analysis ?? null)
+
+    const range = defaultDateRange()
+    setFilterDateFrom(range.from)
+    setFilterDateTo(range.to)
+    setFilterGrade('')
+    setFilterName('')
+    setFilterReenrollment('')
+    setTablePage(1)
+    // Os dados em si (overview + tabela) são carregados pelos useEffects
+    // logo abaixo, que reagem tanto à troca de pesquisa (viewingSurvey.id)
+    // quanto à troca de filtro — os setState acima já disparam isso.
+
+    fetchGradeOptions(survey.id)
+
+    if (survey.survey_mode === 'custom') {
+      setLoadingResponses(true)
+      const { data } = await supabase.from('satisfaction_questions').select('*').eq('survey_id', survey.id).order('order_index', { ascending: true })
+      if (mountedRef.current) setReportQuestions(data ?? [])
+    } else {
+      setReportQuestions([])
+    }
+  }
+
+  // Refetch da Visão Geral quando a pesquisa aberta ou os filtros server-side mudam.
+  useEffect(() => {
+    if (!viewingSurvey) return
+    fetchOverview(viewingSurvey.id, filterDateFrom, filterDateTo, filterGrade)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewingSurvey?.id, filterDateFrom, filterDateTo, filterGrade])
+
+  // Volta pra página 1 sempre que pesquisa/filtro server-side mudam (mudança
+  // de filtro invalida a página atual da tabela).
+  useEffect(() => {
+    setTablePage(1)
+  }, [viewingSurvey?.id, filterDateFrom, filterDateTo, filterGrade])
+
+  // Refetch da tabela paginada quando pesquisa, filtros server-side, ou a
+  // página mudam.
+  useEffect(() => {
+    if (!viewingSurvey) return
+    fetchTablePage(viewingSurvey.id, filterDateFrom, filterDateTo, filterGrade, tablePage)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewingSurvey?.id, filterDateFrom, filterDateTo, filterGrade, tablePage])
+
+  // Busca por nome e filtro de rematrícula são client-side, aplicados só
+  // dentro da página de 20 já carregada (por isso uma página pode mostrar
+  // menos de 20 linhas quando esses dois filtros estão ativos).
+  const visibleTableResponses = useMemo(() => {
+    let list = tableResponses
+    if (filterName.trim()) {
+      const q = filterName.trim().toLowerCase()
+      list = list.filter(r => (r.respondent_name || '').toLowerCase().includes(q))
+    }
+    if (filterReenrollment) {
+      list = list.filter(r => reenrollBucket(r.answers?.reenrollment as string | undefined) === filterReenrollment)
+    }
+    return list
+  }, [tableResponses, filterName, filterReenrollment])
+
+  const sortedTableResponses = useMemo(() => {
+    const list = [...visibleTableResponses]
+    const dir = sortDir === 'asc' ? 1 : -1
+    list.sort((a, b) => {
+      switch (sortColumn) {
+        case 'name':  return (a.respondent_name || '').localeCompare(b.respondent_name || '') * dir
+        case 'grade': return (a.respondent_grade || '').localeCompare(b.respondent_grade || '') * dir
+        case 'date':  return (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * dir
+        case 'score': return (respondentOverallScore10(a) - respondentOverallScore10(b)) * dir
+        case 'reenrollment': return String(a.answers?.reenrollment || '').localeCompare(String(b.answers?.reenrollment || '')) * dir
+        default: return 0
+      }
+    })
+    return list
+  }, [visibleTableResponses, sortColumn, sortDir])
+
   async function generateReport(survey: Survey) {
     if (responses.length === 0) { showToast('Sem respostas para gerar relatório.'); return }
     setGeneratingReport(true)
-    setShowReportModal(true)
     const { data: inst } = await supabase.from('institutions').select('name').eq('id', institutionId).maybeSingle()
     try {
       const res = await fetch('/api/ai', {
@@ -410,8 +920,21 @@ export default function GestorSurveys() {
         }),
       })
       const json = await res.json()
-      if (json.result) setAiReport(json.result)
-      else showToast('Erro ao gerar relatório.')
+      if (json.result) {
+        setAiReport(json.result)
+        const generatedAt = new Date().toISOString()
+        // Análise agregada da pesquisa inteira, salva em satisfaction_surveys
+        // (não em satisfaction_responses.ai_analysis, que é por resposta e
+        // não é usado aqui) — assim a aba não precisa gerar de novo toda
+        // vez que o gestor reabrir a pesquisa.
+        await supabase.from('satisfaction_surveys')
+          .update({ ai_analysis: json.result, ai_analysis_generated_at: generatedAt })
+          .eq('id', survey.id)
+        setViewingSurvey(prev => prev && prev.id === survey.id ? { ...prev, ai_analysis: json.result, ai_analysis_generated_at: generatedAt } : prev)
+        setSurveys(prev => prev.map(s => s.id === survey.id ? { ...s, ai_analysis: json.result, ai_analysis_generated_at: generatedAt } : s))
+      } else {
+        showToast('Erro ao gerar relatório.')
+      }
     } catch { showToast('Erro ao gerar relatório.') }
     setGeneratingReport(false)
   }
@@ -550,6 +1073,8 @@ export default function GestorSurveys() {
 
   // ─── PAINEL DE RESPOSTAS ───────────────────────────────────
   if (viewingSurvey) {
+    const isDefault = viewingSurvey.survey_mode !== 'custom'
+
     const avgGeneral  = avg(responses.map(r => r.answers.general as number))
     const avgTeaching = avg(responses.map(r => r.answers.teaching as number))
     const avgComm     = avg(responses.map(r => r.answers.communication as number))
@@ -557,6 +1082,7 @@ export default function GestorSurveys() {
     const avgCost     = avg(responses.map(r => r.answers.cost_benefit as number))
     const overallAvg  = avg([avgGeneral, avgTeaching, avgComm, avgInfra, avgCost])
     const overallScore10 = scaleToTen(overallAvg)
+    const scoreColor = overallScore10 >= 8 ? '#10B981' : overallScore10 >= 6 ? '#F59E0B' : '#EF4444'
 
     const barData = [
       { name: 'Satisfação geral', value: avgGeneral },
@@ -576,17 +1102,19 @@ export default function GestorSurveys() {
       r.answers.reenrollment === 'Provavelmente não' || r.answers.reenrollment === 'Não vou rematricular'
     ).length
     const undecided = responses.filter(r => r.answers.reenrollment === 'Ainda não decidi').length
-    const scoreColor = overallScore10 >= 8 ? '#10B981' : overallScore10 >= 6 ? '#F59E0B' : '#EF4444'
+
+    const reenroll = reenrollmentBreakdown(responses)
+    const nps = isDefault ? npsFromScores(responses.map(respondentOverallScore10)) : 0
 
     return (
       <div style={{ padding: 24, background: '#f8f9fb', minHeight: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
           <button onClick={() => setViewingSurvey(null)} style={{ ...btn('#F1F5F9', '#374151'), padding: '8px 14px' }}>
             ← Voltar
           </button>
           <div style={{ flex: 1 }}>
             <h1 style={{ fontSize: 20, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>{viewingSurvey.title}</h1>
-            <p style={{ fontSize: 13, color: '#94A3B8', margin: '2px 0 0' }}>{responses.length} resposta{responses.length !== 1 ? 's' : ''}</p>
+            <p style={{ fontSize: 13, color: '#94A3B8', margin: '2px 0 0' }}>{tableTotalCount} resposta{tableTotalCount !== 1 ? 's' : ''} no período selecionado</p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             {viewingSurvey.survey_mode === 'custom' && (
@@ -599,216 +1127,226 @@ export default function GestorSurveys() {
                 <StopCircle size={14} /> Encerrar pesquisa
               </button>
             )}
-            <button onClick={() => generateReport(viewingSurvey)} style={btn('#8B5CF6')}>
-              <Brain size={15} /> Gerar relatório IA
-            </button>
           </div>
         </div>
 
-        {loadingResponses ? (
-          <div style={{ textAlign: 'center', padding: 80, color: '#94A3B8' }}>Carregando respostas...</div>
-        ) : responses.length === 0 ? (
-          <div style={{ ...card, textAlign: 'center', padding: 64 }}>
-            <ClipboardList size={40} color="#CBD5E1" style={{ margin: '0 auto 16px', display: 'block' }} />
-            <p style={{ color: '#94A3B8', fontSize: 15 }}>Nenhuma resposta ainda.</p>
+        {/* Barra de filtros — aplicada nas 3 abas */}
+        <div style={{ ...card, marginBottom: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 14 }}>
+          <div>
+            <label style={labelStyle}>De</label>
+            <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} style={{ ...inputStyle, width: 158 }} />
           </div>
-        ) : viewingSurvey.survey_mode === 'custom' ? (
-          <CustomSurveyReport questions={reportQuestions} responses={responses} />
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24 }}>
-              <div style={{ ...card, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                <p style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: 0 }}>Nota geral</p>
-                <div style={{ fontSize: 56, fontWeight: 900, color: scoreColor, lineHeight: 1 }}>{overallScore10.toFixed(1)}</div>
-                <p style={{ fontSize: 14, color: '#94A3B8', margin: 0 }}>de 10</p>
-                <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                  {[1,2,3,4,5].map(s => (
-                    <Star key={s} size={16} fill={s <= Math.round(overallAvg) ? scoreColor : 'none'} color={scoreColor} />
-                  ))}
-                </div>
-              </div>
-              <div style={card}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 16, marginTop: 0 }}>Média por categoria (1–5)</p>
-                <ResponsiveContainer width="100%" height={160}>
-                  <BarChart data={barData} layout="vertical" margin={{ left: 8, right: 24, top: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" domain={[0, 5]} tick={{ fontSize: 11 }} />
-                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={110} />
-                    <RTooltip formatter={(v) => typeof v === 'number' ? v.toFixed(1) : v} />
-                    <Bar dataKey="value" fill="#F97316" radius={[0, 6, 6, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {pieData.length > 0 && (
-              <div style={card}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 16, marginTop: 0 }}>Distribuição — probabilidade de rematrícula</p>
-                <div style={{ display: 'flex', gap: 32, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <ResponsiveContainer width={200} height={200}>
-                    <PieChart>
-                      <Pie data={pieData} dataKey="value" cx="50%" cy="50%" outerRadius={80} paddingAngle={2}>
-                        {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                      </Pie>
-                      <RTooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {pieData.map((entry, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                        <div style={{ width: 12, height: 12, borderRadius: 3, background: entry.color, flexShrink: 0 }} />
-                        <span style={{ color: '#374151' }}>{entry.name}</span>
-                        <span style={{ fontWeight: 700, color: '#1A2B4A' }}>{entry.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {(evasionRisk > 0 || undecided > 0) && (
-              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                {evasionRisk > 0 && (
-                  <div style={{ ...card, flex: 1, minWidth: 240, border: '1px solid #FECACA', background: '#FFF5F5', display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <AlertTriangle size={24} color="#EF4444" />
-                    <div>
-                      <p style={{ fontSize: 14, fontWeight: 700, color: '#991B1B', margin: '0 0 2px' }}>
-                        {evasionRisk} {evasionRisk === 1 ? 'família indicou' : 'famílias indicaram'} que não vai rematricular
-                      </p>
-                      <p style={{ fontSize: 12, color: '#EF4444', margin: 0 }}>Ação imediata recomendada</p>
-                    </div>
-                  </div>
-                )}
-                {undecided > 0 && (
-                  <div style={{ ...card, flex: 1, minWidth: 240, border: '1px solid #FDE68A', background: '#FFFBEB', display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <AlertTriangle size={24} color="#F59E0B" />
-                    <div>
-                      <p style={{ fontSize: 14, fontWeight: 700, color: '#92400E', margin: '0 0 2px' }}>
-                        {undecided} {undecided === 1 ? 'família ainda indecisa' : 'famílias ainda indecisos'}
-                      </p>
-                      <p style={{ fontSize: 12, color: '#F59E0B', margin: 0 }}>Entre em contato proativamente</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div style={card}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 16, marginTop: 0 }}>
-                Respostas individuais ({responses.length})
-              </p>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ background: '#F8FAFC' }}>
-                      {['Nome', 'Série', 'Nota geral', 'Rematrícula', 'Data', ''].map(h => (
-                        <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#64748B', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {responses.map(r => {
-                      const noteAvg = avg([r.answers.general as number, r.answers.teaching as number, r.answers.communication as number, r.answers.infrastructure as number, r.answers.cost_benefit as number])
-                      const note10 = scaleToTen(noteAvg)
-                      const nc = note10 >= 8 ? '#10B981' : note10 >= 6 ? '#F59E0B' : '#EF4444'
-                      return (
-                        <tr key={r.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                          <td style={{ padding: '10px 14px', color: '#1A2B4A', fontWeight: 500 }}>{r.respondent_name || <span style={{ color: '#CBD5E1', fontStyle: 'italic' }}>Anônimo</span>}</td>
-                          <td style={{ padding: '10px 14px', color: '#64748B' }}>{r.respondent_grade || '—'}</td>
-                          <td style={{ padding: '10px 14px' }}><span style={{ fontWeight: 700, color: nc }}>{note10.toFixed(1)}</span></td>
-                          <td style={{ padding: '10px 14px', color: '#374151', maxWidth: 200, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(r.answers.reenrollment as string) || '—'}</td>
-                          <td style={{ padding: '10px 14px', color: '#94A3B8', whiteSpace: 'nowrap' }}>{fmt(r.created_at)}</td>
-                          <td style={{ padding: '10px 14px' }}>
-                            {r.respondent_name && (
-                              <button
-                                onClick={() => navigate(`/contacts?search=${encodeURIComponent(r.respondent_name!)}`)}
-                                style={{ padding: '4px 10px', borderRadius: 8, background: '#EFF6FF', color: '#3B82F6', border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                              >
-                                Ver em Contatos
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+          <div>
+            <label style={labelStyle}>Até</label>
+            <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} style={{ ...inputStyle, width: 158 }} />
           </div>
-        )}
+          <div>
+            <label style={labelStyle}>Série / Turma</label>
+            <select value={filterGrade} onChange={e => setFilterGrade(e.target.value)} style={{ ...inputStyle, width: 180 }}>
+              <option value="">Todas as séries</option>
+              {gradeOptions.map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <label style={labelStyle}>Buscar por nome</label>
+            <input value={filterName} onChange={e => setFilterName(e.target.value)} placeholder="Nome do respondente..." style={inputStyle} />
+          </div>
+          {isDefault && (
+            <div>
+              <label style={labelStyle}>Rematrícula</label>
+              <select value={filterReenrollment} onChange={e => setFilterReenrollment(e.target.value)} style={{ ...inputStyle, width: 140 }}>
+                <option value="">Todos</option>
+                <option value="sim">Sim</option>
+                <option value="nao">Não</option>
+                <option value="talvez">Talvez</option>
+              </select>
+            </div>
+          )}
+          <button
+            onClick={() => {
+              const range = defaultDateRange()
+              setFilterDateFrom(range.from); setFilterDateTo(range.to)
+              setFilterGrade(''); setFilterName(''); setFilterReenrollment('')
+            }}
+            style={{ ...btn('#F1F5F9', '#374151'), height: 38 }}
+          >
+            Limpar filtros
+          </button>
+        </div>
 
-        {/* Modal relatório IA */}
-        {showReportModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-            <div style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: 620, maxHeight: '90vh', overflowY: 'auto', padding: 32 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-                <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Relatório IA</h2>
-                <button onClick={() => { setShowReportModal(false); setAiReport(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><X size={20} /></button>
+        {/* Abas */}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid #E2E8F0' }}>
+          {([
+            { key: 'overview' as const,  label: 'Visão Geral' },
+            { key: 'responses' as const, label: 'Respostas' },
+            { key: 'ai' as const,        label: 'Relatório IA' },
+          ]).map(t => (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              style={{
+                padding: '10px 18px', background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 13, fontWeight: 700, color: activeTab === t.key ? '#00A896' : '#94A3B8',
+                borderBottom: activeTab === t.key ? '2px solid #00A896' : '2px solid transparent',
+                marginBottom: -1,
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'overview' && (
+          loadingResponses ? (
+            <div style={{ textAlign: 'center', padding: 80, color: '#94A3B8' }}>Carregando...</div>
+          ) : responses.length === 0 ? (
+            <div style={{ ...card, textAlign: 'center', padding: 64 }}>
+              <ClipboardList size={40} color="#CBD5E1" style={{ margin: '0 auto 16px', display: 'block' }} />
+              <p style={{ color: '#94A3B8', fontSize: 15 }}>Nenhuma resposta no período/filtro selecionado.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              {/* Cards de métricas */}
+              <div style={{ display: 'grid', gridTemplateColumns: isDefault ? 'repeat(4, 1fr)' : '1fr', gap: 16 }}>
+                <div style={card}>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 6px' }}>Respostas</p>
+                  <p style={{ fontSize: 28, fontWeight: 900, color: '#1A2B4A', margin: 0 }}>{tableTotalCount}</p>
+                </div>
+                {isDefault && (
+                  <>
+                    <div style={card}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 6px' }}>Nota geral</p>
+                      <p style={{ fontSize: 28, fontWeight: 900, color: scoreColor, margin: 0 }}>{overallScore10.toFixed(1)} <span style={{ fontSize: 13, color: '#94A3B8', fontWeight: 600 }}>/ 10</span></p>
+                    </div>
+                    <div style={card}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 6px' }}>Rematrícula</p>
+                      <p style={{ fontSize: 28, fontWeight: 900, color: '#10B981', margin: 0 }}>{reenroll.yesPct}%</p>
+                      <p style={{ fontSize: 11, color: '#94A3B8', margin: '4px 0 0' }}>{reenroll.noPct}% não · {reenroll.maybePct}% talvez</p>
+                    </div>
+                    <div style={card}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 6px' }}>NPS</p>
+                      <p style={{ fontSize: 28, fontWeight: 900, color: nps >= 0 ? '#10B981' : '#EF4444', margin: 0 }}>{nps >= 0 ? '+' : ''}{nps}</p>
+                    </div>
+                  </>
+                )}
               </div>
-              {generatingReport ? (
-                <div style={{ textAlign: 'center', padding: 48 }}>
-                  <div style={{ width: 40, height: 40, border: '3px solid #8B5CF6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 16px' }} />
-                  <p style={{ color: '#8B5CF6', fontWeight: 600 }}>Analisando respostas com IA...</p>
-                </div>
-              ) : aiReport ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                  <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                    {(() => {
-                      const sc = aiReport.overall_score
-                      const c = sc >= 8 ? '#10B981' : sc >= 6 ? '#F59E0B' : '#EF4444'
-                      const riskCfg = { baixo: { bg: '#D1FAE5', color: '#065F46' }, médio: { bg: '#FEF3C7', color: '#92400E' }, alto: { bg: '#FEE2E2', color: '#991B1B' } }
-                      const rc = riskCfg[aiReport.reenrollment_risk as keyof typeof riskCfg] ?? riskCfg.médio
-                      return (
-                        <>
-                          <div style={{ fontSize: 64, fontWeight: 900, color: c, lineHeight: 1 }}>{Number(sc).toFixed(1)}</div>
-                          <p style={{ color: '#94A3B8', marginTop: 4, marginBottom: 12 }}>/ 10</p>
-                          <span style={{ padding: '4px 14px', borderRadius: 999, fontSize: 13, fontWeight: 700, background: rc.bg, color: rc.color }}>
-                            Risco de rematrícula: {aiReport.reenrollment_risk}
-                          </span>
-                        </>
-                      )
-                    })()}
-                  </div>
-                  <div style={{ background: '#F8FAFC', borderRadius: 12, padding: 16 }}>
-                    <p style={{ fontSize: 12, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 8px' }}>Resumo executivo</p>
-                    <p style={{ fontSize: 14, color: '#374151', margin: 0, lineHeight: 1.6 }}>{aiReport.summary}</p>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                    <div>
-                      <p style={{ fontSize: 12, fontWeight: 700, color: '#065F46', textTransform: 'uppercase', margin: '0 0 10px' }}>Pontos fortes</p>
-                      {aiReport.strengths.map((s, i) => (
-                        <div key={i} style={{ display: 'flex', gap: 8, fontSize: 13, color: '#374151', marginBottom: 6 }}>
-                          <Check size={14} color="#10B981" style={{ flexShrink: 0, marginTop: 2 }} /> {s}
-                        </div>
-                      ))}
-                    </div>
-                    <div>
-                      <p style={{ fontSize: 12, fontWeight: 700, color: '#991B1B', textTransform: 'uppercase', margin: '0 0 10px' }}>Pontos fracos</p>
-                      {aiReport.weaknesses.map((w, i) => (
-                        <div key={i} style={{ display: 'flex', gap: 8, fontSize: 13, color: '#374151', marginBottom: 6 }}>
-                          <X size={14} color="#EF4444" style={{ flexShrink: 0, marginTop: 2 }} /> {w}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 12, fontWeight: 700, color: '#1E40AF', textTransform: 'uppercase', margin: '0 0 10px' }}>Ações prioritárias</p>
-                    {aiReport.priority_actions.map((a, i) => (
-                      <div key={i} style={{ display: 'flex', gap: 10, fontSize: 13, color: '#374151', marginBottom: 6 }}>
-                        <span style={{ fontWeight: 700, color: '#3B82F6', flexShrink: 0 }}>{i + 1}.</span> {a}
+
+              {isDefault ? (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24 }}>
+                    <div style={{ ...card, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: 0 }}>Nota geral</p>
+                      <div style={{ fontSize: 56, fontWeight: 900, color: scoreColor, lineHeight: 1 }}>{overallScore10.toFixed(1)}</div>
+                      <p style={{ fontSize: 14, color: '#94A3B8', margin: 0 }}>de 10</p>
+                      <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                        {[1,2,3,4,5].map(s => (
+                          <Star key={s} size={16} fill={s <= Math.round(overallAvg) ? scoreColor : 'none'} color={scoreColor} />
+                        ))}
                       </div>
-                    ))}
+                    </div>
+                    <div style={card}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 16, marginTop: 0 }}>Média por categoria (1–5)</p>
+                      <ResponsiveContainer width="100%" height={160}>
+                        <BarChart data={barData} layout="vertical" margin={{ left: 8, right: 24, top: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                          <XAxis type="number" domain={[0, 5]} tick={{ fontSize: 11 }} />
+                          <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={110} />
+                          <RTooltip formatter={(v) => typeof v === 'number' ? v.toFixed(1) : v} />
+                          <Bar dataKey="value" fill="#F97316" radius={[0, 6, 6, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
-                  <button onClick={() => window.print()} style={{ ...btn('#1A2B4A'), alignSelf: 'center', marginTop: 8 }}>
-                    Exportar relatório
-                  </button>
-                </div>
+
+                  {pieData.length > 0 && (
+                    <div style={card}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 16, marginTop: 0 }}>Distribuição — probabilidade de rematrícula</p>
+                      <div style={{ display: 'flex', gap: 32, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <ResponsiveContainer width={200} height={200}>
+                          <PieChart>
+                            <Pie data={pieData} dataKey="value" cx="50%" cy="50%" outerRadius={80} paddingAngle={2}>
+                              {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                            </Pie>
+                            <RTooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {pieData.map((entry, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                              <div style={{ width: 12, height: 12, borderRadius: 3, background: entry.color, flexShrink: 0 }} />
+                              <span style={{ color: '#374151' }}>{entry.name}</span>
+                              <span style={{ fontWeight: 700, color: '#1A2B4A' }}>{entry.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {(evasionRisk > 0 || undecided > 0) && (
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                      {evasionRisk > 0 && (
+                        <div style={{ ...card, flex: 1, minWidth: 240, border: '1px solid #FECACA', background: '#FFF5F5', display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <AlertTriangle size={24} color="#EF4444" />
+                          <div>
+                            <p style={{ fontSize: 14, fontWeight: 700, color: '#991B1B', margin: '0 0 2px' }}>
+                              {evasionRisk} {evasionRisk === 1 ? 'família indicou' : 'famílias indicaram'} que não vai rematricular
+                            </p>
+                            <p style={{ fontSize: 12, color: '#EF4444', margin: 0 }}>Ação imediata recomendada</p>
+                          </div>
+                        </div>
+                      )}
+                      {undecided > 0 && (
+                        <div style={{ ...card, flex: 1, minWidth: 240, border: '1px solid #FDE68A', background: '#FFFBEB', display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <AlertTriangle size={24} color="#F59E0B" />
+                          <div>
+                            <p style={{ fontSize: 14, fontWeight: 700, color: '#92400E', margin: '0 0 2px' }}>
+                              {undecided} {undecided === 1 ? 'família ainda indecisa' : 'famílias ainda indecisos'}
+                            </p>
+                            <p style={{ fontSize: 12, color: '#F59E0B', margin: 0 }}>Entre em contato proativamente</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               ) : (
-                <p style={{ textAlign: 'center', color: '#EF4444' }}>Erro ao gerar relatório. Tente novamente.</p>
+                <CustomSurveyReport questions={reportQuestions} responses={responses} />
               )}
             </div>
-          </div>
+          )
+        )}
+
+        {activeTab === 'responses' && (
+          <ResponsesTable
+            isDefault={isDefault}
+            loading={loadingTable}
+            rows={sortedTableResponses}
+            questions={reportQuestions}
+            sortColumn={sortColumn}
+            sortDir={sortDir}
+            onSort={col => {
+              if (sortColumn === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+              else { setSortColumn(col); setSortDir('desc') }
+            }}
+            expandedRowId={expandedRowId}
+            onToggleExpand={id => setExpandedRowId(prev => prev === id ? null : id)}
+            onViewContact={name => navigate(`/contacts?search=${encodeURIComponent(name)}`)}
+            page={tablePage}
+            pageSize={TABLE_PAGE_SIZE}
+            totalCount={tableTotalCount}
+            onPageChange={setTablePage}
+          />
+        )}
+
+        {activeTab === 'ai' && (
+          <AiReportTab
+            survey={viewingSurvey}
+            report={aiReport}
+            generating={generatingReport}
+            hasResponses={responses.length > 0}
+            onGenerate={() => generateReport(viewingSurvey)}
+          />
         )}
       </div>
     )
@@ -968,36 +1506,6 @@ export default function GestorSurveys() {
           </div>
         )}
 
-        {/* Responses view (reuses viewingSurvey state) */}
-        {viewingSurvey && (
-          <div style={{ position: 'fixed', inset: 0, background: '#fff', zIndex: 300, overflowY: 'auto' }}>
-            <div style={{ padding: '16px 16px 96px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                <button onClick={() => { setViewingSurvey(null); setResponses([]) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: 4 }}>
-                  ← Voltar
-                </button>
-                <p style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>{viewingSurvey.title}</p>
-              </div>
-              {loadingResponses ? (
-                <p style={{ textAlign: 'center', color: '#94A3B8', padding: 32 }}>Carregando respostas...</p>
-              ) : responses.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#94A3B8', padding: 32 }}>Nenhuma resposta ainda.</p>
-              ) : responses.map(r => (
-                <div key={r.id} style={{ background: '#F8FAFC', borderRadius: 12, padding: '12px 14px', marginBottom: 10, border: '1px solid #E2E8F0' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: '#1A2B4A', margin: 0 }}>{r.respondent_name ?? 'Anônimo'}</p>
-                    <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>{fmt(r.created_at)}</p>
-                  </div>
-                  {r.respondent_grade && <p style={{ fontSize: 12, color: '#64748B', margin: '0 0 6px' }}>Turma: {r.respondent_grade}</p>}
-                  {typeof r.answers?.satisfaction === 'number' && (
-                    <p style={{ fontSize: 13, color: '#F97316', margin: '0 0 4px' }}>{'⭐'.repeat(r.answers.satisfaction as number)} ({r.answers.satisfaction}/5)</p>
-                  )}
-                  {r.answers?.comment && <p style={{ fontSize: 13, color: '#374151', margin: 0, fontStyle: 'italic' }}>"{r.answers.comment}"</p>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     )
   }
@@ -1095,7 +1603,7 @@ export default function GestorSurveys() {
                             { label: 'Copiar link', icon: <Copy size={13} />, action: () => copyLink(s.survey_token) },
                             ...(s.survey_mode === 'custom' ? [{ label: 'Editar perguntas', icon: <Pencil size={13} />, action: () => { setOpenMenu(null); openEditor(s) } }] : []),
                             { label: 'Ver respostas', icon: <Eye size={13} />, action: () => { setOpenMenu(null); openResponses(s) } },
-                            { label: 'Gerar relatório IA', icon: <Brain size={13} />, action: () => { setOpenMenu(null); openResponses(s).then(() => generateReport(s)) } },
+                            { label: 'Gerar relatório IA', icon: <Brain size={13} />, action: () => { setOpenMenu(null); openResponses(s); setActiveTab('ai') } },
                             ...(s.status !== 'closed' ? [{ label: 'Encerrar pesquisa', icon: <StopCircle size={13} />, action: () => { setOpenMenu(null); closeSurvey(s.id) } }] : []),
                             { label: 'Excluir', icon: <X size={13} />, action: () => { setOpenMenu(null); deleteSurvey(s.id, s.response_count ?? 0) }, danger: true },
                           ].map((item, i) => (
