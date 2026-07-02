@@ -1899,6 +1899,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             tags: payload.new?.tags || c.tags,
             assigned_user_id:   'assigned_user_id'   in payload.new ? payload.new.assigned_user_id   : c.assigned_user_id,
             assigned_user_name: 'assigned_user_name' in payload.new ? payload.new.assigned_user_name : c.assigned_user_name,
+            // bot_active e last_customer_message_at faltavam aqui — mudanças
+            // nesses campos (ex: uma transferência) nunca chegavam a um
+            // atendente que já tinha a conversa carregada localmente, então o
+            // estado do bot/janela ficava desatualizado até um reload manual,
+            // aparentando ter "voltado ao estado inicial".
+            bot_active:                'bot_active'                in payload.new ? payload.new.bot_active                : c.bot_active,
+            last_customer_message_at:  'last_customer_message_at'  in payload.new ? payload.new.last_customer_message_at  : c.last_customer_message_at,
           }
         }))
       })
