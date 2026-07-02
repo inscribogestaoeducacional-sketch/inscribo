@@ -1712,6 +1712,7 @@ async function processAionMessage({
           status:          'waiting',
           last_message:    text || `[${msgType}]`,
           last_message_at: timestamp,
+          last_customer_message_at: timestamp,
           is_aion_inbox:   true,
         })
         .eq('id', existingConv.id)
@@ -1730,6 +1731,7 @@ async function processAionMessage({
           status:          'waiting',
           last_message:    text || `[${msgType}]`,
           last_message_at: timestamp,
+          last_customer_message_at: timestamp,
         })
         .select('id')
         .maybeSingle()
@@ -2225,7 +2227,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (score > 0) {
               const scoreLabel = interactiveTitle || text.trim() || `Avaliação: ${score}`
               await supabase.from('whatsapp_conversations')
-                .update({ satisfaction_score: score, last_message: scoreLabel, last_message_at: timestamp })
+                .update({ satisfaction_score: score, last_message: scoreLabel, last_message_at: timestamp, last_customer_message_at: timestamp })
                 .eq('institution_id', institutionId)
                 .eq('remote_jid', remoteJid)
               await supabase.from('whatsapp_messages').insert({
@@ -2265,6 +2267,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               contact_name:    finalContactName,
               last_message:    contentPreview,
               last_message_at: timestamp,
+              last_customer_message_at: timestamp,
               status:          upsertStatus,
             },
             { onConflict: 'institution_id,remote_jid' }

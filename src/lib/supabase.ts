@@ -223,6 +223,7 @@ export interface WhatsappConversation {
   status: string
   last_message?: string
   last_message_at?: string
+  last_customer_message_at?: string
   unread_count: number
   assigned_user_id?: string
   assigned_user_name?: string

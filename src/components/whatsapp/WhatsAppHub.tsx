@@ -62,6 +62,7 @@ interface Conversation {
   profile_picture_url?: string
   bot_active?: boolean
   satisfaction_score?: number | null
+  last_customer_message_at?: string
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -199,6 +200,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
       profile_picture_url: convData?.profile_picture_url,
       bot_active: (convData as any)?.bot_active ?? false,
       satisfaction_score: (convData as any)?.satisfaction_score ?? null,
+      last_customer_message_at: convData?.last_customer_message_at,
       messages: sorted
         .filter((m, idx, self) => idx === self.findIndex(t => (t.message_id && t.message_id === m.message_id) || t.id === m.id))
         .map(m => {
@@ -250,6 +252,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
         tags: conv.tags || [],
         profile_picture_url: conv.profile_picture_url,
         satisfaction_score: (conv as any).satisfaction_score ?? null,
+        last_customer_message_at: conv.last_customer_message_at,
         messages: [],
       })
     }
@@ -2294,22 +2297,25 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       })
   }, [activeId, activeConv?.lead_id])
 
-  // Reactive 24h window check — recalculates every minute
+  // Reactive 24h window check — recalculates every minute.
+  // Usa last_customer_message_at (coluna na própria conversa) em vez de
+  // escanear activeConv.messages: essa lista é filtrada pela RLS de
+  // whatsapp_messages por remetente, então um atendente que recebeu a
+  // conversa transferida (sem can_see_full_history) pode não enxergar a
+  // última mensagem real do cliente, ainda que a janela esteja aberta.
   useEffect(() => {
     const calcExpired = () => {
       if (!activeConv) { setWindowExpired(false); return }
-      const lastClientMsg = activeConv.messages
-        .filter(m => m.from === 'them')
-        .sort((a, b) => b.ts.getTime() - a.ts.getTime())[0]
+      const lastCustomerMsgAt = activeConv.last_customer_message_at
       setWindowExpired(
-        !lastClientMsg ||
-        Date.now() - lastClientMsg.ts.getTime() > 24 * 60 * 60 * 1000
+        !lastCustomerMsgAt ||
+        Date.now() - new Date(lastCustomerMsgAt).getTime() > 24 * 60 * 60 * 1000
       )
     }
     calcExpired()
     const interval = setInterval(calcExpired, 60000)
     return () => clearInterval(interval)
-  }, [activeConv?.messages, activeId])
+  }, [activeConv?.last_customer_message_at, activeId])
 
   const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0)
 
@@ -4798,10 +4804,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   {!collapseAtendimento && (
                     <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-                      {/* 24h window */}
+                      {/* 24h window — usa last_customer_message_at (não a lista de mensagens
+                          filtrada por RLS) para dar o mesmo resultado pra qualquer atendente
+                          atribuído, independente do que ele pode ver do histórico. */}
                       {!activeConv.isGroup && (() => {
-                        const lastIncoming = [...activeConv.messages].filter(m => m.from === 'them').slice(-1)[0]
-                        const msElapsed    = lastIncoming ? Date.now() - lastIncoming.ts.getTime() : Infinity
+                        const msElapsed    = activeConv.last_customer_message_at
+                          ? Date.now() - new Date(activeConv.last_customer_message_at).getTime()
+                          : Infinity
                         const windowOpen   = msElapsed < 24 * 3600000
                         const hoursLeft    = Math.max(0, 24 - msElapsed / 3600000)
                         const hh           = Math.floor(hoursLeft)
