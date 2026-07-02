@@ -156,6 +156,39 @@ const REENROLL_OPTIONS = [
 
 const PIE_COLORS = ['#10B981', '#6EE7B7', '#FCD34D', '#F97316', '#EF4444']
 
+// ─── segmentos ──────────────────────────────────────────────
+// Não existe coluna dedicada de segmento no banco — é derivado do texto
+// livre de respondent_grade por palavra-chave. Cada escola nomeia suas
+// séries de um jeito diferente, então este é o único lugar a ajustar caso
+// apareça uma nomenclatura que não caia em nenhum padrão abaixo.
+const SEGMENT_OPTIONS = ['Infantil', 'Fundamental I', 'Fundamental II', 'Médio', 'EJA'] as const
+type Segment = typeof SEGMENT_OPTIONS[number]
+
+const SEGMENT_KEYWORDS: Record<Segment, RegExp> = {
+  'Infantil':       /berç|matern|jardim|infantil|\bpr[eé]\b/i,
+  'Fundamental I':  /fund(amental)?\s*i\b(?!i)|\b[1-5]º?\s*ano\b/i,
+  'Fundamental II': /fund(amental)?\s*ii\b|\b[6-9]º?\s*ano\b/i,
+  'Médio':          /m[eé]dio/i,
+  'EJA':            /\beja\b/i,
+}
+
+function inferSegment(grade: string | null | undefined): Segment | null {
+  if (!grade) return null
+  for (const seg of SEGMENT_OPTIONS) {
+    if (SEGMENT_KEYWORDS[seg].test(grade)) return seg
+  }
+  return null
+}
+
+// Séries efetivamente usadas no filtro server-side: se há seleção explícita
+// no multi-select, usa ela; senão, se um segmento está escolhido, usa todas
+// as séries daquele segmento; senão, não filtra por série.
+function effectiveGradeFilter(selectedGrades: string[], segment: Segment | '', allGrades: string[]): string[] {
+  if (selectedGrades.length > 0) return selectedGrades
+  if (segment) return allGrades.filter(g => inferSegment(g) === segment)
+  return []
+}
+
 const QUESTION_TYPES: { type: SurveyQuestionType; label: string; icon: typeof Star }[] = [
   { type: 'scale', label: 'Escala (1 a 5)', icon: Star },
   { type: 'nps', label: 'NPS (0 a 10)', icon: Gauge },
@@ -172,6 +205,10 @@ const card: React.CSSProperties = {
   background: 'white', borderRadius: 16, padding: 24,
   border: '1px solid #e2e8f0', boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
 }
+
+// Cards de métricas (KPIs) da aba "Visão Geral" — padding reduzido pra
+// caber mais informação na tela sem precisar rolar tanto.
+const cardCompact: React.CSSProperties = { ...card, padding: 14 }
 
 const btn = (bg: string, color = 'white'): React.CSSProperties => ({
   padding: '9px 18px', borderRadius: 10, border: 'none',
@@ -203,7 +240,7 @@ function CustomSurveyReport({ questions, responses }: { questions: QuestionRow[]
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={card}>
+      <div style={cardCompact}>
         <p style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 6px' }}>Total de respostas</p>
         <p style={{ fontSize: 30, fontWeight: 900, color: '#1A2B4A', margin: 0 }}>{responses.length}</p>
       </div>
@@ -314,6 +351,58 @@ function CustomSurveyReport({ questions, responses }: { questions: QuestionRow[]
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ─── filtro de série com múltipla seleção ──────────────────────
+function MultiSelectDropdown({ label, options, selected, onChange, placeholder = 'Todas' }: {
+  label: string
+  options: string[]
+  selected: string[]
+  onChange: (next: string[]) => void
+  placeholder?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const allSelected = selected.length === 0
+  const buttonLabel = allSelected
+    ? placeholder
+    : selected.length === 1
+      ? selected[0]
+      : `${selected.length} selecionadas`
+
+  function toggleOne(opt: string) {
+    onChange(selected.includes(opt) ? selected.filter(o => o !== opt) : [...selected, opt])
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <label style={labelStyle}>{label}</label>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{ ...inputStyle, width: 200, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{buttonLabel}</span>
+        <span style={{ color: '#94A3B8', fontSize: 10 }}>▾</span>
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', left: 0, top: 66, background: 'white', border: '1px solid #E2E8F0', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.1)', zIndex: 100, minWidth: 200, maxHeight: 260, overflowY: 'auto', padding: 6 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', fontSize: 13, fontWeight: 600, color: '#374151', cursor: 'pointer', borderRadius: 8 }}>
+            <input type="checkbox" checked={allSelected} onChange={() => onChange([])} />
+            Todas
+          </label>
+          {options.length === 0 ? (
+            <p style={{ fontSize: 12, color: '#94A3B8', padding: '8px 10px', margin: 0 }}>Nenhuma opção.</p>
+          ) : options.map(opt => (
+            <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', fontSize: 13, color: '#374151', cursor: 'pointer', borderRadius: 8 }}>
+              <input type="checkbox" checked={selected.includes(opt)} onChange={() => toggleOne(opt)} />
+              {opt}
+            </label>
+          ))}
+        </div>
+      )}
+      {open && <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setOpen(false)} />}
     </div>
   )
 }
@@ -662,7 +751,8 @@ export default function GestorSurveys() {
   const [activeTab, setActiveTab] = useState<'overview' | 'responses' | 'ai'>('overview')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
-  const [filterGrade, setFilterGrade] = useState('')
+  const [filterSegment, setFilterSegment] = useState<Segment | ''>('')
+  const [filterGrades, setFilterGrades] = useState<string[]>([])
   const [filterName, setFilterName] = useState('')
   const [filterReenrollment, setFilterReenrollment] = useState('')
   const [gradeOptions, setGradeOptions] = useState<string[]>([])
@@ -779,6 +869,11 @@ export default function GestorSurveys() {
     return q
   }
 
+  function applyGradeFilter(q: any, grades: string[]) {
+    if (grades.length > 0) q = q.in('respondent_grade', grades)
+    return q
+  }
+
   async function fetchGradeOptions(surveyId: string) {
     const { data } = await supabase
       .from('satisfaction_responses')
@@ -794,11 +889,11 @@ export default function GestorSurveys() {
   // pra não puxar uma pesquisa inteira de uma escola grande de uma vez só;
   // a contagem exata (pro card "Respostas" e pro NPS/% de rematrícula) usa
   // tableTotalCount, que vem de uma query separada com count exato.
-  async function fetchOverview(surveyId: string, dateFrom: string, dateTo: string, grade: string) {
+  async function fetchOverview(surveyId: string, dateFrom: string, dateTo: string, grades: string[]) {
     setLoadingResponses(true)
     let q = supabase.from('satisfaction_responses').select('*').eq('survey_id', surveyId).order('created_at', { ascending: false }).limit(500)
     q = applyDateFilter(q, dateFrom, dateTo)
-    if (grade) q = q.eq('respondent_grade', grade)
+    q = applyGradeFilter(q, grades)
     const { data } = await q
     if (mountedRef.current) {
       setResponses(data ?? [])
@@ -806,13 +901,13 @@ export default function GestorSurveys() {
     }
   }
 
-  async function fetchTablePage(surveyId: string, dateFrom: string, dateTo: string, grade: string, page: number) {
+  async function fetchTablePage(surveyId: string, dateFrom: string, dateTo: string, grades: string[], page: number) {
     setLoadingTable(true)
     const from = (page - 1) * TABLE_PAGE_SIZE
     const to = from + TABLE_PAGE_SIZE - 1
     let q = supabase.from('satisfaction_responses').select('*', { count: 'exact' }).eq('survey_id', surveyId).order('created_at', { ascending: false }).range(from, to)
     q = applyDateFilter(q, dateFrom, dateTo)
-    if (grade) q = q.eq('respondent_grade', grade)
+    q = applyGradeFilter(q, grades)
     const { data, count } = await q
     if (mountedRef.current) {
       setTableResponses(data ?? [])
@@ -832,7 +927,8 @@ export default function GestorSurveys() {
     const range = defaultDateRange()
     setFilterDateFrom(range.from)
     setFilterDateTo(range.to)
-    setFilterGrade('')
+    setFilterSegment('')
+    setFilterGrades([])
     setFilterName('')
     setFilterReenrollment('')
     setTablePage(1)
@@ -851,26 +947,38 @@ export default function GestorSurveys() {
     }
   }
 
+  // Séries visíveis no multi-select — restritas ao segmento escolhido (se houver).
+  const segmentGradeOptions = useMemo(
+    () => filterSegment ? gradeOptions.filter(g => inferSegment(g) === filterSegment) : gradeOptions,
+    [gradeOptions, filterSegment]
+  )
+
+  // Séries efetivamente aplicadas na query server-side (ver effectiveGradeFilter).
+  const effectiveGrades = useMemo(
+    () => effectiveGradeFilter(filterGrades, filterSegment, gradeOptions),
+    [filterGrades, filterSegment, gradeOptions]
+  )
+
   // Refetch da Visão Geral quando a pesquisa aberta ou os filtros server-side mudam.
   useEffect(() => {
     if (!viewingSurvey) return
-    fetchOverview(viewingSurvey.id, filterDateFrom, filterDateTo, filterGrade)
+    fetchOverview(viewingSurvey.id, filterDateFrom, filterDateTo, effectiveGrades)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewingSurvey?.id, filterDateFrom, filterDateTo, filterGrade])
+  }, [viewingSurvey?.id, filterDateFrom, filterDateTo, effectiveGrades])
 
   // Volta pra página 1 sempre que pesquisa/filtro server-side mudam (mudança
   // de filtro invalida a página atual da tabela).
   useEffect(() => {
     setTablePage(1)
-  }, [viewingSurvey?.id, filterDateFrom, filterDateTo, filterGrade])
+  }, [viewingSurvey?.id, filterDateFrom, filterDateTo, effectiveGrades])
 
   // Refetch da tabela paginada quando pesquisa, filtros server-side, ou a
   // página mudam.
   useEffect(() => {
     if (!viewingSurvey) return
-    fetchTablePage(viewingSurvey.id, filterDateFrom, filterDateTo, filterGrade, tablePage)
+    fetchTablePage(viewingSurvey.id, filterDateFrom, filterDateTo, effectiveGrades, tablePage)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewingSurvey?.id, filterDateFrom, filterDateTo, filterGrade, tablePage])
+  }, [viewingSurvey?.id, filterDateFrom, filterDateTo, effectiveGrades, tablePage])
 
   // Busca por nome e filtro de rematrícula são client-side, aplicados só
   // dentro da página de 20 já carregada (por isso uma página pode mostrar
@@ -1141,12 +1249,23 @@ export default function GestorSurveys() {
             <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} style={{ ...inputStyle, width: 158 }} />
           </div>
           <div>
-            <label style={labelStyle}>Série / Turma</label>
-            <select value={filterGrade} onChange={e => setFilterGrade(e.target.value)} style={{ ...inputStyle, width: 180 }}>
-              <option value="">Todas as séries</option>
-              {gradeOptions.map(g => <option key={g} value={g}>{g}</option>)}
+            <label style={labelStyle}>Segmento</label>
+            <select
+              value={filterSegment}
+              onChange={e => { setFilterSegment(e.target.value as Segment | ''); setFilterGrades([]) }}
+              style={{ ...inputStyle, width: 160 }}
+            >
+              <option value="">Todos</option>
+              {SEGMENT_OPTIONS.map(seg => <option key={seg} value={seg}>{seg}</option>)}
             </select>
           </div>
+          <MultiSelectDropdown
+            label="Série / Turma"
+            options={segmentGradeOptions}
+            selected={filterGrades}
+            onChange={setFilterGrades}
+            placeholder="Todas as séries"
+          />
           <div style={{ flex: 1, minWidth: 180 }}>
             <label style={labelStyle}>Buscar por nome</label>
             <input value={filterName} onChange={e => setFilterName(e.target.value)} placeholder="Nome do respondente..." style={inputStyle} />
@@ -1166,7 +1285,7 @@ export default function GestorSurveys() {
             onClick={() => {
               const range = defaultDateRange()
               setFilterDateFrom(range.from); setFilterDateTo(range.to)
-              setFilterGrade(''); setFilterName(''); setFilterReenrollment('')
+              setFilterSegment(''); setFilterGrades([]); setFilterName(''); setFilterReenrollment('')
             }}
             style={{ ...btn('#F1F5F9', '#374151'), height: 38 }}
           >
@@ -1208,22 +1327,22 @@ export default function GestorSurveys() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               {/* Cards de métricas */}
               <div style={{ display: 'grid', gridTemplateColumns: isDefault ? 'repeat(4, 1fr)' : '1fr', gap: 16 }}>
-                <div style={card}>
+                <div style={cardCompact}>
                   <p style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 6px' }}>Respostas</p>
                   <p style={{ fontSize: 28, fontWeight: 900, color: '#1A2B4A', margin: 0 }}>{tableTotalCount}</p>
                 </div>
                 {isDefault && (
                   <>
-                    <div style={card}>
+                    <div style={cardCompact}>
                       <p style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 6px' }}>Nota geral</p>
                       <p style={{ fontSize: 28, fontWeight: 900, color: scoreColor, margin: 0 }}>{overallScore10.toFixed(1)} <span style={{ fontSize: 13, color: '#94A3B8', fontWeight: 600 }}>/ 10</span></p>
                     </div>
-                    <div style={card}>
+                    <div style={cardCompact}>
                       <p style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 6px' }}>Rematrícula</p>
                       <p style={{ fontSize: 28, fontWeight: 900, color: '#10B981', margin: 0 }}>{reenroll.yesPct}%</p>
                       <p style={{ fontSize: 11, color: '#94A3B8', margin: '4px 0 0' }}>{reenroll.noPct}% não · {reenroll.maybePct}% talvez</p>
                     </div>
-                    <div style={card}>
+                    <div style={cardCompact}>
                       <p style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 6px' }}>NPS</p>
                       <p style={{ fontSize: 28, fontWeight: 900, color: nps >= 0 ? '#10B981' : '#EF4444', margin: 0 }}>{nps >= 0 ? '+' : ''}{nps}</p>
                     </div>
@@ -1234,7 +1353,7 @@ export default function GestorSurveys() {
               {isDefault ? (
                 <>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24 }}>
-                    <div style={{ ...card, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <div style={{ ...cardCompact, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                       <p style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: 0 }}>Nota geral</p>
                       <div style={{ fontSize: 56, fontWeight: 900, color: scoreColor, lineHeight: 1 }}>{overallScore10.toFixed(1)}</div>
                       <p style={{ fontSize: 14, color: '#94A3B8', margin: 0 }}>de 10</p>
@@ -1244,9 +1363,9 @@ export default function GestorSurveys() {
                         ))}
                       </div>
                     </div>
-                    <div style={card}>
+                    <div style={cardCompact}>
                       <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 16, marginTop: 0 }}>Média por categoria (1–5)</p>
-                      <ResponsiveContainer width="100%" height={160}>
+                      <ResponsiveContainer width="100%" height={200}>
                         <BarChart data={barData} layout="vertical" margin={{ left: 8, right: 24, top: 0, bottom: 0 }}>
                           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                           <XAxis type="number" domain={[0, 5]} tick={{ fontSize: 11 }} />
@@ -1259,7 +1378,7 @@ export default function GestorSurveys() {
                   </div>
 
                   {pieData.length > 0 && (
-                    <div style={card}>
+                    <div style={cardCompact}>
                       <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 16, marginTop: 0 }}>Distribuição — probabilidade de rematrícula</p>
                       <div style={{ display: 'flex', gap: 32, alignItems: 'center', flexWrap: 'wrap' }}>
                         <ResponsiveContainer width={200} height={200}>
