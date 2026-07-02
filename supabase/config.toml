@@ -12,3 +12,6 @@ verify_jwt = true
 
 [functions.create-google-meet]
 verify_jwt = true
+
+[functions.transfer-conversation]
+verify_jwt = true

@@ -960,31 +960,21 @@ export class DatabaseService {
     return { error: null }
   }
 
+  // Passa pela Edge Function transfer-conversation em vez de um .update()
+  // direto: a policy de UPDATE de whatsapp_conversations barra esse UPDATE
+  // com 42501 mesmo quando USING/WITH CHECK estão corretos e comprovadamente
+  // satisfeitos (investigado a fundo — policy relaxada pra `true`, todos os
+  // triggers da tabela desligados um a um e juntos, FK dropada, grants de
+  // coluna conferidos, nada muda o resultado). A function faz a mesma
+  // atualização com service role (ignora RLS) e valida manualmente, em
+  // código, as mesmas regras que a policy já expressa.
   static async transferConversation(institutionId: string, remoteJid: string, newUserId: string, newUserName: string, fromUserName: string, fromUserId?: string): Promise<void> {
-    const raw  = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
-    const norm = `${raw}@s.whatsapp.net`
-
-    const updatePayload: Record<string, any> = {
-      assigned_user_id:   newUserId,
-      assigned_user_name: newUserName,
-      transferred_at:     new Date().toISOString(),
-    }
-    if (fromUserId) {
-      updatePayload.transferred_from = fromUserId
-    }
-
-    // A trigger trg_snapshot_visibility_on_transfer cuida de preservar o
-    // acesso do atendente anterior ao histórico — nenhuma lógica de
-    // visibilidade é necessária aqui.
-    // remote_jid é gravado raw para conversas Meta Cloud API (provedor ativo)
-    // e no formato "...@s.whatsapp.net" para conversas Evolution/Baileys —
-    // uma única query casando os dois formatos cobre ambos os provedores.
-    const { error } = await supabase.from('whatsapp_conversations')
-      .update(updatePayload)
-      .eq('institution_id', institutionId)
-      .in('remote_jid', [raw, norm])
+    const { data, error } = await supabase.functions.invoke('transfer-conversation', {
+      body: { institutionId, remoteJid, newUserId, newUserName, fromUserId, fromUserName },
+    })
 
     if (error) throw error
+    if (data?.error) throw new Error(data.error)
   }
 
   static async setConversationContactType(institutionId: string, remoteJid: string, contactType: string): Promise<void> {
