@@ -251,11 +251,8 @@ export default function SatisfactionPage() {
         answers: isCustom ? {} : answers,
         custom_answers: isCustom ? customAnswers : null,
       })
-
-      await supabase
-        .from('satisfaction_surveys')
-        .update({ response_count: (survey.response_count ?? 0) + 1 })
-        .eq('id', survey.id)
+      // response_count é incrementado atomicamente por um trigger no banco
+      // (trg_increment_survey_response_count) — não repetir aqui, senão conta em dobro.
 
       const { data: institutionUsers } = await supabase
         .from('users')

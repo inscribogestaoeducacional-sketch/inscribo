@@ -137,11 +137,55 @@ function ReenrollmentBadge({ value }: { value: string | undefined | null }) {
   )
 }
 
-// últimos 30 dias — default do filtro de período
-function defaultDateRange() {
+// ─── pills de filtro rápido por rematrícula (aba "Respostas") ─────────
+const REENROLL_PILL_ACCENT: Record<'' | ReenrollBucket, string> = {
+  '':      '#00A896',
+  sim:     '#10B981',
+  talvez:  '#F59E0B',
+  nao:     '#EF4444',
+}
+
+function ReenrollmentPills({ value, counts, onChange }: {
+  value: '' | ReenrollBucket
+  counts: { total: number; sim: number; nao: number; talvez: number }
+  onChange: (v: '' | ReenrollBucket) => void
+}) {
+  const options: { key: '' | ReenrollBucket; label: string; count: number }[] = [
+    { key: '',       label: 'Todos',            count: counts.total },
+    { key: 'sim',    label: '✅ Vai renovar',     count: counts.sim },
+    { key: 'talvez', label: '⚠️ Talvez',          count: counts.talvez },
+    { key: 'nao',    label: '❌ Não vai renovar', count: counts.nao },
+  ]
+  return (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+      {options.map(opt => {
+        const active = value === opt.key
+        const accent = REENROLL_PILL_ACCENT[opt.key]
+        return (
+          <button
+            key={opt.key || 'todos'}
+            onClick={() => onChange(opt.key)}
+            style={{
+              padding: '7px 14px', borderRadius: 999, fontSize: 12.5, fontWeight: 700,
+              cursor: 'pointer', whiteSpace: 'nowrap',
+              border: `1.5px solid ${accent}`,
+              background: active ? accent : 'transparent',
+              color: active ? 'white' : accent,
+            }}
+          >
+            {opt.label} ({opt.count})
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// Default do filtro de período: da criação da pesquisa até hoje — assim o
+// gestor vê TODAS as respostas ao abrir o painel, não só uma janela recente.
+function defaultDateRange(createdAt: string) {
   const to = new Date()
-  const from = new Date()
-  from.setDate(from.getDate() - 30)
+  const from = new Date(createdAt)
   const iso = (d: Date) => d.toISOString().slice(0, 10)
   return { from: iso(from), to: iso(to) }
 }
@@ -239,7 +283,7 @@ function CustomSurveyReport({ questions, responses }: { questions: QuestionRow[]
     )
   }
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={cardCompact}>
         <p style={{ fontSize: 12, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 6px' }}>Total de respostas</p>
         <p style={{ fontSize: 30, fontWeight: 900, color: '#1A2B4A', margin: 0 }}>{responses.length}</p>
@@ -251,9 +295,9 @@ function CustomSurveyReport({ questions, responses }: { questions: QuestionRow[]
           .filter(v => v !== undefined && v !== null && v !== '')
 
         return (
-          <div key={q.id} style={card}>
-            <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 4, marginTop: 0 }}>{q.title}</p>
-            <p style={{ fontSize: 11, color: '#94A3B8', marginBottom: 16, marginTop: 0, textTransform: 'uppercase', fontWeight: 600 }}>
+          <div key={q.id} style={cardCompact}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 2, marginTop: 0 }}>{q.title}</p>
+            <p style={{ fontSize: 11, color: '#94A3B8', marginBottom: 10, marginTop: 0, textTransform: 'uppercase', fontWeight: 600 }}>
               {values.length} resposta{values.length !== 1 ? 's' : ''}
             </p>
 
@@ -268,25 +312,29 @@ function CustomSurveyReport({ questions, responses }: { questions: QuestionRow[]
               // calcular o NPS real (%promotores − %detratores) direto.
               const nps = q.question_type === 'nps' ? npsFromScores(nums) : null
               return (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
-                  <div style={{ textAlign: 'center', minWidth: 80 }}>
-                    <div style={{ fontSize: 32, fontWeight: 900, color: '#1A2B4A' }}>{average.toFixed(1)}</div>
-                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>média (0–{max})</p>
-                  </div>
-                  {nps !== null && (
-                    <div style={{ textAlign: 'center', minWidth: 80 }}>
-                      <div style={{ fontSize: 32, fontWeight: 900, color: nps >= 0 ? '#10B981' : '#EF4444' }}>{nps >= 0 ? '+' : ''}{nps}</div>
-                      <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>NPS</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ display: 'flex', gap: 16, flexBasis: '30%', minWidth: 120, flexShrink: 0 }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 32, fontWeight: 900, color: '#1A2B4A' }}>{average.toFixed(1)}</div>
+                      <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>média (0–{max})</p>
                     </div>
-                  )}
-                  <ResponsiveContainer width="100%" height={120} minWidth={240}>
-                    <BarChart data={barData} margin={{ left: 0, right: 8, top: 0, bottom: 0 }}>
-                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={24} />
-                      <RTooltip />
-                      <Bar dataKey="value" fill="#F97316" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                    {nps !== null && (
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 32, fontWeight: 900, color: nps >= 0 ? '#10B981' : '#EF4444' }}>{nps >= 0 ? '+' : ''}{nps}</div>
+                        <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>NPS</p>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ flexBasis: '70%', flexGrow: 1, minWidth: 0 }}>
+                    <ResponsiveContainer width="100%" height={120}>
+                      <BarChart data={barData} margin={{ left: 0, right: 8, top: 0, bottom: 0 }}>
+                        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={24} />
+                        <RTooltip />
+                        <Bar dataKey="value" fill="#F97316" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               )
             })()}
@@ -924,7 +972,7 @@ export default function GestorSurveys() {
     setExpandedRowId(null)
     setAiReport(survey.ai_analysis ?? null)
 
-    const range = defaultDateRange()
+    const range = defaultDateRange(survey.created_at)
     setFilterDateFrom(range.from)
     setFilterDateTo(range.to)
     setFilterSegment('')
@@ -1010,6 +1058,29 @@ export default function GestorSurveys() {
     })
     return list
   }, [visibleTableResponses, sortColumn, sortDir])
+
+  // Contagem pros pills de rematrícula (aba Respostas) — usa `responses`
+  // (conjunto agregado já filtrado por data/segmento/série, capado em 500)
+  // em vez da página de 20 da tabela, senão os números só refletiriam a
+  // página atual. Aplica a busca por nome também, pra bater com o que o
+  // gestor está vendo; não aplica o próprio filtro de rematrícula, já que
+  // o objetivo é mostrar quanto cada opção renderia.
+  const reenrollmentPillCounts = useMemo(() => {
+    const base = filterName.trim()
+      ? responses.filter(r => (r.respondent_name || '').toLowerCase().includes(filterName.trim().toLowerCase()))
+      : responses
+    const buckets = { sim: 0, nao: 0, talvez: 0 }
+    for (const r of base) {
+      const b = reenrollBucket(r.answers?.reenrollment as string | undefined)
+      if (b) buckets[b]++
+    }
+    return { total: base.length, ...buckets }
+  }, [responses, filterName])
+
+  const hasReenrollmentField = useMemo(
+    () => responses.some(r => r.answers && Object.prototype.hasOwnProperty.call(r.answers, 'reenrollment')),
+    [responses]
+  )
 
   async function generateReport(survey: Survey) {
     if (responses.length === 0) { showToast('Sem respostas para gerar relatório.'); return }
@@ -1283,7 +1354,7 @@ export default function GestorSurveys() {
           )}
           <button
             onClick={() => {
-              const range = defaultDateRange()
+              const range = defaultDateRange(viewingSurvey.created_at)
               setFilterDateFrom(range.from); setFilterDateTo(range.to)
               setFilterSegment(''); setFilterGrades([]); setFilterName(''); setFilterReenrollment('')
             }}
@@ -1379,11 +1450,11 @@ export default function GestorSurveys() {
 
                   {pieData.length > 0 && (
                     <div style={cardCompact}>
-                      <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 16, marginTop: 0 }}>Distribuição — probabilidade de rematrícula</p>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 10, marginTop: 0 }}>Distribuição — probabilidade de rematrícula</p>
                       <div style={{ display: 'flex', gap: 32, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <ResponsiveContainer width={200} height={200}>
+                        <ResponsiveContainer width={160} height={160}>
                           <PieChart>
-                            <Pie data={pieData} dataKey="value" cx="50%" cy="50%" outerRadius={80} paddingAngle={2}>
+                            <Pie data={pieData} dataKey="value" cx="50%" cy="50%" outerRadius={70} paddingAngle={2}>
                               {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                             </Pie>
                             <RTooltip />
@@ -1437,25 +1508,34 @@ export default function GestorSurveys() {
         )}
 
         {activeTab === 'responses' && (
-          <ResponsesTable
-            isDefault={isDefault}
-            loading={loadingTable}
-            rows={sortedTableResponses}
-            questions={reportQuestions}
-            sortColumn={sortColumn}
-            sortDir={sortDir}
-            onSort={col => {
-              if (sortColumn === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-              else { setSortColumn(col); setSortDir('desc') }
-            }}
-            expandedRowId={expandedRowId}
-            onToggleExpand={id => setExpandedRowId(prev => prev === id ? null : id)}
-            onViewContact={name => navigate(`/contacts?search=${encodeURIComponent(name)}`)}
-            page={tablePage}
-            pageSize={TABLE_PAGE_SIZE}
-            totalCount={tableTotalCount}
-            onPageChange={setTablePage}
-          />
+          <>
+            {isDefault && hasReenrollmentField && (
+              <ReenrollmentPills
+                value={filterReenrollment as '' | ReenrollBucket}
+                counts={reenrollmentPillCounts}
+                onChange={setFilterReenrollment}
+              />
+            )}
+            <ResponsesTable
+              isDefault={isDefault}
+              loading={loadingTable}
+              rows={sortedTableResponses}
+              questions={reportQuestions}
+              sortColumn={sortColumn}
+              sortDir={sortDir}
+              onSort={col => {
+                if (sortColumn === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                else { setSortColumn(col); setSortDir('desc') }
+              }}
+              expandedRowId={expandedRowId}
+              onToggleExpand={id => setExpandedRowId(prev => prev === id ? null : id)}
+              onViewContact={name => navigate(`/contacts?search=${encodeURIComponent(name)}`)}
+              page={tablePage}
+              pageSize={TABLE_PAGE_SIZE}
+              totalCount={tableTotalCount}
+              onPageChange={setTablePage}
+            />
+          </>
         )}
 
         {activeTab === 'ai' && (
