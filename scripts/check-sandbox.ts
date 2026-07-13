@@ -1,6 +1,6 @@
 const TOKEN  = process.env.WA_ACCESS_TOKEN
-const PHONE_ID = '1007880222413531'
-const WABA_ID  = '1222972209822315'
+const PHONE_ID = '1214617431733213'
+const WABA_ID  = '2812701862456294'
 const BASE     = 'https://graph.facebook.com/v19.0'
 
 async function get(url: string) {

@@ -3,14 +3,14 @@
  * Teste básico de integração com a Meta Cloud API (WhatsApp).
  *
  * Uso:
- *   WA_ACCESS_TOKEN=EAAxxxx WABA_ID=1222... npx tsx scripts/test-whatsapp.ts
+ *   WA_ACCESS_TOKEN=EAAxxxx WABA_ID=2812... npx tsx scripts/test-whatsapp.ts
  *
  * Ou crie um .env.local com as variáveis e rode:
  *   npx tsx --env-file=.env.local scripts/test-whatsapp.ts
  */
 
 const TOKEN   = process.env.WA_ACCESS_TOKEN
-const WABA_ID = process.env.WABA_ID || '1222972209822315'
+const WABA_ID = process.env.WABA_ID || '2812701862456294'
 const BASE    = 'https://graph.facebook.com/v19.0'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

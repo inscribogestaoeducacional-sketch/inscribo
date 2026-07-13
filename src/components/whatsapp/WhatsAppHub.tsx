@@ -2859,16 +2859,19 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         .eq('is_active', true)
         .maybeSingle()
 
-      const { data: tokenRow } = await supabase
+      const { data: settingsRows } = await supabase
         .from('platform_settings')
-        .select('value')
-        .eq('key', 'wa_access_token')
-        .maybeSingle()
+        .select('key, value')
+        .in('key', ['wa_access_token', 'wa_waba_id'])
 
-      const token = tokenRow?.value || ''
+      const settingsMap: Record<string, string> = {}
+      settingsRows?.forEach((r: any) => { settingsMap[r.key] = r.value })
+
+      const token = settingsMap['wa_access_token'] || ''
       if (!phoneData?.phone_number_id || !token) throw new Error('WhatsApp não configurado')
 
-      const wabaId = phoneData.waba_id || '1222972209822315'
+      const wabaId = phoneData.waba_id || settingsMap['wa_waba_id'] || ''
+      if (!wabaId) throw new Error('WABA ID não configurado')
 
       // Verify template exists and is approved
       const checkRes = await fetch(

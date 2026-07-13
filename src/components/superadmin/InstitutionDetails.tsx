@@ -597,7 +597,9 @@ export default function InstitutionDetails() {
 
   const createDefaultTemplates = async (wabaId: string, token: string): Promise<void> => {
     if (!wabaId || !token) return
-    const AION_WABA = '1222972209822315'
+    const { data: wabaRow } = await supabase
+      .from('platform_settings').select('value').eq('key', 'wa_waba_id').maybeSingle()
+    const AION_WABA = wabaRow?.value || ''
     if (wabaId === AION_WABA) return
 
     const { data: templates } = await supabase
@@ -752,9 +754,11 @@ export default function InstitutionDetails() {
     if (!waForm.phone_id) { showToast('Phone Number ID é obrigatório.', false); return }
     setSavingWa(true)
     try {
-      const { data: tokenRow } = await supabase
-        .from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
-      const globalToken = tokenRow?.value || ''
+      const { data: settingsRows } = await supabase
+        .from('platform_settings').select('key, value').in('key', ['wa_access_token', 'wa_waba_id'])
+      const settingsMap: Record<string, string> = {}
+      settingsRows?.forEach((r: any) => { settingsMap[r.key] = r.value })
+      const globalToken = settingsMap['wa_access_token'] || ''
       if (!globalToken) throw new Error('Token de acesso não encontrado. Vá em Admin → Configurações → WhatsApp e salve o Access Token.')
       const testRes = await fetch(`https://graph.facebook.com/v19.0/${waForm.phone_id}?fields=display_phone_number,verified_name`, { headers: { Authorization: `Bearer ${globalToken}` } })
       if (!testRes.ok) { const err = await testRes.json(); throw new Error((err as any)?.error?.message || 'Phone ID inválido ou token sem permissão') }
@@ -765,7 +769,7 @@ export default function InstitutionDetails() {
         whatsapp_display_name: waForm.display_name || testData.verified_name || '',
         whatsapp_connected: true,
       }).eq('id', id)
-      const AION_WABA_ID = '1222972209822315'
+      const AION_WABA_ID = settingsMap['wa_waba_id'] || ''
       const wabaToSubscribe = waForm.waba_id?.trim() || ''
       const effectiveWabaId = wabaToSubscribe || AION_WABA_ID
 
@@ -1419,7 +1423,7 @@ export default function InstitutionDetails() {
                                 { k: 'phone_id',     l: 'Phone Number ID',   placeholder: '1007880222413531' },
                                 { k: 'phone_number', l: 'Número',            placeholder: '+55 83 99999-9999' },
                                 { k: 'display_name', l: 'Nome de exibição',  placeholder: 'Colégio São João' },
-                                { k: 'waba_id',      l: 'WABA ID (deixe vazio se usar o WABA da Áion)', placeholder: '1222972209822315' },
+                                { k: 'waba_id',      l: 'WABA ID (deixe vazio se usar o WABA da Áion)', placeholder: '2812701862456294' },
                               ].map(f => (
                                 <div key={f.k}>
                                   <label className={lbl}>{f.l}</label>
@@ -1636,7 +1640,7 @@ export default function InstitutionDetails() {
                         { k: 'phone_id',     label: 'Phone ID',     placeholder: 'ID do número (Meta)' },
                         { k: 'phone_number', label: 'Telefone',     placeholder: '+55 (00) 00000-0000' },
                         { k: 'display_name', label: 'Nome exibido', placeholder: 'Nome da conta WA' },
-                        { k: 'waba_id',      label: 'WABA ID (deixe vazio se usar o WABA da Áion)', placeholder: '1222972209822315' },
+                        { k: 'waba_id',      label: 'WABA ID (deixe vazio se usar o WABA da Áion)', placeholder: '2812701862456294' },
                       ].map(f => (
                         <div key={f.k}>
                           <label className={lbl}>{f.label}</label>

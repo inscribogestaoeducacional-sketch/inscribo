@@ -677,7 +677,7 @@ export default function AdminSettings() {
             </div>
             <div>
               <label className={lbl}>WABA ID</label>
-              <input className={inp} placeholder="Ex: 1222972209822315"
+              <input className={inp} placeholder="Ex: 2812701862456294"
                 value={aionWA.waba_id || ''}
                 onChange={e => setAionWA(p => ({ ...p, waba_id: e.target.value }))} />
               <p className={hint}>WhatsApp Business Account ID — usado para registrar o webhook automaticamente</p>
@@ -740,7 +740,7 @@ export default function AdminSettings() {
             </div>
             <div>
               <label className={lbl}>WABA ID</label>
-              <input className={inp} value={settings.wa_waba_id} onChange={e => set('wa_waba_id', e.target.value)} placeholder="1222972209822315" />
+              <input className={inp} value={settings.wa_waba_id} onChange={e => set('wa_waba_id', e.target.value)} placeholder="2812701862456294" />
               <p className={hint}>WhatsApp Business Account ID</p>
             </div>
           </div>
