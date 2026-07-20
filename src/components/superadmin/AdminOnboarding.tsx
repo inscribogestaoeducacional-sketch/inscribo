@@ -375,15 +375,11 @@ function PaymentPanel({ process, onSuccess }: { process: Process; onSuccess: () 
 
       if (data?.paymentLink) setPayLink(data.paymentLink)
 
-      await supabase.from('payments').insert({
-        institution_id: process.institution_id,
-        amount:         Number(form.monthlyValue),
-        status:         'pending',
-        payment_type:   'monthly',
-        due_date:       new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-        description:    `Mensalidade — ${process.institution?.name}`,
-      })
-
+      // Não cria a primeira mensalidade aqui. As 12 mensalidades (incluindo a
+      // primeira) são geradas de uma vez pelo asaas-webhook (generateMonthlyPayments)
+      // quando o pagamento da implantação é confirmado — criar uma mensalidade
+      // manual aqui, antes disso, fazia o webhook achar que "mensalidades já
+      // existem" e pular a geração das outras 11.
       onSuccess()
     } catch (e: any) {
       setErr(e?.message || 'Erro ao gerar cobrança.')

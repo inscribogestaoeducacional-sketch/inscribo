@@ -367,6 +367,7 @@ serve(async (req) => {
         'POST',
         {
           institution_id,
+          consultant_id: consultant_id || null,
           status: 'sent',
           sign_url: null,
           autentique_document_id: documentId,
