@@ -6,23 +6,34 @@ import SuperAdminLayout from './SuperAdminLayout'
 import { useAuth } from '../../contexts/AuthContext'
 import {
   Building2, Users, TrendingUp, Calendar,
-  ArrowRight, Clock, CheckCircle2, AlertCircle
+  ArrowRight, Clock, CheckCircle2, AlertCircle, DollarSign
 } from 'lucide-react'
 
 function fmtDate(s: string) {
   return new Date(s).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
+function fmtBRL(n: number) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n || 0)
+}
+
+const COMMISSION_TYPE_MAP: Record<string, string> = { implantacao: 'Implantação', mensalidade: 'Mensalidade' }
+const COMMISSION_STATUS_MAP: Record<string, { l: string; c: string; bg: string }> = {
+  pendente:  { l: 'Pendente',  c: '#d97706', bg: '#fffbeb' },
+  paga:      { l: 'Paga',      c: '#16a34a', bg: '#f0fdf4' },
+  cancelada: { l: 'Cancelada', c: '#9ca3af', bg: '#f9fafb' },
+}
 
 export default function ConsultantHome() {
   const { user } = useAuth()
-  const [schools, setSchools]   = useState<any[]>([])
-  const [leads, setLeads]       = useState<any[]>([])
+  const [schools, setSchools]         = useState<any[]>([])
+  const [leads, setLeads]             = useState<any[]>([])
+  const [commissions, setCommissions] = useState<any[]>([])
   const [loading, setLoading]   = useState(true)
 
   useEffect(() => {
     const load = async () => {
       setLoading(true)
-      const [schRes, leadRes] = await Promise.all([
+      const [schRes, leadRes, commRes] = await Promise.all([
         supabase.from('institutions')
           .select('id, name, city, state, plan_status, created_at')
           .eq('consultant_id', user?.id || '')
@@ -33,13 +44,21 @@ export default function ConsultantHome() {
           .not('stage', 'in', '(cliente)')
           .order('updated_at', { ascending: false })
           .limit(10),
+        supabase.from('consultant_commissions')
+          .select('*, institutions(name)')
+          .eq('consultant_id', user?.id || '')
+          .order('created_at', { ascending: false }),
       ])
       setSchools(schRes.data || [])
       setLeads(leadRes.data  || [])
+      setCommissions(commRes.data || [])
       setLoading(false)
     }
     if (user?.id) load()
   }, [user?.id])
+
+  const commissionsPending = commissions.filter(c => c.status === 'pendente').reduce((s, c) => s + (c.amount || 0), 0)
+  const commissionsPaid    = commissions.filter(c => c.status === 'paga').reduce((s, c) => s + (c.amount || 0), 0)
 
   const overdueLeads = leads.filter(l =>
     l.next_followup && new Date(l.next_followup) < new Date()
@@ -173,6 +192,49 @@ export default function ConsultantHome() {
             )}
           </div>
 
+        </div>
+
+        {/* Minhas comissões — somente leitura */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+            <h2 className="font-bold text-gray-900">Minhas comissões</h2>
+            <div className="flex items-center gap-4 text-xs">
+              <span className="text-amber-600 font-semibold">{fmtBRL(commissionsPending)} pendente</span>
+              <span className="text-green-600 font-semibold">{fmtBRL(commissionsPaid)} paga</span>
+            </div>
+          </div>
+          {loading ? (
+            <div className="p-5 space-y-3">
+              {Array(3).fill(0).map((_, i) => <div key={i} className="h-10 bg-gray-100 rounded-lg animate-pulse" />)}
+            </div>
+          ) : commissions.length === 0 ? (
+            <div className="p-10 text-center text-gray-400">
+              <DollarSign className="w-10 h-10 mx-auto mb-2 text-gray-200" />
+              <p className="text-sm">Nenhuma comissão lançada ainda</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {commissions.map(c => {
+                const st = COMMISSION_STATUS_MAP[c.status] || COMMISSION_STATUS_MAP.pendente
+                return (
+                  <div key={c.id} className="px-5 py-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">
+                        {COMMISSION_TYPE_MAP[c.type] || c.type} {(c as any).institutions?.name ? `— ${(c as any).institutions.name}` : ''}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {c.payment_date ? `Pago em ${fmtDate(c.payment_date)}` : 'Ainda não paga'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-sm font-bold text-gray-700">{fmtBRL(c.amount)}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ color: st.c, background: st.bg }}>{st.l}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     </SuperAdminLayout>

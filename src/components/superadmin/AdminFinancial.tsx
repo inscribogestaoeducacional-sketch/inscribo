@@ -7,22 +7,38 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import {
   DollarSign, Building2, AlertTriangle, CheckCircle2, Clock, X, RefreshCw,
   ExternalLink, AlertCircle, Send, Plus, Copy, CreditCard, Ban,
-  MessageCircle, Unlock, Lock, Eye, ChevronDown, ChevronRight
+  MessageCircle, Unlock, Lock, Eye, ChevronDown, ChevronRight,
+  Users, Calendar, ChevronLeft, SlidersHorizontal
 } from 'lucide-react'
 
 function fmtBRL(n: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n || 0)
 }
-function isThisMonth(d: string | null) {
-  if (!d) return false
-  const dt = new Date(d), now = new Date()
-  return dt.getFullYear() === now.getFullYear() && dt.getMonth() === now.getMonth()
-}
 function daysLate(dueDate: string) {
   return Math.max(0, Math.floor((Date.now() - new Date(dueDate + 'T12:00:00').getTime()) / 86400000))
 }
 
-type Tab = 'overview' | 'payments' | 'overdue' | 'costs' | 'entries'
+type Period = { start: Date; end: Date }
+
+// Compara pelo dia (ignora hora) pra funcionar tanto com colunas DATE puras
+// ('2026-07-01') quanto com timestamps completos (paid_at) sem cair no bug de
+// fuso horário de "new Date('2026-07-01')" virar o dia anterior dependendo do
+// navegador.
+function inPeriod(dateStr: string | null | undefined, period: Period) {
+  if (!dateStr) return false
+  const raw = dateStr.length === 10 ? `${dateStr}T12:00:00` : dateStr
+  const d = new Date(raw)
+  const startDay = new Date(period.start.getFullYear(), period.start.getMonth(), period.start.getDate())
+  const endDay   = new Date(period.end.getFullYear(), period.end.getMonth(), period.end.getDate(), 23, 59, 59, 999)
+  return d >= startDay && d <= endDay
+}
+
+function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1) }
+function endOfMonth(d: Date)   { return new Date(d.getFullYear(), d.getMonth() + 1, 0) }
+function toDateInput(d: Date)  { return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0] }
+function fromDateInput(s: string) { const [y, m, day] = s.split('-').map(Number); return new Date(y, m - 1, day) }
+
+type Tab = 'overview' | 'payments' | 'overdue' | 'costs' | 'entries' | 'commissions'
 
 const STATUS_MAP: Record<string, { l: string; c: string; bg: string }> = {
   pending:   { l: 'Pendente',  c: '#6b7280', bg: '#f3f4f6' },
@@ -46,6 +62,17 @@ const ENTRY_CATEGORY_MAP: Record<string, string> = {
   infraestrutura:      'Infraestrutura',
   folha:               'Folha',
   outro:                'Outro',
+}
+
+const COMMISSION_TYPE_MAP: Record<string, string> = {
+  implantacao: 'Implantação',
+  mensalidade: 'Mensalidade',
+}
+
+const COMMISSION_STATUS_MAP: Record<string, { l: string; c: string; bg: string }> = {
+  pendente:  { l: 'Pendente',  c: '#d97706', bg: '#fffbeb' },
+  paga:      { l: 'Paga',      c: '#16a34a', bg: '#f0fdf4' },
+  cancelada: { l: 'Cancelada', c: '#9ca3af', bg: '#f9fafb' },
 }
 
 const inp = 'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all bg-white'
@@ -468,6 +495,145 @@ function FinancialEntryModal({ entry, institutions, userId, onClose, onSuccess, 
   )
 }
 
+// ─── Modal Comissão ──────────────────────────────────────────────────────
+function CommissionModal({ commission, consultants, institutions, userId, onClose, onSuccess, showToast }: {
+  commission?: any; consultants: any[]; institutions: any[]; userId?: string
+  onClose: () => void; onSuccess: () => void; showToast: (m: string, ok?: boolean) => void
+}) {
+  const isNew = !commission?.id
+  const [form, setForm] = useState({
+    consultant_id:   commission?.consultant_id   || '',
+    institution_id:  commission?.institution_id  || '',
+    type:             commission?.type             || 'mensalidade',
+    reference_month: commission?.reference_month || '',
+    basis_amount:    String(commission?.basis_amount ?? ''),
+    percentage:       String(commission?.percentage ?? ''),
+    amount:           String(commission?.amount ?? ''),
+    status:           commission?.status           || 'pendente',
+    payment_date:    commission?.payment_date     || '',
+    notes:            commission?.notes             || '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const set = (k: string, v: any) => setForm(f => {
+    const next = { ...f, [k]: v }
+    // Ao marcar como paga, preenche payment_date com hoje se ainda estiver vazio (editável depois).
+    if (k === 'status' && v === 'paga' && !f.payment_date) {
+      next.payment_date = new Date().toISOString().split('T')[0]
+    }
+    return next
+  })
+
+  const handleSave = async () => {
+    if (!form.consultant_id || !form.amount) { showToast('Selecione o consultor e informe o valor.', false); return }
+    setSaving(true)
+    const payload = {
+      consultant_id:   form.consultant_id,
+      institution_id:  form.institution_id || null,
+      type:             form.type,
+      reference_month: form.reference_month || null,
+      basis_amount:    form.basis_amount ? Number(form.basis_amount) : null,
+      percentage:       form.percentage ? Number(form.percentage) : null,
+      amount:           Number(form.amount),
+      status:           form.status,
+      payment_date:    form.payment_date || null,
+      notes:            form.notes || null,
+    }
+    const { error } = isNew
+      ? await supabase.from('consultant_commissions').insert({ ...payload, source: 'manual', created_by: userId || null })
+      : await supabase.from('consultant_commissions').update(payload).eq('id', commission.id)
+    if (error) { showToast('Erro ao salvar: ' + error.message, false) }
+    else { showToast(isNew ? 'Comissão adicionada!' : 'Comissão atualizada!'); onSuccess(); onClose() }
+    setSaving(false)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-gray-900">{isNew ? 'Nova comissão' : 'Editar comissão'}</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className={lbl}>Consultor *</label>
+            <select className={inp} value={form.consultant_id} onChange={e => set('consultant_id', e.target.value)}>
+              <option value="">Selecionar...</option>
+              {consultants.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={lbl}>Escola (opcional)</label>
+            <select className={inp} value={form.institution_id} onChange={e => set('institution_id', e.target.value)}>
+              <option value="">Nenhuma</option>
+              {institutions.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Tipo *</label>
+              <select className={inp} value={form.type} onChange={e => set('type', e.target.value)}>
+                <option value="implantacao">Implantação</option>
+                <option value="mensalidade">Mensalidade</option>
+              </select>
+            </div>
+            {form.type === 'mensalidade' && (
+              <div>
+                <label className={lbl}>Mês de referência</label>
+                <input type="month" className={inp}
+                  value={form.reference_month ? form.reference_month.slice(0, 7) : ''}
+                  onChange={e => set('reference_month', e.target.value ? `${e.target.value}-01` : '')} />
+              </div>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Valor base (R$)</label>
+              <input type="number" step="0.01" className={inp} placeholder="Ex: monthly_value do contrato" value={form.basis_amount} onChange={e => set('basis_amount', e.target.value)} />
+            </div>
+            <div>
+              <label className={lbl}>Percentual (%)</label>
+              <input type="number" step="0.01" className={inp} placeholder="Ex: 10" value={form.percentage} onChange={e => set('percentage', e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className={lbl}>Valor final (R$) *</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
+              <input type="number" step="0.01" className={inp + ' pl-9'} value={form.amount} onChange={e => set('amount', e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Status</label>
+              <select className={inp} value={form.status} onChange={e => set('status', e.target.value)}>
+                <option value="pendente">Pendente</option>
+                <option value="paga">Paga</option>
+                <option value="cancelada">Cancelada</option>
+              </select>
+            </div>
+            <div>
+              <label className={lbl}>Data de pagamento</label>
+              <input type="date" className={inp} value={form.payment_date} onChange={e => set('payment_date', e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className={lbl}>Notas</label>
+            <input className={inp} placeholder="Detalhes opcionais..." value={form.notes} onChange={e => set('notes', e.target.value)} />
+          </div>
+        </div>
+        <div className="flex gap-3 mt-5">
+          <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">Cancelar</button>
+          <button onClick={handleSave} disabled={saving}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
+            {saving ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Salvando...</> : <><CheckCircle2 className="w-4 h-4" />Salvar</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────
 export default function AdminFinancial() {
   const { user } = useAuth()
@@ -475,6 +641,8 @@ export default function AdminFinancial() {
   const [payments,     setPayments]     = useState<any[]>([])
   const [costs,        setCosts]        = useState<any[]>([])
   const [entries,      setEntries]      = useState<any[]>([])
+  const [commissions,  setCommissions]  = useState<any[]>([])
+  const [consultants,  setConsultants]  = useState<any[]>([])
   const [settings,     setSettings]     = useState<Record<string, string>>({})
   const [loading,      setLoading]      = useState(true)
   const [tab,          setTab]          = useState<Tab>('overview')
@@ -485,6 +653,25 @@ export default function AdminFinancial() {
   const [selectedPayment, setSelectedPayment] = useState<any | null>(null)
   const [costModal, setCostModal] = useState<any | null | 'new'>(null)
   const [entryModal, setEntryModal] = useState<any | null | 'new'>(null)
+  const [commissionModal, setCommissionModal] = useState<any | null | 'new'>(null)
+
+  // ── Período (default: mês corrente, mesmo comportamento de antes) ──────
+  const [period, setPeriod] = useState<Period>(() => {
+    const now = new Date()
+    return { start: startOfMonth(now), end: endOfMonth(now) }
+  })
+  const [showCustomPeriod, setShowCustomPeriod] = useState(false)
+  const isWholeMonth = period.start.getDate() === 1
+    && period.end.getTime() === endOfMonth(period.start).getTime()
+  const periodLabel = isWholeMonth
+    ? period.start.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+    : `${period.start.toLocaleDateString('pt-BR')} – ${period.end.toLocaleDateString('pt-BR')}`
+  const shiftMonth = (delta: number) => {
+    setPeriod(p => {
+      const base = new Date(p.start.getFullYear(), p.start.getMonth() + delta, 1)
+      return { start: base, end: endOfMonth(base) }
+    })
+  }
 
   const showToast = (msg: string, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 4000) }
 
@@ -498,34 +685,45 @@ export default function AdminFinancial() {
 
   const loadData = async () => {
     setLoading(true)
-    const [instRes, payRes, cfgRes, costRes, entryRes] = await Promise.all([
+    const [instRes, payRes, cfgRes, costRes, entryRes, commRes, consRes] = await Promise.all([
       supabase.from('institutions').select('id, name, city, plan, plan_status, asaas_customer_id, monthly_value, email, cnpj, phone').order('name'),
       supabase.from('payments').select('*, institutions(name)').order('created_at', { ascending: false }),
       supabase.from('platform_settings').select('key, value'),
       supabase.from('platform_costs').select('*').order('name'),
       supabase.from('financial_entries').select('*, institutions(name)').order('entry_date', { ascending: false }),
+      supabase.from('consultant_commissions').select('*, institutions(name)').order('created_at', { ascending: false }),
+      supabase.from('users').select('id, full_name').eq('user_type', 'consultant').order('full_name'),
     ])
     if (cancelledRef.current) return
     setInstitutions(instRes.data || [])
     setPayments(payRes.data || [])
     setCosts(costRes.data || [])
     setEntries(entryRes.data || [])
+    setCommissions(commRes.data || [])
+    setConsultants(consRes.data || [])
     const cfg: Record<string, string> = {}
     for (const s of cfgRes.data || []) cfg[s.key] = s.value
     setSettings(cfg)
     setLoading(false)
   }
 
-  // ── KPIs ──────────────────────────────────────────────────
+  // ── KPIs (todos relativos ao `period` selecionado, default = mês corrente) ──
   const now = new Date()
 
   // Lançamentos manuais (financial_entries) — somas adicionais aos cálculos
   // existentes de payments/platform_costs, sem substituí-los.
-  const manualEntradasThisMonth = entries.filter(e => e.type === 'entrada' && e.entry_date && isThisMonth(e.entry_date + 'T12:00:00')).reduce((s, e) => s + (e.amount || 0), 0)
-  const manualSaidasThisMonth   = entries.filter(e => e.type === 'saida'   && e.entry_date && isThisMonth(e.entry_date + 'T12:00:00')).reduce((s, e) => s + (e.amount || 0), 0)
+  const manualEntradasPeriod = entries.filter(e => e.type === 'entrada' && inPeriod(e.entry_date, period)).reduce((s, e) => s + (e.amount || 0), 0)
+  const manualSaidasPeriod   = entries.filter(e => e.type === 'saida'   && inPeriod(e.entry_date, period)).reduce((s, e) => s + (e.amount || 0), 0)
 
-  const mrr = payments.filter(p => p.status === 'paid' && isThisMonth(p.paid_at)).reduce((s, p) => s + (p.amount || 0), 0)
-    + manualEntradasThisMonth
+  // Comissões de consultor no período (payment_date se já paga, senão created_at)
+  // — entram como custo, afetam a margem, igual platform_costs/financial_entries.
+  const commissionsInPeriod  = commissions.filter(c => c.status !== 'cancelada' && inPeriod(c.payment_date || c.created_at, period))
+  const commissionsPending  = commissionsInPeriod.filter(c => c.status === 'pendente').reduce((s, c) => s + (c.amount || 0), 0)
+  const commissionsPaid     = commissionsInPeriod.filter(c => c.status === 'paga').reduce((s, c) => s + (c.amount || 0), 0)
+  const commissionsTotal    = commissionsPending + commissionsPaid
+
+  const mrr = payments.filter(p => p.status === 'paid' && inPeriod(p.paid_at, period)).reduce((s, p) => s + (p.amount || 0), 0)
+    + manualEntradasPeriod
   const mrrProjected = institutions.filter(i => i.plan_status === 'active' && i.plan !== 'gratuito').reduce((s, i) => s + (i.monthly_value || 550), 0)
   const overdueList  = payments.filter(p => p.status === 'overdue')
   const overdueTotal = overdueList.reduce((s, p) => s + (p.amount || 0), 0)
@@ -550,14 +748,17 @@ export default function AdminFinancial() {
     }
   })
 
-  // ── Custos (Financeiro > Custos): platform_costs (recorrente) + saídas manuais do mês
+  // ── Custos (Financeiro > Custos): platform_costs (recorrente, SEM dimensão
+  // temporal — sempre "atual", independente do período) + saídas manuais e
+  // comissões do período selecionado.
   const activeCosts  = costs.filter(c => c.active)
-  const monthlyTotal = activeCosts.reduce((s, c) => {
+  const platformCostsMonthly = activeCosts.reduce((s, c) => {
     if (c.recurrence === 'monthly') return s + (c.amount || 0)
     if (c.recurrence === 'yearly')  return s + (c.amount || 0) / 12
     return s
-  }, 0) + manualSaidasThisMonth
-  const yearlyTotal  = monthlyTotal * 12
+  }, 0)
+  const monthlyTotal = platformCostsMonthly + manualSaidasPeriod + commissionsTotal
+  const yearlyTotal  = platformCostsMonthly * 12
   const grossProfit  = mrrProjected - monthlyTotal
   const margin       = mrrProjected > 0 ? Math.round((grossProfit / mrrProjected) * 100) : 0
 
@@ -690,13 +891,40 @@ export default function AdminFinancial() {
           </div>
         </div>
 
+        {/* Seletor de período */}
+        <div className="flex items-center gap-3 flex-wrap bg-white border border-gray-200 rounded-xl px-4 py-2.5">
+          <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          {!showCustomPeriod ? (
+            <div className="flex items-center gap-2">
+              <button onClick={() => shiftMonth(-1)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-500"><ChevronLeft className="w-4 h-4" /></button>
+              <span className="text-sm font-semibold text-gray-800 capitalize min-w-[140px] text-center">{periodLabel}</span>
+              <button onClick={() => shiftMonth(1)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-500"><ChevronRight className="w-4 h-4" /></button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <input type="date" className="px-2 py-1.5 text-sm border border-gray-200 rounded-lg"
+                value={toDateInput(period.start)}
+                onChange={e => setPeriod(p => ({ ...p, start: fromDateInput(e.target.value) }))} />
+              <span className="text-gray-400 text-sm">até</span>
+              <input type="date" className="px-2 py-1.5 text-sm border border-gray-200 rounded-lg"
+                value={toDateInput(period.end)}
+                onChange={e => setPeriod(p => ({ ...p, end: fromDateInput(e.target.value) }))} />
+            </div>
+          )}
+          <button onClick={() => setShowCustomPeriod(v => !v)}
+            className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg ml-auto ${showCustomPeriod ? 'bg-cyan-50 text-cyan-700' : 'text-gray-500 hover:bg-gray-100'}`}>
+            <SlidersHorizontal className="w-3.5 h-3.5" /> {showCustomPeriod ? 'Usar navegação por mês' : 'Período personalizado'}
+          </button>
+        </div>
+
         {/* KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'MRR este mês',   value: fmtBRL(mrr),          sub: `Projeção: ${fmtBRL(mrrProjected)}`, icon: DollarSign,   grad: 'from-green-500 to-emerald-600' },
+            { label: 'Receita no período', value: fmtBRL(mrr),          sub: `Projeção recorrente: ${fmtBRL(mrrProjected)}`, icon: DollarSign,   grad: 'from-green-500 to-emerald-600' },
             { label: 'Escolas ativas', value: institutions.filter(i => i.plan_status === 'active').length, sub: `${churnCount} churn`, icon: Building2, grad: 'from-cyan-500 to-blue-600' },
             { label: 'Inadimplência',  value: fmtBRL(overdueTotal), sub: `${overdueList.length} cobranças`, icon: AlertTriangle, grad: overdueTotal > 0 ? 'from-red-500 to-rose-600' : 'from-gray-400 to-gray-500' },
             { label: 'A receber',      value: fmtBRL(pendingTotal), sub: 'cobranças pendentes', icon: Clock, grad: 'from-amber-500 to-orange-500' },
+            { label: 'Comissões (período)', value: fmtBRL(commissionsTotal), sub: `${fmtBRL(commissionsPending)} pendente · ${fmtBRL(commissionsPaid)} paga`, icon: Users, grad: 'from-purple-500 to-fuchsia-600' },
           ].map(k => {
             const Icon = k.icon
             return (
@@ -725,6 +953,7 @@ export default function AdminFinancial() {
             { id: 'overdue'  as Tab, label: `Inadimplência${overdueGroups.length > 0 ? ` (${overdueGroups.length})` : ''}`, alert: overdueGroups.length > 0 },
             { id: 'costs'    as Tab, label: `Custos (${costs.length})` },
             { id: 'entries'  as Tab, label: `Lançamentos (${entries.length})` },
+            { id: 'commissions' as Tab, label: `Comissões (${commissions.length})` },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap
@@ -1015,16 +1244,21 @@ export default function AdminFinancial() {
         {/* ── TAB: Custos ── */}
         {tab === 'costs' && (() => {
           // activeCosts/monthlyTotal/yearlyTotal/grossProfit/margin já calculados
-          // no escopo do componente (incluem saídas manuais do mês) — ver bloco de KPIs.
+          // no escopo do componente (monthlyTotal soma platform_costs recorrente +
+          // saídas manuais/comissões do período selecionado) — ver bloco de KPIs.
           const CATS: Record<string, string> = { infrastructure: 'Infraestrutura', tools: 'Ferramentas/SaaS', services: 'Serviços', other: 'Outros' }
           const REC:  Record<string, string> = { monthly: 'Mensal', yearly: 'Anual', one_time: 'Avulso' }
 
           return (
             <div className="space-y-6">
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-800">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                <span>"Custos fixos" (tabela abaixo) reflete a configuração <strong>atual</strong> — sem data de início/fim, não varia com o período selecionado. Só as saídas manuais e comissões somadas no KPI "Custos/mês" respeitam o período.</span>
+              </div>
               {/* KPIs */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
-                  { label: 'Custos/mês',   value: fmtBRL(monthlyTotal), sub: 'custos ativos',          grad: 'from-red-500 to-rose-600',    icon: DollarSign   },
+                  { label: 'Custos/mês',   value: fmtBRL(monthlyTotal), sub: 'fixos + saídas/comissões do período', grad: 'from-red-500 to-rose-600',    icon: DollarSign   },
                   { label: 'Projeção anual', value: fmtBRL(yearlyTotal), sub: 'estimativa 12 meses',    grad: 'from-orange-500 to-red-500',  icon: AlertTriangle },
                   { label: 'Lucro bruto/mês', value: fmtBRL(grossProfit), sub: `MRR - custos`,          grad: grossProfit > 0 ? 'from-green-500 to-emerald-600' : 'from-red-500 to-rose-600', icon: CheckCircle2 },
                   { label: 'Margem bruta',  value: `${margin}%`,          sub: `de ${fmtBRL(mrrProjected)} MRR`, grad: margin > 50 ? 'from-cyan-500 to-blue-600' : 'from-amber-500 to-orange-500', icon: Clock },
@@ -1180,6 +1414,72 @@ export default function AdminFinancial() {
           </div>
         )}
 
+        {/* ── TAB: Comissões ── */}
+        {tab === 'commissions' && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-gray-900">Comissões de consultor</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Lançamento manual — entram como custo no cálculo de margem do período</p>
+              </div>
+              <button onClick={() => setCommissionModal('new')}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm">
+                <Plus className="w-4 h-4" /> Nova comissão
+              </button>
+            </div>
+            {commissions.length === 0 ? (
+              <div className="p-12 text-center text-gray-400">
+                <Users className="w-10 h-10 mx-auto mb-2 text-gray-200" />
+                <p className="text-sm">Nenhuma comissão cadastrada</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      {['Consultor','Escola','Tipo','Valor','Status','Pagamento','Ações'].map(h => (
+                        <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {commissions.map(c => {
+                      const st = COMMISSION_STATUS_MAP[c.status] || COMMISSION_STATUS_MAP.pendente
+                      const consultantName = consultants.find(cs => cs.id === c.consultant_id)?.full_name || '—'
+                      return (
+                        <tr key={c.id} className="hover:bg-gray-50">
+                          <td className="px-5 py-3 font-semibold text-gray-900 text-sm">{consultantName}</td>
+                          <td className="px-5 py-3 text-sm text-gray-500">{(c as any).institutions?.name || '—'}</td>
+                          <td className="px-5 py-3 text-xs text-gray-500">{COMMISSION_TYPE_MAP[c.type] || c.type}</td>
+                          <td className="px-5 py-3 font-bold text-gray-800 text-sm">{fmtBRL(c.amount)}</td>
+                          <td className="px-5 py-3">
+                            <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: st.c, background: st.bg }}>{st.l}</span>
+                          </td>
+                          <td className="px-5 py-3 text-sm text-gray-500">{c.payment_date ? new Date(c.payment_date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+                          <td className="px-5 py-3">
+                            <div className="flex gap-1">
+                              <button onClick={() => setCommissionModal(c)} className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg">
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={async () => {
+                                if (!confirm(`Excluir comissão de "${consultantName}"?`)) return
+                                await supabase.from('consultant_commissions').delete().eq('id', c.id)
+                                showToast('Comissão excluída.'); loadData()
+                              }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                                <Ban className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
 
       {showNewCharge && (
@@ -1214,6 +1514,18 @@ export default function AdminFinancial() {
           institutions={institutions}
           userId={user?.id}
           onClose={() => setEntryModal(null)}
+          onSuccess={loadData}
+          showToast={showToast}
+        />
+      )}
+
+      {commissionModal !== null && (
+        <CommissionModal
+          commission={commissionModal === 'new' ? undefined : commissionModal}
+          consultants={consultants}
+          institutions={institutions}
+          userId={user?.id}
+          onClose={() => setCommissionModal(null)}
           onSuccess={loadData}
           showToast={showToast}
         />
