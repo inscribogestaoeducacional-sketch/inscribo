@@ -1,6 +1,7 @@
 // src/components/superadmin/AdminFinancial.tsx
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 import SuperAdminLayout from './SuperAdminLayout'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import {
@@ -21,7 +22,7 @@ function daysLate(dueDate: string) {
   return Math.max(0, Math.floor((Date.now() - new Date(dueDate + 'T12:00:00').getTime()) / 86400000))
 }
 
-type Tab = 'overview' | 'payments' | 'overdue' | 'costs'
+type Tab = 'overview' | 'payments' | 'overdue' | 'costs' | 'entries'
 
 const STATUS_MAP: Record<string, { l: string; c: string; bg: string }> = {
   pending:   { l: 'Pendente',  c: '#6b7280', bg: '#f3f4f6' },
@@ -35,6 +36,16 @@ const TYPE_MAP: Record<string, string> = {
   implementation:      'Implantação',
   monthly:             'Mensalidade',
   extra_conversations: 'Conversas extras',
+}
+
+const ENTRY_CATEGORY_MAP: Record<string, string> = {
+  implantacao_avulsa: 'Implantação avulsa',
+  consultoria:         'Consultoria',
+  patrocinio:          'Patrocínio',
+  marketing:           'Marketing',
+  infraestrutura:      'Infraestrutura',
+  folha:               'Folha',
+  outro:                'Outro',
 }
 
 const inp = 'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all bg-white'
@@ -350,11 +361,120 @@ function CostModal({ cost, onClose, onSuccess, showToast }: {
   )
 }
 
+// ─── Modal Lançamento manual ────────────────────────────────────────────────
+function FinancialEntryModal({ entry, institutions, userId, onClose, onSuccess, showToast }: {
+  entry?: any; institutions: any[]; userId?: string
+  onClose: () => void; onSuccess: () => void; showToast: (m: string, ok?: boolean) => void
+}) {
+  const isNew = !entry?.id
+  const [form, setForm] = useState({
+    type:           entry?.type           || 'entrada',
+    amount:         String(entry?.amount || ''),
+    description:    entry?.description    || '',
+    category:       entry?.category       || 'outro',
+    entry_date:     entry?.entry_date     || new Date().toISOString().split('T')[0],
+    institution_id: entry?.institution_id || '',
+    notes:          entry?.notes          || '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleSave = async () => {
+    if (!form.description || !form.amount) { showToast('Preencha descrição e valor.', false); return }
+    setSaving(true)
+    const payload = {
+      type:           form.type,
+      amount:         Number(form.amount),
+      description:    form.description.trim(),
+      category:       form.category,
+      entry_date:     form.entry_date,
+      institution_id: form.institution_id || null,
+      notes:          form.notes || null,
+    }
+    const { error } = isNew
+      ? await supabase.from('financial_entries').insert({ ...payload, source: 'manual', created_by: userId || null })
+      : await supabase.from('financial_entries').update(payload).eq('id', entry.id)
+    if (error) { showToast('Erro ao salvar: ' + error.message, false) }
+    else { showToast(isNew ? 'Lançamento adicionado!' : 'Lançamento atualizado!'); onSuccess(); onClose() }
+    setSaving(false)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-gray-900">{isNew ? 'Novo lançamento' : 'Editar lançamento'}</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className={lbl}>Tipo *</label>
+            <div className="grid grid-cols-2 gap-3">
+              <button type="button" onClick={() => set('type', 'entrada')}
+                className={`py-2.5 rounded-lg text-sm font-semibold border ${form.type === 'entrada' ? 'bg-green-50 border-green-400 text-green-700' : 'border-gray-200 text-gray-500'}`}>
+                Entrada
+              </button>
+              <button type="button" onClick={() => set('type', 'saida')}
+                className={`py-2.5 rounded-lg text-sm font-semibold border ${form.type === 'saida' ? 'bg-red-50 border-red-400 text-red-700' : 'border-gray-200 text-gray-500'}`}>
+                Saída
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className={lbl}>Descrição *</label>
+            <input className={inp} placeholder="Ex: Patrocínio evento X, Consultoria pontual..." value={form.description} onChange={e => set('description', e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Valor (R$) *</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
+                <input type="number" step="0.01" className={inp + ' pl-9'} value={form.amount} onChange={e => set('amount', e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <label className={lbl}>Data</label>
+              <input type="date" className={inp} value={form.entry_date} onChange={e => set('entry_date', e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className={lbl}>Categoria</label>
+            <select className={inp} value={form.category} onChange={e => set('category', e.target.value)}>
+              {Object.entries(ENTRY_CATEGORY_MAP).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={lbl}>Escola (opcional)</label>
+            <select className={inp} value={form.institution_id} onChange={e => set('institution_id', e.target.value)}>
+              <option value="">Nenhuma / lançamento da plataforma</option>
+              {institutions.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={lbl}>Observações</label>
+            <input className={inp} placeholder="Detalhes opcionais..." value={form.notes} onChange={e => set('notes', e.target.value)} />
+          </div>
+        </div>
+        <div className="flex gap-3 mt-5">
+          <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">Cancelar</button>
+          <button onClick={handleSave} disabled={saving}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
+            {saving ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Salvando...</> : <><CheckCircle2 className="w-4 h-4" />Salvar</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────
 export default function AdminFinancial() {
+  const { user } = useAuth()
   const [institutions, setInstitutions] = useState<any[]>([])
   const [payments,     setPayments]     = useState<any[]>([])
   const [costs,        setCosts]        = useState<any[]>([])
+  const [entries,      setEntries]      = useState<any[]>([])
   const [settings,     setSettings]     = useState<Record<string, string>>({})
   const [loading,      setLoading]      = useState(true)
   const [tab,          setTab]          = useState<Tab>('overview')
@@ -364,6 +484,7 @@ export default function AdminFinancial() {
   const [showNewCharge, setShowNewCharge] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState<any | null>(null)
   const [costModal, setCostModal] = useState<any | null | 'new'>(null)
+  const [entryModal, setEntryModal] = useState<any | null | 'new'>(null)
 
   const showToast = (msg: string, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 4000) }
 
@@ -377,16 +498,18 @@ export default function AdminFinancial() {
 
   const loadData = async () => {
     setLoading(true)
-    const [instRes, payRes, cfgRes, costRes] = await Promise.all([
+    const [instRes, payRes, cfgRes, costRes, entryRes] = await Promise.all([
       supabase.from('institutions').select('id, name, city, plan, plan_status, asaas_customer_id, monthly_value, email, cnpj, phone').order('name'),
       supabase.from('payments').select('*, institutions(name)').order('created_at', { ascending: false }),
       supabase.from('platform_settings').select('key, value'),
       supabase.from('platform_costs').select('*').order('name'),
+      supabase.from('financial_entries').select('*, institutions(name)').order('entry_date', { ascending: false }),
     ])
     if (cancelledRef.current) return
     setInstitutions(instRes.data || [])
     setPayments(payRes.data || [])
     setCosts(costRes.data || [])
+    setEntries(entryRes.data || [])
     const cfg: Record<string, string> = {}
     for (const s of cfgRes.data || []) cfg[s.key] = s.value
     setSettings(cfg)
@@ -395,7 +518,14 @@ export default function AdminFinancial() {
 
   // ── KPIs ──────────────────────────────────────────────────
   const now = new Date()
+
+  // Lançamentos manuais (financial_entries) — somas adicionais aos cálculos
+  // existentes de payments/platform_costs, sem substituí-los.
+  const manualEntradasThisMonth = entries.filter(e => e.type === 'entrada' && e.entry_date && isThisMonth(e.entry_date + 'T12:00:00')).reduce((s, e) => s + (e.amount || 0), 0)
+  const manualSaidasThisMonth   = entries.filter(e => e.type === 'saida'   && e.entry_date && isThisMonth(e.entry_date + 'T12:00:00')).reduce((s, e) => s + (e.amount || 0), 0)
+
   const mrr = payments.filter(p => p.status === 'paid' && isThisMonth(p.paid_at)).reduce((s, p) => s + (p.amount || 0), 0)
+    + manualEntradasThisMonth
   const mrrProjected = institutions.filter(i => i.plan_status === 'active' && i.plan !== 'gratuito').reduce((s, i) => s + (i.monthly_value || 550), 0)
   const overdueList  = payments.filter(p => p.status === 'overdue')
   const overdueTotal = overdueList.reduce((s, p) => s + (p.amount || 0), 0)
@@ -409,11 +539,27 @@ export default function AdminFinancial() {
       const pd = new Date(p.paid_at)
       return pd.getFullYear() === d.getFullYear() && pd.getMonth() === d.getMonth()
     })
+    const monthManualEntradas = entries.filter(e => {
+      if (e.type !== 'entrada' || !e.entry_date) return false
+      const ed = new Date(e.entry_date + 'T12:00:00')
+      return ed.getFullYear() === d.getFullYear() && ed.getMonth() === d.getMonth()
+    })
     return {
       month: d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
-      mrr:   monthPaid.reduce((s, p) => s + (p.amount || 0), 0),
+      mrr:   monthPaid.reduce((s, p) => s + (p.amount || 0), 0) + monthManualEntradas.reduce((s, e) => s + (e.amount || 0), 0),
     }
   })
+
+  // ── Custos (Financeiro > Custos): platform_costs (recorrente) + saídas manuais do mês
+  const activeCosts  = costs.filter(c => c.active)
+  const monthlyTotal = activeCosts.reduce((s, c) => {
+    if (c.recurrence === 'monthly') return s + (c.amount || 0)
+    if (c.recurrence === 'yearly')  return s + (c.amount || 0) / 12
+    return s
+  }, 0) + manualSaidasThisMonth
+  const yearlyTotal  = monthlyTotal * 12
+  const grossProfit  = mrrProjected - monthlyTotal
+  const margin       = mrrProjected > 0 ? Math.round((grossProfit / mrrProjected) * 100) : 0
 
   const filteredPayments = payments.filter(p => {
     const matchStatus = filterStatus === 'all' || p.status === filterStatus
@@ -439,13 +585,17 @@ export default function AdminFinancial() {
 
     if (action === 'cancel') {
       if (!confirm('Cancelar esta cobrança?')) return
-      // Cancela no Asaas se tiver ID
+      // Cancela no Asaas se tiver ID — só marca como cancelado localmente se
+      // o Asaas confirmar (senão a cobrança fica "cancelada" no painel mas
+      // continua cobrável de verdade do lado do Asaas).
       if (payment.asaas_payment_id) {
-        try {
-          await supabase.functions.invoke('asaas-cancel-charge', {
-            body: { payment_id: payment.asaas_payment_id }
-          })
-        } catch {}
+        const { data, error } = await supabase.functions.invoke('asaas-cancel-charge', {
+          body: { payment_id: payment.asaas_payment_id }
+        })
+        if (error || !data?.success) {
+          showToast('Erro ao cancelar no Asaas: ' + (error?.message || data?.error || 'falha desconhecida') + '. Cobrança NÃO foi cancelada localmente.', false)
+          return
+        }
       }
       await supabase.from('payments').update({ status: 'cancelled' }).eq('id', payment.id)
       showToast('Cobrança cancelada.')
@@ -574,6 +724,7 @@ export default function AdminFinancial() {
             { id: 'payments' as Tab, label: `Histórico (${payments.length})` },
             { id: 'overdue'  as Tab, label: `Inadimplência${overdueGroups.length > 0 ? ` (${overdueGroups.length})` : ''}`, alert: overdueGroups.length > 0 },
             { id: 'costs'    as Tab, label: `Custos (${costs.length})` },
+            { id: 'entries'  as Tab, label: `Lançamentos (${entries.length})` },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap
@@ -863,15 +1014,8 @@ export default function AdminFinancial() {
 
         {/* ── TAB: Custos ── */}
         {tab === 'costs' && (() => {
-          const activeCosts    = costs.filter(c => c.active)
-          const monthlyTotal   = activeCosts.reduce((s, c) => {
-            if (c.recurrence === 'monthly') return s + (c.amount || 0)
-            if (c.recurrence === 'yearly')  return s + (c.amount || 0) / 12
-            return s
-          }, 0)
-          const yearlyTotal    = monthlyTotal * 12
-          const grossProfit    = mrrProjected - monthlyTotal
-          const margin         = mrrProjected > 0 ? Math.round((grossProfit / mrrProjected) * 100) : 0
+          // activeCosts/monthlyTotal/yearlyTotal/grossProfit/margin já calculados
+          // no escopo do componente (incluem saídas manuais do mês) — ver bloco de KPIs.
           const CATS: Record<string, string> = { infrastructure: 'Infraestrutura', tools: 'Ferramentas/SaaS', services: 'Serviços', other: 'Outros' }
           const REC:  Record<string, string> = { monthly: 'Mensal', yearly: 'Anual', one_time: 'Avulso' }
 
@@ -967,6 +1111,75 @@ export default function AdminFinancial() {
           )
         })()}
 
+        {/* ── TAB: Lançamentos ── */}
+        {tab === 'entries' && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-gray-900">Lançamentos manuais</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Receitas e despesas avulsas, fora do fluxo automático de mensalidade e custos fixos</p>
+              </div>
+              <button onClick={() => setEntryModal('new')}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm">
+                <Plus className="w-4 h-4" /> Novo lançamento
+              </button>
+            </div>
+            {entries.length === 0 ? (
+              <div className="p-12 text-center text-gray-400">
+                <DollarSign className="w-10 h-10 mx-auto mb-2 text-gray-200" />
+                <p className="text-sm">Nenhum lançamento cadastrado</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      {['Tipo','Descrição','Valor','Categoria','Data','Escola','Ações'].map(h => (
+                        <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {entries.map(e => (
+                      <tr key={e.id} className="hover:bg-gray-50">
+                        <td className="px-5 py-3">
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${e.type === 'entrada' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                            {e.type === 'entrada' ? 'Entrada' : 'Saída'}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3">
+                          <p className="font-semibold text-gray-900 text-sm">{e.description}</p>
+                          {e.notes && <p className="text-xs text-gray-400 mt-0.5">{e.notes}</p>}
+                        </td>
+                        <td className={`px-5 py-3 font-bold text-sm ${e.type === 'entrada' ? 'text-green-700' : 'text-red-600'}`}>
+                          {e.type === 'entrada' ? '+' : '−'}{fmtBRL(e.amount)}
+                        </td>
+                        <td className="px-5 py-3 text-sm text-gray-500">{ENTRY_CATEGORY_MAP[e.category] || e.category}</td>
+                        <td className="px-5 py-3 text-sm text-gray-500">{e.entry_date ? new Date(e.entry_date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+                        <td className="px-5 py-3 text-sm text-gray-500">{(e as any).institutions?.name || '—'}</td>
+                        <td className="px-5 py-3">
+                          <div className="flex gap-1">
+                            <button onClick={() => setEntryModal(e)} className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg">
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={async () => {
+                              if (!confirm(`Excluir lançamento "${e.description}"?`)) return
+                              await supabase.from('financial_entries').delete().eq('id', e.id)
+                              showToast('Lançamento excluído.'); loadData()
+                            }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                              <Ban className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
 
       {showNewCharge && (
@@ -990,6 +1203,17 @@ export default function AdminFinancial() {
         <CostModal
           cost={costModal === 'new' ? undefined : costModal}
           onClose={() => setCostModal(null)}
+          onSuccess={loadData}
+          showToast={showToast}
+        />
+      )}
+
+      {entryModal !== null && (
+        <FinancialEntryModal
+          entry={entryModal === 'new' ? undefined : entryModal}
+          institutions={institutions}
+          userId={user?.id}
+          onClose={() => setEntryModal(null)}
           onSuccess={loadData}
           showToast={showToast}
         />
