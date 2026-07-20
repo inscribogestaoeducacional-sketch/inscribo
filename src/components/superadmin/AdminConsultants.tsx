@@ -26,7 +26,7 @@ export default function AdminConsultants() {
   const [saving, setSaving]           = useState(false)
 
   const [form, setForm] = useState({
-    full_name: '', email: '', phone: '', password: '',
+    full_name: '', email: '', phone: '', password: '', consultant_type: '' as '' | 'interno' | 'externo',
   })
 
   const showToast = (msg: string, ok = true) => {
@@ -38,7 +38,7 @@ export default function AdminConsultants() {
     setLoading(true)
     const [consRes, schRes] = await Promise.all([
       supabase.from('users')
-        .select('id, full_name, email, phone, created_at, user_type')
+        .select('id, full_name, email, phone, created_at, user_type, consultant_type')
         .eq('user_type', 'consultant')
         .order('full_name'),
       supabase.from('institutions')
@@ -56,18 +56,19 @@ export default function AdminConsultants() {
 
   const openNew = () => {
     setEditTarget(null)
-    setForm({ full_name: '', email: '', phone: '', password: '' })
+    setForm({ full_name: '', email: '', phone: '', password: '', consultant_type: '' })
     setShowModal(true)
   }
 
   const openEdit = (c: any) => {
     setEditTarget(c)
-    setForm({ full_name: c.full_name || '', email: c.email || '', phone: c.phone || '', password: '' })
+    setForm({ full_name: c.full_name || '', email: c.email || '', phone: c.phone || '', password: '', consultant_type: c.consultant_type || '' })
     setShowModal(true)
   }
 
   const handleSave = async () => {
     if (!form.full_name || !form.email) { showToast('Nome e e-mail são obrigatórios.', false); return }
+    if (!form.consultant_type) { showToast('Selecione o tipo de consultor (interno/externo).', false); return }
     setSaving(true)
     try {
       if (editTarget) {
@@ -75,6 +76,7 @@ export default function AdminConsultants() {
         const { error } = await supabase.from('users').update({
           full_name: form.full_name,
           phone: form.phone || null,
+          consultant_type: form.consultant_type,
         }).eq('id', editTarget.id)
         if (error) throw error
         showToast('Consultor atualizado!')
@@ -99,6 +101,7 @@ export default function AdminConsultants() {
               full_name: form.full_name.trim(),
               role: 'consultant',
               user_type: 'consultant',
+              consultant_type: form.consultant_type,
               phone: form.phone || null,
             }),
           }
@@ -196,9 +199,20 @@ export default function AdminConsultants() {
                       </div>
                       <div>
                         <p className="font-bold text-gray-900 text-sm leading-tight">{c.full_name}</p>
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full mt-0.5">
-                          <Shield className="w-2.5 h-2.5" /> Consultor
-                        </span>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
+                            <Shield className="w-2.5 h-2.5" /> Consultor
+                          </span>
+                          {c.consultant_type ? (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.consultant_type === 'interno' ? 'bg-cyan-100 text-cyan-700' : 'bg-amber-100 text-amber-700'}`}>
+                              {c.consultant_type === 'interno' ? 'Interno' : 'Externo'}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600">
+                              Não classificado
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex gap-1">
@@ -297,6 +311,15 @@ export default function AdminConsultants() {
                 <label className={lbl}>Telefone / WhatsApp</label>
                 <input className={inp} placeholder="(83) 99999-9999" value={form.phone}
                   onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
+              </div>
+              <div>
+                <label className={lbl}>Tipo de consultor *</label>
+                <select className={inp} value={form.consultant_type}
+                  onChange={e => setForm(f => ({ ...f, consultant_type: e.target.value as '' | 'interno' | 'externo' }))}>
+                  <option value="">Selecione...</option>
+                  <option value="interno">Interno</option>
+                  <option value="externo">Externo</option>
+                </select>
               </div>
               {!editTarget && (
                 <div>
