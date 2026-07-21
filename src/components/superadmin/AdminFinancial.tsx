@@ -3,12 +3,15 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import SuperAdminLayout from './SuperAdminLayout'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import {
+  ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  PieChart, Pie, Cell,
+} from 'recharts'
 import {
   DollarSign, Building2, AlertTriangle, CheckCircle2, Clock, X, RefreshCw,
   ExternalLink, AlertCircle, Send, Plus, Copy, CreditCard, Ban,
-  MessageCircle, Unlock, Lock, Eye, ChevronDown, ChevronRight,
-  Users, Calendar, ChevronLeft, SlidersHorizontal
+  MessageCircle, Unlock, Lock, Eye, ChevronRight, ChevronLeft,
+  Users, Calendar, SlidersHorizontal, Wallet, Briefcase, ArrowUpDown,
 } from 'lucide-react'
 
 function fmtBRL(n: number) {
@@ -37,8 +40,25 @@ function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 
 function endOfMonth(d: Date)   { return new Date(d.getFullYear(), d.getMonth() + 1, 0) }
 function toDateInput(d: Date)  { return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0] }
 function fromDateInput(s: string) { const [y, m, day] = s.split('-').map(Number); return new Date(y, m - 1, day) }
+// Quantos meses (inclusive) se passaram entre `a` e `b` — usado só pra
+// prorratear platform_costs no saldo acumulado, já que a tabela não tem
+// data de início/fim própria (ver nota na aba Custos).
+function monthsBetween(a: Date, b: Date) {
+  return Math.max(0, (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()) + 1)
+}
+// Sentinela "desde sempre" — usado no cálculo do saldo em caixa acumulado,
+// que precisa somar TUDO até o fim do período, não só o período em si.
+const EPOCH = new Date(2000, 0, 1)
+// Data em que o custo passou a existir de fato — effective_from se
+// preenchido, senão created_at (registros antigos, cadastrados antes dessa
+// coluna existir).
+function costEffectiveDate(c: any): Date | null {
+  if (c.effective_from) return new Date(c.effective_from + 'T12:00:00')
+  if (c.created_at) return new Date(c.created_at)
+  return null
+}
 
-type Tab = 'overview' | 'payments' | 'overdue' | 'costs' | 'entries' | 'commissions'
+type Tab = 'overview' | 'revenue' | 'costs' | 'commissions' | 'overdue'
 
 const STATUS_MAP: Record<string, { l: string; c: string; bg: string }> = {
   pending:   { l: 'Pendente',  c: '#6b7280', bg: '#f3f4f6' },
@@ -62,6 +82,12 @@ const ENTRY_CATEGORY_MAP: Record<string, string> = {
   infraestrutura:      'Infraestrutura',
   folha:               'Folha',
   outro:                'Outro',
+}
+
+const FOLHA_TIPO_MAP: Record<string, string> = {
+  funcionario:  'Funcionário',
+  socio_victor: 'Retirada de sócio - Victor',
+  socio_fabio:  'Retirada de sócio - Fábio',
 }
 
 const COMMISSION_TYPE_MAP: Record<string, string> = {
@@ -297,18 +323,19 @@ function PaymentDetailModal({ payment, onClose, onAction }: {
   )
 }
 
-// ─── Modal Custo ──────────────────────────────────────────────────────────
+// ─── Modal Custo fixo/recorrente (platform_costs) ──────────────────────────
 function CostModal({ cost, onClose, onSuccess, showToast }: {
   cost?: any; onClose: () => void; onSuccess: () => void; showToast: (m: string, ok?: boolean) => void
 }) {
   const isNew = !cost?.id
   const [form, setForm] = useState({
-    name:       cost?.name       || '',
-    amount:     String(cost?.amount || ''),
-    recurrence: cost?.recurrence || 'monthly',
-    category:   cost?.category   || 'infrastructure',
-    active:     cost?.active     ?? true,
-    notes:      cost?.notes      || '',
+    name:           cost?.name           || '',
+    amount:         String(cost?.amount || ''),
+    recurrence:     cost?.recurrence     || 'monthly',
+    category:       cost?.category       || 'infrastructure',
+    active:         cost?.active         ?? true,
+    effective_from: cost?.effective_from || (!cost?.id ? new Date().toISOString().split('T')[0] : ''),
+    notes:          cost?.notes          || '',
   })
   const [saving, setSaving] = useState(false)
 
@@ -317,7 +344,11 @@ function CostModal({ cost, onClose, onSuccess, showToast }: {
   const handleSave = async () => {
     if (!form.name || !form.amount) { showToast('Preencha nome e valor.', false); return }
     setSaving(true)
-    const payload = { name: form.name.trim(), amount: Number(form.amount), recurrence: form.recurrence, category: form.category, active: form.active, notes: form.notes || null }
+    const payload = {
+      name: form.name.trim(), amount: Number(form.amount), recurrence: form.recurrence,
+      category: form.category, active: form.active, effective_from: form.effective_from || null,
+      notes: form.notes || null,
+    }
     const { error } = isNew
       ? await supabase.from('platform_costs').insert(payload)
       : await supabase.from('platform_costs').update(payload).eq('id', cost.id)
@@ -330,7 +361,7 @@ function CostModal({ cost, onClose, onSuccess, showToast }: {
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-4">
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold text-gray-900">{isNew ? 'Adicionar custo' : 'Editar custo'}</h2>
+          <h2 className="text-lg font-bold text-gray-900">{isNew ? 'Novo custo fixo/recorrente' : 'Editar custo'}</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><X className="w-5 h-5 text-gray-400" /></button>
         </div>
         <div className="space-y-4">
@@ -354,6 +385,11 @@ function CostModal({ cost, onClose, onSuccess, showToast }: {
                 <option value="one_time">Avulso</option>
               </select>
             </div>
+          </div>
+          <div>
+            <label className={lbl}>Custo existe desde (opcional)</label>
+            <input type="date" className={inp} value={form.effective_from} onChange={e => set('effective_from', e.target.value)} />
+            <p className="text-xs text-gray-400 mt-1">Usado no saldo em caixa acumulado e na tendência anual — não no cálculo do período atual.</p>
           </div>
           <div>
             <label className={lbl}>Categoria</label>
@@ -388,19 +424,20 @@ function CostModal({ cost, onClose, onSuccess, showToast }: {
   )
 }
 
-// ─── Modal Lançamento manual ────────────────────────────────────────────────
-function FinancialEntryModal({ entry, institutions, userId, onClose, onSuccess, showToast }: {
-  entry?: any; institutions: any[]; userId?: string
+// ─── Modal Lançamento manual (financial_entries) ───────────────────────────
+function FinancialEntryModal({ entry, defaultType, institutions, userId, onClose, onSuccess, showToast }: {
+  entry?: any; defaultType?: 'entrada' | 'saida'; institutions: any[]; userId?: string
   onClose: () => void; onSuccess: () => void; showToast: (m: string, ok?: boolean) => void
 }) {
   const isNew = !entry?.id
   const [form, setForm] = useState({
-    type:           entry?.type           || 'entrada',
+    type:           entry?.type           || defaultType || 'entrada',
     amount:         String(entry?.amount || ''),
     description:    entry?.description    || '',
     category:       entry?.category       || 'outro',
     entry_date:     entry?.entry_date     || new Date().toISOString().split('T')[0],
     institution_id: entry?.institution_id || '',
+    folha_tipo:     entry?.folha_tipo     || '',
     notes:          entry?.notes          || '',
   })
   const [saving, setSaving] = useState(false)
@@ -417,6 +454,7 @@ function FinancialEntryModal({ entry, institutions, userId, onClose, onSuccess, 
       category:       form.category,
       entry_date:     form.entry_date,
       institution_id: form.institution_id || null,
+      folha_tipo:     form.category === 'folha' ? (form.folha_tipo || null) : null,
       notes:          form.notes || null,
     }
     const { error } = isNew
@@ -429,7 +467,7 @@ function FinancialEntryModal({ entry, institutions, userId, onClose, onSuccess, 
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-gray-900">{isNew ? 'Novo lançamento' : 'Editar lançamento'}</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><X className="w-5 h-5 text-gray-400" /></button>
@@ -471,6 +509,15 @@ function FinancialEntryModal({ entry, institutions, userId, onClose, onSuccess, 
               {Object.entries(ENTRY_CATEGORY_MAP).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
+          {form.category === 'folha' && (
+            <div>
+              <label className={lbl}>Tipo (folha) *</label>
+              <select className={inp} value={form.folha_tipo} onChange={e => set('folha_tipo', e.target.value)}>
+                <option value="">Selecionar...</option>
+                {Object.entries(FOLHA_TIPO_MAP).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
+          )}
           <div>
             <label className={lbl}>Escola (opcional)</label>
             <select className={inp} value={form.institution_id} onChange={e => set('institution_id', e.target.value)}>
@@ -646,16 +693,17 @@ export default function AdminFinancial() {
   const [settings,     setSettings]     = useState<Record<string, string>>({})
   const [loading,      setLoading]      = useState(true)
   const [tab,          setTab]          = useState<Tab>('overview')
-  const [filterStatus, setFilterStatus] = useState('all')
-  const [filterInst,   setFilterInst]   = useState('')
   const [toast,        setToast]        = useState<{ msg: string; ok: boolean } | null>(null)
   const [showNewCharge, setShowNewCharge] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState<any | null>(null)
   const [costModal, setCostModal] = useState<any | null | 'new'>(null)
   const [entryModal, setEntryModal] = useState<any | null | 'new'>(null)
+  const [entryModalType, setEntryModalType] = useState<'entrada' | 'saida'>('entrada')
   const [commissionModal, setCommissionModal] = useState<any | null | 'new'>(null)
+  const [revenueSortAsc, setRevenueSortAsc] = useState(false)
 
-  // ── Período (default: mês corrente, mesmo comportamento de antes) ──────
+  // ── Período (default: mês corrente) — compartilhado por Visão Geral,
+  // Receitas, Custos e Comissões. Inadimplência nunca é filtrada por ele.
   const [period, setPeriod] = useState<Period>(() => {
     const now = new Date()
     return { start: startOfMonth(now), end: endOfMonth(now) }
@@ -707,66 +755,129 @@ export default function AdminFinancial() {
     setLoading(false)
   }
 
-  // ── KPIs (todos relativos ao `period` selecionado, default = mês corrente) ──
+  // ═══════════════════════════════════════════════════════════════════════
+  // CÁLCULOS — tudo em cima dos arrays já carregados por inteiro (sem
+  // refiltrar no backend), usando `inPeriod` pro período selecionado e um
+  // período "desde sempre" (EPOCH) pro saldo acumulado.
+  // ═══════════════════════════════════════════════════════════════════════
   const now = new Date()
 
-  // Lançamentos manuais (financial_entries) — somas adicionais aos cálculos
-  // existentes de payments/platform_costs, sem substituí-los.
-  const manualEntradasPeriod = entries.filter(e => e.type === 'entrada' && inPeriod(e.entry_date, period)).reduce((s, e) => s + (e.amount || 0), 0)
-  const manualSaidasPeriod   = entries.filter(e => e.type === 'saida'   && inPeriod(e.entry_date, period)).reduce((s, e) => s + (e.amount || 0), 0)
+  const paymentsPaidPeriod = payments.filter(p => p.status === 'paid' && inPeriod(p.paid_at, period))
+  const manualEntradasPeriod = entries.filter(e => e.type === 'entrada' && inPeriod(e.entry_date, period))
+  const manualSaidasPeriod   = entries.filter(e => e.type === 'saida'   && inPeriod(e.entry_date, period))
+  const folhaPeriodo = entries.filter(e => e.type === 'saida' && e.category === 'folha' && inPeriod(e.entry_date, period))
+    .reduce((s, e) => s + (e.amount || 0), 0)
 
-  // Comissões de consultor no período (payment_date se já paga, senão created_at)
-  // — entram como custo, afetam a margem, igual platform_costs/financial_entries.
-  const commissionsInPeriod  = commissions.filter(c => c.status !== 'cancelada' && inPeriod(c.payment_date || c.created_at, period))
+  const commissionsInPeriod = commissions.filter(c => c.status !== 'cancelada' && inPeriod(c.payment_date || c.created_at, period))
   const commissionsPending  = commissionsInPeriod.filter(c => c.status === 'pendente').reduce((s, c) => s + (c.amount || 0), 0)
   const commissionsPaid     = commissionsInPeriod.filter(c => c.status === 'paga').reduce((s, c) => s + (c.amount || 0), 0)
   const commissionsTotal    = commissionsPending + commissionsPaid
 
-  const mrr = payments.filter(p => p.status === 'paid' && inPeriod(p.paid_at, period)).reduce((s, p) => s + (p.amount || 0), 0)
-    + manualEntradasPeriod
-  const mrrProjected = institutions.filter(i => i.plan_status === 'active' && i.plan !== 'gratuito').reduce((s, i) => s + (i.monthly_value || 550), 0)
-  const overdueList  = payments.filter(p => p.status === 'overdue')
-  const overdueTotal = overdueList.reduce((s, p) => s + (p.amount || 0), 0)
-  const pendingTotal = payments.filter(p => p.status === 'pending').reduce((s, p) => s + (p.amount || 0), 0)
-  const churnCount   = institutions.filter(i => ['cancelled','suspended'].includes(i.plan_status)).length
-
-  const mrrChart = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1)
-    const monthPaid = payments.filter(p => {
-      if (p.status !== 'paid' || !p.paid_at) return false
-      const pd = new Date(p.paid_at)
-      return pd.getFullYear() === d.getFullYear() && pd.getMonth() === d.getMonth()
-    })
-    const monthManualEntradas = entries.filter(e => {
-      if (e.type !== 'entrada' || !e.entry_date) return false
-      const ed = new Date(e.entry_date + 'T12:00:00')
-      return ed.getFullYear() === d.getFullYear() && ed.getMonth() === d.getMonth()
-    })
-    return {
-      month: d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
-      mrr:   monthPaid.reduce((s, p) => s + (p.amount || 0), 0) + monthManualEntradas.reduce((s, e) => s + (e.amount || 0), 0),
-    }
-  })
-
-  // ── Custos (Financeiro > Custos): platform_costs (recorrente, SEM dimensão
-  // temporal — sempre "atual", independente do período) + saídas manuais e
-  // comissões do período selecionado.
-  const activeCosts  = costs.filter(c => c.active)
+  const activeCosts = costs.filter(c => c.active)
   const platformCostsMonthly = activeCosts.reduce((s, c) => {
     if (c.recurrence === 'monthly') return s + (c.amount || 0)
     if (c.recurrence === 'yearly')  return s + (c.amount || 0) / 12
     return s
   }, 0)
-  const monthlyTotal = platformCostsMonthly + manualSaidasPeriod + commissionsTotal
-  const yearlyTotal  = platformCostsMonthly * 12
-  const grossProfit  = mrrProjected - monthlyTotal
-  const margin       = mrrProjected > 0 ? Math.round((grossProfit / mrrProjected) * 100) : 0
 
-  const filteredPayments = payments.filter(p => {
-    const matchStatus = filterStatus === 'all' || p.status === filterStatus
-    const matchInst   = !filterInst || p.institution_id === filterInst
-    return matchStatus && matchInst
+  const receitaPeriodo = paymentsPaidPeriod.reduce((s, p) => s + (p.amount || 0), 0)
+    + manualEntradasPeriod.reduce((s, e) => s + (e.amount || 0), 0)
+  const custosPeriodo = platformCostsMonthly
+    + manualSaidasPeriod.reduce((s, e) => s + (e.amount || 0), 0)
+    + commissionsTotal
+  const lucroPeriodo  = receitaPeriodo - custosPeriodo
+  const margemPeriodo = receitaPeriodo > 0 ? Math.round((lucroPeriodo / receitaPeriodo) * 100) : 0
+
+  const mrrProjected = institutions.filter(i => i.plan_status === 'active' && i.plan !== 'gratuito').reduce((s, i) => s + (i.monthly_value || 550), 0)
+  const overdueList  = payments.filter(p => p.status === 'overdue')
+  const overdueTotal = overdueList.reduce((s, p) => s + (p.amount || 0), 0)
+  const pendingTotal = payments.filter(p => p.status === 'pending').reduce((s, p) => s + (p.amount || 0), 0)
+  const churnCount   = institutions.filter(i => ['cancelled', 'suspended'].includes(i.plan_status)).length
+
+  // ── Saldo em caixa acumulado: tudo desde o início até o FIM do período
+  // selecionado (não é "do período", é histórico acumulado). platform_costs
+  // é prorrateado por effective_from de cada custo (fallback created_at pra
+  // registros antigos) até o fim do período — ver campo "Custo existe desde"
+  // no modal de custo.
+  const sinceStart: Period = { start: EPOCH, end: period.end }
+  const receitaAcumulada =
+    payments.filter(p => p.status === 'paid' && inPeriod(p.paid_at, sinceStart)).reduce((s, p) => s + (p.amount || 0), 0)
+    + entries.filter(e => e.type === 'entrada' && inPeriod(e.entry_date, sinceStart)).reduce((s, e) => s + (e.amount || 0), 0)
+  const saidasAcumuladas = entries.filter(e => e.type === 'saida' && inPeriod(e.entry_date, sinceStart)).reduce((s, e) => s + (e.amount || 0), 0)
+  const comissoesAcumuladas = commissions.filter(c => c.status !== 'cancelada' && inPeriod(c.payment_date || c.created_at, sinceStart)).reduce((s, c) => s + (c.amount || 0), 0)
+  const custosFixosAcumulados = activeCosts.reduce((s, c) => {
+    const effective = costEffectiveDate(c)
+    if (!effective) return s
+    if (effective > period.end) return s
+    const months = monthsBetween(effective, period.end)
+    if (c.recurrence === 'monthly') return s + (c.amount || 0) * months
+    if (c.recurrence === 'yearly')  return s + ((c.amount || 0) / 12) * months
+    return s + (c.amount || 0) // one_time: conta uma vez só
+  }, 0)
+  const saldoCaixa = receitaAcumulada - saidasAcumuladas - comissoesAcumuladas - custosFixosAcumulados
+
+  // ── Tendência anual — SEMPRE últimos 12 meses corridos, independente do
+  // `period`. Cada custo fixo só entra a partir do mês do seu effective_from
+  // (fallback created_at) — antes disso, é como se ainda não existisse.
+  const yearlyTrend = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1)
+    const monthPeriod: Period = { start: d, end: endOfMonth(d) }
+    const receita = payments.filter(p => p.status === 'paid' && inPeriod(p.paid_at, monthPeriod)).reduce((s, p) => s + (p.amount || 0), 0)
+      + entries.filter(e => e.type === 'entrada' && inPeriod(e.entry_date, monthPeriod)).reduce((s, e) => s + (e.amount || 0), 0)
+    const platformCostsThisMonth = activeCosts.reduce((s, c) => {
+      const effective = costEffectiveDate(c)
+      if (!effective || effective > monthPeriod.end) return s
+      if (c.recurrence === 'monthly') return s + (c.amount || 0)
+      if (c.recurrence === 'yearly')  return s + (c.amount || 0) / 12
+      return s
+    }, 0)
+    const custo = platformCostsThisMonth
+      + entries.filter(e => e.type === 'saida' && inPeriod(e.entry_date, monthPeriod)).reduce((s, e) => s + (e.amount || 0), 0)
+      + commissions.filter(c => c.status !== 'cancelada' && inPeriod(c.payment_date || c.created_at, monthPeriod)).reduce((s, c) => s + (c.amount || 0), 0)
+    const margem = receita > 0 ? Math.round(((receita - custo) / receita) * 100) : 0
+    return { month: d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }), receita, custo, margem }
   })
+
+  // ── Composição de custos do período selecionado ──
+  const platformFixedPeriod    = activeCosts.filter(c => c.nature === 'custo_fixo').reduce((s, c) => s + (c.recurrence === 'monthly' ? (c.amount || 0) : c.recurrence === 'yearly' ? (c.amount || 0) / 12 : 0), 0)
+  const platformVariablePeriod = activeCosts.filter(c => c.nature !== 'custo_fixo').reduce((s, c) => s + (c.recurrence === 'monthly' ? (c.amount || 0) : c.recurrence === 'yearly' ? (c.amount || 0) / 12 : 0), 0)
+  const entriesFixedPeriod    = manualSaidasPeriod.filter(e => e.category !== 'folha' && e.nature === 'custo_fixo').reduce((s, e) => s + (e.amount || 0), 0)
+  const entriesVariablePeriod = manualSaidasPeriod.filter(e => e.category !== 'folha' && e.nature !== 'custo_fixo').reduce((s, e) => s + (e.amount || 0), 0)
+  const costComposition = [
+    { name: 'Custo fixo',     value: platformFixedPeriod + entriesFixedPeriod,       color: '#0891B2' },
+    { name: 'Custo variável', value: platformVariablePeriod + entriesVariablePeriod, color: '#D97706' },
+    { name: 'Folha/pessoal',  value: folhaPeriodo,                                    color: '#7C3AED' },
+    { name: 'Comissões',      value: commissionsTotal,                                color: '#DC2626' },
+  ].filter(c => c.value > 0)
+
+  // ── Receitas: lista unificada payments (pagos) + financial_entries (entrada) ──
+  const revenueRows = [
+    ...paymentsPaidPeriod.map(p => ({
+      id: 'p-' + p.id, source: 'payment' as const, date: p.paid_at,
+      description: TYPE_MAP[p.payment_type] || p.payment_type || 'Pagamento',
+      amount: p.amount, institutionName: (p as any).institutions?.name, raw: p,
+    })),
+    ...manualEntradasPeriod.map(e => ({
+      id: 'e-' + e.id, source: 'entry' as const, date: e.entry_date,
+      description: e.description, amount: e.amount, institutionName: (e as any).institutions?.name, raw: e,
+    })),
+  ].sort((a, b) => {
+    const diff = new Date(a.date).getTime() - new Date(b.date).getTime()
+    return revenueSortAsc ? diff : -diff
+  })
+
+  // ── Custos: lista unificada platform_costs (todos) + financial_entries (saída, no período) ──
+  const costRows = [
+    ...costs.map(c => ({
+      id: 'c-' + c.id, source: 'platform' as const, name: c.name, amount: c.amount,
+      category: c.category, recurrence: c.recurrence, active: c.active, folhaTipo: undefined as string | undefined, raw: c,
+    })),
+    ...manualSaidasPeriod.map(e => ({
+      id: 'e-' + e.id, source: 'entry' as const, name: e.description, amount: e.amount,
+      category: e.category, recurrence: undefined as string | undefined, active: undefined as boolean | undefined,
+      folhaTipo: e.folha_tipo as string | undefined, raw: e,
+    })),
+  ]
 
   // ── Ações sobre pagamento ─────────────────────────────────
   const handlePaymentAction = async (action: string, payment: any) => {
@@ -812,7 +923,7 @@ export default function AdminFinancial() {
             to: inst?.email,
             data: {
               institution_name: inst?.name,
-              value: fmtBRL(payment.amount).replace('R$\u00a0', ''),
+              value: fmtBRL(payment.amount).replace('R$ ', ''),
               due_date: payment.due_date ? new Date(payment.due_date + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
               billing_type: 'PIX/Boleto',
               payment_link: payment.asaas_charge_url,
@@ -861,6 +972,8 @@ export default function AdminFinancial() {
 
   const overdueGroups = Object.values(overdueByInst).sort((a: any, b: any) => b.maxDays - a.maxDays)
 
+  const openNewEntry = (type: 'entrada' | 'saida') => { setEntryModalType(type); setEntryModal('new') }
+
   return (
     <SuperAdminLayout>
       <div className="p-8 space-y-6">
@@ -878,17 +991,11 @@ export default function AdminFinancial() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Financeiro</h1>
-            <p className="text-sm text-gray-500 mt-1">Receita, cobranças e inadimplência</p>
+            <p className="text-sm text-gray-500 mt-1">Receita, custos, comissões e inadimplência</p>
           </div>
-          <div className="flex gap-3">
-            <button onClick={loadData} className="p-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-500">
-              <RefreshCw className="w-4 h-4" />
-            </button>
-            <button onClick={() => setShowNewCharge(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm shadow-sm hover:from-cyan-600 hover:to-blue-700">
-              <Plus className="w-4 h-4" /> Nova cobrança
-            </button>
-          </div>
+          <button onClick={loadData} className="p-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-500">
+            <RefreshCw className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Seletor de período */}
@@ -917,43 +1024,14 @@ export default function AdminFinancial() {
           </button>
         </div>
 
-        {/* KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            { label: 'Receita no período', value: fmtBRL(mrr),          sub: `Projeção recorrente: ${fmtBRL(mrrProjected)}`, icon: DollarSign,   grad: 'from-green-500 to-emerald-600' },
-            { label: 'Escolas ativas', value: institutions.filter(i => i.plan_status === 'active').length, sub: `${churnCount} churn`, icon: Building2, grad: 'from-cyan-500 to-blue-600' },
-            { label: 'Inadimplência',  value: fmtBRL(overdueTotal), sub: `${overdueList.length} cobranças`, icon: AlertTriangle, grad: overdueTotal > 0 ? 'from-red-500 to-rose-600' : 'from-gray-400 to-gray-500' },
-            { label: 'A receber',      value: fmtBRL(pendingTotal), sub: 'cobranças pendentes', icon: Clock, grad: 'from-amber-500 to-orange-500' },
-            { label: 'Comissões (período)', value: fmtBRL(commissionsTotal), sub: `${fmtBRL(commissionsPending)} pendente · ${fmtBRL(commissionsPaid)} paga`, icon: Users, grad: 'from-purple-500 to-fuchsia-600' },
-          ].map(k => {
-            const Icon = k.icon
-            return (
-              <div key={k.label} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{k.label}</p>
-                    {loading ? <div className="h-7 w-20 bg-gray-100 rounded animate-pulse" />
-                      : <p className="text-xl font-bold text-gray-900">{k.value}</p>}
-                    {k.sub && !loading && <p className="text-xs text-gray-400 mt-1">{k.sub}</p>}
-                  </div>
-                  <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${k.grad} flex items-center justify-center flex-shrink-0`}>
-                    <Icon className="w-5 h-5 text-white" />
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-
         {/* Tabs */}
         <div className="flex border-b border-gray-200 overflow-x-auto">
           {[
-            { id: 'overview' as Tab, label: 'Visão geral' },
-            { id: 'payments' as Tab, label: `Histórico (${payments.length})` },
-            { id: 'overdue'  as Tab, label: `Inadimplência${overdueGroups.length > 0 ? ` (${overdueGroups.length})` : ''}`, alert: overdueGroups.length > 0 },
-            { id: 'costs'    as Tab, label: `Custos (${costs.length})` },
-            { id: 'entries'  as Tab, label: `Lançamentos (${entries.length})` },
-            { id: 'commissions' as Tab, label: `Comissões (${commissions.length})` },
+            { id: 'overview'    as Tab, label: 'Visão Geral' },
+            { id: 'revenue'     as Tab, label: `Receitas (${revenueRows.length})` },
+            { id: 'costs'       as Tab, label: `Custos (${costRows.length})` },
+            { id: 'commissions' as Tab, label: `Comissões (${commissionsInPeriod.length})` },
+            { id: 'overdue'     as Tab, label: `Inadimplência${overdueGroups.length > 0 ? ` (${overdueGroups.length})` : ''}`, alert: overdueGroups.length > 0 },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap
@@ -964,33 +1042,111 @@ export default function AdminFinancial() {
           ))}
         </div>
 
-        {/* ── TAB: Visão geral ── */}
+        {/* ══════════════════════════ TAB: Visão Geral ══════════════════════════ */}
         {tab === 'overview' && (
           <div className="space-y-6">
+
+            {/* Texto dinâmico */}
+            <div className="bg-gradient-to-br from-cyan-50 to-blue-50 border border-cyan-100 rounded-2xl p-6">
+              <p className="text-sm text-gray-700 leading-relaxed">
+                Em <strong className="capitalize">{periodLabel}</strong>, a Áion faturou <strong>{fmtBRL(receitaPeriodo)}</strong>,
+                {' '}teve custos de <strong>{fmtBRL(custosPeriodo)}</strong> (incluindo {fmtBRL(commissionsTotal)} em comissões),
+                {' '}resultando em margem de <strong>{margemPeriodo}%</strong>. O saldo em caixa acumulado é{' '}
+                <strong className={saldoCaixa >= 0 ? 'text-green-700' : 'text-red-700'}>{fmtBRL(saldoCaixa)}</strong>.
+              </p>
+            </div>
+
+            {/* KPIs */}
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              {[
+                { label: 'Receita do período', value: fmtBRL(receitaPeriodo), sub: `Projeção recorrente: ${fmtBRL(mrrProjected)}`, icon: DollarSign, grad: 'from-green-500 to-emerald-600' },
+                { label: 'Custos do período',   value: fmtBRL(custosPeriodo),  sub: 'fixos + variáveis + comissões',            icon: AlertTriangle, grad: 'from-red-500 to-rose-600' },
+                { label: 'Comissões do período', value: fmtBRL(commissionsTotal), sub: `${fmtBRL(commissionsPending)} pendente · ${fmtBRL(commissionsPaid)} paga`, icon: Users, grad: 'from-purple-500 to-fuchsia-600' },
+                { label: 'Saldo em caixa acumulado', value: fmtBRL(saldoCaixa), sub: 'histórico até o fim do período', icon: Wallet, grad: saldoCaixa >= 0 ? 'from-cyan-500 to-blue-600' : 'from-red-500 to-rose-600' },
+                { label: 'Margem',  value: `${margemPeriodo}%`, sub: `${fmtBRL(lucroPeriodo)} de lucro no período`, icon: CheckCircle2, grad: margemPeriodo >= 0 ? 'from-emerald-500 to-teal-600' : 'from-red-500 to-rose-600' },
+                { label: 'Inadimplência atual', value: fmtBRL(overdueTotal), sub: `${overdueList.length} cobranças em atraso (não filtrado por período)`, icon: AlertCircle, grad: overdueTotal > 0 ? 'from-amber-500 to-orange-500' : 'from-gray-400 to-gray-500' },
+              ].map(k => {
+                const Icon = k.icon
+                return (
+                  <div key={k.label} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{k.label}</p>
+                        {loading ? <div className="h-7 w-20 bg-gray-100 rounded animate-pulse" />
+                          : <p className="text-xl font-bold text-gray-900">{k.value}</p>}
+                        {k.sub && !loading && <p className="text-xs text-gray-400 mt-1">{k.sub}</p>}
+                      </div>
+                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${k.grad} flex items-center justify-center flex-shrink-0`}>
+                        <Icon className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Tendência anual (12 meses corridos, independente do período selecionado) */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-              <h2 className="font-bold text-gray-900 mb-5">MRR — últimos 6 meses</h2>
-              {loading ? <div className="h-52 bg-gray-50 rounded-xl animate-pulse" />
-                : <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={mrrChart}>
+              <h2 className="font-bold text-gray-900 mb-1">Tendência — últimos 12 meses</h2>
+              <p className="text-xs text-gray-400 mb-5">Receita vs. custo vs. margem — não é afetada pelo período selecionado acima</p>
+              {loading ? <div className="h-64 bg-gray-50 rounded-xl animate-pulse" />
+                : <ResponsiveContainer width="100%" height={280}>
+                    <ComposedChart data={yearlyTrend}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                       <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#9ca3af' }} />
-                      <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-                      <Tooltip formatter={v => [fmtBRL(Number(v)), 'MRR']} />
-                      <Line type="monotone" dataKey="mrr" stroke="#14b8a6" strokeWidth={3} dot={{ fill: '#14b8a6', r: 4 }} />
-                    </LineChart>
+                      <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#9ca3af' }} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
+                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#9ca3af' }} tickFormatter={v => `${v}%`} />
+                      <Tooltip formatter={(v, name) => name === 'Margem' ? [`${v}%`, name] : [fmtBRL(Number(v)), name]} />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      <Line yAxisId="left" type="monotone" dataKey="receita" name="Receita" stroke="#16a34a" strokeWidth={3} dot={{ fill: '#16a34a', r: 3 }} />
+                      <Line yAxisId="left" type="monotone" dataKey="custo" name="Custo" stroke="#dc2626" strokeWidth={3} dot={{ fill: '#dc2626', r: 3 }} />
+                      <Line yAxisId="right" type="monotone" dataKey="margem" name="Margem" stroke="#0891b2" strokeWidth={2} strokeDasharray="4 3" dot={{ fill: '#0891b2', r: 3 }} />
+                    </ComposedChart>
                   </ResponsiveContainer>
               }
             </div>
 
+            {/* Composição de custos do período */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+              <h2 className="font-bold text-gray-900 mb-1">Composição de custos</h2>
+              <p className="text-xs text-gray-400 mb-5 capitalize">{periodLabel}</p>
+              {loading ? <div className="h-64 bg-gray-50 rounded-xl animate-pulse" />
+                : costComposition.length === 0 ? (
+                  <div className="py-12 text-center text-gray-400 text-sm">Nenhum custo no período selecionado</div>
+                ) : (
+                  <div className="flex flex-col md:flex-row items-center gap-6">
+                    <ResponsiveContainer width="100%" height={240} className="max-w-[280px]">
+                      <PieChart>
+                        <Pie data={costComposition} dataKey="value" nameKey="name" innerRadius={55} outerRadius={95} paddingAngle={2}>
+                          {costComposition.map((c, i) => <Cell key={i} fill={c.color} />)}
+                        </Pie>
+                        <Tooltip formatter={v => fmtBRL(Number(v))} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="flex-1 w-full space-y-2">
+                      {costComposition.map(c => (
+                        <div key={c.name} className="flex items-center justify-between text-sm py-1.5 border-b border-gray-50">
+                          <span className="flex items-center gap-2 text-gray-600"><span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: c.color }} />{c.name}</span>
+                          <span className="font-semibold text-gray-900">{fmtBRL(c.value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              }
+            </div>
+
+            {/* Escolas por situação financeira */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-100">
+              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                 <h2 className="font-bold text-gray-900">Escolas por situação financeira</h2>
+                <span className="text-xs text-gray-400">{churnCount} churn</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
-                      {['Escola','Plano','Status','MRR','Asaas','Ações'].map(h => (
+                      {['Escola', 'Plano', 'Status', 'MRR', 'Asaas', 'Ações'].map(h => (
                         <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                       ))}
                     </tr>
@@ -1046,68 +1202,76 @@ export default function AdminFinancial() {
           </div>
         )}
 
-        {/* ── TAB: Histórico ── */}
-        {tab === 'payments' && (
+        {/* ══════════════════════════ TAB: Receitas ══════════════════════════ */}
+        {tab === 'revenue' && (
           <div className="space-y-4">
-            <div className="flex gap-3 flex-wrap">
-              <select className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-cyan-500 outline-none"
-                value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-                <option value="all">Todos os status</option>
-                {Object.entries(STATUS_MAP).map(([k, v]) => <option key={k} value={k}>{v.l}</option>)}
-              </select>
-              <select className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-cyan-500 outline-none"
-                value={filterInst} onChange={e => setFilterInst(e.target.value)}>
-                <option value="">Todas as escolas</option>
-                {institutions.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-              </select>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <p className="text-sm text-gray-500 capitalize">{periodLabel} — {fmtBRL(receitaPeriodo)} no total</p>
+              <div className="flex gap-2">
+                <button onClick={() => openNewEntry('entrada')}
+                  className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl font-semibold text-sm hover:bg-gray-50">
+                  <Plus className="w-4 h-4" /> Lançamento manual
+                </button>
+                <button onClick={() => setShowNewCharge(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm">
+                  <CreditCard className="w-4 h-4" /> Nova cobrança
+                </button>
+              </div>
             </div>
 
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
               {loading ? <div className="p-6 space-y-3">{Array(5).fill(0).map((_, i) => <div key={i} className="h-10 bg-gray-50 rounded animate-pulse" />)}</div>
-                : filteredPayments.length === 0
+                : revenueRows.length === 0
                 ? <div className="p-12 text-center text-gray-400">
                     <DollarSign className="w-10 h-10 mx-auto mb-2 text-gray-200" />
-                    <p className="text-sm">Nenhum pagamento encontrado</p>
+                    <p className="text-sm">Nenhuma receita no período selecionado</p>
                   </div>
                 : <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
                         <tr className="bg-gray-50 border-b border-gray-100">
-                          {['Escola','Tipo','Valor','Vencimento','Pago em','Status',''].map(h => (
+                          <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                            <button onClick={() => setRevenueSortAsc(v => !v)} className="flex items-center gap-1 hover:text-gray-700">
+                              Data <ArrowUpDown className="w-3 h-3" />
+                            </button>
+                          </th>
+                          {['Descrição', 'Escola', 'Origem', 'Valor', ''].map(h => (
                             <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
-                        {filteredPayments.slice(0, 100).map(p => {
-                          const st = STATUS_MAP[p.status] || STATUS_MAP.pending
-                          return (
-                            <tr key={p.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedPayment(p)}>
-                              <td className="px-5 py-3 font-medium text-gray-900 text-sm">{(p as any).institutions?.name || '—'}</td>
-                              <td className="px-5 py-3 text-xs text-gray-500">{TYPE_MAP[p.payment_type] || p.payment_type || '—'}</td>
-                              <td className="px-5 py-3 font-semibold text-gray-700 text-sm">{fmtBRL(p.amount)}</td>
-                              <td className="px-5 py-3 text-sm text-gray-500">{p.due_date ? new Date(p.due_date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</td>
-                              <td className="px-5 py-3 text-sm text-gray-500">{p.paid_at ? new Date(p.paid_at).toLocaleDateString('pt-BR') : '—'}</td>
-                              <td className="px-5 py-3">
-                                <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: st.c, background: st.bg }}>{st.l}</span>
-                              </td>
-                              <td className="px-5 py-3">
+                        {revenueRows.map(r => (
+                          <tr key={r.id} className={`hover:bg-gray-50 ${r.source === 'payment' ? 'cursor-pointer' : ''}`}
+                            onClick={() => r.source === 'payment' && setSelectedPayment(r.raw)}>
+                            <td className="px-5 py-3 text-sm text-gray-500">{r.date ? new Date(r.date.length === 10 ? r.date + 'T12:00:00' : r.date).toLocaleDateString('pt-BR') : '—'}</td>
+                            <td className="px-5 py-3 font-medium text-gray-900 text-sm">{r.description}</td>
+                            <td className="px-5 py-3 text-sm text-gray-500">{r.institutionName || '—'}</td>
+                            <td className="px-5 py-3">
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${r.source === 'payment' ? 'bg-cyan-100 text-cyan-700' : 'bg-purple-100 text-purple-700'}`}>
+                                {r.source === 'payment' ? 'Automático - Asaas' : 'Manual'}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3 font-bold text-green-700 text-sm">+{fmtBRL(r.amount)}</td>
+                            <td className="px-5 py-3">
+                              {r.source === 'entry' && (
                                 <div className="flex gap-1">
-                                  {p.asaas_charge_url && (
-                                    <a href={p.asaas_charge_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-                                      className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg">
-                                      <ExternalLink className="w-3.5 h-3.5" />
-                                    </a>
-                                  )}
-                                  <button onClick={e => { e.stopPropagation(); setSelectedPayment(p) }}
-                                    className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg">
+                                  <button onClick={e => { e.stopPropagation(); setEntryModal(r.raw) }} className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg">
                                     <Eye className="w-3.5 h-3.5" />
                                   </button>
+                                  <button onClick={async e => {
+                                    e.stopPropagation()
+                                    if (!confirm(`Excluir lançamento "${r.description}"?`)) return
+                                    await supabase.from('financial_entries').delete().eq('id', r.raw.id)
+                                    showToast('Lançamento excluído.'); loadData()
+                                  }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                                    <Ban className="w-3.5 h-3.5" />
+                                  </button>
                                 </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
+                              )}
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
@@ -1116,7 +1280,181 @@ export default function AdminFinancial() {
           </div>
         )}
 
-        {/* ── TAB: Inadimplência ── */}
+        {/* ══════════════════════════ TAB: Custos ══════════════════════════ */}
+        {tab === 'costs' && (
+          <div className="space-y-6">
+            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-800">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+              <span>Custos fixos/recorrentes (tabela abaixo) refletem a configuração <strong>atual</strong> — sem data de início/fim, não variam com o período selecionado. Só as saídas manuais respeitam o período.</span>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: 'Custos/mês (recorrente)', value: fmtBRL(platformCostsMonthly), sub: 'custos fixos ativos', grad: 'from-red-500 to-rose-600', icon: DollarSign },
+                { label: 'Saídas manuais (período)', value: fmtBRL(manualSaidasPeriod.reduce((s, e) => s + (e.amount || 0), 0)), sub: 'lançamentos avulsos', grad: 'from-orange-500 to-red-500', icon: AlertTriangle },
+                { label: 'Custo com pessoal', value: fmtBRL(folhaPeriodo), sub: 'categoria "folha" no período', grad: 'from-purple-500 to-fuchsia-600', icon: Briefcase },
+                { label: 'Custos do período (total)', value: fmtBRL(custosPeriodo), sub: 'fixos + variáveis + comissões', grad: 'from-gray-600 to-gray-800', icon: Wallet },
+              ].map(k => {
+                const Icon = k.icon
+                return (
+                  <div key={k.label} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{k.label}</p>
+                        <p className="text-xl font-bold text-gray-900">{k.value}</p>
+                        <p className="text-xs text-gray-400 mt-1">{k.sub}</p>
+                      </div>
+                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${k.grad} flex items-center justify-center flex-shrink-0`}>
+                        <Icon className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+                <h2 className="font-bold text-gray-900">Custos operacionais</h2>
+                <div className="flex gap-2">
+                  <button onClick={() => openNewEntry('saida')}
+                    className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl font-semibold text-sm hover:bg-gray-50">
+                    <Plus className="w-4 h-4" /> Saída manual
+                  </button>
+                  <button onClick={() => setCostModal('new')}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm">
+                    <Plus className="w-4 h-4" /> Custo fixo
+                  </button>
+                </div>
+              </div>
+              {costRows.length === 0 ? (
+                <div className="p-12 text-center text-gray-400">
+                  <DollarSign className="w-10 h-10 mx-auto mb-2 text-gray-200" />
+                  <p className="text-sm">Nenhum custo cadastrado</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100">
+                        {['Nome', 'Valor', 'Categoria', 'Origem', 'Status', 'Ações'].map(h => (
+                          <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {costRows.map(c => (
+                        <tr key={c.id} className="hover:bg-gray-50">
+                          <td className="px-5 py-3">
+                            <p className="font-semibold text-gray-900 text-sm">{c.name}</p>
+                            {c.folhaTipo && <p className="text-xs text-gray-400 mt-0.5">{FOLHA_TIPO_MAP[c.folhaTipo] || c.folhaTipo}</p>}
+                          </td>
+                          <td className="px-5 py-3 font-bold text-gray-800 text-sm">{fmtBRL(c.amount)}</td>
+                          <td className="px-5 py-3 text-sm text-gray-500">{ENTRY_CATEGORY_MAP[c.category] || c.category}</td>
+                          <td className="px-5 py-3">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.source === 'platform' ? 'bg-cyan-100 text-cyan-700' : 'bg-purple-100 text-purple-700'}`}>
+                              {c.source === 'platform' ? (c.recurrence === 'monthly' ? 'Fixo mensal' : c.recurrence === 'yearly' ? 'Fixo anual' : 'Avulso') : 'Manual'}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3">
+                            {c.source === 'platform' ? (
+                              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${c.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                                {c.active ? 'Ativo' : 'Inativo'}
+                              </span>
+                            ) : '—'}
+                          </td>
+                          <td className="px-5 py-3">
+                            <div className="flex gap-1">
+                              <button onClick={() => c.source === 'platform' ? setCostModal(c.raw) : setEntryModal(c.raw)} className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg">
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={async () => {
+                                if (!confirm(`Excluir "${c.name}"?`)) return
+                                if (c.source === 'platform') await supabase.from('platform_costs').delete().eq('id', c.raw.id)
+                                else await supabase.from('financial_entries').delete().eq('id', c.raw.id)
+                                showToast('Custo excluído.'); loadData()
+                              }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                                <Ban className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════ TAB: Comissões ══════════════════════════ */}
+        {tab === 'commissions' && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h2 className="font-bold text-gray-900">Comissões de consultor</h2>
+                <p className="text-xs text-gray-400 mt-0.5 capitalize">{periodLabel} — {fmtBRL(commissionsPending)} pendente · {fmtBRL(commissionsPaid)} paga</p>
+              </div>
+              <button onClick={() => setCommissionModal('new')}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm">
+                <Plus className="w-4 h-4" /> Nova comissão
+              </button>
+            </div>
+            {commissionsInPeriod.length === 0 ? (
+              <div className="p-12 text-center text-gray-400">
+                <Users className="w-10 h-10 mx-auto mb-2 text-gray-200" />
+                <p className="text-sm">Nenhuma comissão no período selecionado</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      {['Consultor', 'Escola', 'Tipo', 'Valor', 'Status', 'Pagamento', 'Ações'].map(h => (
+                        <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {commissionsInPeriod.map(c => {
+                      const st = COMMISSION_STATUS_MAP[c.status] || COMMISSION_STATUS_MAP.pendente
+                      const consultantName = consultants.find(cs => cs.id === c.consultant_id)?.full_name || '—'
+                      return (
+                        <tr key={c.id} className="hover:bg-gray-50">
+                          <td className="px-5 py-3 font-semibold text-gray-900 text-sm">{consultantName}</td>
+                          <td className="px-5 py-3 text-sm text-gray-500">{(c as any).institutions?.name || '—'}</td>
+                          <td className="px-5 py-3 text-xs text-gray-500">{COMMISSION_TYPE_MAP[c.type] || c.type}</td>
+                          <td className="px-5 py-3 font-bold text-gray-800 text-sm">{fmtBRL(c.amount)}</td>
+                          <td className="px-5 py-3">
+                            <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: st.c, background: st.bg }}>{st.l}</span>
+                          </td>
+                          <td className="px-5 py-3 text-sm text-gray-500">{c.payment_date ? new Date(c.payment_date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+                          <td className="px-5 py-3">
+                            <div className="flex gap-1">
+                              <button onClick={() => setCommissionModal(c)} className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg">
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={async () => {
+                                if (!confirm(`Excluir comissão de "${consultantName}"?`)) return
+                                await supabase.from('consultant_commissions').delete().eq('id', c.id)
+                                showToast('Comissão excluída.'); loadData()
+                              }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                                <Ban className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══════════════════════════ TAB: Inadimplência ══════════════════════════ */}
         {tab === 'overdue' && (
           <div className="space-y-4">
             {overdueGroups.length === 0 ? (
@@ -1241,245 +1579,6 @@ export default function AdminFinancial() {
           </div>
         )}
 
-        {/* ── TAB: Custos ── */}
-        {tab === 'costs' && (() => {
-          // activeCosts/monthlyTotal/yearlyTotal/grossProfit/margin já calculados
-          // no escopo do componente (monthlyTotal soma platform_costs recorrente +
-          // saídas manuais/comissões do período selecionado) — ver bloco de KPIs.
-          const CATS: Record<string, string> = { infrastructure: 'Infraestrutura', tools: 'Ferramentas/SaaS', services: 'Serviços', other: 'Outros' }
-          const REC:  Record<string, string> = { monthly: 'Mensal', yearly: 'Anual', one_time: 'Avulso' }
-
-          return (
-            <div className="space-y-6">
-              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-800">
-                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                <span>"Custos fixos" (tabela abaixo) reflete a configuração <strong>atual</strong> — sem data de início/fim, não varia com o período selecionado. Só as saídas manuais e comissões somadas no KPI "Custos/mês" respeitam o período.</span>
-              </div>
-              {/* KPIs */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
-                  { label: 'Custos/mês',   value: fmtBRL(monthlyTotal), sub: 'fixos + saídas/comissões do período', grad: 'from-red-500 to-rose-600',    icon: DollarSign   },
-                  { label: 'Projeção anual', value: fmtBRL(yearlyTotal), sub: 'estimativa 12 meses',    grad: 'from-orange-500 to-red-500',  icon: AlertTriangle },
-                  { label: 'Lucro bruto/mês', value: fmtBRL(grossProfit), sub: `MRR - custos`,          grad: grossProfit > 0 ? 'from-green-500 to-emerald-600' : 'from-red-500 to-rose-600', icon: CheckCircle2 },
-                  { label: 'Margem bruta',  value: `${margin}%`,          sub: `de ${fmtBRL(mrrProjected)} MRR`, grad: margin > 50 ? 'from-cyan-500 to-blue-600' : 'from-amber-500 to-orange-500', icon: Clock },
-                ].map(k => {
-                  const Icon = k.icon
-                  return (
-                    <div key={k.label} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{k.label}</p>
-                          <p className="text-xl font-bold text-gray-900">{k.value}</p>
-                          <p className="text-xs text-gray-400 mt-1">{k.sub}</p>
-                        </div>
-                        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${k.grad} flex items-center justify-center flex-shrink-0`}>
-                          <Icon className="w-5 h-5 text-white" />
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* Table */}
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                  <h2 className="font-bold text-gray-900">Custos operacionais</h2>
-                  <button onClick={() => setCostModal('new')}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm">
-                    <Plus className="w-4 h-4" /> Adicionar custo
-                  </button>
-                </div>
-                {costs.length === 0 ? (
-                  <div className="p-12 text-center text-gray-400">
-                    <DollarSign className="w-10 h-10 mx-auto mb-2 text-gray-200" />
-                    <p className="text-sm">Nenhum custo cadastrado</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-gray-50 border-b border-gray-100">
-                          {['Nome','Valor','Recorrência','Categoria','Status','Ações'].map(h => (
-                            <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {costs.map(c => (
-                          <tr key={c.id} className="hover:bg-gray-50">
-                            <td className="px-5 py-3">
-                              <p className="font-semibold text-gray-900 text-sm">{c.name}</p>
-                              {c.notes && <p className="text-xs text-gray-400 mt-0.5">{c.notes}</p>}
-                            </td>
-                            <td className="px-5 py-3 font-bold text-gray-800 text-sm">{fmtBRL(c.amount)}</td>
-                            <td className="px-5 py-3 text-sm text-gray-500">{REC[c.recurrence] || c.recurrence}</td>
-                            <td className="px-5 py-3 text-sm text-gray-500">{CATS[c.category] || c.category}</td>
-                            <td className="px-5 py-3">
-                              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${c.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
-                                {c.active ? 'Ativo' : 'Inativo'}
-                              </span>
-                            </td>
-                            <td className="px-5 py-3">
-                              <div className="flex gap-1">
-                                <button onClick={() => setCostModal(c)} className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg">
-                                  <Eye className="w-3.5 h-3.5" />
-                                </button>
-                                <button onClick={async () => {
-                                  if (!confirm(`Excluir "${c.name}"?`)) return
-                                  await supabase.from('platform_costs').delete().eq('id', c.id)
-                                  showToast('Custo excluído.'); loadData()
-                                }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
-                                  <Ban className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-          )
-        })()}
-
-        {/* ── TAB: Lançamentos ── */}
-        {tab === 'entries' && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <div>
-                <h2 className="font-bold text-gray-900">Lançamentos manuais</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Receitas e despesas avulsas, fora do fluxo automático de mensalidade e custos fixos</p>
-              </div>
-              <button onClick={() => setEntryModal('new')}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm">
-                <Plus className="w-4 h-4" /> Novo lançamento
-              </button>
-            </div>
-            {entries.length === 0 ? (
-              <div className="p-12 text-center text-gray-400">
-                <DollarSign className="w-10 h-10 mx-auto mb-2 text-gray-200" />
-                <p className="text-sm">Nenhum lançamento cadastrado</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100">
-                      {['Tipo','Descrição','Valor','Categoria','Data','Escola','Ações'].map(h => (
-                        <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {entries.map(e => (
-                      <tr key={e.id} className="hover:bg-gray-50">
-                        <td className="px-5 py-3">
-                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${e.type === 'entrada' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                            {e.type === 'entrada' ? 'Entrada' : 'Saída'}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3">
-                          <p className="font-semibold text-gray-900 text-sm">{e.description}</p>
-                          {e.notes && <p className="text-xs text-gray-400 mt-0.5">{e.notes}</p>}
-                        </td>
-                        <td className={`px-5 py-3 font-bold text-sm ${e.type === 'entrada' ? 'text-green-700' : 'text-red-600'}`}>
-                          {e.type === 'entrada' ? '+' : '−'}{fmtBRL(e.amount)}
-                        </td>
-                        <td className="px-5 py-3 text-sm text-gray-500">{ENTRY_CATEGORY_MAP[e.category] || e.category}</td>
-                        <td className="px-5 py-3 text-sm text-gray-500">{e.entry_date ? new Date(e.entry_date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</td>
-                        <td className="px-5 py-3 text-sm text-gray-500">{(e as any).institutions?.name || '—'}</td>
-                        <td className="px-5 py-3">
-                          <div className="flex gap-1">
-                            <button onClick={() => setEntryModal(e)} className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg">
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                            <button onClick={async () => {
-                              if (!confirm(`Excluir lançamento "${e.description}"?`)) return
-                              await supabase.from('financial_entries').delete().eq('id', e.id)
-                              showToast('Lançamento excluído.'); loadData()
-                            }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
-                              <Ban className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── TAB: Comissões ── */}
-        {tab === 'commissions' && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <div>
-                <h2 className="font-bold text-gray-900">Comissões de consultor</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Lançamento manual — entram como custo no cálculo de margem do período</p>
-              </div>
-              <button onClick={() => setCommissionModal('new')}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm">
-                <Plus className="w-4 h-4" /> Nova comissão
-              </button>
-            </div>
-            {commissions.length === 0 ? (
-              <div className="p-12 text-center text-gray-400">
-                <Users className="w-10 h-10 mx-auto mb-2 text-gray-200" />
-                <p className="text-sm">Nenhuma comissão cadastrada</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100">
-                      {['Consultor','Escola','Tipo','Valor','Status','Pagamento','Ações'].map(h => (
-                        <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {commissions.map(c => {
-                      const st = COMMISSION_STATUS_MAP[c.status] || COMMISSION_STATUS_MAP.pendente
-                      const consultantName = consultants.find(cs => cs.id === c.consultant_id)?.full_name || '—'
-                      return (
-                        <tr key={c.id} className="hover:bg-gray-50">
-                          <td className="px-5 py-3 font-semibold text-gray-900 text-sm">{consultantName}</td>
-                          <td className="px-5 py-3 text-sm text-gray-500">{(c as any).institutions?.name || '—'}</td>
-                          <td className="px-5 py-3 text-xs text-gray-500">{COMMISSION_TYPE_MAP[c.type] || c.type}</td>
-                          <td className="px-5 py-3 font-bold text-gray-800 text-sm">{fmtBRL(c.amount)}</td>
-                          <td className="px-5 py-3">
-                            <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: st.c, background: st.bg }}>{st.l}</span>
-                          </td>
-                          <td className="px-5 py-3 text-sm text-gray-500">{c.payment_date ? new Date(c.payment_date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</td>
-                          <td className="px-5 py-3">
-                            <div className="flex gap-1">
-                              <button onClick={() => setCommissionModal(c)} className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg">
-                                <Eye className="w-3.5 h-3.5" />
-                              </button>
-                              <button onClick={async () => {
-                                if (!confirm(`Excluir comissão de "${consultantName}"?`)) return
-                                await supabase.from('consultant_commissions').delete().eq('id', c.id)
-                                showToast('Comissão excluída.'); loadData()
-                              }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
-                                <Ban className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
       </div>
 
       {showNewCharge && (
@@ -1511,6 +1610,7 @@ export default function AdminFinancial() {
       {entryModal !== null && (
         <FinancialEntryModal
           entry={entryModal === 'new' ? undefined : entryModal}
+          defaultType={entryModalType}
           institutions={institutions}
           userId={user?.id}
           onClose={() => setEntryModal(null)}

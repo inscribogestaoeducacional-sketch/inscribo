@@ -351,14 +351,27 @@ serve(async (req) => {
 
     if (contract_id) {
       // Reenvio: atualizar contrato existente
-      await dbFetch(`contracts?id=eq.${contract_id}`, 'PATCH', {
+      const patchBody: Record<string, any> = {
         status: 'sent',
         sign_url: null,
         autentique_document_id: documentId,
         signer_name,
         signer_email,
         signers: signersInitial,
-      })
+      }
+      // Só grava consultant_id se o contrato ainda não tiver um — reenviar
+      // não deve trocar o dono de um contrato já atribuído.
+      if (consultant_id) {
+        const { data: existingContract } = await dbFetch(
+          `contracts?id=eq.${contract_id}&select=consultant_id`,
+          'GET'
+        )
+        const currentConsultantId = Array.isArray(existingContract) ? existingContract[0]?.consultant_id : null
+        if (!currentConsultantId) {
+          patchBody.consultant_id = consultant_id
+        }
+      }
+      await dbFetch(`contracts?id=eq.${contract_id}`, 'PATCH', patchBody)
       contractId = contract_id
     } else if (institution_id) {
       // Novo contrato
