@@ -6,7 +6,7 @@ import SuperAdminLayout from './SuperAdminLayout'
 import {
   Users, Plus, Search, RefreshCw, Edit2, Trash2,
   Mail, Phone, Building2, X, CheckCircle2, AlertTriangle,
-  Eye, EyeOff, Shield
+  Eye, EyeOff, Shield, Key
 } from 'lucide-react'
 
 const inp = 'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all bg-white'
@@ -99,7 +99,13 @@ export default function AdminConsultants() {
               email: form.email.trim().toLowerCase(),
               password: form.password,
               full_name: form.full_name.trim(),
-              role: 'consultant',
+              // 'consultant' não é um valor válido de `role` (CHECK IN
+              // ('admin','manager','user')) — quem distingue consultor é
+              // user_type/consultant_type. 'user' aqui não concede nenhum
+              // privilégio de escola: consultores são roteados inteiramente
+              // por user_type (App.tsx isAdminArea), role só importa pro
+              // lado escola (admin/manager/user).
+              role: 'user',
               user_type: 'consultant',
               consultant_type: form.consultant_type,
               phone: form.phone || null,
@@ -121,11 +127,32 @@ export default function AdminConsultants() {
 
   const handleDelete = async (c: any) => {
     if (!confirm(`Desativar o consultor "${c.full_name}"?\nEle perderá acesso ao painel. As escolas vinculadas ficarão sem consultor.`)) return
-    const { error } = await supabase.from('users').update({ active: false }).eq('id', c.id)
-    if (error) { showToast('Erro ao desativar.', false); return }
+    const { data, error } = await supabase.from('users').update({ active: false }).eq('id', c.id).select('id')
+    if (error) { showToast('Erro ao desativar: ' + error.message, false); return }
+    // RLS pode bloquear o UPDATE sem retornar `error` (só filtra a linha) —
+    // se nenhuma linha voltou, nada foi alterado de verdade no banco.
+    if (!data || data.length === 0) {
+      showToast('Não foi possível desativar — sem permissão para alterar este usuário (RLS).', false)
+      return
+    }
     await supabase.from('institutions').update({ consultant_id: null }).eq('consultant_id', c.id)
     showToast('Consultor desativado.')
     loadData()
+  }
+
+  const handleResetPassword = async (c: any) => {
+    if (!confirm(`Enviar e-mail de redefinição de senha para "${c.full_name}" (${c.email})?`)) return
+    try {
+      // Mesmo padrão já usado em UserManagement.tsx (PasswordModal): reset
+      // por e-mail, client-side, sem precisar de Edge Function/admin API.
+      const { error } = await supabase.auth.resetPasswordForEmail(c.email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+      if (error) throw error
+      showToast('E-mail de redefinição enviado!')
+    } catch (e: any) {
+      showToast(e?.message || 'Erro ao enviar e-mail de redefinição.', false)
+    }
   }
 
   const filtered = consultants.filter(c =>
@@ -321,7 +348,7 @@ export default function AdminConsultants() {
                   <option value="externo">Externo</option>
                 </select>
               </div>
-              {!editTarget && (
+              {!editTarget ? (
                 <div>
                   <label className={lbl}>Senha inicial *</label>
                   <div className="relative">
@@ -334,6 +361,11 @@ export default function AdminConsultants() {
                     </button>
                   </div>
                 </div>
+              ) : (
+                <button type="button" onClick={() => handleResetPassword(editTarget)}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 border border-gray-200 text-gray-700 rounded-xl font-semibold text-sm hover:bg-gray-50">
+                  <Key className="w-4 h-4" /> Enviar e-mail de redefinição de senha
+                </button>
               )}
             </div>
 
