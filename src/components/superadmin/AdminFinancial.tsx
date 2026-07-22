@@ -12,6 +12,7 @@ import {
   ExternalLink, AlertCircle, Send, Plus, Copy, CreditCard, Ban,
   MessageCircle, Unlock, Lock, Eye, ChevronRight, ChevronLeft,
   Users, Calendar, SlidersHorizontal, Wallet, Briefcase, ArrowUpDown,
+  Edit2, Trash2,
 } from 'lucide-react'
 
 function fmtBRL(n: number) {
@@ -681,6 +682,178 @@ function CommissionModal({ commission, consultants, institutions, userId, onClos
   )
 }
 
+// ─── Drawer: pagamentos de uma escola (editar/excluir individual) ─────────
+function SchoolPaymentsDrawer({ institution, onClose, onPaymentAction, showToast, onGlobalRefresh }: {
+  institution: any; onClose: () => void
+  onPaymentAction: (action: string, payment: any) => Promise<void>
+  showToast: (m: string, ok?: boolean) => void
+  onGlobalRefresh: () => void
+}) {
+  const [payments, setPayments] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ amount: '', due_date: '', status: 'pending' })
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    const { data } = await supabase.from('payments').select('*').eq('institution_id', institution.id).order('due_date', { ascending: true })
+    setPayments(data || [])
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [institution.id])
+
+  const startEdit = (p: any) => {
+    setEditingId(p.id)
+    setEditForm({ amount: String(p.amount ?? ''), due_date: p.due_date || '', status: p.status || 'pending' })
+  }
+
+  const saveEdit = async (p: any) => {
+    if (!editForm.amount || Number(editForm.amount) <= 0) { showToast('Valor inválido.', false); return }
+    setBusyId(p.id)
+    const { error } = await supabase.from('payments').update({
+      amount: Number(editForm.amount),
+      due_date: editForm.due_date || null,
+      status: editForm.status,
+    }).eq('id', p.id)
+    setBusyId(null)
+    if (error) { showToast('Erro ao salvar: ' + error.message, false); return }
+    showToast('Pagamento atualizado!')
+    setEditingId(null)
+    load()
+    onGlobalRefresh()
+  }
+
+  const handleDelete = async (p: any) => {
+    // Excluir aqui é DELETE de verdade — não cancela a cobrança do lado do
+    // Asaas. Se ainda houver uma cobrança ativa lá, avisa e oferece
+    // reaproveitar a mesma ação de "Cancelar" já usada no resto do painel
+    // (que só marca cancelado localmente se o Asaas confirmar).
+    if (p.asaas_payment_id && p.status !== 'cancelled') {
+      const cancelFirst = confirm(
+        `Esta cobrança tem um ID Asaas (${p.asaas_payment_id}) e ainda não foi cancelada.\n\n` +
+        `Excluir aqui NÃO cancela a cobrança no Asaas — ela continua válida e cobrável do lado de lá.\n\n` +
+        `Clique OK para cancelar no Asaas primeiro (recomendado).\nClique Cancelar para excluir mesmo assim, sem cancelar.`
+      )
+      if (cancelFirst) {
+        setBusyId(p.id)
+        await onPaymentAction('cancel', p)
+        setBusyId(null)
+        await load()
+        onGlobalRefresh()
+        showToast('Cobrança tratada no Asaas — confira o status e clique em excluir de novo se ainda quiser remover o registro.')
+        return
+      }
+    }
+    if (!confirm(
+      `Tem certeza que deseja EXCLUIR PERMANENTEMENTE este pagamento?\n\n` +
+      `${TYPE_MAP[p.payment_type] || p.payment_type} — ${fmtBRL(p.amount)} — venc. ${p.due_date ? new Date(p.due_date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}\n\n` +
+      `Esta ação não pode ser desfeita.`
+    )) return
+    setBusyId(p.id)
+    const { error } = await supabase.from('payments').delete().eq('id', p.id)
+    setBusyId(null)
+    if (error) { showToast('Erro ao excluir: ' + error.message, false); return }
+    showToast('Pagamento excluído.')
+    load()
+    onGlobalRefresh()
+  }
+
+  const totalPaid = payments.reduce((s, p) => s + (p.status === 'paid' ? (p.amount || 0) : 0), 0)
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[300] flex justify-end" onClick={onClose}>
+      <div className="bg-white w-full max-w-2xl h-full overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white px-6 py-5 border-b border-gray-100 flex items-center justify-between z-10">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">{institution.name}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{payments.length} pagamento{payments.length !== 1 ? 's' : ''} · {fmtBRL(totalPaid)} pago no total</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+
+        <div className="p-6">
+          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-800 mb-4">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            <span>Editar/excluir aqui altera só o registro no Áion Edu. Cobranças com ID Asaas continuam existindo lá até serem canceladas de verdade.</span>
+          </div>
+
+          {loading ? (
+            <div className="space-y-3">{Array(3).fill(0).map((_, i) => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+          ) : payments.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <DollarSign className="w-10 h-10 mx-auto mb-2 text-gray-200" />
+              <p className="text-sm">Nenhum pagamento cadastrado pra essa escola</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {payments.map(p => {
+                const isEditing = editingId === p.id
+                const st = STATUS_MAP[p.status] || STATUS_MAP.pending
+                return (
+                  <div key={p.id} className="border border-gray-200 rounded-xl p-4">
+                    {!isEditing ? (
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className="font-semibold text-gray-900 text-sm">{TYPE_MAP[p.payment_type] || p.payment_type}</span>
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ color: st.c, background: st.bg }}>{st.l}</span>
+                          </div>
+                          <p className="text-lg font-bold text-gray-800">{fmtBRL(p.amount)}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            Venc. {p.due_date ? new Date(p.due_date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+                            {p.paid_at && <> · Pago em {new Date(p.paid_at).toLocaleDateString('pt-BR')}</>}
+                            {p.asaas_payment_id && <> · Asaas: {p.asaas_payment_id}</>}
+                          </p>
+                        </div>
+                        <div className="flex gap-1 flex-shrink-0">
+                          <button onClick={() => startEdit(p)} disabled={busyId === p.id} className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg disabled:opacity-40">
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleDelete(p)} disabled={busyId === p.id} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg disabled:opacity-40">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className={lbl}>Valor (R$)</label>
+                            <input type="number" step="0.01" className={inp} value={editForm.amount} onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))} />
+                          </div>
+                          <div>
+                            <label className={lbl}>Vencimento</label>
+                            <input type="date" className={inp} value={editForm.due_date} onChange={e => setEditForm(f => ({ ...f, due_date: e.target.value }))} />
+                          </div>
+                        </div>
+                        <div>
+                          <label className={lbl}>Status</label>
+                          <select className={inp} value={editForm.status} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}>
+                            {Object.entries(STATUS_MAP).map(([k, v]) => <option key={k} value={k}>{v.l}</option>)}
+                          </select>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => setEditingId(null)} className="flex-1 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-semibold">Cancelar</button>
+                          <button onClick={() => saveEdit(p)} disabled={busyId === p.id}
+                            className="flex-1 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg text-sm font-semibold disabled:opacity-60">
+                            {busyId === p.id ? 'Salvando...' : 'Salvar'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────
 export default function AdminFinancial() {
   const { user } = useAuth()
@@ -701,6 +874,7 @@ export default function AdminFinancial() {
   const [entryModalType, setEntryModalType] = useState<'entrada' | 'saida'>('entrada')
   const [commissionModal, setCommissionModal] = useState<any | null | 'new'>(null)
   const [revenueSortAsc, setRevenueSortAsc] = useState(false)
+  const [schoolDrawer, setSchoolDrawer] = useState<any | null>(null)
 
   // ── Período (default: mês corrente) — compartilhado por Visão Geral,
   // Receitas, Custos e Comissões. Inadimplência nunca é filtrada por ele.
@@ -1164,7 +1338,7 @@ export default function AdminFinancial() {
                       }
                       const st = stMap[i.plan_status] || { l: i.plan_status, c: '#6b7280', bg: '#f3f4f6' }
                       return (
-                        <tr key={i.id} className="hover:bg-gray-50">
+                        <tr key={i.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSchoolDrawer(i)}>
                           <td className="px-5 py-3 font-semibold text-gray-900 text-sm">{i.name}</td>
                           <td className="px-5 py-3 text-sm text-gray-500 capitalize">{i.plan || '—'}</td>
                           <td className="px-5 py-3">
@@ -1178,7 +1352,7 @@ export default function AdminFinancial() {
                               ? <span className="text-green-600 font-semibold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Vinculado</span>
                               : <span className="text-gray-400">Não vinculado</span>}
                           </td>
-                          <td className="px-5 py-3">
+                          <td className="px-5 py-3" onClick={e => e.stopPropagation()}>
                             <div className="flex gap-1">
                               {i.plan_status === 'suspended'
                                 ? <button onClick={() => handleReactivate(i)} className="flex items-center gap-1 text-xs px-2 py-1.5 bg-green-50 text-green-700 rounded-lg font-semibold hover:bg-green-100">
@@ -1628,6 +1802,16 @@ export default function AdminFinancial() {
           onClose={() => setCommissionModal(null)}
           onSuccess={loadData}
           showToast={showToast}
+        />
+      )}
+
+      {schoolDrawer && (
+        <SchoolPaymentsDrawer
+          institution={schoolDrawer}
+          onClose={() => setSchoolDrawer(null)}
+          onPaymentAction={handlePaymentAction}
+          showToast={showToast}
+          onGlobalRefresh={loadData}
         />
       )}
 
