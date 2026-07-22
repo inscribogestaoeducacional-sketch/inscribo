@@ -292,6 +292,7 @@ export default function GestorHome() {
   const leafletInstanceRef = useRef<any>(null)
   const [activeLeadsData, setActiveLeadsData] = useState<{ id: string; updated_at: string }[]>([])
   const [activeReenrollData, setActiveReenrollData] = useState<{ period: string; confirmed: number }[]>([])
+  const [overdueNotifs, setOverdueNotifs] = useState<{ id: string; message: string; action_url: string | null }[]>([])
 
   const getPeriodRange = () => {
     const now = new Date()
@@ -324,7 +325,7 @@ export default function GestorHome() {
     setLoading(true)
     try {
       const { start, end } = getPeriodRange()
-      const [cyclesRes, funnelRes, transferRes, leadsRes, visitsRes, waRes, enrollRes, usersRes, waPhoneRes, waConvsRes] = await Promise.all([
+      const [cyclesRes, funnelRes, transferRes, leadsRes, visitsRes, waRes, enrollRes, usersRes, waPhoneRes, waConvsRes, overdueNotifRes] = await Promise.all([
         supabase.from('campaign_cycles').select('*').eq('institution_id', institutionId).order('created_at', { ascending: false }),
         supabase.from('funnel_metrics').select('*').eq('institution_id', institutionId).order('created_at', { ascending: true }),
         supabase.from('student_transfers').select('id,student_name,course_grade,transfer_date,reason_category').eq('institution_id', institutionId).is('deleted_at', null).order('transfer_date', { ascending: false }).limit(5),
@@ -335,6 +336,10 @@ export default function GestorHome() {
         supabase.from('users').select('id,full_name,role').eq('institution_id', institutionId),
         supabase.from('whatsapp_phone_numbers').select('phone_number,display_name').eq('institution_id', institutionId).limit(1).maybeSingle(),
         supabase.from('whatsapp_conversations').select('id,created_at,status,assigned_user_name,assigned_user_id,bot_active,satisfaction_score,first_response_at,remote_jid').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end),
+        // Alertas de inadimplência gravados por overdue-payment-reminders — não
+        // filtrados pelo period do dashboard, são "pendências atuais", igual
+        // Inadimplência já não é period-filtrada em AdminFinancial.tsx.
+        supabase.from('system_notifications').select('id,message,action_url').eq('institution_id', institutionId).eq('type', 'overdue_reminder').is('read_at', null).order('created_at', { ascending: false }),
       ])
 
       const loadedCycles = (cyclesRes.data ?? []) as CampaignCycle[]
@@ -362,6 +367,7 @@ export default function GestorHome() {
       }
 
       setFunnelData(funnelRes.data ?? [])
+      setOverdueNotifs((overdueNotifRes.data ?? []) as { id: string; message: string; action_url: string | null }[])
       setTransfers((transferRes.data ?? []) as StudentTransfer[])
       setLeads((leadsRes.data ?? []) as { id: string; status: string; created_at: string }[])
       setVisits((visitsRes.data ?? []) as { id: string; status: string; created_at: string }[])
@@ -1009,6 +1015,11 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
 
   // ── Alertas inteligentes ──────────────────────────────────────────────────
   const alerts: { msg: string; type: 'warning' | 'info' | 'success'; action?: string; path?: string }[] = []
+  // Alertas de inadimplência (system_notifications, gravados por
+  // overdue-payment-reminders) entram primeiro — são os mais urgentes.
+  for (const n of overdueNotifs) {
+    alerts.push({ msg: n.message, type: 'warning', action: n.action_url ? 'Ver financeiro' : undefined, path: n.action_url || undefined })
+  }
   if (newVariation !== null && newVariation < -20) alerts.push({ msg: `Novatos caíram ${Math.abs(newVariation)}% vs ano anterior — revisar estratégia de captação`, type: 'warning' })
   if (marketSharePct !== null && marketSharePct < 5) alerts.push({ msg: 'Market share abaixo de 5% — oportunidade de crescimento expressivo na cidade', type: 'info' })
   if (!campaignUnlocked) alerts.push({ msg: 'Campanha ainda não liberada pelo administrador', type: 'info' })

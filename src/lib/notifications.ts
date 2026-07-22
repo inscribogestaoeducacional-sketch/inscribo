@@ -9,7 +9,7 @@ export async function createNotification({
   action_url = null,
 }: {
   institution_id: string
-  type: 'weekly_alert' | 'goal_deviation' | 'milestone' | 'suggestion'
+  type: 'weekly_alert' | 'goal_deviation' | 'milestone' | 'suggestion' | 'overdue_reminder'
   title: string
   message: string
   severity?: 'info' | 'warning' | 'danger' | 'success'

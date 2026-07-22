@@ -6,23 +6,23 @@
 // marcos de dias configurados em platform_settings — overdue_warning1_days,
 // overdue_warning2_days, overdue_warning3_days, overdue_suspend_days (os
 // MESMOS campos editáveis na tela de Configurações, AdminSettings.tsx,
-// default 3/7/15/20) — dispara um template de WhatsApp via
-// api/whatsapp/send-template (o mesmo endpoint que o resto do projeto já usa
-// pra enviar template — não um mecanismo de envio novo). O nome do template
-// é montado dinamicamente como `cobranca_atraso_d{marco}`.
+// default 3/7/15/20) — dispara um e-mail via `send-email` (Brevo, mesma
+// Edge Function já usada pelo resto do projeto) usando os templates
+// overdue_1/2/3/4, e grava um alerta em `system_notifications` pro gestor
+// da escola ver no painel.
 //
-// ⚠️ NÃO ATIVAR EM PRODUÇÃO AINDA:
-// 1) Os templates cobranca_atraso_d{N} (N = valor configurado em cada um dos
-//    4 campos acima, ex: cobranca_atraso_d3 se overdue_warning1_days=3)
-//    ainda NÃO existem e NÃO foram aprovados no Meta Business Manager.
-//    `components` abaixo é um placeholder mínimo (só o nome da escola) —
-//    precisa ser reescrito com os parâmetros reais do template aprovado
-//    (valor em atraso, dias de atraso, link de pagamento, etc.).
-// 2) Por segurança, a function só ENVIA de verdade se a config
-//    `overdue_reminders_enabled` em platform_settings valer 'true'. Enquanto
-//    isso não for setado, ela roda em modo "dry-run": loga o que enviaria e
-//    NÃO grava em overdue_reminders_sent (pra não "queimar" o marco antes da
-//    função estar pronta pra valer).
+// Substituiu o envio por WhatsApp (que dependia de templates Meta ainda não
+// aprovados) — e-mail não tem esse bloqueio, os 4 templates já existem em
+// supabase/functions/send-email/index.ts e são customizáveis em
+// AdminSettings.tsx (seção de templates de e-mail).
+//
+// ⚠️ Por segurança, a function só ENVIA de verdade se a config
+// `overdue_reminders_enabled` em platform_settings valer 'true'. Enquanto
+// isso não for setado, ela roda em modo "dry-run": loga o que enviaria e
+// NÃO grava em overdue_reminders_sent nem em system_notifications (pra não
+// "queimar" o marco antes de alguém revisar o texto dos templates/os prazos
+// configurados). Ative só depois de conferir os 4 templates em
+// Configurações → Templates de e-mail.
 // =============================================================================
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -34,19 +34,21 @@ const CORS = {
 
 // Fallback individual por campo — só usado se a chave estiver ausente/vazia/
 // não-numérica/≤0 em platform_settings, nunca substitui um valor válido.
-const DEFAULT_MILESTONES: Record<string, number> = {
-  overdue_warning1_days: 3,
-  overdue_warning2_days: 7,
-  overdue_warning3_days: 15,
-  overdue_suspend_days:  20,
-}
-
-const APP_BASE_URL = Deno.env.get('APP_BASE_URL') || 'https://app.aionedu.com.br'
+// A ordem aqui também define a prioridade de desempate quando dois campos
+// têm o mesmo número de dias (ver loadMilestones).
+const MILESTONE_TEMPLATES: { key: string; template: string; fallbackDays: number }[] = [
+  { key: 'overdue_warning1_days', template: 'overdue_1', fallbackDays: 3 },
+  { key: 'overdue_warning2_days', template: 'overdue_2', fallbackDays: 7 },
+  { key: 'overdue_warning3_days', template: 'overdue_3', fallbackDays: 15 },
+  { key: 'overdue_suspend_days',  template: 'overdue_4', fallbackDays: 20 },
+]
 
 // Lê os 4 marcos configuráveis de platform_settings, com fallback
-// individual por campo. Nunca lança erro — sempre retorna 4 números > 0.
-async function loadMilestones(sb: any): Promise<number[]> {
-  const keys = Object.keys(DEFAULT_MILESTONES)
+// individual por campo. Nunca lança erro. Retorna Map<dias, template>,
+// mantendo o template do PRIMEIRO campo (warning1 > warning2 > warning3 >
+// suspend) caso dois campos configurados colidam no mesmo número de dias.
+async function loadMilestoneTemplates(sb: any): Promise<Map<number, string>> {
+  const keys = MILESTONE_TEMPLATES.map(m => m.key)
   const { data: rows } = await sb
     .from('platform_settings')
     .select('key, value')
@@ -55,15 +57,14 @@ async function loadMilestones(sb: any): Promise<number[]> {
   const byKey: Record<string, string> = {}
   for (const r of rows || []) byKey[r.key] = r.value
 
-  const milestones = keys.map(k => {
-    const raw = byKey[k]
+  const map = new Map<number, string>()
+  for (const m of MILESTONE_TEMPLATES) {
+    const raw = byKey[m.key]
     const parsed = raw != null && raw !== '' ? parseInt(raw, 10) : NaN
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MILESTONES[k]
-  })
-
-  // Remove duplicatas (ex: dois campos configurados com o mesmo número de
-  // dias) — cada marco só precisa ser checado uma vez por pagamento.
-  return Array.from(new Set(milestones))
+    const days = Number.isFinite(parsed) && parsed > 0 ? parsed : m.fallbackDays
+    if (!map.has(days)) map.set(days, m.template)
+  }
+  return map
 }
 
 serve(async (req) => {
@@ -82,17 +83,18 @@ serve(async (req) => {
       .maybeSingle()
     const enabled = enabledRow?.value === 'true'
 
-    const milestones = await loadMilestones(sb)
+    const milestoneTemplates = await loadMilestoneTemplates(sb)
+    const milestones = Array.from(milestoneTemplates.keys())
 
     const { data: overduePayments, error: fetchErr } = await sb
       .from('payments')
-      .select('id, institution_id, amount, due_date, institutions(id, name, phone)')
+      .select('id, institution_id, amount, due_date, asaas_charge_url, institutions(id, name, email)')
       .eq('status', 'overdue')
 
     if (fetchErr) throw new Error(fetchErr.message)
 
     const today = new Date()
-    let evaluated = 0, matched = 0, sent = 0, skippedAlreadySent = 0, dryRun = 0
+    let evaluated = 0, matched = 0, sent = 0, notified = 0, skippedAlreadySent = 0, dryRun = 0
     const errors: any[] = []
 
     for (const payment of overduePayments || []) {
@@ -101,7 +103,8 @@ serve(async (req) => {
 
       const due = new Date(payment.due_date + 'T00:00:00')
       const daysLate = Math.floor((today.getTime() - due.getTime()) / 86400000)
-      if (!milestones.includes(daysLate)) continue
+      const templateName = milestoneTemplates.get(daysLate)
+      if (!templateName) continue
       matched++
 
       const { data: already } = await sb
@@ -113,52 +116,66 @@ serve(async (req) => {
       if (already) { skippedAlreadySent++; continue }
 
       const inst = (payment as any).institutions
-      const templateName = `cobranca_atraso_d${daysLate}`
 
       if (!enabled) {
         dryRun++
-        console.log(`[overdue-payment-reminders] DRY-RUN — enviaria "${templateName}" para "${inst?.name}" (payment ${payment.id}, D+${daysLate}). Ative com platform_settings.overdue_reminders_enabled = 'true'.`)
+        console.log(`[overdue-payment-reminders] DRY-RUN — enviaria e-mail "${templateName}" para "${inst?.email}" (escola ${inst?.name}, payment ${payment.id}, D+${daysLate}). Ative com platform_settings.overdue_reminders_enabled = 'true'.`)
         continue
       }
 
-      if (!inst?.phone) {
-        errors.push({ payment_id: payment.id, milestone: daysLate, error: 'Instituição sem telefone cadastrado' })
+      if (!inst?.email) {
+        errors.push({ payment_id: payment.id, milestone: daysLate, error: 'Instituição sem e-mail cadastrado' })
         continue
       }
 
       try {
-        const to = '55' + String(inst.phone).replace(/\D/g, '')
-        const res = await fetch(`${APP_BASE_URL}/api/whatsapp/send-template`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            institution_id: inst.id,
-            to,
-            template_name: templateName,
-            language: 'pt_BR',
-            // TODO: placeholder mínimo — trocar pelos parâmetros reais do
-            // template aprovado na Meta (valor em atraso, dias de atraso,
-            // link de pagamento) quando cobranca_atraso_d{3,7,15,20}
-            // existirem de verdade.
-            components: [
-              { type: 'body', parameters: [{ type: 'text', text: inst.name || '' }] },
-            ],
-          }),
+        const { data: emailResult, error: emailError } = await sb.functions.invoke('send-email', {
+          body: {
+            type: templateName,
+            to: inst.email,
+            data: {
+              institution_name: inst.name,
+              dias_atraso: String(daysLate),
+              payment_link: payment.asaas_charge_url || null,
+            },
+          },
         })
-        const data = await res.json()
-        if (!res.ok || data?.error) throw new Error(data?.error || `HTTP ${res.status}`)
+        if (emailError || emailResult?.error) {
+          throw new Error(emailResult?.error || emailError?.message || 'Erro ao enviar e-mail')
+        }
 
         await sb.from('overdue_reminders_sent').insert({ payment_id: payment.id, milestone: daysLate })
         sent++
+
+        // Alerta pro gestor ver no painel (banner + sino) — best-effort: se
+        // isso falhar, o e-mail já foi enviado e o marco já foi registrado,
+        // não desfaz nem repete o envio.
+        try {
+          const amount = Number(payment.amount || 0)
+          const amountFmt = amount > 0 ? ` — R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : ''
+          const { error: notifError } = await sb.from('system_notifications').insert({
+            institution_id: inst.id,
+            type: 'overdue_reminder',
+            title: 'Mensalidade em atraso',
+            message: `Mensalidade com ${daysLate} dias de atraso${amountFmt}. Regularize para evitar a suspensão do acesso.`,
+            severity: 'warning',
+            action_url: '/settings',
+            created_at: new Date().toISOString(),
+          })
+          if (notifError) throw notifError
+          notified++
+        } catch (notifErr) {
+          console.error(`[overdue-payment-reminders] falha ao gravar system_notifications (payment ${payment.id}):`, String(notifErr))
+        }
       } catch (e) {
         errors.push({ payment_id: payment.id, milestone: daysLate, error: String(e) })
       }
     }
 
-    console.log(`[overdue-payment-reminders] milestones=[${milestones.join(',')}] enabled=${enabled} evaluated=${evaluated} matched=${matched} sent=${sent} dryRun=${dryRun} skippedAlreadySent=${skippedAlreadySent} errors=${errors.length}`)
+    console.log(`[overdue-payment-reminders] milestones=[${milestones.join(',')}] enabled=${enabled} evaluated=${evaluated} matched=${matched} sent=${sent} notified=${notified} dryRun=${dryRun} skippedAlreadySent=${skippedAlreadySent} errors=${errors.length}`)
 
     return new Response(
-      JSON.stringify({ ok: true, milestones, enabled, evaluated, matched, sent, dryRun, skippedAlreadySent, errors }),
+      JSON.stringify({ ok: true, milestones, enabled, evaluated, matched, sent, notified, dryRun, skippedAlreadySent, errors }),
       { headers: { ...CORS, 'Content-Type': 'application/json' } }
     )
 

@@ -10,6 +10,7 @@ export type EmailType =
   | 'overdue_1'
   | 'overdue_2'
   | 'overdue_3'
+  | 'overdue_4'
 
 export const sendEmail = async (
   type: EmailType,

@@ -274,6 +274,7 @@ const DEFAULTS: Settings = {
   email_template_overdue_1: '',
   email_template_overdue_2: '',
   email_template_overdue_3: '',
+  email_template_overdue_4: '',
   email_template_suspended: '',
   email_template_reactivated: '',
   // Template do contrato
@@ -313,6 +314,13 @@ const DEFAULT_EMAIL_OVERDUE_1 = `<h2>Lembrete de pagamento</h2>
 <p>Identificamos que a mensalidade da escola <strong>{{escola}}</strong> está com {{dias_atraso}} dias de atraso.</p>
 <p>Para evitar a suspensão do sistema, realize o pagamento o quanto antes.</p>
 {{#if link_pagamento}}<p><a href="{{link_pagamento}}">Clique aqui para pagar</a></p>{{/if}}
+<p>Equipe Áion Edu</p>`
+
+const DEFAULT_EMAIL_OVERDUE_4 = `<h2>Mensalidade em atraso</h2>
+<p>Olá, <strong>{{gestor}}</strong>!</p>
+<p>A mensalidade da escola <strong>{{escola}}</strong> está com {{dias_atraso}} dias de atraso. Pedimos que regularize o quanto antes para manter tudo em dia.</p>
+{{#if link_pagamento}}<p><a href="{{link_pagamento}}">Pagar agora</a></p>{{/if}}
+<p>Se já efetuou o pagamento ou precisar de ajuda, fale com seu consultor.</p>
 <p>Equipe Áion Edu</p>`
 
 const DEFAULT_EMAIL_SUSPENDED = `<h2>Sistema suspenso ⚠️</h2>
@@ -981,6 +989,12 @@ export default function AdminSettings() {
 <p>Sua conta será suspensa em <strong>{{data_suspensao}}</strong> por falta de pagamento.</p>
 {{#if link_pagamento}}<p><a href="{{link_pagamento}}">Pagar agora</a></p>{{/if}}
 <p>Equipe Áion Edu</p>`,
+            },
+            {
+              id: 'email_template_overdue_4',
+              label: '📌 Inadimplência — lembrete adicional',
+              desc: `Enviado em D+${settings.overdue_suspend_days}, tom mais brando (sem mencionar suspensão)`,
+              default: DEFAULT_EMAIL_OVERDUE_4,
             },
             {
               id: 'email_template_suspended',

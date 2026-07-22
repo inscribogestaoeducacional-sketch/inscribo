@@ -266,6 +266,18 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     `)
   }),
 
+  overdue_4: (data) => ({
+    subject: `Mensalidade em atraso - regularize o quanto antes - ${data.institution_name}`,
+    html: wrap(`
+      <p style="margin:0 0 4px;">${badge('Pagamento em atraso', '#FFFBEB', '#D97706')}</p>
+      ${h1('Mensalidade em atraso', '#D97706')}
+      ${p(`Ola! A mensalidade da escola <strong>${data.institution_name}</strong> esta com <strong>${data.dias_atraso} dias</strong> de atraso. Pedimos que regularize o quanto antes para manter tudo em dia.`)}
+      ${box(`<span style="font-size:14px;">Se precisar de ajuda ou ja efetuou o pagamento, fale com seu consultor.</span>`, '#FFFBEB', '#FDE68A', '#92400E')}
+      ${data.payment_link ? btn('Pagar agora', data.payment_link, '#D97706') : ''}
+      ${supportLine()}
+    `)
+  }),
+
   proposal: (data) => ({
     subject: `Proposta Comercial Aion Edu — ${data.school_name || 'sua escola'}`,
     html: wrap(`

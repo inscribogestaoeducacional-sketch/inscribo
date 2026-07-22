@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 export interface Notification {
   id: string
   institution_id: string | null
-  type: 'weekly_alert' | 'goal_deviation' | 'milestone' | 'suggestion'
+  type: 'weekly_alert' | 'goal_deviation' | 'milestone' | 'suggestion' | 'overdue_reminder'
   title: string
   message: string
   severity: 'info' | 'warning' | 'danger' | 'success'
