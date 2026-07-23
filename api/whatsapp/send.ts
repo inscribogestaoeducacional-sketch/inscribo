@@ -21,6 +21,7 @@ async function getWAConfig() {
 }
 
 const GRAPH_URL = 'https://graph.facebook.com/v19.0'
+const META_FETCH_TIMEOUT_MS = 30000
 
 type MsgType = 'text' | 'image' | 'video' | 'audio' | 'document'
 
@@ -225,7 +226,8 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type':  'application/json',
       },
-      body: JSON.stringify(payload),
+      body:   JSON.stringify(payload),
+      signal: AbortSignal.timeout(META_FETCH_TIMEOUT_MS),
     })
 
     console.log('send.ts - meta response:', metaRes.status)

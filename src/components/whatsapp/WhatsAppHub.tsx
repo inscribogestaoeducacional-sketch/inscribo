@@ -138,15 +138,6 @@ function getAvatarBgColor(name: string): string {
   return AVATAR_BG_COLORS[Math.abs(hash) % AVATAR_BG_COLORS.length]
 }
 
-function toBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve((reader.result as string).split(',')[1])
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
 function normalizeJid(jid: string): string {
   return jid.includes('@') ? jid : `${jid}@s.whatsapp.net`
 }
@@ -1379,56 +1370,57 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const blob = audioBlob
     const mimeType = recordingMimeTypeRef.current || blob.type
     console.log('[AUDIO] sendAudio blob.size:', blob.size, 'mimeType:', mimeType)
-    const reader = new FileReader()
-    reader.onloadend = async () => {
-      const base64 = (reader.result as string).split(',')[1]
-      try {
-        const uploadRes = await fetch('/api/whatsapp/media', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            institution_id: effectiveInstitutionId || undefined,
-            base64,
-            mimetype: mimeType,
-            filename: `audio-${Date.now()}.${mimeType.includes('webm') ? 'webm' : 'mp4'}`,
-          }),
-        })
-        if (!uploadRes.ok) throw new Error(`Upload HTTP ${uploadRes.status}`)
-        const { url: mediaUrl } = await uploadRes.json()
-        console.log('[AUDIO] upload ok, mediaUrl:', mediaUrl)
-        discardAudio()
-        const to = activeId
-          .replace(/@s\.whatsapp\.net$/, '')
-          .replace(/@.*/, '')
-          .replace(/\D/g, '')
-        console.log('[AUDIO] enviando para /api/whatsapp/send, to:', to)
-        const sendRes = await fetch('/api/whatsapp/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            institution_id: effectiveInstitutionId || undefined,
-            isAionSend: isAionInbox,
-            to,
-            type: 'audio',
-            mediaUrl,
-            sender_name: user?.full_name,
-            sender_user_id: user?.id,
-          }),
-        })
-        if (!sendRes.ok) {
-          const err = await sendRes.json().catch(() => ({}))
-          console.error('[send-audio] error:', err)
-          setSendError('Erro ao enviar áudio.')
-        } else {
-          await stopBotIfActive(activeId)
+    const filename = `audio-${Date.now()}.${mimeType.includes('webm') ? 'webm' : 'mp4'}`
+    try {
+      const uploadForm = new FormData()
+      uploadForm.append('file', blob, filename)
+      if (effectiveInstitutionId) uploadForm.append('institution_id', effectiveInstitutionId)
+      uploadForm.append('filename', filename)
+
+      const uploadRes = await fetch('/api/whatsapp/media', {
+        method: 'POST',
+        body: uploadForm,
+      })
+      if (!uploadRes.ok) {
+        if (uploadRes.status === 413) {
+          const errBody = await uploadRes.json().catch(() => ({}))
+          throw new Error(errBody.error || 'Áudio excede o limite permitido pelo servidor.')
         }
-      } catch (e) {
-        console.error('[send-audio] error:', e)
-        setSendError('Erro ao enviar áudio.')
-        discardAudio()
+        throw new Error(`Upload HTTP ${uploadRes.status}`)
       }
+      const { url: mediaUrl } = await uploadRes.json()
+      console.log('[AUDIO] upload ok, mediaUrl:', mediaUrl)
+      discardAudio()
+      const to = activeId
+        .replace(/@s\.whatsapp\.net$/, '')
+        .replace(/@.*/, '')
+        .replace(/\D/g, '')
+      console.log('[AUDIO] enviando para /api/whatsapp/send, to:', to)
+      const sendRes = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          institution_id: effectiveInstitutionId || undefined,
+          isAionSend: isAionInbox,
+          to,
+          type: 'audio',
+          mediaUrl,
+          sender_name: user?.full_name,
+          sender_user_id: user?.id,
+        }),
+      })
+      if (!sendRes.ok) {
+        const err = await sendRes.json().catch(() => ({}))
+        console.error('[send-audio] error:', err)
+        setSendError('Erro ao enviar áudio.')
+      } else {
+        await stopBotIfActive(activeId)
+      }
+    } catch (e: any) {
+      console.error('[send-audio] error:', e)
+      setSendError(/limite/i.test(e?.message || '') ? e.message : 'Erro ao enviar áudio.')
+      discardAudio()
     }
-    reader.readAsDataURL(blob)
   }
 
   const handleLinkLead = async (leadId: string) => {
@@ -3058,8 +3050,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   const sendPendingFile = async () => {
     if (!pendingFile || !activeId || (!effectiveInstitutionId && !isAionInbox)) return
-    if (pendingFile.size > 15 * 1024 * 1024) {
-      setSendError('Arquivo muito grande. Máximo 15MB.')
+    if (pendingFile.size > 20 * 1024 * 1024) {
+      setSendError('Arquivo excede o limite de 20MB.')
       setPendingFile(null)
       setPendingFilePreview(null)
       return
@@ -3072,10 +3064,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       : 'document'
 
     const fileToSend = mediatype === 'image' ? await compressImage(pendingFile) : pendingFile
-    const base64 = await toBase64(fileToSend)
     setUploadProgress(30)
 
-    const localUrl = `data:${fileToSend.type};base64,${base64}`
+    // blob: é permitido em img-src/media-src pelo CSP (index.html) — sem custo de base64 só pra preview local
+    const localUrl = URL.createObjectURL(fileToSend)
     const tempId = `temp-file-${Date.now()}`
     const tempMsg: Message = {
       id: tempId,
@@ -3093,19 +3085,24 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     ))
 
     try {
-      // Step 1: upload to Supabase Storage via /api/whatsapp/media
+      // Step 1: upload direto (multipart/form-data) pro Supabase Storage via /api/whatsapp/media
+      const uploadForm = new FormData()
+      uploadForm.append('file', fileToSend, fileToSend.name)
+      if (effectiveInstitutionId) uploadForm.append('institution_id', effectiveInstitutionId)
+      uploadForm.append('filename', pendingFile.name)
+
       const uploadRes = await fetch('/api/whatsapp/media', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          institution_id: effectiveInstitutionId,
-          base64,
-          mimetype: fileToSend.type || pendingFile.type,
-          filename: pendingFile.name,
-        }),
+        body: uploadForm,
       })
       setUploadProgress(65)
-      if (!uploadRes.ok) throw new Error(`Upload HTTP ${uploadRes.status}`)
+      if (!uploadRes.ok) {
+        if (uploadRes.status === 413) {
+          const errBody = await uploadRes.json().catch(() => ({}))
+          throw new Error(errBody.error || 'Arquivo excede o limite permitido pelo servidor.')
+        }
+        throw new Error(`Upload HTTP ${uploadRes.status}`)
+      }
       const { url: mediaUrl } = await uploadRes.json()
 
       // Step 2: send via Meta Cloud API with the permanent URL
@@ -3136,14 +3133,16 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       ))
       if (activeId) await stopBotIfActive(activeId)
       setTimeout(() => { setPendingFile(null); setPendingFilePreview(null); setUploadProgress(0) }, 800)
-    } catch (err) {
+    } catch (err: any) {
       console.error('[sendPendingFile] error:', err)
-      setSendError('Erro ao enviar arquivo.')
+      setSendError(/limite/i.test(err?.message || '') ? err.message : 'Erro ao enviar arquivo.')
       setConversations(prev => prev.map(c =>
         c.id === activeId ? { ...c, messages: c.messages.filter(m => m.id !== tempId) } : c
       ))
       setPendingFile(null); setPendingFilePreview(null)
       setUploadProgress(0)
+    } finally {
+      URL.revokeObjectURL(localUrl)
     }
   }
 
