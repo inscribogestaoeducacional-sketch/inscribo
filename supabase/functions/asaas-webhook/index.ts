@@ -4,18 +4,54 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, asaas-access-token',
+}
+
+// Comparação em tempo constante — evita timing attack na validação do token
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
+
+// Asaas não usa HMAC de payload: a autenticação do webhook é feita via um token
+// estático configurado no painel Asaas (Integrações > Webhooks > "Token de autenticação"),
+// que a Asaas ecoa de volta no header `asaas-access-token` em toda chamada.
+async function isValidAsaasRequest(req: Request, sb: ReturnType<typeof createClient>): Promise<boolean> {
+  const incomingToken = req.headers.get('asaas-access-token') || ''
+  if (!incomingToken) return false
+
+  const { data } = await sb
+    .from('platform_settings')
+    .select('value')
+    .eq('key', 'asaas_webhook_token')
+    .maybeSingle()
+
+  const expectedToken = data?.value || Deno.env.get('ASAAS_WEBHOOK_TOKEN') || ''
+  if (!expectedToken) {
+    console.error('[asaas-webhook] asaas_webhook_token/ASAAS_WEBHOOK_TOKEN não configurado — rejeitando por segurança')
+    return false
+  }
+
+  return timingSafeEqual(incomingToken, expectedToken)
 }
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
-  // Webhook externo — não valida JWT do Supabase
   try {
     const sb = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
+
+    if (!(await isValidAsaasRequest(req, sb))) {
+      console.error('[asaas-webhook] token inválido ou ausente — requisição rejeitada')
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...CORS, 'Content-Type': 'application/json' }
+      })
+    }
 
     const body = await req.json()
     console.log('[asaas-webhook] payload:', JSON.stringify(body))

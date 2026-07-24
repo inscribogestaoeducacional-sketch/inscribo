@@ -1493,7 +1493,9 @@ export default function AionWhatsAppHub() {
     const CONNECTED_STATES = ['open', 'connected', 'CONNECTED', 'OPEN']
     const checkStatus = async () => {
       try {
+        const { data: { session } } = await supabase.auth.getSession()
         const res = await fetch(`/api/evolution/connection-state?institutionId=${effectiveInstitutionId}`, {
+          headers: session ? { 'Authorization': `Bearer ${session.access_token}` } : {},
           signal: AbortSignal.timeout(8000),
         })
         if (!res.ok) {
@@ -1518,9 +1520,13 @@ export default function AionWhatsAppHub() {
     if (!effectiveInstitutionId || !instance || syncing || useMetaApi) return
     try {
       setSyncing(true)
+      const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/api/evolution/sync-messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({ institutionId: effectiveInstitutionId, instanceName: instance }),
       })
       const data = await res.json()

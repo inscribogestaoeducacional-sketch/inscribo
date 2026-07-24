@@ -40,7 +40,23 @@
       "Bash(grep -n \"activeConv && \\(\\\\|<>$\\\\|<\\\\/>\" src/components/whatsapp/WhatsAppHub.tsx)",
       "Bash(sed -n '2536,2545p' src/components/whatsapp/WhatsAppHub.tsx)",
       "Bash(sed -n '2653,2662p' src/components/whatsapp/WhatsAppHub.tsx)",
-      "Bash(sed -n '2940,2948p' src/components/whatsapp/WhatsAppHub.tsx)"
+      "Bash(sed -n '2940,2948p' src/components/whatsapp/WhatsAppHub.tsx)",
+      "Bash(grep -inE '\"?\\(access_token|accessToken|token\\)\"?\\\\s*[:=]\\\\s*\"?EAA[A-Za-z0-9]{15,}')",
+      "Bash(grep -inE 'Bearer EAA[A-Za-z0-9]{15,}')",
+      "Bash(grep -inE '\\\\bEAA[A-Za-z0-9]{15,80}\\\\b')",
+      "Bash(grep -ionE 'EAA[A-Za-z0-9]{20,100}')",
+      "Bash(grep -onE 'EAA[A-Za-z0-9]{20,100}')",
+      "Bash(grep -v '^[0-9]*:$')",
+      "Bash(awk 'NR<=22947 && /^commit /{c=$0; l=NR} END{print l\": \"c}' /tmp/fulllog.txt)",
+      "Bash(grep -inE '1222[0-9]{5,}')",
+      "Bash(grep -inE \"EAA[A-Za-z0-9]{15,}\")",
+      "Bash(git grep *)",
+      "Bash(xargs -0 grep -InE 'EAA[A-Za-z0-9]{15,}')",
+      "Bash(xargs -a /tmp/srcfiles.txt -d '\\\\n' grep -InE 'EAA[A-Za-z0-9]{15,}')",
+      "Bash(rm -f /tmp/fulllog.txt /tmp/srcfiles.txt)"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
     ]
   }
 }

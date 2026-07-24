@@ -5,8 +5,16 @@ import {
   evolutionHeaders,
   getSupabaseAdmin,
   getInstanceForInstitution,
+  getInstitutionForInstance,
+  authenticate,
+  hasInstitutionAccess,
+  hasInstitutionAdminAccess,
+  getEvolutionWebhookToken,
+  appendWebhookToken,
+  isAllowedMediaHost,
   APP_URL,
   errorResponse,
+  type AuthContext,
 } from './config.js'
 
 // ─── router ──────────────────────────────────────────────────────────────────
@@ -30,19 +38,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const route = routeArr.join('/')
   console.log('[evolution router] route:', route, '| url:', req.url)
 
+  // `webhook` é chamado pelo servidor Evolution API (não um usuário logado) e
+  // `media-proxy` é consumido direto via <img src>/<video src> no browser (sem
+  // header customizável) — nenhum dos dois pode carregar um Bearer token do
+  // Supabase. Cada um tem sua própria defesa: token compartilhado / allowlist de host.
+  if (route === 'webhook')     return handleWebhook(req, res)
+  if (route === 'media-proxy') return handleMediaProxy(req, res)
+
+  const auth = await authenticate(req)
+  if (!auth) {
+    return errorResponse(res, 401, 'Unauthorized')
+  }
+
   switch (route) {
-    case 'get-qrcode':       return handleGetQrcode(req, res)
-    case 'connection-state': return handleConnectionState(req, res)
-    case 'create-instance':  return handleCreateInstance(req, res)
-    case 'delete-instance':  return handleDeleteInstance(req, res)
-    case 'send-message':     return handleSendMessage(req, res)
-    case 'send-media':       return handleSendMedia(req, res)
-    case 'webhook':          return handleWebhook(req, res)
-    case 'sync-messages':    return handleSyncMessages(req, res)
-    case 'media-proxy':      return handleMediaProxy(req, res)
-    case 'fetch-profile':    return handleFetchProfile(req, res)
-    case 'get-profile-picture': return handleGetProfilePicture(req, res)
-    case 'set-webhook':      return handleSetWebhook(req, res)
+    case 'get-qrcode':          return handleGetQrcode(req, res, auth)
+    case 'connection-state':    return handleConnectionState(req, res, auth)
+    case 'create-instance':     return handleCreateInstance(req, res, auth)
+    case 'delete-instance':     return handleDeleteInstance(req, res, auth)
+    case 'send-message':        return handleSendMessage(req, res, auth)
+    case 'send-media':          return handleSendMedia(req, res, auth)
+    case 'sync-messages':       return handleSyncMessages(req, res, auth)
+    case 'fetch-profile':       return handleFetchProfile(req, res, auth)
+    case 'get-profile-picture': return handleGetProfilePicture(req, res, auth)
+    case 'set-webhook':         return handleSetWebhook(req, res, auth)
     default:
       return res.status(404).json({ error: `Unknown evolution route: ${route}` })
   }
@@ -51,11 +69,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 // ═══════════════════════════════════════════════════════════
 //  get-qrcode
 // ═══════════════════════════════════════════════════════════
-async function handleGetQrcode(req: VercelRequest, res: VercelResponse) {
+async function handleGetQrcode(req: VercelRequest, res: VercelResponse, auth: AuthContext) {
   const institutionId = (req.query.institutionId || req.body?.institutionId) as string | undefined
 
   if (!institutionId) {
     return errorResponse(res, 400, 'institutionId required')
+  }
+  if (!hasInstitutionAdminAccess(auth, institutionId)) {
+    return errorResponse(res, 403, 'Forbidden')
   }
 
   try {
@@ -112,7 +133,8 @@ async function handleGetQrcode(req: VercelRequest, res: VercelResponse) {
 
       // Register webhook with stable APP_URL
       if (APP_URL) {
-        const webhookUrl = `${APP_URL}/api/evolution/webhook?institution_id=${institutionId}`
+        const webhookToken = await getEvolutionWebhookToken()
+        const webhookUrl = appendWebhookToken(`${APP_URL}/api/evolution/webhook?institution_id=${institutionId}`, webhookToken)
         await fetch(`${EVOLUTION_URL}/webhook/set/${instanceName}`, {
           method: 'POST',
           headers: evolutionHeaders(),
@@ -148,14 +170,19 @@ async function handleGetQrcode(req: VercelRequest, res: VercelResponse) {
 // ═══════════════════════════════════════════════════════════
 //  connection-state
 // ═══════════════════════════════════════════════════════════
-async function handleConnectionState(req: VercelRequest, res: VercelResponse) {
+async function handleConnectionState(req: VercelRequest, res: VercelResponse, auth: AuthContext) {
   let instanceName = (req.query.instanceName as string) || req.body?.instanceName
+  let institutionId = (req.query.institutionId as string) || req.body?.institutionId
 
-  if (!instanceName) {
-    const institutionId = (req.query.institutionId as string) || req.body?.institutionId
-    if (institutionId) {
-      instanceName = (await getInstanceForInstitution(institutionId)) ?? undefined
-    }
+  if (!instanceName && institutionId) {
+    instanceName = (await getInstanceForInstitution(institutionId)) ?? undefined
+  }
+  if (!institutionId && instanceName) {
+    institutionId = (await getInstitutionForInstance(instanceName)) ?? undefined
+  }
+
+  if (!hasInstitutionAccess(auth, institutionId)) {
+    return errorResponse(res, 403, 'Forbidden')
   }
 
   if (!instanceName) {
@@ -179,15 +206,21 @@ async function handleConnectionState(req: VercelRequest, res: VercelResponse) {
 // ═══════════════════════════════════════════════════════════
 //  create-instance
 // ═══════════════════════════════════════════════════════════
-async function handleCreateInstance(req: VercelRequest, res: VercelResponse) {
+async function handleCreateInstance(req: VercelRequest, res: VercelResponse, auth: AuthContext) {
   const { instanceName, institutionId } = req.body
+
+  if (!institutionId) {
+    return errorResponse(res, 400, 'institutionId required')
+  }
+  if (!hasInstitutionAdminAccess(auth, institutionId)) {
+    return errorResponse(res, 403, 'Forbidden')
+  }
 
   const baseUrl = APP_URL ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:5173')
 
-  const webhookUrl = institutionId
-    ? `${baseUrl}/api/evolution/webhook?institution_id=${institutionId}`
-    : undefined
+  const webhookToken = await getEvolutionWebhookToken()
+  const webhookUrl = appendWebhookToken(`${baseUrl}/api/evolution/webhook?institution_id=${institutionId}`, webhookToken)
 
   const response = await fetch(`${EVOLUTION_URL}/instance/create`, {
     method: 'POST',
@@ -196,13 +229,11 @@ async function handleCreateInstance(req: VercelRequest, res: VercelResponse) {
       instanceName,
       qrcode: true,
       integration: 'WHATSAPP-BAILEYS',
-      ...(webhookUrl && {
-        webhook: {
-          url: webhookUrl,
-          enabled: true,
-          events: ['MESSAGES_UPSERT'],
-        },
-      }),
+      webhook: {
+        url: webhookUrl,
+        enabled: true,
+        events: ['MESSAGES_UPSERT'],
+      },
     }),
   })
   const data = await response.json()
@@ -212,8 +243,17 @@ async function handleCreateInstance(req: VercelRequest, res: VercelResponse) {
 // ═══════════════════════════════════════════════════════════
 //  delete-instance
 // ═══════════════════════════════════════════════════════════
-async function handleDeleteInstance(req: VercelRequest, res: VercelResponse) {
+async function handleDeleteInstance(req: VercelRequest, res: VercelResponse, auth: AuthContext) {
   const { instanceName } = req.body
+  if (!instanceName) {
+    return errorResponse(res, 400, 'instanceName required')
+  }
+
+  const institutionId = await getInstitutionForInstance(instanceName)
+  if (!hasInstitutionAdminAccess(auth, institutionId)) {
+    return errorResponse(res, 403, 'Forbidden')
+  }
+
   const response = await fetch(`${EVOLUTION_URL}/instance/delete/${instanceName}`, {
     method: 'DELETE',
     headers: { apikey: EVOLUTION_KEY },
@@ -225,12 +265,19 @@ async function handleDeleteInstance(req: VercelRequest, res: VercelResponse) {
 // ═══════════════════════════════════════════════════════════
 //  send-message
 // ═══════════════════════════════════════════════════════════
-async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
+async function handleSendMessage(req: VercelRequest, res: VercelResponse, auth: AuthContext) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { instanceName, remoteJid, message, institutionId } = req.body
+  const { instanceName, remoteJid, message } = req.body
   if (!instanceName || !remoteJid || !message) {
     return res.status(400).json({ error: 'Missing required fields' })
+  }
+
+  // institution_id nunca vem do body do cliente — é sempre resolvido a partir
+  // da instância real, pra garantir que o usuário só envia pela instância da própria escola
+  const institutionId = await getInstitutionForInstance(instanceName)
+  if (!hasInstitutionAccess(auth, institutionId)) {
+    return errorResponse(res, 403, 'Forbidden')
   }
 
   const response = await fetch(`${EVOLUTION_URL}/message/sendText/${instanceName}`, {
@@ -260,12 +307,18 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
 // ═══════════════════════════════════════════════════════════
 //  send-media
 // ═══════════════════════════════════════════════════════════
-async function handleSendMedia(req: VercelRequest, res: VercelResponse) {
+async function handleSendMedia(req: VercelRequest, res: VercelResponse, auth: AuthContext) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   const { instanceName, remoteJid, mediatype, mimetype, media, fileName, caption } = req.body
   if (!instanceName || !remoteJid || !media) {
     return res.status(400).json({ error: 'Missing required fields' })
+  }
+
+  // institution_id nunca vem do body do cliente — mesmo padrão de send-message
+  const institutionId = await getInstitutionForInstance(instanceName)
+  if (!hasInstitutionAccess(auth, institutionId)) {
+    return errorResponse(res, 403, 'Forbidden')
   }
 
   try {
@@ -295,10 +348,27 @@ async function handleSendMedia(req: VercelRequest, res: VercelResponse) {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  webhook
+//  webhook (chamado pelo Evolution API — não passa pelo gate de JWT)
 // ═══════════════════════════════════════════════════════════
 async function handleWebhook(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  // Validação opt-in: só passa a exigir o token depois que
+  // platform_settings.evolution_webhook_token (ou env EVOLUTION_WEBHOOK_SECRET)
+  // for configurado — mesmo padrão do wa_app_secret em api/whatsapp/webhook.ts.
+  // Instâncias registradas antes da configuração continuam funcionando até serem
+  // reconectadas / terem o webhook re-registrado (a URL passa a incluir o token
+  // automaticamente a partir de agora em get-qrcode, create-instance e set-webhook).
+  const expectedToken = await getEvolutionWebhookToken()
+  if (expectedToken) {
+    const incomingToken = (req.query.token as string) || ''
+    if (incomingToken !== expectedToken) {
+      console.error('[webhook] token inválido ou ausente — requisição rejeitada')
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+  } else {
+    console.warn('[webhook] evolution_webhook_token não configurado — aceitando sem validação de origem')
+  }
 
   // Respond immediately so Evolution doesn't retry
   res.status(200).json({ status: 'ok' })
@@ -499,13 +569,16 @@ async function handleWebhook(req: VercelRequest, res: VercelResponse) {
 // ═══════════════════════════════════════════════════════════
 //  sync-messages
 // ═══════════════════════════════════════════════════════════
-async function handleSyncMessages(req: VercelRequest, res: VercelResponse) {
+async function handleSyncMessages(req: VercelRequest, res: VercelResponse, auth: AuthContext) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   const { institutionId, instanceName: instanceNameParam } = req.body
 
   if (!institutionId) {
     return res.status(400).json({ error: 'institutionId required' })
+  }
+  if (!hasInstitutionAccess(auth, institutionId)) {
+    return errorResponse(res, 403, 'Forbidden')
   }
 
   const instanceName = await getInstanceForInstitution(institutionId) || instanceNameParam
@@ -646,7 +719,8 @@ async function handleSyncMessages(req: VercelRequest, res: VercelResponse) {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  media-proxy
+//  media-proxy (consumido via <img>/<video> — não passa pelo gate de JWT;
+//  a defesa aqui é a allowlist de hosts, que fecha o SSRF independente de auth)
 // ═══════════════════════════════════════════════════════════
 async function handleMediaProxy(req: VercelRequest, res: VercelResponse) {
   const { url, instanceName, messageId } = req.query
@@ -660,6 +734,11 @@ async function handleMediaProxy(req: VercelRequest, res: VercelResponse) {
   const inst  = typeof instanceName === 'string' ? instanceName : (Array.isArray(instanceName) ? instanceName[0] : '')
 
   console.log('[media-proxy] url:', decodedUrl.slice(0, 100), '| msgId:', msgId, '| inst:', inst)
+
+  if (!isAllowedMediaHost(decodedUrl)) {
+    console.warn('[media-proxy] host não permitido, requisição rejeitada:', decodedUrl.slice(0, 100))
+    return res.status(400).json({ error: 'URL de mídia não permitida' })
+  }
 
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
@@ -750,10 +829,16 @@ async function handleMediaProxy(req: VercelRequest, res: VercelResponse) {
 // ═══════════════════════════════════════════════════════════
 //  fetch-profile (GET)
 // ═══════════════════════════════════════════════════════════
-async function handleFetchProfile(req: VercelRequest, res: VercelResponse) {
+async function handleFetchProfile(req: VercelRequest, res: VercelResponse, auth: AuthContext) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
   const { instanceName, number } = req.query
   if (!instanceName || !number) return res.status(400).json({ error: 'Missing params' })
+
+  const institutionId = await getInstitutionForInstance(instanceName as string)
+  if (!hasInstitutionAccess(auth, institutionId)) {
+    return errorResponse(res, 403, 'Forbidden')
+  }
+
   try {
     const response = await fetch(`${EVOLUTION_URL}/chat/fetchProfile/${instanceName}?number=${number}`, {
       headers: { apikey: EVOLUTION_KEY },
@@ -768,10 +853,16 @@ async function handleFetchProfile(req: VercelRequest, res: VercelResponse) {
 // ═══════════════════════════════════════════════════════════
 //  get-profile-picture (POST)
 // ═══════════════════════════════════════════════════════════
-async function handleGetProfilePicture(req: VercelRequest, res: VercelResponse) {
+async function handleGetProfilePicture(req: VercelRequest, res: VercelResponse, auth: AuthContext) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const { instanceName, number } = req.body
   if (!instanceName || !number) return res.status(400).json({ error: 'Missing params' })
+
+  const institutionId = await getInstitutionForInstance(instanceName)
+  if (!hasInstitutionAccess(auth, institutionId)) {
+    return errorResponse(res, 403, 'Forbidden')
+  }
+
   try {
     const response = await fetch(`${EVOLUTION_URL}/chat/fetchProfile/${instanceName}`, {
       method: 'POST',
@@ -788,16 +879,33 @@ async function handleGetProfilePicture(req: VercelRequest, res: VercelResponse) 
 // ═══════════════════════════════════════════════════════════
 //  set-webhook
 // ═══════════════════════════════════════════════════════════
-async function handleSetWebhook(req: VercelRequest, res: VercelResponse) {
+async function handleSetWebhook(req: VercelRequest, res: VercelResponse, auth: AuthContext) {
   const { instanceName, webhookUrl } = req.body
+  if (!instanceName || !webhookUrl) {
+    return errorResponse(res, 400, 'instanceName e webhookUrl são obrigatórios')
+  }
+
+  const institutionId = await getInstitutionForInstance(instanceName)
+  if (!hasInstitutionAdminAccess(auth, institutionId)) {
+    return errorResponse(res, 403, 'Forbidden')
+  }
+
+  // Evita que a URL do webhook seja redirecionada pra um host arbitrário
+  // (quem controla essa URL controla pra onde os eventos da instância vão)
+  if (APP_URL && !(webhookUrl as string).startsWith(APP_URL)) {
+    return errorResponse(res, 400, 'webhookUrl inválido')
+  }
+
+  const webhookToken = await getEvolutionWebhookToken()
+  const finalWebhookUrl = appendWebhookToken(webhookUrl, webhookToken)
 
   console.log('[set-webhook] instanceName:', instanceName)
-  console.log('[set-webhook] webhookUrl:', webhookUrl)
+  console.log('[set-webhook] webhookUrl:', finalWebhookUrl)
 
   // v2.3.x requer wrapper "webhook:" no body
   const body = {
     webhook: {
-      url: webhookUrl,
+      url: finalWebhookUrl,
       enabled: true,
       webhookByEvents: false,
       webhookBase64: false,
