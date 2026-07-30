@@ -250,7 +250,7 @@ const DEFAULTS: Settings = {
   asaas_api_key: '',
   asaas_environment: 'production',
   // Autentique
-  autentique_api_token: '5b05e93af43286958a4b751db049225de54c3cefbf7c2b21470c9c0b855549ae',
+  autentique_api_token: '',
   // Brevo
   brevo_api_key: '',
   brevo_from_email: 'noreply@aionedu.com.br',
@@ -846,6 +846,10 @@ export default function AdminSettings() {
             <label className={lbl}>Token de API Autentique</label>
             <SecretInput value={settings.autentique_api_token} onChange={v => set('autentique_api_token', v)} placeholder="Token da API Autentique" />
             <p className={hint}>Obtido em <span className="font-medium">autentique.com.br → Configurações → API</span></p>
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2 text-xs text-amber-800">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            <span>⚠️ Este campo não é utilizado atualmente. O token real é configurado em Supabase Dashboard → Edge Functions → Secrets (<code className="bg-amber-100 px-1 rounded">AUTENTIQUE_API_KEY</code>).</span>
           </div>
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-800 space-y-1">
             <p className="font-semibold">Como funciona:</p>

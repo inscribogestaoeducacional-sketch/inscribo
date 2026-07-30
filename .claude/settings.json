@@ -53,7 +53,20 @@
       "Bash(git grep *)",
       "Bash(xargs -0 grep -InE 'EAA[A-Za-z0-9]{15,}')",
       "Bash(xargs -a /tmp/srcfiles.txt -d '\\\\n' grep -InE 'EAA[A-Za-z0-9]{15,}')",
-      "Bash(rm -f /tmp/fulllog.txt /tmp/srcfiles.txt)"
+      "Bash(rm -f /tmp/fulllog.txt /tmp/srcfiles.txt)",
+      "WebSearch",
+      "WebFetch(domain:docs.autentique.com.br)",
+      "Bash(deno check *)",
+      "Bash(xargs grep -nE 'sk_live_|sk_test_|sk-[A-Za-z0-9]|AIza[A-Za-z0-9_-]{10,}|xkeysib-|ghp_[A-Za-z0-9]{20,}|glpat-|AKIA[A-Z0-9]{10,}|eyJ[A-Za-z0-9_-]{10,}\\\\.eyJ|\\\\$aact_|EAA[A-Za-z0-9]{20,}')",
+      "Bash(node -e \"const p='eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5eHh1dW14a2hobm9xcnhwb3JqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM4NzYwNTMsImV4cCI6MjA1OTQ1MjA1M30'; console.log\\(Buffer.from\\(p,'base64'\\).toString\\(\\)\\)\")",
+      "Bash(xargs grep -niE \"service_role|SERVICE_ROLE_KEY\")",
+      "Bash(xargs grep -noE \"eyJ[A-Za-z0-9_-]{15,}\\\\.[A-Za-z0-9_-]{15,}\\\\.[A-Za-z0-9_-]{15,}\")",
+      "Bash(grep -nE \"[:=][[:space:]]*['\\\\\"][A-Za-z0-9_/+-]{24,}['\\\\\"]\" src/components/superadmin/AionWhatsAppHub.tsx src/components/whatsapp/WhatsAppHub.tsx api/evolution/config.ts \"api/evolution/[...route].ts\")",
+      "Bash(grep -rnoE 'EAA[A-Za-z0-9]{100,}' . --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=.git)",
+      "Bash(git check-ignore *)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(git status *)",
+      "Bash(xargs grep -ln \"lead_id\")"
     ],
     "additionalDirectories": [
       "\\tmp"

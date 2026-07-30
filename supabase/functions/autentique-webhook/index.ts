@@ -3,7 +3,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-autentique-signature',
 }
 
 async function dbFetch(path: string, method: string, body?: object, prefer?: string) {
@@ -25,11 +25,63 @@ async function dbFetch(path: string, method: string, body?: object, prefer?: str
   return { data, status: res.status }
 }
 
+// Comparação em tempo constante — evita timing attack na validação da assinatura
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
+
+async function hmacSha256Hex(secret: string, payload: string): Promise<string> {
+  const enc = new TextEncoder()
+  const key = await crypto.subtle.importKey(
+    'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  )
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload))
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+// A Autentique assina o corpo bruto do webhook com HMAC-SHA256 e envia o digest
+// hexadecimal no header `x-autentique-signature`. O segredo é o cadastrado no
+// Painel do Desenvolvedor da Autentique ao registrar o endpoint do webhook.
+// Docs: https://docs.autentique.com.br/api/integration-basics/webhooks
+async function isValidAutentiqueRequest(req: Request, rawBody: string): Promise<boolean> {
+  const incomingSignature = req.headers.get('x-autentique-signature') || ''
+  if (!incomingSignature) return false
+
+  const { data: cfgRows } = await dbFetch(
+    'platform_settings?key=eq.autentique_webhook_secret&select=value',
+    'GET'
+  )
+  const expectedSecret =
+    (Array.isArray(cfgRows) ? cfgRows[0]?.value : null) ||
+    Deno.env.get('AUTENTIQUE_WEBHOOK_SECRET') ||
+    ''
+
+  if (!expectedSecret) {
+    console.error('[autentique-webhook] autentique_webhook_secret/AUTENTIQUE_WEBHOOK_SECRET não configurado — rejeitando por segurança')
+    return false
+  }
+
+  const calculatedSignature = await hmacSha256Hex(expectedSecret, rawBody)
+  return timingSafeEqual(incomingSignature.toLowerCase(), calculatedSignature.toLowerCase())
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
   try {
-    const body = await req.json()
+    const rawBody = await req.text()
+
+    if (!(await isValidAutentiqueRequest(req, rawBody))) {
+      console.error('[autentique-webhook] assinatura inválida ou ausente — requisição rejeitada')
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...CORS, 'Content-Type': 'application/json' }
+      })
+    }
+
+    const body = JSON.parse(rawBody)
     console.log('[autentique-webhook] payload:', JSON.stringify(body))
 
     const documentId =
