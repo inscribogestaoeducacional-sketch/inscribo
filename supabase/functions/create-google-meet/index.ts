@@ -1,70 +1,47 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-async function createJWT(serviceAccount: Record<string, string>): Promise<string> {
-  const now = Math.floor(Date.now() / 1000)
-  const header  = { alg: 'RS256', typ: 'JWT' }
-  const payload = {
-    iss: serviceAccount.client_email,
-    scope: 'https://www.googleapis.com/auth/calendar',
-    aud: 'https://oauth2.googleapis.com/token',
-    exp: now + 3600,
-    iat: now,
-  }
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-  const b64url = (obj: unknown) =>
-    btoa(JSON.stringify(obj))
-      .replace(/=/g, '')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-
-  const signingInput = `${b64url(header)}.${b64url(payload)}`
-
-  const pem = serviceAccount.private_key
-  const pemBody = pem
-    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
-    .replace(/-----END PRIVATE KEY-----/g, '')
-    .replace(/\n/g, '')
-  const binaryKey = Uint8Array.from(atob(pemBody), (c) => c.charCodeAt(0))
-
-  const cryptoKey = await crypto.subtle.importKey(
-    'pkcs8',
-    binaryKey,
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  )
-
-  const sig = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    cryptoKey,
-    new TextEncoder().encode(signingInput),
-  )
-
-  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)))
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-
-  return `${signingInput}.${sigB64}`
+async function getRefreshToken(): Promise<string | null> {
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+  const { data } = await supabase
+    .from('platform_settings')
+    .select('value')
+    .eq('key', 'google_oauth_refresh_token')
+    .maybeSingle()
+  return data?.value || null
 }
 
-async function getAccessToken(serviceAccount: Record<string, string>): Promise<string> {
-  const jwt = await createJWT(serviceAccount)
+// Conta pessoal (não Workspace) usa OAuth 2.0 em vez de Service Account: uma
+// Service Account não tem calendário próprio e não pode convidar attendees
+// de fora do domínio sem Domain-Wide Delegation (exclusivo de Workspace).
+// Trocamos o refresh_token salvo por um access_token novo a cada chamada.
+async function getAccessToken(refreshToken: string): Promise<string> {
+  const clientId = Deno.env.get('GOOGLE_OAUTH_CLIENT_ID')
+  const clientSecret = Deno.env.get('GOOGLE_OAUTH_CLIENT_SECRET')
+  if (!clientId || !clientSecret) {
+    throw new Error('GOOGLE_OAUTH_CLIENT_ID/GOOGLE_OAUTH_CLIENT_SECRET não configurados nos secrets da function')
+  }
+
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion: jwt,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
     }),
   })
   const data = await res.json()
-  if (!res.ok) throw new Error(data.error_description || 'Failed to get access token')
+  if (!res.ok) throw new Error(data.error_description || data.error || 'Failed to refresh access token')
   return data.access_token
 }
 
@@ -72,17 +49,16 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const serviceAccountJson = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_JSON')
     const calendarId = Deno.env.get('GOOGLE_CALENDAR_ID') || 'primary'
 
-    if (!serviceAccountJson) {
+    const refreshToken = await getRefreshToken()
+    if (!refreshToken) {
       return new Response(
-        JSON.stringify({ meet_link: null, error: 'Google não configurado' }),
+        JSON.stringify({ meet_link: null, error: 'Google Calendar não conectado. Conecte em Configurações → Google Meet.' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
 
-    const serviceAccount = JSON.parse(serviceAccountJson)
     const body = await req.json()
     const { title, description, start_datetime, end_datetime, attendees = [] } = body
 
@@ -93,7 +69,7 @@ serve(async (req) => {
       )
     }
 
-    const accessToken = await getAccessToken(serviceAccount)
+    const accessToken = await getAccessToken(refreshToken)
 
     const event = {
       summary: title || 'Reunião Áion Edu',

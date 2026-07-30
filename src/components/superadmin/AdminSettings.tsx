@@ -280,8 +280,8 @@ const DEFAULTS: Settings = {
   // Template do contrato
   contract_template_text: '',
   // Google Meet
-  google_calendar_id:          '',
-  google_service_account_json: '',
+  google_calendar_id:         '',
+  google_oauth_refresh_token: '',
 }
 
 const DEFAULT_EMAIL_WELCOME_PENDING = `<h2>Olá, {{gestor}}! 👋</h2>
@@ -387,6 +387,30 @@ export default function AdminSettings() {
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok })
     setTimeout(() => setToast(null), 3500)
+  }
+
+  // Trata o retorno de /api/google/oauth-callback (?google_oauth=connected|error)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const googleOauth = params.get('google_oauth')
+    if (!googleOauth) return
+    if (googleOauth === 'connected') {
+      showToast('Google Calendar conectado com sucesso!')
+      loadSettings()
+    } else {
+      showToast(params.get('message') || 'Erro ao conectar Google Calendar.', false)
+    }
+    params.delete('google_oauth')
+    params.delete('message')
+    const qs = params.toString()
+    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const connectGoogle = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { showToast('Sessão expirada — faça login novamente.', false); return }
+    window.location.href = `/api/google/oauth-authorize?access_token=${encodeURIComponent(session.access_token)}`
   }
 
   const loadSettings = async () => {
@@ -536,6 +560,7 @@ export default function AdminSettings() {
   }
 
   const webhookUrl = `https://syxxuumxkhhnoqrxporj.supabase.co/functions/v1/asaas-webhook`
+  const googleConnected = !!settings.google_oauth_refresh_token
 
   if (loading) {
     return (
@@ -913,36 +938,53 @@ export default function AdminSettings() {
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3 text-sm text-blue-800">
             <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold">Como configurar</p>
+              <p className="font-semibold">Como funciona</p>
               <p className="text-xs mt-1">
-                1. Crie uma <strong>Conta de Serviço</strong> no Google Cloud Console com permissão na API Google Calendar.<br />
-                2. Compartilhe o calendário desejado com o e-mail da conta de serviço (<code>...@...iam.gserviceaccount.com</code>).<br />
-                3. Para maior segurança, configure o JSON como secret <code>GOOGLE_SERVICE_ACCOUNT_JSON</code> no painel do Supabase
-                (<span className="font-medium">Edge Functions → Manage secrets</span>).
+                Conecte uma conta Gmail pessoal (não precisa ser Workspace) clicando no botão abaixo.
+                A partir daí, os eventos passam a ser criados nessa conta, com link do Meet gerado
+                automaticamente e convite por e-mail para os participantes.
               </p>
             </div>
           </div>
+
+          <div className={`rounded-xl border p-4 flex items-center justify-between gap-4 ${googleConnected ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+            <div className="flex items-center gap-2">
+              {googleConnected
+                ? <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                : <AlertCircle className="w-5 h-5 text-gray-400 flex-shrink-0" />}
+              <div>
+                <p className={`text-sm font-bold ${googleConnected ? 'text-green-700' : 'text-gray-600'}`}>
+                  {googleConnected ? 'Conectado' : 'Não conectado'}
+                </p>
+                <p className="text-xs text-gray-400">
+                  {googleConnected
+                    ? 'Uma conta Google está autorizada a criar eventos.'
+                    : 'Conecte uma conta Gmail para habilitar o Meet automático.'}
+                </p>
+              </div>
+            </div>
+            <button onClick={connectGoogle}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-600 hover:to-blue-700 flex-shrink-0">
+              <ExternalLink className="w-3.5 h-3.5" />
+              {googleConnected ? 'Reconectar Google Calendar' : 'Conectar Google Calendar'}
+            </button>
+          </div>
+
           <div>
             <label className={lbl}>Google Calendar ID</label>
             <input className={inp} value={settings.google_calendar_id}
               onChange={e => set('google_calendar_id', e.target.value)}
               placeholder="primary  ou  seuemail@gmail.com" />
-            <p className={hint}>Use <code>primary</code> para o calendário padrão da conta de serviço.</p>
+            <p className={hint}>Use <code>primary</code> para o calendário padrão da conta conectada.</p>
           </div>
-          <div>
-            <label className={lbl}>Service Account JSON</label>
-            <SecretInput
-              value={settings.google_service_account_json}
-              onChange={v => set('google_service_account_json', v)}
-              placeholder='{"type":"service_account","project_id":"..."}' />
-            <p className={hint}>JSON completo gerado ao criar a conta de serviço. Armazenado de forma segura no banco.</p>
-          </div>
+
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2 text-xs text-amber-800">
             <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-            <span>Se o secret de ambiente estiver configurado no Supabase, ele tem prioridade sobre o valor salvo aqui. Quando nenhum dos dois está presente, os modais de reunião permitem inserir o link do Meet manualmente.</span>
+            <span>Quando nenhuma conta está conectada, os modais de reunião permitem inserir o link do Meet manualmente.</span>
           </div>
+
           <div className="flex justify-end pt-2">
-            <SaveBtn keys={['google_calendar_id', 'google_service_account_json']} id="google_meet" />
+            <SaveBtn keys={['google_calendar_id']} id="google_meet" />
           </div>
         </Section>
 
