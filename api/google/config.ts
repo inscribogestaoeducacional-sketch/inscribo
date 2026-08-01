@@ -9,7 +9,6 @@ export const SUPABASE_URL =
   ''
 
 export const SUPABASE_SERVICE_KEY =
-  process.env.SUPABASE_SERVICE_KEY ||
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   ''
 
@@ -64,48 +63,19 @@ export async function authenticateAdminGeral(req: VercelRequest): Promise<Google
   const queryToken = (req.query.access_token as string) || ''
   const stateToken = (req.query.state as string) || ''
   const token = headerToken || queryToken || stateToken || ''
-
-  // TODO(debug): logs temporários pra investigar rejeição de admin_geral real (admin@inscribo.com) — remover depois de diagnosticado
-  console.log('[authenticateAdminGeral] 1) token extraído:', {
-    found: !!token,
-    source: headerToken ? 'header' : queryToken ? 'query.access_token' : stateToken ? 'query.state' : 'none',
-    preview: token ? token.slice(0, 20) : null,
-  })
-
   if (!token) return null
 
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase.auth.getUser(token)
-
-  console.log('[authenticateAdminGeral] 2) getUser resultado:', {
-    hasError: !!error,
-    errorMessage: error?.message ?? null,
-    userId: data?.user?.id ?? null,
-    userEmail: data?.user?.email ?? null,
-  })
-
   if (error || !data?.user) return null
 
-  const { data: row, error: rowError } = await supabase
+  const { data: row } = await supabase
     .from('users')
     .select('user_type')
     .eq('id', data.user.id)
     .maybeSingle()
 
-  console.log('[authenticateAdminGeral] 3) query users resultado:', {
-    row,
-    rowError: rowError?.message ?? null,
-  })
-
-  if (row?.user_type !== 'admin_geral') {
-    console.log('[authenticateAdminGeral] 4) REJEITADO — condição final falhou:', {
-      reason: 'row?.user_type !== "admin_geral"',
-      userTypeEncontrado: row?.user_type ?? null,
-      userId: data.user.id,
-      userEmail: data.user.email,
-    })
-    return null
-  }
+  if (row?.user_type !== 'admin_geral') return null
 
   return { userId: data.user.id, token }
 }
