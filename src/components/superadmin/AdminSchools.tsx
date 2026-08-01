@@ -1265,7 +1265,7 @@ export default function AdminSchools() {
     setLoading(true)
     const monthYear = new Date().toISOString().slice(0, 7)
     const [instRes, consultRes, cycleRes, waRes, usageRes] = await Promise.all([
-      supabase.from('institutions').select('id, name, city, state, email, phone, plan, plan_status, monthly_value, consultant_id, evolution_instance, created_at, address, cnpj').order('name'),
+      supabase.from('institutions').select('id, name, city, state, email, phone, plan, plan_status, monthly_value, consultant_id, created_at, address, cnpj').order('name'),
       supabase.from('users').select('id, full_name, email').eq('user_type', 'consultant'),
       supabase.from('campaign_cycles')
         .select('institution_id, status, year, id, start_date, end_date, campaign_start_month, label')

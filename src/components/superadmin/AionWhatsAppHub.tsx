@@ -415,29 +415,14 @@ function AudioPlayer({ duration = 15, mediaUrl, isDark = true }: { duration?: nu
 }
 
 // ─── getMediaUrl ──────────────────────────────────────────────────────────────
-// Supabase Storage public URLs and data: URLs are returned directly.
-// Legacy Evolution API ephemeral URLs still go through the proxy.
-function getMediaUrl(message: any, instanceName?: string): string | null {
-  const raw =
-    message.media_url ||
-    message.mediaUrl ||
-    message.url ||
-    message.message?.imageMessage?.url ||
-    message.message?.videoMessage?.url ||
-    message.message?.audioMessage?.url ||
-    message.message?.documentMessage?.url ||
-    message.message?.stickerMessage?.url ||
-    null
+// Só mídia hospedada no Supabase Storage (o webhook Meta baixa e reidrata pra
+// lá) ou já como data: URL. Mensagens antigas sem isso simplesmente não carregam.
+function getMediaUrl(message: any): string | null {
+  const raw = message.media_url || message.mediaUrl || message.url || null
   if (!raw) return null
-  // data: URLs and already-proxied paths are used as-is
   if (raw.startsWith('data:') || raw.startsWith('/api/')) return raw
-  // Supabase Storage public URLs: use directly (no proxy needed)
   if (raw.includes('.supabase.co/storage/')) return raw
-  // Evolution API ephemeral URLs: route through proxy
-  const msgId = message.key?.id || message.message_id || message.id || ''
-  const idParam = msgId ? `&messageId=${encodeURIComponent(msgId)}` : ''
-  const instParam = instanceName ? `&instanceName=${encodeURIComponent(instanceName)}` : ''
-  return `/api/evolution/media-proxy?url=${encodeURIComponent(raw)}${idParam}${instParam}`
+  return null
 }
 
 function DownloadIcon() {
@@ -470,7 +455,7 @@ async function handleDownload(url: string, filename: string) {
 }
 
 // ─── RenderMessageContent ─────────────────────────────────────────────────────
-function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: { message: any; fromMe: boolean; instanceName?: string; onImageClick?: (url: string) => void }) {
+function RenderMessageContent({ message, fromMe, onImageClick }: { message: any; fromMe: boolean; onImageClick?: (url: string) => void }) {
   const msgType = (
     message.type ||
     message.message_type ||
@@ -511,7 +496,7 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
     )
   }
 
-  const mediaUrl = getMediaUrl(message, instanceName)
+  const mediaUrl = getMediaUrl(message)
   const caption  = message.caption || message.message?.imageMessage?.caption || ''
   const body     = message.body || message.content || message.conversation ||
                    message.message?.conversation || ''
@@ -633,7 +618,7 @@ function RenderMessageContent({ message, fromMe, instanceName, onImageClick }: {
 }
 
 // ─── MessageBubble ────────────────────────────────────────────────────────────
-function MessageBubble({ msg, onImageClick, instanceName, contactName }: { msg: Message; onImageClick?: (url: string) => void; instanceName?: string; contactName?: string }) {
+function MessageBubble({ msg, onImageClick, contactName }: { msg: Message; onImageClick?: (url: string) => void; contactName?: string }) {
   const isMe = msg.from === 'me'
 
   return (
@@ -704,7 +689,7 @@ function MessageBubble({ msg, onImageClick, instanceName, contactName }: { msg: 
             </div>
           </div>
         )}
-        <RenderMessageContent message={msg} fromMe={isMe} instanceName={instanceName} onImageClick={onImageClick} />
+        <RenderMessageContent message={msg} fromMe={isMe} onImageClick={onImageClick} />
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -766,8 +751,6 @@ export default function AionWhatsAppHub() {
   const [searchParams] = useSearchParams()
   const phoneParam = searchParams.get('phone')
   const nameParam  = searchParams.get('name')
-
-  const instance = ''
 
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
@@ -850,16 +833,10 @@ export default function AionWhatsAppHub() {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
 
-  // Feature 1: Connection status
-  const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'disconnected'>('unknown')
   const [windowExpired, setWindowExpired] = useState(false)
 
   // Meta API state
-  const [useMetaApi, setUseMetaApi] = useState(false)
   const [metaConfig, setMetaConfig] = useState<{ phone_id: string; token: string } | null>(null)
-
-  // Sync state
-  const [syncing, setSyncing] = useState(false)
 
   // Typing indicator
   const [typingConvIds, setTypingConvIds] = useState<Set<string>>(new Set())
@@ -1320,8 +1297,6 @@ export default function AionWhatsAppHub() {
           .select('phone_number_id')
           .eq('connected', true)
           .maybeSingle()
-        setUseMetaApi(true)
-        setConnectionStatus(platformWA ? 'connected' : 'disconnected')
         setIsConnected(!!platformWA)
       } else {
         const { data: phoneRecord } = await supabase
@@ -1332,21 +1307,17 @@ export default function AionWhatsAppHub() {
           .maybeSingle()
 
         if (phoneRecord) {
-          setUseMetaApi(true)
-          setConnectionStatus('connected')
           setIsConnected(true)
         } else {
           const inst = await DatabaseService.getInstitution(effectiveInstitutionId)
           const instAny = inst as any
           if (instAny?.whatsapp_phone_id || instAny?.whatsapp_connected) {
-            setUseMetaApi(true)
-            setConnectionStatus('connected')
             setIsConnected(true)
             if (instAny?.whatsapp_phone_id) {
               setMetaConfig({ phone_id: instAny.whatsapp_phone_id, token: '' })
             }
           } else {
-            setIsConnected(!!inst?.evolution_instance)
+            setIsConnected(false)
           }
         }
       }
@@ -1484,71 +1455,6 @@ export default function AionWhatsAppHub() {
       clearInterval(interval)
     }
   }, [effectiveInstitutionId, isAionInbox])
-
-  const prevConnectionStatusRef = useRef<string>('unknown')
-
-  // Feature 1: Connection status polling (só Evolution — Meta API não precisa de polling)
-  useEffect(() => {
-    if (!effectiveInstitutionId || useMetaApi) return
-    const CONNECTED_STATES = ['open', 'connected', 'CONNECTED', 'OPEN']
-    const checkStatus = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        const res = await fetch(`/api/evolution/connection-state?institutionId=${effectiveInstitutionId}`, {
-          headers: session ? { 'Authorization': `Bearer ${session.access_token}` } : {},
-          signal: AbortSignal.timeout(8000),
-        })
-        if (!res.ok) {
-          console.warn('[connection-state] HTTP', res.status)
-          return
-        }
-        const data = await res.json()
-        const state = data?.instance?.state ?? data?.state ?? data?.status
-        const isConn = CONNECTED_STATES.includes(state)
-        setConnectionStatus(isConn ? 'connected' : state ? 'disconnected' : 'unknown')
-      } catch (err) {
-        console.warn('[connection-state] fetch failed:', err)
-      }
-    }
-    checkStatus()
-    const iv = setInterval(checkStatus, 30000)
-    return () => clearInterval(iv)
-  }, [effectiveInstitutionId, useMetaApi])
-
-  // Sync 48h messages from Evolution API (não aplicável à Meta API — mensagens chegam via webhook)
-  const syncMessages = async () => {
-    if (!effectiveInstitutionId || !instance || syncing || useMetaApi) return
-    try {
-      setSyncing(true)
-      const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch('/api/evolution/sync-messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(session ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
-        },
-        body: JSON.stringify({ institutionId: effectiveInstitutionId, instanceName: instance }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        console.log(`[sync] ${data.synced} mensagens sincronizadas de ${data.chats} conversas`)
-        await loadMessages()
-      }
-    } catch (err) {
-      console.warn('[sync] erro:', err)
-    } finally {
-      setSyncing(false)
-    }
-  }
-
-  // Sync when connection becomes active (reconnect) or on first connect
-  useEffect(() => {
-    const prev = prevConnectionStatusRef.current
-    prevConnectionStatusRef.current = connectionStatus
-    if (connectionStatus === 'connected' && prev !== 'connected') {
-      syncMessages()
-    }
-  }, [connectionStatus])
 
   // Reset unread, auto-assign, auto-link lead, auto-transition waiting→open when opening conversation
   useEffect(() => {
@@ -2840,23 +2746,6 @@ export default function AionWhatsAppHub() {
 
       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#F0FDFB', height: '100%' }}>
 
-        {/* Connection warning banner */}
-        {connectionStatus === 'disconnected' && !useMetaApi && (
-          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12, margin: '8px 16px', padding: '10px 16px', borderRadius: 10, background: '#FEF3C7', border: '1px solid #F59E0B' }}>
-            <span style={{ fontSize: 16 }}>⚠️</span>
-            <span style={{ fontSize: 13, color: '#92400E', flex: 1 }}>Conexão com WhatsApp instável ou desconectada. Verifique em Configurações → WhatsApp.</span>
-            <button onClick={() => navigate('/settings?tab=whatsapp')} style={{ fontSize: 12, fontWeight: 600, color: '#D97706', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap', flexShrink: 0 }}>
-              Ir para Configurações
-            </button>
-          </div>
-        )}
-        {/* Sync indicator */}
-        {syncing && (
-          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '6px 0', background: '#E6F7F5', borderBottom: '1px solid #D1FAE5' }}>
-            <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#00A896', animation: 'pulse 1s infinite' }} />
-            <span style={{ fontSize: 11, color: '#007A6E', fontWeight: 500 }}>Sincronizando mensagens...</span>
-          </div>
-        )}
 
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
@@ -3309,7 +3198,7 @@ export default function AionWhatsAppHub() {
                   <div style={{ flex: 1, height: 1, background: 'linear-gradient(to left, transparent, #D1FAE5, transparent)' }} />
                 </div>
                 {group.msgs.map(msg => (
-                  <MessageBubble key={msg.id} msg={msg} onImageClick={url => setLightboxUrl(url)} instanceName={instance} contactName={activeConv?.name || 'Contato'} />
+                  <MessageBubble key={msg.id} msg={msg} onImageClick={url => setLightboxUrl(url)} contactName={activeConv?.name || 'Contato'} />
                 ))}
               </div>
             ))}

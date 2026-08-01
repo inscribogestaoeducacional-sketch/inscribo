@@ -71,7 +71,9 @@
       "Bash(git checkout *)",
       "Bash(git restore *)",
       "Bash(node -e \"console.log\\(JSON.stringify\\(require\\('./package.json'\\).scripts, null, 2\\)\\)\")",
-      "Bash(echo \"grep_exit: $?\")"
+      "Bash(echo \"grep_exit: $?\")",
+      "Bash(rm \"api/evolution/[...route].ts\" \"api/evolution/config.ts\")",
+      "Bash(rmdir \"api/evolution\")"
     ],
     "additionalDirectories": [
       "\\tmp"

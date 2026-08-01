@@ -185,9 +185,6 @@ export interface Institution {
   logo_url?: string
   primary_color: string
   secondary_color: string
-  evolution_url?: string
-  evolution_key?: string
-  evolution_instance?: string
   created_at: string
   updated_at: string
 }
