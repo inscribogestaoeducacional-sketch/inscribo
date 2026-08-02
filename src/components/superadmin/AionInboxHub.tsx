@@ -609,8 +609,8 @@ function MsgStatusSvg({ status }: { status?: string }) {
 
 function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: '#F8FAFC', borderRadius: 12, padding: '12px 14px' }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+    <div style={{ borderBottom: '1px solid #E9F7F4', padding: '14px 0' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
         {title}
       </div>
       {children}
@@ -1499,22 +1499,27 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
       )}
 
       {/* ── Col 1: Conversation list ──────────────────────────────────────── */}
-      <div style={{ width: 280, flexShrink: 0, borderRight: '1px solid #E2E8F0', background: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ padding: '16px 16px 10px', borderBottom: '1px solid #F1F5F9' }}>
+      <div style={{ width: 320, flexShrink: 0, borderRight: '1px solid #D1FAE5', background: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid #D1FAE5' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>Inbox Áion</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <MessageCircle style={{ width: 17, height: 17, color: '#00A896' }} />
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>Inbox Áion</div>
+            </div>
             {totalUnread > 0 && (
               <span style={{ background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 99, padding: '2px 7px', minWidth: 20, textAlign: 'center' }}>
                 {totalUnread}
               </span>
             )}
           </div>
-          <div style={{ display: 'flex', gap: 4, marginTop: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
             {(['all', 'leads', 'schools', 'general', 'unread'] as ConvFilter[]).map(f => {
               const labels: Record<ConvFilter, string> = { all: 'Todas', leads: 'Vendas', schools: 'Suporte', general: 'Geral', unread: 'Não lidas' }
               const active = filter === f
               return (
-                <button key={f} onClick={() => setFilter(f)} style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600, border: '1.5px solid', borderColor: active ? '#00A896' : '#E2E8F0', background: active ? '#E6F7F5' : '#F8FAFC', color: active ? '#00A896' : '#64748B', cursor: 'pointer' }}>
+                <button key={f} onClick={() => setFilter(f)} style={{ padding: '4px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 600, border: 'none', background: active ? '#EDE9FE' : '#F0FDFB', color: active ? '#7C3AED' : '#64748B', cursor: 'pointer', transition: 'all 0.15s' }}>
                   {labels[f]}
                 </button>
               )
@@ -1533,13 +1538,22 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
               const isActive = activeConv?.id === conv.id
               const qc = queueColor(conv.queue)
               return (
-                <div key={conv.id} onClick={() => selectConv(conv)} style={{ padding: '12px 14px', borderBottom: '1px solid #F8FAFC', background: isActive ? '#F0FDFB' : '#fff', borderLeft: `3px solid ${isActive ? '#00A896' : 'transparent'}`, cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#00A896' }}>
+                <div key={conv.id} onClick={() => selectConv(conv)}
+                  style={{
+                    position: 'relative', padding: '11px 14px', borderBottom: '1px solid #F0FDFB',
+                    background: isActive ? 'linear-gradient(135deg, #E6F7F5 0%, #F0FDFB 100%)' : 'transparent',
+                    borderLeft: `3px solid ${isActive ? '#00A896' : 'transparent'}`,
+                    cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'flex-start', transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#F8FAFC' }}
+                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
+                >
+                  <div style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#00A896' }}>
                     {initials(conv.contact_name, conv.remote_jid)}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 130 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 165 }}>
                         {conv.contact_name || formatPhone(conv.remote_jid)}
                       </span>
                       <span style={{ fontSize: 11, color: '#94A3B8', flexShrink: 0, marginLeft: 4 }}>{formatTime(conv.last_message_at)}</span>
@@ -1572,8 +1586,8 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
         ) : (
           <>
             {/* Header */}
-            <div style={{ padding: '12px 20px', borderBottom: '1px solid #E2E8F0', background: '#fff', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-              <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#00A896' }}>
+            <div style={{ padding: '12px 20px', borderBottom: '1px solid #D1FAE5', background: '#fff', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+              <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#00A896' }}>
                 {initials(activeConv.contact_name, activeConv.remote_jid)}
               </div>
               <div style={{ flex: 1 }}>
@@ -1619,7 +1633,7 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
             )}
 
             {/* Input area */}
-            <div style={{ padding: '10px 20px 12px', borderTop: '1px solid #E2E8F0', background: '#fff', flexShrink: 0, position: 'relative' }}>
+            <div style={{ padding: '10px 20px 12px', borderTop: '1px solid #D1FAE5', background: '#fff', flexShrink: 0, position: 'relative' }}>
 
               {/* Attach menu */}
               {showAttach && (
@@ -2014,19 +2028,19 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
         </div>
       )}
 
-      <div style={{ width: 320, flexShrink: 0, borderLeft: '1px solid #E2E8F0', background: '#fff', overflowY: 'auto' }}>
+      <div style={{ width: 320, flexShrink: 0, borderLeft: '1px solid #D1FAE5', background: '#fff', overflowY: 'auto' }}>
         {!activeConv ? (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8 }}>
             <User style={{ width: 40, height: 40, color: '#CBD5E1' }} />
             <div style={{ fontSize: 13, color: '#94A3B8' }}>Selecione uma conversa</div>
           </div>
         ) : (
-          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ padding: '4px 16px 20px', display: 'flex', flexDirection: 'column' }}>
 
             {/* CONTATO */}
             <PanelSection title="Contato">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#00A896', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: '#00A896', flexShrink: 0, boxShadow: '0 3px 10px rgba(13,148,136,0.25)', border: '2px solid #fff' }}>
                   {initials(activeConv.contact_name, activeConv.remote_jid)}
                 </div>
                 <div style={{ minWidth: 0 }}>
@@ -2175,8 +2189,11 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
                           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 0',
                           background: leadEditSaved ? '#10B981' : '#00A896', color: '#fff', fontSize: 12, fontWeight: 700,
                           borderRadius: 8, border: 'none', cursor: savingLeadEdit ? 'not-allowed' : 'pointer', opacity: savingLeadEdit ? 0.7 : 1,
-                          transition: 'background 0.15s',
-                        }}>
+                          transition: 'background 0.15s, transform 0.15s, box-shadow 0.15s',
+                        }}
+                        onMouseEnter={e => { if (!savingLeadEdit) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 3px 10px rgba(0,168,150,0.3)' } }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}
+                      >
                         {savingLeadEdit
                           ? <><Loader2 style={{ width: 13, height: 13, animation: 'spin 1s linear infinite' }} />Salvando...</>
                           : leadEditSaved
@@ -2341,7 +2358,10 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
               {activeConv.status !== 'closed' && (
                 <div style={{ marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 7 }}>
                   <button onClick={handleCloseConversation}
-                    style={{ width: '100%', padding: '10px 0', fontSize: 13, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 3px 10px rgba(13,148,136,0.3)' }}>
+                    style={{ width: '100%', padding: '10px 0', fontSize: 13, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 3px 10px rgba(13,148,136,0.3)', transition: 'transform 0.15s, box-shadow 0.15s' }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 5px 14px rgba(13,148,136,0.4)' }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 3px 10px rgba(13,148,136,0.3)' }}
+                  >
                     ✅ Concluir Atendimento
                   </button>
                   {activeConv.assigned_user_id && (
