@@ -1694,17 +1694,18 @@ async function processAionMessage({
     const queue = await detectAionQueue(rawPhone, supabase)
 
     // Select or create conversation
-    const { data: existingConv } = await supabase
+    const { data: existingConv, error: existingConvErr } = await supabase
       .from('whatsapp_conversations')
       .select('id')
       .eq('remote_jid', remoteJid)
       .is('institution_id', null)
       .maybeSingle()
+    if (existingConvErr) console.error('❌ [aion] erro ao buscar conversa existente:', existingConvErr)
 
     let conv: { id: string } | null = null
 
     if (existingConv) {
-      const { data: updated } = await supabase
+      const { data: updated, error: updateConvErr } = await supabase
         .from('whatsapp_conversations')
         .update({
           contact_name:    contactName,
@@ -1718,9 +1719,10 @@ async function processAionMessage({
         .eq('id', existingConv.id)
         .select('id')
         .maybeSingle()
+      if (updateConvErr) console.error('❌ [aion] erro ao atualizar whatsapp_conversations:', updateConvErr)
       conv = updated
     } else {
-      const { data: created } = await supabase
+      const { data: created, error: insertConvErr } = await supabase
         .from('whatsapp_conversations')
         .insert({
           remote_jid:      remoteJid,
@@ -1735,6 +1737,7 @@ async function processAionMessage({
         })
         .select('id')
         .maybeSingle()
+      if (insertConvErr) console.error('❌ [aion] erro ao criar whatsapp_conversations:', insertConvErr)
       conv = created
     }
 
@@ -1747,7 +1750,7 @@ async function processAionMessage({
     if (rpcErr1) console.error('❌ rpc error:', rpcErr1.message)
 
     // Insert message
-    await supabase.from('whatsapp_messages').insert({
+    const { error: insertMsgErr } = await supabase.from('whatsapp_messages').insert({
       institution_id:  null,
       conversation_id: conv?.id || null,
       remote_jid:      remoteJid,
@@ -1763,6 +1766,7 @@ async function processAionMessage({
       is_aion_inbox:   true,
       raw_data:        msg,
     })
+    if (insertMsgErr) console.error('❌ [aion] erro ao inserir whatsapp_messages:', insertMsgErr)
 
     console.log('[aion] mensagem recebida de', rawPhone, '→ fila:', queue)
 
@@ -1770,23 +1774,25 @@ async function processAionMessage({
     // Priority: whatsapp_flows (FlowEditor) keyed by platform_whatsapp.id
     let aionFlow: any = null
     if (platformWAId) {
-      const { data: wflow } = await supabase
+      const { data: wflow, error: wflowErr } = await supabase
         .from('whatsapp_flows')
         .select('*')
         .eq('institution_id', platformWAId)
         .maybeSingle()
+      if (wflowErr) console.error('❌ [aion] erro ao buscar whatsapp_flows:', wflowErr)
       if (wflow?.is_active && wflow?.bot_enabled && wflow?.bot_flow?.nodes?.length) {
         aionFlow = wflow
       }
     }
     // Fallback: legacy aion_flows table
     if (!aionFlow) {
-      const { data: legacyFlow } = await supabase
+      const { data: legacyFlow, error: legacyFlowErr } = await supabase
         .from('aion_flows')
         .select('*')
         .eq('is_active', true)
         .eq('bot_enabled', true)
         .maybeSingle()
+      if (legacyFlowErr) console.error('❌ [aion] erro ao buscar aion_flows:', legacyFlowErr)
       aionFlow = legacyFlow
     }
 
@@ -1795,23 +1801,25 @@ async function processAionMessage({
     // Keyword / QR Code detection
     const trimmedText = text.trim().toUpperCase()
     if (trimmedText) {
-      const { data: keyword } = await supabase
+      const { data: keyword, error: keywordErr } = await supabase
         .from('aion_keywords')
         .select('*')
         .eq('keyword', trimmedText)
         .eq('is_active', true)
         .maybeSingle()
+      if (keywordErr) console.error('❌ [aion] erro ao buscar aion_keywords:', keywordErr)
 
       if (keyword) {
         if (keyword.create_lead) {
           const cleanPhone = rawPhone.replace(/^55/, '')
-          const { data: existingLead } = await supabase
+          const { data: existingLead, error: existingLeadErr } = await supabase
             .from('crm_leads')
             .select('id')
             .or(`phone.ilike.%${cleanPhone}%`)
             .maybeSingle()
+          if (existingLeadErr) console.error('❌ [aion] erro ao buscar crm_leads existente (keyword):', existingLeadErr)
           if (!existingLead) {
-            await supabase.from('crm_leads').insert({
+            const { error: insertLeadErr } = await supabase.from('crm_leads').insert({
               name:       contactName,
               phone:      rawPhone,
               origin:     keyword.source || 'whatsapp',
@@ -1820,20 +1828,23 @@ async function processAionMessage({
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             })
+            if (insertLeadErr) console.error('❌ [aion] erro ao criar crm_leads (keyword):', insertLeadErr)
           }
         }
         if (keyword.tag) {
-          const { data: convTagData } = await supabase
+          const { data: convTagData, error: convTagErr } = await supabase
             .from('whatsapp_conversations')
             .select('tags')
             .eq('is_aion_inbox', true)
             .eq('remote_jid', remoteJid)
             .maybeSingle()
+          if (convTagErr) console.error('❌ [aion] erro ao buscar tags da conversa:', convTagErr)
           const tags: string[] = (convTagData?.tags as string[]) || []
           if (!tags.includes(keyword.tag)) {
-            await supabase.from('whatsapp_conversations')
+            const { error: updateTagErr } = await supabase.from('whatsapp_conversations')
               .update({ tags: [...tags, keyword.tag] })
               .eq('is_aion_inbox', true).eq('remote_jid', remoteJid)
+            if (updateTagErr) console.error('❌ [aion] erro ao atualizar tags da conversa:', updateTagErr)
           }
         }
         if (keyword.auto_response) {
@@ -1846,13 +1857,14 @@ async function processAionMessage({
     // Auto-create lead for new general-queue contacts
     if (queue === 'general') {
       const cleanPhone = rawPhone.replace(/^55/, '')
-      const { data: existingLead } = await supabase
+      const { data: existingLead, error: existingLeadErr2 } = await supabase
         .from('crm_leads')
         .select('id')
         .or(`phone.ilike.%${cleanPhone}%`)
         .maybeSingle()
+      if (existingLeadErr2) console.error('❌ [aion] erro ao buscar crm_leads existente (general):', existingLeadErr2)
       if (!existingLead) {
-        await supabase.from('crm_leads').insert({
+        const { error: insertLeadErr2 } = await supabase.from('crm_leads').insert({
           name:       contactName,
           phone:      rawPhone,
           origin:     'whatsapp',
@@ -1860,34 +1872,38 @@ async function processAionMessage({
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
+        if (insertLeadErr2) console.error('❌ [aion] erro ao criar crm_leads (general):', insertLeadErr2)
       }
     }
 
     // Fetch conversation bot state
-    const { data: convState } = await supabase
+    const { data: convState, error: convStateErr } = await supabase
       .from('whatsapp_conversations')
       .select('bot_active, bot_variables')
       .eq('is_aion_inbox', true)
       .eq('remote_jid', remoteJid)
       .maybeSingle()
+    if (convStateErr) console.error('❌ [aion] erro ao buscar estado do bot:', convStateErr)
 
     const botVars = (convState?.bot_variables as Record<string, string>) || {}
     const hasMenuPending = !!interactiveChoiceId &&
       Object.keys(botVars).some(k => k.startsWith('__menu_sent_'))
 
     // Count messages to detect truly new conversations
-    const { count: msgCount } = await supabase
+    const { count: msgCount, error: msgCountErr } = await supabase
       .from('whatsapp_messages')
       .select('id', { count: 'exact', head: true })
       .eq('is_aion_inbox', true)
       .eq('remote_jid', remoteJid)
+    if (msgCountErr) console.error('❌ [aion] erro ao contar whatsapp_messages:', msgCountErr)
 
     const isNewConv = (msgCount ?? 0) <= 1
 
     if (isNewConv) {
-      await supabase.from('whatsapp_conversations')
+      const { error: resetBotErr } = await supabase.from('whatsapp_conversations')
         .update({ bot_active: true, bot_current_node: null, bot_variables: {} })
         .eq('is_aion_inbox', true).eq('remote_jid', remoteJid)
+      if (resetBotErr) console.error('❌ [aion] erro ao resetar estado do bot:', resetBotErr)
       await processAionFlow(aionFlow, remoteJid, text, interactiveChoiceId, true)
     } else if (hasMenuPending || convState?.bot_active === true) {
       await processAionFlow(aionFlow, remoteJid, text, interactiveChoiceId, false)
