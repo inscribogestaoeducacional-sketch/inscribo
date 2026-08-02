@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
 import { createGoogleMeet, buildEndDatetime } from '../../lib/googleMeet'
+import AttendeesPicker from '../shared/AttendeesPicker'
 import {
   Building2, Users, DollarSign, FileText, CheckCircle2,
   Clock, AlertTriangle, ExternalLink, Copy, RefreshCw,
@@ -124,10 +125,10 @@ function getCurrentPhase(institution: any, contract: any, onboardingProcess: any
 // ── MeetingModal ──────────────────────────────────────────────────────────────
 function MeetingModal({
   processId, institutionId, phase, title: defaultTitle,
-  attendeeEmail, onClose, onSaved,
+  attendeeEmail, consultants, onClose, onSaved,
 }: {
   processId: string; institutionId: string; phase: string; title: string
-  attendeeEmail?: string; onClose: () => void; onSaved: () => void
+  attendeeEmail?: string; consultants: any[]; onClose: () => void; onSaved: () => void
 }) {
   const [form, setForm] = useState({
     title: defaultTitle,
@@ -135,7 +136,7 @@ function MeetingModal({
     duration_min: 60,
     meet_link: '',
     notes: '',
-    attendees_raw: attendeeEmail || '',
+    attendees: [] as string[],
   })
   const [saving, setSaving] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -152,7 +153,7 @@ function MeetingModal({
       title: form.title,
       start_datetime: start,
       end_datetime: end,
-      attendees: form.attendees_raw.split(',').map(s => s.trim()).filter(Boolean),
+      attendees: form.attendees,
     })
     if (result.meet_link) set('meet_link', result.meet_link)
     else setErr(result.error || 'Erro ao criar Meet')
@@ -173,7 +174,7 @@ function MeetingModal({
         meet_link: form.meet_link || null,
         notes: form.notes || null,
         status: 'scheduled',
-        attendees: form.attendees_raw.split(',').map(s => s.trim()).filter(Boolean),
+        attendees: form.attendees,
       })
       onSaved()
     } catch (e: any) { setErr(e.message || 'Erro ao agendar') }
@@ -217,8 +218,8 @@ function MeetingModal({
             </div>
           </div>
           <div>
-            <label className={lbl}>Participantes (emails, separados por vírgula)</label>
-            <input className={inp} value={form.attendees_raw} onChange={e => set('attendees_raw', e.target.value)} />
+            <label className={lbl}>Participantes</label>
+            <AttendeesPicker clientEmail={attendeeEmail || ''} consultants={consultants} value={form.attendees} onChange={v => set('attendees', v)} />
           </div>
           <div>
             <label className={lbl}>Notas</label>
@@ -331,7 +332,7 @@ export default function InstitutionDetails() {
         supabase.from('contracts').select('*').eq('institution_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('onboarding_processes').select('*').eq('institution_id', id).maybeSingle(),
         supabase.from('campaign_cycles').select('*').eq('institution_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from('users').select('id, full_name').eq('user_type', 'consultant').order('full_name'),
+        supabase.from('users').select('id, full_name, email').eq('user_type', 'consultant').order('full_name'),
         supabase.from('whatsapp_phone_numbers').select('waba_id').eq('institution_id', id).maybeSingle(),
       ])
 
@@ -931,6 +932,7 @@ export default function InstitutionDetails() {
             phase={meetingModal.phase}
             title={meetingModal.title}
             attendeeEmail={institution.email}
+            consultants={consultants}
             onClose={() => setMeetingModal(null)}
             onSaved={() => { setMeetingModal(null); loadAll() }}
           />

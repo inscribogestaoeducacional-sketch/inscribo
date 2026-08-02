@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
 import { createGoogleMeet, buildEndDatetime } from '../../lib/googleMeet'
+import AttendeesPicker from '../shared/AttendeesPicker'
 import {
   Building2, Calendar, CheckCircle2, Clock, Plus, X,
   ChevronRight, ChevronDown, AlertCircle, Edit2, Trash2,
@@ -560,8 +561,8 @@ function PaymentPanel({ process, onSuccess }: { process: Process; onSuccess: () 
 }
 
 // ─── Meeting Modal ────────────────────────────────────────────────────────
-function MeetingModal({ meeting, process, onClose, onSave }: {
-  meeting: Partial<Meeting> | null; process: Process
+function MeetingModal({ meeting, process, consultants, onClose, onSave }: {
+  meeting: Partial<Meeting> | null; process: Process; consultants: any[]
   onClose: () => void; onSave: (m: Partial<Meeting>) => Promise<void>
 }) {
   const isNew = !meeting?.id
@@ -569,7 +570,7 @@ function MeetingModal({ meeting, process, onClose, onSave }: {
     type: 'kickoff', status: 'scheduled', duration_min: 60,
     institution_id: process.institution_id, process_id: process.id,
   })
-  const [attendees, setAttendees] = useState((meeting?.attendees || []).join(', '))
+  const [attendees, setAttendees] = useState<string[]>(meeting?.attendees || [])
   const [saving, setSaving]       = useState(false)
   const [generating, setGenerating] = useState(false)
   const [meetErr, setMeetErr]     = useState('')
@@ -591,7 +592,7 @@ function MeetingModal({ meeting, process, onClose, onSave }: {
       title:          form.title || 'Reunião Áion Edu',
       start_datetime: start,
       end_datetime:   end,
-      attendees:      attendees.split(',').map(s => s.trim()).filter(Boolean),
+      attendees,
     })
     if (result.meet_link) {
       set('meet_link', result.meet_link)
@@ -605,7 +606,7 @@ function MeetingModal({ meeting, process, onClose, onSave }: {
 
   const handleSave = async () => {
     setSaving(true)
-    await onSave({ ...form, attendees: attendees.split(',').map(s => s.trim()).filter(Boolean) })
+    await onSave({ ...form, attendees })
     setSaving(false)
   }
 
@@ -670,9 +671,8 @@ function MeetingModal({ meeting, process, onClose, onSave }: {
             </div>
           </div>
           <div>
-            <label className={lbl}>Participantes (e-mails separados por vírgula)</label>
-            <input className={inp} placeholder="diretor@escola.com.br, contato@aionedu.com.br"
-              value={attendees} onChange={e => setAttendees(e.target.value)} />
+            <label className={lbl}>Participantes</label>
+            <AttendeesPicker clientEmail={process.institution?.email || ''} consultants={consultants} value={attendees} onChange={setAttendees} />
           </div>
           {!isNew && (
             <div>
@@ -995,6 +995,7 @@ export default function AdminOnboarding() {
   const [processes,     setProcesses]     = useState<Process[]>([])
   const [allMeetings,   setAllMeetings]   = useState<Meeting[]>([])
   const [institutions,  setInstitutions]  = useState<any[]>([])
+  const [consultants,   setConsultants]   = useState<any[]>([])
   const [loading,       setLoading]       = useState(true)
   const [view,          setView]          = useState<'processes'|'calendar'>('processes')
   const [search,        setSearch]        = useState('')
@@ -1011,10 +1012,11 @@ export default function AdminOnboarding() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-     const [procRes, meetRes, instRes] = await Promise.all([
+     const [procRes, meetRes, instRes, consultRes] = await Promise.all([
   supabase.from('onboarding_processes').select('*, institutions(id,name,city,state,email,cnpj,monthly_value,implementation_value)').order('created_at',{ascending:false}),
   supabase.from('onboarding_meetings').select('*, institutions(id,name,city,state)').order('scheduled_at'),
   supabase.from('institutions').select('id,name,city,state,email,cnpj,monthly_value,implementation_value,plan_status').not('plan_status','in','("cancelled")').order('name'),
+  supabase.from('users').select('id, full_name, email').eq('user_type','consultant').order('full_name'),
 ])
       const procs: Process[] = (procRes.data||[]).map((p:any)=>({...p,institution:p.institutions}))
       if (procs.length>0) {
@@ -1026,6 +1028,7 @@ export default function AdminOnboarding() {
       }
       setProcesses(procs)
       setInstitutions(instRes.data||[])
+      setConsultants(consultRes.data||[])
     } catch(e:any) { showToast(e?.message||'Erro ao carregar',false) }
     setLoading(false)
   },[])
@@ -1259,6 +1262,7 @@ export default function AdminOnboarding() {
         <MeetingModal
           meeting={meetingModal.meeting}
           process={processes.find(p=>p.id===meetingModal.meeting?.process_id)||processes[0]||{id:'',institution_id:'',status:'in_progress',current_phase:'contract',started_at:null,notes:null,created_at:''}}
+          consultants={consultants}
           onClose={()=>setMeetingModal({meeting:null,open:false})}
           onSave={handleSaveMeeting}
         />

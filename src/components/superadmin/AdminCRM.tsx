@@ -5,6 +5,7 @@ import SuperAdminLayout from './SuperAdminLayout'
 import { useNavigate } from 'react-router-dom'
 import { createGoogleMeet, buildEndDatetime } from '../../lib/googleMeet'
 import { buildContractVars, renderContractHtml } from '../../lib/contractPreview'
+import AttendeesPicker from '../shared/AttendeesPicker'
 import {
   Plus, X, Search, Phone, Mail, MapPin,
   Calendar, Clock, ChevronRight, AlertCircle, CheckCircle2,
@@ -88,8 +89,8 @@ function isDueSoon(d?: string) {
 }
 
 // ─── CRM Meeting Modal ────────────────────────────────────────────────────
-function CRMeetingModal({ lead, meeting, onClose, onSave }: {
-  lead: Lead; meeting?: CRMeeting | null
+function CRMeetingModal({ lead, meeting, consultants, onClose, onSave }: {
+  lead: Lead; meeting?: CRMeeting | null; consultants: any[]
   onClose: () => void; onSave: () => void
 }) {
   const isNew = !meeting?.id
@@ -99,7 +100,7 @@ function CRMeetingModal({ lead, meeting, onClose, onSave }: {
     scheduled_at: meeting?.scheduled_at?.slice(0, 16) || '',
     duration_min: meeting?.duration_min ?? 30,
     meet_link:    meeting?.meet_link    || '',
-    attendees:    (meeting?.attendees   || []).join(', '),
+    attendees:    (meeting?.attendees   || []) as string[],
     notes:        meeting?.notes        || '',
     status:       meeting?.status       || 'scheduled' as CRMeeting['status'],
   })
@@ -119,7 +120,7 @@ function CRMeetingModal({ lead, meeting, onClose, onSave }: {
       title: form.title,
       start_datetime: start,
       end_datetime: end,
-      attendees: form.attendees.split(',').map(s => s.trim()).filter(Boolean),
+      attendees: form.attendees,
     })
     if (result.meet_link) {
       set('meet_link', result.meet_link)
@@ -139,7 +140,7 @@ function CRMeetingModal({ lead, meeting, onClose, onSave }: {
       scheduled_at: new Date(form.scheduled_at).toISOString(),
       duration_min: form.duration_min,
       meet_link:    form.meet_link || null,
-      attendees:    form.attendees.split(',').map(s => s.trim()).filter(Boolean),
+      attendees:    form.attendees,
       notes:        form.notes || null,
       status:       form.status,
       updated_at:   new Date().toISOString(),
@@ -220,8 +221,8 @@ function CRMeetingModal({ lead, meeting, onClose, onSave }: {
           </div>
 
           <div>
-            <label className={lbl}>Participantes (e-mails separados por vírgula)</label>
-            <input className={inp} placeholder="contato@escola.com.br, gerente@aionedu.com.br" value={form.attendees} onChange={e => set('attendees', e.target.value)} />
+            <label className={lbl}>Participantes</label>
+            <AttendeesPicker clientEmail={lead.email} consultants={consultants} value={form.attendees} onChange={v => set('attendees', v)} />
           </div>
 
           <div>
@@ -720,6 +721,7 @@ function LeadModal({ lead: initialLead, consultants, onClose, onSave, onStartOnb
         <CRMeetingModal
           lead={initialLead}
           meeting={meetingModal === 'new' ? null : meetingModal}
+          consultants={consultants}
           onClose={() => setMeetingModal(null)}
           onSave={() => { setMeetingModal(null); loadMeetings() }}
         />
@@ -1131,7 +1133,7 @@ export default function AdminCRM() {
     setLoading(true)
     const [leadsRes, consultRes, meetingsRes] = await Promise.all([
       supabase.from('crm_leads').select('*').order('updated_at', { ascending: false }),
-      supabase.from('users').select('id, full_name').eq('user_type', 'consultant'),
+      supabase.from('users').select('id, full_name, email').eq('user_type', 'consultant'),
       supabase.from('crm_meetings').select('lead_id').eq('status', 'scheduled'),
     ])
     if (cancelledRef.current) return
