@@ -876,7 +876,7 @@ export default function AdminAionInbox() {
 
         {/* Tab content */}
         <div style={{ flex: 1, overflow: 'hidden', display: tab === 'inbox' || tab === 'flow' ? 'flex' : 'block', flexDirection: 'column' }}>
-          {tab === 'inbox' && <AionInboxHub aionPlatformId={aionPlatformId} onManageQuickReplies={() => setTab('settings')} />}
+          {tab === 'inbox' && <AionInboxHub isAionInbox={true} />}
           {tab === 'flow' && (
             aionPlatformId
               ? <FlowEditor institutionId={aionPlatformId} onClose={() => setTab('inbox')} />
