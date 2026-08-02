@@ -9,6 +9,7 @@ import {
   X, Paperclip, Smile, CornerUpLeft, SmilePlus, Save, Zap,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -82,6 +83,18 @@ interface AionCrmMeeting {
   type: string
   scheduled_at: string
   status: string
+}
+
+// Template buscado ao vivo na Graph API (mesmo shape de InstitutionDetails.tsx
+// loadWaTemplates() / WhatsAppHub.tsx) — não cacheado em whatsapp_templates
+// porque essa tabela tem institution_id com FK real pra institutions(id), e
+// platform_whatsapp.id (a pseudo-instituição do Inbox Áion) violaria essa FK.
+interface AionWaTemplate {
+  id?: string
+  name: string
+  language: string
+  status?: string
+  components?: { type: string; text?: string; [key: string]: unknown }[]
 }
 
 interface ConsultantUser {
@@ -195,6 +208,19 @@ function interactionLabel(type: string): string {
   if (type === 'email') return 'E-mail'
   if (type === 'meeting') return 'Reunião'
   return 'Nota'
+}
+
+// Mesma lógica de buildTemplatePreview() em WhatsAppHub.tsx — resolve {{n}}
+// no corpo do template com os valores preenchidos, pra pré-visualização.
+function buildAionTemplatePreview(tmpl: AionWaTemplate | undefined, vars: Record<string, string>): string {
+  if (!tmpl) return '[Template]'
+  const bodyComp = tmpl.components?.find(c => c.type === 'BODY')
+  if (!bodyComp?.text) return `[Template: ${tmpl.name}]`
+  let text: string = bodyComp.text
+  Object.entries(vars).forEach(([n, val]) => {
+    text = text.replace(new RegExp(`\\{\\{${n}\\}\\}`, 'g'), val)
+  })
+  return text
 }
 
 async function compressImage(file: File, maxMB = 4): Promise<File> {
@@ -604,6 +630,7 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
   aionPlatformId?: string
   onManageQuickReplies?: () => void
 } = {}) {
+  const { user } = useAuth()
   // ── state ──
   const [conversations, setConversations]           = useState<AionConversation[]>([])
   const [activeConv, setActiveConv]                 = useState<AionConversation | null>(null)
@@ -642,6 +669,18 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
   // respostas rápidas — whatsapp_quick_replies com platform_whatsapp.id como pseudo-institution_id
   const [showQuickReplies, setShowQuickReplies]     = useState(false)
   const [quickReplies, setQuickReplies]             = useState<{ id: string; label: string; text: string; shortcut: string | null }[]>([])
+  // mensagens agendadas — sempre via template aprovado (reativação fora da
+  // janela de 24h exige template; texto livre é rejeitado pela Meta nesse caso)
+  const [showScheduleModal, setShowScheduleModal]   = useState(false)
+  const [aionTemplates, setAionTemplates]           = useState<AionWaTemplate[]>([])
+  const [loadingTemplates, setLoadingTemplates]     = useState(false)
+  const [scheduleTemplateName, setScheduleTemplateName] = useState('')
+  const [scheduleTemplateVars, setScheduleTemplateVars] = useState<Record<string, string>>({})
+  const [scheduleSendAt, setScheduleSendAt]         = useState('')
+  const [savingSchedule, setSavingSchedule]         = useState(false)
+  const [scheduleError, setScheduleError]           = useState('')
+  const [scheduledMessages, setScheduledMessages]   = useState<{ id: string; content: string; send_at: string; message_type: string }[]>([])
+  const [loadingScheduled, setLoadingScheduled]     = useState(false)
   // media state
   const [replyTo, setReplyTo]                       = useState<AionMessage | null>(null)
   const [pendingFile, setPendingFile]               = useState<File | null>(null)
@@ -710,6 +749,24 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
         if (data) setQuickReplies(data.map((r: any) => ({ id: r.id, label: r.title, text: r.message, shortcut: r.shortcut ?? null })))
       })
   }, [aionPlatformId])
+
+  // ── load mensagens agendadas pendentes da conversa ativa ──
+  const loadScheduledMessages = useCallback(async (convId: string) => {
+    setLoadingScheduled(true)
+    const { data } = await supabase
+      .from('aion_scheduled_messages')
+      .select('id, content, send_at, message_type')
+      .eq('conversation_id', convId)
+      .eq('status', 'pending')
+      .order('send_at', { ascending: true })
+    setScheduledMessages(data ?? [])
+    setLoadingScheduled(false)
+  }, [])
+
+  useEffect(() => {
+    if (!activeConv?.id) { setScheduledMessages([]); return }
+    loadScheduledMessages(activeConv.id)
+  }, [activeConv?.id, loadScheduledMessages])
 
   // ── stop mic on unmount ──
   useEffect(() => {
@@ -1244,6 +1301,87 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
     }
   }
 
+  // Busca templates aprovados direto na Graph API (mesmo padrão de
+  // InstitutionDetails.tsx:loadWaTemplates()) — sem cache local, ver comentário
+  // da migration 20260803000000 sobre por que whatsapp_templates não serve aqui.
+  const loadAionTemplates = async () => {
+    setLoadingTemplates(true)
+    try {
+      const { data: waRow } = await supabase.from('platform_whatsapp').select('waba_id').eq('connected', true).maybeSingle()
+      const wabaId = waRow?.waba_id
+      if (!wabaId) { setAionTemplates([]); return }
+
+      const { data: tokenRow } = await supabase.from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
+      const token = tokenRow?.value || ''
+      if (!token) { setAionTemplates([]); return }
+
+      const res = await fetch(`https://graph.facebook.com/v18.0/${wabaId}/message_templates?limit=50`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      const approved = ((data.data || []) as AionWaTemplate[]).filter(t => t.status?.toUpperCase() === 'APPROVED')
+      setAionTemplates(approved)
+    } catch (e) {
+      console.error('[schedule] erro ao carregar templates:', e)
+      setAionTemplates([])
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }
+
+  const openScheduleModal = () => {
+    setScheduleTemplateName('')
+    setScheduleTemplateVars({})
+    setScheduleSendAt('')
+    setScheduleError('')
+    setShowScheduleModal(true)
+    loadAionTemplates()
+  }
+
+  const handleSchedule = async () => {
+    if (!activeConv || savingSchedule) return
+    const tmpl = aionTemplates.find(t => t.name === scheduleTemplateName)
+    if (!tmpl) { setScheduleError('Selecione um template.'); return }
+    if (!scheduleSendAt) { setScheduleError('Escolha a data e hora de envio.'); return }
+    const sendAtIso = new Date(scheduleSendAt).toISOString()
+    if (new Date(sendAtIso).getTime() <= Date.now()) { setScheduleError('A data/hora precisa ser no futuro.'); return }
+
+    const varKeys = Object.keys(scheduleTemplateVars)
+    const components = varKeys.length > 0
+      ? [{ type: 'body', parameters: varKeys.map(k => ({ type: 'text', text: scheduleTemplateVars[k] })) }]
+      : (tmpl.components ?? [])
+    const preview = buildAionTemplatePreview(tmpl, scheduleTemplateVars)
+
+    setSavingSchedule(true)
+    setScheduleError('')
+    try {
+      const { error } = await supabase.from('aion_scheduled_messages').insert({
+        conversation_id:     activeConv.id,
+        remote_jid:           activeConv.remote_jid,
+        message_type:         'template',
+        content:               preview,
+        template_name:         tmpl.name,
+        template_language:     tmpl.language || 'pt_BR',
+        template_components:   components,
+        send_at:               sendAtIso,
+        created_by:            user?.id || null,
+      })
+      if (error) throw error
+      setShowScheduleModal(false)
+      await loadScheduledMessages(activeConv.id)
+    } catch (e: any) {
+      setScheduleError(e?.message || 'Erro ao agendar mensagem.')
+    } finally {
+      setSavingSchedule(false)
+    }
+  }
+
+  const cancelScheduledMessage = async (id: string) => {
+    if (!confirm('Cancelar esta mensagem agendada?')) return
+    await supabase.from('aion_scheduled_messages').update({ status: 'cancelled' }).eq('id', id)
+    setScheduledMessages(prev => prev.filter(m => m.id !== id))
+  }
+
   const filteredConvs = conversations.filter(c => {
     if (filter === 'unread') return (c.unread_count ?? 0) > 0
     if (filter === 'leads') return c.queue === 'leads'
@@ -1545,9 +1683,10 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {([
-                    { icon: Paperclip, active: showAttach,       onClick: () => { setShowAttach(v => !v); setShowEmojiPicker(false); setShowQuickReplies(false) }, title: 'Anexar' },
-                    { icon: Zap,       active: showQuickReplies, onClick: () => { setShowQuickReplies(v => !v); setShowAttach(false); setShowEmojiPicker(false) }, title: 'Respostas rápidas' },
-                    { icon: Smile,     active: showEmojiPicker,  onClick: () => { setShowEmojiPicker(v => !v); setShowAttach(false); setShowQuickReplies(false) }, title: 'Emoji'  },
+                    { icon: Paperclip, active: showAttach,        onClick: () => { setShowAttach(v => !v); setShowEmojiPicker(false); setShowQuickReplies(false) }, title: 'Anexar' },
+                    { icon: Zap,       active: showQuickReplies,  onClick: () => { setShowQuickReplies(v => !v); setShowAttach(false); setShowEmojiPicker(false) }, title: 'Respostas rápidas' },
+                    { icon: Clock,     active: showScheduleModal, onClick: () => { setShowAttach(false); setShowEmojiPicker(false); setShowQuickReplies(false); openScheduleModal() }, title: 'Agendar mensagem' },
+                    { icon: Smile,     active: showEmojiPicker,   onClick: () => { setShowEmojiPicker(v => !v); setShowAttach(false); setShowQuickReplies(false) }, title: 'Emoji'  },
                   ] as const).map(btn => {
                     const IconComp = btn.icon
                     return (
@@ -1612,6 +1751,97 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
                 Criar Lead
               </button>
               <button onClick={() => { setShowLeadModal(false); setLeadForm({ name: '', phone: '', email: '', grade_interest: '' }) }}
+                style={{ padding: '10px 16px', background: '#F1F5F9', color: '#64748B', fontSize: 13, fontWeight: 600, borderRadius: 9, border: 'none', cursor: 'pointer' }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Agendar Mensagem */}
+      {showScheduleModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: '28px 28px 24px', width: 460, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', marginBottom: 4 }}>Agendar Mensagem</div>
+            <p style={{ fontSize: 12, color: '#94A3B8', marginTop: 0, marginBottom: 16 }}>
+              Só templates aprovados pela Meta — necessário pra reativar contato fora da janela de 24h.
+            </p>
+
+            {scheduleError && (
+              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#DC2626', marginBottom: 14 }}>
+                {scheduleError}
+              </div>
+            )}
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, display: 'block' }}>Template aprovado</label>
+              {loadingTemplates ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}>
+                  <Loader2 style={{ width: 18, height: 18, color: '#00A896', animation: 'spin 1s linear infinite' }} />
+                </div>
+              ) : aionTemplates.length === 0 ? (
+                <p style={{ fontSize: 12, color: '#94A3B8', margin: 0, lineHeight: 1.5 }}>
+                  Nenhum template aprovado encontrado. Confirme se o WhatsApp da Áion está conectado e tem templates aprovados no Gerenciador de Negócios da Meta.
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 160, overflowY: 'auto' }}>
+                  {aionTemplates.map(tpl => {
+                    const bodyText = tpl.components?.find(c => c.type === 'BODY')?.text || tpl.name
+                    const isSelected = scheduleTemplateName === tpl.name
+                    return (
+                      <button key={tpl.id || tpl.name}
+                        onClick={() => { setScheduleTemplateName(tpl.name); setScheduleTemplateVars({}) }}
+                        style={{ textAlign: 'left', padding: '8px 10px', background: isSelected ? '#E6F7F5' : '#FFFFFF', border: `1.5px solid ${isSelected ? '#00A896' : '#E2E8F0'}`, borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s' }}>
+                        <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{tpl.name}</p>
+                        <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bodyText}</p>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {scheduleTemplateName && (() => {
+              const tmpl = aionTemplates.find(t => t.name === scheduleTemplateName)
+              const bodyComp = tmpl?.components?.find(c => c.type === 'BODY')
+              const matches = bodyComp?.text ? [...bodyComp.text.matchAll(/\{\{(\d+)\}\}/g)] : []
+              return (
+                <div style={{ marginBottom: 14 }}>
+                  {matches.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                      <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#64748B' }}>Variáveis do template:</p>
+                      {matches.map(([, n]) => (
+                        <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 11, color: '#94A3B8', whiteSpace: 'nowrap' }}>{`{{${n}}}`}</span>
+                          <input value={scheduleTemplateVars[n] || ''}
+                            onChange={e => setScheduleTemplateVars(v => ({ ...v, [n]: e.target.value }))}
+                            placeholder={`Variável ${n}`}
+                            style={{ flex: 1, padding: '6px 10px', fontSize: 12, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 7, color: '#1A2B4A', outline: 'none' }} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p style={{ fontSize: 12, color: '#64748B', margin: 0, background: '#F8FAFC', borderRadius: 8, padding: '8px 10px', lineHeight: 1.5 }}>
+                    {buildAionTemplatePreview(tmpl, scheduleTemplateVars)}
+                  </p>
+                </div>
+              )
+            })()}
+
+            <div style={{ marginBottom: 6 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, display: 'block' }}>Data e hora de envio</label>
+              <input type="datetime-local" value={scheduleSendAt} onChange={e => setScheduleSendAt(e.target.value)}
+                style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #E2E8F0', borderRadius: 8, fontSize: 14, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button onClick={handleSchedule} disabled={savingSchedule || !scheduleTemplateName}
+                style={{ flex: 1, padding: '10px 0', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 9, border: 'none', cursor: (savingSchedule || !scheduleTemplateName) ? 'not-allowed' : 'pointer', opacity: (savingSchedule || !scheduleTemplateName) ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                {savingSchedule ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> : <Clock style={{ width: 14, height: 14 }} />}
+                Agendar
+              </button>
+              <button onClick={() => setShowScheduleModal(false)}
                 style={{ padding: '10px 16px', background: '#F1F5F9', color: '#64748B', fontSize: 13, fontWeight: 600, borderRadius: 9, border: 'none', cursor: 'pointer' }}>
                 Cancelar
               </button>
@@ -1989,6 +2219,39 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
                   Iniciado em {new Date(activeConv.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                 </div>
               </div>
+            </PanelSection>
+
+            {/* MENSAGENS AGENDADAS */}
+            <PanelSection title="Mensagens Agendadas">
+              {loadingScheduled ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 8 }}>
+                  <Loader2 style={{ width: 16, height: 16, color: '#00A896', animation: 'spin 1s linear infinite' }} />
+                </div>
+              ) : scheduledMessages.length === 0 ? (
+                <div style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '6px 0' }}>
+                  Nenhuma mensagem agendada pra este contato.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {scheduledMessages.map(m => (
+                    <div key={m.id} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#00A896', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Clock style={{ width: 11, height: 11 }} />
+                          {new Date(m.send_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <button onClick={() => cancelScheduledMessage(m.id)} title="Cancelar"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: 2, flexShrink: 0 }}>
+                          <X style={{ width: 13, height: 13 }} />
+                        </button>
+                      </div>
+                      <p style={{ fontSize: 12, color: '#64748B', margin: '4px 0 0', lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any }}>
+                        {m.content}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </PanelSection>
 
           </div>
