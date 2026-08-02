@@ -49,7 +49,7 @@ interface Conversation {
   labels: Label[]
   messages: Message[]
   isGroup: boolean
-  lead_id?: string
+  aion_lead_id?: string
   grade?: string
   source?: string
   responsible?: string
@@ -190,7 +190,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
       online: false,
       labels: [],
       isGroup,
-      lead_id: convData?.lead_id || jidMsgs.find(m => m.lead_id)?.lead_id,
+      aion_lead_id: (convData as any)?.aion_lead_id || jidMsgs.find(m => m.lead_id)?.lead_id,
       assigned_user_id: convData?.assigned_user_id,
       assigned_user_name: convData?.assigned_user_name,
       contact_type: convData?.contact_type,
@@ -241,7 +241,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
         online: false,
         labels: [],
         isGroup,
-        lead_id: conv.lead_id,
+        aion_lead_id: (conv as any).aion_lead_id,
         assigned_user_id: conv.assigned_user_id,
         assigned_user_name: conv.assigned_user_name,
         contact_type: conv.contact_type,
@@ -1075,10 +1075,10 @@ export default function AionWhatsAppHub() {
     if (!activeId) return
     const rJid = rawJid(activeId)
     await supabase.from('whatsapp_conversations')
-      .update({ lead_id: leadId, updated_at: new Date().toISOString() })
+      .update({ aion_lead_id: leadId, updated_at: new Date().toISOString() })
       .eq('is_aion_inbox', true)
       .eq('remote_jid', rJid)
-    setConversations(prev => prev.map(c => c.id === activeId ? { ...c, lead_id: leadId } : c))
+    setConversations(prev => prev.map(c => c.id === activeId ? { ...c, aion_lead_id: leadId } : c))
     const found = leadResults.find(l => l.id === leadId)
     if (found) setConversations(prev => prev.map(c =>
       c.id === activeId ? { ...c, name: found.responsible_name || found.student_name || c.name } : c
@@ -1412,7 +1412,7 @@ export default function AionWhatsAppHub() {
             name: payload.new?.contact_name || c.name,
             status: payload.new?.status || c.status,
             contact_type: payload.new?.contact_type || c.contact_type,
-            lead_id: payload.new?.lead_id || c.lead_id,
+            aion_lead_id: payload.new?.aion_lead_id || c.aion_lead_id,
             tags: payload.new?.tags || c.tags,
             assigned_user_id:   'assigned_user_id'   in payload.new ? payload.new.assigned_user_id   : c.assigned_user_id,
             assigned_user_name: 'assigned_user_name' in payload.new ? payload.new.assigned_user_name : c.assigned_user_name,
@@ -1431,14 +1431,14 @@ export default function AionWhatsAppHub() {
           table: 'leads',
           filter: `institution_id=eq.${effectiveInstitutionId}`
         }, (payload: any) => {
-          const currentLeadId = conversationsRef.current.find(c => c.id === activeIdRef.current)?.lead_id
+          const currentLeadId = conversationsRef.current.find(c => c.id === activeIdRef.current)?.aion_lead_id
           if (payload.new?.id === currentLeadId) {
             setLeadData(payload.new)
             setLeadEditForm(payload.new)
           }
           if (payload.new?.responsible_name) {
             setConversations(prev => prev.map(c =>
-              c.lead_id === payload.new.id
+              c.aion_lead_id === payload.new.id
                 ? { ...c, name: payload.new.responsible_name }
                 : c
             ))
@@ -1476,7 +1476,7 @@ export default function AionWhatsAppHub() {
   useEffect(() => {
     if (rightPanelTab === 'history' && activeId) {
       loadHistory(rawJid(activeId))
-      const leadId = conversations.find(c => c.id === activeId)?.lead_id
+      const leadId = conversations.find(c => c.id === activeId)?.aion_lead_id
       if (leadId) loadLeadCrmEvents(leadId)
     }
   }, [rightPanelTab, activeId])
@@ -2526,11 +2526,11 @@ export default function AionWhatsAppHub() {
       if (activeId) {
         const rJid = rawJid(activeId)
         await supabase.from('whatsapp_conversations')
-          .update({ lead_id: lead.id })
+          .update({ aion_lead_id: lead.id })
           .eq('remote_jid', rJid)
           .eq('is_aion_inbox', true)
         setConversations(prev => prev.map(c => c.id === activeId
-          ? { ...c, lead_id: lead.id, contact_type: 'lead', name: leadForm.responsible_name || c.name }
+          ? { ...c, aion_lead_id: lead.id, contact_type: 'lead', name: leadForm.responsible_name || c.name }
           : c
         ))
         setLeadData(lead)
@@ -3147,7 +3147,7 @@ export default function AionWhatsAppHub() {
                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                     Bloquear contato
                   </button>
-                  {activeConv?.lead_id && (
+                  {activeConv?.aion_lead_id && (
                     <button onClick={() => { navigate('/super-admin/crm'); setShowMoreMenu(false) }}
                       style={{ width: '100%', textAlign: 'left', padding: '10px 16px', fontSize: 13, color: '#1A2B4A', background: 'none', border: 'none', cursor: 'pointer' }}
                       onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFC')}
@@ -3719,7 +3719,7 @@ export default function AionWhatsAppHub() {
                       )}
 
                       {/* Who is this contact? */}
-                      {!activeConv.isGroup && (!activeConv.contact_type || activeConv.contact_type === 'unknown') && !activeConv.lead_id && (
+                      {!activeConv.isGroup && (!activeConv.contact_type || activeConv.contact_type === 'unknown') && !activeConv.aion_lead_id && (
                         <div style={{ margin: '0 12px', padding: '10px 12px', background: '#fffbeb', borderRadius: 10, border: '1px solid #fde68a' }}>
                           <p style={{ fontSize: 12, fontWeight: 600, color: '#d97706', margin: '0 0 8px' }}>Quem é esse contato?</p>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
@@ -3968,7 +3968,7 @@ export default function AionWhatsAppHub() {
                     </button>
                     {!collapseLead && (
                       <div style={{ padding: '0 12px 12px' }}>
-                        {activeConv.lead_id ? (
+                        {activeConv.aion_lead_id ? (
                           leadData ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                               {/* Lead data header */}

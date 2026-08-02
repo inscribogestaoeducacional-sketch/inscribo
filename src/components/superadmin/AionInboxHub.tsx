@@ -26,7 +26,7 @@ interface AionConversation {
   queue?: string
   tags?: string[]
   contact_type?: string
-  lead_id?: string
+  aion_lead_id?: string
   created_at: string
   is_aion_inbox?: boolean
 }
@@ -1087,8 +1087,8 @@ export default function AionInboxHub() {
       if (newLead) {
         setLead(newLead as AionLead)
         await supabase.from('whatsapp_conversations')
-          .update({ contact_type: 'lead', lead_id: newLead.id }).eq('id', activeConv.id)
-        setActiveConv(prev => prev ? { ...prev, contact_type: 'lead', lead_id: (newLead as AionLead).id } : prev)
+          .update({ contact_type: 'lead', aion_lead_id: newLead.id }).eq('id', activeConv.id)
+        setActiveConv(prev => prev ? { ...prev, contact_type: 'lead', aion_lead_id: (newLead as AionLead).id } : prev)
       }
     } finally {
       setSavingLead(false)
@@ -1112,8 +1112,8 @@ export default function AionInboxHub() {
     const { data: linkedLead } = await supabase.from('crm_leads').select('*').eq('id', leadId).maybeSingle()
     if (linkedLead) setLead(linkedLead as AionLead)
     await supabase.from('whatsapp_conversations')
-      .update({ lead_id: leadId, contact_type: 'lead' }).eq('id', activeConv.id)
-    setActiveConv(prev => prev ? { ...prev, lead_id: leadId, contact_type: 'lead' } : prev)
+      .update({ aion_lead_id: leadId, contact_type: 'lead' }).eq('id', activeConv.id)
+    setActiveConv(prev => prev ? { ...prev, aion_lead_id: leadId, contact_type: 'lead' } : prev)
     setLinkingLead(false); setLeadSearch(''); setLeadResults([])
   }
 

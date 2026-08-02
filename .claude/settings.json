@@ -75,7 +75,8 @@
       "Bash(rm \"api/evolution/[...route].ts\" \"api/evolution/config.ts\")",
       "Bash(rmdir \"api/evolution\")",
       "Bash(xargs grep -l \"ON users\\\\b\")",
-      "Bash(echo \"attendeespicker_matches: $?\")"
+      "Bash(echo \"attendeespicker_matches: $?\")",
+      "Bash(xargs grep -l \"lead_id\")"
     ],
     "additionalDirectories": [
       "\\tmp"
