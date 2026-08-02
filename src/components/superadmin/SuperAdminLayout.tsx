@@ -21,19 +21,52 @@ interface Notification {
 }
 
 // ─── menus ────────────────────────────────────────────────────────────────
-const ADMIN_MENU = [
-  { path: '/super-admin',              label: 'Dashboard',     icon: Home,        exact: true },
-  { path: '/super-admin/crm',          label: 'CRM Comercial', icon: TrendingUp               },
-  { path: '/super-admin/schools',               label: 'Escolas',           icon: Building2  },
-  { path: '/super-admin/market-intelligence',   label: 'Intel. Mercado',    icon: BarChart3  },
-  { path: '/super-admin/financial',             label: 'Financeiro',        icon: DollarSign },
-  { path: '/super-admin/whatsapp',     label: 'WhatsApp',      icon: MessageCircle            },
-  { path: '/super-admin/aion-inbox',   label: 'Inbox Áion',    icon: Inbox                    },
-  { path: '/super-admin/consultants',  label: 'Consultores',   icon: Users                    },
-  { path: '/super-admin/settings',     label: 'Configurações', icon: Settings                 },
+interface MenuItem { path: string; label: string; icon: any; exact?: boolean }
+interface MenuGroup { title: string; items: MenuItem[] }
+
+const ADMIN_GROUPS: MenuGroup[] = [
+  {
+    title: 'Visão geral',
+    items: [
+      { path: '/super-admin',            label: 'Dashboard',     icon: Home, exact: true },
+    ],
+  },
+  {
+    title: 'Comercial',
+    items: [
+      { path: '/super-admin/crm',        label: 'CRM Comercial', icon: TrendingUp  },
+      { path: '/super-admin/onboarding', label: 'Onboarding',    icon: CheckCircle2 },
+      { path: '/super-admin/contracts',  label: 'Contratos',     icon: FileText    },
+      { path: '/super-admin/aion-inbox', label: 'Inbox Áion',    icon: Inbox       },
+    ],
+  },
+  {
+    title: 'Escolas',
+    items: [
+      { path: '/super-admin/schools',    label: 'Escolas',       icon: Building2   },
+    ],
+  },
+  {
+    title: 'Sistema',
+    items: [
+      { path: '/super-admin/settings',              label: 'Configurações',   icon: Settings      },
+      { path: '/super-admin/consultants',            label: 'Consultores',    icon: Users         },
+      { path: '/super-admin/market-intelligence',    label: 'Intel. Mercado', icon: BarChart3     },
+      { path: '/super-admin/updates',                label: 'Updates',        icon: BookOpen      },
+      { path: '/super-admin/whatsapp',                label: 'WhatsApp',       icon: MessageCircle },
+    ],
+  },
+  {
+    title: 'Financeiro',
+    items: [
+      { path: '/super-admin/financial',  label: 'Financeiro',    icon: DollarSign  },
+    ],
+  },
 ]
 
-const CONSULTANT_MENU = [
+const ADMIN_MENU_FLAT = ADMIN_GROUPS.flatMap(g => g.items)
+
+const CONSULTANT_MENU: MenuItem[] = [
   { path: '/super-admin/consultant',           label: 'Dashboard',      icon: Home,      exact: true },
   { path: '/super-admin/crm',                  label: 'CRM Comercial',  icon: TrendingUp            },
   { path: '/super-admin/consultant/schools',   label: 'Minhas Escolas', icon: Building2             },
@@ -54,6 +87,9 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
   const { user, signOut } = useAuth()
 
   const [sidebarOpen, setSidebarOpen]     = useState(() => localStorage.getItem('sa-sidebar') !== 'false')
+  const [openGroups,  setOpenGroups]      = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(ADMIN_GROUPS.map(g => [g.title, true]))
+  )
   const [profileOpen, setProfileOpen]     = useState(false)
   const [notifOpen,   setNotifOpen]       = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -65,7 +101,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
   const notifRef   = useRef<HTMLDivElement>(null)
 
   const isConsultant = user?.user_type === 'consultant'
-  const menuItems    = isConsultant ? CONSULTANT_MENU : ADMIN_MENU
+  const flatMenuItems = isConsultant ? CONSULTANT_MENU : ADMIN_MENU_FLAT
   const initials     = (user?.full_name || 'A').split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
 
   // ── load ─────────────────────────────────────────────
@@ -92,6 +128,10 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
       localStorage.setItem('sa-sidebar', String(!v))
       return !v
     })
+  }
+
+  const toggleGroup = (title: string) => {
+    setOpenGroups(prev => ({ ...prev, [title]: !prev[title] }))
   }
 
   const loadNotifications = async () => {
@@ -162,7 +202,41 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
   const totalBadge = unread + overdueFollowups + todayMeetings
 
   // label da página atual
-  const currentLabel = menuItems.find(m => isActive(m.path, m.exact))?.label || 'Admin Geral'
+  const currentLabel = flatMenuItems.find(m => isActive(m.path, m.exact))?.label || 'Admin Geral'
+
+  const renderNavItem = (item: MenuItem) => {
+    const active = isActive(item.path, item.exact)
+    const Icon   = item.icon
+
+    // badge por item
+    const badge = item.path === '/super-admin/crm' ? overdueFollowups : 0
+
+    return (
+      <Link key={item.path} to={item.path}
+        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all relative group
+          ${active
+            ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-sm'
+            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}>
+        <Icon className="w-4 h-4 flex-shrink-0" />
+        {sidebarOpen && (
+          <span className="text-sm font-semibold truncate flex-1">{item.label}</span>
+        )}
+        {badge > 0 && (
+          <span className={`min-w-[18px] h-[18px] text-[10px] font-bold px-1 rounded-full flex items-center justify-center flex-shrink-0
+            ${active ? 'bg-white text-cyan-600' : 'bg-red-500 text-white'}`}>
+            {badge}
+          </span>
+        )}
+        {/* Tooltip quando sidebar fechada */}
+        {!sidebarOpen && (
+          <div className="absolute left-full ml-2 px-2.5 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
+            {item.label}{badge > 0 ? ` (${badge})` : ''}
+            <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900" />
+          </div>
+        )}
+      </Link>
+    )
+  }
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -185,40 +259,34 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          {menuItems.map(item => {
-            const active = isActive(item.path, item.exact)
-            const Icon   = item.icon
-
-            // badge por item
-            const badge = item.path === '/super-admin/crm' ? overdueFollowups : 0
-
-            return (
-              <Link key={item.path} to={item.path}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all relative group
-                  ${active
-                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}>
-                <Icon className="w-4 h-4 flex-shrink-0" />
-                {sidebarOpen && (
-                  <span className="text-sm font-semibold truncate flex-1">{item.label}</span>
-                )}
-                {badge > 0 && (
-                  <span className={`min-w-[18px] h-[18px] text-[10px] font-bold px-1 rounded-full flex items-center justify-center flex-shrink-0
-                    ${active ? 'bg-white text-cyan-600' : 'bg-red-500 text-white'}`}>
-                    {badge}
-                  </span>
-                )}
-                {/* Tooltip quando sidebar fechada */}
-                {!sidebarOpen && (
-                  <div className="absolute left-full ml-2 px-2.5 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
-                    {item.label}{badge > 0 ? ` (${badge})` : ''}
-                    <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900" />
-                  </div>
-                )}
-              </Link>
-            )
-          })}
+        <nav className="flex-1 px-2 py-3 space-y-3 overflow-y-auto">
+          {isConsultant ? (
+            <div className="space-y-0.5">
+              {CONSULTANT_MENU.map(item => renderNavItem(item))}
+            </div>
+          ) : (
+            ADMIN_GROUPS.map(group => {
+              const groupOpen = openGroups[group.title] !== false
+              return (
+                <div key={group.title}>
+                  {sidebarOpen && (
+                    <button onClick={() => toggleGroup(group.title)}
+                      className="w-full flex items-center justify-between px-3 py-1.5 text-left group">
+                      <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider group-hover:text-gray-600 transition-colors">
+                        {group.title}
+                      </span>
+                      <ChevronDown className={`w-3.5 h-3.5 text-gray-300 group-hover:text-gray-500 transition-transform duration-200 ${groupOpen ? '' : '-rotate-90'}`} />
+                    </button>
+                  )}
+                  {(!sidebarOpen || groupOpen) && (
+                    <div className="space-y-0.5">
+                      {group.items.map(item => renderNavItem(item))}
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )}
         </nav>
 
         {/* User footer */}
