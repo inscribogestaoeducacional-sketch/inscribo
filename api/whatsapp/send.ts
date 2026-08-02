@@ -23,13 +23,16 @@ async function getWAConfig() {
 const GRAPH_URL = 'https://graph.facebook.com/v19.0'
 const META_FETCH_TIMEOUT_MS = 30000
 
-type MsgType = 'text' | 'image' | 'video' | 'audio' | 'document'
+type MsgType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'template'
 
 // ── Build Meta Cloud API payload per message type ────────────────────────────
 function buildPayload(
   to: string,
   type: MsgType,
-  opts: { message?: string; mediaUrl?: string; caption?: string; filename?: string; quotedMessageId?: string }
+  opts: {
+    message?: string; mediaUrl?: string; caption?: string; filename?: string; quotedMessageId?: string
+    templateName?: string; templateLanguage?: string; templateComponents?: unknown[]
+  }
 ): object {
   const base = { messaging_product: 'whatsapp', recipient_type: 'individual', to, type }
   const context = opts.quotedMessageId ? { context: { message_id: opts.quotedMessageId } } : {}
@@ -52,6 +55,20 @@ function buildPayload(
           ...(opts.caption ? { caption: opts.caption } : {}),
         },
       }
+    case 'template':
+      // Mesmo shape já usado por aion-scheduled-send (components em minúsculo,
+      // sem normalização de case — Meta aceita, é o mesmo payload que a Edge
+      // Function envia hoje pras mensagens agendadas).
+      return {
+        ...base,
+        template: {
+          name:     opts.templateName!,
+          language: { code: opts.templateLanguage || 'pt_BR' },
+          ...(opts.templateComponents && opts.templateComponents.length > 0
+            ? { components: opts.templateComponents }
+            : {}),
+        },
+      }
     default:
       return { ...base, text: { body: '[unsupported type]', preview_url: false } }
   }
@@ -64,6 +81,7 @@ function contentPreview(type: MsgType, message?: string, caption?: string, filen
   if (type === 'video')    return caption || '[Vídeo]'
   if (type === 'audio')    return '[Áudio]'
   if (type === 'document') return filename ? `[Documento] ${filename}` : '[Documento]'
+  if (type === 'template') return caption || '[Template]'
   return '[Mídia]'
 }
 
@@ -143,13 +161,18 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
     quoted_message_id,
     quoted_content,
     quoted_from_me,
+    templateName,
+    templateLanguage,
+    templateComponents = [],
   } = req.body ?? {}
 
   // ── Validation ──
   if (!to)                            return res.status(400).json({ error: 'to é obrigatório' })
   if (!isAionSend && !institution_id) return res.status(400).json({ error: 'institution_id é obrigatório para envio de escola' })
   if (type === 'text' && !message)    return res.status(400).json({ error: 'message é obrigatório para type=text' })
-  if (type !== 'text' && !mediaUrl && !base64)
+  if (type === 'template' && !templateName)
+    return res.status(400).json({ error: 'templateName é obrigatório para type=template' })
+  if (type !== 'text' && type !== 'template' && !mediaUrl && !base64)
     return res.status(400).json({ error: `mediaUrl ou base64 é obrigatório para type=${type}` })
 
   try {
@@ -202,7 +225,7 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
 
     // ── Resolve media URL (upload if base64 provided) ──
     let resolvedMediaUrl: string | undefined = mediaUrl
-    if (type !== 'text' && !resolvedMediaUrl && base64 && mimetype) {
+    if (type !== 'text' && type !== 'template' && !resolvedMediaUrl && base64 && mimetype) {
       resolvedMediaUrl = await uploadToStorage(supabase, base64, mimetype,
         filename || `media.${mimetype.split('/')[1] || 'bin'}`,
         institution_id
@@ -216,6 +239,9 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
       caption:        caption || undefined,
       filename:       filename || undefined,
       quotedMessageId: quoted_message_id || undefined,
+      templateName,
+      templateLanguage,
+      templateComponents,
     })
 
     console.log('send.ts - payload:', JSON.stringify(payload))

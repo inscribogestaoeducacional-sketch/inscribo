@@ -76,7 +76,8 @@
       "Bash(rmdir \"api/evolution\")",
       "Bash(xargs grep -l \"ON users\\\\b\")",
       "Bash(echo \"attendeespicker_matches: $?\")",
-      "Bash(xargs grep -l \"lead_id\")"
+      "Bash(xargs grep -l \"lead_id\")",
+      "Bash(grep -iE \"AionInboxHub|whatsapp[/\\\\\\\\\\\\\\\\]send\\\\.ts\")"
     ],
     "additionalDirectories": [
       "\\tmp"

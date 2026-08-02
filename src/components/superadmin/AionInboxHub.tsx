@@ -6,7 +6,7 @@ import {
   ExternalLink, UserPlus, Send, Check,
   Loader2, Image, FileText, Mic, Video,
   Tag, Clock, Calendar, Play, Pause,
-  X, Paperclip, Smile, CornerUpLeft, SmilePlus, Save, Zap, Copy,
+  X, Paperclip, Smile, CornerUpLeft, SmilePlus, Save, Zap, Copy, Search,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -20,6 +20,7 @@ interface AionConversation {
   contact_name?: string
   last_message?: string
   last_message_at?: string
+  last_customer_message_at?: string
   unread_count: number
   status: string
   assigned_user_id?: string
@@ -111,6 +112,7 @@ interface ConsultantUser {
 }
 
 type ConvFilter = 'all' | 'leads' | 'schools' | 'general' | 'unread'
+type AssignFilter = 'all' | 'mine' | 'unassigned'
 type RecorderState = 'idle' | 'recording' | 'preview'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -643,6 +645,14 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
   const [lead, setLead]                             = useState<AionLead | null>(null)
   const [consultants, setConsultants]               = useState<ConsultantUser[]>([])
   const [filter, setFilter]                         = useState<ConvFilter>('all')
+  const [assignFilter, setAssignFilter]             = useState<AssignFilter>('all')
+  const [search, setSearch]                         = useState('')
+  // Aguardando/Minhas/Paradas — mesmo threshold usado no lado escola
+  // (whatsapp_flows.stale_conversation_hours, WhatsAppHub.tsx), buscado com o
+  // mesmo padrão de pseudo-institution_id (platform_whatsapp.id) já usado pro
+  // bot flow do Inbox Áion.
+  const [staleHours, setStaleHours]                 = useState(24)
+  const [windowExpired, setWindowExpired]           = useState(false)
   const [inputText, setInputText]                   = useState('')
   const [sending, setSending]                       = useState(false)
   const [loadingMsgs, setLoadingMsgs]               = useState(false)
@@ -695,6 +705,13 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
   const [scheduleError, setScheduleError]           = useState('')
   const [scheduledMessages, setScheduledMessages]   = useState<{ id: string; content: string; send_at: string; message_type: string }[]>([])
   const [loadingScheduled, setLoadingScheduled]     = useState(false)
+  // envio imediato de template (reaproveita aionTemplates/loadAionTemplates do
+  // agendamento — estado de seleção separado pra não conflitar com o modal de agendar)
+  const [showTemplateSendModal, setShowTemplateSendModal] = useState(false)
+  const [templateSendName, setTemplateSendName]     = useState('')
+  const [templateSendVars, setTemplateSendVars]     = useState<Record<string, string>>({})
+  const [sendingTemplateNow, setSendingTemplateNow] = useState(false)
+  const [templateSendError, setTemplateSendError]   = useState('')
   // media state
   const [replyTo, setReplyTo]                       = useState<AionMessage | null>(null)
   const [pendingFile, setPendingFile]               = useState<File | null>(null)
@@ -763,6 +780,25 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
         if (data) setQuickReplies(data.map((r: any) => ({ id: r.id, label: r.title, text: r.message, shortcut: r.shortcut ?? null })))
       })
   }, [aionPlatformId])
+
+  // ── load stale_conversation_hours (mesma linha de whatsapp_flows usada pro bot) ──
+  useEffect(() => {
+    if (!aionPlatformId) return
+    supabase.from('whatsapp_flows').select('stale_conversation_hours').eq('institution_id', aionPlatformId).maybeSingle()
+      .then(({ data }) => { if (data?.stale_conversation_hours) setStaleHours(data.stale_conversation_hours) })
+  }, [aionPlatformId])
+
+  // ── janela de 24h (last_customer_message_at) — recalcula a cada minuto ──
+  useEffect(() => {
+    const calcExpired = () => {
+      if (!activeConv) { setWindowExpired(false); return }
+      const last = activeConv.last_customer_message_at
+      setWindowExpired(!last || Date.now() - new Date(last).getTime() > 24 * 60 * 60 * 1000)
+    }
+    calcExpired()
+    const interval = setInterval(calcExpired, 60000)
+    return () => clearInterval(interval)
+  }, [activeConv?.last_customer_message_at, activeConv?.id])
 
   // ── load mensagens agendadas pendentes da conversa ativa ──
   const loadScheduledMessages = useCallback(async (convId: string) => {
@@ -918,7 +954,7 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
 
   // ── send text ──
   const handleSend = async () => {
-    if (!activeConv || !inputText.trim() || sending) return
+    if (!activeConv || !inputText.trim() || sending || windowExpired) return
     const text = inputText.trim()
     const quotedMsg = replyTo
     const tempId = `temp-${Date.now()}`
@@ -953,6 +989,7 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
       setMessages(prev => prev.map(m =>
         m.id === tempId ? { ...m, id: data.wamid || tempId, message_id: data.wamid || undefined, status: 'sent' } : m
       ))
+      await markConversationEngaged()
     } catch (err: any) {
       setMessages(prev => prev.filter(m => m.id !== tempId))
       setSendError(err.message || 'Erro ao enviar mensagem.')
@@ -1025,6 +1062,7 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
       setUploadProgress(100)
       if (!sendRes.ok) throw new Error(`Send HTTP ${sendRes.status}`)
       setMessages(prev => prev.map(m => m.id === tempId ? { ...m, media_url: mediaUrl, status: 'sent' } : m))
+      await markConversationEngaged()
       setTimeout(() => { setPendingFile(null); setPendingFilePreview(null); setUploadProgress(0) }, 800)
     } catch (err: any) {
       setSendError('Erro ao enviar arquivo.')
@@ -1139,6 +1177,8 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
         if (!sendRes.ok) {
           const err = await sendRes.json().catch(() => ({}))
           setSendError(err.error || 'Erro ao enviar áudio.')
+        } else {
+          await markConversationEngaged()
         }
       } catch {
         setSendError('Erro ao enviar áudio.'); discardAudio()
@@ -1231,6 +1271,64 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
     await supabase.from('whatsapp_conversations').update({ status: 'waiting', assigned_user_id: null, assigned_user_name: null }).eq('id', activeConv.id)
     setActiveConv(prev => prev ? { ...prev, status: 'waiting', assigned_user_id: undefined, assigned_user_name: undefined } : prev)
     setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, status: 'waiting', assigned_user_id: undefined, assigned_user_name: undefined } : c))
+  }
+
+  // ── assumir conversa da fila "Aguardando" — UPDATE atômico (WHERE
+  // assigned_user_id IS NULL) evita que dois atendentes assumam a mesma
+  // conversa ao mesmo tempo, mesmo padrão de WhatsAppHub.tsx/claimConversationIfUnassigned ──
+  const handleClaimConversation = async () => {
+    if (!activeConv || !user?.id) return
+    const patch = { assigned_user_id: user.id, assigned_user_name: user.full_name || user.email, status: 'open' }
+    const { data, error } = await supabase.from('whatsapp_conversations')
+      .update(patch)
+      .eq('id', activeConv.id)
+      .is('assigned_user_id', null)
+      .select('id')
+    if (error || !data || data.length === 0) {
+      setSendError('Essa conversa já foi assumida por outro atendente.')
+      return
+    }
+    setActiveConv(prev => prev ? { ...prev, ...patch } : prev)
+    setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, ...patch } : c))
+  }
+
+  // ── resgatar conversa "parada" de outro atendente — WHERE assigned_user_id
+  // = previousUserId evita resgatar a conversa errada caso ela já tenha sido
+  // resgatada por outra pessoa entre o carregamento da lista e o clique ──
+  const handleRescueConversation = async () => {
+    if (!activeConv || !user?.id || !activeConv.assigned_user_id) return
+    const previousUserId   = activeConv.assigned_user_id
+    const previousUserName = activeConv.assigned_user_name || 'outro atendente'
+    const hours = hoursSince(activeConv.last_message_at)
+    if (!window.confirm(`Deseja resgatar essa conversa? Ela estava com ${previousUserName} há ${hours}h.`)) return
+    const patch = { assigned_user_id: user.id, assigned_user_name: user.full_name || user.email }
+    const { data, error } = await supabase.from('whatsapp_conversations')
+      .update({ ...patch, transferred_at: new Date().toISOString(), transferred_from: previousUserId })
+      .eq('id', activeConv.id)
+      .eq('assigned_user_id', previousUserId)
+      .select('id')
+    if (error || !data || data.length === 0) {
+      setSendError('Conversa não disponível para resgate.')
+      return
+    }
+    setActiveConv(prev => prev ? { ...prev, ...patch } : prev)
+    setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, ...patch } : c))
+  }
+
+  // ── marca a conversa como "em atendimento" após uma resposta do atendente —
+  // sem isso, status nunca sai de 'waiting' (processAionMessage sempre grava
+  // 'waiting' em toda mensagem do cliente), e a conversa nunca sairia da fila
+  // de Aguardando/Paradas mesmo depois de respondida ──
+  const markConversationEngaged = async () => {
+    if (!activeConv) return
+    const patch: { status: string; assigned_user_id?: string; assigned_user_name?: string } = { status: 'open' }
+    if (!activeConv.assigned_user_id && user?.id) {
+      patch.assigned_user_id = user.id
+      patch.assigned_user_name = user.full_name || user.email
+    }
+    await supabase.from('whatsapp_conversations').update(patch).eq('id', activeConv.id)
+    setActiveConv(prev => prev ? { ...prev, ...patch } : prev)
+    setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, ...patch } : c))
   }
 
   // ── lead modal ──
@@ -1401,6 +1499,71 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
     setScheduledMessages(prev => prev.filter(m => m.id !== id))
   }
 
+  // ── envio imediato de template (reaproveita aionTemplates/loadAionTemplates
+  // do agendamento) — chama /api/whatsapp/send com type=template, mesmo
+  // endpoint/branch isAionSend já usado pelo texto/mídia/áudio (não dá pra usar
+  // api/whatsapp/send-template.ts: aquele endpoint exige institution_id real,
+  // busca telefone em whatsapp_phone_numbers e usage em whatsapp_conversation_usage
+  // — nada disso existe pro Inbox Áion, que usa platform_whatsapp) ──
+  const openTemplateSendModal = () => {
+    setTemplateSendName('')
+    setTemplateSendVars({})
+    setTemplateSendError('')
+    setShowTemplateSendModal(true)
+    loadAionTemplates()
+  }
+
+  const handleSendTemplateNow = async () => {
+    if (!activeConv || sendingTemplateNow) return
+    const tmpl = aionTemplates.find(t => t.name === templateSendName)
+    if (!tmpl) { setTemplateSendError('Selecione um template.'); return }
+
+    const varKeys = Object.keys(templateSendVars)
+    const components = varKeys.length > 0
+      ? [{ type: 'body', parameters: varKeys.map(k => ({ type: 'text', text: templateSendVars[k] })) }]
+      : (tmpl.components ?? [])
+    const preview = buildAionTemplatePreview(tmpl, templateSendVars)
+
+    setSendingTemplateNow(true)
+    setTemplateSendError('')
+    try {
+      const to = activeConv.remote_jid.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
+      const res = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          isAionSend: true, to, type: 'template',
+          templateName: tmpl.name, templateLanguage: tmpl.language || 'pt_BR', templateComponents: components,
+          caption: preview,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao enviar template')
+
+      const tempMsg: AionMessage = {
+        id: data.wamid || `temp-tmpl-${Date.now()}`,
+        remote_jid: activeConv.remote_jid,
+        from_me: true,
+        message_type: 'template',
+        content: preview,
+        message_id: data.wamid || undefined,
+        timestamp: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        status: 'sent',
+        is_aion_inbox: true,
+      }
+      setMessages(prev => [...prev, tempMsg])
+      await markConversationEngaged()
+      setShowTemplateSendModal(false)
+      setTemplateSendName('')
+      setTemplateSendVars({})
+    } catch (e: any) {
+      setTemplateSendError(e?.message || 'Erro ao enviar template.')
+    } finally {
+      setSendingTemplateNow(false)
+    }
+  }
+
   const openMeetingModal = () => {
     setMeetingTitle(`Reunião com ${lead?.name || lead?.contact_name || 'contato'}`)
     setMeetingDate('')
@@ -1471,14 +1634,103 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
     setShowMeetingModal(false)
   }
 
+  // Conversa "parada": atribuída a outro atendente (não eu), ainda aguardando
+  // resposta (status waiting), sem atividade há mais de staleHours — mesma
+  // regra de isConvStale() em WhatsAppHub.tsx.
+  const isConvStale = (conv: AionConversation) =>
+    !!conv.assigned_user_id &&
+    conv.assigned_user_id !== user?.id &&
+    conv.status === 'waiting' &&
+    !!conv.last_message_at &&
+    (Date.now() - new Date(conv.last_message_at).getTime()) > staleHours * 3600 * 1000
+
+  const hoursSince = (dateStr?: string) =>
+    dateStr ? Math.max(1, Math.floor((Date.now() - new Date(dateStr).getTime()) / 3600000)) : 0
+
   const filteredConvs = conversations.filter(c => {
-    if (filter === 'unread') return (c.unread_count ?? 0) > 0
-    if (filter === 'leads') return c.queue === 'leads'
-    if (filter === 'schools') return c.queue === 'schools'
-    if (filter === 'general') return !c.queue || (c.queue !== 'leads' && c.queue !== 'schools')
+    const q = search.trim().toLowerCase()
+    if (q) {
+      const qDigits = q.replace(/\D/g, '')
+      const matchesName  = (c.contact_name || '').toLowerCase().includes(q)
+      const matchesPhone = qDigits.length > 0 && c.remote_jid.replace(/\D/g, '').includes(qDigits)
+      if (!matchesName && !matchesPhone) return false
+    }
+    if (filter === 'unread' && (c.unread_count ?? 0) === 0) return false
+    if (filter === 'leads' && c.queue !== 'leads') return false
+    if (filter === 'schools' && c.queue !== 'schools') return false
+    if (filter === 'general' && (c.queue === 'leads' || c.queue === 'schools')) return false
+    if (assignFilter === 'mine' && c.assigned_user_id !== user?.id) return false
+    if (assignFilter === 'unassigned' && c.assigned_user_id) return false
     return true
   })
   const totalUnread = conversations.reduce((sum, c) => sum + (c.unread_count ?? 0), 0)
+
+  // Agrupamento visual (Aguardando/Minhas/Paradas/Outras) — respeita os
+  // filtros já aplicados em filteredConvs. Sem restrição de visibilidade por
+  // atendente (diferente do lado escola): quem acessa o Inbox Áion já é
+  // admin_geral/consultant (RLS via is_aion_platform_operator()), então
+  // "Outras conversas" aparece sempre, não só pra quem "vê tudo".
+  const filteredWaitingConvs = filteredConvs.filter(c => !c.assigned_user_id && c.status === 'waiting')
+  const filteredMyConvs      = filteredConvs.filter(c => c.assigned_user_id === user?.id)
+  const filteredStaleConvs   = filteredConvs.filter(c => isConvStale(c))
+  const filteredOtherConvs   = filteredConvs.filter(c =>
+    !(!c.assigned_user_id && c.status === 'waiting') &&
+    c.assigned_user_id !== user?.id &&
+    !isConvStale(c)
+  )
+
+  const renderConvItem = (conv: AionConversation) => {
+    const isActive = activeConv?.id === conv.id
+    const qc = queueColor(conv.queue)
+    const isStale = isConvStale(conv)
+    const isFree = !conv.assigned_user_id && conv.status === 'waiting'
+    return (
+      <div key={conv.id} onClick={() => selectConv(conv)}
+        style={{
+          position: 'relative', padding: '11px 14px', borderBottom: '1px solid #F0FDFB',
+          background: isActive ? 'linear-gradient(135deg, #E6F7F5 0%, #F0FDFB 100%)' : isStale ? '#FFF7ED' : isFree ? '#FFFBEB' : 'transparent',
+          borderLeft: `3px solid ${isActive ? '#00A896' : isStale ? '#F97316' : isFree ? '#F59E0B' : 'transparent'}`,
+          cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'flex-start', transition: 'background 0.15s',
+        }}
+        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = isStale ? '#FFEDD5' : isFree ? '#FEF3C7' : '#F8FAFC' }}
+        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = isStale ? '#FFF7ED' : isFree ? '#FFFBEB' : 'transparent' }}
+      >
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#00A896' }}>
+            {initials(conv.contact_name, conv.remote_jid)}
+          </div>
+          {conv.assigned_user_name && (
+            <div title={conv.assigned_user_name} style={{ position: 'absolute', bottom: -1, right: -1, width: 16, height: 16, borderRadius: '50%', background: '#1A2B4A', border: '2px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 700, color: 'white' }}>
+              {initials(conv.assigned_user_name).slice(0, 1)}
+            </div>
+          )}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 165 }}>
+              {conv.contact_name || formatPhone(conv.remote_jid)}
+            </span>
+            <span style={{ fontSize: 11, color: '#94A3B8', flexShrink: 0, marginLeft: 4 }}>{formatTime(conv.last_message_at)}</span>
+          </div>
+          <div style={{ fontSize: 12, color: '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>{conv.last_message || '—'}</div>
+          {isStale && conv.assigned_user_name && (
+            <p style={{ fontSize: 11, color: '#C2410C', margin: '0 0 4px', fontWeight: 600 }}>
+              ⏰ Parada há {hoursSince(conv.last_message_at)}h · era de {conv.assigned_user_name}
+            </p>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontSize: 10, fontWeight: 600, background: qc.bg, color: qc.text, borderRadius: 20, padding: '1px 7px' }}>{queueLabel(conv.queue)}</span>
+            {conv.bot_active && <Bot style={{ width: 11, height: 11, color: '#6366F1' }} />}
+            {(conv.unread_count ?? 0) > 0 && (
+              <span style={{ marginLeft: 'auto', background: '#00A896', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 99, padding: '1px 6px', minWidth: 17, textAlign: 'center' }}>
+                {conv.unread_count}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -1514,7 +1766,16 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
               </span>
             )}
           </div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', marginTop: 10 }}>
+            <Search style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, color: '#94A3B8', pointerEvents: 'none' }} />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar nome ou telefone…"
+              style={{ width: '100%', paddingLeft: 30, paddingRight: 10, paddingTop: 7, paddingBottom: 7, fontSize: 12, background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 9, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}
+              onFocus={e => { e.currentTarget.style.borderColor = '#00A896' }}
+              onBlur={e => { e.currentTarget.style.borderColor = '#D1FAE5' }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
             {(['all', 'leads', 'schools', 'general', 'unread'] as ConvFilter[]).map(f => {
               const labels: Record<ConvFilter, string> = { all: 'Todas', leads: 'Vendas', schools: 'Suporte', general: 'Geral', unread: 'Não lidas' }
               const active = filter === f
@@ -1525,6 +1786,20 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
               )
             })}
           </div>
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Atribuição</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {(['all', 'mine', 'unassigned'] as AssignFilter[]).map(f => {
+                const labels: Record<AssignFilter, string> = { all: 'Todas', mine: 'Minhas', unassigned: 'Livres' }
+                const active = assignFilter === f
+                return (
+                  <button key={f} onClick={() => setAssignFilter(f)} style={{ padding: '4px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 600, border: 'none', background: active ? '#D1FAE5' : '#F0FDFB', color: active ? '#059669' : '#64748B', cursor: 'pointer', transition: 'all 0.15s' }}>
+                    {labels[f]}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {loadingConvs ? (
@@ -1534,44 +1809,42 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
           ) : filteredConvs.length === 0 ? (
             <div style={{ padding: '40px 16px', textAlign: 'center', color: '#94A3B8', fontSize: 13 }}>Nenhuma conversa encontrada.</div>
           ) : (
-            filteredConvs.map(conv => {
-              const isActive = activeConv?.id === conv.id
-              const qc = queueColor(conv.queue)
-              return (
-                <div key={conv.id} onClick={() => selectConv(conv)}
-                  style={{
-                    position: 'relative', padding: '11px 14px', borderBottom: '1px solid #F0FDFB',
-                    background: isActive ? 'linear-gradient(135deg, #E6F7F5 0%, #F0FDFB 100%)' : 'transparent',
-                    borderLeft: `3px solid ${isActive ? '#00A896' : 'transparent'}`,
-                    cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'flex-start', transition: 'background 0.15s',
-                  }}
-                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#F8FAFC' }}
-                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
-                >
-                  <div style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, background: '#E6F7F5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#00A896' }}>
-                    {initials(conv.contact_name, conv.remote_jid)}
+            <>
+              {filteredWaitingConvs.length > 0 && (
+                <>
+                  <div style={{ padding: '8px 14px 4px', fontSize: 11, fontWeight: 700, color: '#D97706', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    ⏳ Aguardando
+                    <span style={{ background: '#EF4444', color: '#fff', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>{filteredWaitingConvs.length}</span>
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 165 }}>
-                        {conv.contact_name || formatPhone(conv.remote_jid)}
-                      </span>
-                      <span style={{ fontSize: 11, color: '#94A3B8', flexShrink: 0, marginLeft: 4 }}>{formatTime(conv.last_message_at)}</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>{conv.last_message || '—'}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ fontSize: 10, fontWeight: 600, background: qc.bg, color: qc.text, borderRadius: 20, padding: '1px 7px' }}>{queueLabel(conv.queue)}</span>
-                      {conv.bot_active && <Bot style={{ width: 11, height: 11, color: '#6366F1' }} />}
-                      {(conv.unread_count ?? 0) > 0 && (
-                        <span style={{ marginLeft: 'auto', background: '#00A896', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 99, padding: '1px 6px', minWidth: 17, textAlign: 'center' }}>
-                          {conv.unread_count}
-                        </span>
-                      )}
-                    </div>
+                  {filteredWaitingConvs.map(conv => renderConvItem(conv))}
+                </>
+              )}
+              {filteredMyConvs.length > 0 && (
+                <>
+                  <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#00A896', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Minhas conversas
                   </div>
-                </div>
-              )
-            })
+                  {filteredMyConvs.map(conv => renderConvItem(conv))}
+                </>
+              )}
+              {filteredStaleConvs.length > 0 && (
+                <>
+                  <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#C2410C', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    ⏰ Paradas
+                    <span style={{ background: '#F97316', color: '#fff', borderRadius: 9999, padding: '0 6px', fontSize: 10, fontWeight: 700 }}>{filteredStaleConvs.length}</span>
+                  </div>
+                  {filteredStaleConvs.map(conv => renderConvItem(conv))}
+                </>
+              )}
+              {filteredOtherConvs.length > 0 && (
+                <>
+                  <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Outras conversas
+                  </div>
+                  {filteredOtherConvs.map(conv => renderConvItem(conv))}
+                </>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -1634,6 +1907,50 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
 
             {/* Input area */}
             <div style={{ padding: '10px 20px 12px', borderTop: '1px solid #D1FAE5', background: '#fff', flexShrink: 0, position: 'relative' }}>
+
+              {/* Janela de 24h expirada — Meta exige template aprovado nesse caso */}
+              {windowExpired && recorderState === 'idle' && (
+                <div style={{ marginBottom: 8, background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: '#92400E', margin: 0 }}>⏱ Janela de 24h expirada</p>
+                    <p style={{ fontSize: 11, color: '#B45309', margin: '2px 0 0' }}>Use um template aprovado para reativar a conversa.</p>
+                  </div>
+                  <button onClick={openTemplateSendModal}
+                    style={{ background: '#F59E0B', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+                    Enviar Template
+                  </button>
+                </div>
+              )}
+
+              {/* Conversa aguardando — sem atendente, permite reservar antes de responder */}
+              {!activeConv.assigned_user_id && activeConv.status === 'waiting' && recorderState === 'idle' && (
+                <div style={{ marginBottom: 8, background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: '#92400E', margin: 0 }}>⏳ Conversa aguardando atendimento</p>
+                    <p style={{ fontSize: 11, color: '#B45309', margin: '2px 0 0' }}>Assuma para reservar antes de responder, ou envie uma mensagem que ela é atribuída a você automaticamente.</p>
+                  </div>
+                  <button onClick={handleClaimConversation}
+                    style={{ background: '#F59E0B', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+                    Assumir
+                  </button>
+                </div>
+              )}
+
+              {/* Conversa parada — atribuída a outro atendente, sem atividade recente */}
+              {isConvStale(activeConv) && recorderState === 'idle' && (
+                <div style={{ marginBottom: 8, background: '#FFF7ED', border: '1px solid #FDBA74', borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: '#9A3412', margin: 0 }}>⏰ Conversa parada</p>
+                    <p style={{ fontSize: 11, color: '#C2410C', margin: '2px 0 0' }}>
+                      Era de {activeConv.assigned_user_name || 'outro atendente'}, sem resposta há {hoursSince(activeConv.last_message_at)}h.
+                    </p>
+                  </div>
+                  <button onClick={handleRescueConversation}
+                    style={{ background: '#F97316', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+                    Resgatar
+                  </button>
+                </div>
+              )}
 
               {/* Attach menu */}
               {showAttach && (
@@ -1786,10 +2103,11 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {([
-                    { icon: Paperclip, active: showAttach,        onClick: () => { setShowAttach(v => !v); setShowEmojiPicker(false); setShowQuickReplies(false) }, title: 'Anexar' },
-                    { icon: Zap,       active: showQuickReplies,  onClick: () => { setShowQuickReplies(v => !v); setShowAttach(false); setShowEmojiPicker(false) }, title: 'Respostas rápidas' },
-                    { icon: Clock,     active: showScheduleModal, onClick: () => { setShowAttach(false); setShowEmojiPicker(false); setShowQuickReplies(false); openScheduleModal() }, title: 'Agendar mensagem' },
-                    { icon: Smile,     active: showEmojiPicker,   onClick: () => { setShowEmojiPicker(v => !v); setShowAttach(false); setShowQuickReplies(false) }, title: 'Emoji'  },
+                    { icon: Paperclip, active: showAttach,           onClick: () => { setShowAttach(v => !v); setShowEmojiPicker(false); setShowQuickReplies(false) }, title: 'Anexar' },
+                    { icon: Zap,       active: showQuickReplies,     onClick: () => { setShowQuickReplies(v => !v); setShowAttach(false); setShowEmojiPicker(false) }, title: 'Respostas rápidas' },
+                    { icon: FileText,  active: showTemplateSendModal, onClick: openTemplateSendModal, title: 'Enviar Template' },
+                    { icon: Clock,     active: showScheduleModal,    onClick: () => { setShowAttach(false); setShowEmojiPicker(false); setShowQuickReplies(false); openScheduleModal() }, title: 'Agendar mensagem' },
+                    { icon: Smile,     active: showEmojiPicker,      onClick: () => { setShowEmojiPicker(v => !v); setShowAttach(false); setShowQuickReplies(false) }, title: 'Emoji'  },
                   ] as const).map(btn => {
                     const IconComp = btn.icon
                     return (
@@ -1801,15 +2119,16 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
                   })}
                   <textarea
                     value={inputText}
-                    onChange={e => setInputText(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-                    placeholder="Digite uma mensagem…"
+                    disabled={windowExpired}
+                    onChange={e => { if (!windowExpired) setInputText(e.target.value) }}
+                    onKeyDown={e => { if (!windowExpired && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+                    placeholder={windowExpired ? 'Janela de 24h expirada — use um template' : 'Digite uma mensagem…'}
                     rows={1}
-                    style={{ flex: 1, padding: '10px 18px', fontSize: 14, background: '#F0FDFB', border: '1.5px solid #D1FAE5', borderRadius: 28, color: '#1A2B4A', outline: 'none', resize: 'none', fontFamily: 'inherit', lineHeight: 1.5, minHeight: 42, maxHeight: 100, boxSizing: 'border-box', transition: 'all 0.2s' }}
+                    style={{ flex: 1, padding: '10px 18px', fontSize: 14, background: windowExpired ? '#F9FAFB' : '#F0FDFB', border: `1.5px solid ${windowExpired ? '#E5E7EB' : '#D1FAE5'}`, borderRadius: 28, color: windowExpired ? '#9CA3AF' : '#1A2B4A', outline: 'none', resize: 'none', fontFamily: 'inherit', lineHeight: 1.5, minHeight: 42, maxHeight: 100, boxSizing: 'border-box', transition: 'all 0.2s', cursor: windowExpired ? 'not-allowed' : 'text' }}
                     onFocus={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#FFFFFF' }}
-                    onBlur={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#F0FDFB' }}
+                    onBlur={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = windowExpired ? '#F9FAFB' : '#F0FDFB' }}
                   />
-                  {inputText.trim() ? (
+                  {inputText.trim() && !windowExpired ? (
                     <button onClick={handleSend} disabled={sending}
                       style={{ width: 44, height: 44, borderRadius: '50%', background: sending ? '#94A3B8' : '#00A896', color: '#fff', border: 'none', cursor: sending ? 'not-allowed' : 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {sending ? <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} /> : <Send style={{ width: 18, height: 18 }} />}
@@ -1945,6 +2264,91 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
                 Agendar
               </button>
               <button onClick={() => setShowScheduleModal(false)}
+                style={{ padding: '10px 16px', background: '#F1F5F9', color: '#64748B', fontSize: 13, fontWeight: 600, borderRadius: 9, border: 'none', cursor: 'pointer' }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enviar Template Agora */}
+      {showTemplateSendModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: '28px 28px 24px', width: 460, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', marginBottom: 4 }}>Enviar Template Agora</div>
+            <p style={{ fontSize: 12, color: '#94A3B8', marginTop: 0, marginBottom: 16 }}>
+              Envio imediato de template aprovado pela Meta — use pra reativar contato fora da janela de 24h.
+            </p>
+
+            {templateSendError && (
+              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#DC2626', marginBottom: 14 }}>
+                {templateSendError}
+              </div>
+            )}
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, display: 'block' }}>Template aprovado</label>
+              {loadingTemplates ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}>
+                  <Loader2 style={{ width: 18, height: 18, color: '#00A896', animation: 'spin 1s linear infinite' }} />
+                </div>
+              ) : aionTemplates.length === 0 ? (
+                <p style={{ fontSize: 12, color: '#94A3B8', margin: 0, lineHeight: 1.5 }}>
+                  Nenhum template aprovado encontrado. Confirme se o WhatsApp da Áion está conectado e tem templates aprovados no Gerenciador de Negócios da Meta.
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 160, overflowY: 'auto' }}>
+                  {aionTemplates.map(tpl => {
+                    const bodyText = tpl.components?.find(c => c.type === 'BODY')?.text || tpl.name
+                    const isSelected = templateSendName === tpl.name
+                    return (
+                      <button key={tpl.id || tpl.name}
+                        onClick={() => { setTemplateSendName(tpl.name); setTemplateSendVars({}) }}
+                        style={{ textAlign: 'left', padding: '8px 10px', background: isSelected ? '#E6F7F5' : '#FFFFFF', border: `1.5px solid ${isSelected ? '#00A896' : '#E2E8F0'}`, borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s' }}>
+                        <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{tpl.name}</p>
+                        <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bodyText}</p>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {templateSendName && (() => {
+              const tmpl = aionTemplates.find(t => t.name === templateSendName)
+              const bodyComp = tmpl?.components?.find(c => c.type === 'BODY')
+              const matches = bodyComp?.text ? [...bodyComp.text.matchAll(/\{\{(\d+)\}\}/g)] : []
+              return (
+                <div style={{ marginBottom: 6 }}>
+                  {matches.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                      <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#64748B' }}>Variáveis do template:</p>
+                      {matches.map(([, n]) => (
+                        <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 11, color: '#94A3B8', whiteSpace: 'nowrap' }}>{`{{${n}}}`}</span>
+                          <input value={templateSendVars[n] || ''}
+                            onChange={e => setTemplateSendVars(v => ({ ...v, [n]: e.target.value }))}
+                            placeholder={`Variável ${n}`}
+                            style={{ flex: 1, padding: '6px 10px', fontSize: 12, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 7, color: '#1A2B4A', outline: 'none' }} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p style={{ fontSize: 12, color: '#64748B', margin: 0, background: '#F8FAFC', borderRadius: 8, padding: '8px 10px', lineHeight: 1.5 }}>
+                    {buildAionTemplatePreview(tmpl, templateSendVars)}
+                  </p>
+                </div>
+              )
+            })()}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button onClick={handleSendTemplateNow} disabled={sendingTemplateNow || !templateSendName}
+                style={{ flex: 1, padding: '10px 0', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 9, border: 'none', cursor: (sendingTemplateNow || !templateSendName) ? 'not-allowed' : 'pointer', opacity: (sendingTemplateNow || !templateSendName) ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                {sendingTemplateNow ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> : <Send style={{ width: 14, height: 14 }} />}
+                Enviar agora
+              </button>
+              <button onClick={() => setShowTemplateSendModal(false)}
                 style={{ padding: '10px 16px', background: '#F1F5F9', color: '#64748B', fontSize: 13, fontWeight: 600, borderRadius: 9, border: 'none', cursor: 'pointer' }}>
                 Cancelar
               </button>
