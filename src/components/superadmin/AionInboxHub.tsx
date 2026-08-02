@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import EmojiPicker from '@emoji-mart/react'
 import emojiData from '@emoji-mart/data'
 import {
-  MessageCircle, Bot, User, Phone, Building2, MapPin,
+  MessageCircle, Bot, User, Phone,
   ExternalLink, UserPlus, Send, Check,
   Loader2, Image, FileText, Mic, Video,
   Tag, Clock, Calendar, Play, Pause,
-  X, Paperclip, Smile, CornerUpLeft, SmilePlus,
+  X, Paperclip, Smile, CornerUpLeft, SmilePlus, Save,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
@@ -53,16 +53,35 @@ interface AionMessage {
 
 interface AionLead {
   id: string
-  name?: string
+  name?: string | null
   contact_name?: string
   phone?: string
-  school?: string
-  city?: string
-  state?: string
-  stage?: string
-  next_followup?: string
-  notes?: string
+  school_name?: string | null
+  city?: string | null
+  state?: string | null
+  stage?: string | null
+  next_followup?: string | null
+  notes?: string | null
   created_at?: string
+}
+
+// crm_interactions e crm_meetings já existem e são usados por AdminCRM.tsx
+// (LeadModal) — mesmas tabelas, mesmo lead_id (crm_leads.id), reaproveitadas aqui.
+interface AionInteraction {
+  id: string
+  lead_id: string
+  type: 'call' | 'whatsapp' | 'email' | 'meeting' | 'note'
+  content: string
+  created_at: string
+}
+
+interface AionCrmMeeting {
+  id: string
+  lead_id: string
+  title: string
+  type: string
+  scheduled_at: string
+  status: string
 }
 
 interface ConsultantUser {
@@ -157,6 +176,25 @@ function statusLabel(status: string): string {
   if (status === 'open') return 'Aberta'
   if (status === 'closed') return 'Fechada'
   return status
+}
+
+// Mesmos 6 estágios usados em AdminCRM.tsx (STAGES) — crm_leads.stage
+const AION_LEAD_STAGES = ['interesse', 'qualificacao', 'proposta', 'negociacao', 'fechado', 'cliente'] as const
+
+function interactionIcon(type: string): string {
+  if (type === 'call') return '📞'
+  if (type === 'whatsapp') return '💬'
+  if (type === 'email') return '📧'
+  if (type === 'meeting') return '🤝'
+  return '📌'
+}
+
+function interactionLabel(type: string): string {
+  if (type === 'call') return 'Ligação'
+  if (type === 'whatsapp') return 'WhatsApp'
+  if (type === 'email') return 'E-mail'
+  if (type === 'meeting') return 'Reunião'
+  return 'Nota'
 }
 
 async function compressImage(file: File, maxMB = 4): Promise<File> {
@@ -587,6 +625,17 @@ export default function AionInboxHub() {
   const [leadSearch, setLeadSearch]                 = useState('')
   const [leadResults, setLeadResults]               = useState<{id:string;name:string;phone:string}[]>([])
   const [searchingLeads, setSearchingLeads]         = useState(false)
+  // lead panel — edição, histórico e reuniões
+  const [leadTab, setLeadTab]                       = useState<'dados' | 'historico' | 'reunioes'>('dados')
+  const [leadEditForm, setLeadEditForm]             = useState<Partial<AionLead>>({})
+  const [savingLeadEdit, setSavingLeadEdit]         = useState(false)
+  const [leadEditSaved, setLeadEditSaved]           = useState(false)
+  const [leadInteractions, setLeadInteractions]     = useState<AionInteraction[]>([])
+  const [loadingInteractions, setLoadingInteractions] = useState(false)
+  const [newInteraction, setNewInteraction]         = useState({ type: 'note', content: '' })
+  const [savingInteraction, setSavingInteraction]   = useState(false)
+  const [leadMeetings, setLeadMeetings]             = useState<AionCrmMeeting[]>([])
+  const [loadingMeetings, setLoadingMeetings]       = useState(false)
   // media state
   const [replyTo, setReplyTo]                       = useState<AionMessage | null>(null)
   const [pendingFile, setPendingFile]               = useState<File | null>(null)
@@ -647,6 +696,25 @@ export default function AionInboxHub() {
   useEffect(() => {
     return () => { audioStreamRef.current?.getTracks().forEach(t => t.stop()) }
   }, [])
+
+  // ── reset draft de edição + carregar histórico/reuniões quando o lead muda ──
+  useEffect(() => {
+    setLeadEditForm(lead ? { ...lead } : {})
+    setLeadEditSaved(false)
+    setLeadTab('dados')
+    if (!lead?.id) {
+      setLeadInteractions([])
+      setLeadMeetings([])
+      return
+    }
+    setLoadingInteractions(true)
+    supabase.from('crm_interactions').select('*').eq('lead_id', lead.id).order('created_at', { ascending: false })
+      .then(({ data }) => { setLeadInteractions((data as AionInteraction[]) ?? []); setLoadingInteractions(false) })
+    setLoadingMeetings(true)
+    supabase.from('crm_meetings').select('*').eq('lead_id', lead.id).order('scheduled_at', { ascending: false })
+      .then(({ data }) => { setLeadMeetings((data as AionCrmMeeting[]) ?? []); setLoadingMeetings(false) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead?.id])
 
   // ── emoji picker outside click ──
   useEffect(() => {
@@ -1117,6 +1185,46 @@ export default function AionInboxHub() {
     setLinkingLead(false); setLeadSearch(''); setLeadResults([])
   }
 
+  const handleSaveLeadEdit = async () => {
+    if (!lead) return
+    setSavingLeadEdit(true)
+    try {
+      const payload = {
+        name:          leadEditForm.name?.trim() || null,
+        school_name:   leadEditForm.school_name?.trim() || null,
+        city:          leadEditForm.city?.trim() || null,
+        state:         leadEditForm.state?.trim() || null,
+        stage:         leadEditForm.stage || null,
+        next_followup: leadEditForm.next_followup || null,
+        notes:         leadEditForm.notes?.trim() || null,
+      }
+      const { error } = await supabase.from('crm_leads').update(payload).eq('id', lead.id)
+      if (!error) {
+        setLead(prev => (prev ? { ...prev, ...payload } : prev))
+        setLeadEditSaved(true)
+        setTimeout(() => setLeadEditSaved(false), 2000)
+      }
+    } finally {
+      setSavingLeadEdit(false)
+    }
+  }
+
+  const handleAddInteraction = async () => {
+    if (!lead || !newInteraction.content.trim() || savingInteraction) return
+    setSavingInteraction(true)
+    try {
+      await supabase.from('crm_interactions').insert({
+        lead_id: lead.id, type: newInteraction.type, content: newInteraction.content.trim(),
+      })
+      setNewInteraction({ type: 'note', content: '' })
+      const { data } = await supabase.from('crm_interactions')
+        .select('*').eq('lead_id', lead.id).order('created_at', { ascending: false })
+      setLeadInteractions((data as AionInteraction[]) ?? [])
+    } finally {
+      setSavingInteraction(false)
+    }
+  }
+
   const filteredConvs = conversations.filter(c => {
     if (filter === 'unread') return (c.unread_count ?? 0) > 0
     if (filter === 'leads') return c.queue === 'leads'
@@ -1540,31 +1648,176 @@ export default function AionInboxHub() {
                   <Loader2 style={{ width: 18, height: 18, color: '#00A896', animation: 'spin 1s linear infinite' }} />
                 </div>
               ) : lead ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{lead.name || lead.contact_name || '—'}</div>
-                  {lead.school && (
-                    <div style={{ fontSize: 12, color: '#64748B', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Building2 style={{ width: 11, height: 11 }} />{lead.school}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {/* Mini-abas */}
+                  <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid #E2E8F0' }}>
+                    {([
+                      { key: 'dados',     label: 'Dados' },
+                      { key: 'historico', label: 'Histórico' },
+                      { key: 'reunioes',  label: 'Reuniões' },
+                    ] as const).map(t => (
+                      <button key={t.key} onClick={() => setLeadTab(t.key)}
+                        style={{
+                          padding: '6px 10px', fontSize: 11, fontWeight: 700, border: 'none', cursor: 'pointer',
+                          borderBottom: leadTab === t.key ? '2px solid #00A896' : '2px solid transparent',
+                          color: leadTab === t.key ? '#00A896' : '#94A3B8', background: 'transparent', transition: 'color 0.15s',
+                        }}>
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* ABA DADOS — edição inline */}
+                  {leadTab === 'dados' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div>
+                        <label style={panelLabelStyle}>Nome</label>
+                        <input value={leadEditForm.name || ''} onChange={e => setLeadEditForm(f => ({ ...f, name: e.target.value }))}
+                          placeholder="Nome do responsável" style={{ ...panelSelectStyle, cursor: 'text' }} />
+                      </div>
+                      <div>
+                        <label style={panelLabelStyle}>Escola</label>
+                        <input value={leadEditForm.school_name || ''} onChange={e => setLeadEditForm(f => ({ ...f, school_name: e.target.value }))}
+                          placeholder="Nome da escola" style={{ ...panelSelectStyle, cursor: 'text' }} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px', gap: 6 }}>
+                        <div>
+                          <label style={panelLabelStyle}>Cidade</label>
+                          <input value={leadEditForm.city || ''} onChange={e => setLeadEditForm(f => ({ ...f, city: e.target.value }))}
+                            style={{ ...panelSelectStyle, cursor: 'text' }} />
+                        </div>
+                        <div>
+                          <label style={panelLabelStyle}>UF</label>
+                          <input value={leadEditForm.state || ''} maxLength={2}
+                            onChange={e => setLeadEditForm(f => ({ ...f, state: e.target.value.toUpperCase().slice(0, 2) }))}
+                            style={{ ...panelSelectStyle, cursor: 'text' }} />
+                        </div>
+                      </div>
+                      <div>
+                        <label style={panelLabelStyle}>Stage</label>
+                        <select value={leadEditForm.stage || ''} onChange={e => setLeadEditForm(f => ({ ...f, stage: e.target.value }))} style={panelSelectStyle}>
+                          <option value="">—</option>
+                          {AION_LEAD_STAGES.map(s => <option key={s} value={s}>{stageLabel(s)}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={panelLabelStyle}>Próximo follow-up</label>
+                        <input type="date" value={leadEditForm.next_followup ? leadEditForm.next_followup.slice(0, 10) : ''}
+                          onChange={e => setLeadEditForm(f => ({ ...f, next_followup: e.target.value }))}
+                          style={{ ...panelSelectStyle, cursor: 'text' }} />
+                      </div>
+                      <div>
+                        <label style={panelLabelStyle}>Notas</label>
+                        <textarea value={leadEditForm.notes || ''} onChange={e => setLeadEditForm(f => ({ ...f, notes: e.target.value }))}
+                          rows={3} placeholder="Anotações sobre este lead..."
+                          style={{ ...panelSelectStyle, cursor: 'text', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
+                      </div>
+                      <button onClick={handleSaveLeadEdit} disabled={savingLeadEdit}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 0',
+                          background: leadEditSaved ? '#10B981' : '#00A896', color: '#fff', fontSize: 12, fontWeight: 700,
+                          borderRadius: 8, border: 'none', cursor: savingLeadEdit ? 'not-allowed' : 'pointer', opacity: savingLeadEdit ? 0.7 : 1,
+                          transition: 'background 0.15s',
+                        }}>
+                        {savingLeadEdit
+                          ? <><Loader2 style={{ width: 13, height: 13, animation: 'spin 1s linear infinite' }} />Salvando...</>
+                          : leadEditSaved
+                            ? <><Check style={{ width: 13, height: 13 }} />Salvo!</>
+                            : <><Save style={{ width: 13, height: 13 }} />Salvar alterações</>}
+                      </button>
                     </div>
                   )}
-                  {(lead.city || lead.state) && (
-                    <div style={{ fontSize: 12, color: '#64748B', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <MapPin style={{ width: 11, height: 11 }} />{[lead.city, lead.state].filter(Boolean).join(', ')}
+
+                  {/* ABA HISTÓRICO — crm_interactions (mesma tabela do CRM Comercial) */}
+                  {leadTab === 'historico' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: 8 }}>
+                        <select value={newInteraction.type} onChange={e => setNewInteraction(f => ({ ...f, type: e.target.value }))}
+                          style={{ ...panelSelectStyle, marginBottom: 6, padding: '5px 8px', fontSize: 11 }}>
+                          <option value="note">Nota</option>
+                          <option value="call">Ligação</option>
+                          <option value="whatsapp">WhatsApp</option>
+                          <option value="email">E-mail</option>
+                          <option value="meeting">Reunião</option>
+                        </select>
+                        <textarea value={newInteraction.content} onChange={e => setNewInteraction(f => ({ ...f, content: e.target.value }))}
+                          placeholder="Registrar contato..." rows={2}
+                          style={{ width: '100%', padding: '6px 8px', border: '1.5px solid #E2E8F0', borderRadius: 6, fontSize: 12, outline: 'none', resize: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
+                        <button onClick={handleAddInteraction} disabled={savingInteraction || !newInteraction.content.trim()}
+                          style={{ marginTop: 6, padding: '5px 12px', borderRadius: 7, background: '#00A896', color: '#fff', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', opacity: (savingInteraction || !newInteraction.content.trim()) ? 0.5 : 1 }}>
+                          {savingInteraction ? 'Salvando...' : 'Registrar'}
+                        </button>
+                      </div>
+
+                      {loadingInteractions ? (
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: 12 }}>
+                          <Loader2 style={{ width: 16, height: 16, color: '#00A896', animation: 'spin 1s linear infinite' }} />
+                        </div>
+                      ) : leadInteractions.length === 0 ? (
+                        <div style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '10px 0' }}>Nenhuma interação registrada ainda.</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {leadInteractions.map(item => (
+                            <div key={item.id} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 10px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: '#1A2B4A' }}>{interactionIcon(item.type)} {interactionLabel(item.type)}</span>
+                                <span style={{ fontSize: 10, color: '#94A3B8', whiteSpace: 'nowrap', marginLeft: 6 }}>
+                                  {new Date(item.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                              <p style={{ fontSize: 12, color: '#64748B', margin: '3px 0 0', lineHeight: 1.5 }}>{item.content}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
-                  {lead.stage && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 11, color: '#64748B', fontWeight: 600 }}>Stage:</span>
-                      <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 20, padding: '2px 10px', background: stageColor(lead.stage).bg, color: stageColor(lead.stage).text }}>{stageLabel(lead.stage)}</span>
+
+                  {/* ABA REUNIÕES — crm_meetings (mesma tabela do CRM Comercial); agendamento
+                      em si fica pra próxima etapa, aqui só a lista + o espaço reservado */}
+                  {leadTab === 'reunioes' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <button
+                        disabled
+                        title="Em breve — o agendamento será conectado na próxima etapa"
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 0',
+                          background: '#F1F5F9', color: '#94A3B8', fontSize: 12, fontWeight: 700,
+                          borderRadius: 8, border: '1px dashed #CBD5E1', cursor: 'not-allowed',
+                        }}>
+                        <Calendar style={{ width: 13, height: 13 }} /> Agendar reunião
+                        <span style={{ fontSize: 9, fontWeight: 700, background: '#E2E8F0', color: '#64748B', padding: '1px 6px', borderRadius: 20, marginLeft: 2 }}>EM BREVE</span>
+                      </button>
+
+                      {loadingMeetings ? (
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: 12 }}>
+                          <Loader2 style={{ width: 16, height: 16, color: '#00A896', animation: 'spin 1s linear infinite' }} />
+                        </div>
+                      ) : leadMeetings.length === 0 ? (
+                        <div style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '10px 0' }}>Nenhuma reunião agendada ainda.</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {leadMeetings.map(m => (
+                            <div key={m.id} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 10px' }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{m.title}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                                <Calendar style={{ width: 11, height: 11, color: '#94A3B8' }} />
+                                <span style={{ fontSize: 11, color: '#64748B' }}>
+                                  {new Date(m.scheduled_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                                <span style={{
+                                  fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 20, marginLeft: 'auto',
+                                  background: m.status === 'completed' ? '#DCFCE7' : m.status === 'cancelled' ? '#FEE2E2' : '#DBEAFE',
+                                  color: m.status === 'completed' ? '#16A34A' : m.status === 'cancelled' ? '#DC2626' : '#2563EB',
+                                }}>
+                                  {m.status === 'completed' ? 'Realizada' : m.status === 'cancelled' ? 'Cancelada' : 'Agendada'}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {lead.next_followup && (
-                    <div style={{ fontSize: 12, color: '#64748B', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Calendar style={{ width: 11, height: 11 }} />Follow-up: {new Date(lead.next_followup).toLocaleDateString('pt-BR')}
-                    </div>
-                  )}
-                  {lead.notes && (
-                    <div style={{ fontSize: 12, color: '#64748B', background: '#F0FDFB', borderRadius: 8, padding: '8px 10px', lineHeight: 1.5, marginTop: 2 }}>{lead.notes}</div>
                   )}
                 </div>
               ) : (
