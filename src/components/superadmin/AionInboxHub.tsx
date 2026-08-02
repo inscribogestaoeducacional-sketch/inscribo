@@ -6,10 +6,11 @@ import {
   ExternalLink, UserPlus, Send, Check,
   Loader2, Image, FileText, Mic, Video,
   Tag, Clock, Calendar, Play, Pause,
-  X, Paperclip, Smile, CornerUpLeft, SmilePlus, Save, Zap,
+  X, Paperclip, Smile, CornerUpLeft, SmilePlus, Save, Zap, Copy,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
+import { createGoogleMeet, buildEndDatetime } from '../../lib/googleMeet'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -82,6 +83,10 @@ interface AionCrmMeeting {
   title: string
   type: string
   scheduled_at: string
+  duration_min?: number
+  meet_link?: string | null
+  google_event_id?: string | null
+  calendar_link?: string | null
   status: string
 }
 
@@ -666,6 +671,15 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
   const [savingInteraction, setSavingInteraction]   = useState(false)
   const [leadMeetings, setLeadMeetings]             = useState<AionCrmMeeting[]>([])
   const [loadingMeetings, setLoadingMeetings]       = useState(false)
+  // agendar reunião (Google Meet)
+  const [showMeetingModal, setShowMeetingModal]     = useState(false)
+  const [meetingTitle, setMeetingTitle]             = useState('')
+  const [meetingDate, setMeetingDate]               = useState('')
+  const [meetingDuration, setMeetingDuration]       = useState(30)
+  const [generatingMeeting, setGeneratingMeeting]   = useState(false)
+  const [meetingError, setMeetingError]             = useState('')
+  const [meetingResult, setMeetingResult]           = useState<{ meet_link: string; scheduled_at: string } | null>(null)
+  const [copiedMeetLink, setCopiedMeetLink]         = useState<string | null>(null)
   // respostas rápidas — whatsapp_quick_replies com platform_whatsapp.id como pseudo-institution_id
   const [showQuickReplies, setShowQuickReplies]     = useState(false)
   const [quickReplies, setQuickReplies]             = useState<{ id: string; label: string; text: string; shortcut: string | null }[]>([])
@@ -773,6 +787,13 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
     return () => { audioStreamRef.current?.getTracks().forEach(t => t.stop()) }
   }, [])
 
+  const loadLeadMeetings = useCallback(async (leadId: string) => {
+    setLoadingMeetings(true)
+    const { data } = await supabase.from('crm_meetings').select('*').eq('lead_id', leadId).order('scheduled_at', { ascending: false })
+    setLeadMeetings((data as AionCrmMeeting[]) ?? [])
+    setLoadingMeetings(false)
+  }, [])
+
   // ── reset draft de edição + carregar histórico/reuniões quando o lead muda ──
   useEffect(() => {
     setLeadEditForm(lead ? { ...lead } : {})
@@ -786,9 +807,7 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
     setLoadingInteractions(true)
     supabase.from('crm_interactions').select('*').eq('lead_id', lead.id).order('created_at', { ascending: false })
       .then(({ data }) => { setLeadInteractions((data as AionInteraction[]) ?? []); setLoadingInteractions(false) })
-    setLoadingMeetings(true)
-    supabase.from('crm_meetings').select('*').eq('lead_id', lead.id).order('scheduled_at', { ascending: false })
-      .then(({ data }) => { setLeadMeetings((data as AionCrmMeeting[]) ?? []); setLoadingMeetings(false) })
+    loadLeadMeetings(lead.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead?.id])
 
@@ -1382,6 +1401,76 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
     setScheduledMessages(prev => prev.filter(m => m.id !== id))
   }
 
+  const openMeetingModal = () => {
+    setMeetingTitle(`Reunião com ${lead?.name || lead?.contact_name || 'contato'}`)
+    setMeetingDate('')
+    setMeetingDuration(30)
+    setMeetingError('')
+    setMeetingResult(null)
+    setShowMeetingModal(true)
+  }
+
+  // Mesma integração já validada em AdminCRM.tsx/AdminOnboarding.tsx — create-google-meet
+  // via OAuth (src/lib/googleMeet.ts) — sem attendees, decisão já tomada: fluxo WhatsApp
+  // não precisa de e-mail de participante (diferente do CRM comercial, que tem o AttendeesPicker).
+  const handleCreateMeeting = async () => {
+    if (!lead || generatingMeeting) return
+    if (!meetingTitle.trim()) { setMeetingError('Dê um título pra reunião.'); return }
+    if (!meetingDate) { setMeetingError('Escolha a data e hora.'); return }
+    const startIso = new Date(meetingDate).toISOString()
+    if (new Date(startIso).getTime() <= Date.now()) { setMeetingError('A data/hora precisa ser no futuro.'); return }
+
+    setGeneratingMeeting(true)
+    setMeetingError('')
+    try {
+      const endIso = buildEndDatetime(startIso, meetingDuration)
+      const result = await createGoogleMeet({
+        title: meetingTitle.trim(),
+        start_datetime: startIso,
+        end_datetime: endIso,
+        attendees: [],
+      })
+      if (!result.meet_link) {
+        setMeetingError(result.error || 'Não foi possível gerar o link do Meet. Configure o Google Meet nas Configurações.')
+        return
+      }
+
+      const { error } = await supabase.from('crm_meetings').insert({
+        lead_id:         lead.id,
+        title:           meetingTitle.trim(),
+        type:            'video',
+        scheduled_at:    startIso,
+        duration_min:    meetingDuration,
+        meet_link:       result.meet_link,
+        google_event_id: result.event_id || null,
+        calendar_link:   result.calendar_link || null,
+        attendees:       [],
+        status:          'scheduled',
+        created_at:      new Date().toISOString(),
+      })
+      if (error) throw error
+
+      setMeetingResult({ meet_link: result.meet_link, scheduled_at: startIso })
+      await loadLeadMeetings(lead.id)
+    } catch (e: any) {
+      setMeetingError(e?.message || 'Erro ao agendar reunião.')
+    } finally {
+      setGeneratingMeeting(false)
+    }
+  }
+
+  const copyMeetLink = (link: string) => {
+    navigator.clipboard.writeText(link)
+    setCopiedMeetLink(link)
+    setTimeout(() => setCopiedMeetLink(null), 2000)
+  }
+
+  const sendMeetLinkToChat = (link: string, scheduledAt: string) => {
+    const dateLabel = new Date(scheduledAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    setInputText(`Olá! Agendei nossa reunião para ${dateLabel}. Link: ${link}`)
+    setShowMeetingModal(false)
+  }
+
   const filteredConvs = conversations.filter(c => {
     if (filter === 'unread') return (c.unread_count ?? 0) > 0
     if (filter === 'leads') return c.queue === 'leads'
@@ -1850,6 +1939,81 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
         </div>
       )}
 
+      {/* Agendar Reunião */}
+      {showMeetingModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: '28px 28px 24px', width: 420, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', marginBottom: 20 }}>Agendar Reunião</div>
+
+            {meetingError && (
+              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#DC2626', marginBottom: 14 }}>
+                {meetingError}
+              </div>
+            )}
+
+            {meetingResult ? (
+              <div>
+                <div style={{ background: '#F0FDFB', border: '1px solid #D1FAE5', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: '#00A896', margin: '0 0 8px' }}>✅ Reunião agendada com sucesso!</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input readOnly value={meetingResult.meet_link}
+                      style={{ flex: 1, padding: '7px 10px', fontSize: 12, color: '#1A2B4A', border: '1px solid #D1FAE5', borderRadius: 7, background: '#fff', outline: 'none' }} />
+                    <button onClick={() => copyMeetLink(meetingResult.meet_link)} title="Copiar link"
+                      style={{ width: 32, height: 32, flexShrink: 0, border: '1px solid #D1FAE5', borderRadius: 7, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {copiedMeetLink === meetingResult.meet_link ? <Check style={{ width: 14, height: 14, color: '#10B981' }} /> : <Copy style={{ width: 14, height: 14, color: '#64748B' }} />}
+                    </button>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => sendMeetLinkToChat(meetingResult.meet_link, meetingResult.scheduled_at)}
+                    style={{ flex: 1, padding: '10px 0', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 9, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                    <Send style={{ width: 14, height: 14 }} /> Enviar no WhatsApp
+                  </button>
+                  <button onClick={() => setShowMeetingModal(false)}
+                    style={{ padding: '10px 16px', background: '#F1F5F9', color: '#64748B', fontSize: 13, fontWeight: 600, borderRadius: 9, border: 'none', cursor: 'pointer' }}>
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, display: 'block' }}>Título</label>
+                  <input value={meetingTitle} onChange={e => setMeetingTitle(e.target.value)}
+                    style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #E2E8F0', borderRadius: 8, fontSize: 14, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ display: 'flex', gap: 12, marginBottom: 6 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, display: 'block' }}>Data e hora</label>
+                    <input type="datetime-local" value={meetingDate} onChange={e => setMeetingDate(e.target.value)}
+                      style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #E2E8F0', borderRadius: 8, fontSize: 14, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ width: 110 }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, display: 'block' }}>Duração</label>
+                    <select value={meetingDuration} onChange={e => setMeetingDuration(Number(e.target.value))}
+                      style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #E2E8F0', borderRadius: 8, fontSize: 14, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box', background: '#fff' }}>
+                      {[15, 30, 45, 60, 90, 120].map(m => <option key={m} value={m}>{m} min</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+                  <button onClick={handleCreateMeeting} disabled={generatingMeeting}
+                    style={{ flex: 1, padding: '10px 0', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 9, border: 'none', cursor: generatingMeeting ? 'not-allowed' : 'pointer', opacity: generatingMeeting ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                    {generatingMeeting ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> : <Video style={{ width: 14, height: 14 }} />}
+                    {generatingMeeting ? 'Gerando...' : 'Agendar'}
+                  </button>
+                  <button onClick={() => setShowMeetingModal(false)}
+                    style={{ padding: '10px 16px', background: '#F1F5F9', color: '#64748B', fontSize: 13, fontWeight: 600, borderRadius: 9, border: 'none', cursor: 'pointer' }}>
+                    Cancelar
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <div style={{ width: 320, flexShrink: 0, borderLeft: '1px solid #E2E8F0', background: '#fff', overflowY: 'auto' }}>
         {!activeConv ? (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8 }}>
@@ -2071,16 +2235,13 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
                       em si fica pra próxima etapa, aqui só a lista + o espaço reservado */}
                   {leadTab === 'reunioes' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <button
-                        disabled
-                        title="Em breve — o agendamento será conectado na próxima etapa"
+                      <button onClick={openMeetingModal}
                         style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 0',
-                          background: '#F1F5F9', color: '#94A3B8', fontSize: 12, fontWeight: 700,
-                          borderRadius: 8, border: '1px dashed #CBD5E1', cursor: 'not-allowed',
+                          background: '#00A896', color: '#fff', fontSize: 12, fontWeight: 700,
+                          borderRadius: 8, border: 'none', cursor: 'pointer',
                         }}>
-                        <Calendar style={{ width: 13, height: 13 }} /> Agendar reunião
-                        <span style={{ fontSize: 9, fontWeight: 700, background: '#E2E8F0', color: '#64748B', padding: '1px 6px', borderRadius: 20, marginLeft: 2 }}>EM BREVE</span>
+                        <Video style={{ width: 13, height: 13 }} /> Agendar reunião
                       </button>
 
                       {loadingMeetings ? (
@@ -2107,6 +2268,18 @@ export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
                                   {m.status === 'completed' ? 'Realizada' : m.status === 'cancelled' ? 'Cancelada' : 'Agendada'}
                                 </span>
                               </div>
+                              {m.meet_link && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}>
+                                  <Video style={{ width: 11, height: 11, color: '#00A896', flexShrink: 0 }} />
+                                  <span style={{ fontSize: 11, color: '#00A896', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                                    {m.meet_link}
+                                  </span>
+                                  <button onClick={() => copyMeetLink(m.meet_link!)} title="Copiar link"
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: 2, flexShrink: 0 }}>
+                                    {copiedMeetLink === m.meet_link ? <Check style={{ width: 12, height: 12, color: '#10B981' }} /> : <Copy style={{ width: 12, height: 12 }} />}
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
