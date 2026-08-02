@@ -6,7 +6,7 @@ import {
   ExternalLink, UserPlus, Send, Check,
   Loader2, Image, FileText, Mic, Video,
   Tag, Clock, Calendar, Play, Pause,
-  X, Paperclip, Smile, CornerUpLeft, SmilePlus, Save,
+  X, Paperclip, Smile, CornerUpLeft, SmilePlus, Save, Zap,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
@@ -600,7 +600,10 @@ const panelSelectStyle: React.CSSProperties = {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function AionInboxHub() {
+export default function AionInboxHub({ aionPlatformId, onManageQuickReplies }: {
+  aionPlatformId?: string
+  onManageQuickReplies?: () => void
+} = {}) {
   // ── state ──
   const [conversations, setConversations]           = useState<AionConversation[]>([])
   const [activeConv, setActiveConv]                 = useState<AionConversation | null>(null)
@@ -636,6 +639,9 @@ export default function AionInboxHub() {
   const [savingInteraction, setSavingInteraction]   = useState(false)
   const [leadMeetings, setLeadMeetings]             = useState<AionCrmMeeting[]>([])
   const [loadingMeetings, setLoadingMeetings]       = useState(false)
+  // respostas rápidas — whatsapp_quick_replies com platform_whatsapp.id como pseudo-institution_id
+  const [showQuickReplies, setShowQuickReplies]     = useState(false)
+  const [quickReplies, setQuickReplies]             = useState<{ id: string; label: string; text: string; shortcut: string | null }[]>([])
   // media state
   const [replyTo, setReplyTo]                       = useState<AionMessage | null>(null)
   const [pendingFile, setPendingFile]               = useState<File | null>(null)
@@ -691,6 +697,19 @@ export default function AionInboxHub() {
       .or('user_type.eq.consultant,role.eq.admin_geral')
       .then(({ data }) => setConsultants((data as ConsultantUser[]) ?? []))
   }, [])
+
+  // ── load quick replies (globais + pessoais — RLS já filtra) ──
+  useEffect(() => {
+    if (!aionPlatformId) return
+    supabase
+      .from('whatsapp_quick_replies')
+      .select('id, title, message, order_index, shortcut')
+      .eq('institution_id', aionPlatformId)
+      .order('order_index', { ascending: true })
+      .then(({ data }) => {
+        if (data) setQuickReplies(data.map((r: any) => ({ id: r.id, label: r.title, text: r.message, shortcut: r.shortcut ?? null })))
+      })
+  }, [aionPlatformId])
 
   // ── stop mic on unmount ──
   useEffect(() => {
@@ -1396,6 +1415,50 @@ export default function AionInboxHub() {
                 </div>
               )}
 
+              {/* Quick replies panel */}
+              {showQuickReplies && (
+                <div style={{ marginBottom: 8, background: '#F0FDFB', borderRadius: 12, border: '1px solid #D1FAE5', padding: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#64748B' }}>Respostas rápidas</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      {onManageQuickReplies && (
+                        <button onClick={() => { setShowQuickReplies(false); onManageQuickReplies() }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#00A896', fontSize: 11, fontWeight: 600 }}>
+                          Gerenciar
+                        </button>
+                      )}
+                      <button onClick={() => setShowQuickReplies(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: 2 }}>
+                        <X style={{ width: 14, height: 14 }} />
+                      </button>
+                    </div>
+                  </div>
+                  {quickReplies.length === 0 ? (
+                    <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '12px 0' }}>
+                      Nenhuma resposta rápida cadastrada.<br />
+                      {onManageQuickReplies && (
+                        <span style={{ color: '#00A896', cursor: 'pointer' }} onClick={() => { setShowQuickReplies(false); onManageQuickReplies() }}>
+                          Configure em Configurações → Respostas Rápidas
+                        </span>
+                      )}
+                    </p>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      {quickReplies.map(qr => (
+                        <button
+                          key={qr.id}
+                          onClick={() => { setInputText(qr.text); setShowQuickReplies(false) }}
+                          style={{ textAlign: 'left', padding: '8px 12px', background: '#FFFFFF', border: '1px solid #D1FAE5', borderRadius: 8, cursor: 'pointer' }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#E6F7F5' }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#FFFFFF' }}
+                        >
+                          <p style={{ fontSize: 12, fontWeight: 600, color: '#1A2B4A', margin: 0 }}>{qr.label}</p>
+                          <p style={{ fontSize: 11, color: '#64748B', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{qr.text}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* File preview */}
               {pendingFile && (
                 <div style={{ marginBottom: 8, background: '#F0FDFB', borderRadius: 12, border: '1px solid #D1FAE5', padding: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1482,8 +1545,9 @@ export default function AionInboxHub() {
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {([
-                    { icon: Paperclip, active: showAttach,      onClick: () => { setShowAttach(v => !v); setShowEmojiPicker(false) }, title: 'Anexar' },
-                    { icon: Smile,     active: showEmojiPicker, onClick: () => { setShowEmojiPicker(v => !v); setShowAttach(false) },  title: 'Emoji'  },
+                    { icon: Paperclip, active: showAttach,       onClick: () => { setShowAttach(v => !v); setShowEmojiPicker(false); setShowQuickReplies(false) }, title: 'Anexar' },
+                    { icon: Zap,       active: showQuickReplies, onClick: () => { setShowQuickReplies(v => !v); setShowAttach(false); setShowEmojiPicker(false) }, title: 'Respostas rápidas' },
+                    { icon: Smile,     active: showEmojiPicker,  onClick: () => { setShowEmojiPicker(v => !v); setShowAttach(false); setShowQuickReplies(false) }, title: 'Emoji'  },
                   ] as const).map(btn => {
                     const IconComp = btn.icon
                     return (

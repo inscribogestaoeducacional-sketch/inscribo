@@ -6,7 +6,7 @@ import FlowEditor from '../whatsapp/FlowEditor'
 import {
   Settings, MessageCircle, GitBranch, QrCode, Megaphone,
   Plus, Trash2, Copy, Check, ToggleLeft, ToggleRight, Save, Loader2,
-  TrendingUp, Users, Clock,
+  TrendingUp, Users, Clock, Edit2,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -62,7 +62,7 @@ const DAYS = [
 
 // ─── SettingsTab ──────────────────────────────────────────────────────────────
 
-function SettingsTab() {
+function SettingsTab({ aionPlatformId }: { aionPlatformId: string }) {
   const [flow, setFlow]           = useState<AionFlow | null>(null)
   const [consultants, setConsultants] = useState<ConsultantUser[]>([])
   const [loading, setLoading]     = useState(true)
@@ -263,6 +263,9 @@ function SettingsTab() {
         )}
       </div>
 
+      {/* Respostas Rápidas */}
+      <QuickRepliesSection institutionId={aionPlatformId} />
+
       {/* Salvar */}
       <button onClick={save} disabled={saving}
         style={{
@@ -277,6 +280,188 @@ function SettingsTab() {
           : <Save  style={{ width: 16, height: 16 }} />}
         {saving ? 'Salvando…' : saved ? 'Salvo!' : 'Salvar Configurações'}
       </button>
+    </div>
+  )
+}
+
+// ─── QuickRepliesSection ─────────────────────────────────────────────────────
+// Reaproveita whatsapp_quick_replies (mesma tabela do lado escola —
+// WhatsAppHub.tsx / SystemSettings.tsx) usando platform_whatsapp.id como
+// pseudo-institution_id, igual o FlowEditor já faz com whatsapp_flows.
+// Ver migration 20260802000100_whatsapp_quick_replies_aion_inbox.sql pro
+// motivo de precisar de policies de RLS adicionais pra isso funcionar.
+
+interface AionQuickReply {
+  id: string
+  title: string
+  message: string
+  shortcut: string | null
+  order_index: number
+}
+
+const EMPTY_QR = { title: '', message: '', shortcut: '' }
+
+function QuickRepliesSection({ institutionId }: { institutionId: string }) {
+  const [items, setItems]         = useState<AionQuickReply[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [showForm, setShowForm]   = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm]           = useState({ ...EMPTY_QR })
+  const [saving, setSaving]       = useState(false)
+
+  const load = async () => {
+    const { data } = await supabase
+      .from('whatsapp_quick_replies')
+      .select('id, title, message, shortcut, order_index')
+      .eq('institution_id', institutionId)
+      .order('order_index', { ascending: true })
+    setItems((data as AionQuickReply[]) ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => { if (institutionId) load() }, [institutionId])
+
+  const startNew = () => { setEditingId(null); setForm({ ...EMPTY_QR }); setShowForm(true) }
+  const startEdit = (item: AionQuickReply) => {
+    setEditingId(item.id)
+    setForm({ title: item.title, message: item.message, shortcut: item.shortcut || '' })
+    setShowForm(true)
+  }
+  const cancelForm = () => { setShowForm(false); setEditingId(null); setForm({ ...EMPTY_QR }) }
+
+  const saveItem = async () => {
+    if (!form.title.trim() || !form.message.trim()) return
+    setSaving(true)
+    const shortcut = form.shortcut.trim()
+      ? (form.shortcut.trim().startsWith('/') ? form.shortcut.trim() : `/${form.shortcut.trim()}`)
+      : null
+    if (editingId) {
+      await supabase.from('whatsapp_quick_replies')
+        .update({ title: form.title.trim(), message: form.message.trim(), shortcut, updated_at: new Date().toISOString() })
+        .eq('id', editingId)
+    } else {
+      await supabase.from('whatsapp_quick_replies').insert({
+        institution_id: institutionId,
+        title:          form.title.trim(),
+        message:        form.message.trim(),
+        shortcut,
+        order_index:    items.length,
+      })
+    }
+    cancelForm()
+    setSaving(false)
+    await load()
+  }
+
+  const deleteItem = async (id: string) => {
+    if (!confirm('Excluir esta resposta rápida?')) return
+    await supabase.from('whatsapp_quick_replies').delete().eq('id', id)
+    setItems(prev => prev.filter(i => i.id !== id))
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '9px 12px', border: '1.5px solid #E2E8F0',
+    borderRadius: 8, fontSize: 14, color: '#1A2B4A', background: '#fff',
+    outline: 'none', boxSizing: 'border-box',
+  }
+  const labelStyle: React.CSSProperties = {
+    fontSize: 12, fontWeight: 600, color: '#64748B',
+    textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, display: 'block',
+  }
+
+  return (
+    <div style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>Respostas Rápidas</div>
+          <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>Mensagens prontas pra inserir na conversa com um clique</div>
+        </div>
+        <button onClick={startNew}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 10, border: 'none', cursor: 'pointer', flexShrink: 0 }}>
+          <Plus style={{ width: 16, height: 16 }} /> Nova Resposta
+        </button>
+      </div>
+
+      {showForm && (
+        <div style={{ background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: 14, padding: '20px 22px', marginBottom: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 16 }}>
+            {editingId ? 'Editar Resposta' : 'Nova Resposta'}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 14, marginBottom: 14 }}>
+            <div>
+              <label style={labelStyle}>Título *</label>
+              <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
+                placeholder="Ex: Boas-vindas" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Atalho</label>
+              <input value={form.shortcut} onChange={e => setForm({ ...form, shortcut: e.target.value })}
+                placeholder="/oi" style={inputStyle} />
+            </div>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={labelStyle}>Mensagem *</label>
+            <textarea value={form.message} onChange={e => setForm({ ...form, message: e.target.value })}
+              rows={3} placeholder="Texto que será inserido na conversa"
+              style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }} />
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={saveItem} disabled={saving || !form.title.trim() || !form.message.trim()}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', background: '#00A896', color: '#fff',
+                fontSize: 13, fontWeight: 700, borderRadius: 9, border: 'none',
+                cursor: (saving || !form.title.trim() || !form.message.trim()) ? 'not-allowed' : 'pointer',
+                opacity: (saving || !form.title.trim() || !form.message.trim()) ? 0.6 : 1,
+              }}>
+              {saving ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> : <Check style={{ width: 14, height: 14 }} />}
+              {editingId ? 'Salvar alterações' : 'Salvar'}
+            </button>
+            <button onClick={cancelForm}
+              style={{ padding: '9px 16px', background: '#F1F5F9', color: '#64748B', fontSize: 13, fontWeight: 600, borderRadius: 9, border: 'none', cursor: 'pointer' }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}>
+          <Loader2 style={{ width: 22, height: 22, color: '#00A896', animation: 'spin 1s linear infinite' }} />
+        </div>
+      ) : items.length === 0 ? (
+        !showForm && (
+          <div style={{ textAlign: 'center', padding: '20px 0', color: '#94A3B8', fontSize: 13 }}>
+            Nenhuma resposta rápida cadastrada ainda.
+          </div>
+        )
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {items.map(item => (
+            <div key={item.id}
+              style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{item.title}</span>
+                  {item.shortcut && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#00A896', background: '#E6F7F5', padding: '1px 8px', borderRadius: 20 }}>{item.shortcut}</span>
+                  )}
+                </div>
+                <div style={{ fontSize: 12, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.message}</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                <button onClick={() => startEdit(item)} title="Editar"
+                  style={{ width: 30, height: 30, border: '1.5px solid #E2E8F0', borderRadius: 8, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Edit2 style={{ width: 13, height: 13, color: '#64748B' }} />
+                </button>
+                <button onClick={() => deleteItem(item.id)} title="Excluir"
+                  style={{ width: 30, height: 30, border: '1.5px solid #FEE2E2', borderRadius: 8, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Trash2 style={{ width: 13, height: 13, color: '#EF4444' }} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -691,7 +876,7 @@ export default function AdminAionInbox() {
 
         {/* Tab content */}
         <div style={{ flex: 1, overflow: 'hidden', display: tab === 'inbox' || tab === 'flow' ? 'flex' : 'block', flexDirection: 'column' }}>
-          {tab === 'inbox' && <AionInboxHub />}
+          {tab === 'inbox' && <AionInboxHub aionPlatformId={aionPlatformId} onManageQuickReplies={() => setTab('settings')} />}
           {tab === 'flow' && (
             aionPlatformId
               ? <FlowEditor institutionId={aionPlatformId} onClose={() => setTab('inbox')} />
@@ -700,7 +885,7 @@ export default function AdminAionInbox() {
                 </div>
           )}
           {tab === 'qrcodes'  && <div style={{ overflowY: 'auto', height: '100%' }}><CampaignsTab /></div>}
-          {tab === 'settings' && <div style={{ overflowY: 'auto', height: '100%' }}><SettingsTab /></div>}
+          {tab === 'settings' && <div style={{ overflowY: 'auto', height: '100%' }}><SettingsTab aionPlatformId={aionPlatformId} /></div>}
         </div>
       </div>
     </SuperAdminLayout>
