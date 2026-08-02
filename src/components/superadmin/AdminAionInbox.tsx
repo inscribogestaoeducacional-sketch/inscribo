@@ -4,8 +4,9 @@ import SuperAdminLayout from './SuperAdminLayout'
 import AionInboxHub from './AionInboxHub'
 import FlowEditor from '../whatsapp/FlowEditor'
 import {
-  Settings, MessageCircle, GitBranch, QrCode,
+  Settings, MessageCircle, GitBranch, QrCode, Megaphone,
   Plus, Trash2, Copy, Check, ToggleLeft, ToggleRight, Save, Loader2,
+  TrendingUp, Users, Clock,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -280,13 +281,34 @@ function SettingsTab() {
   )
 }
 
-// ─── QRCodesTab ───────────────────────────────────────────────────────────────
+// ─── CampaignsTab ───────────────────────────────────────────────────────────────
 
 const EMPTY_KW = { keyword: '', label: '', description: '', auto_response: '', tag: '', source: 'whatsapp', create_lead: true }
 
-function QRCodesTab() {
+// Rastreio de lead por campanha: não existe FK entre crm_leads e aion_keywords —
+// o webhook (api/whatsapp/webhook.ts) grava a origem só como texto livre em
+// crm_leads.notes ("Veio via QR Code: {label}"). É o único jeito confiável de
+// ligar um lead a uma keyword específica hoje (origin repete o mesmo valor de
+// keyword.source entre keywords diferentes, e a tag fica só na conversa, não no lead).
+const CAMPAIGN_NOTE_PREFIX = 'Veio via QR Code:'
+
+type Period = 'today' | '7d' | '30d' | 'all'
+const PERIOD_LABELS: Record<Period, string> = { today: 'Hoje', '7d': '7 dias', '30d': '30 dias', all: 'Tudo' }
+
+function periodCutoffIso(period: Period): string | null {
+  if (period === 'all') return null
+  const d = new Date()
+  if (period === 'today') { d.setHours(0, 0, 0, 0); return d.toISOString() }
+  if (period === '7d') { d.setDate(d.getDate() - 7); return d.toISOString() }
+  d.setDate(d.getDate() - 30)
+  return d.toISOString()
+}
+
+function CampaignsTab() {
   const [keywords, setKeywords]   = useState<AionKeyword[]>([])
   const [aionTags, setAionTags]   = useState<{id:string;name:string;color:string}[]>([])
+  const [campaignLeads, setCampaignLeads] = useState<{ notes: string; created_at: string }[]>([])
+  const [period, setPeriod]       = useState<Period>('30d')
   const [loading, setLoading]     = useState(true)
   const [showForm, setShowForm]   = useState(false)
   const [form, setForm]           = useState({ ...EMPTY_KW })
@@ -294,16 +316,33 @@ function QRCodesTab() {
   const [copiedId, setCopiedId]   = useState<string | null>(null)
 
   const load = async () => {
-    const [{ data: kws }, { data: tags }] = await Promise.all([
+    const [{ data: kws }, { data: tags }, { data: leads }] = await Promise.all([
       supabase.from('aion_keywords').select('*').order('created_at', { ascending: false }),
       supabase.from('aion_tags').select('*').order('name'),
+      supabase.from('crm_leads').select('notes, created_at').ilike('notes', `${CAMPAIGN_NOTE_PREFIX}%`),
     ])
     setKeywords((kws as AionKeyword[]) ?? [])
     setAionTags(tags ?? [])
+    setCampaignLeads((leads as { notes: string; created_at: string }[]) ?? [])
     setLoading(false)
   }
 
   useEffect(() => { load() }, [])
+
+  // Contagem/última-vez por keyword — comparação exata contra o texto que o
+  // webhook grava (Veio via QR Code: {label}), não substring, pra um label não
+  // "vazar" contagem de outro que o contenha como prefixo.
+  const keywordStats = keywords.map(kw => {
+    const expected = `${CAMPAIGN_NOTE_PREFIX} ${kw.label}`
+    const matches  = campaignLeads.filter(l => l.notes === expected)
+    const lastUsed = matches.length
+      ? matches.reduce((max, l) => (l.created_at > max ? l.created_at : max), matches[0].created_at)
+      : null
+    return { keyword: kw, count: matches.length, lastUsed }
+  })
+
+  const cutoff = periodCutoffIso(period)
+  const totalInPeriod = campaignLeads.filter(l => !cutoff || l.created_at >= cutoff).length
 
   const copyLink = (link: string, id: string) => {
     navigator.clipboard.writeText(link)
@@ -353,11 +392,83 @@ function QRCodesTab() {
 
   return (
     <div style={{ padding: '24px 24px' }}>
+      {/* Métricas de campanha */}
+      <div style={{ marginBottom: 28 }}>
+        {keywords.length === 0 ? (
+          <div style={{ background: '#F8FAFC', border: '1.5px dashed #CBD5E1', borderRadius: 14, padding: '32px 24px', textAlign: 'center' }}>
+            <Megaphone style={{ width: 32, height: 32, color: '#94A3B8', margin: '0 auto 12px' }} />
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 4 }}>Nenhuma campanha cadastrada ainda</div>
+            <div style={{ fontSize: 13, color: '#64748B', maxWidth: 440, margin: '0 auto', lineHeight: 1.6 }}>
+              Cada keyword abaixo vira uma campanha rastreável: gere o link/QR code, divulgue,
+              e acompanhe aqui quantos leads ela trouxe e quando foi usada pela última vez.
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Resumo geral */}
+            <div style={{
+              background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 14, padding: '20px 22px', marginBottom: 16,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ width: 44, height: 44, background: '#E6F7F5', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <TrendingUp style={{ width: 22, height: 22, color: '#00A896' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#1A2B4A', lineHeight: 1 }}>{totalInPeriod}</div>
+                  <div style={{ fontSize: 12, color: '#64748B', marginTop: 3 }}>
+                    lead{totalInPeriod === 1 ? '' : 's'} captado{totalInPeriod === 1 ? '' : 's'} via campanha — {PERIOD_LABELS[period]}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', borderRadius: 10, padding: 3 }}>
+                {(['today', '7d', '30d', 'all'] as Period[]).map(p => (
+                  <button key={p} onClick={() => setPeriod(p)}
+                    style={{
+                      padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
+                      background: period === p ? '#00A896' : 'transparent', color: period === p ? '#fff' : '#64748B',
+                    }}>
+                    {PERIOD_LABELS[p]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Por keyword */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+              {keywordStats.map(({ keyword, count, lastUsed }) => (
+                <div key={keyword.id} style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {keyword.label}
+                    </span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#00A896', background: '#E6F7F5', padding: '2px 7px', borderRadius: 20, flexShrink: 0 }}>
+                      {keyword.keyword}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    <Users style={{ width: 13, height: 13, color: '#94A3B8' }} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{count}</span>
+                    <span style={{ fontSize: 12, color: '#64748B' }}>lead{count === 1 ? '' : 's'}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Clock style={{ width: 13, height: 13, color: '#94A3B8' }} />
+                    <span style={{ fontSize: 12, color: '#64748B' }}>
+                      {lastUsed ? `Última vez: ${new Date(lastUsed).toLocaleDateString('pt-BR')}` : 'Ainda não usada'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
       {/* Toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>Keywords / QR Codes</div>
-          <div style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>Cada keyword gera um link QR Code para o WhatsApp da Áion</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>Keywords de Campanha</div>
+          <div style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>Cada keyword gera um link/QR Code para o WhatsApp da Áion</div>
         </div>
         <button onClick={() => setShowForm(v => !v)}
           style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 10, border: 'none', cursor: 'pointer' }}>
@@ -551,7 +662,7 @@ export default function AdminAionInbox() {
   const tabs: { key: Tab; label: string; Icon: React.ElementType }[] = [
     { key: 'inbox',    label: 'Inbox',          Icon: MessageCircle },
     { key: 'flow',     label: 'Fluxo do Bot',   Icon: GitBranch },
-    { key: 'qrcodes',  label: 'QR Codes',       Icon: QrCode },
+    { key: 'qrcodes',  label: 'Campanhas',      Icon: Megaphone },
     { key: 'settings', label: 'Configurações',  Icon: Settings },
   ]
 
@@ -588,7 +699,7 @@ export default function AdminAionInbox() {
                   <Loader2 style={{ width: 28, height: 28, color: '#00A896', animation: 'spin 1s linear infinite' }} />
                 </div>
           )}
-          {tab === 'qrcodes'  && <div style={{ overflowY: 'auto', height: '100%' }}><QRCodesTab /></div>}
+          {tab === 'qrcodes'  && <div style={{ overflowY: 'auto', height: '100%' }}><CampaignsTab /></div>}
           {tab === 'settings' && <div style={{ overflowY: 'auto', height: '100%' }}><SettingsTab /></div>}
         </div>
       </div>
