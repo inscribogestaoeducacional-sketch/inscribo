@@ -7,7 +7,7 @@ if (typeof globalThis !== 'undefined' && !(globalThis as any).Buffer) {
 import React from 'react'
 import { Document, Page, View, Text, Image, Link, Font, StyleSheet } from '@react-pdf/renderer'
 import AION_LOGO_B64 from './aionLogo'
-import { buildInterpretation, type RaioXMetrics, type CompetitorRow, type SegmentMetric } from './raioXMetrics'
+import { buildInterpretation, type RaioXMetrics, type CompetitorRow, type SegmentMetric, type SegmentCompetitorRow } from './raioXMetrics'
 
 // ─── Local fonts — WOFF (fontkit in react-pdf doesn't support woff2) ──────────
 Font.register({
@@ -42,11 +42,7 @@ const SOFT   = '#E6F7F4'
 // pontos de atenção — mesma linguagem visual de alerta já usada no site (Landing.tsx)
 const WARN      = '#F59E0B'
 const WARN_BG   = '#FFFBEB'
-const WARN_BRD  = '#FDE68A'
-const WARN_TEXT = '#92400E'
 const NEUTRAL_BG = '#F1F5F9'
-
-const NO_DATA_TEXT = 'Não há informações públicas suficientes para este indicador.'
 
 const fmtNum = (v: number) => Math.round(v).toLocaleString('pt-BR')
 const fmtPct = (v: number) => `${v.toFixed(1)}%`
@@ -125,15 +121,6 @@ function HeroStat({ label, value, sub, color }: { label: string; value: string; 
       <Text style={{ fontSize: 10, fontWeight: 700, color: CMID, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, fontFamily: 'PlusJakartaSans' }}>{label}</Text>
       <Text style={{ fontFamily: 'BricolageGrotesque', fontWeight: 900, fontSize: 46, color, marginBottom: 8 }}>{value}</Text>
       <Text style={{ fontSize: 11, color: CMID, lineHeight: 1.5, fontFamily: 'PlusJakartaSans' }}>{sub}</Text>
-    </View>
-  )
-}
-
-function NoDataBanner({ label }: { label: string }) {
-  return (
-    <View style={{ backgroundColor: WARN_BG, borderWidth: 1, borderColor: WARN_BRD, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, marginBottom: 10 }}>
-      <Text style={{ fontSize: 11, fontWeight: 700, color: WARN_TEXT, marginBottom: 3, fontFamily: 'PlusJakartaSans' }}>{label}</Text>
-      <Text style={{ fontSize: 10, color: WARN_TEXT, fontFamily: 'PlusJakartaSans' }}>{NO_DATA_TEXT}</Text>
     </View>
   )
 }
@@ -280,15 +267,9 @@ function Page3({ m }: { m: RaioXMetrics }) {
       <Tag>Panorama do Mercado</Tag>
       <Text style={s.title}>Indicadores de {m.city}/{m.state}</Text>
 
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 26 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
         {indicators.map(i => <KpiCard key={i.label} label={i.label} value={i.value} />)}
       </View>
-
-      <Text style={{ fontSize: 11.5, fontWeight: 700, color: CMID, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: 'PlusJakartaSans' }}>
-        Outros indicadores de mercado
-      </Text>
-      <NoDataBanner label="Desempenho médio no ENEM (rede privada regional)" />
-      <NoDataBanner label="Renda média e perfil socioeconômico das famílias (IBGE)" />
     </Page>
   )
 }
@@ -391,17 +372,41 @@ function Page6({ m }: { m: RaioXMetrics }) {
 }
 
 // ─── PAGE 7 — RANKING E PARTICIPAÇÃO POR ETAPA DE ENSINO ──────────────────────
+function CompetitorMiniList({ items }: { items: SegmentCompetitorRow[] }) {
+  if (items.length === 0) return null
+  return (
+    <View style={{ marginTop: 4 }}>
+      <Text style={{ fontSize: 9.5, fontWeight: 700, color: CMID, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, fontFamily: 'PlusJakartaSans' }}>
+        Principais concorrentes nesse segmento
+      </Text>
+      {items.map((c, i) => (
+        <View key={c.co_entidade} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: '#E2E8F0' }}>
+          <Text style={{ flex: 1, fontSize: 10.5, color: AZUL, fontWeight: 600, fontFamily: 'PlusJakartaSans' }}>{`${i + 1}º ${c.no_entidade}`}</Text>
+          <Text style={{ fontSize: 10, color: CMID, fontFamily: 'PlusJakartaSans' }}>{`${fmtNum(c.value)} · ${fmtPct(c.marketSharePct)}`}</Text>
+        </View>
+      ))}
+    </View>
+  )
+}
+
 function SegmentCard({ seg, cityAvg }: { seg: SegmentMetric; cityAvg: number }) {
   const initial = seg.label.charAt(0)
 
   if (!seg.active) {
     return (
-      <View style={{ backgroundColor: NEUTRAL_BG, borderRadius: 14, padding: 18, marginBottom: 14, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-        <NumberCircle text={initial} size={44} color={CLIGHT} bg="#fff" fontSize={16} />
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontFamily: 'BricolageGrotesque', fontWeight: 800, fontSize: 14, color: AZUL, marginBottom: 3 }}>{seg.label}</Text>
-          <Text style={{ fontSize: 10.5, color: CMID, fontFamily: 'PlusJakartaSans' }}>A escola não atua neste segmento.</Text>
+      <View style={{ backgroundColor: NEUTRAL_BG, borderRadius: 14, padding: 18, marginBottom: 14 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: seg.topCompetitors.length > 0 ? 12 : 0 }}>
+          <NumberCircle text={initial} size={44} color={CLIGHT} bg="#fff" fontSize={16} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontFamily: 'BricolageGrotesque', fontWeight: 800, fontSize: 14, color: AZUL, marginBottom: 3 }}>{seg.label}</Text>
+            <Text style={{ fontSize: 10.5, color: CMID, fontFamily: 'PlusJakartaSans' }}>
+              {seg.totalStudents > 0
+                ? `A escola não atua neste segmento — ${fmtNum(seg.totalActive)} escolas atendem ${fmtNum(seg.totalStudents)} alunos aqui.`
+                : 'A escola não atua neste segmento.'}
+            </Text>
+          </View>
         </View>
+        <CompetitorMiniList items={seg.topCompetitors} />
       </View>
     )
   }
@@ -425,6 +430,10 @@ function SegmentCard({ seg, cityAvg }: { seg: SegmentMetric; cityAvg: number }) 
         </View>
       </View>
 
+      <Text style={{ fontSize: 10, color: CMID, marginBottom: 10, fontFamily: 'PlusJakartaSans' }}>
+        {`${fmtNum(seg.totalStudents)} alunos matriculados nesse segmento, entre ${seg.totalActive} escolas privadas do município.`}
+      </Text>
+
       {!isLeader && seg.leaderName && (
         <Text style={{ fontSize: 10, color: CMID, marginBottom: 10, fontFamily: 'PlusJakartaSans' }}>
           {`Líder do segmento: ${seg.leaderName} (${fmtNum(seg.leaderValue)} matrículas)`}
@@ -446,6 +455,8 @@ function SegmentCard({ seg, cityAvg }: { seg: SegmentMetric; cityAvg: number }) 
         color={CLIGHT}
         valueLabel={fmtNum(cityAvg)}
       />
+
+      <CompetitorMiniList items={seg.topCompetitors} />
     </View>
   )
 }
@@ -509,21 +520,58 @@ function Page8({ m, interpretation }: { m: RaioXMetrics; interpretation: string[
   )
 }
 
-// ─── PAGE 9 — COMO A ÁION EDU PODE AJUDAR + CTA ───────────────────────────────
+// ─── PAGE 9 — COMO A ÁION EDU PODE AJUDAR (diferenciais) ──────────────────────
+const AION_BENEFITS = [
+  { title: 'Nenhum lead se perde',            desc: 'Pipeline completo do primeiro contato até a matrícula assinada, com histórico de cada família.' },
+  { title: 'Atendimento 100% centralizado',   desc: 'Toda a equipe responde pelo WhatsApp oficial da escola — sem números pessoais, sem perder conversa.' },
+  { title: 'Decisões com dados, não achismo', desc: 'Relatórios de conversão, CPA e desempenho por consultor, sempre atualizados.' },
+  { title: 'Implantação em poucos dias',      desc: 'Sem projeto longo de TI: sua secretaria já opera na primeira semana.' },
+]
+
 function Page9({ m }: { m: RaioXMetrics }) {
+  return (
+    <Page size="A4" orientation="portrait" style={[s.page, { paddingVertical: 32, paddingHorizontal: 38 }]}>
+      <Tag>Por que a Áion Edu</Tag>
+      <Text style={s.title}>{`O que muda para ${m.schoolName}`}</Text>
+
+      <Text style={{ fontSize: 11.5, color: CMID, lineHeight: 1.7, marginBottom: 22, fontFamily: 'PlusJakartaSans' }}>
+        {'A campanha de matrículas da sua escola começa AGORA com a '}
+        <Text style={{ fontWeight: 700, color: VD }}>ÁION EDU</Text>
+        {'. Lemos os dados da sua escola, criamos um plano de campanha com metas e ações, centralizamos o atendimento das famílias e entregamos ao gestor visibilidade total — do primeiro contato até a matrícula assinada.'}
+      </Text>
+
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 22 }}>
+        {AION_BENEFITS.map((b, i) => (
+          <View key={b.title} style={{ width: '48%', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: BORDA, borderRadius: 14, padding: 16 }}>
+            <NumberCircle text={String(i + 1)} size={30} color={VD} bg={SOFT} fontSize={13} />
+            <Text style={{ fontFamily: 'BricolageGrotesque', fontWeight: 800, fontSize: 12.5, color: AZUL, marginTop: 10, marginBottom: 5, lineHeight: 1.3 }}>{b.title}</Text>
+            <Text style={{ fontSize: 9.5, color: CMID, lineHeight: 1.5, fontFamily: 'PlusJakartaSans' }}>{b.desc}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={{ backgroundColor: VD, borderRadius: 14, paddingVertical: 20, paddingHorizontal: 22 }}>
+        <Text style={{ fontSize: 12.5, color: '#fff', lineHeight: 1.7, fontFamily: 'PlusJakartaSans', fontStyle: 'italic' }}>
+          {'"Enquanto sua equipe foca em encantar as famílias, a Áion Edu cuida da organização, dos alertas e dos números — para nenhuma matrícula ficar pelo caminho."'}
+        </Text>
+      </View>
+    </Page>
+  )
+}
+
+// ─── PAGE 10 — CTA FINAL ───────────────────────────────────────────────────────
+function Page10({ m }: { m: RaioXMetrics }) {
   const pillars = ['Mais Controle', 'Mais Previsibilidade', 'Mais Matrículas']
   return (
     <Page size="A4" orientation="portrait" style={[s.page, { backgroundColor: VD, paddingVertical: 48, paddingHorizontal: 40, alignItems: 'center', justifyContent: 'center' }]}>
       <LogoPill height={22} />
 
       <Text style={{ fontFamily: 'BricolageGrotesque', fontWeight: 900, fontSize: 26, color: '#fff', textAlign: 'center', marginTop: 24, marginBottom: 16, lineHeight: 1.25 }}>
-        {`Como a Áion Edu pode ajudar ${m.schoolName}`}
+        {`${m.schoolName} pronta para a próxima campanha`}
       </Text>
 
       <Text style={{ fontSize: 12, color: '#B2D8CE', textAlign: 'center', lineHeight: 1.7, marginBottom: 26, fontFamily: 'PlusJakartaSans' }}>
-        {'A campanha de matrículas da sua escola começa AGORA com a '}
-        <Text style={{ fontWeight: 700, color: '#fff' }}>ÁION EDU</Text>
-        {'! Lemos os dados da sua escola, criamos um plano de campanha com metas e ações, centralizamos o atendimento das famílias e entregamos ao gestor visibilidade total — do primeiro contato até a matrícula assinada.'}
+        Fale com a nossa equipe e veja, na prática, como a Áion Edu se encaixa na rotina da sua escola.
       </Text>
 
       <View style={{ gap: 10, marginBottom: 30, alignItems: 'center' }}>
@@ -567,6 +615,7 @@ export default function RaioXPdfDocument({ data }: { data: RaioXPdfData }) {
       <Page7 m={m} />
       <Page8 m={m} interpretation={interpretation} />
       <Page9 m={m} />
+      <Page10 m={m} />
     </Document>
   )
 }

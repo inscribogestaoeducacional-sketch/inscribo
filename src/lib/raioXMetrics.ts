@@ -10,6 +10,13 @@ export interface CompetitorRow {
   isSelected: boolean
 }
 
+export interface SegmentCompetitorRow {
+  co_entidade: string
+  no_entidade: string
+  value: number          // matrículas da escola concorrente nesse segmento
+  marketSharePct: number // participação dela nesse segmento
+}
+
 export interface SegmentMetric {
   key: 'inf' | 'fund' | 'med'
   label: string
@@ -17,9 +24,11 @@ export interface SegmentMetric {
   active: boolean            // a escola tem matrículas nesse segmento
   ranking: number | null     // null se a escola não atua nesse segmento
   totalActive: number        // quantas escolas privadas do município atuam nesse segmento
+  totalStudents: number      // total de alunos do segmento entre as escolas privadas do município
   marketSharePct: number | null
   leaderName: string | null
   leaderValue: number
+  topCompetitors: SegmentCompetitorRow[] // top 3 concorrentes desse segmento (exclui a própria escola)
 }
 
 export interface RaioXMetrics {
@@ -150,10 +159,22 @@ export async function calculateRaioXMetrics(
     const marketSharePct = active && totalSegStudents > 0 ? (schoolValue / totalSegStudents) * 100 : null
     const leader = segSorted[0] ?? null
 
+    const topCompetitors: SegmentCompetitorRow[] = segSorted
+      .filter(r => r.co_entidade !== coEntidade)
+      .slice(0, 3)
+      .map(r => ({
+        co_entidade: r.co_entidade,
+        no_entidade: r.no_entidade ?? '—',
+        value: r[field] ?? 0,
+        marketSharePct: totalSegStudents > 0 ? ((r[field] ?? 0) / totalSegStudents) * 100 : 0,
+      }))
+
     return {
       key, label, schoolValue, active, ranking, totalActive, marketSharePct,
+      totalStudents: totalSegStudents,
       leaderName: leader ? (leader.no_entidade ?? '—') : null,
       leaderValue: leader ? (leader[field] ?? 0) : 0,
+      topCompetitors,
     }
   }
 

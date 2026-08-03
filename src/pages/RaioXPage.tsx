@@ -70,6 +70,16 @@ const ufName = (uf: string) => UFS.find(u => u.uf === uf)?.name ?? uf
 const STEP_LABELS = ['Buscar escola', 'Confirmar', 'Seus dados']
 const STEP_INDEX: Record<Step, number> = { search: 0, confirm: 1, form: 2, success: 3 }
 
+// mensagens rotativas exibidas enquanto o relatório é calculado/gerado
+const LOADING_MESSAGES = [
+  'Analisando os dados do Censo Escolar...',
+  'Comparando com as escolas da sua região...',
+  'Calculando ranking e participação de mercado...',
+  'Montando os gráficos do seu relatório...',
+  'A Áion Edu já ajuda escolas a organizar toda a captação de alunos...',
+  'Preparando seu Raio-X Estratégico...',
+]
+
 const labelStyle: React.CSSProperties = {
   display: 'block', fontSize: 12, fontWeight: 600, color: '#374151',
   marginBottom: 6, marginTop: 16,
@@ -140,6 +150,22 @@ export default function RaioXPage() {
   useEffect(() => {
     return () => { if (pdfUrl) URL.revokeObjectURL(pdfUrl) }
   }, [pdfUrl])
+
+  // mensagens rotativas com fade durante a geração do relatório
+  const [loadingMsgIndex, setLoadingMsgIndex] = useState(0)
+  const [loadingMsgVisible, setLoadingMsgVisible] = useState(true)
+
+  useEffect(() => {
+    if (pdfState !== 'loading') { setLoadingMsgIndex(0); setLoadingMsgVisible(true); return }
+    const interval = setInterval(() => {
+      setLoadingMsgVisible(false)
+      setTimeout(() => {
+        setLoadingMsgIndex(i => (i + 1) % LOADING_MESSAGES.length)
+        setLoadingMsgVisible(true)
+      }, 300)
+    }, 2500)
+    return () => clearInterval(interval)
+  }, [pdfState])
 
   // ── passo 2: busca de cidades com debounce, escopada pela UF escolhida ────
   useEffect(() => {
@@ -549,8 +575,14 @@ export default function RaioXPage() {
                     <div style={{ width: 28, height: 28, border: `3px solid ${VM}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'raiox-spin 0.8s linear infinite' }} />
                   </div>
                   <h2 className="s-title" style={{ margin: 0, fontSize: 19, color: TEXT }}>Gerando seu relatório...</h2>
-                  <p style={{ margin: '10px 0 0', fontSize: 13.5, color: MUTED, lineHeight: 1.6, maxWidth: 360, marginLeft: 'auto', marginRight: 'auto' }}>
-                    Estamos calculando os indicadores de <strong>{selectedSchool?.no_entidade}</strong> a partir dos dados do Censo Escolar INEP.
+                  <p
+                    style={{
+                      margin: '10px 0 0', fontSize: 13.5, color: MUTED, lineHeight: 1.6, minHeight: 42,
+                      maxWidth: 360, marginLeft: 'auto', marginRight: 'auto',
+                      opacity: loadingMsgVisible ? 1 : 0, transition: 'opacity 0.3s ease',
+                    }}
+                  >
+                    {LOADING_MESSAGES[loadingMsgIndex]}
                   </p>
                 </>
               )}
