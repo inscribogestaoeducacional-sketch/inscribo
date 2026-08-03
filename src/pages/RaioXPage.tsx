@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, FormEvent } from 'react'
+import { useState, useEffect, FormEvent } from 'react'
 import { pdf } from '@react-pdf/renderer'
 import { supabase } from '../lib/supabase'
 import { SHARED_CSS } from '../styles/sharedCSS'
@@ -17,6 +17,7 @@ interface SchoolResult {
 }
 
 type Step = 'search' | 'confirm' | 'form' | 'success'
+type SearchStage = 'uf' | 'city' | 'school'
 
 // ─── design tokens — paleta oficial da Áion Edu (ver src/styles/sharedCSS.ts) ─
 const VD     = '#00523C' // verde escuro — cor primária da marca
@@ -30,6 +31,29 @@ const SOFT   = '#E6F7F5' // fundo mint claro (mesmo de .tag-g)
 
 const HERO_GRADIENT = `linear-gradient(135deg, ${VD} 0%, ${VMID} 50%, ${VM} 100%)`
 
+// CSS responsivo específico da página — breakpoints mobile, tap targets maiores
+const RAIOX_CSS = `
+.rx-hero { padding: 48px 20px 130px; }
+.rx-card-wrap { margin: -90px auto 60px; padding: 0 20px; }
+.rx-card { padding: 32px; transition: padding .2s ease; }
+.rx-uf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 8px; }
+.rx-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.rx-actions { display: flex; gap: 10px; }
+.rx-list-item { display: block; width: 100%; text-align: left; padding: 14px 16px; border-radius: 10px; border: 1.5px solid ${BORDER}; background: #fff; cursor: pointer; min-height: 48px; transition: background .15s, border-color .15s; }
+.rx-list-item:hover { background: ${SOFT}; border-color: ${VM}; }
+.rx-uf-btn { padding: 13px 4px; border-radius: 10px; border: 1.5px solid ${BORDER}; background: #fff; color: ${TEXT}; font-size: 14px; font-weight: 700; cursor: pointer; min-height: 48px; transition: background .15s, border-color .15s; font-family: 'Plus Jakarta Sans', sans-serif; }
+.rx-uf-btn:hover { background: ${SOFT}; border-color: ${VM}; color: ${VD}; }
+@media (max-width: 480px) {
+  .rx-hero { padding: 32px 16px 104px !important; }
+  .rx-card-wrap { margin: -72px auto 36px !important; padding: 0 14px !important; }
+  .rx-card { padding: 22px 18px !important; border-radius: 16px !important; }
+  .rx-grid2 { grid-template-columns: 1fr !important; }
+  .rx-actions { flex-direction: column !important; }
+  .rx-actions > button, .rx-actions > a { width: 100% !important; }
+  .rx-uf-grid { grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)) !important; gap: 6px !important; }
+}
+`
+
 const UFS = [
   { uf: 'AC', name: 'Acre' }, { uf: 'AL', name: 'Alagoas' }, { uf: 'AP', name: 'Amapá' },
   { uf: 'AM', name: 'Amazonas' }, { uf: 'BA', name: 'Bahia' }, { uf: 'CE', name: 'Ceará' },
@@ -41,6 +65,7 @@ const UFS = [
   { uf: 'RO', name: 'Rondônia' }, { uf: 'RR', name: 'Roraima' }, { uf: 'SC', name: 'Santa Catarina' },
   { uf: 'SP', name: 'São Paulo' }, { uf: 'SE', name: 'Sergipe' }, { uf: 'TO', name: 'Tocantins' },
 ]
+const ufName = (uf: string) => UFS.find(u => u.uf === uf)?.name ?? uf
 
 const STEP_LABELS = ['Buscar escola', 'Confirmar', 'Seus dados']
 const STEP_INDEX: Record<Step, number> = { search: 0, confirm: 1, form: 2, success: 3 }
@@ -49,29 +74,54 @@ const labelStyle: React.CSSProperties = {
   display: 'block', fontSize: 12, fontWeight: 600, color: '#374151',
   marginBottom: 6, marginTop: 16,
 }
+const headingStyle: React.CSSProperties = { margin: '0 0 4px', fontSize: 18, color: TEXT }
+const subtextStyle: React.CSSProperties = { margin: '0 0 16px', fontSize: 13, color: MUTED }
+const hintStyle: React.CSSProperties = { fontSize: 12.5, color: MUTED, marginTop: 12, textAlign: 'center' }
+const errStyle: React.CSSProperties = { color: '#dc2626', fontSize: 12, marginTop: 8 }
+const backLinkStyle: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'none',
+  color: VM, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0, marginBottom: 14,
+}
 
 // ─── componente ───────────────────────────────────────────────────────────
 export default function RaioXPage() {
-  // injeta a folha de estilos oficial do site (fontes, .inp, .btn-g, .tag-g etc.)
+  // injeta a folha de estilos oficial do site (fontes, .inp, .btn-g, .tag-g etc.) + CSS responsivo da página
   useEffect(() => {
-    const el = document.createElement('style')
-    el.id = 'aion-css'
-    el.textContent = SHARED_CSS
-    if (!document.getElementById('aion-css')) document.head.appendChild(el)
-    return () => { document.getElementById('aion-css')?.remove() }
+    const shared = document.createElement('style')
+    shared.id = 'aion-css'
+    shared.textContent = SHARED_CSS
+    if (!document.getElementById('aion-css')) document.head.appendChild(shared)
+
+    const own = document.createElement('style')
+    own.id = 'raiox-css'
+    own.textContent = RAIOX_CSS
+    document.head.appendChild(own)
+
+    return () => {
+      document.getElementById('aion-css')?.remove()
+      document.getElementById('raiox-css')?.remove()
+    }
   }, [])
 
   const [step, setStep] = useState<Step>('search')
+  const [searchStage, setSearchStage] = useState<SearchStage>('uf')
 
-  // busca de escola
-  const [query, setQuery] = useState('')
-  const [ufFilter, setUfFilter] = useState('')
-  const [results, setResults] = useState<SchoolResult[]>([])
-  const [searching, setSearching] = useState(false)
-  const [searchError, setSearchError] = useState<string | null>(null)
-  const [showDropdown, setShowDropdown] = useState(false)
+  // funil — passo 1: UF
+  const [selectedUf, setSelectedUf] = useState('')
+
+  // funil — passo 2: cidade (autocomplete filtrado pela UF)
+  const [cityQuery, setCityQuery] = useState('')
+  const [cityResults, setCityResults] = useState<string[]>([])
+  const [citySearching, setCitySearching] = useState(false)
+  const [cityError, setCityError] = useState<string | null>(null)
+  const [selectedCity, setSelectedCity] = useState('')
+
+  // funil — passo 3: escola (universo pré-carregado por UF+cidade, filtro local)
+  const [schoolQuery, setSchoolQuery] = useState('')
+  const [allSchools, setAllSchools] = useState<SchoolResult[]>([])
+  const [loadingSchools, setLoadingSchools] = useState(false)
+  const [schoolsError, setSchoolsError] = useState<string | null>(null)
   const [selectedSchool, setSelectedSchool] = useState<SchoolResult | null>(null)
-  const searchBoxRef = useRef<HTMLDivElement>(null)
 
   // formulário de captura
   const [directorName, setDirectorName] = useState('')
@@ -91,47 +141,59 @@ export default function RaioXPage() {
     return () => { if (pdfUrl) URL.revokeObjectURL(pdfUrl) }
   }, [pdfUrl])
 
-  // ── busca com debounce (nome, cidade ou UF simultaneamente + filtro de UF) ─
+  // ── passo 2: busca de cidades com debounce, escopada pela UF escolhida ────
   useEffect(() => {
-    const term = query.trim()
-    if (term.length < 2) { setResults([]); setSearchError(null); return }
-    const timer = setTimeout(() => runSearch(term), 350)
+    if (searchStage !== 'city' || !selectedUf) return
+    const term = cityQuery.trim()
+    if (term.length < 1) { setCityResults([]); setCityError(null); return }
+    const timer = setTimeout(() => runCitySearch(term), 300)
     return () => clearTimeout(timer)
-  }, [query, ufFilter])
+  }, [cityQuery, searchStage, selectedUf])
 
-  useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
-      if (searchBoxRef.current && !searchBoxRef.current.contains(e.target as Node)) {
-        setShowDropdown(false)
-      }
-    }
-    document.addEventListener('mousedown', onClickOutside)
-    return () => document.removeEventListener('mousedown', onClickOutside)
-  }, [])
-
-  async function runSearch(term: string) {
-    setSearching(true)
-    setSearchError(null)
-
-    // sanitiza caracteres que quebrariam a sintaxe do filtro .or() do PostgREST
+  async function runCitySearch(term: string) {
+    setCitySearching(true)
+    setCityError(null)
     const safeTerm = term.replace(/[,()%*]/g, ' ').trim()
-    if (!safeTerm) { setSearching(false); setResults([]); return }
+    if (!safeTerm) { setCitySearching(false); setCityResults([]); return }
 
-    let q = supabase
+    const { data, error } = await supabase
       .from('inep_escolas')
-      .select('co_entidade, no_entidade, no_municipio, sg_uf, qt_mat_total, ano_censo')
-      .or(`no_entidade.ilike.%${safeTerm}%,no_municipio.ilike.%${safeTerm}%,sg_uf.ilike.%${safeTerm}%`)
-      .order('ano_censo', { ascending: false })
-      .limit(300)
-
-    if (ufFilter) q = q.eq('sg_uf', ufFilter)
-
-    const { data, error } = await q
-    setSearching(false)
+      .select('no_municipio')
+      .eq('sg_uf', selectedUf)
+      .ilike('no_municipio', `%${safeTerm}%`)
+      .limit(500)
+    setCitySearching(false)
 
     if (error) {
-      setSearchError('Não foi possível buscar agora. Tente novamente.')
-      setResults([])
+      setCityError('Não foi possível buscar agora. Tente novamente.')
+      setCityResults([])
+      return
+    }
+
+    const uniq = Array.from(new Set((data ?? []).map(r => r.no_municipio).filter((v): v is string => !!v)))
+    uniq.sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    setCityResults(uniq.slice(0, 10))
+  }
+
+  // ── passo 3: pré-carrega todas as escolas da cidade escolhida (universo já pequeno) ─
+  useEffect(() => {
+    if (searchStage === 'school' && selectedUf && selectedCity) loadSchools()
+  }, [searchStage, selectedUf, selectedCity]) // eslint-disable-line
+
+  async function loadSchools() {
+    setLoadingSchools(true)
+    setSchoolsError(null)
+    const { data, error } = await supabase
+      .from('inep_escolas')
+      .select('co_entidade, no_entidade, no_municipio, sg_uf, qt_mat_total, ano_censo')
+      .eq('sg_uf', selectedUf)
+      .eq('no_municipio', selectedCity)
+      .order('ano_censo', { ascending: false })
+    setLoadingSchools(false)
+
+    if (error) {
+      setSchoolsError('Não foi possível carregar as escolas agora. Tente novamente.')
+      setAllSchools([])
       return
     }
 
@@ -142,15 +204,44 @@ export default function RaioXPage() {
       if (seen.has(row.co_entidade)) continue
       seen.add(row.co_entidade)
       deduped.push(row)
-      if (deduped.length >= 8) break
     }
-    setResults(deduped)
-    setShowDropdown(true)
+    deduped.sort((a, b) => a.no_entidade.localeCompare(b.no_entidade, 'pt-BR'))
+    setAllSchools(deduped)
+  }
+
+  const schoolResults = schoolQuery.trim()
+    ? allSchools.filter(s => s.no_entidade.toLowerCase().includes(schoolQuery.trim().toLowerCase()))
+    : allSchools
+
+  function pickUf(uf: string) {
+    setSelectedUf(uf)
+    setSearchStage('city')
+    setCityQuery('')
+    setCityResults([])
+    setSelectedCity('')
+  }
+
+  function backToUf() {
+    setSearchStage('uf')
+    setSelectedCity('')
+    setCityQuery('')
+    setCityResults([])
+  }
+
+  function pickCity(cityName: string) {
+    setSelectedCity(cityName)
+    setSearchStage('school')
+    setSchoolQuery('')
+  }
+
+  function backToCity() {
+    setSearchStage('city')
+    setAllSchools([])
+    setSchoolQuery('')
   }
 
   function selectSchool(school: SchoolResult) {
     setSelectedSchool(school)
-    setShowDropdown(false)
     setCity(school.no_municipio ?? '')
     setStep('confirm')
   }
@@ -158,6 +249,7 @@ export default function RaioXPage() {
   function backToSearch() {
     setSelectedSchool(null)
     setStep('search')
+    setSearchStage('school')
   }
 
   async function generateReport(school: SchoolResult, director: string) {
@@ -226,16 +318,12 @@ export default function RaioXPage() {
     <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
 
       {/* ── Hero ─────────────────────────────────────────────────────── */}
-      <div style={{ background: HERO_GRADIENT, padding: '48px 20px 130px', position: 'relative', overflow: 'hidden' }}>
+      <div className="rx-hero" style={{ background: HERO_GRADIENT, position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', top: -80, right: -80, width: 280, height: 280, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
         <div style={{ position: 'absolute', bottom: -100, left: -60, width: 220, height: 220, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
         <div style={{ maxWidth: 620, margin: '0 auto', position: 'relative', zIndex: 1, textAlign: 'center' }}>
           <div style={{ background: 'rgba(255,255,255,0.96)', borderRadius: 16, padding: '10px 18px', display: 'inline-flex', alignItems: 'center', marginBottom: 20, boxShadow: '0 8px 24px rgba(0,0,0,0.18)' }}>
             <img src={AION_LOGO_B64} alt="Áion Edu" style={{ height: 30, objectFit: 'contain' }} />
-          </div>
-          <div className="tag-d" style={{ marginBottom: 16 }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: VC, display: 'inline-block' }} />
-            AION EDU
           </div>
           <h1 className="s-title" style={{ margin: 0, fontSize: 30, color: '#fff' }}>
             Raio-X Estratégico da Escola
@@ -247,8 +335,8 @@ export default function RaioXPage() {
       </div>
 
       {/* ── Card ─────────────────────────────────────────────────────── */}
-      <div style={{ maxWidth: 560, margin: '-90px auto 60px', padding: '0 20px', position: 'relative', zIndex: 2 }}>
-        <div style={{ background: '#fff', borderRadius: 20, boxShadow: '0 20px 50px rgba(0,82,60,0.18)', border: `1px solid ${BORDER}`, padding: 32 }}>
+      <div className="rx-card-wrap" style={{ maxWidth: 560, position: 'relative', zIndex: 2 }}>
+        <div className="rx-card" style={{ background: '#fff', borderRadius: 20, boxShadow: '0 20px 50px rgba(0,82,60,0.18)', border: `1px solid ${BORDER}` }}>
 
           {step !== 'success' && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 28 }}>
@@ -271,88 +359,92 @@ export default function RaioXPage() {
             </div>
           )}
 
-          {/* ── Passo 1: busca ─────────────────────────────────────── */}
+          {/* ── Passo 1: busca em funil (UF → Cidade → Escola) ──────── */}
           {step === 'search' && (
             <div>
-              <h2 className="s-title" style={{ margin: '0 0 4px', fontSize: 18, color: TEXT }}>Qual é a sua escola?</h2>
-              <p style={{ margin: '0 0 18px', fontSize: 13, color: MUTED }}>Busque pelo nome, cidade ou estado cadastrado no Censo Escolar do INEP.</p>
+              {searchStage === 'uf' && (
+                <div>
+                  <h2 className="s-title" style={headingStyle}>Em qual estado sua escola está?</h2>
+                  <p style={subtextStyle}>Selecione o estado (UF) para começar a busca.</p>
+                  <div className="rx-uf-grid">
+                    {UFS.map(u => (
+                      <button key={u.uf} type="button" className="rx-uf-btn" onClick={() => pickUf(u.uf)}>
+                        {u.uf}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-              <div style={{ display: 'flex', gap: 10 }}>
-                <div ref={searchBoxRef} style={{ position: 'relative', flex: 1 }}>
+              {searchStage === 'city' && (
+                <div>
+                  <button type="button" style={backLinkStyle} onClick={backToUf}>← {ufName(selectedUf)}</button>
+                  <h2 className="s-title" style={headingStyle}>Qual é a cidade?</h2>
+                  <p style={subtextStyle}>Digite o nome da cidade em {ufName(selectedUf)}.</p>
                   <input
                     className="inp"
-                    value={query}
-                    onChange={e => { setQuery(e.target.value); setShowDropdown(true) }}
-                    onFocus={() => results.length > 0 && setShowDropdown(true)}
-                    placeholder="Nome da escola, cidade ou estado"
+                    value={cityQuery}
+                    onChange={e => setCityQuery(e.target.value)}
+                    placeholder="Nome da cidade"
+                    autoFocus
                   />
-                  {showDropdown && (
-                    <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 12, boxShadow: '0 12px 32px rgba(0,0,0,0.12)', maxHeight: 320, overflowY: 'auto', zIndex: 10 }}>
-                      {searching && (
-                        <div style={{ padding: 16, fontSize: 13, color: MUTED, textAlign: 'center' }}>Buscando...</div>
-                      )}
-                      {!searching && results.length === 0 && query.trim().length >= 2 && (
-                        <div style={{ padding: 16, fontSize: 13, color: MUTED, textAlign: 'center' }}>Nenhuma escola encontrada. Tente outro termo.</div>
-                      )}
-                      {!searching && results.map(r => (
-                        <button
-                          key={r.co_entidade}
-                          type="button"
-                          onClick={() => selectSchool(r)}
-                          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '12px 16px', border: 'none', borderBottom: '1px solid #f3f4f6', background: '#fff', cursor: 'pointer' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = SOFT)}
-                          onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
-                        >
+                  {cityError && <p style={errStyle}>{cityError}</p>}
+                  {citySearching && <p style={hintStyle}>Buscando...</p>}
+                  {!citySearching && !cityError && cityQuery.trim().length >= 1 && cityResults.length === 0 && (
+                    <p style={hintStyle}>Nenhuma cidade encontrada.</p>
+                  )}
+                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
+                    {cityResults.map(c => (
+                      <button key={c} type="button" className="rx-list-item" onClick={() => pickCity(c)}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: TEXT }}>{c}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {searchStage === 'school' && (
+                <div>
+                  <button type="button" style={backLinkStyle} onClick={backToCity}>← {selectedCity}/{selectedUf}</button>
+                  <h2 className="s-title" style={headingStyle}>Qual é a sua escola?</h2>
+                  <p style={subtextStyle}>
+                    {loadingSchools ? 'Carregando escolas...' : `${allSchools.length} escola(s) encontrada(s) em ${selectedCity}/${selectedUf}.`}
+                  </p>
+                  <input
+                    className="inp"
+                    value={schoolQuery}
+                    onChange={e => setSchoolQuery(e.target.value)}
+                    placeholder="Filtrar pelo nome da escola"
+                  />
+                  {schoolsError && <p style={errStyle}>{schoolsError}</p>}
+
+                  {loadingSchools ? (
+                    <div style={{ textAlign: 'center', padding: '28px 0' }}>
+                      <div style={{ width: 26, height: 26, margin: '0 auto', border: `3px solid ${VM}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'raiox-spin 0.8s linear infinite' }} />
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 340, overflowY: 'auto' }}>
+                      {schoolResults.length === 0 && <p style={hintStyle}>Nenhuma escola encontrada com esse filtro.</p>}
+                      {schoolResults.map(r => (
+                        <button key={r.co_entidade} type="button" className="rx-list-item" onClick={() => selectSchool(r)}>
                           <div style={{ fontSize: 14, fontWeight: 600, color: TEXT }}>{r.no_entidade}</div>
                           <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
-                            {r.no_municipio ?? '—'}{r.sg_uf ? `/${r.sg_uf}` : ''} · Censo {r.ano_censo}
+                            {r.qt_mat_total != null ? `${r.qt_mat_total.toLocaleString('pt-BR')} matrículas` : 'Matrículas não informadas'} · Censo {r.ano_censo}
                           </div>
                         </button>
                       ))}
                     </div>
                   )}
                 </div>
-
-                <select
-                  className="inp"
-                  value={ufFilter}
-                  onChange={e => setUfFilter(e.target.value)}
-                  style={{ width: 100, flexShrink: 0, cursor: 'pointer' }}
-                  title="Refinar por estado"
-                >
-                  <option value="">UF</option>
-                  {UFS.map(u => <option key={u.uf} value={u.uf}>{u.uf}</option>)}
-                </select>
-              </div>
-
-              {ufFilter && (
-                <div style={{ marginTop: 10 }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, background: SOFT, color: VD, fontSize: 12, fontWeight: 700, border: '1px solid #A7F3D0' }}>
-                    Filtrando por {UFS.find(u => u.uf === ufFilter)?.name ?? ufFilter}
-                    <button
-                      type="button"
-                      onClick={() => setUfFilter('')}
-                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: VD, fontWeight: 900, fontSize: 14, lineHeight: 1, padding: 0 }}
-                      aria-label="Remover filtro de UF"
-                    >
-                      ×
-                    </button>
-                  </span>
-                </div>
               )}
-
-              {searchError && <p style={{ color: '#dc2626', fontSize: 12, marginTop: 8 }}>{searchError}</p>}
-              <p style={{ fontSize: 12, color: MUTED, marginTop: 10 }}>
-                Dica: a busca encontra escolas pelo nome, pela cidade ou pelo estado — útil quando há escolas com nomes parecidos em cidades diferentes. Use o seletor de UF para refinar ainda mais.
-              </p>
             </div>
           )}
 
           {/* ── Passo 2: confirmação ───────────────────────────────── */}
           {step === 'confirm' && selectedSchool && (
             <div>
-              <h2 className="s-title" style={{ margin: '0 0 4px', fontSize: 18, color: TEXT }}>É esta a sua escola?</h2>
-              <p style={{ margin: '0 0 16px', fontSize: 13, color: MUTED }}>Confirme os dados antes de continuar.</p>
+              <h2 className="s-title" style={headingStyle}>É esta a sua escola?</h2>
+              <p style={subtextStyle}>Confirme os dados antes de continuar.</p>
 
               <div style={{ border: `1.5px solid ${BORDER}`, borderRadius: 14, padding: 20, background: SOFT }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
@@ -380,8 +472,8 @@ export default function RaioXPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-                <button type="button" className="btn-outline-green" onClick={backToSearch} style={{ flex: '0 0 auto', padding: '11px 18px', fontSize: 13 }}>
+              <div className="rx-actions" style={{ marginTop: 20 }}>
+                <button type="button" className="btn-outline-green" onClick={backToSearch} style={{ flex: '0 0 auto', padding: '12px 18px', fontSize: 13 }}>
                   ← Buscar outra
                 </button>
                 <button type="button" className="btn-g" onClick={() => setStep('form')} style={{ flex: 1, justifyContent: 'center', fontSize: 13, padding: '12px 18px' }}>
@@ -394,7 +486,7 @@ export default function RaioXPage() {
           {/* ── Passo 3: formulário ────────────────────────────────── */}
           {step === 'form' && selectedSchool && (
             <form onSubmit={handleSubmit}>
-              <h2 className="s-title" style={{ margin: '0 0 4px', fontSize: 18, color: TEXT }}>Seus dados de contato</h2>
+              <h2 className="s-title" style={headingStyle}>Seus dados de contato</h2>
               <p style={{ margin: '0 0 4px', fontSize: 13, color: MUTED }}>Enviaremos o Raio-X Estratégico assim que estiver pronto.</p>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, background: SOFT, marginTop: 14 }}>
@@ -408,7 +500,7 @@ export default function RaioXPage() {
               <label style={labelStyle}>Cargo *</label>
               <input className="inp" value={role} onChange={e => setRole(e.target.value)} required placeholder="Ex: Diretor(a), Coordenador(a) Pedagógico(a)" />
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="rx-grid2">
                 <div>
                   <label style={labelStyle}>WhatsApp *</label>
                   <input className="inp" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} required placeholder="(00) 00000-0000" />
@@ -423,7 +515,7 @@ export default function RaioXPage() {
               <input className="inp" type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="seu@email.com" />
 
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 18, cursor: 'pointer' }}>
-                <input type="checkbox" checked={lgpdAccepted} onChange={e => setLgpdAccepted(e.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: VM }} />
+                <input type="checkbox" checked={lgpdAccepted} onChange={e => setLgpdAccepted(e.target.checked)} style={{ marginTop: 2, width: 18, height: 18, flexShrink: 0, accentColor: VM }} />
                 <span style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.5 }}>
                   Autorizo o uso dos meus dados para receber o Raio-X Estratégico da minha escola, conforme a{' '}
                   <a href="/privacidade" target="_blank" rel="noreferrer" style={{ color: VD, fontWeight: 600 }}>Política de Privacidade</a> e a LGPD. *
@@ -432,8 +524,8 @@ export default function RaioXPage() {
 
               {submitError && <p style={{ color: '#dc2626', fontSize: 12, marginTop: 12 }}>{submitError}</p>}
 
-              <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
-                <button type="button" className="btn-outline-green" onClick={() => setStep('confirm')} style={{ flex: '0 0 auto', padding: '11px 18px', fontSize: 13 }}>
+              <div className="rx-actions" style={{ marginTop: 22 }}>
+                <button type="button" className="btn-outline-green" onClick={() => setStep('confirm')} style={{ flex: '0 0 auto', padding: '12px 18px', fontSize: 13 }}>
                   ← Voltar
                 </button>
                 <button

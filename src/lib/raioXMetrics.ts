@@ -10,6 +10,18 @@ export interface CompetitorRow {
   isSelected: boolean
 }
 
+export interface SegmentMetric {
+  key: 'inf' | 'fund' | 'med'
+  label: string
+  schoolValue: number
+  active: boolean            // a escola tem matrículas nesse segmento
+  ranking: number | null     // null se a escola não atua nesse segmento
+  totalActive: number        // quantas escolas privadas do município atuam nesse segmento
+  marketSharePct: number | null
+  leaderName: string | null
+  leaderValue: number
+}
+
 export interface RaioXMetrics {
   co_entidade: string
   schoolName: string
@@ -38,6 +50,8 @@ export interface RaioXMetrics {
   cityAvgFund: number
   cityAvgMed: number
 
+  segments: SegmentMetric[]
+
   marketScore: number
   scoreLabel: string
 }
@@ -54,6 +68,8 @@ interface RawSchoolRow {
   qt_mat_med: number | null
   ano_censo: number
 }
+
+type SegmentField = 'qt_mat_inf' | 'qt_mat_fund' | 'qt_mat_med'
 
 // ─── cálculo dos indicadores ────────────────────────────────────────────────
 // Consulta reutilizável — roda no client porque inep_escolas tem RLS desabilitado.
@@ -118,6 +134,35 @@ export async function calculateRaioXMetrics(
   const cityAvgFund = rankingTotal > 0 ? sorted.reduce((s, r) => s + (r.qt_mat_fund ?? 0), 0) / rankingTotal : 0
   const cityAvgMed  = rankingTotal > 0 ? sorted.reduce((s, r) => s + (r.qt_mat_med ?? 0), 0) / rankingTotal : 0
 
+  // ranking e market share por segmento — escolas com 0 matrículas no segmento
+  // "não atuam" nele e ficam fora do ranking daquele segmento específico
+  function computeSegment(field: SegmentField, key: SegmentMetric['key'], label: string, sch: RawSchoolRow): SegmentMetric {
+    const schoolValue = sch[field] ?? 0
+    const active = schoolValue > 0
+
+    let segGroup = latest.filter(r => r.tp_dependencia === PRIVATE_DEPENDENCIA && (r[field] ?? 0) > 0)
+    if (active && !segGroup.some(r => r.co_entidade === coEntidade)) segGroup = [...segGroup, sch]
+
+    const segSorted = [...segGroup].sort((a, b) => (b[field] ?? 0) - (a[field] ?? 0))
+    const totalActive = segSorted.length
+    const totalSegStudents = segSorted.reduce((sum, r) => sum + (r[field] ?? 0), 0)
+    const ranking = active ? segSorted.findIndex(r => r.co_entidade === coEntidade) + 1 : null
+    const marketSharePct = active && totalSegStudents > 0 ? (schoolValue / totalSegStudents) * 100 : null
+    const leader = segSorted[0] ?? null
+
+    return {
+      key, label, schoolValue, active, ranking, totalActive, marketSharePct,
+      leaderName: leader ? (leader.no_entidade ?? '—') : null,
+      leaderValue: leader ? (leader[field] ?? 0) : 0,
+    }
+  }
+
+  const segments: SegmentMetric[] = [
+    computeSegment('qt_mat_inf', 'inf', 'Educação Infantil', school),
+    computeSegment('qt_mat_fund', 'fund', 'Ensino Fundamental', school),
+    computeSegment('qt_mat_med', 'med', 'Ensino Médio', school),
+  ]
+
   // score de mercado (0-100, regra simples e transparente — não é IA):
   // 60 pts pela posição relativa no ranking + até 40 pts pelo market share (cap em 20% de share)
   const rankingScore = rankingTotal > 1 ? 60 * (1 - (ranking - 1) / (rankingTotal - 1)) : 60
@@ -150,6 +195,7 @@ export async function calculateRaioXMetrics(
     cityAvgInf,
     cityAvgFund,
     cityAvgMed,
+    segments,
     marketScore,
     scoreLabel,
   }
@@ -188,6 +234,32 @@ export function buildInterpretation(m: RaioXMetrics): string[] {
     stageNote('Ensino Fundamental', m.qtMatFund, m.cityAvgFund),
     stageNote('Ensino Médio', m.qtMatMed, m.cityAvgMed),
   ].forEach(note => { if (note) paragraphs.push(note) })
+
+  // interpretação por segmento — contraste entre etapas de ensino
+  const activeSegments = m.segments.filter(s => s.active && s.ranking != null)
+  const inactiveSegments = m.segments.filter(s => !s.active)
+
+  if (activeSegments.length >= 2) {
+    const best = activeSegments.reduce((a, b) => (a.ranking! < b.ranking! ? a : b))
+    const worst = activeSegments.reduce((a, b) => (a.ranking! > b.ranking! ? a : b))
+    if (best.key !== worst.key && best.ranking !== worst.ranking) {
+      const bestPhrase = best.ranking === 1 ? `Líder em ${best.label}` : `${best.ranking}º lugar em ${best.label}`
+      paragraphs.push(`${bestPhrase}, mas ${worst.ranking}º lugar em ${worst.label} — desempenho desigual entre as etapas de ensino, com espaço para equilibrar a captação.`)
+    } else if (best.ranking === 1) {
+      paragraphs.push(`${m.schoolName} é líder de mercado em todas as etapas de ensino em que atua.`)
+    }
+  } else if (activeSegments.length === 1) {
+    const only = activeSegments[0]
+    paragraphs.push(
+      only.ranking === 1
+        ? `${m.schoolName} atua apenas em ${only.label}, onde é líder de mercado no município.`
+        : `${m.schoolName} atua apenas em ${only.label}, ocupando a ${only.ranking}ª posição nesse segmento.`
+    )
+  }
+
+  if (inactiveSegments.length > 0 && inactiveSegments.length < m.segments.length) {
+    paragraphs.push(`A escola não atua em ${inactiveSegments.map(s => s.label).join(' e ')} — possível oportunidade de expansão de etapas de ensino.`)
+  }
 
   return paragraphs
 }
