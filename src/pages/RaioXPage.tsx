@@ -291,7 +291,9 @@ export default function RaioXPage() {
 
       setPdfUrl(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob) })
       setPdfState('ready')
-    } catch {
+    } catch (err) {
+      // TODO(diagnóstico): remover depois de identificar a causa real em produção
+      console.error('[RaioX] Erro ao gerar relatório:', err instanceof Error ? err.stack ?? err.message : err)
       setPdfState('error')
     }
   }
