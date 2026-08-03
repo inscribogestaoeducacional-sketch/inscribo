@@ -79,7 +79,8 @@
       "Bash(xargs grep -l \"lead_id\")",
       "Bash(grep -iE \"AionInboxHub|whatsapp[/\\\\\\\\\\\\\\\\]send\\\\.ts\")",
       "Bash(cp src/components/superadmin/AionInboxHub.tsx src/components/superadmin/AionInboxHub.legacy.tsx.bak)",
-      "Bash(cp src/components/whatsapp/WhatsAppHub.tsx src/components/superadmin/AionInboxHub.tsx)"
+      "Bash(cp src/components/whatsapp/WhatsAppHub.tsx src/components/superadmin/AionInboxHub.tsx)",
+      "Bash(echo \"exit:$?\")"
     ],
     "additionalDirectories": [
       "\\tmp"

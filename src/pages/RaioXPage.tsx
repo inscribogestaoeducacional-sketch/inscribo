@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, FormEvent } from 'react'
+import { pdf } from '@react-pdf/renderer'
 import { supabase } from '../lib/supabase'
 import { SHARED_CSS } from '../styles/sharedCSS'
 import AION_LOGO_B64 from '../lib/aionLogo'
+import { calculateRaioXMetrics } from '../lib/raioXMetrics'
+import RaioXPdfDocument from '../lib/raioXPdf'
 
 // ─── tipos ──────────────────────────────────────────────────────────────────
 interface SchoolResult {
@@ -80,6 +83,14 @@ export default function RaioXPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
+  // geração do relatório em PDF (Fase C)
+  const [pdfState, setPdfState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    return () => { if (pdfUrl) URL.revokeObjectURL(pdfUrl) }
+  }, [pdfUrl])
+
   // ── busca com debounce (nome, cidade ou UF simultaneamente + filtro de UF) ─
   useEffect(() => {
     const term = query.trim()
@@ -149,6 +160,24 @@ export default function RaioXPage() {
     setStep('search')
   }
 
+  async function generateReport(school: SchoolResult, director: string) {
+    setPdfState('loading')
+    try {
+      const metrics = await calculateRaioXMetrics(school.co_entidade, school.no_municipio ?? '', school.sg_uf ?? '')
+      if (!metrics) throw new Error('Sem dados suficientes')
+
+      const generatedDate = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+      const blob = await pdf(
+        <RaioXPdfDocument data={{ metrics, directorName: director, generatedDate }} />
+      ).toBlob()
+
+      setPdfUrl(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob) })
+      setPdfState('ready')
+    } catch {
+      setPdfState('error')
+    }
+  }
+
   const digits = whatsapp.replace(/\D/g, '')
   const canSubmit =
     directorName.trim().length > 1 &&
@@ -181,6 +210,7 @@ export default function RaioXPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error || 'Erro ao enviar. Tente novamente.')
       setStep('success')
+      void generateReport(selectedSchool, directorName.trim())
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Erro ao enviar. Tente novamente.')
     } finally {
@@ -418,16 +448,61 @@ export default function RaioXPage() {
             </form>
           )}
 
-          {/* ── Passo 4: sucesso (Fase A — geração real vem na Fase C) ── */}
+          {/* ── Passo 4: relatório (Fase C — geração real do PDF) ──── */}
           {step === 'success' && (
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <div style={{ width: 64, height: 64, borderRadius: '50%', background: SOFT, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-                <div style={{ width: 28, height: 28, border: `3px solid ${VM}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'raiox-spin 0.8s linear infinite' }} />
-              </div>
-              <h2 className="s-title" style={{ margin: 0, fontSize: 19, color: TEXT }}>Gerando seu relatório...</h2>
-              <p style={{ margin: '10px 0 0', fontSize: 13.5, color: MUTED, lineHeight: 1.6, maxWidth: 360, marginLeft: 'auto', marginRight: 'auto' }}>
-                Recebemos seus dados para <strong>{selectedSchool?.no_entidade}</strong>. Em breve você receberá o Raio-X Estratégico da sua escola por e-mail e WhatsApp.
-              </p>
+              {pdfState !== 'ready' && pdfState !== 'error' && (
+                <>
+                  <div style={{ width: 64, height: 64, borderRadius: '50%', background: SOFT, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                    <div style={{ width: 28, height: 28, border: `3px solid ${VM}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'raiox-spin 0.8s linear infinite' }} />
+                  </div>
+                  <h2 className="s-title" style={{ margin: 0, fontSize: 19, color: TEXT }}>Gerando seu relatório...</h2>
+                  <p style={{ margin: '10px 0 0', fontSize: 13.5, color: MUTED, lineHeight: 1.6, maxWidth: 360, marginLeft: 'auto', marginRight: 'auto' }}>
+                    Estamos calculando os indicadores de <strong>{selectedSchool?.no_entidade}</strong> a partir dos dados do Censo Escolar INEP.
+                  </p>
+                </>
+              )}
+
+              {pdfState === 'ready' && pdfUrl && selectedSchool && (
+                <>
+                  <div style={{ width: 64, height: 64, borderRadius: '50%', background: SOFT, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                    <i className="ti ti-circle-check" style={{ fontSize: 30, color: VM }} />
+                  </div>
+                  <h2 className="s-title" style={{ margin: 0, fontSize: 19, color: TEXT }}>Seu relatório está pronto!</h2>
+                  <p style={{ margin: '10px 0 0', fontSize: 13.5, color: MUTED, lineHeight: 1.6, maxWidth: 360, marginLeft: 'auto', marginRight: 'auto' }}>
+                    O Raio-X Estratégico de <strong>{selectedSchool.no_entidade}</strong> já pode ser baixado.
+                  </p>
+                  <a
+                    href={pdfUrl}
+                    download={`raio-x-${selectedSchool.no_entidade.replace(/\s+/g, '_')}.pdf`}
+                    className="btn-g"
+                    style={{ marginTop: 20, justifyContent: 'center' }}
+                  >
+                    Baixar Relatório Gratuito
+                  </a>
+                </>
+              )}
+
+              {pdfState === 'error' && (
+                <>
+                  <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                    <i className="ti ti-alert-circle" style={{ fontSize: 28, color: '#dc2626' }} />
+                  </div>
+                  <h2 className="s-title" style={{ margin: 0, fontSize: 19, color: TEXT }}>Não foi possível gerar o relatório</h2>
+                  <p style={{ margin: '10px 0 0', fontSize: 13.5, color: MUTED, lineHeight: 1.6, maxWidth: 360, marginLeft: 'auto', marginRight: 'auto' }}>
+                    Seu cadastro foi recebido normalmente, mas houve um problema ao calcular os indicadores. Tente novamente.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn-outline-green"
+                    onClick={() => selectedSchool && generateReport(selectedSchool, directorName.trim())}
+                    style={{ marginTop: 18 }}
+                  >
+                    Tentar novamente
+                  </button>
+                </>
+              )}
+
               <style>{`@keyframes raiox-spin { to { transform: rotate(360deg) } }`}</style>
             </div>
           )}
