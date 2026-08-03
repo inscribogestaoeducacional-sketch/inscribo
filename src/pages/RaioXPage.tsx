@@ -1,4 +1,4 @@
-import { useState, useEffect, FormEvent } from 'react'
+import { useState, useEffect, useRef, FormEvent } from 'react'
 import { pdf } from '@react-pdf/renderer'
 import { supabase } from '../lib/supabase'
 import { SHARED_CSS } from '../styles/sharedCSS'
@@ -43,8 +43,20 @@ const RAIOX_CSS = `
 .rx-list-item:hover { background: ${SOFT}; border-color: ${VM}; }
 .rx-uf-btn { padding: 13px 4px; border-radius: 10px; border: 1.5px solid ${BORDER}; background: #fff; color: ${TEXT}; font-size: 14px; font-weight: 700; cursor: pointer; min-height: 48px; transition: background .15s, border-color .15s; font-family: 'Plus Jakarta Sans', sans-serif; }
 .rx-uf-btn:hover { background: ${SOFT}; border-color: ${VM}; color: ${VD}; }
-.rx-gate-hero { min-height: 92vh; padding: 90px 20px; }
+.rx-gate-hero { min-height: 92vh; padding: 90px 20px; background: linear-gradient(135deg, ${VD} 0%, ${VMID} 50%, ${VM} 100%); background-size: 220% 220%; animation: rxGateGradient 14s ease infinite; }
 .rx-gate-btn { width: auto; }
+@keyframes rxGateGradient { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+@keyframes rxFadeUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+.rx-gate-anim { opacity: 0; animation: rxFadeUp 0.7s cubic-bezier(.22,1,.36,1) forwards; }
+.rx-gate-anim-1 { animation-delay: 0.05s; }
+.rx-gate-anim-2 { animation-delay: 0.25s; }
+.rx-gate-anim-3 { animation-delay: 0.45s; }
+.rx-gate-anim-4 { animation-delay: 0.65s; }
+.rx-gate-anim-5 { animation-delay: 0.9s; }
+@media (prefers-reduced-motion: reduce) {
+  .rx-gate-hero { animation: none; }
+  .rx-gate-anim { animation: none; opacity: 1; }
+}
 @media (max-width: 480px) {
   .rx-hero { padding: 32px 16px 104px !important; }
   .rx-card-wrap { margin: -72px auto 36px !important; padding: 0 14px !important; }
@@ -85,6 +97,9 @@ const AION_HIGHLIGHTS: { icon: HighlightIconName; title: string; desc: string }[
   { icon: 'grid',  title: 'Mais de 10 módulos, um único clique',       desc: 'Tudo organizado numa única tela - sem dor de cabeça pra gerar nada.' },
   { icon: 'star',  title: 'O melhor custo-benefício do mercado educacional', desc: 'Tecnologia completa por um investimento que cabe no orçamento da sua escola.' },
 ]
+
+const CAROUSEL_CARD_MS = 2400
+const CAROUSEL_TOTAL_MS = CAROUSEL_CARD_MS * AION_HIGHLIGHTS.length // 12s no total
 
 // ícones inline (SVG) — a fonte de ícones "ti ti-*" usada em outros pontos do site
 // não está carregada em nenhum lugar do projeto (sem <link> nem @font-face), então
@@ -128,25 +143,62 @@ const GATE_CHECKLIST = [
   'Relatório em PDF',
 ]
 
-function CheckIcon({ size = 22 }: { size?: number }) {
+function CheckIcon({ size = 22, color = VD }: { size?: number; color?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-      <circle cx="12" cy="12" r="11" fill={VD} />
+      <circle cx="12" cy="12" r="11" fill={color} />
       <path d="M7 12.5l3 3 7-7" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
 
+function AlertIcon({ size = 28, color = '#dc2626' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+      <circle cx="12" cy="12" r="11" fill={color} fillOpacity={0.12} stroke={color} strokeWidth={1.6} />
+      <line x1="12" y1="7" x2="12" y2="13.5" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <circle cx="12" cy="16.5" r="1.15" fill={color} />
+    </svg>
+  )
+}
+
+function SchoolIcon({ size = 20, color = VD }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <polyline points="9 22 9 12 15 12 15 22" />
+    </svg>
+  )
+}
+
+function WhatsAppIcon({ size = 18, color = '#fff' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+    </svg>
+  )
+}
+
+const AION_WHATSAPP_URL = 'https://wa.me/5583993444383?text=Ol%C3%A1!%20Vi%20o%20Raio-X%20Estrat%C3%A9gico%20da%20%C3%81ion%20Edu%20e%20quero%20saber%20mais.'
+
 function GateScreen({ onStart }: { onStart: () => void }) {
   return (
     <div>
       {/* ── Seção 1 — Hero principal ──────────────────────────────── */}
-      <div className="rx-gate-hero" style={{ background: HERO_GRADIENT, position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center' }}>
+      <div className="rx-gate-hero" style={{ position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center' }}>
         <div style={{ position: 'absolute', top: -100, right: -100, width: 340, height: 340, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
         <div style={{ position: 'absolute', bottom: -120, left: -80, width: 280, height: 280, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
+        <div className="grid-pattern" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
         <div style={{ maxWidth: 680, margin: '0 auto', position: 'relative', zIndex: 1, textAlign: 'center', padding: '0 20px' }}>
-          <div style={{
-            display: 'inline-block', padding: '8px 18px', borderRadius: 999,
+          <div className="rx-gate-anim rx-gate-anim-1" style={{
+            background: 'rgba(255,255,255,0.96)', borderRadius: 16, padding: '9px 16px', display: 'inline-flex', alignItems: 'center',
+            marginBottom: 22, boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+          }}>
+            <img src={AION_LOGO_B64} alt="Áion Edu" style={{ height: 26, objectFit: 'contain' }} />
+          </div>
+
+          <div className="rx-gate-anim rx-gate-anim-2" style={{
+            display: 'block', padding: '8px 18px', borderRadius: 999,
             background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.3)',
             marginBottom: 22,
           }}>
@@ -155,26 +207,38 @@ function GateScreen({ onStart }: { onStart: () => void }) {
             </span>
           </div>
 
-          <h1 className="s-title" style={{ margin: 0, fontSize: 'clamp(28px, 6vw, 48px)', color: '#fff', lineHeight: 1.15 }}>
+          <h1 className="s-title rx-gate-anim rx-gate-anim-3" style={{ margin: 0, fontSize: 'clamp(28px, 6vw, 48px)', color: '#fff', lineHeight: 1.15 }}>
             VOCÊ JÁ PLANEJOU AS MATRÍCULAS 2027?
           </h1>
 
-          <p style={{ margin: '20px auto 0', fontSize: 'clamp(14px, 2.4vw, 17px)', color: 'rgba(255,255,255,0.88)', lineHeight: 1.6, maxWidth: 480 }}>
-            Descubra gratuitamente como sua escola está posicionada no mercado e identifique oportunidades para crescer.
-          </p>
+          <div className="rx-gate-anim rx-gate-anim-4">
+            <p style={{ margin: '20px auto 0', fontSize: 'clamp(14px, 2.4vw, 17px)', color: 'rgba(255,255,255,0.88)', lineHeight: 1.6, maxWidth: 480 }}>
+              Descubra gratuitamente como sua escola está posicionada no mercado e identifique oportunidades para crescer.
+            </p>
 
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 9, marginTop: 26,
-            padding: '11px 20px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.28)',
-          }}>
-            <span style={{ fontSize: 14, lineHeight: 1 }}>🟢</span>
-            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#fff' }}>Receba seu Raio-X Estratégico em menos de 1 minuto.</span>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 9, marginTop: 26,
+              padding: '11px 20px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.28)',
+            }}>
+              <span style={{ fontSize: 14, lineHeight: 1 }}>🟢</span>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: '#fff' }}>Receba seu Raio-X Estratégico em menos de 1 minuto.</span>
+            </div>
           </div>
 
-          <div style={{ marginTop: 34 }}>
+          <div className="rx-gate-anim rx-gate-anim-5" style={{ marginTop: 34, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
             <button type="button" className="btn-white rx-gate-btn" onClick={onStart} style={{ fontSize: 15, padding: '17px 44px' }}>
               GERAR RAIO-X GRATUITO
             </button>
+            <a
+              href={AION_WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-ghost rx-gate-btn"
+              style={{ fontSize: 13, padding: '11px 26px' }}
+            >
+              <WhatsAppIcon size={16} />
+              Falar no WhatsApp
+            </a>
           </div>
         </div>
       </div>
@@ -269,21 +333,47 @@ export default function RaioXPage() {
     return () => { if (pdfUrl) URL.revokeObjectURL(pdfUrl) }
   }, [pdfUrl])
 
-  // carrossel de diferenciais com fade durante a geração do relatório
+  // carrossel de diferenciais — roda por conta própria por CAROUSEL_TOTAL_MS (12s),
+  // independente de quanto tempo o cálculo/PDF real leva. Antes, o intervalo era
+  // reiniciado/cancelado toda vez que `pdfState` mudava (efeito com [pdfState] como
+  // dependência): se o PDF ficava pronto antes dos 3s do primeiro tick, o carrossel
+  // nunca chegava a trocar de card ("não passa"). Agora o timer é disparado uma única
+  // vez por geração (via startCarousel, chamado dentro de generateReport) e só é
+  // interrompido no unmount ou no fim natural dos 12s.
   const [highlightIndex, setHighlightIndex] = useState(0)
-  const [highlightVisible, setHighlightVisible] = useState(true)
+  const [carouselProgress, setCarouselProgress] = useState(0) // 0-100
+  const [carouselDone, setCarouselDone] = useState(false)
+  const carouselTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
-    if (pdfState !== 'loading') { setHighlightIndex(0); setHighlightVisible(true); return }
-    const interval = setInterval(() => {
-      setHighlightVisible(false)
-      setTimeout(() => {
-        setHighlightIndex(i => (i + 1) % AION_HIGHLIGHTS.length)
-        setHighlightVisible(true)
-      }, 300)
-    }, 3000)
-    return () => clearInterval(interval)
-  }, [pdfState])
+    return () => { if (carouselTimerRef.current) clearInterval(carouselTimerRef.current) }
+  }, [])
+
+  function startCarousel() {
+    if (carouselTimerRef.current) clearInterval(carouselTimerRef.current)
+    setHighlightIndex(0)
+    setCarouselProgress(0)
+    setCarouselDone(false)
+
+    const startedAt = Date.now()
+    carouselTimerRef.current = setInterval(() => {
+      const elapsed = Date.now() - startedAt
+      setCarouselProgress(Math.min(100, (elapsed / CAROUSEL_TOTAL_MS) * 100))
+      setHighlightIndex(Math.min(AION_HIGHLIGHTS.length - 1, Math.floor(elapsed / CAROUSEL_CARD_MS)))
+      if (elapsed >= CAROUSEL_TOTAL_MS) {
+        setCarouselDone(true)
+        if (carouselTimerRef.current) clearInterval(carouselTimerRef.current)
+      }
+    }, 100)
+  }
+
+  // fade curto a cada troca de card (puramente cosmético, não controla o tempo)
+  const [highlightVisible, setHighlightVisible] = useState(true)
+  useEffect(() => {
+    setHighlightVisible(false)
+    const t = setTimeout(() => setHighlightVisible(true), 60)
+    return () => clearTimeout(t)
+  }, [highlightIndex])
 
   // ── passo 2: busca de cidades com debounce, escopada pela UF escolhida ────
   useEffect(() => {
@@ -398,6 +488,7 @@ export default function RaioXPage() {
 
   async function generateReport(school: SchoolResult, director: string) {
     setPdfState('loading')
+    startCarousel()
     try {
       const metrics = await calculateRaioXMetrics(school.co_entidade, school.no_municipio ?? '', school.sg_uf ?? '')
       if (!metrics) throw new Error('Sem dados suficientes')
@@ -459,6 +550,12 @@ export default function RaioXPage() {
   const disabledBtnStyle: React.CSSProperties = {
     background: '#E5E7EB', color: '#9CA3AF', boxShadow: 'none', cursor: 'not-allowed', pointerEvents: 'none',
   }
+
+  // o botão de download só aparece quando os DOIS terminaram: o carrossel (12s fixos)
+  // e o cálculo/PDF real — o que demorar mais define o momento
+  const showCarousel = pdfState === 'loading' || (pdfState === 'ready' && !carouselDone)
+  const showReady = pdfState === 'ready' && carouselDone
+  const showError = pdfState === 'error'
 
   if (showGate) {
     return (
@@ -603,7 +700,7 @@ export default function RaioXPage() {
               <div style={{ border: `1.5px solid ${BORDER}`, borderRadius: 14, padding: 20, background: SOFT }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
                   <div style={{ width: 44, height: 44, borderRadius: 12, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}>
-                    <i className="ti ti-school" style={{ fontSize: 20, color: VD }} />
+                    <SchoolIcon size={20} />
                   </div>
                   <div>
                     <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: TEXT }}>{selectedSchool.no_entidade}</p>
@@ -644,7 +741,7 @@ export default function RaioXPage() {
               <p style={{ margin: '0 0 4px', fontSize: 13, color: MUTED }}>Enviaremos o Raio-X Estratégico assim que estiver pronto.</p>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, background: SOFT, marginTop: 14 }}>
-                <i className="ti ti-school" style={{ fontSize: 14, color: VD }} />
+                <SchoolIcon size={14} />
                 <span style={{ fontSize: 12.5, color: TEXT, fontWeight: 600 }}>{selectedSchool.no_entidade}</span>
               </div>
 
@@ -697,7 +794,7 @@ export default function RaioXPage() {
           {/* ── Passo 4: relatório (Fase C — geração real do PDF) ──── */}
           {step === 'success' && (
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              {pdfState !== 'ready' && pdfState !== 'error' && (
+              {showCarousel && (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, marginBottom: 18 }}>
                     <div style={{ width: 16, height: 16, border: `2.5px solid ${VM}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'raiox-spin 0.8s linear infinite', flexShrink: 0 }} />
@@ -738,13 +835,18 @@ export default function RaioXPage() {
                       />
                     ))}
                   </div>
+
+                  {/* barra de progresso — sincronizada com a troca dos cards (0-100% em 12s) */}
+                  <div style={{ height: 5, borderRadius: 3, background: '#E5E7EB', marginTop: 12, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${carouselProgress}%`, borderRadius: 3, background: `linear-gradient(90deg, ${VD}, ${VM})`, transition: 'width 0.1s linear' }} />
+                  </div>
                 </>
               )}
 
-              {pdfState === 'ready' && pdfUrl && selectedSchool && (
+              {showReady && pdfUrl && selectedSchool && (
                 <>
                   <div style={{ width: 64, height: 64, borderRadius: '50%', background: SOFT, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-                    <i className="ti ti-circle-check" style={{ fontSize: 30, color: VM }} />
+                    <CheckIcon size={34} />
                   </div>
                   <h2 className="s-title" style={{ margin: 0, fontSize: 19, color: TEXT }}>Seu relatório está pronto!</h2>
                   <p style={{ margin: '10px 0 0', fontSize: 13.5, color: MUTED, lineHeight: 1.6, maxWidth: 360, marginLeft: 'auto', marginRight: 'auto' }}>
@@ -761,10 +863,10 @@ export default function RaioXPage() {
                 </>
               )}
 
-              {pdfState === 'error' && (
+              {showError && (
                 <>
                   <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-                    <i className="ti ti-alert-circle" style={{ fontSize: 28, color: '#dc2626' }} />
+                    <AlertIcon size={30} />
                   </div>
                   <h2 className="s-title" style={{ margin: 0, fontSize: 19, color: TEXT }}>Não foi possível gerar o relatório</h2>
                   <p style={{ margin: '10px 0 0', fontSize: 13.5, color: MUTED, lineHeight: 1.6, maxWidth: 360, marginLeft: 'auto', marginRight: 'auto' }}>

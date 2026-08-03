@@ -173,6 +173,65 @@ function InsightCard({ text }: { text: string }) {
   )
 }
 
+// ─── Chrome de relatório premium — marca d'água, cabeçalho, rodapé, divisória ─
+// Aplicado apenas nas páginas de conteúdo (fundo claro); capa e CTA final (fundo
+// escuro) já têm identidade visual própria e ganham só a numeração de página.
+
+// marca d'água sutil — logo em baixa opacidade, centralizada atrás do conteúdo
+function Watermark() {
+  return (
+    <View style={{ position: 'absolute', top: 370, left: 140, opacity: 0.05 }} fixed>
+      <Image src={AION_LOGO_B64} style={{ width: 300 }} />
+    </View>
+  )
+}
+
+// cabeçalho consistente — logo pequena + nome do relatório
+function ReportHeader() {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }} fixed>
+      <Image src={AION_LOGO_B64} style={{ height: 13 }} />
+      <Text style={{ fontSize: 8.5, fontWeight: 700, color: CLIGHT, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'PlusJakartaSans' }}>
+        Raio-X Estratégico da Escola
+      </Text>
+    </View>
+  )
+}
+
+// divisória estilizada — traço de destaque colorido + linha fina, no lugar do cinza simples
+function Divider() {
+  return (
+    <View style={{ flexDirection: 'row', height: 2, marginBottom: 22 }}>
+      <View style={{ width: 48, backgroundColor: VM, borderRadius: 1 }} />
+      <View style={{ flex: 1, backgroundColor: '#EDF2F7', borderRadius: 1, marginLeft: 4 }} />
+    </View>
+  )
+}
+
+// rodapé consistente — nome da escola + numeração de página estilizada
+function ReportFooter({ schoolName }: { schoolName: string }) {
+  return (
+    <View style={{ position: 'absolute', bottom: 22, left: 38, right: 38, borderTopWidth: 1, borderTopColor: '#EDF2F7', paddingTop: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }} fixed>
+      <Text style={{ fontSize: 8, color: CLIGHT, fontFamily: 'PlusJakartaSans' }}>{schoolName}</Text>
+      <Text
+        style={{ fontSize: 8, fontWeight: 700, color: VM, fontFamily: 'PlusJakartaSans' }}
+        render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}
+      />
+    </View>
+  )
+}
+
+// numeração simples para capa/CTA (fundo escuro, já com identidade visual própria)
+function PageNumber({ dark }: { dark?: boolean }) {
+  return (
+    <Text
+      style={{ position: 'absolute', bottom: 20, right: 36, fontSize: 8, color: dark ? 'rgba(255,255,255,0.55)' : CLIGHT, fontFamily: 'PlusJakartaSans' }}
+      render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}
+      fixed
+    />
+  )
+}
+
 // ─── PAGE 1 — CAPA ────────────────────────────────────────────────────────────
 function Page1({ m, generatedDate }: { m: RaioXMetrics; generatedDate: string }) {
   const cards = [
@@ -216,6 +275,7 @@ function Page1({ m, generatedDate }: { m: RaioXMetrics; generatedDate: string })
           <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', marginTop: 3, fontFamily: 'PlusJakartaSans' }}>{`${m.ranking}º lugar entre ${m.rankingTotal} escolas privadas do município`}</Text>
         </View>
       </View>
+      <PageNumber dark />
     </Page>
   )
 }
@@ -225,7 +285,10 @@ function Page2({ m, headline }: { m: RaioXMetrics; headline: string }) {
   const sColor = scoreColor(m.marketScore)
   const sBg = m.marketScore >= 70 ? SOFT : m.marketScore >= 40 ? '#E6F7F4' : WARN_BG
   return (
-    <Page size="A4" orientation="portrait" style={[s.page, { paddingVertical: 32, paddingHorizontal: 38 }]}>
+    <Page size="A4" orientation="portrait" style={[s.page, { paddingTop: 30, paddingBottom: 56, paddingHorizontal: 38 }]}>
+      <Watermark />
+      <ReportHeader />
+      <Divider />
       <Tag>Resumo Executivo</Tag>
       <Text style={s.title}>Como {m.schoolName} está posicionada</Text>
 
@@ -250,6 +313,7 @@ function Page2({ m, headline }: { m: RaioXMetrics; headline: string }) {
       <View style={{ backgroundColor: VD, borderRadius: 12, paddingVertical: 16, paddingHorizontal: 18 }}>
         <Text style={{ fontSize: 12, color: '#fff', lineHeight: 1.6, fontFamily: 'PlusJakartaSans' }}>{headline}</Text>
       </View>
+      <ReportFooter schoolName={m.schoolName} />
     </Page>
   )
 }
@@ -263,13 +327,17 @@ function Page3({ m }: { m: RaioXMetrics }) {
     { label: 'Ano de referência (Censo Escolar)',     value: String(m.anoCenso) },
   ]
   return (
-    <Page size="A4" orientation="portrait" style={[s.page, { paddingVertical: 32, paddingHorizontal: 38 }]}>
+    <Page size="A4" orientation="portrait" style={[s.page, { paddingTop: 30, paddingBottom: 56, paddingHorizontal: 38 }]}>
+      <Watermark />
+      <ReportHeader />
+      <Divider />
       <Tag>Panorama do Mercado</Tag>
       <Text style={s.title}>Indicadores de {m.city}/{m.state}</Text>
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
         {indicators.map(i => <KpiCard key={i.label} label={i.label} value={i.value} />)}
       </View>
+      <ReportFooter schoolName={m.schoolName} />
     </Page>
   )
 }
@@ -279,7 +347,10 @@ function Page4({ m }: { m: RaioXMetrics }) {
   const rColor = rankColor(m.ranking, m.rankingTotal)
   const rBg = m.ranking <= 5 ? SOFT : WARN_BG
   return (
-    <Page size="A4" orientation="portrait" style={[s.page, { paddingVertical: 32, paddingHorizontal: 38 }]}>
+    <Page size="A4" orientation="portrait" style={[s.page, { paddingTop: 30, paddingBottom: 56, paddingHorizontal: 38 }]}>
+      <Watermark />
+      <ReportHeader />
+      <Divider />
       <Tag>Ranking</Tag>
       <Text style={s.title}>Posição de {m.schoolName} no mercado local</Text>
 
@@ -312,6 +383,7 @@ function Page4({ m }: { m: RaioXMetrics }) {
           />
         </View>
       </View>
+      <ReportFooter schoolName={m.schoolName} />
     </Page>
   )
 }
@@ -319,7 +391,10 @@ function Page4({ m }: { m: RaioXMetrics }) {
 // ─── PAGE 5 — PRINCIPAIS CONCORRENTES ─────────────────────────────────────────
 function Page5({ m }: { m: RaioXMetrics }) {
   return (
-    <Page size="A4" orientation="portrait" style={[s.page, { paddingVertical: 32, paddingHorizontal: 38 }]}>
+    <Page size="A4" orientation="portrait" style={[s.page, { paddingTop: 30, paddingBottom: 56, paddingHorizontal: 38 }]}>
+      <Watermark />
+      <ReportHeader />
+      <Divider />
       <Tag>Concorrência</Tag>
       <Text style={s.title}>Principais escolas privadas de {m.city}/{m.state}</Text>
 
@@ -344,6 +419,7 @@ function Page5({ m }: { m: RaioXMetrics }) {
           <Text style={{ fontSize: 11, color: c.isSelected ? VD : CMID, fontWeight: c.isSelected ? 800 : 500, textAlign: 'right', fontFamily: 'PlusJakartaSans' }}>{fmtPct(c.marketSharePct)}</Text>,
         ])}
       />
+      <ReportFooter schoolName={m.schoolName} />
     </Page>
   )
 }
@@ -352,7 +428,10 @@ function Page5({ m }: { m: RaioXMetrics }) {
 function Page6({ m }: { m: RaioXMetrics }) {
   const maxVal = Math.max(1, ...m.topCompetitors.map(c => c.qt_mat_total))
   return (
-    <Page size="A4" orientation="portrait" style={[s.page, { paddingVertical: 32, paddingHorizontal: 38 }]}>
+    <Page size="A4" orientation="portrait" style={[s.page, { paddingTop: 30, paddingBottom: 56, paddingHorizontal: 38 }]}>
+      <Watermark />
+      <ReportHeader />
+      <Divider />
       <Tag>Participação de Mercado</Tag>
       <Text style={s.title}>Distribuição de matrículas entre as principais escolas</Text>
 
@@ -367,6 +446,7 @@ function Page6({ m }: { m: RaioXMetrics }) {
           highlight={c.isSelected}
         />
       ))}
+      <ReportFooter schoolName={m.schoolName} />
     </Page>
   )
 }
@@ -468,13 +548,17 @@ function Page7({ m }: { m: RaioXMetrics }) {
     med: m.cityAvgMed,
   }
   return (
-    <Page size="A4" orientation="portrait" style={[s.page, { paddingVertical: 32, paddingHorizontal: 38 }]}>
+    <Page size="A4" orientation="portrait" style={[s.page, { paddingTop: 30, paddingBottom: 56, paddingHorizontal: 38 }]}>
+      <Watermark />
+      <ReportHeader />
+      <Divider />
       <Tag>Etapas de Ensino</Tag>
       <Text style={s.title}>Ranking e participação por segmento educacional</Text>
 
       {m.segments.map(seg => (
         <SegmentCard key={seg.key} seg={seg} cityAvg={cityAvgByKey[seg.key]} />
       ))}
+      <ReportFooter schoolName={m.schoolName} />
     </Page>
   )
 }
@@ -495,7 +579,10 @@ function Page8({ m, interpretation }: { m: RaioXMetrics; interpretation: string[
   ]
 
   return (
-    <Page size="A4" orientation="portrait" style={[s.page, { paddingVertical: 32, paddingHorizontal: 38 }]}>
+    <Page size="A4" orientation="portrait" style={[s.page, { paddingTop: 30, paddingBottom: 56, paddingHorizontal: 38 }]}>
+      <Watermark />
+      <ReportHeader />
+      <Divider />
       <Tag>Comparativo Geral</Tag>
       <Text style={s.title}>Sua escola vs. média de {m.city}/{m.state}</Text>
 
@@ -512,10 +599,12 @@ function Page8({ m, interpretation }: { m: RaioXMetrics; interpretation: string[
         ])}
       />
 
-      <Text style={{ fontSize: 11.5, fontWeight: 700, color: CMID, marginTop: 22, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: 'PlusJakartaSans' }}>
+      <Text style={{ fontSize: 11.5, fontWeight: 700, color: CMID, marginTop: 22, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: 'PlusJakartaSans' }}>
         Interpretação
       </Text>
+      <Divider />
       {interpretation.map((p, i) => <InsightCard key={i} text={p} />)}
+      <ReportFooter schoolName={m.schoolName} />
     </Page>
   )
 }
@@ -532,7 +621,10 @@ const AION_BENEFITS = [
 
 function Page9({ m }: { m: RaioXMetrics }) {
   return (
-    <Page size="A4" orientation="portrait" style={[s.page, { paddingVertical: 32, paddingHorizontal: 38 }]}>
+    <Page size="A4" orientation="portrait" style={[s.page, { paddingTop: 30, paddingBottom: 56, paddingHorizontal: 38 }]}>
+      <Watermark />
+      <ReportHeader />
+      <Divider />
       <Tag>Por que a Áion Edu</Tag>
       <Text style={s.title}>{`O que muda para ${m.schoolName}`}</Text>
 
@@ -557,6 +649,7 @@ function Page9({ m }: { m: RaioXMetrics }) {
           {'"Enquanto sua equipe foca em encantar as famílias, a Áion Edu cuida da organização, dos alertas e dos números — para nenhuma matrícula ficar pelo caminho."'}
         </Text>
       </View>
+      <ReportFooter schoolName={m.schoolName} />
     </Page>
   )
 }
@@ -566,7 +659,10 @@ function Page10({ m }: { m: RaioXMetrics }) {
   const pillars = ['Mais Controle', 'Mais Previsibilidade', 'Mais Matrículas']
   return (
     <Page size="A4" orientation="portrait" style={[s.page, { backgroundColor: VD, paddingVertical: 48, paddingHorizontal: 40, alignItems: 'center', justifyContent: 'center' }]}>
-      <LogoPill height={22} />
+      {/* logo grande e centralizada — elemento visual de destaque desta página final */}
+      <View style={{ backgroundColor: '#fff', borderRadius: 20, paddingVertical: 18, paddingHorizontal: 40, marginBottom: 8 }}>
+        <Image src={AION_LOGO_B64} style={{ height: 52 }} />
+      </View>
 
       <Text style={{ fontFamily: 'BricolageGrotesque', fontWeight: 900, fontSize: 26, color: '#fff', textAlign: 'center', marginTop: 24, marginBottom: 16, lineHeight: 1.25 }}>
         {`${m.schoolName} pronta para a próxima campanha`}
@@ -590,6 +686,7 @@ function Page10({ m }: { m: RaioXMetrics }) {
         </View>
       </Link>
       <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', marginTop: 16, fontFamily: 'PlusJakartaSans' }}>aionedu.com.br · Todos os direitos reservados</Text>
+      <PageNumber dark />
     </Page>
   )
 }
