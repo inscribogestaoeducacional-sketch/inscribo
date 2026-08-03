@@ -43,6 +43,8 @@ const RAIOX_CSS = `
 .rx-list-item:hover { background: ${SOFT}; border-color: ${VM}; }
 .rx-uf-btn { padding: 13px 4px; border-radius: 10px; border: 1.5px solid ${BORDER}; background: #fff; color: ${TEXT}; font-size: 14px; font-weight: 700; cursor: pointer; min-height: 48px; transition: background .15s, border-color .15s; font-family: 'Plus Jakarta Sans', sans-serif; }
 .rx-uf-btn:hover { background: ${SOFT}; border-color: ${VM}; color: ${VD}; }
+.rx-gate-hero { min-height: 92vh; padding: 90px 20px; }
+.rx-gate-btn { width: auto; }
 @media (max-width: 480px) {
   .rx-hero { padding: 32px 16px 104px !important; }
   .rx-card-wrap { margin: -72px auto 36px !important; padding: 0 14px !important; }
@@ -51,6 +53,8 @@ const RAIOX_CSS = `
   .rx-actions { flex-direction: column !important; }
   .rx-actions > button, .rx-actions > a { width: 100% !important; }
   .rx-uf-grid { grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)) !important; gap: 6px !important; }
+  .rx-gate-hero { min-height: 100vh; padding: 64px 16px !important; }
+  .rx-gate-btn { width: 100% !important; }
 }
 `
 
@@ -115,6 +119,95 @@ const backLinkStyle: React.CSSProperties = {
   color: VM, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0, marginBottom: 14,
 }
 
+// ─── portão de entrada (gate) — exibido antes do fluxo de busca/formulário ───
+const GATE_CHECKLIST = [
+  'Ranking da cidade',
+  'Principais concorrentes',
+  'Market Share',
+  'Dados oficiais do INEP',
+  'Relatório em PDF',
+]
+
+function CheckIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+      <circle cx="12" cy="12" r="11" fill={VD} />
+      <path d="M7 12.5l3 3 7-7" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function GateScreen({ onStart }: { onStart: () => void }) {
+  return (
+    <div>
+      {/* ── Seção 1 — Hero principal ──────────────────────────────── */}
+      <div className="rx-gate-hero" style={{ background: HERO_GRADIENT, position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center' }}>
+        <div style={{ position: 'absolute', top: -100, right: -100, width: 340, height: 340, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
+        <div style={{ position: 'absolute', bottom: -120, left: -80, width: 280, height: 280, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
+        <div style={{ maxWidth: 680, margin: '0 auto', position: 'relative', zIndex: 1, textAlign: 'center', padding: '0 20px' }}>
+          <div style={{
+            display: 'inline-block', padding: '8px 18px', borderRadius: 999,
+            background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.3)',
+            marginBottom: 22,
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Atenção, diretores e mantenedores de escolas
+            </span>
+          </div>
+
+          <h1 className="s-title" style={{ margin: 0, fontSize: 'clamp(28px, 6vw, 48px)', color: '#fff', lineHeight: 1.15 }}>
+            VOCÊ JÁ PLANEJOU AS MATRÍCULAS 2027?
+          </h1>
+
+          <p style={{ margin: '20px auto 0', fontSize: 'clamp(14px, 2.4vw, 17px)', color: 'rgba(255,255,255,0.88)', lineHeight: 1.6, maxWidth: 480 }}>
+            Descubra gratuitamente como sua escola está posicionada no mercado e identifique oportunidades para crescer.
+          </p>
+
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 9, marginTop: 26,
+            padding: '11px 20px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.28)',
+          }}>
+            <span style={{ fontSize: 14, lineHeight: 1 }}>🟢</span>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#fff' }}>Receba seu Raio-X Estratégico em menos de 1 minuto.</span>
+          </div>
+
+          <div style={{ marginTop: 34 }}>
+            <button type="button" className="btn-white rx-gate-btn" onClick={onStart} style={{ fontSize: 15, padding: '17px 44px' }}>
+              GERAR RAIO-X GRATUITO
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Seção 2 — Reforço ──────────────────────────────────────── */}
+      <div style={{ background: '#fff', padding: 'clamp(56px, 10vw, 96px) 20px' }}>
+        <div style={{ maxWidth: 520, margin: '0 auto', textAlign: 'center' }}>
+          <h2 className="s-title" style={{ margin: 0, fontSize: 'clamp(24px, 5vw, 36px)', color: VD, lineHeight: 1.2 }}>
+            DESCUBRA A POSIÇÃO DA SUA ESCOLA.
+          </h2>
+
+          <div style={{ marginTop: 36, display: 'inline-flex', flexDirection: 'column', gap: 16, textAlign: 'left' }}>
+            {GATE_CHECKLIST.map(item => (
+              <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <CheckIcon />
+                <span style={{ fontSize: 16, fontWeight: 600, color: TEXT }}>{item}</span>
+              </div>
+            ))}
+          </div>
+
+          <p style={{ margin: '32px 0 0', fontSize: 18, fontWeight: 800, color: VD }}>Tudo isso gratuitamente.</p>
+
+          <div style={{ marginTop: 26 }}>
+            <button type="button" className="btn-g rx-gate-btn" onClick={onStart} style={{ fontSize: 15, padding: '17px 44px' }}>
+              FAZER MEU RAIO-X
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── componente ───────────────────────────────────────────────────────────
 export default function RaioXPage() {
   // injeta a folha de estilos oficial do site (fontes, .inp, .btn-g, .tag-g etc.) + CSS responsivo da página
@@ -134,6 +227,9 @@ export default function RaioXPage() {
       document.getElementById('raiox-css')?.remove()
     }
   }, [])
+
+  // portão de entrada — só avança pro fluxo de busca ao clicar num CTA da tela inicial
+  const [showGate, setShowGate] = useState(true)
 
   const [step, setStep] = useState<Step>('search')
   const [searchStage, setSearchStage] = useState<SearchStage>('uf')
@@ -362,6 +458,14 @@ export default function RaioXPage() {
 
   const disabledBtnStyle: React.CSSProperties = {
     background: '#E5E7EB', color: '#9CA3AF', boxShadow: 'none', cursor: 'not-allowed', pointerEvents: 'none',
+  }
+
+  if (showGate) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <GateScreen onStart={() => setShowGate(false)} />
+      </div>
+    )
   }
 
   return (

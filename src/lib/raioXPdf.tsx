@@ -553,7 +553,7 @@ function Page9({ m }: { m: RaioXMetrics }) {
       ))}
 
       <View style={{ backgroundColor: VD, borderRadius: 14, paddingVertical: 18, paddingHorizontal: 22, marginTop: 4 }}>
-        <Text style={{ fontSize: 12.5, color: '#fff', lineHeight: 1.7, fontFamily: 'PlusJakartaSans', fontStyle: 'italic' }}>
+        <Text style={{ fontSize: 12.5, fontWeight: 600, color: '#fff', lineHeight: 1.7, fontFamily: 'PlusJakartaSans' }}>
           {'"Enquanto sua equipe foca em encantar as famílias, a Áion Edu cuida da organização, dos alertas e dos números — para nenhuma matrícula ficar pelo caminho."'}
         </Text>
       </View>
