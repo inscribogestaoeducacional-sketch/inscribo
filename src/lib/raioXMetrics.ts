@@ -96,11 +96,19 @@ export async function calculateRaioXMetrics(
   if (error || !data || data.length === 0) return null
 
   const rows = data as RawSchoolRow[]
-  const anoCenso = Math.max(...rows.map(r => r.ano_censo))
-  const latest = rows.filter(r => r.ano_censo === anoCenso)
 
-  const school = latest.find(r => r.co_entidade === coEntidade)
+  // ano de referência = ano mais recente disponível para a PRÓPRIA escola
+  // selecionada — não o ano mais recente entre todas as escolas da cidade, que
+  // pode não ter registro dela (import de censo por ano costuma ser parcial).
+  const schoolRows = rows.filter(r => r.co_entidade === coEntidade)
+  if (schoolRows.length === 0) return null
+
+  const anoCenso = schoolRows.reduce((max, r) => (r.ano_censo > max ? r.ano_censo : max), schoolRows[0].ano_censo)
+  const school = schoolRows.find(r => r.ano_censo === anoCenso)
   if (!school) return null
+
+  // demais escolas da cidade no MESMO ano de referência da escola selecionada
+  const latest = rows.filter(r => r.ano_censo === anoCenso)
 
   // universo de comparação: escolas privadas do município no ano mais recente
   let group = latest.filter(r => r.tp_dependencia === PRIVATE_DEPENDENCIA && (r.qt_mat_total ?? 0) > 0)

@@ -521,11 +521,13 @@ function Page8({ m, interpretation }: { m: RaioXMetrics; interpretation: string[
 }
 
 // ─── PAGE 9 — COMO A ÁION EDU PODE AJUDAR (diferenciais) ──────────────────────
+// mesmo conteúdo do carrossel exibido em RaioXPage.tsx durante a geração do relatório
 const AION_BENEFITS = [
-  { title: 'Nenhum lead se perde',            desc: 'Pipeline completo do primeiro contato até a matrícula assinada, com histórico de cada família.' },
-  { title: 'Atendimento 100% centralizado',   desc: 'Toda a equipe responde pelo WhatsApp oficial da escola — sem números pessoais, sem perder conversa.' },
-  { title: 'Decisões com dados, não achismo', desc: 'Relatórios de conversão, CPA e desempenho por consultor, sempre atualizados.' },
-  { title: 'Implantação em poucos dias',      desc: 'Sem projeto longo de TI: sua secretaria já opera na primeira semana.' },
+  { title: 'Criamos sua campanha de matrícula com você', desc: 'A Áion não entrega só um sistema - montamos a campanha junto e acompanhamos os resultados automaticamente.' },
+  { title: 'CRM feito especialmente para escolas',        desc: 'Não é um sistema genérico adaptado - foi construído pensando na realidade da gestão educacional.' },
+  { title: 'Relatórios de campanha completos',            desc: 'Veja exatamente de onde vêm seus leads e o que está funcionando, sem precisar montar planilha.' },
+  { title: 'Mais de 10 módulos, um único clique',         desc: 'Tudo organizado numa única tela - sem dor de cabeça pra gerar nada.' },
+  { title: 'O melhor custo-benefício do mercado educacional', desc: 'Tecnologia completa por um investimento que cabe no orçamento da sua escola.' },
 ]
 
 function Page9({ m }: { m: RaioXMetrics }) {
@@ -534,23 +536,23 @@ function Page9({ m }: { m: RaioXMetrics }) {
       <Tag>Por que a Áion Edu</Tag>
       <Text style={s.title}>{`O que muda para ${m.schoolName}`}</Text>
 
-      <Text style={{ fontSize: 11.5, color: CMID, lineHeight: 1.7, marginBottom: 22, fontFamily: 'PlusJakartaSans' }}>
+      <Text style={{ fontSize: 11, color: CMID, lineHeight: 1.6, marginBottom: 18, fontFamily: 'PlusJakartaSans' }}>
         {'A campanha de matrículas da sua escola começa AGORA com a '}
         <Text style={{ fontWeight: 700, color: VD }}>ÁION EDU</Text>
         {'. Lemos os dados da sua escola, criamos um plano de campanha com metas e ações, centralizamos o atendimento das famílias e entregamos ao gestor visibilidade total — do primeiro contato até a matrícula assinada.'}
       </Text>
 
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 22 }}>
-        {AION_BENEFITS.map((b, i) => (
-          <View key={b.title} style={{ width: '48%', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: BORDA, borderRadius: 14, padding: 16 }}>
-            <NumberCircle text={String(i + 1)} size={30} color={VD} bg={SOFT} fontSize={13} />
-            <Text style={{ fontFamily: 'BricolageGrotesque', fontWeight: 800, fontSize: 12.5, color: AZUL, marginTop: 10, marginBottom: 5, lineHeight: 1.3 }}>{b.title}</Text>
+      {AION_BENEFITS.map((b, i) => (
+        <View key={b.title} style={{ flexDirection: 'row', gap: 14, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: BORDA, borderRadius: 14, padding: 14, marginBottom: 9 }}>
+          <NumberCircle text={String(i + 1)} size={30} color={VD} bg={SOFT} fontSize={13} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontFamily: 'BricolageGrotesque', fontWeight: 800, fontSize: 12, color: AZUL, marginBottom: 4, lineHeight: 1.3 }}>{b.title}</Text>
             <Text style={{ fontSize: 9.5, color: CMID, lineHeight: 1.5, fontFamily: 'PlusJakartaSans' }}>{b.desc}</Text>
           </View>
-        ))}
-      </View>
+        </View>
+      ))}
 
-      <View style={{ backgroundColor: VD, borderRadius: 14, paddingVertical: 20, paddingHorizontal: 22 }}>
+      <View style={{ backgroundColor: VD, borderRadius: 14, paddingVertical: 18, paddingHorizontal: 22, marginTop: 4 }}>
         <Text style={{ fontSize: 12.5, color: '#fff', lineHeight: 1.7, fontFamily: 'PlusJakartaSans', fontStyle: 'italic' }}>
           {'"Enquanto sua equipe foca em encantar as famílias, a Áion Edu cuida da organização, dos alertas e dos números — para nenhuma matrícula ficar pelo caminho."'}
         </Text>

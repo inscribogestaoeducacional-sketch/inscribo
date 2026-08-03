@@ -70,15 +70,37 @@ const ufName = (uf: string) => UFS.find(u => u.uf === uf)?.name ?? uf
 const STEP_LABELS = ['Buscar escola', 'Confirmar', 'Seus dados']
 const STEP_INDEX: Record<Step, number> = { search: 0, confirm: 1, form: 2, success: 3 }
 
-// mensagens rotativas exibidas enquanto o relatório é calculado/gerado
-const LOADING_MESSAGES = [
-  'Analisando os dados do Censo Escolar...',
-  'Comparando com as escolas da sua região...',
-  'Calculando ranking e participação de mercado...',
-  'Montando os gráficos do seu relatório...',
-  'A Áion Edu já ajuda escolas a organizar toda a captação de alunos...',
-  'Preparando seu Raio-X Estratégico...',
+// carrossel de diferenciais exibido enquanto o relatório é calculado/gerado
+// (mesmo conteúdo usado na página "Por que a Áion Edu" do PDF — ver raioXPdf.tsx)
+type HighlightIconName = 'trend' | 'home' | 'chart' | 'grid' | 'star'
+
+const AION_HIGHLIGHTS: { icon: HighlightIconName; title: string; desc: string }[] = [
+  { icon: 'trend', title: 'Criamos sua campanha de matrícula com você', desc: 'A Áion não entrega só um sistema - montamos a campanha junto e acompanhamos os resultados automaticamente.' },
+  { icon: 'home',  title: 'CRM feito especialmente para escolas',       desc: 'Não é um sistema genérico adaptado - foi construído pensando na realidade da gestão educacional.' },
+  { icon: 'chart', title: 'Relatórios de campanha completos',          desc: 'Veja exatamente de onde vêm seus leads e o que está funcionando, sem precisar montar planilha.' },
+  { icon: 'grid',  title: 'Mais de 10 módulos, um único clique',       desc: 'Tudo organizado numa única tela - sem dor de cabeça pra gerar nada.' },
+  { icon: 'star',  title: 'O melhor custo-benefício do mercado educacional', desc: 'Tecnologia completa por um investimento que cabe no orçamento da sua escola.' },
 ]
+
+// ícones inline (SVG) — a fonte de ícones "ti ti-*" usada em outros pontos do site
+// não está carregada em nenhum lugar do projeto (sem <link> nem @font-face), então
+// renderiza em branco; para garantir que os ícones do carrossel realmente apareçam,
+// usamos o mesmo padrão de SVG inline já usado (e funcional) em src/pages/Landing.tsx.
+function HighlightIcon({ name, size = 24, color = '#00523C' }: { name: HighlightIconName; size?: number; color?: string }) {
+  const common = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
+  switch (name) {
+    case 'trend':
+      return <svg {...common}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>
+    case 'home':
+      return <svg {...common}><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>
+    case 'chart':
+      return <svg {...common}><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>
+    case 'grid':
+      return <svg {...common}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
+    case 'star':
+      return <svg {...common}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+  }
+}
 
 const labelStyle: React.CSSProperties = {
   display: 'block', fontSize: 12, fontWeight: 600, color: '#374151',
@@ -151,19 +173,19 @@ export default function RaioXPage() {
     return () => { if (pdfUrl) URL.revokeObjectURL(pdfUrl) }
   }, [pdfUrl])
 
-  // mensagens rotativas com fade durante a geração do relatório
-  const [loadingMsgIndex, setLoadingMsgIndex] = useState(0)
-  const [loadingMsgVisible, setLoadingMsgVisible] = useState(true)
+  // carrossel de diferenciais com fade durante a geração do relatório
+  const [highlightIndex, setHighlightIndex] = useState(0)
+  const [highlightVisible, setHighlightVisible] = useState(true)
 
   useEffect(() => {
-    if (pdfState !== 'loading') { setLoadingMsgIndex(0); setLoadingMsgVisible(true); return }
+    if (pdfState !== 'loading') { setHighlightIndex(0); setHighlightVisible(true); return }
     const interval = setInterval(() => {
-      setLoadingMsgVisible(false)
+      setHighlightVisible(false)
       setTimeout(() => {
-        setLoadingMsgIndex(i => (i + 1) % LOADING_MESSAGES.length)
-        setLoadingMsgVisible(true)
+        setHighlightIndex(i => (i + 1) % AION_HIGHLIGHTS.length)
+        setHighlightVisible(true)
       }, 300)
-    }, 2500)
+    }, 3000)
     return () => clearInterval(interval)
   }, [pdfState])
 
@@ -573,19 +595,45 @@ export default function RaioXPage() {
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
               {pdfState !== 'ready' && pdfState !== 'error' && (
                 <>
-                  <div style={{ width: 64, height: 64, borderRadius: '50%', background: SOFT, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-                    <div style={{ width: 28, height: 28, border: `3px solid ${VM}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'raiox-spin 0.8s linear infinite' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, marginBottom: 18 }}>
+                    <div style={{ width: 16, height: 16, border: `2.5px solid ${VM}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'raiox-spin 0.8s linear infinite', flexShrink: 0 }} />
+                    <h2 className="s-title" style={{ margin: 0, fontSize: 17, color: TEXT }}>Gerando seu relatório...</h2>
                   </div>
-                  <h2 className="s-title" style={{ margin: 0, fontSize: 19, color: TEXT }}>Gerando seu relatório...</h2>
-                  <p
+
+                  {/* carrossel dos diferenciais Áion */}
+                  <div
                     style={{
-                      margin: '10px 0 0', fontSize: 13.5, color: MUTED, lineHeight: 1.6, minHeight: 42,
-                      maxWidth: 360, marginLeft: 'auto', marginRight: 'auto',
-                      opacity: loadingMsgVisible ? 1 : 0, transition: 'opacity 0.3s ease',
+                      background: SOFT, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '26px 24px',
+                      minHeight: 176, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                      opacity: highlightVisible ? 1 : 0,
+                      transform: highlightVisible ? 'translateY(0)' : 'translateY(6px)',
+                      transition: 'opacity 0.35s ease, transform 0.35s ease',
                     }}
                   >
-                    {LOADING_MESSAGES[loadingMsgIndex]}
-                  </p>
+                    <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14, boxShadow: '0 4px 14px rgba(0,82,60,0.14)', flexShrink: 0 }}>
+                      <HighlightIcon name={AION_HIGHLIGHTS[highlightIndex].icon} size={24} color={VD} />
+                    </div>
+                    <p className="s-title" style={{ margin: 0, fontSize: 15, color: TEXT, textAlign: 'center' }}>
+                      {AION_HIGHLIGHTS[highlightIndex].title}
+                    </p>
+                    <p style={{ margin: '8px 0 0', fontSize: 12.5, color: MUTED, textAlign: 'center', lineHeight: 1.6, maxWidth: 340 }}>
+                      {AION_HIGHLIGHTS[highlightIndex].desc}
+                    </p>
+                  </div>
+
+                  {/* indicador de progresso (5 dots) */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 16 }}>
+                    {AION_HIGHLIGHTS.map((h, i) => (
+                      <div
+                        key={h.title}
+                        style={{
+                          width: i === highlightIndex ? 18 : 6, height: 6, borderRadius: 3,
+                          background: i === highlightIndex ? VD : '#D1D5DB',
+                          transition: 'width 0.3s ease, background 0.3s ease',
+                        }}
+                      />
+                    ))}
+                  </div>
                 </>
               )}
 
