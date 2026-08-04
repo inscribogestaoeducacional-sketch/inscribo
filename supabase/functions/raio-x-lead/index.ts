@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
       co_entidade ? `CO_ENTIDADE INEP: ${co_entidade}` : null,
     ].filter(Boolean)
 
-    const { error: leadError } = await supabase.from('crm_leads').insert({
+    const { data: lead, error: leadError } = await supabase.from('crm_leads').insert({
       name: director_name.trim(),
       phone: phone.trim(),
       email: email.trim(),
@@ -50,11 +50,34 @@ Deno.serve(async (req) => {
       notes: notesParts.join(' | '),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    })
+    }).select('id').single()
 
     if (leadError) {
       console.error('Lead error:', leadError)
       throw new Error(leadError.message)
+    }
+
+    // Fase B — WhatsApp + e-mail de boas-vindas assim que o lead é capturado
+    // (único sinal server-side que temos: o PDF em si é gerado e baixado
+    // 100% no client, ver src/pages/RaioXPage.tsx). Best-effort: uma falha
+    // aqui não deve impedir a resposta de sucesso pro formulário.
+    try {
+      await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/raio-x-followup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+        },
+        body: JSON.stringify({
+          leadId: lead?.id,
+          director_name: director_name.trim(),
+          phone: phone.trim(),
+          email: email.trim(),
+          school_name: school_name.trim(),
+        }),
+      })
+    } catch (followupErr) {
+      console.error('[raio-x-lead] erro ao chamar raio-x-followup:', followupErr)
     }
 
     return new Response(

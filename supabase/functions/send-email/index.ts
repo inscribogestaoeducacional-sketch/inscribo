@@ -7,6 +7,8 @@ const FROM_NAME = 'Aion Edu'
 const LOGO_URL = 'https://www.aionedu.com.br/aion-logo-full.png'
 const SUPPORT_PHONE = '(83) 98556-6393'
 const SUPPORT_WA = 'https://wa.me/5583985556393'
+// Numero comercial (vendas/demo) — mesmo usado em RaioXPage.tsx, Landing.tsx e Footer.tsx.
+const SALES_WA = 'https://wa.me/5583993444383'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -308,6 +310,18 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
       <p style="color:#475569;font-size:14px;margin:0 0 4px;">${data.consultant_name || 'Equipe Aion Edu'}</p>
       ${data.consultant_phone ? `<p style="color:#475569;font-size:14px;margin:0;"><a href="https://wa.me/55${data.consultant_phone.replace(/\D/g,'')}" style="color:#00A896;text-decoration:none;">WhatsApp: ${data.consultant_phone}</a></p>` : ''}
     `, `Nova proposta da Aion Edu para ${data.school_name}`)
+  }),
+
+  raio_x_boas_vindas: (data) => ({
+    subject: `Seu Raio-X Estrategico da ${data.escola || 'sua escola'} chegou!`,
+    html: wrap(`
+      <p style="margin:0 0 4px;">${badge('Raio-X Estrategico', '#00523C', '#ffffff')}</p>
+      ${h1(`Ola, ${data.diretor || 'diretor(a)'}!`, '#00523C')}
+      ${p(`Seu Raio-X Estrategico da <strong>${data.escola || 'sua escola'}</strong> ja foi baixado com sucesso - obrigado por participar! Esperamos que os dados tenham te ajudado a enxergar melhor a posicao da sua escola no mercado.`)}
+      ${p(`Se quiser aprofundar essa analise e entender como transformar isso em mais matriculas para 2027, e so responder este e-mail ou chamar a gente no WhatsApp.`)}
+      ${btn('Chamar no WhatsApp', SALES_WA, '#25D366')}
+      ${p('Um abraco,<br>Equipe Aion Edu')}
+    `, `Seu Raio-X Estrategico da ${data.escola} chegou!`)
   }),
 
 }

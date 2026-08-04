@@ -493,6 +493,11 @@ function CampaignsTab() {
   const [keywords, setKeywords]   = useState<AionKeyword[]>([])
   const [aionTags, setAionTags]   = useState<{id:string;name:string;color:string}[]>([])
   const [campaignLeads, setCampaignLeads] = useState<{ notes: string; created_at: string }[]>([])
+  // Raio-X Estratégico (landing page INEP) é uma origem de lead separada das
+  // keywords de QR Code acima — crm_leads.origin='raio_x_inep', sem o prefixo
+  // "Veio via QR Code:" em notes, então nunca batia com keywordStats. Contado
+  // à parte, no card dedicado abaixo (ver "Raio-X Estratégico").
+  const [raioXLeads, setRaioXLeads] = useState<{ created_at: string }[]>([])
   const [period, setPeriod]       = useState<Period>('30d')
   const [loading, setLoading]     = useState(true)
   const [showForm, setShowForm]   = useState(false)
@@ -501,14 +506,16 @@ function CampaignsTab() {
   const [copiedId, setCopiedId]   = useState<string | null>(null)
 
   const load = async () => {
-    const [{ data: kws }, { data: tags }, { data: leads }] = await Promise.all([
+    const [{ data: kws }, { data: tags }, { data: leads }, { data: raioX }] = await Promise.all([
       supabase.from('aion_keywords').select('*').order('created_at', { ascending: false }),
       supabase.from('aion_tags').select('*').order('name'),
       supabase.from('crm_leads').select('notes, created_at').ilike('notes', `${CAMPAIGN_NOTE_PREFIX}%`),
+      supabase.from('crm_leads').select('created_at').eq('origin', 'raio_x_inep'),
     ])
     setKeywords((kws as AionKeyword[]) ?? [])
     setAionTags(tags ?? [])
     setCampaignLeads((leads as { notes: string; created_at: string }[]) ?? [])
+    setRaioXLeads((raioX as { created_at: string }[]) ?? [])
     setLoading(false)
   }
 
@@ -528,6 +535,11 @@ function CampaignsTab() {
 
   const cutoff = periodCutoffIso(period)
   const totalInPeriod = campaignLeads.filter(l => !cutoff || l.created_at >= cutoff).length
+
+  const raioXInPeriod = raioXLeads.filter(l => !cutoff || l.created_at >= cutoff).length
+  const raioXLastUsed = raioXLeads.length
+    ? raioXLeads.reduce((max, l) => (l.created_at > max ? l.created_at : max), raioXLeads[0].created_at)
+    : null
 
   const copyLink = (link: string, id: string) => {
     navigator.clipboard.writeText(link)
@@ -579,73 +591,93 @@ function CampaignsTab() {
     <div style={{ padding: '24px 24px' }}>
       {/* Métricas de campanha */}
       <div style={{ marginBottom: 28 }}>
+        {/* Resumo geral (QR Code) + seletor de período — sempre visível,
+            independente de haver keywords cadastradas (antes ficava dentro do
+            "keywords.length === 0" e sumia junto com o card do Raio-X abaixo). */}
+        <div style={{
+          background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 14, padding: '20px 22px', marginBottom: 16,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ width: 44, height: 44, background: '#E6F7F5', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <TrendingUp style={{ width: 22, height: 22, color: '#00A896' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#1A2B4A', lineHeight: 1 }}>{totalInPeriod}</div>
+              <div style={{ fontSize: 12, color: '#64748B', marginTop: 3 }}>
+                lead{totalInPeriod === 1 ? '' : 's'} captado{totalInPeriod === 1 ? '' : 's'} via QR Code — {PERIOD_LABELS[period]}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', borderRadius: 10, padding: 3 }}>
+            {(['today', '7d', '30d', 'all'] as Period[]).map(p => (
+              <button key={p} onClick={() => setPeriod(p)}
+                style={{
+                  padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
+                  background: period === p ? '#00A896' : 'transparent', color: period === p ? '#fff' : '#64748B',
+                }}>
+                {PERIOD_LABELS[p]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Raio-X Estratégico (landing INEP) — origem separada das keywords de
+            QR Code, contada direto por crm_leads.origin='raio_x_inep'. */}
+        <div style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '14px 16px', marginBottom: 16, maxWidth: 260 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', flex: 1 }}>Raio-X Estratégico</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#00A896', background: '#E6F7F5', padding: '2px 7px', borderRadius: 20, flexShrink: 0 }}>INEP</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <Users style={{ width: 13, height: 13, color: '#94A3B8' }} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{raioXInPeriod}</span>
+            <span style={{ fontSize: 12, color: '#64748B' }}>lead{raioXInPeriod === 1 ? '' : 's'} — {PERIOD_LABELS[period]}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Clock style={{ width: 13, height: 13, color: '#94A3B8' }} />
+            <span style={{ fontSize: 12, color: '#64748B' }}>
+              {raioXLastUsed ? `Última vez: ${new Date(raioXLastUsed).toLocaleDateString('pt-BR')}` : 'Nenhum lead ainda'}
+            </span>
+          </div>
+        </div>
+
+        {/* Por keyword */}
         {keywords.length === 0 ? (
           <div style={{ background: '#F8FAFC', border: '1.5px dashed #CBD5E1', borderRadius: 14, padding: '32px 24px', textAlign: 'center' }}>
             <Megaphone style={{ width: 32, height: 32, color: '#94A3B8', margin: '0 auto 12px' }} />
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 4 }}>Nenhuma campanha cadastrada ainda</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A', marginBottom: 4 }}>Nenhuma keyword de QR Code cadastrada ainda</div>
             <div style={{ fontSize: 13, color: '#64748B', maxWidth: 440, margin: '0 auto', lineHeight: 1.6 }}>
               Cada keyword abaixo vira uma campanha rastreável: gere o link/QR code, divulgue,
               e acompanhe aqui quantos leads ela trouxe e quando foi usada pela última vez.
             </div>
           </div>
         ) : (
-          <>
-            {/* Resumo geral */}
-            <div style={{
-              background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 14, padding: '20px 22px', marginBottom: 16,
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div style={{ width: 44, height: 44, background: '#E6F7F5', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <TrendingUp style={{ width: 22, height: 22, color: '#00A896' }} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+            {keywordStats.map(({ keyword, count, lastUsed }) => (
+              <div key={keyword.id} style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '14px 16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {keyword.label}
+                  </span>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: '#00A896', background: '#E6F7F5', padding: '2px 7px', borderRadius: 20, flexShrink: 0 }}>
+                    {keyword.keyword}
+                  </span>
                 </div>
-                <div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: '#1A2B4A', lineHeight: 1 }}>{totalInPeriod}</div>
-                  <div style={{ fontSize: 12, color: '#64748B', marginTop: 3 }}>
-                    lead{totalInPeriod === 1 ? '' : 's'} captado{totalInPeriod === 1 ? '' : 's'} via campanha — {PERIOD_LABELS[period]}
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <Users style={{ width: 13, height: 13, color: '#94A3B8' }} />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{count}</span>
+                  <span style={{ fontSize: 12, color: '#64748B' }}>lead{count === 1 ? '' : 's'}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Clock style={{ width: 13, height: 13, color: '#94A3B8' }} />
+                  <span style={{ fontSize: 12, color: '#64748B' }}>
+                    {lastUsed ? `Última vez: ${new Date(lastUsed).toLocaleDateString('pt-BR')}` : 'Ainda não usada'}
+                  </span>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', borderRadius: 10, padding: 3 }}>
-                {(['today', '7d', '30d', 'all'] as Period[]).map(p => (
-                  <button key={p} onClick={() => setPeriod(p)}
-                    style={{
-                      padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
-                      background: period === p ? '#00A896' : 'transparent', color: period === p ? '#fff' : '#64748B',
-                    }}>
-                    {PERIOD_LABELS[p]}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Por keyword */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-              {keywordStats.map(({ keyword, count, lastUsed }) => (
-                <div key={keyword.id} style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '14px 16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {keyword.label}
-                    </span>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: '#00A896', background: '#E6F7F5', padding: '2px 7px', borderRadius: 20, flexShrink: 0 }}>
-                      {keyword.keyword}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                    <Users style={{ width: 13, height: 13, color: '#94A3B8' }} />
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{count}</span>
-                    <span style={{ fontSize: 12, color: '#64748B' }}>lead{count === 1 ? '' : 's'}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Clock style={{ width: 13, height: 13, color: '#94A3B8' }} />
-                    <span style={{ fontSize: 12, color: '#64748B' }}>
-                      {lastUsed ? `Última vez: ${new Date(lastUsed).toLocaleDateString('pt-BR')}` : 'Ainda não usada'}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
+            ))}
+          </div>
         )}
       </div>
 

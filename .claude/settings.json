@@ -82,7 +82,10 @@
       "Bash(cp src/components/whatsapp/WhatsAppHub.tsx src/components/superadmin/AionInboxHub.tsx)",
       "Bash(echo \"exit:$?\")",
       "Bash(grep -v \"AionWhatsAppHub.tsx$\")",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\"; grep -n \"platform_whatsapp\\\\|phone_number_id\\\\|access_token\\\\|waba_id\" {}')",
+      "Bash(curl -sS -m 8 -o /dev/null -w \"HTTP %{http_code}\\\\n\" https://example.com)",
+      "Bash(node -e ' *)"
     ],
     "additionalDirectories": [
       "\\tmp"
