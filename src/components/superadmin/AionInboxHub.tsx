@@ -9,14 +9,13 @@ import {
 } from 'lucide-react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConversationEvent, User as UserType, supabase } from '../../lib/supabase'
+import { DatabaseService, WhatsappMessage, WhatsappConversation, User as UserType, supabase } from '../../lib/supabase'
 import LeadModal, { STAGES as CRM_STAGES } from '../shared/LeadModal'
 import ProposalGenerator from './ProposalGenerator'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MsgType = 'text' | 'audio' | 'image' | 'video' | 'document' | 'sticker' | 'deleted'
 type ConvStatus = 'waiting' | 'open' | 'closed'
-type RightPanelTab = 'details' | 'history'
 interface Message {
   id: string
   type: MsgType
@@ -862,18 +861,6 @@ function MessageBubble({
   )
 }
 
-// ─── Event type icon colors ───────────────────────────────────────────────────
-function eventDotColor(eventType: string): string {
-  switch (eventType) {
-    case 'assignment':         return 'bg-blue-400'
-    case 'transfer':           return 'bg-purple-400'
-    case 'status_change':      return 'bg-amber-400'
-    case 'contact_identified': return 'bg-teal-400'
-    case 'message_received':   return 'bg-gray-300'
-    default:                   return 'bg-gray-300'
-  }
-}
-
 // ─── WhatsAppHub ──────────────────────────────────────────────────────────────
 interface WhatsAppHubProps {
   institutionId?: string
@@ -1034,9 +1021,6 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   const [readFilter, setReadFilter] = useState<'all' | 'read' | 'unread'>('all')
   const [assignFilter, setAssignFilter] = useState<'all' | 'mine' | 'none'>('all')
   const [canSeeAllConversations, setCanSeeAllConversations] = useState(false)
-  const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('details')
-  const [convHistory, setConvHistory] = useState<WhatsappConversationEvent[]>([])
-  const [historyLoading, setHistoryLoading] = useState(false)
   const [users, setUsers] = useState<UserType[]>([])
   const [transferring, setTransferring] = useState(false)
   const [transferTarget, setTransferTarget] = useState('')
@@ -1045,11 +1029,9 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   const [showAttach, setShowAttach] = useState(false)
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [showContactInfo, setShowContactInfo] = useState(true)
-  const [collapseHistory, setCollapseHistory] = useState(true)
   const [collapseContact, setCollapseContact] = useState(false)
   const [collapseAtendimento, setCollapseAtendimento] = useState(false)
   const [collapseLead, setCollapseLead] = useState(false)
-  const [collapseAvaliacao, setCollapseAvaliacao] = useState(true)
   const [collapseScheduled, setCollapseScheduled] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [recorderState, setRecorderState] = useState<'idle' | 'recording' | 'preview'>('idle')
@@ -1084,8 +1066,6 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   // Edit contact inline form
   const [editingContact, setEditingContact] = useState(false)
   const [editForm, setEditForm] = useState({ name: '', contact_type: '', notes: '' })
-  const [leadCrmEvents, setLeadCrmEvents] = useState<{ label: string; time: string; color: string }[]>([])
-  const [leadCrmLoading, setLeadCrmLoading] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [templates, setTemplates] = useState<{ id: string; name: string; language: string; components: any[] }[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState('')
@@ -1567,39 +1547,6 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
     })
   }
 
-  const loadLeadCrmEvents = async (leadId: string) => {
-    setLeadCrmLoading(true)
-    try {
-      const [{ data: lead }, { data: meetings }] = await Promise.all([
-        supabase.from('crm_leads').select('stage, created_at, name, school_name').eq('id', leadId).single(),
-        supabase.from('crm_meetings').select('scheduled_at, status').eq('lead_id', leadId).order('scheduled_at', { ascending: true }),
-      ])
-      const fmtDate = (d: string) =>
-        new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
-      const STAGE_LABEL: Record<string, string> = {
-        interesse: 'Interesse', qualificacao: 'Qualificação', proposta: 'Proposta enviada',
-        negociacao: 'Em negociação', fechado: 'Negócio fechado', cliente: 'Virou cliente',
-      }
-      const STAGE_COLOR: Record<string, string> = {
-        interesse: '#6366F1', qualificacao: '#0891B2', proposta: '#D97706',
-        negociacao: '#7C3AED', fechado: '#16A34A', cliente: '#00523C',
-      }
-      const events = []
-      if (lead) {
-        events.push({ label: `Lead criado (${lead.name || lead.school_name})`, time: fmtDate(lead.created_at), color: '#60A5FA' })
-        if (lead.stage !== 'interesse') events.push({ label: STAGE_LABEL[lead.stage] || lead.stage, time: fmtDate(lead.created_at), color: STAGE_COLOR[lead.stage] || '#94A3B8' })
-      }
-      ;(meetings || []).forEach(m => {
-        events.push({ label: `Reunião ${m.status === 'completed' ? 'realizada' : 'agendada'}`, time: fmtDate(m.scheduled_at), color: '#FBBF24' })
-      })
-      setLeadCrmEvents(events)
-    } catch {
-      setLeadCrmEvents([])
-    } finally {
-      setLeadCrmLoading(false)
-    }
-  }
-
   // onSave do LeadModal compartilhado (crm_leads) — cria ou atualiza o lead
   // comercial e mantém o vínculo com a conversa ativa em sincronia.
   const handleSaveLead = async (form: any) => {
@@ -1638,7 +1585,6 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
             await supabase.from('whatsapp_conversations').update({ contact_name: form.name }).eq('institution_id', effectiveInstitutionId).eq('remote_jid', rJid)
           }
         }
-        loadLeadCrmEvents(leadId)
       }
 
       setHubToast('Lead salvo!')
@@ -1649,14 +1595,6 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
     } finally {
       setSavingLead(false)
     }
-  }
-
-  const loadHistory = async (jid: string) => {
-    if (!effectiveInstitutionId || !jid) return
-    setHistoryLoading(true)
-    const events = await DatabaseService.getConversationEvents(effectiveInstitutionId, jid)
-    setConvHistory(events)
-    setHistoryLoading(false)
   }
 
   const loadMessages = async () => {
@@ -2103,14 +2041,6 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
     fetch().catch(() => {})
   }, [activeId])
 
-  // Load history when switching to history tab (conv events + CRM events)
-  useEffect(() => {
-    if (rightPanelTab === 'history' && activeId) {
-      loadHistory(rawJid(activeId))
-      const leadId = conversations.find(c => c.id === activeId)?.lead_id
-      if (leadId) loadLeadCrmEvents(leadId)
-    }
-  }, [rightPanelTab, activeId])
 
   // Presence channel for typing indicator — subscribe per active conversation
   useEffect(() => {
@@ -4846,26 +4776,9 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
           <div style={{ width: 280, flexShrink: 0, background: '#FFFFFF', borderLeft: '1px solid #D1FAE5', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {activeConv ? (
             <>
-            {/* Tab bar */}
-            <div style={{ flexShrink: 0, display: 'flex', background: '#FFFFFF', borderBottom: '1px solid #D1FAE5', alignItems: 'center' }}>
-              {([
-                { key: 'details', label: 'Detalhes' },
-                { key: 'history', label: 'Histórico' },
-              ] as { key: RightPanelTab; label: string }[]).map(tab => (
-                <button
-                  key={tab.key}
-                  onClick={() => setRightPanelTab(tab.key)}
-                  style={{
-                    flex: 1, padding: '12px 0', fontSize: 12, fontWeight: rightPanelTab === tab.key ? 700 : 500,
-                    color: rightPanelTab === tab.key ? '#1A2B4A' : '#64748B',
-                    borderBottom: rightPanelTab === tab.key ? '2px solid #00A896' : '2px solid transparent',
-                    background: 'none', border: 'none',
-                    cursor: 'pointer', transition: 'all 0.15s',
-                  }}
-                >
-                  {tab.label}
-                </button>
-              ))}
+            {/* Header bar */}
+            <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FFFFFF', borderBottom: '1px solid #D1FAE5', padding: '10px 14px' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>Detalhes</span>
               <button onClick={exportConversation} title="Exportar conversa"
                 style={{ padding: '8px 10px', background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', flexShrink: 0, transition: 'color 0.15s' }}
                 onMouseEnter={e => (e.currentTarget.style.color = '#00A896')}
@@ -4875,9 +4788,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
               </button>
             </div>
 
-            {/* ── Detalhes tab ── */}
-            {rightPanelTab === 'details' && (
-              <div className="wa-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
+            <div className="wa-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
 
                 {/* Concluir / Sair buttons */}
                 {activeConv.status !== 'closed' && (
@@ -4932,7 +4843,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                               background: activeConv.contact_type === 'lead' ? '#e6f7f5' : activeConv.contact_type === 'client' ? '#d1fae5' : activeConv.contact_type === 'supplier' ? '#ede9fe' : '#f1f5f9',
                               color: activeConv.contact_type === 'lead' ? '#0d9488' : activeConv.contact_type === 'client' ? '#059669' : activeConv.contact_type === 'supplier' ? '#7C3AED' : '#64748B',
                             }}>
-                              {activeConv.contact_type === 'lead' ? 'Nova Família' : activeConv.contact_type === 'client' ? 'Cliente' : activeConv.contact_type === 'supplier' ? 'Fornecedor' : activeConv.contact_type}
+                              {activeConv.contact_type === 'lead' ? 'Lead' : activeConv.contact_type === 'client' ? 'Cliente' : activeConv.contact_type === 'supplier' ? 'Fornecedor' : activeConv.contact_type}
                             </span>
                           )}
                           {activeConv.isGroup && (
@@ -4966,7 +4877,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                               <select value={editForm.contact_type} onChange={e => setEditForm(f => ({...f, contact_type: e.target.value}))}
                                 style={{ width: '100%', padding: '7px 9px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}>
                                 <option value="">Desconhecido</option>
-                                <option value="lead">Nova Família</option>
+                                <option value="lead">Lead</option>
                                 <option value="client">Cliente</option>
                                 <option value="supplier">Fornecedor</option>
                                 <option value="other">Outro</option>
@@ -5048,8 +4959,8 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                           <p style={{ fontSize: 12, fontWeight: 600, color: '#d97706', margin: '0 0 8px' }}>Quem é esse contato?</p>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
                             {[
-                              { key: 'lead',     label: '🎓 Nova Família', bg: '#0d9488', color: '#fff',    onClick: () => handleContactType('lead') },
-                              { key: 'client',   label: '✅ Família',       bg: '#d1fae5', color: '#059669', onClick: () => handleContactType('client') },
+                              { key: 'lead',     label: '🎯 Lead',         bg: '#0d9488', color: '#fff',    onClick: () => handleContactType('lead') },
+                              { key: 'client',   label: '✅ Cliente',      bg: '#d1fae5', color: '#059669', onClick: () => handleContactType('client') },
                               { key: 'supplier', label: '🏢 Fornecedor',    bg: '#ede9fe', color: '#7C3AED', onClick: () => handleContactType('supplier') },
                               { key: 'other',    label: 'Outro',            bg: '#f1f5f9', color: '#64748B', onClick: () => handleContactType('other') },
                             ].map(opt => (
@@ -5523,88 +5434,8 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                   </div>
                 )}
 
-                {/* ── SEÇÃO: AVALIAÇÃO ────────────────────────────────────────── */}
-                <div style={{ borderBottom: '1px solid #e2f5f3' }}>
-                  <button onClick={() => setCollapseAvaliacao(v => !v)}
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fefd', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#edfaf8')}
-                    onMouseLeave={e => (e.currentTarget.style.background = '#f8fefd')}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Avaliação</span>
-                    {collapseAvaliacao
-                      ? <ChevronRight style={{ width: 14, height: 14, color: '#0d9488' }} />
-                      : <ChevronDown style={{ width: 14, height: 14, color: '#0d9488' }} />}
-                  </button>
-                  {!collapseAvaliacao && (
-                    <div style={{ padding: '0 12px 12px' }}>
-                      {activeConv.satisfaction_score ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#fffbeb', borderRadius: 8, border: '1px solid #fde68a' }}>
-                          <span style={{ fontSize: 16 }}>{'⭐'.repeat(activeConv.satisfaction_score)}</span>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: '#92400E' }}>{activeConv.satisfaction_score}/5</span>
-                        </div>
-                      ) : (
-                        <p style={{ margin: 0, fontSize: 12, color: '#94A3B8', fontStyle: 'italic' }}>Sem avaliação registrada</p>
-                      )}
-                    </div>
-                  )}
-                </div>
 
               </div>
-            )}
-
-            {/* ── Histórico tab ── */}
-            {rightPanelTab === 'history' && (
-              <div className="wa-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', background: '#FFFFFF' }}>
-                <p style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Histórico de eventos</p>
-                {historyLoading || leadCrmLoading ? (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 0' }}>
-                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-[#00A896] border-t-transparent" />
-                  </div>
-                ) : convHistory.length === 0 && leadCrmEvents.length === 0 ? (
-                  <p style={{ fontSize: 12, color: '#64748B', textAlign: 'center', padding: '32px 0' }}>Nenhum evento registrado</p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {convHistory.map(ev => (
-                      <div key={ev.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px', borderRadius: 8, transition: 'background 0.15s' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = '#F0FDFB')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                        <div className={eventDotColor(ev.event_type)} style={{ width: 8, height: 8, borderRadius: '50%', marginTop: 4, flexShrink: 0 }} />
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                          <p style={{ fontSize: 12, fontWeight: 500, color: '#1A2B4A', margin: 0, lineHeight: 1.4 }}>{ev.description || ev.event_type}</p>
-                          {ev.user_name && (
-                            <p style={{ fontSize: 11, color: '#64748B', margin: '2px 0 0' }}>{ev.user_name}</p>
-                          )}
-                          <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0' }}>
-                            {new Date(ev.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                    {leadCrmEvents.length > 0 && (
-                      <>
-                        {convHistory.length > 0 && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0' }}>
-                            <div style={{ flex: 1, height: 1, background: '#E2E8F0' }} />
-                            <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>CRM</span>
-                            <div style={{ flex: 1, height: 1, background: '#E2E8F0' }} />
-                          </div>
-                        )}
-                        {leadCrmEvents.map((ev, i) => (
-                          <div key={`crm-${i}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px', borderRadius: 8, transition: 'background 0.15s' }}
-                            onMouseEnter={e => (e.currentTarget.style.background = '#F0FDFB')}
-                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                            <div style={{ width: 8, height: 8, borderRadius: '50%', background: ev.color, marginTop: 4, flexShrink: 0 }} />
-                            <div style={{ minWidth: 0, flex: 1 }}>
-                              <p style={{ fontSize: 12, fontWeight: 500, color: '#1A2B4A', margin: 0, lineHeight: 1.4 }}>{ev.label}</p>
-                              <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0' }}>{ev.time}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
             </>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', padding: 32 }}>
