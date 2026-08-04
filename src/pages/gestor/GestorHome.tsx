@@ -85,7 +85,6 @@ interface MarketSchool {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const MONTH_NAMES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
-const MONTH_SHORT: Record<number, string> = { 1:'Jan',2:'Fev',3:'Mar',4:'Abr',5:'Mai',6:'Jun',7:'Jul',8:'Ago',9:'Set',10:'Out',11:'Nov',12:'Dez' }
 
 function fmt(n: number) { return new Intl.NumberFormat('pt-BR').format(n) }
 function fmtBRL(n: number) { return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }) }
@@ -118,13 +117,6 @@ function renderMarkdown(text: string): JSX.Element {
     }
   }
   return <>{elements}</>
-}
-
-function greeting() {
-  const h = new Date().getHours()
-  if (h < 12) return 'Bom dia'
-  if (h < 18) return 'Boa tarde'
-  return 'Boa noite'
 }
 
 function calcCampaignTiming(startMonth = 8) {
@@ -278,7 +270,6 @@ export default function GestorHome() {
   const [prevLeadsCount, setPrevLeadsCount] = useState(0)
   const [prevEnrolled, setPrevEnrolled] = useState(0)
   const [activeConvsNow, setActiveConvsNow] = useState(0)
-  const [avgResponseByAttendant, setAvgResponseByAttendant] = useState<Record<string,number>>({})
   const [badgeTooltip, setBadgeTooltip] = useState(false)
   const [allEnrollments, setAllEnrollments] = useState<{ id: string; user_id: string; created_at: string }[]>([])
   const [npsData, setNpsData] = useState<{ id: string; title: string; created_at: string; satisfaction_responses: { score: number | null }[] } | null>(null)
@@ -329,13 +320,13 @@ export default function GestorHome() {
         supabase.from('campaign_cycles').select('*').eq('institution_id', institutionId).order('created_at', { ascending: false }),
         supabase.from('funnel_metrics').select('*').eq('institution_id', institutionId).order('created_at', { ascending: true }),
         supabase.from('student_transfers').select('id,student_name,course_grade,transfer_date,reason_category').eq('institution_id', institutionId).is('deleted_at', null).order('transfer_date', { ascending: false }).limit(5),
-        supabase.from('leads').select('id,status,created_at,grade_interest,source').eq('institution_id', institutionId).gte('created_at', start),
+        supabase.from('leads').select('id,status,created_at,grade_interest,source').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end),
         supabase.from('visits').select('id,status,created_at').eq('institution_id', institutionId).gte('created_at', start),
         supabase.from('whatsapp_messages').select('id,created_at,from_me,remote_jid').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end),
         supabase.from('enrollments').select('id,user_id,created_at').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end),
         supabase.from('users').select('id,full_name,role').eq('institution_id', institutionId),
         supabase.from('whatsapp_phone_numbers').select('phone_number,display_name').eq('institution_id', institutionId).limit(1).maybeSingle(),
-        supabase.from('whatsapp_conversations').select('id,created_at,status,assigned_user_name,assigned_user_id,bot_active,satisfaction_score,first_response_at,remote_jid').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end),
+        supabase.from('whatsapp_conversations').select('id,created_at,status,assigned_user_name,assigned_user_id,bot_active,satisfaction_score,first_response_at,remote_jid').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end).not('remote_jid', 'ilike', '%@g.us'),
         // Alertas de inadimplência gravados por overdue-payment-reminders — não
         // filtrados pelo period do dashboard, são "pendências atuais", igual
         // Inadimplência já não é period-filtrada em AdminFinancial.tsx.
@@ -351,7 +342,7 @@ export default function GestorHome() {
         const [leadsAtivosRes, reenrollRes] = await Promise.all([
           supabase.from('leads').select('id, updated_at')
             .eq('institution_id', institutionId)
-            .eq('status', 'matriculado')
+            .eq('status', 'enrolled')
             .gte('updated_at', `${chartActive.year}-01-01`)
             .lte('updated_at', `${chartActive.year}-12-31`),
           supabase.from('monthly_reenrollments').select('period, confirmed')
@@ -383,7 +374,7 @@ export default function GestorHome() {
         .from('leads')
         .select('id, responsible_id')
         .eq('institution_id', institutionId)
-        .eq('status', 'matriculado')
+        .eq('status', 'enrolled')
         .gte('updated_at', start)
         .lte('updated_at', end)
       const leadsForEnroll = (leadsForEnrollData ?? []) as { id: string; responsible_id: string | null }[]
@@ -480,15 +471,26 @@ export default function GestorHome() {
 
       const duration = new Date(end).getTime() - new Date(start).getTime()
       const prevStart = new Date(new Date(start).getTime() - duration).toISOString()
-      const prevLeadsRes = await supabase
-        .from('leads')
-        .select('id,status,created_at')
-        .eq('institution_id', institutionId)
-        .gte('created_at', prevStart)
-        .lt('created_at', start)
+      // prevEnrolled usa a mesma fonte/campo de data que totalEnrolled
+      // (enrollments.created_at) — antes comparava matrículas do período atual
+      // (evento de matrícula) contra leads do período anterior filtrados por
+      // data de cadastro do lead, uma base temporal diferente.
+      const [prevLeadsRes, prevEnrollRes] = await Promise.all([
+        supabase
+          .from('leads')
+          .select('id,status,created_at')
+          .eq('institution_id', institutionId)
+          .gte('created_at', prevStart)
+          .lt('created_at', start),
+        supabase
+          .from('enrollments')
+          .select('id')
+          .eq('institution_id', institutionId)
+          .gte('created_at', prevStart)
+          .lt('created_at', start),
+      ])
       setPrevLeadsCount(prevLeadsRes.data?.length ?? 0)
-      setPrevEnrolled((prevLeadsRes.data ?? []).filter(l =>
-        l.status === 'enrolled' || l.status === 'matriculado').length)
+      setPrevEnrolled(prevEnrollRes.data?.length ?? 0)
 
       // NPS data — última pesquisa de satisfação
       const { data: npsRes } = await supabase
@@ -513,20 +515,33 @@ export default function GestorHome() {
       const inepCity = cycleWithCity?.school_data?.city as string | undefined
       const inepState = cycleWithCity?.school_data?.state as string | undefined
       if (inepCity && inepState) {
-        const { data: marketSchoolsData, error: marketError } = await supabase
+        // Ano do censo mais recente disponível pra essa cidade/UF, em vez de
+        // um ano fixo — a base INEP é atualizada anualmente e um valor
+        // hardcoded fica desatualizado a cada novo censo importado.
+        const { data: yearRow } = await supabase
           .from('inep_escolas')
-          .select('co_entidade, no_entidade, tp_dependencia, qt_mat_total, qt_mat_fund, qt_mat_med, qt_mat_inf, ano_censo')
+          .select('ano_censo')
           .eq('no_municipio', inepCity)
           .eq('sg_uf', inepState?.toUpperCase() ?? '')
-          .eq('ano_censo', 2025)
-setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
+          .order('ano_censo', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        const latestCensusYear = yearRow?.ano_censo ?? new Date().getFullYear()
+
+        const { data: marketSchoolsData, error: marketError } = await supabase
+          .from('inep_escolas')
+          .select('co_entidade, no_entidade, tp_dependencia, qt_mat_total, ano_censo')
+          .eq('no_municipio', inepCity)
+          .eq('sg_uf', inepState?.toUpperCase() ?? '')
+          .eq('ano_censo', latestCensusYear)
+        setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
 
         const { data: mapSchoolsData } = await supabase
           .from('inep_escolas')
           .select('co_entidade, no_entidade, tp_dependencia, qt_mat_total, lat, lng')
           .eq('no_municipio', inepCity)
           .eq('sg_uf', inepState?.toUpperCase() ?? '')
-          .eq('ano_censo', 2025)
+          .eq('ano_censo', latestCensusYear)
           .not('lat', 'is', null)
           .not('lng', 'is', null)
         setMapSchools(mapSchoolsData || [])
@@ -610,9 +625,10 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
       const result = json.result ?? null
       setMarketData(result)
       if (result && cycleId) {
-        await supabase.from('campaign_cycles').update({ market_data: result, market_data_fetched_at: new Date().toISOString() }).eq('id', cycleId)
+        const { error } = await supabase.from('campaign_cycles').update({ market_data: result, market_data_fetched_at: new Date().toISOString() }).eq('id', cycleId)
+        if (error) console.error('[GestorHome] erro ao salvar market_data:', error)
       }
-    } catch { } finally { setMarketLoading(false) }
+    } catch (e) { console.error('[GestorHome] erro ao buscar market_data:', e) } finally { setMarketLoading(false) }
   }
 
   const AI_CACHE_KEY = `ai_insight_${institutionId}`
@@ -940,6 +956,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
     const lastCalc = targetCycle.score_calculated_at ? new Date(targetCycle.score_calculated_at).getTime() : 0
     if (targetCycle.score === score && lastCalc > sevenDaysAgo) return
     supabase.from('campaign_cycles').update({ score, score_calculated_at: new Date().toISOString() }).eq('id', targetCycle.id)
+      .then(({ error }) => { if (error) console.error('[GestorHome] erro ao salvar score da campanha:', error) })
   }, [score, hasHistory])
 
   // ── Mapa Leaflet ──────────────────────────────────────────────────────────
@@ -1031,7 +1048,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
   const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
   const leadsNoContact = leads.filter(l => l.created_at < fiveDaysAgo && l.status !== 'matriculado' && l.status !== 'enrolled' && l.status !== 'descartado').length
   if (leadsNoContact > 0) alerts.push({ msg: `${leadsNoContact} leads sem contato há mais de 5 dias`, type: 'warning', action: 'Ver leads', path: '/leads' })
-  if (avgSatisfaction !== null && avgSatisfaction < 2.5) alerts.push({ msg: `Satisfação média abaixo de 2.5 (${avgSatisfaction.toFixed(1)}/3) — atenção ao atendimento`, type: 'warning', action: 'Ver pesquisas', path: '/surveys' })
+  if (avgSatisfaction !== null && avgSatisfaction < 2.5) alerts.push({ msg: `Satisfação média abaixo de 2.5 (${avgSatisfaction.toFixed(1)}/3) — atenção ao atendimento`, type: 'warning', action: 'Ver pesquisas', path: '/pesquisas' })
 
   const avgFee = (setupCycle?.school_data?.avg_monthly_fee as number | null | undefined) || latest?.avg_monthly_fee || latest?.fee || null
 
@@ -1043,7 +1060,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
       { label: 'WhatsApp', icon: MessageCircle, path: '/whatsapp', bg: '#D1FAE5', color: '#059669' },
       { label: 'Relatórios', icon: BarChart3, path: '/reports', bg: '#DBEAFE', color: '#2563EB' },
       { label: 'Transferências', icon: TrendingDown, path: '/transfers', bg: '#FEE2E2', color: '#DC2626' },
-      { label: 'Pesquisas', icon: Star, path: '/surveys', bg: '#F5F3FF', color: '#7C3AED' },
+      { label: 'Pesquisas', icon: Star, path: '/pesquisas', bg: '#F5F3FF', color: '#7C3AED' },
     ]
     const alertColors = { warning: { bg: '#FEF3C7', color: '#B45309', border: '#FDE68A' }, info: { bg: '#DBEAFE', color: '#1D4ED8', border: '#BFDBFE' }, success: { bg: '#D1FAE5', color: '#065F46', border: '#6EE7B7' } }
 
@@ -1256,7 +1273,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
             { label: 'Conversas WhatsApp', value: waConvsRaw.length, prev: null as number | null, icon: <MessageCircle size={20} color="#25D366" />, color: '#25D366', bg: '#F0FDF4', path: '/whatsapp' },
             { label: 'Matrículas', value: totalEnrolled, prev: prevEnrolled, icon: <GraduationCap size={20} color="#7C3AED" />, color: '#7C3AED', bg: '#F5F3FF', path: '/leads' },
             { label: 'Taxa de conversão', value: conversionRateNum.toFixed(1) + '%', prev: null as number | null, icon: <TrendingUp size={20} color="#F59E0B" />, color: '#F59E0B', bg: '#FFFBEB', path: '/leads' },
-            { label: 'Satisfação média', value: satisfPct !== null ? `${satisfPct}%` : '—', prev: null as number | null, icon: <Star size={20} color={satisfPctColor(satisfPct)} />, color: satisfPctColor(satisfPct), bg: '#FFFBEB', path: '/surveys' },
+            { label: 'Satisfação média', value: satisfPct !== null ? `${satisfPct}%` : '—', prev: null as number | null, icon: <Star size={20} color={satisfPctColor(satisfPct)} />, color: satisfPctColor(satisfPct), bg: '#FFFBEB', path: '/pesquisas' },
             { label: 'Tempo de resposta', value: waAvgResponse !== null ? (waAvgResponse < 60 ? (waAvgResponse === 0 ? '< 1min' : `${waAvgResponse}min`) : `${Math.floor(waAvgResponse / 60)}h ${waAvgResponse % 60}m`) : '—', prev: null as number | null, icon: <Clock size={20} color="#EF4444" />, color: '#EF4444', bg: '#FEF2F2', path: '/whatsapp' },
           ].map(card => {
             const variation = card.prev !== null && card.prev > 0
@@ -1720,7 +1737,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
           )
         })()}
         {waSatisfStats && (
-          <SectionCard title="Satisfação dos Atendimentos" subtitle="Período selecionado" icon={<Star />} iconBg="#FEF3C7" iconColor="#F59E0B" action={() => navigate('/surveys')} actionLabel="Ver pesquisas">
+          <SectionCard title="Satisfação dos Atendimentos" subtitle="Período selecionado" icon={<Star />} iconBg="#FEF3C7" iconColor="#F59E0B" action={() => navigate('/pesquisas')} actionLabel="Ver pesquisas">
             {(() => {
               const sc = waSatisfStats.avgScore
               const scPct = toSatisfPct(sc) ?? 0
@@ -2058,7 +2075,7 @@ setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
           <div style={{ display: 'flex', gap: 6 }}>
             {inepHasData && (
               <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>
-                Dados INEP 2025 ✓
+                Dados INEP {inepMaxYear ?? ''} ✓
               </span>
             )}
             <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>

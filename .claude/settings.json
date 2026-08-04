@@ -89,7 +89,8 @@
       "Bash(grep -n \"^\\\\[functions\\\\]$\\\\|verify_jwt\" supabase/config.toml)",
       "Skill(claude-api)",
       "Skill(claude-api:*)",
-      "Bash(echo \"---exit $?---\")"
+      "Bash(echo \"---exit $?---\")",
+      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\"; grep -n \"lat\\\\|lng\\\\|geocod\" {}')"
     ],
     "additionalDirectories": [
       "\\tmp"
