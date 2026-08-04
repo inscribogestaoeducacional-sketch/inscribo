@@ -1667,8 +1667,13 @@ async function processAionMessage({
   platformWAId?: string
 }): Promise<void> {
   try {
-    const remoteJid   = msg.from as string
-    const rawPhone    = remoteJid.replace(/@.*/, '')
+    // Normalizado (fonte de verdade — ver comentário de normalizePhone acima)
+    // em vez de usar msg.from cru: números BR chegam da Meta às vezes sem o
+    // 9º dígito, então o remote_jid cru divergia do que raio-x-followup e
+    // outras origens "outbound-first" já gravam, causando conversas
+    // duplicadas para o mesmo contato.
+    const remoteJid   = normalizePhone((msg.from as string).replace(/@.*/, ''))
+    const rawPhone    = remoteJid
     const contactName = (value.contacts?.[0]?.profile?.name as string | undefined) || remoteJid
     const msgType     = (msg.type as string) || 'text'
     const timestamp   = new Date(parseInt(msg.timestamp) * 1000).toISOString()
@@ -2078,11 +2083,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           c.wa_id === rawJid
         )?.profile?.picture_url
 
-        console.log('[PRE-LOOP] criando contato:', rawJid)
+        // rawJid crua só serve pra casar com value.contacts[].wa_id acima
+        // (vem do mesmo payload da Meta, no mesmo formato); o que vai pro
+        // banco é sempre a versão normalizada, pro remote_jid do contato
+        // ficar no mesmo formato canônico das conversas/mensagens.
+        const normalizedJid = normalizePhone(rawJid)
+        console.log('[PRE-LOOP] criando contato:', normalizedJid)
 
         await upsertContact(
           institutionId,
-          rawJid,
+          normalizedJid,
           contactName,
           picUrl
         )
@@ -2090,9 +2100,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // ── Process incoming messages ──────────────────────────────────────────
       for (const msg of value.messages || []) {
-        // Always store remote_jid without @-suffix to avoid duplicate rows
-        const remoteJid   = (msg.from as string).replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
-        const rawPhone    = remoteJid.replace(/@.*/, '')
+        // Always store remote_jid without @-suffix to avoid duplicate rows.
+        // Normalizado (não só o sufixo @jid): números BR às vezes chegam da
+        // Meta sem o 9º dígito — sem normalizar aqui, essa mesma escola podia
+        // acabar com duas conversas pro mesmo contato (uma com o 9, criada
+        // por um envio outbound-first, outra sem, criada por esta mensagem
+        // recebida). normalizePhone() é a mesma função usada em todo o
+        // arquivo (ver definição acima) — agora é ela quem decide o formato
+        // canônico do remote_jid, não o valor cru que a Meta manda.
+        const remoteJid   = normalizePhone((msg.from as string).replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, ''))
+        const rawPhone    = remoteJid
         console.log('[LOOP] msg recebida:', msg.type, remoteJid, institutionId)
 
         // Sempre criar/atualizar contato ao receber mensagem (antes de qualquer continue)

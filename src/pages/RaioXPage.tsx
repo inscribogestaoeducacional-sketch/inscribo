@@ -5,6 +5,7 @@ import { SHARED_CSS } from '../styles/sharedCSS'
 import AION_LOGO_B64 from '../lib/aionLogo'
 import { calculateRaioXMetrics } from '../lib/raioXMetrics'
 import RaioXPdfDocument from '../lib/raioXPdf'
+import { normalizePhone } from '../lib/phone'
 
 // ─── tipos ──────────────────────────────────────────────────────────────────
 interface SchoolResult {
@@ -522,13 +523,19 @@ export default function RaioXPage() {
     setSubmitting(true)
     setSubmitError(null)
     try {
+      // normalizePhone (mesma função do webhook real, ver src/lib/phone.ts)
+      // assume que o DDI já está presente; o campo acima é de texto livre e
+      // um diretor de escola BR normalmente digita sem o 55 na frente, então
+      // garantimos o prefixo antes de normalizar — senão o número ficaria
+      // sem código de país salvo em crm_leads.phone.
+      const normalizedPhone = normalizePhone(digits.startsWith('55') ? digits : `55${digits}`)
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/raio-x-lead`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           director_name: directorName.trim(),
           role: role.trim(),
-          phone: whatsapp.trim(),
+          phone: normalizedPhone,
           email: email.trim(),
           city: city.trim(),
           state: selectedSchool.sg_uf,

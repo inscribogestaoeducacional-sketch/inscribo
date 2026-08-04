@@ -6,7 +6,7 @@ import FlowEditor from '../whatsapp/FlowEditor'
 import {
   Settings, MessageCircle, GitBranch, QrCode, Megaphone,
   Plus, Trash2, Copy, Check, ToggleLeft, ToggleRight, Save, Loader2,
-  TrendingUp, Users, Clock, Edit2,
+  TrendingUp, Users, Clock, Edit2, Send, AlertCircle, X,
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -39,6 +39,15 @@ interface AionKeyword {
   create_lead: boolean
   whatsapp_link: string
   is_active: boolean
+  created_at: string
+}
+
+interface RaioXLead {
+  id: string
+  name: string
+  phone: string
+  email: string
+  school_name: string
   created_at: string
 }
 
@@ -496,26 +505,40 @@ function CampaignsTab() {
   // Raio-X Estratégico (landing page INEP) é uma origem de lead separada das
   // keywords de QR Code acima — crm_leads.origin='raio_x_inep', sem o prefixo
   // "Veio via QR Code:" em notes, então nunca batia com keywordStats. Contado
-  // à parte, no card dedicado abaixo (ver "Raio-X Estratégico").
-  const [raioXLeads, setRaioXLeads] = useState<{ created_at: string }[]>([])
+  // à parte, no card dedicado abaixo (ver "Raio-X Estratégico"), com lista
+  // individual de leads + reenvio manual do fluxo da Fase B.
+  const [raioXLeads, setRaioXLeads] = useState<RaioXLead[]>([])
+  // ids de crm_leads que já têm conversa registrada (whatsapp_conversations
+  // com aion_lead_id = lead.id) — indica quem já foi "atendido" pelo fluxo
+  // automático (raio-x-followup) vs. casos antigos de antes da Fase B.
+  const [linkedLeadIds, setLinkedLeadIds] = useState<Set<string>>(new Set())
   const [period, setPeriod]       = useState<Period>('30d')
   const [loading, setLoading]     = useState(true)
   const [showForm, setShowForm]   = useState(false)
   const [form, setForm]           = useState({ ...EMPTY_KW })
   const [saving, setSaving]       = useState(false)
   const [copiedId, setCopiedId]   = useState<string | null>(null)
+  const [resendingId, setResendingId] = useState<string | null>(null)
+  const [toast, setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
+
+  const showToast = (msg: string, ok = true) => {
+    setToast({ msg, ok })
+    setTimeout(() => setToast(null), 4500)
+  }
 
   const load = async () => {
-    const [{ data: kws }, { data: tags }, { data: leads }, { data: raioX }] = await Promise.all([
+    const [{ data: kws }, { data: tags }, { data: leads }, { data: raioX }, { data: linkedConvs }] = await Promise.all([
       supabase.from('aion_keywords').select('*').order('created_at', { ascending: false }),
       supabase.from('aion_tags').select('*').order('name'),
       supabase.from('crm_leads').select('notes, created_at').ilike('notes', `${CAMPAIGN_NOTE_PREFIX}%`),
-      supabase.from('crm_leads').select('created_at').eq('origin', 'raio_x_inep'),
+      supabase.from('crm_leads').select('id, name, phone, email, school_name, created_at').eq('origin', 'raio_x_inep').order('created_at', { ascending: false }),
+      supabase.from('whatsapp_conversations').select('aion_lead_id').eq('is_aion_inbox', true).not('aion_lead_id', 'is', null),
     ])
     setKeywords((kws as AionKeyword[]) ?? [])
     setAionTags(tags ?? [])
     setCampaignLeads((leads as { notes: string; created_at: string }[]) ?? [])
-    setRaioXLeads((raioX as { created_at: string }[]) ?? [])
+    setRaioXLeads((raioX as RaioXLead[]) ?? [])
+    setLinkedLeadIds(new Set((linkedConvs ?? []).map((c: any) => c.aion_lead_id as string)))
     setLoading(false)
   }
 
@@ -577,6 +600,34 @@ function CampaignsTab() {
     setKeywords(prev => prev.filter(k => k.id !== id))
   }
 
+  // Chama a Edge Function raio-x-followup manualmente pra um lead específico
+  // — mesmo payload que raio-x-lead/index.ts monta automaticamente ao criar
+  // o lead. A function já faz find-or-create em whatsapp_conversations (por
+  // remote_jid + is_aion_inbox), então reenviar pra quem já tem conversa só
+  // atualiza a conversa existente e insere uma nova mensagem — não duplica.
+  const handleResend = async (lead: RaioXLead) => {
+    setResendingId(lead.id)
+    try {
+      const { data, error } = await supabase.functions.invoke('raio-x-followup', {
+        body: {
+          leadId: lead.id,
+          director_name: lead.name,
+          phone: lead.phone,
+          email: lead.email,
+          school_name: lead.school_name,
+        },
+      })
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
+      showToast(`Reenviado para ${lead.name}!`, true)
+      await load()
+    } catch (e: any) {
+      showToast(e?.message || 'Erro ao reenviar.', false)
+    } finally {
+      setResendingId(null)
+    }
+  }
+
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '9px 12px', border: '1.5px solid #E2E8F0',
     borderRadius: 8, fontSize: 14, color: '#1A2B4A', background: '#fff',
@@ -589,6 +640,15 @@ function CampaignsTab() {
 
   return (
     <div style={{ padding: '24px 24px' }}>
+      {toast && (
+        <div className={`fixed top-6 right-6 z-[200] flex items-center gap-3 px-5 py-3 rounded-xl shadow-xl text-sm font-semibold
+          ${toast.ok ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+          {toast.ok ? <Check className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {toast.msg}
+          <button onClick={() => setToast(null)}><X className="w-4 h-4 opacity-70 hover:opacity-100" /></button>
+        </div>
+      )}
+
       {/* Métricas de campanha */}
       <div style={{ marginBottom: 28 }}>
         {/* Resumo geral (QR Code) + seletor de período — sempre visível,
@@ -624,8 +684,8 @@ function CampaignsTab() {
 
         {/* Raio-X Estratégico (landing INEP) — origem separada das keywords de
             QR Code, contada direto por crm_leads.origin='raio_x_inep'. */}
-        <div style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '14px 16px', marginBottom: 16, maxWidth: 260 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+        <div style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, maxWidth: 260 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', flex: 1 }}>Raio-X Estratégico</span>
             <span style={{ fontSize: 10, fontWeight: 700, color: '#00A896', background: '#E6F7F5', padding: '2px 7px', borderRadius: 20, flexShrink: 0 }}>INEP</span>
           </div>
@@ -634,12 +694,65 @@ function CampaignsTab() {
             <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{raioXInPeriod}</span>
             <span style={{ fontSize: 12, color: '#64748B' }}>lead{raioXInPeriod === 1 ? '' : 's'} — {PERIOD_LABELS[period]}</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: raioXLeads.length ? 14 : 0 }}>
             <Clock style={{ width: 13, height: 13, color: '#94A3B8' }} />
             <span style={{ fontSize: 12, color: '#64748B' }}>
               {raioXLastUsed ? `Última vez: ${new Date(raioXLastUsed).toLocaleDateString('pt-BR')}` : 'Nenhum lead ainda'}
             </span>
           </div>
+
+          {/* Lista de leads — quem já tem conversa em whatsapp_conversations
+              (aion_lead_id) foi atendido pelo fluxo automático (raio-x-followup);
+              quem não tem é caso antigo, de antes da Fase B existir. */}
+          {raioXLeads.length > 0 && (
+            <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: 12, overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ textAlign: 'left' }}>
+                    {['Nome', 'Telefone', 'E-mail', 'Escola', 'Cadastro', 'Status', ''].map(h => (
+                      <th key={h} style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {raioXLeads.map(lead => {
+                    const attended = linkedLeadIds.has(lead.id)
+                    const isResending = resendingId === lead.id
+                    return (
+                      <tr key={lead.id} style={{ borderTop: '1px solid #F1F5F9' }}>
+                        <td style={{ padding: '8px 10px', color: '#1A2B4A', fontWeight: 600, whiteSpace: 'nowrap' }}>{lead.name}</td>
+                        <td style={{ padding: '8px 10px', color: '#475569', whiteSpace: 'nowrap' }}>{lead.phone}</td>
+                        <td style={{ padding: '8px 10px', color: '#475569', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.email}</td>
+                        <td style={{ padding: '8px 10px', color: '#475569', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.school_name}</td>
+                        <td style={{ padding: '8px 10px', color: '#64748B', whiteSpace: 'nowrap' }}>{new Date(lead.created_at).toLocaleDateString('pt-BR')}</td>
+                        <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20,
+                            background: attended ? '#D1FAE5' : '#FEF3C7', color: attended ? '#059669' : '#B45309',
+                          }}>
+                            {attended ? 'Atendido' : 'Pendente'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                          <button onClick={() => handleResend(lead)} disabled={isResending}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 8,
+                              fontSize: 12, fontWeight: 700, border: '1px solid #A7F3D0', cursor: isResending ? 'default' : 'pointer',
+                              background: isResending ? '#F1F5F9' : '#E6F7F5', color: isResending ? '#94A3B8' : '#00523C',
+                            }}>
+                            {isResending
+                              ? <Loader2 className="animate-spin" style={{ width: 12, height: 12 }} />
+                              : <Send style={{ width: 12, height: 12 }} />}
+                            {isResending ? 'Enviando...' : (attended ? 'Reenviar' : 'Enviar')}
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* Por keyword */}

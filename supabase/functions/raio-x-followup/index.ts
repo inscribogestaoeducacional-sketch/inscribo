@@ -17,6 +17,7 @@
 // especial adicional.
 // =============================================================================
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { normalizePhone } from '../_shared/phone.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -40,14 +41,16 @@ const RAIO_X_PRONTO_TEMPLATE_NAME = 'raio_x_pronto'
 const RAIO_X_PRONTO_TEMPLATE_TEXT =
   'Olá {{1}}! 👋 Vimos que você acabou de baixar o Raio-X Estratégico da {{2}} - esperamos que os dados tenham sido úteis! Se quiser entender melhor como transformar esse diagnóstico em mais matrículas para 2027, um consultor da Áion Edu pode te mostrar isso sem compromisso. Responda esta mensagem quando quiser conversar! 🚀'
 
-// Mesma normalização usada em AionInboxHub.tsx:handleNewConv — número sem
-// máscara, sempre com DDI 55 e o 9º dígito do celular.
-function normalizePhone(raw: string): string {
-  const digits = raw.replace(/\D/g, '')
-  if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
-    return digits.length === 12 ? `${digits.slice(0, 4)}9${digits.slice(4)}` : digits
-  }
-  return `55${digits.length === 10 ? `${digits.slice(0, 2)}9${digits.slice(2)}` : digits}`
+// normalizePhone (import acima) assume que o DDI já está presente — é o que
+// a Meta sempre manda, mas o `phone` aqui vem de um formulário público
+// (src/pages/RaioXPage.tsx) que um diretor de escola brasileira normalmente
+// preenche SEM o 55 na frente. Garante o DDI antes de normalizar, senão um
+// número de 10-11 dígitos sem código de país passaria batido sem o 55 (a
+// função só mexe em números que já começam com 55).
+function toRemoteJid(rawPhone: string): string {
+  const digits = rawPhone.replace(/\D/g, '')
+  const withCountryCode = digits.startsWith('55') ? digits : `55${digits}`
+  return normalizePhone(withCountryCode)
 }
 
 function buildPreview(directorName: string, schoolName: string): string {
@@ -75,7 +78,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    const remoteJid = normalizePhone(phone)
+    const remoteJid = toRemoteJid(phone)
     const directorTrim = director_name.trim()
     const schoolTrim = school_name.trim()
     const preview = buildPreview(directorTrim, schoolTrim)
