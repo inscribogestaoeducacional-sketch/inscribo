@@ -43,7 +43,7 @@ async function callClaude(prompt: string, maxTokens = 1024): Promise<string> {
       'anthropic-version': '2023-06-01'
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-5',
       max_tokens: maxTokens,
       messages: [{ role: 'user', content: prompt }]
     })
@@ -66,7 +66,7 @@ async function callClaudeWithDocument(pdfBase64: string, textPrompt: string, max
       'anthropic-beta': 'pdfs-2024-09-25'
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-5',
       max_tokens: maxTokens,
       messages: [{
         role: 'user',
@@ -693,7 +693,7 @@ Gere uma análise em 3 parágrafos curtos:
           'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-5',
           max_tokens: 300,
           system: systemPrompt,
           messages: [{ role: 'user', content: userPrompt }]
