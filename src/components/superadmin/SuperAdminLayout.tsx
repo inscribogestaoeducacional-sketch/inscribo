@@ -35,8 +35,6 @@ const ADMIN_GROUPS: MenuGroup[] = [
     title: 'Comercial',
     items: [
       { path: '/super-admin/crm',        label: 'CRM Comercial', icon: TrendingUp  },
-      { path: '/super-admin/onboarding', label: 'Onboarding',    icon: CheckCircle2 },
-      { path: '/super-admin/contracts',  label: 'Contratos',     icon: FileText    },
       { path: '/super-admin/aion-inbox', label: 'Inbox Áion',    icon: Inbox       },
     ],
   },
@@ -364,14 +362,14 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
                   )}
 
                   {todayMeetings > 0 && (
-                    <Link to="/super-admin/onboarding" onClick={() => setNotifOpen(false)}
+                    <Link to="/super-admin/schools" onClick={() => setNotifOpen(false)}
                       className="flex items-start gap-3 px-4 py-3 bg-cyan-50 border-b border-cyan-100 hover:bg-cyan-100 transition-colors">
                       <AlertCircle className="w-4 h-4 text-cyan-600 flex-shrink-0 mt-0.5" />
                       <div>
                         <p className="text-sm font-semibold text-cyan-700">
                           {todayMeetings} reunião{todayMeetings > 1 ? 'ões' : ''} hoje
                         </p>
-                        <p className="text-xs text-cyan-500 mt-0.5">Ver na Implantação →</p>
+                        <p className="text-xs text-cyan-500 mt-0.5">Ver em Escolas →</p>
                       </div>
                     </Link>
                   )}

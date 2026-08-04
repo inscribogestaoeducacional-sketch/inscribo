@@ -1749,6 +1749,18 @@ async function processAionMessage({
       })
     if (rpcErr1) console.error('❌ rpc error:', rpcErr1.message)
 
+    // ── Resolve media URL (download + re-upload to Storage) — mesmo padrão
+    // do fluxo de escola acima; institutionId aqui é só um prefixo de path no
+    // Storage (bucket whatsapp-media), não precisa ser um institutions.id real.
+    let mediaUrl: string | null = null
+    if (MEDIA_TYPES.includes(msgType as MediaType)) {
+      const mediaObj = msg[msgType as keyof typeof msg] as any
+      if (mediaObj?.id) {
+        const mimeType = (mediaObj.mime_type as string) || 'application/octet-stream'
+        mediaUrl = await resolveMediaUrl(mediaObj.id, 'aion', mimeType)
+      }
+    }
+
     // Insert message
     const { error: insertMsgErr } = await supabase.from('whatsapp_messages').insert({
       institution_id:  null,
@@ -1764,6 +1776,7 @@ async function processAionMessage({
       status:          'received',
       direction:       'inbound',
       is_aion_inbox:   true,
+      media_url:       mediaUrl,
       raw_data:        msg,
     })
     if (insertMsgErr) console.error('❌ [aion] erro ao inserir whatsapp_messages:', insertMsgErr)

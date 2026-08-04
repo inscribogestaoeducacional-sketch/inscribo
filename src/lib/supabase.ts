@@ -37,6 +37,29 @@ export interface Lead {
   tags?: string[]
 }
 
+// CRM comercial interno da Áion (venda do produto pra escolas) — não confundir
+// com `Lead` acima, que é o lead de matrícula do CRM escolar.
+export interface CrmLead {
+  id: string
+  name: string
+  phone?: string
+  email?: string
+  school_name?: string
+  city?: string
+  state?: string
+  origin?: string
+  stage: 'interesse' | 'qualificacao' | 'proposta' | 'negociacao' | 'fechado' | 'cliente'
+  notes?: string
+  consultant_id?: string
+  monthly_value?: number
+  implementation_value?: number
+  next_followup?: string
+  converted_institution_id?: string
+  has_proposal?: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface Visit {
   id: string
   lead_id?: string
@@ -309,6 +332,57 @@ export class DatabaseService {
       .eq('id', id)
 
     if (error) throw error
+  }
+
+  // CRM Leads (crm_leads) — CRM comercial interno da Áion, distinto de `leads`
+  // (matrículas escolares). Sem institution_id: escopo é a própria Áion.
+  static async getCrmLeads(): Promise<CrmLead[]> {
+    const { data, error } = await supabase
+      .from('crm_leads')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data || []
+  }
+
+  static async createCrmLead(lead: Partial<CrmLead>): Promise<CrmLead> {
+    const { data, error } = await supabase
+      .from('crm_leads')
+      .insert(lead)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  }
+
+  static async updateCrmLead(id: string, updates: Partial<CrmLead>): Promise<void> {
+    const { error } = await supabase
+      .from('crm_leads')
+      .update(updates)
+      .eq('id', id)
+
+    if (error) throw error
+  }
+
+  static async deleteCrmLead(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('crm_leads')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+  }
+
+  static async searchCrmLeadsByPhone(phone: string): Promise<CrmLead[]> {
+    const digits = phone.replace(/\D/g, '').slice(-8)
+    const { data, error } = await supabase
+      .from('crm_leads')
+      .select('*')
+      .limit(50)
+    if (error) return []
+    return (data || []).filter((l: CrmLead) => l.phone && l.phone.replace(/\D/g, '').endsWith(digits))
   }
 
   // Visits

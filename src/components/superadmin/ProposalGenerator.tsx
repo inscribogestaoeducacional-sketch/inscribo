@@ -26,6 +26,7 @@ export interface ProposalGeneratorProps {
   }
   onClose: () => void
   onSave?: (proposal: any) => void
+  onGenerated?: (pdfUrl: string) => void
 }
 
 interface ProposalForm extends ProposalData {
@@ -56,7 +57,7 @@ const darkInp: React.CSSProperties = {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function ProposalGenerator({ lead, consultant, onClose, onSave }: ProposalGeneratorProps) {
+export default function ProposalGenerator({ lead, consultant, onClose, onSave, onGenerated }: ProposalGeneratorProps) {
   const { user } = useAuth()
   const today = new Date().toISOString().slice(0, 10)
   const defaultDeadline = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
@@ -175,6 +176,7 @@ export default function ProposalGenerator({ lead, consultant, onClose, onSave }:
         const { data: { publicUrl } } = supabase.storage.from('proposals').getPublicUrl(fileName)
         setPdfUrl(publicUrl)
         await supabase.from('proposals').update({ pdf_url: publicUrl }).eq('id', id)
+        onGenerated?.(publicUrl)
       }
 
       const url = URL.createObjectURL(blob)

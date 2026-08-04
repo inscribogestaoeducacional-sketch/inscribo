@@ -17,6 +17,42 @@ function Skeleton({ h = 'h-4', w = 'w-full', cls = '' }: { h?: string; w?: strin
   return <div className={`${h} ${w} ${cls} bg-gray-200 rounded animate-pulse`} />
 }
 
+// 19 tarefas padrão do processo de implantação — mesma taxonomia usada em
+// InstitutionDetails.tsx (5 fases: contract/implementation/training/campaign/
+// monthly). Toda escola nova já nasce com o processo criado, eliminando o
+// passo manual de "iniciar onboarding" depois.
+const ONBOARDING_DEFAULT_TASKS: Record<string, { title: string; description: string }[]> = {
+  contract: [
+    { title: 'Contrato enviado via Autentique',      description: 'Enviar contrato para assinatura digital' },
+    { title: 'Contrato assinado pela escola',        description: 'Confirmar assinatura do responsável' },
+    { title: 'Pagamento da implantação confirmado',  description: 'Verificar pagamento no Asaas' },
+  ],
+  implementation: [
+    { title: 'Kickoff agendado e realizado',         description: 'Realizar reunião de kickoff com a escola' },
+    { title: 'Dados do ERP importados',              description: 'Importar histórico do sistema atual' },
+    { title: 'WhatsApp oficial homologado',          description: 'Configurar número via API Oficial Meta' },
+    { title: 'Equipe cadastrada no sistema',         description: 'Criar usuários para todos os atendentes' },
+    { title: 'Fluxos de atendimento configurados',   description: 'Personalizar bot e fluxos do WhatsApp' },
+    { title: 'Formulário de captação publicado',     description: 'Integrar formulário no site da escola' },
+  ],
+  training: [
+    { title: 'Treinamento de CRM realizado',         description: 'Treinar equipe no kanban de leads' },
+    { title: 'Treinamento de WhatsApp realizado',    description: 'Treinar equipe no WhatsApp oficial' },
+    { title: 'Treinamento de Relatórios realizado',  description: 'Treinar gestor na leitura dos dados' },
+    { title: 'Dúvidas da equipe respondidas',        description: 'Sessão de perguntas e respostas' },
+  ],
+  campaign: [
+    { title: 'Campanha configurada pelo gestor',     description: 'Gestor preencheu os dados da campanha' },
+    { title: 'IA gerou o plano de campanha',         description: 'Plano com metas mensais gerado' },
+    { title: 'Metas revisadas e aprovadas',          description: 'Gestor aprovou as metas sugeridas' },
+    { title: 'Campanha liberada pelo admin',         description: 'Admin liberou o acesso à campanha' },
+  ],
+  monthly: [
+    { title: '1ª reunião mensal realizada',          description: 'Primeiro acompanhamento mensal' },
+    { title: 'Relatório do mês enviado',             description: 'Relatório de performance enviado' },
+  ],
+}
+
 type ToastT = { msg: string; ok: boolean }
 function ToastBar({ toast, onClose }: { toast: ToastT; onClose: () => void }) {
   return (
@@ -199,6 +235,29 @@ function NewSchoolWizard({
         .select().single()
 
       if (instErr) throw new Error(instErr.message)
+
+      // 1b. Criar processo de implantação + semear as 19 tarefas padrão —
+      // antes exigia um passo manual separado ("iniciar onboarding"); erro
+      // aqui não bloqueia a criação da escola (o admin pode iniciar depois
+      // manualmente em InstitutionDetails.tsx), só avisa.
+      try {
+        const { data: proc, error: procErr } = await supabase
+          .from('onboarding_processes')
+          .insert({ institution_id: institution.id, current_phase: 'contract', status: 'active' })
+          .select().single()
+        if (procErr) throw procErr
+        const allTasks: any[] = []
+        let order = 0
+        for (const phase of ['contract', 'implementation', 'training', 'campaign', 'monthly']) {
+          for (const t of ONBOARDING_DEFAULT_TASKS[phase]) {
+            allTasks.push({ process_id: proc.id, phase, title: t.title, description: t.description, done: false, sort_order: order++ })
+          }
+        }
+        const { error: tasksErr } = await supabase.from('onboarding_tasks').insert(allTasks)
+        if (tasksErr) throw tasksErr
+      } catch (e: any) {
+        console.error('[NewSchoolWizard] erro ao criar processo de implantação:', e?.message)
+      }
 
       // 2. Criar usuário gestor
       const fnRes = await fetch(

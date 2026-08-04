@@ -5,11 +5,13 @@ import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight, ChevronLeft,
   CheckCheck, Check, Zap, Settings, User, Users, Download,
-  X, MoreVertical, CornerUpLeft, SmilePlus, Edit, Trash2
+  X, MoreVertical, CornerUpLeft, SmilePlus, Edit, Trash2, Clock
 } from 'lucide-react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConversationEvent, User as UserType, supabase } from '../../lib/supabase'
+import LeadModal, { STAGES as CRM_STAGES } from '../shared/LeadModal'
+import ProposalGenerator from './ProposalGenerator'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MsgType = 'text' | 'audio' | 'image' | 'video' | 'document' | 'sticker' | 'deleted'
@@ -192,7 +194,9 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
       online: false,
       labels: [],
       isGroup,
-      lead_id: convData?.lead_id || jidMsgs.find(m => m.lead_id)?.lead_id,
+      // Inbox Áion usa aion_lead_id (FK p/ crm_leads) — lead_id fica sempre NULL
+      // nessas linhas por causa da CHECK constraint; um dos dois é sempre null.
+      lead_id: convData?.lead_id || (convData as any)?.aion_lead_id || jidMsgs.find(m => m.lead_id)?.lead_id,
       assigned_user_id: convData?.assigned_user_id,
       assigned_user_name: convData?.assigned_user_name,
       contact_type: convData?.contact_type,
@@ -245,7 +249,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
         online: false,
         labels: [],
         isGroup,
-        lead_id: conv.lead_id,
+        lead_id: conv.lead_id || (conv as any).aion_lead_id,
         assigned_user_id: conv.assigned_user_id,
         assigned_user_name: conv.assigned_user_name,
         contact_type: conv.contact_type,
@@ -1007,6 +1011,15 @@ function QuickReplyManagerModal({ isOpen, onClose, institutionId, userId, onSave
 export default function AionInboxHub({ institutionId: propInstitutionId, isAionInbox = false }: WhatsAppHubProps = {}) {
   const { user } = useAuth()
   const effectiveInstitutionId = propInstitutionId ?? user?.institution_id ?? ''
+  // Inbox Áion não é uma escola — não existe institution_id real aplicável.
+  // aionPlatformId é o pseudo-institution_id (platform_whatsapp.id), mesmo
+  // padrão já usado em AdminAionInbox.tsx para whatsapp_quick_replies/whatsapp_flows.
+  const [aionPlatformId, setAionPlatformId] = useState('')
+  useEffect(() => {
+    if (!isAionInbox) return
+    supabase.from('platform_whatsapp').select('id').eq('connected', true).maybeSingle()
+      .then(({ data }) => setAionPlatformId(data?.id ?? ''))
+  }, [isAionInbox])
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
@@ -1037,6 +1050,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   const [collapseAtendimento, setCollapseAtendimento] = useState(false)
   const [collapseLead, setCollapseLead] = useState(false)
   const [collapseAvaliacao, setCollapseAvaliacao] = useState(true)
+  const [collapseScheduled, setCollapseScheduled] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [recorderState, setRecorderState] = useState<'idle' | 'recording' | 'preview'>('idle')
   const [recordingSeconds, setRecordingSeconds] = useState(0)
@@ -1053,7 +1067,8 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   const [newConvName, setNewConvName] = useState('')
   const [showLeadModal, setShowLeadModal] = useState(false)
   const [showClientModal, setShowClientModal] = useState(false)
-  const [leadForm, setLeadForm] = useState({ responsible_name: '', student_name: '', phone: '', email: '', grade_interest: '', source: 'WhatsApp' })
+  const [showProposalGenerator, setShowProposalGenerator] = useState(false)
+  const [crmConsultants, setCrmConsultants] = useState<any[]>([])
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [pendingFilePreview, setPendingFilePreview] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -1084,10 +1099,24 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   // Template panel for new outbound conversations
   const [showTemplatePanel, setShowTemplatePanel] = useState(false)
 
-  // Lead data for right panel
+  // Agendamento de mensagens (só Inbox Áion) — sempre via template aprovado,
+  // buscado ao vivo na Graph API (ver AionInboxHub.legacy.tsx.bak) porque
+  // whatsapp_templates.institution_id tem FK real pra institutions(id) e
+  // platform_whatsapp.id não pode ser gravado lá.
+  const [showScheduleModal, setShowScheduleModal] = useState(false)
+  const [aionTemplates, setAionTemplates] = useState<{ id?: string; name: string; language: string; status?: string; components?: any[] }[]>([])
+  const [loadingAionTemplates, setLoadingAionTemplates] = useState(false)
+  const [scheduleTemplateName, setScheduleTemplateName] = useState('')
+  const [scheduleTemplateVars, setScheduleTemplateVars] = useState<Record<string, string>>({})
+  const [scheduleSendAt, setScheduleSendAt] = useState('')
+  const [savingSchedule, setSavingSchedule] = useState(false)
+  const [scheduleError, setScheduleError] = useState('')
+  const [scheduledMessages, setScheduledMessages] = useState<{ id: string; content: string; send_at: string; message_type: string }[]>([])
+  const [loadingScheduled, setLoadingScheduled] = useState(false)
+
+  // Lead data for right panel — sempre crm_leads (CRM comercial da Áion),
+  // editado/visualizado via LeadModal completo (mesmo de AdminCRM.tsx)
   const [leadData, setLeadData] = useState<any>(null)
-  const [editingLead, setEditingLead] = useState(false)
-  const [leadEditForm, setLeadEditForm] = useState<any>({})
   const [savingLead, setSavingLead] = useState(false)
 
   // New feature states
@@ -1400,26 +1429,31 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   }
 
   const handleLinkLead = async (leadId: string) => {
-    if (!activeId || !effectiveInstitutionId) return
+    if (!activeId || (!effectiveInstitutionId && !isAionInbox)) return
     const rJid = rawJid(activeId)
-    await DatabaseService.updateWhatsappMessageLead(rJid, effectiveInstitutionId, leadId)
-    await DatabaseService.linkConversationLead(effectiveInstitutionId, rJid, leadId)
+    if (isAionInbox) {
+      // whatsapp_conversations.lead_id é FK pra leads(id) (lado escola); pro
+      // Inbox Áion existe aion_lead_id (FK pra crm_leads(id)) — uma CHECK
+      // constraint exige lead_id NULL quando is_aion_inbox=true, então usar
+      // "lead_id" aqui quebraria o insert. whatsapp_messages não tem coluna
+      // equivalente — o vínculo fica só na conversa mesmo.
+      await supabase.from('whatsapp_conversations').update({ aion_lead_id: leadId }).eq('is_aion_inbox', true).eq('remote_jid', rJid)
+    } else {
+      await DatabaseService.updateWhatsappMessageLead(rJid, effectiveInstitutionId, leadId)
+      await DatabaseService.linkConversationLead(effectiveInstitutionId, rJid, leadId)
+    }
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, lead_id: leadId } : c))
     const found = leadResults.find(l => l.id === leadId)
     if (found) setConversations(prev => prev.map(c =>
-      c.id === activeId ? { ...c, name: found.responsible_name || found.student_name || c.name } : c
+      c.id === activeId ? { ...c, name: found.name || c.name } : c
     ))
     // Carregar dados do lead imediatamente no painel direito
     const { data: lead } = await supabase
-      .from('leads')
-      .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at')
+      .from('crm_leads')
+      .select('*')
       .eq('id', leadId)
       .single()
-    if (lead) {
-      console.log('[LEAD PANEL] linked & loaded:', lead.responsible_name)
-      setLeadData(lead)
-      setLeadEditForm(lead)
-    }
+    if (lead) setLeadData(lead)
     setLinkingLead(false)
     setLeadSearch('')
     setLeadResults([])
@@ -1427,12 +1461,12 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
 
   const searchLeads = async (q: string) => {
     setLeadSearch(q)
-    if (!effectiveInstitutionId || q.length < 2) { setLeadResults([]); return }
-    const results = await DatabaseService.searchLeadsByPhone(effectiveInstitutionId, q)
-    const allLeads = await DatabaseService.getLeads(effectiveInstitutionId)
+    if (q.length < 2) { setLeadResults([]); return }
+    const results = await DatabaseService.searchCrmLeadsByPhone(q)
+    const allLeads = await DatabaseService.getCrmLeads()
     const byName = allLeads.filter(l =>
-      l.responsible_name?.toLowerCase().includes(q.toLowerCase()) ||
-      l.student_name?.toLowerCase().includes(q.toLowerCase())
+      l.name?.toLowerCase().includes(q.toLowerCase()) ||
+      l.school_name?.toLowerCase().includes(q.toLowerCase())
     )
     const combined = [...results, ...byName.filter(l => !results.find(r => r.id === l.id))].slice(0, 8)
     setLeadResults(combined)
@@ -1536,27 +1570,27 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   const loadLeadCrmEvents = async (leadId: string) => {
     setLeadCrmLoading(true)
     try {
-      const [{ data: lead }, { data: visits }] = await Promise.all([
-        supabase.from('leads').select('status, created_at, responsible_name, student_name').eq('id', leadId).single(),
-        supabase.from('visits').select('scheduled_date, status').eq('lead_id', leadId).order('scheduled_date', { ascending: true }),
+      const [{ data: lead }, { data: meetings }] = await Promise.all([
+        supabase.from('crm_leads').select('stage, created_at, name, school_name').eq('id', leadId).single(),
+        supabase.from('crm_meetings').select('scheduled_at, status').eq('lead_id', leadId).order('scheduled_at', { ascending: true }),
       ])
       const fmtDate = (d: string) =>
         new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
-      const STATUS_LABEL: Record<string, string> = {
-        new: 'Lead criado', contact: 'Contato realizado', scheduled: 'Visita agendada',
-        visit: 'Visita realizada', proposal: 'Proposta enviada', enrolled: 'Matriculado', lost: 'Lead perdido',
+      const STAGE_LABEL: Record<string, string> = {
+        interesse: 'Interesse', qualificacao: 'Qualificação', proposta: 'Proposta enviada',
+        negociacao: 'Em negociação', fechado: 'Negócio fechado', cliente: 'Virou cliente',
       }
-      const STATUS_COLOR: Record<string, string> = {
-        new: '#60A5FA', contact: '#2DD4BF', scheduled: '#FBBF24',
-        visit: '#A78BFA', proposal: '#F97316', enrolled: '#34D399', lost: '#F87171',
+      const STAGE_COLOR: Record<string, string> = {
+        interesse: '#6366F1', qualificacao: '#0891B2', proposta: '#D97706',
+        negociacao: '#7C3AED', fechado: '#16A34A', cliente: '#00523C',
       }
       const events = []
       if (lead) {
-        events.push({ label: `Lead criado (${lead.responsible_name || lead.student_name})`, time: fmtDate(lead.created_at), color: '#60A5FA' })
-        if (lead.status !== 'new') events.push({ label: STATUS_LABEL[lead.status] || lead.status, time: fmtDate(lead.created_at), color: STATUS_COLOR[lead.status] || '#94A3B8' })
+        events.push({ label: `Lead criado (${lead.name || lead.school_name})`, time: fmtDate(lead.created_at), color: '#60A5FA' })
+        if (lead.stage !== 'interesse') events.push({ label: STAGE_LABEL[lead.stage] || lead.stage, time: fmtDate(lead.created_at), color: STAGE_COLOR[lead.stage] || '#94A3B8' })
       }
-      ;(visits || []).forEach(v => {
-        events.push({ label: `Visita ${v.status === 'completed' ? 'realizada' : 'agendada'}`, time: fmtDate(v.scheduled_date), color: '#FBBF24' })
+      ;(meetings || []).forEach(m => {
+        events.push({ label: `Reunião ${m.status === 'completed' ? 'realizada' : 'agendada'}`, time: fmtDate(m.scheduled_at), color: '#FBBF24' })
       })
       setLeadCrmEvents(events)
     } catch {
@@ -1566,56 +1600,50 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
     }
   }
 
-  const handleSaveLead = async (overrides?: Partial<typeof leadEditForm>) => {
-    const form = overrides ? { ...leadEditForm, ...overrides } : leadEditForm
-    if (!activeConv?.lead_id || !form) return
+  // onSave do LeadModal compartilhado (crm_leads) — cria ou atualiza o lead
+  // comercial e mantém o vínculo com a conversa ativa em sincronia.
+  const handleSaveLead = async (form: any) => {
     setSavingLead(true)
     try {
-      await supabase.from('leads').update({
-        responsible_name: form.responsible_name,
-        student_name: form.student_name,
-        grade_interest: form.grade_interest,
-        email: form.email,
-        status: form.status,
-      }).eq('id', activeConv.lead_id)
-      setLeadData({ ...leadData, ...form })
-      setLeadEditForm({ ...leadData, ...form })
-      setEditingLead(false)
-      setHubToast('Lead atualizado!')
-      setTimeout(() => setHubToast(null), 3000)
+      let leadId: string | undefined = leadData?.id
 
-      if (form.responsible_name && effectiveInstitutionId) {
-        const normPhone = (() => {
-          let d = (form.phone || '').replace(/\D/g, '')
-          // Brazilian with CC: 55 + DDD(2) + [9] + local
-          if (d.startsWith('55') && (d.length === 12 || d.length === 13)) {
-            return d.length === 12 ? d.slice(0, 4) + '9' + d.slice(4) : d
-          }
-          // 10-digit bare Brazilian (no valid E.164 is 10 digits globally)
-          if (d.length === 10) return '55' + d.slice(0, 2) + '9' + d.slice(2)
-          // 11-digit NOT starting with '1': unambiguous Brazilian DDD (21-99)
-          if (d.length === 11 && !d.startsWith('1')) return '55' + d
-          // 11-digit starting with '1': could be US/CA (+1) — preserve as-is
-          // 12+ digits: already has a country code — preserve as-is
-          return d
-        })()
-
-        if (normPhone) {
-          await supabase.from('whatsapp_contacts')
-            .update({ name: form.responsible_name })
-            .eq('institution_id', effectiveInstitutionId)
-            .eq('phone', normPhone)
-
-          skipNextNameUpdateRef.current = activeId
-          setConversations(prev => prev.map(c =>
-            c.id === activeId ? { ...c, name: form.responsible_name } : c
-          ))
-          await supabase.from('whatsapp_conversations')
-            .update({ contact_name: form.responsible_name })
-            .eq('institution_id', effectiveInstitutionId)
-            .eq('remote_jid', activeId)
-        }
+      if (leadId) {
+        await DatabaseService.updateCrmLead(leadId, form)
+        setLeadData((prev: any) => ({ ...prev, ...form }))
+      } else {
+        const created = await DatabaseService.createCrmLead(form)
+        leadId = created.id
+        setLeadData(created)
       }
+
+      if (leadId && activeId) {
+        const rJid = rawJid(activeId)
+        if (isAionInbox) {
+          // aion_lead_id (FK p/ crm_leads) — a CHECK constraint exige lead_id
+          // NULL quando is_aion_inbox=true. whatsapp_contacts é conceito só de
+          // escola (ver migration 20260802000100): não gravamos nada lá pro
+          // Inbox Áion, só atualizamos o nome exibido localmente.
+          await supabase.from('whatsapp_conversations').update({ aion_lead_id: leadId }).eq('is_aion_inbox', true).eq('remote_jid', rJid)
+          setConversations(prev => prev.map(c => c.id === activeId ? { ...c, lead_id: leadId, name: form.name || c.name } : c))
+        } else if (effectiveInstitutionId) {
+          await DatabaseService.updateWhatsappMessageLead(rJid, effectiveInstitutionId, leadId)
+          await DatabaseService.linkConversationLead(effectiveInstitutionId, rJid, leadId)
+          setConversations(prev => prev.map(c => c.id === activeId ? { ...c, lead_id: leadId } : c))
+
+          // Sincroniza o nome exibido da conversa com o nome do contato do lead
+          if (form.name) {
+            await supabase.from('whatsapp_contacts').update({ name: form.name }).eq('institution_id', effectiveInstitutionId).eq('phone', rJid)
+            skipNextNameUpdateRef.current = activeId
+            setConversations(prev => prev.map(c => c.id === activeId ? { ...c, name: form.name } : c))
+            await supabase.from('whatsapp_conversations').update({ contact_name: form.name }).eq('institution_id', effectiveInstitutionId).eq('remote_jid', rJid)
+          }
+        }
+        loadLeadCrmEvents(leadId)
+      }
+
+      setHubToast('Lead salvo!')
+      setTimeout(() => setHubToast(null), 3000)
+      setShowLeadModal(false)
     } catch {
       setSendError('Erro ao salvar lead.')
     } finally {
@@ -1694,76 +1722,14 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
 
       const initialConvs = await loadMessages()
       setActiveId(prev => prev ?? (initialConvs?.[0]?.id ?? null))
-      if (!isAionInbox) DatabaseService.getUsers(effectiveInstitutionId).then(setUsers).catch(() => {})
-
-      if (!isAionInbox) {
-        // Load institution name for template variables
-        ;(async () => {
-          try {
-            const { data: instData } = await supabase
-              .from('institutions')
-              .select('name')
-              .eq('id', effectiveInstitutionId)
-              .single()
-            if (instData?.name) setInstitutionName(instData.name)
-          } catch {}
-        })()
-
-        // Load approved templates
-        ;(async () => {
-          try {
-            const { data } = await supabase
-              .from('whatsapp_templates')
-              .select('id, name, language, components')
-              .eq('institution_id', effectiveInstitutionId)
-              .eq('status', 'approved')
-            if (data) setTemplates(data)
-          } catch {}
-        })()
-
-        // Load quick replies from DB (globais + pessoais — RLS já filtra;
-        // aqui só ordenamos pessoais primeiro, depois globais)
-        ;(async () => {
-          try {
-            const { data } = await supabase
-              .from('whatsapp_quick_replies')
-              .select('id, title, message, order_index, user_id, shortcut')
-              .eq('institution_id', effectiveInstitutionId)
-              .order('order_index', { ascending: true })
-            if (data) {
-              const mapped = data.map((r: any) => ({ id: r.id, label: r.title, text: r.message, shortcut: r.shortcut ?? null, user_id: r.user_id ?? null }))
-              mapped.sort((a, b) => (a.user_id ? 0 : 1) - (b.user_id ? 0 : 1))
-              setQuickReplies(mapped)
-            }
-          } catch {}
-        })()
-
-        // Load flow config (satisfaction survey toggle)
-        ;(async () => {
-          try {
-            const { data } = await supabase
-              .from('whatsapp_flows')
-              .select('satisfaction_survey_enabled, satisfaction_message')
-              .eq('institution_id', effectiveInstitutionId)
-              .maybeSingle()
-            if (data) setFlowConfig({
-              satisfaction_survey_enabled: !!(data as any).satisfaction_survey_enabled,
-              satisfaction_message: (data as any).satisfaction_message || 'Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊',
-            })
-          } catch {}
-        })()
-
-        // Load whatsapp_tags for tag dropdown
-        ;(async () => {
-          try {
-            const { data } = await supabase
-              .from('whatsapp_tags')
-              .select('id, name, color')
-              .eq('institution_id', effectiveInstitutionId)
-              .order('name')
-            if (data) setHubTags(data as { id: string; name: string; color: string }[])
-          } catch {}
-        })()
+      if (isAionInbox) {
+        // Time Áion pra transferência/atribuição — mesmo padrão de AionWhatsAppHub.tsx
+        // (consultores + admin_geral), já que `users` aqui não é escopado por institution_id.
+        supabase.from('users').select('id, full_name, email, user_type, role')
+          .or('user_type.eq.consultant,role.eq.admin_geral')
+          .then(({ data }) => setUsers((data || []) as unknown as UserType[]))
+      } else {
+        DatabaseService.getUsers(effectiveInstitutionId).then(setUsers).catch(() => {})
       }
 
       setLoading(false)
@@ -1874,7 +1840,25 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       .subscribe()
 
     let leadsChannel: ReturnType<typeof supabase.channel> | null = null
-    if (effectiveInstitutionId) {
+    if (isAionInbox) {
+      // crm_leads não tem institution_id — sem filtro, casamos pelo id no handler
+      leadsChannel = supabase
+        .channel(`leads-${channelSuffix}`)
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'crm_leads',
+        }, (payload: any) => {
+          const currentLeadId = conversationsRef.current.find(c => c.id === activeIdRef.current)?.lead_id
+          if (payload.new?.id === currentLeadId) setLeadData(payload.new)
+          if (payload.new?.name) {
+            setConversations(prev => prev.map(c =>
+              c.lead_id === payload.new.id ? { ...c, name: payload.new.name } : c
+            ))
+          }
+        })
+        .subscribe()
+    } else if (effectiveInstitutionId) {
       leadsChannel = supabase
         .channel(`leads-${channelSuffix}`)
         .on('postgres_changes', {
@@ -1884,10 +1868,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
           filter: `institution_id=eq.${effectiveInstitutionId}`
         }, (payload: any) => {
           const currentLeadId = conversationsRef.current.find(c => c.id === activeIdRef.current)?.lead_id
-          if (payload.new?.id === currentLeadId) {
-            setLeadData(payload.new)
-            setLeadEditForm(payload.new)
-          }
+          if (payload.new?.id === currentLeadId) setLeadData(payload.new)
           if (payload.new?.responsible_name) {
             setConversations(prev => prev.map(c =>
               c.lead_id === payload.new.id
@@ -1908,18 +1889,147 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
     }
   }, [effectiveInstitutionId, isAionInbox])
 
+  // Nome da instituição, templates aprovados, respostas rápidas, pesquisa de
+  // satisfação e tags — no Inbox Áion o escopo é aionPlatformId (platform_whatsapp.id),
+  // não effectiveInstitutionId (que não representa nenhuma escola real aqui).
+  // Efeito separado do de cima porque aionPlatformId resolve de forma assíncrona
+  // (useEffect próprio) depois do primeiro render.
+  useEffect(() => {
+    if (isAionInbox) {
+      // Inbox Áion não é uma escola cadastrada em `institutions` — nome fixo.
+      setInstitutionName('Áion Edu')
+      // Lista de consultores pro seletor do LeadModal (mesmo padrão de AdminCRM.tsx)
+      supabase.from('users').select('id, full_name, email').eq('user_type', 'consultant')
+        .then(({ data }) => setCrmConsultants(data || []))
+    } else if (effectiveInstitutionId) {
+      ;(async () => {
+        try {
+          const { data: instData } = await supabase
+            .from('institutions')
+            .select('name')
+            .eq('id', effectiveInstitutionId)
+            .single()
+          if (instData?.name) setInstitutionName(instData.name)
+        } catch {}
+      })()
+    }
+
+    const scopeId = isAionInbox ? aionPlatformId : effectiveInstitutionId
+    if (!scopeId) return
+
+    // Templates aprovados — whatsapp_templates.institution_id tem FK real pra
+    // institutions(id) (diferente de whatsapp_flows/quick_replies), então
+    // platform_whatsapp.id nunca bate com nenhuma linha ali. Pro Inbox Áion os
+    // templates são buscados ao vivo na Graph API (mesmo padrão do agendamento
+    // — ver AionInboxHub.legacy.tsx.bak:loadAionTemplates()).
+    ;(async () => {
+      if (isAionInbox) {
+        try {
+          const { data: waRow } = await supabase.from('platform_whatsapp').select('waba_id').eq('connected', true).maybeSingle()
+          const wabaId = (waRow as any)?.waba_id
+          if (!wabaId) { setTemplates([]); return }
+          const { data: tokenRow } = await supabase.from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
+          const token = (tokenRow as any)?.value || ''
+          if (!token) { setTemplates([]); return }
+          const res = await fetch(`https://graph.facebook.com/v19.0/${wabaId}/message_templates?limit=50`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          const data = await res.json()
+          const approved = ((data.data || []) as any[])
+            .filter(t => t.status?.toUpperCase() === 'APPROVED')
+            .map(t => ({ id: t.id || t.name, name: t.name, language: t.language, components: t.components || [] }))
+          setTemplates(approved)
+        } catch {
+          setTemplates([])
+        }
+        return
+      }
+      try {
+        const { data } = await supabase
+          .from('whatsapp_templates')
+          .select('id, name, language, components')
+          .eq('institution_id', scopeId)
+          .eq('status', 'approved')
+        if (data) setTemplates(data)
+      } catch {}
+    })()
+
+    // Respostas rápidas (globais + pessoais — RLS já filtra; aqui só
+    // ordenamos pessoais primeiro, depois globais)
+    ;(async () => {
+      try {
+        const { data } = await supabase
+          .from('whatsapp_quick_replies')
+          .select('id, title, message, order_index, user_id, shortcut')
+          .eq('institution_id', scopeId)
+          .order('order_index', { ascending: true })
+        if (data) {
+          const mapped = data.map((r: any) => ({ id: r.id, label: r.title, text: r.message, shortcut: r.shortcut ?? null, user_id: r.user_id ?? null }))
+          mapped.sort((a, b) => (a.user_id ? 0 : 1) - (b.user_id ? 0 : 1))
+          setQuickReplies(mapped)
+        }
+      } catch {}
+    })()
+
+    // Pesquisa de satisfação — recurso de escola, não faz sentido no Inbox Áion
+    if (!isAionInbox) {
+      ;(async () => {
+        try {
+          const { data } = await supabase
+            .from('whatsapp_flows')
+            .select('satisfaction_survey_enabled, satisfaction_message')
+            .eq('institution_id', scopeId)
+            .maybeSingle()
+          if (data) setFlowConfig({
+            satisfaction_survey_enabled: !!(data as any).satisfaction_survey_enabled,
+            satisfaction_message: (data as any).satisfaction_message || 'Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊',
+          })
+        } catch {}
+      })()
+    }
+
+    // Tags para o dropdown de etiquetas
+    ;(async () => {
+      try {
+        const { data } = await supabase
+          .from('whatsapp_tags')
+          .select('id, name, color')
+          .eq('institution_id', scopeId)
+          .order('name')
+        if (data) setHubTags(data as { id: string; name: string; color: string }[])
+      } catch {}
+    })()
+  }, [isAionInbox, effectiveInstitutionId, aionPlatformId])
+
   // Reset unread, auto-assign, auto-link lead, auto-transition waiting→open when opening conversation
   useEffect(() => {
-    if (!activeId || !effectiveInstitutionId) return
+    if (!activeId || (!effectiveInstitutionId && !isAionInbox)) return
     // Reset unread
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, unreadCount: 0 } : c))
     const rJid = rawJid(activeId)
-    DatabaseService.resetConversationUnread(effectiveInstitutionId, rJid).catch(() => {})
+    if (isAionInbox) {
+      supabase.from('whatsapp_conversations').update({ unread_count: 0 }).eq('is_aion_inbox', true).eq('remote_jid', rJid).then(() => {})
+    } else {
+      DatabaseService.resetConversationUnread(effectiveInstitutionId, rJid).catch(() => {})
+    }
 
     const conv = conversations.find(c => c.id === activeId)
 
     // Auto-link lead if not linked
-    if (conv && !conv.lead_id && !conv.isGroup && effectiveInstitutionId) {
+    if (conv && !conv.lead_id && !conv.isGroup && isAionInbox) {
+      DatabaseService.searchCrmLeadsByPhone(conv.phone)
+        .then(leads => {
+          if (leads.length > 0) {
+            const lead = leads[0]
+            supabase.from('whatsapp_conversations').update({ aion_lead_id: lead.id }).eq('is_aion_inbox', true).eq('remote_jid', rJid)
+            setConversations(prev => prev.map(c => c.id === activeId
+              ? { ...c, lead_id: lead.id, name: c.name === formatPhone(activeId) ? (lead.name || c.name) : c.name }
+              : c
+            ))
+          }
+        })
+        .catch(() => {})
+    } else if (conv && !conv.lead_id && !conv.isGroup && effectiveInstitutionId) {
       DatabaseService.searchLeadsByPhone(effectiveInstitutionId, conv.phone)
         .then(leads => {
           if (leads.length > 0) {
@@ -2191,7 +2301,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   const getDefaultVarValue = (index: number): string => {
     const defaults: Record<number, string> = {
       1: activeConv?.name || '',
-      2: institutionName || 'Colégio',
+      2: institutionName || (isAionInbox ? 'Áion Edu' : 'Colégio'),
       3: new Date().toLocaleDateString('pt-BR'),
     }
     return defaults[index] || ''
@@ -2200,21 +2310,22 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   // Load lead data when active conversation or its lead_id changes
   useEffect(() => {
     const leadId = activeConv?.lead_id
-    console.log('[LEAD PANEL] activeId:', activeId, '| lead_id:', leadId)
-    if (!leadId) { setLeadData(null); setEditingLead(false); return }
+    if (!leadId) { setLeadData(null); return }
     supabase
-      .from('leads')
-      .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at')
+      .from(isAionInbox ? 'crm_leads' : 'leads')
+      .select('*')
       .eq('id', leadId)
       .single()
       .then(({ data }) => {
-        if (data) {
-          console.log('[LEAD PANEL] loaded:', data.responsible_name)
-          setLeadData(data)
-          setLeadEditForm(data)
-        }
+        if (data) setLeadData(data)
       })
-  }, [activeId, activeConv?.lead_id])
+  }, [activeId, activeConv?.lead_id, isAionInbox])
+
+  // Mensagens agendadas pendentes da conversa ativa (só Inbox Áion)
+  useEffect(() => {
+    if (!isAionInbox || !activeId) { setScheduledMessages([]); return }
+    loadScheduledMessages(rawJid(activeId))
+  }, [activeId, isAionInbox])
 
   // Reactive 24h window check — recalculates every minute.
   // Usa last_customer_message_at (coluna na própria conversa) em vez de
@@ -2444,8 +2555,26 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   // comportamento nos dois casos. UPDATE atômico (WHERE assigned_user_id IS
   // NULL): se outro atendente já respondeu/assumiu primeiro, retorna false.
   const claimActiveConversation = async (convId: string): Promise<boolean> => {
-    if (!effectiveInstitutionId || !user?.id) return false
+    if ((!effectiveInstitutionId && !isAionInbox) || !user?.id) return false
     const rJid = rawJid(convId)
+
+    if (isAionInbox) {
+      const { data } = await supabase.from('whatsapp_conversations')
+        .update({ status: 'open', assigned_user_id: user.id, assigned_user_name: user.full_name || user.email })
+        .eq('is_aion_inbox', true).eq('remote_jid', rJid).is('assigned_user_id', null)
+        .select('id')
+      if (!data || data.length === 0) {
+        setSendError('Essa conversa já foi assumida por outro atendente.')
+        await loadMessages()
+        return false
+      }
+      setConversations(prev => prev.map(c => c.id === convId
+        ? { ...c, status: 'open' as ConvStatus, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email }
+        : c
+      ))
+      return true
+    }
+
     const claimed = await DatabaseService.claimConversationIfUnassigned(
       effectiveInstitutionId, rJid, user.id, user.full_name || user.email
     )
@@ -2481,13 +2610,27 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   }
 
   const handleRescueConversation = async () => {
-    if (!activeId || !effectiveInstitutionId || !user?.id) return
+    if (!activeId || (!effectiveInstitutionId && !isAionInbox) || !user?.id) return
     const conv = conversationsRef.current.find(c => c.id === activeId)
     if (!conv || !conv.assigned_user_id) return
     const hours = hoursSince(conv.lastTime)
     if (!window.confirm(`Deseja resgatar essa conversa? Ela estava com ${conv.assigned_user_name || 'outro atendente'} há ${hours}h.`)) return
 
     const rJid = rawJid(activeId)
+
+    if (isAionInbox) {
+      await supabase.from('whatsapp_conversations')
+        .update({ assigned_user_id: user.id, assigned_user_name: user.full_name || user.email, status: 'open' })
+        .eq('is_aion_inbox', true).eq('remote_jid', rJid)
+      setConversations(prev => prev.map(c => c.id === activeId
+        ? { ...c, status: 'open' as ConvStatus, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email }
+        : c
+      ))
+      setHubToast('Conversa resgatada!')
+      setTimeout(() => setHubToast(null), 3000)
+      return
+    }
+
     const { error } = await DatabaseService.rescueConversation(
       effectiveInstitutionId, rJid, user.id, user.full_name || user.email,
       conv.assigned_user_id, conv.assigned_user_name || 'outro atendente', hours
@@ -2512,23 +2655,21 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   // com o que o atendente acabou de escrever. UPDATE com WHERE bot_active =
   // true evita sobrescrever à toa quando o robô já tiver sido desativado.
   const stopBotIfActive = async (convId: string) => {
-    if (!effectiveInstitutionId || !user?.id) return
+    if ((!effectiveInstitutionId && !isAionInbox) || !user?.id) return
     const conv = conversationsRef.current.find(c => c.id === convId)
     if (!conv?.bot_active) return
 
     const rJid = rawJid(convId)
-    const { data, error } = await supabase
-      .from('whatsapp_conversations')
-      .update({
-        bot_active:         false,
-        assigned_user_id:   user.id,
-        assigned_user_name: user.full_name || user.email,
-        status:             'open',
-      })
-      .eq('institution_id', effectiveInstitutionId)
-      .eq('remote_jid', rJid)
-      .eq('bot_active', true)
-      .select('id')
+    const update = {
+      bot_active:         false,
+      assigned_user_id:   user.id,
+      assigned_user_name: user.full_name || user.email,
+      status:             'open',
+    }
+    const query = isAionInbox
+      ? supabase.from('whatsapp_conversations').update(update).eq('is_aion_inbox', true).eq('remote_jid', rJid).eq('bot_active', true).select('id')
+      : supabase.from('whatsapp_conversations').update(update).eq('institution_id', effectiveInstitutionId).eq('remote_jid', rJid).eq('bot_active', true).select('id')
+    const { data, error } = await query
 
     if (error || !data || data.length === 0) return
 
@@ -2537,14 +2678,16 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       : c
     ))
 
-    await DatabaseService.logConversationEvent({
-      institution_id: effectiveInstitutionId,
-      remote_jid: rJid,
-      event_type: 'bot_stopped',
-      description: `Robô desativado — ${user.full_name || user.email} entrou na conversa`,
-      user_id: user.id,
-      metadata: { triggered_by: 'human_message' },
-    })
+    if (!isAionInbox) {
+      await DatabaseService.logConversationEvent({
+        institution_id: effectiveInstitutionId,
+        remote_jid: rJid,
+        event_type: 'bot_stopped',
+        description: `Robô desativado — ${user.full_name || user.email} entrou na conversa`,
+        user_id: user.id,
+        metadata: { triggered_by: 'human_message' },
+      })
+    }
   }
 
   // Menu "/" de respostas rápidas: ativo enquanto o campo inteiro for só
@@ -2655,7 +2798,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   }
 
   const handleSendTemplate = async () => {
-    if (!activeId || !effectiveInstitutionId || !selectedTemplate) return
+    if (!activeId || (!effectiveInstitutionId && !isAionInbox) || !selectedTemplate) return
     const tmpl = templates.find(t => t.id === selectedTemplate) ||
       { id: '', name: selectedTemplate, language: 'pt_BR', components: [] }
     const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
@@ -2670,15 +2813,24 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
     console.log('[TEMPLATE PREVIEW]', { tmpl: tmpl?.name, components: tmpl?.components, vars: templateVars, preview })
     try {
       console.log('[SEND-TEMPLATE] to:', to, 'template:', tmpl.name, 'components:', JSON.stringify(components))
-      const res = await fetch('/api/whatsapp/send-template', {
+      // /api/whatsapp/send-template.ts exige institution_id real (busca telefone em
+      // whatsapp_phone_numbers e usage em whatsapp_conversation_usage) — nada disso
+      // existe pro Inbox Áion, que usa platform_whatsapp. Por isso o envio de template
+      // (aqui e em handleSendNewConvTemplate) usa /api/whatsapp/send com isAionSend,
+      // o mesmo endpoint/padrão já usado por texto/mídia/áudio.
+      const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          institution_id: effectiveInstitutionId,
+          institution_id: isAionInbox ? undefined : effectiveInstitutionId,
+          isAionSend: isAionInbox,
           to,
-          template_name: tmpl.name,
-          language: tmpl.language || 'pt_BR',
-          components,
+          type: 'template',
+          templateName: tmpl.name,
+          templateLanguage: tmpl.language || 'pt_BR',
+          templateComponents: components,
+          caption: preview,
+          sender_name: user?.full_name,
           sender_user_id: user?.id,
         }),
       })
@@ -2709,17 +2861,19 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       // resto do sistema (fila, RLS de resgate de conversa parada); usar aqui fazia essa
       // conversa (já atribuída) ser tratada como abandonada depois de staleHours sem
       // resposta do cliente, aparecendo pra outros atendentes na fila de "Paradas".
-      if (effectiveInstitutionId && user?.id && activeId) {
+      if ((effectiveInstitutionId || isAionInbox) && user?.id && activeId) {
         const rJid = rawJid(activeId)
-        await supabase.from('whatsapp_conversations')
-          .update({
-            assigned_user_id:   user.id,
-            assigned_user_name: user.full_name || user.email,
-            bot_active:         false,
-            status:             'open',
-          })
-          .eq('institution_id', effectiveInstitutionId)
-          .eq('remote_jid', rJid)
+        const assignUpdate = {
+          assigned_user_id:   user.id,
+          assigned_user_name: user.full_name || user.email,
+          bot_active:         false,
+          status:             'open',
+        }
+        if (isAionInbox) {
+          await supabase.from('whatsapp_conversations').update(assignUpdate).eq('is_aion_inbox', true).eq('remote_jid', rJid)
+        } else {
+          await supabase.from('whatsapp_conversations').update(assignUpdate).eq('institution_id', effectiveInstitutionId).eq('remote_jid', rJid)
+        }
         setConversations(prev => prev.map(c =>
           c.id === activeId
             ? { ...c, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email, bot_active: false, status: 'open' as ConvStatus }
@@ -2832,9 +2986,13 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   }
 
   const handleStatusChange = async (status: ConvStatus) => {
-    if (!activeId || !effectiveInstitutionId) return
+    if (!activeId || (!effectiveInstitutionId && !isAionInbox)) return
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, status } : c))
     const rJid = rawJid(activeId)
+    if (isAionInbox) {
+      await supabase.from('whatsapp_conversations').update({ status }).eq('is_aion_inbox', true).eq('remote_jid', rJid)
+      return
+    }
     await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, status)
     DatabaseService.logConversationEvent({
       institution_id: effectiveInstitutionId,
@@ -2848,11 +3006,26 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
 
   const handleTransfer = async () => {
     console.warn('🔄 TRANSFER INICIADO', new Date().toISOString())
-    if (!activeId || !effectiveInstitutionId || !transferTarget) return
+    if (!activeId || (!effectiveInstitutionId && !isAionInbox) || !transferTarget) return
     const targetUser = users.find(u => u.id === transferTarget)
     if (!targetUser) return
-    const fromName = activeConv?.assigned_user_name || user.full_name || user.email
     const rJid = rawJid(activeId)
+
+    if (isAionInbox) {
+      await supabase.from('whatsapp_conversations')
+        .update({ assigned_user_id: targetUser.id, assigned_user_name: targetUser.full_name, status: 'open' })
+        .eq('is_aion_inbox', true).eq('remote_jid', rJid)
+      await loadMessages()
+      setConversations(prev => prev.map(c => c.id === activeId
+        ? { ...c, assigned_user_id: targetUser.id, assigned_user_name: targetUser.full_name }
+        : c
+      ))
+      setTransferring(false)
+      setTransferTarget('')
+      return
+    }
+
+    const fromName = activeConv?.assigned_user_name || user.full_name || user.email
     console.log('[TRANSFER] activeId completo:', activeId)
     console.log('[TRANSFER] rawJid resultado:', rJid)
     console.log('[TRANSFER] transferindo para:', targetUser.full_name, targetUser.id)
@@ -2892,13 +3065,15 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
 
   const handleContactType = async (type: string) => {
     console.log('[CONTACT TYPE] chamada com:', type, '| activeId:', activeId, '| institution:', effectiveInstitutionId)
-    if (!activeId || !effectiveInstitutionId) return
+    if (!activeId || (!effectiveInstitutionId && !isAionInbox)) return
     if (type === 'lead') {
-      setLeadForm(prev => ({
-        ...prev,
-        responsible_name: activeConv && activeConv.name !== formatPhone(activeConv.id) ? activeConv.name : '',
+      // Abre o LeadModal completo (crm_leads) já pré-preenchido com nome/telefone da conversa
+      setLeadData({
+        name: activeConv && activeConv.name !== formatPhone(activeConv.id) ? activeConv.name : '',
         phone: activeConv?.phone || '',
-      }))
+        stage: 'interesse',
+        origin: 'WhatsApp',
+      })
       setShowLeadModal(true)
       return
     }
@@ -2907,40 +3082,50 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       return
     }
     const rJid = rawJid(activeId)
-    await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, type)
-    // Sync whatsapp_contacts.type — normalize to canonical 13-digit format
-    const normContactPhone = (() => {
-      let d = rJid.replace(/@.*/, '').replace(/\D/g, '')
-      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-      if (d.length === 11) d = '55' + d
-      return d
-    })()
-    console.log('[SYNC] normPhone:', normContactPhone)
-    console.log('[SYNC] institutionId:', effectiveInstitutionId)
-    const { data: contactRow, error: contactErr } = await supabase
-      .from('whatsapp_contacts')
-      .select('id, phone, type')
-      .eq('institution_id', effectiveInstitutionId)
-      .eq('phone', normContactPhone)
-      .maybeSingle()
-    console.log('[SYNC] contact found:', contactRow, 'error:', contactErr)
-    if (contactRow) {
-      const { error: updateErr } = await supabase
+    if (isAionInbox) {
+      await supabase.from('whatsapp_conversations').update({ contact_type: type }).eq('is_aion_inbox', true).eq('remote_jid', rJid)
+    } else {
+      await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, type)
+    }
+    // Sync whatsapp_contacts.type — conceito só de escola (whatsapp_contacts é
+    // sempre institution_id NOT NULL; Inbox Áion não cria/edita linha lá — ver
+    // migration 20260802000100). normalize to canonical 13-digit format
+    if (!isAionInbox) {
+      const normContactPhone = (() => {
+        let d = rJid.replace(/@.*/, '').replace(/\D/g, '')
+        if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
+        if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
+        if (d.length === 11) d = '55' + d
+        return d
+      })()
+      console.log('[SYNC] normPhone:', normContactPhone)
+      console.log('[SYNC] institutionId:', effectiveInstitutionId)
+      const { data: contactRow, error: contactErr } = await supabase
         .from('whatsapp_contacts')
-        .update({ type, updated_at: new Date().toISOString() })
-        .eq('id', contactRow.id)
-      console.log('[SYNC] update error:', updateErr)
+        .select('id, phone, type')
+        .eq('institution_id', effectiveInstitutionId)
+        .eq('phone', normContactPhone)
+        .maybeSingle()
+      console.log('[SYNC] contact found:', contactRow, 'error:', contactErr)
+      if (contactRow) {
+        const { error: updateErr } = await supabase
+          .from('whatsapp_contacts')
+          .update({ type, updated_at: new Date().toISOString() })
+          .eq('id', contactRow.id)
+        console.log('[SYNC] update error:', updateErr)
+      }
     }
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, contact_type: type } : c))
-    await DatabaseService.logConversationEvent({
-      institution_id: effectiveInstitutionId,
-      remote_jid: rJid,
-      event_type: 'contact_identified',
-      description: `Contato identificado como: ${type === 'lead' ? 'Lead' : type === 'client' ? 'Cliente' : type === 'supplier' ? 'Fornecedor' : 'Outro'}`,
-      user_id: user.id,
-      user_name: user.full_name || user.email,
-    })
+    if (!isAionInbox) {
+      await DatabaseService.logConversationEvent({
+        institution_id: effectiveInstitutionId,
+        remote_jid: rJid,
+        event_type: 'contact_identified',
+        description: `Contato identificado como: ${type === 'lead' ? 'Lead' : type === 'client' ? 'Cliente' : type === 'supplier' ? 'Fornecedor' : 'Outro'}`,
+        user_id: user.id,
+        user_name: user.full_name || user.email,
+      })
+    }
   }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -3057,6 +3242,61 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
     }
   }
 
+  // Anexa o PDF já gerado/hospedado por ProposalGenerator (bucket público
+  // "proposals") como mensagem de documento na conversa ativa. Diferente de
+  // sendPendingFile, o arquivo já tem uma URL pública então não precisa do
+  // passo de upload via /api/whatsapp/media — envia direto pro Meta como link.
+  const handleAttachProposalPdf = async (pdfUrl: string) => {
+    if (!activeId) return
+    const fileName = `Proposta_${(leadData?.school_name || leadData?.name || 'Aion').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
+    const tempId = `temp-proposal-${Date.now()}`
+    const tempMsg: Message = {
+      id: tempId,
+      type: 'document',
+      content: fileName,
+      from: 'me',
+      ts: new Date(),
+      status: 'sent',
+      media_url: pdfUrl,
+      fileName,
+    }
+    setConversations(prev => prev.map(c =>
+      c.id === activeId ? { ...c, messages: [...c.messages, tempMsg], lastMessage: '[Documento]', lastTime: tempMsg.ts } : c
+    ))
+    try {
+      const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
+      const res = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          institution_id: isAionInbox ? undefined : effectiveInstitutionId,
+          isAionSend: isAionInbox,
+          to,
+          type: 'document',
+          mediaUrl: pdfUrl,
+          filename: fileName,
+          sender_name: user?.full_name,
+          sender_user_id: user?.id,
+        }),
+      })
+      if (!res.ok) throw new Error(`Send HTTP ${res.status}`)
+      setConversations(prev => prev.map(c =>
+        c.id === activeId
+          ? { ...c, messages: c.messages.map(m => m.id === tempId ? { ...m, status: 'sent' as const } : m) }
+          : c
+      ))
+      await stopBotIfActive(activeId)
+      setHubToast('Proposta enviada na conversa!')
+      setTimeout(() => setHubToast(null), 3000)
+    } catch (err: any) {
+      console.error('[handleAttachProposalPdf] error:', err)
+      setSendError('Erro ao anexar proposta na conversa.')
+      setConversations(prev => prev.map(c =>
+        c.id === activeId ? { ...c, messages: c.messages.filter(m => m.id !== tempId) } : c
+      ))
+    }
+  }
+
   const handleNewConv = async () => {
     if (!newConvPhone.trim()) return
     const raw = newConvPhone.trim()
@@ -3092,7 +3332,24 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
         labels: [], isGroup: false, tags: [],
         messages: [],
       }
-      if (effectiveInstitutionId) {
+      if (isAionInbox) {
+        try {
+          const { data: existingAionConv } = await supabase
+            .from('whatsapp_conversations')
+            .select('id')
+            .eq('is_aion_inbox', true)
+            .eq('remote_jid', normalized)
+            .maybeSingle()
+          if (existingAionConv) {
+            await supabase.from('whatsapp_conversations')
+              .update({ contact_name: name, status: 'open' })
+              .eq('id', existingAionConv.id)
+          } else {
+            await supabase.from('whatsapp_conversations')
+              .insert({ remote_jid: normalized, institution_id: null, is_aion_inbox: true, contact_name: name, status: 'open' })
+          }
+        } catch {}
+      } else if (effectiveInstitutionId) {
         DatabaseService.upsertConversationStatus(effectiveInstitutionId, jid, 'open').catch(() => {})
       }
       setConversations(prev => [newConv, ...prev])
@@ -3103,7 +3360,19 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       setShowTemplatePanel(true)
     }
 
-    if (effectiveInstitutionId) {
+    if (isAionInbox) {
+      // Sem whatsapp_contacts pro Inbox Áion (ver migration 20260802000100) — só
+      // tenta vincular a um crm_lead existente pelo telefone.
+      try {
+        const leads = await DatabaseService.searchCrmLeadsByPhone(normalized)
+        if (leads[0]) {
+          await supabase.from('whatsapp_conversations')
+            .update({ aion_lead_id: leads[0].id })
+            .eq('is_aion_inbox', true)
+            .eq('remote_jid', normalized)
+        }
+      } catch {}
+    } else if (effectiveInstitutionId) {
       try {
         const { data: existingContact } = await supabase
           .from('whatsapp_contacts')
@@ -3147,7 +3416,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   }
 
   const handleSendNewConvTemplate = async () => {
-    if (!activeId || !effectiveInstitutionId || !selectedTemplate) return
+    if (!activeId || (!effectiveInstitutionId && !isAionInbox) || !selectedTemplate) return
     const tmpl = templates.find(t => t.id === selectedTemplate) ||
       { id: '', name: selectedTemplate, language: 'pt_BR', components: [] }
     const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
@@ -3158,15 +3427,21 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
 
     setSendingTemplate(true)
     try {
-      const res = await fetch('/api/whatsapp/send-template', {
+      // Mesmo padrão de handleSendTemplate: /api/whatsapp/send-template.ts não
+      // suporta o Inbox Áion (exige institution_id real).
+      const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          institution_id: effectiveInstitutionId,
+          institution_id: isAionInbox ? undefined : effectiveInstitutionId,
+          isAionSend: isAionInbox,
           to,
-          template_name: tmpl.name,
-          language: tmpl.language || 'pt_BR',
-          components,
+          type: 'template',
+          templateName: tmpl.name,
+          templateLanguage: tmpl.language || 'pt_BR',
+          templateComponents: components,
+          caption: `[Template] ${tmpl.name}`,
+          sender_name: user?.full_name,
           sender_user_id: user?.id,
         }),
       })
@@ -3196,24 +3471,27 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       ))
 
       // Update conversation in DB
-      await supabase.from('whatsapp_conversations')
-        .update({
-          status: 'open',
-          assigned_user_id: user?.id,
-          assigned_user_name: user?.full_name,
-          bot_active: false,
-        })
-        .eq('institution_id', effectiveInstitutionId)
-        .eq('remote_jid', rawJid(activeId))
+      const rJid = rawJid(activeId)
+      const convUpdate = {
+        status: 'open',
+        assigned_user_id: user?.id,
+        assigned_user_name: user?.full_name,
+        bot_active: false,
+      }
+      if (isAionInbox) {
+        await supabase.from('whatsapp_conversations').update(convUpdate).eq('is_aion_inbox', true).eq('remote_jid', rJid)
+      } else {
+        await supabase.from('whatsapp_conversations').update(convUpdate).eq('institution_id', effectiveInstitutionId).eq('remote_jid', rJid)
 
-      // Increment outbound initiated count
-      const monthYear = new Date().toISOString().slice(0, 7)
-      try {
-        await supabase.rpc('increment_initiated_count', {
-          p_institution_id: effectiveInstitutionId,
-          p_month_year: monthYear,
-        })
-      } catch {}
+        // Increment outbound initiated count — métrica de uso só de escola
+        const monthYear = new Date().toISOString().slice(0, 7)
+        try {
+          await supabase.rpc('increment_initiated_count', {
+            p_institution_id: effectiveInstitutionId,
+            p_month_year: monthYear,
+          })
+        } catch {}
+      }
 
       setShowTemplatePanel(false)
       setSelectedTemplate('')
@@ -3227,38 +3505,139 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
     }
   }
 
+  // Templates ao vivo na Graph API pro modal de agendamento — mesma busca já
+  // usada pra popular `templates` no Inbox Áion (ver useEffect acima), mas
+  // sem filtrar por status aqui de novo (loadAionTemplates já retorna só approved).
+  const loadAionAgendaTemplates = async () => {
+    setLoadingAionTemplates(true)
+    try {
+      const { data: waRow } = await supabase.from('platform_whatsapp').select('waba_id').eq('connected', true).maybeSingle()
+      const wabaId = (waRow as any)?.waba_id
+      if (!wabaId) { setAionTemplates([]); return }
+      const { data: tokenRow } = await supabase.from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
+      const token = (tokenRow as any)?.value || ''
+      if (!token) { setAionTemplates([]); return }
+      const res = await fetch(`https://graph.facebook.com/v19.0/${wabaId}/message_templates?limit=50`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      const approved = ((data.data || []) as any[]).filter(t => t.status?.toUpperCase() === 'APPROVED')
+      setAionTemplates(approved)
+    } catch (e) {
+      console.error('[schedule] erro ao carregar templates:', e)
+      setAionTemplates([])
+    } finally {
+      setLoadingAionTemplates(false)
+    }
+  }
+
+  const openScheduleModal = () => {
+    setScheduleTemplateName('')
+    setScheduleTemplateVars({})
+    setScheduleSendAt('')
+    setScheduleError('')
+    setShowScheduleModal(true)
+    loadAionAgendaTemplates()
+  }
+
+  const loadScheduledMessages = async (remoteJid: string) => {
+    setLoadingScheduled(true)
+    const { data } = await supabase
+      .from('aion_scheduled_messages')
+      .select('id, content, send_at, message_type')
+      .eq('remote_jid', remoteJid)
+      .eq('status', 'pending')
+      .order('send_at', { ascending: true })
+    setScheduledMessages(data ?? [])
+    setLoadingScheduled(false)
+  }
+
+  const handleSchedule = async () => {
+    if (!activeId || savingSchedule) return
+    const tmpl = aionTemplates.find(t => t.name === scheduleTemplateName)
+    if (!tmpl) { setScheduleError('Selecione um template.'); return }
+    if (!scheduleSendAt) { setScheduleError('Escolha a data e hora de envio.'); return }
+    const sendAtIso = new Date(scheduleSendAt).toISOString()
+    if (new Date(sendAtIso).getTime() <= Date.now()) { setScheduleError('A data/hora precisa ser no futuro.'); return }
+
+    const varKeys = Object.keys(scheduleTemplateVars)
+    const components = varKeys.length > 0
+      ? [{ type: 'body', parameters: varKeys.map(k => ({ type: 'text', text: scheduleTemplateVars[k] })) }]
+      : (tmpl.components ?? [])
+    const preview = buildTemplatePreview(tmpl, scheduleTemplateVars)
+    const rJid = rawJid(activeId)
+
+    setSavingSchedule(true)
+    setScheduleError('')
+    try {
+      const { error } = await supabase.from('aion_scheduled_messages').insert({
+        remote_jid: rJid,
+        message_type: 'template',
+        content: preview,
+        template_name: tmpl.name,
+        template_language: tmpl.language || 'pt_BR',
+        template_components: components,
+        send_at: sendAtIso,
+        created_by: user?.id || null,
+      })
+      if (error) throw error
+      setShowScheduleModal(false)
+      await loadScheduledMessages(rJid)
+      setHubToast('Mensagem agendada!')
+      setTimeout(() => setHubToast(null), 3000)
+    } catch (e: any) {
+      setScheduleError(e?.message || 'Erro ao agendar mensagem.')
+    } finally {
+      setSavingSchedule(false)
+    }
+  }
+
+  const cancelScheduledMessage = async (id: string) => {
+    if (!window.confirm('Cancelar esta mensagem agendada?')) return
+    await supabase.from('aion_scheduled_messages').update({ status: 'cancelled' }).eq('id', id)
+    setScheduledMessages(prev => prev.filter(m => m.id !== id))
+  }
+
   const handleAddTag = async (tag: string) => {
-    if (!tag.trim() || !activeId || !effectiveInstitutionId) return
+    if (!tag.trim() || !activeId || (!effectiveInstitutionId && !isAionInbox)) return
     const currentTags = activeConv?.tags || []
     if (currentTags.includes(tag.trim())) return
     const newTags = [...currentTags, tag.trim()]
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, tags: newTags } : c))
-    await DatabaseService.updateConversationTags(effectiveInstitutionId, rawJid(activeId), newTags)
-    // Sync tags to whatsapp_contacts — phone stored = digits of the wa_id (exact match)
-    const normPhone = rawJid(activeId).replace(/\D/g, '')
-    await supabase.from('whatsapp_contacts')
-      .update({ tags: newTags })
-      .eq('institution_id', effectiveInstitutionId)
-      .eq('phone', normPhone)
+    if (isAionInbox) {
+      await supabase.from('whatsapp_conversations').update({ tags: newTags }).eq('is_aion_inbox', true).eq('remote_jid', rawJid(activeId))
+    } else {
+      await DatabaseService.updateConversationTags(effectiveInstitutionId, rawJid(activeId), newTags)
+      // Sync tags to whatsapp_contacts — phone stored = digits of the wa_id (exact match)
+      const normPhone = rawJid(activeId).replace(/\D/g, '')
+      await supabase.from('whatsapp_contacts')
+        .update({ tags: newTags })
+        .eq('institution_id', effectiveInstitutionId)
+        .eq('phone', normPhone)
+    }
     setAddingTag(false)
     setNewTag('')
   }
 
   const handleRemoveTag = async (tag: string) => {
-    if (!activeId || !effectiveInstitutionId) return
+    if (!activeId || (!effectiveInstitutionId && !isAionInbox)) return
     const newTags = (activeConv?.tags || []).filter(t => t !== tag)
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, tags: newTags } : c))
-    await DatabaseService.updateConversationTags(effectiveInstitutionId, rawJid(activeId), newTags)
-    // Sync tags to whatsapp_contacts — phone stored = digits of the wa_id (exact match)
-    const normPhone = rawJid(activeId).replace(/\D/g, '')
-    await supabase.from('whatsapp_contacts')
-      .update({ tags: newTags })
-      .eq('institution_id', effectiveInstitutionId)
-      .eq('phone', normPhone)
+    if (isAionInbox) {
+      await supabase.from('whatsapp_conversations').update({ tags: newTags }).eq('is_aion_inbox', true).eq('remote_jid', rawJid(activeId))
+    } else {
+      await DatabaseService.updateConversationTags(effectiveInstitutionId, rawJid(activeId), newTags)
+      // Sync tags to whatsapp_contacts — phone stored = digits of the wa_id (exact match)
+      const normPhone = rawJid(activeId).replace(/\D/g, '')
+      await supabase.from('whatsapp_contacts')
+        .update({ tags: newTags })
+        .eq('institution_id', effectiveInstitutionId)
+        .eq('phone', normPhone)
+    }
   }
 
   const handleCloseConversation = async () => {
-    if (!activeId || !effectiveInstitutionId) return
+    if (!activeId || (!effectiveInstitutionId && !isAionInbox)) return
     const convId = activeId
     const rJid   = rawJid(convId)
 
@@ -3282,19 +3661,32 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
 
     // 3. Persist to DB (triggers Realtime — guarded above)
     console.log('[CLOSE 5] salvando no banco | institutionId:', effectiveInstitutionId, '| rJid:', rJid)
-    const closeResult = await DatabaseService.closeConversation(effectiveInstitutionId, rJid)
+    let closeResult: { count: number; error: any }
+    if (isAionInbox) {
+      const norm = `${rJid}@s.whatsapp.net`
+      const payload = { status: 'closed', bot_active: false, assigned_user_id: null, assigned_user_name: null }
+      const [r1, r2] = await Promise.all([
+        supabase.from('whatsapp_conversations').update(payload).eq('is_aion_inbox', true).eq('remote_jid', rJid).select('id'),
+        supabase.from('whatsapp_conversations').update(payload).eq('is_aion_inbox', true).eq('remote_jid', norm).select('id'),
+      ])
+      closeResult = { count: (r1.data?.length ?? 0) + (r2.data?.length ?? 0), error: r1.error || r2.error }
+    } else {
+      closeResult = await DatabaseService.closeConversation(effectiveInstitutionId, rJid)
+    }
     console.log('[CLOSE 5] resultado banco:', JSON.stringify(closeResult))
     if (closeResult.count === 0) {
       console.warn('[CLOSE 5] AVISO: 0 linhas atualizadas — possível problema de RLS ou formato do JID')
     }
-    DatabaseService.logConversationEvent({
-      institution_id: effectiveInstitutionId,
-      remote_jid: rJid,
-      event_type: 'status_change',
-      description: 'Conversa concluída',
-      user_id: user!.id,
-      user_name: user!.full_name || user!.email,
-    }).catch(() => {})
+    if (!isAionInbox) {
+      DatabaseService.logConversationEvent({
+        institution_id: effectiveInstitutionId,
+        remote_jid: rJid,
+        event_type: 'status_change',
+        description: 'Conversa concluída',
+        user_id: user!.id,
+        user_name: user!.full_name || user!.email,
+      }).catch(() => {})
+    }
     console.log('[CLOSE 6] concluído — aguardando Realtime (guard 5s)')
 
     // 4. Release guard after 10s (long enough for all Realtime events to arrive)
@@ -3388,20 +3780,26 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   }
 
   const handleAssignFromClosed = async () => {
-    if (!activeId || !effectiveInstitutionId || !transferTarget) return
+    if (!activeId || (!effectiveInstitutionId && !isAionInbox) || !transferTarget) return
     const targetUser = users.find(u => u.id === transferTarget)
     if (!targetUser) return
     const rJid = rawJid(activeId)
-    await DatabaseService.assignConversation(effectiveInstitutionId, rJid, targetUser.id, targetUser.full_name)
-    await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, 'open')
-    await DatabaseService.logConversationEvent({
-      institution_id: effectiveInstitutionId,
-      remote_jid: rJid,
-      event_type: 'assignment',
-      description: `Atribuído para ${targetUser.full_name}`,
-      user_id: user.id,
-      user_name: user.full_name || user.email,
-    })
+    if (isAionInbox) {
+      await supabase.from('whatsapp_conversations')
+        .update({ assigned_user_id: targetUser.id, assigned_user_name: targetUser.full_name, status: 'open' })
+        .eq('is_aion_inbox', true).eq('remote_jid', rJid)
+    } else {
+      await DatabaseService.assignConversation(effectiveInstitutionId, rJid, targetUser.id, targetUser.full_name)
+      await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, 'open')
+      await DatabaseService.logConversationEvent({
+        institution_id: effectiveInstitutionId,
+        remote_jid: rJid,
+        event_type: 'assignment',
+        description: `Atribuído para ${targetUser.full_name}`,
+        user_id: user.id,
+        user_name: user.full_name || user.email,
+      })
+    }
     setConversations(prev => prev.map(c => c.id === activeId
       ? { ...c, assigned_user_id: targetUser.id, assigned_user_name: targetUser.full_name, status: 'open' as ConvStatus }
       : c
@@ -3411,17 +3809,23 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   }
 
   const handleLeaveConversation = async () => {
-    if (!activeId || !effectiveInstitutionId) return
+    if (!activeId || (!effectiveInstitutionId && !isAionInbox)) return
     setConversations(prev => prev.map(c => c.id === activeId
       ? { ...c, status: 'waiting' as ConvStatus, assigned_user_id: undefined, assigned_user_name: undefined }
       : c
     ))
-    await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rawJid(activeId), 'waiting')
+    const rJid = rawJid(activeId)
+    if (isAionInbox) {
+      await supabase.from('whatsapp_conversations').update({ status: 'waiting', assigned_user_id: null, assigned_user_name: null })
+        .eq('is_aion_inbox', true).eq('remote_jid', rJid)
+      return
+    }
+    await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, 'waiting')
     await supabase.from('whatsapp_conversations').update({ assigned_user_id: null, assigned_user_name: null })
-      .eq('institution_id', effectiveInstitutionId).eq('remote_jid', rawJid(activeId))
+      .eq('institution_id', effectiveInstitutionId).eq('remote_jid', rJid)
     DatabaseService.logConversationEvent({
       institution_id: effectiveInstitutionId,
-      remote_jid: rawJid(activeId),
+      remote_jid: rJid,
       event_type: 'transfer',
       description: `${user.full_name || user.email} saiu do atendimento`,
       user_id: user.id,
@@ -3456,49 +3860,6 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
     } catch (err) {
       console.error('[handleReact]', err)
     }
-  }
-
-  const handleCreateLead = async () => {
-    if (!effectiveInstitutionId || !leadForm.responsible_name) return
-    try {
-      const lead = await DatabaseService.createLead({
-        ...leadForm,
-        institution_id: effectiveInstitutionId,
-        status: 'new',
-      })
-      if (activeId) {
-        const rJid = rawJid(activeId)
-        await DatabaseService.updateWhatsappMessageLead(rJid, effectiveInstitutionId, lead.id)
-        await DatabaseService.linkConversationLead(effectiveInstitutionId, rJid, lead.id)
-        await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, 'lead')
-        setConversations(prev => prev.map(c => c.id === activeId
-          ? { ...c, lead_id: lead.id, contact_type: 'lead', name: leadForm.responsible_name || c.name }
-          : c
-        ))
-      }
-      // Sync to whatsapp_contacts
-      const normPhone = (() => {
-        let d = (leadForm.phone || activeConv?.phone || '').replace(/\D/g, '')
-        if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-        if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-        if (d.length === 11) d = '55' + d
-        return d
-      })()
-      if (normPhone && effectiveInstitutionId) {
-        await supabase
-          .from('whatsapp_contacts')
-          .upsert({
-            institution_id: effectiveInstitutionId,
-            phone: normPhone,
-            name: leadForm.responsible_name || normPhone,
-            type: 'lead',
-            lead_id: lead.id,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'institution_id,phone' })
-      }
-      setShowLeadModal(false)
-      setLeadForm({ responsible_name: '', student_name: '', phone: '', email: '', grade_interest: '', source: 'WhatsApp' })
-    } catch { setSendError('Erro ao criar lead.') }
   }
 
   const filteredMessages = activeConv
@@ -3602,62 +3963,19 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
 
       {/* Lead Modal */}
       {showLeadModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 w-96 shadow-2xl border border-[#E2E8F0] max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-[#1A2B4A]">Criar Lead</h3>
-              <button onClick={() => setShowLeadModal(false)} className="p-1 text-[#64748B] hover:text-[#1A2B4A]">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-[#64748B] mb-1">Nome do Responsável *</label>
-                <input value={leadForm.responsible_name} onChange={e => setLeadForm(f => ({...f, responsible_name: e.target.value}))}
-                  placeholder="Nome completo"
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[#64748B] mb-1">Nome do Aluno</label>
-                <input value={leadForm.student_name} onChange={e => setLeadForm(f => ({...f, student_name: e.target.value}))}
-                  placeholder="Nome do aluno"
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[#64748B] mb-1">Telefone</label>
-                <input value={leadForm.phone} onChange={e => setLeadForm(f => ({...f, phone: e.target.value}))}
-                  placeholder="+55 00 00000-0000"
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[#64748B] mb-1">E-mail</label>
-                <input type="email" value={leadForm.email} onChange={e => setLeadForm(f => ({...f, email: e.target.value}))}
-                  placeholder="email@exemplo.com"
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[#64748B] mb-1">Série de Interesse</label>
-                <select value={leadForm.grade_interest} onChange={e => setLeadForm(f => ({...f, grade_interest: e.target.value}))}
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
-                  <option value="">Selecionar...</option>
-                  {['Educação Infantil','1º Ano','2º Ano','3º Ano','4º Ano','5º Ano','6º Ano','7º Ano','8º Ano','9º Ano','1º EM','2º EM','3º EM'].map(g => (
-                    <option key={g} value={g}>{g}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setShowLeadModal(false)}
-                className="flex-1 py-2.5 text-xs font-medium text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
-                Cancelar
-              </button>
-              <button onClick={handleCreateLead} disabled={!leadForm.responsible_name.trim()}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
-                Criar Lead
-              </button>
-            </div>
-          </div>
-        </div>
+        <LeadModal
+          lead={leadData ?? null}
+          consultants={crmConsultants}
+          onClose={() => setShowLeadModal(false)}
+          onSave={async (form) => {
+            await handleSaveLead({
+              ...form,
+              name: form.name || (activeConv && activeConv.name !== formatPhone(activeConv.id) ? activeConv.name : undefined),
+              phone: form.phone || activeConv?.phone,
+            })
+          }}
+          onStartOnboarding={() => navigate('/super-admin/crm')}
+        />
       )}
 
       {/* Client Modal (placeholder) */}
@@ -3679,18 +3997,22 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                 Cancelar
               </button>
               <button onClick={async () => {
-                if (!activeId || !effectiveInstitutionId) return
+                if (!activeId || (!effectiveInstitutionId && !isAionInbox)) return
                 const rJid = rawJid(activeId)
-                await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, 'client')
+                if (isAionInbox) {
+                  await supabase.from('whatsapp_conversations').update({ contact_type: 'client' }).eq('is_aion_inbox', true).eq('remote_jid', rJid)
+                } else {
+                  await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, 'client')
+                  await DatabaseService.logConversationEvent({
+                    institution_id: effectiveInstitutionId,
+                    remote_jid: rJid,
+                    event_type: 'contact_identified',
+                    description: 'Contato identificado como: Cliente',
+                    user_id: user.id,
+                    user_name: user.full_name || user.email,
+                  })
+                }
                 setConversations(prev => prev.map(c => c.id === activeId ? { ...c, contact_type: 'client' } : c))
-                await DatabaseService.logConversationEvent({
-                  institution_id: effectiveInstitutionId,
-                  remote_jid: rJid,
-                  event_type: 'contact_identified',
-                  description: 'Contato identificado como: Cliente',
-                  user_id: user.id,
-                  user_name: user.full_name || user.email,
-                })
                 setShowClientModal(false)
               }}
                 className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81]">
@@ -3699,6 +4021,20 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
             </div>
           </div>
         </div>
+      )}
+
+      {showProposalGenerator && leadData && (
+        <ProposalGenerator
+          lead={{
+            id: leadData.id,
+            name: leadData.name,
+            school_name: leadData.school_name,
+            email: leadData.email,
+            phone: leadData.phone,
+          }}
+          onClose={() => setShowProposalGenerator(false)}
+          onGenerated={pdfUrl => { setShowProposalGenerator(false); handleAttachProposalPdf(pdfUrl) }}
+        />
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#F0FDFB', height: '100%' }}>
@@ -3961,7 +4297,12 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                     if (!window.confirm('Isso apagará todas as mensagens permanentemente. Continuar?')) return
                     setConversations(prev => prev.map(c => c.id === activeId ? {...c, messages: []} : c))
                     setShowMoreMenu(false)
-                    if (activeId && effectiveInstitutionId) {
+                    if (activeId && isAionInbox) {
+                      await supabase.from('whatsapp_messages')
+                        .delete()
+                        .eq('is_aion_inbox', true)
+                        .eq('remote_jid', activeId)
+                    } else if (activeId && effectiveInstitutionId) {
                       await supabase.from('whatsapp_messages')
                         .delete()
                         .eq('institution_id', effectiveInstitutionId)
@@ -3973,36 +4314,43 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                     Limpar conversa
                   </button>
-                  <button onClick={async () => {
-                    if (!window.confirm('Bloquear este contato? Mensagens futuras serão ignoradas.')) return
-                    setShowMoreMenu(false)
-                    if (!activeId || !effectiveInstitutionId) return
-                    const normPhone = (() => {
-                      let d = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
-                      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-                      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-                      if (d.length === 11) d = '55' + d
-                      return d
-                    })()
-                    try {
-                      await supabase.from('whatsapp_blacklist').insert({
-                        institution_id: effectiveInstitutionId,
-                        phone: normPhone,
-                        blocked_at: new Date().toISOString()
-                      })
-                    } catch {}
-                    setConversations(prev => prev.filter(c => c.id !== activeId))
-                    setActiveId(null)
-                    setHubToast('Contato bloqueado')
-                    setTimeout(() => setHubToast(null), 3000)
-                  }}
-                    style={{ width: '100%', textAlign: 'left', padding: '10px 16px', fontSize: 13, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#FEF2F2')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                    Bloquear contato
-                  </button>
+                  {/* Blacklist é conceito só de escola (whatsapp_blacklist.institution_id NOT NULL,
+                      sem equivalente pro Inbox Áion) — não expõe essa ação aqui. */}
+                  {!isAionInbox && (
+                    <button onClick={async () => {
+                      if (!window.confirm('Bloquear este contato? Mensagens futuras serão ignoradas.')) return
+                      setShowMoreMenu(false)
+                      if (!activeId || !effectiveInstitutionId) return
+                      const normPhone = (() => {
+                        let d = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
+                        if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
+                        if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
+                        if (d.length === 11) d = '55' + d
+                        return d
+                      })()
+                      try {
+                        await supabase.from('whatsapp_blacklist').insert({
+                          institution_id: effectiveInstitutionId,
+                          phone: normPhone,
+                          blocked_at: new Date().toISOString()
+                        })
+                      } catch {}
+                      setConversations(prev => prev.filter(c => c.id !== activeId))
+                      setActiveId(null)
+                      setHubToast('Contato bloqueado')
+                      setTimeout(() => setHubToast(null), 3000)
+                    }}
+                      style={{ width: '100%', textAlign: 'left', padding: '10px 16px', fontSize: 13, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#FEF2F2')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                      Bloquear contato
+                    </button>
+                  )}
                   {activeConv?.lead_id && (
-                    <button onClick={() => { navigate(`/leads?highlight=${activeConv.lead_id}`); setShowMoreMenu(false) }}
+                    <button onClick={() => {
+                      navigate(isAionInbox ? '/super-admin/crm' : `/leads?highlight=${activeConv.lead_id}`)
+                      setShowMoreMenu(false)
+                    }}
                       style={{ width: '100%', textAlign: 'left', padding: '10px 16px', fontSize: 13, color: '#1A2B4A', background: 'none', border: 'none', cursor: 'pointer' }}
                       onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFC')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
@@ -4102,7 +4450,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                 {templates.length === 0 ? (
                   <p style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic', margin: '0 0 10px' }}>
                     Nenhum template aprovado cadastrado.
-                    <span style={{ color: '#00A896', cursor: 'pointer', marginLeft: 4 }} onClick={() => navigate('/settings?tab=whatsapp')}>
+                    <span style={{ color: '#00A896', cursor: 'pointer', marginLeft: 4 }} onClick={() => navigate(isAionInbox ? '/super-admin/aion-inbox?tab=settings' : '/settings?tab=whatsapp')}>
                       Configurar templates
                     </span>
                   </p>
@@ -4174,8 +4522,8 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                 {quickReplies.length === 0 ? (
                   <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '12px 0' }}>
                     Nenhuma resposta rápida cadastrada.<br />
-                    <span style={{ color: '#00A896', cursor: 'pointer' }} onClick={() => navigate('/settings?tab=whatsapp')}>
-                      Configure em Configurações → WhatsApp
+                    <span style={{ color: '#00A896', cursor: 'pointer' }} onClick={() => isAionInbox ? setShowQRManager(true) : navigate('/settings?tab=whatsapp')}>
+                      {isAionInbox ? 'Criar uma resposta rápida' : 'Configure em Configurações → WhatsApp'}
                     </span>
                   </p>
                 ) : (
@@ -4412,6 +4760,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                   { icon: Paperclip, active: showAttach, onClick: () => { setShowAttach(v => !v); setShowQuickReplies(false) }, title: 'Anexar arquivo' },
                   { icon: Zap,       active: showQuickReplies, onClick: () => { setShowQuickReplies(v => !v); setShowAttach(false) }, title: 'Respostas rápidas' },
                   { icon: Smile,     active: showEmojiPicker,  onClick: () => { setShowEmojiPicker(v => !v); setShowAttach(false); setShowQuickReplies(false) }, title: 'Emojis' },
+                  ...(isAionInbox ? [{ icon: Clock, active: showScheduleModal, onClick: () => { setShowAttach(false); setShowQuickReplies(false); setShowEmojiPicker(false); openScheduleModal() }, title: 'Agendar mensagem' }] : []),
                 ].map(btn => {
                   const IconComp = btn.icon
                   return (
@@ -4633,34 +4982,51 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                             </div>
                             <div style={{ display: 'flex', gap: 6 }}>
                               <button onClick={async () => {
-                                if (!activeId || !effectiveInstitutionId) return
+                                if (!activeId || (!effectiveInstitutionId && !isAionInbox)) return
+                                const rJid = rawJid(activeId)
                                 if (editForm.name && editForm.name !== activeConv.name) {
                                   skipNextNameUpdateRef.current = activeId
                                   setConversations(prev => prev.map(c => c.id === activeId ? {...c, name: editForm.name} : c))
-                                  await supabase.from('whatsapp_conversations').update({ contact_name: editForm.name })
-                                    .eq('institution_id', effectiveInstitutionId).eq('remote_jid', rawJid(activeId))
-                                  const normPhone = (() => {
-                                    let d = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
-                                    if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-                                    if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-                                    if (d.length === 11) d = '55' + d
-                                    return d
-                                  })()
-                                  await supabase.from('whatsapp_contacts')
-                                    .update({ name: editForm.name })
-                                    .eq('institution_id', effectiveInstitutionId)
-                                    .eq('phone', normPhone)
-                                  console.log('[SYNC NAME] atualizado em whatsapp_contacts:', normPhone)
+                                  if (isAionInbox) {
+                                    await supabase.from('whatsapp_conversations').update({ contact_name: editForm.name })
+                                      .eq('is_aion_inbox', true).eq('remote_jid', rJid)
+                                  } else {
+                                    await supabase.from('whatsapp_conversations').update({ contact_name: editForm.name })
+                                      .eq('institution_id', effectiveInstitutionId).eq('remote_jid', rJid)
+                                    const normPhone = (() => {
+                                      let d = rJid.replace(/@.*/, '').replace(/\D/g, '')
+                                      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
+                                      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
+                                      if (d.length === 11) d = '55' + d
+                                      return d
+                                    })()
+                                    await supabase.from('whatsapp_contacts')
+                                      .update({ name: editForm.name })
+                                      .eq('institution_id', effectiveInstitutionId)
+                                      .eq('phone', normPhone)
+                                    console.log('[SYNC NAME] atualizado em whatsapp_contacts:', normPhone)
+                                  }
                                 }
                                 if (editForm.contact_type && editForm.contact_type !== (activeConv.contact_type || '')) {
-                                  await DatabaseService.setConversationContactType(effectiveInstitutionId, rawJid(activeId), editForm.contact_type)
+                                  if (isAionInbox) {
+                                    await supabase.from('whatsapp_conversations').update({ contact_type: editForm.contact_type }).eq('is_aion_inbox', true).eq('remote_jid', rJid)
+                                  } else {
+                                    await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, editForm.contact_type)
+                                  }
                                   setConversations(prev => prev.map(c => c.id === activeId ? {...c, contact_type: editForm.contact_type} : c))
                                 }
                                 if (editForm.notes !== undefined) {
-                                  await supabase.from('whatsapp_conversations')
-                                    .update({ notes: editForm.notes })
-                                    .eq('institution_id', effectiveInstitutionId)
-                                    .eq('remote_jid', rawJid(activeId))
+                                  if (isAionInbox) {
+                                    await supabase.from('whatsapp_conversations')
+                                      .update({ notes: editForm.notes })
+                                      .eq('is_aion_inbox', true)
+                                      .eq('remote_jid', rJid)
+                                  } else {
+                                    await supabase.from('whatsapp_conversations')
+                                      .update({ notes: editForm.notes })
+                                      .eq('institution_id', effectiveInstitutionId)
+                                      .eq('remote_jid', rJid)
+                                  }
                                 }
                                 setEditingContact(false)
                               }}
@@ -4819,15 +5185,22 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Robô</label>
                         <button
                           onClick={async () => {
-                            if (!activeId || !effectiveInstitutionId) return
+                            if (!activeId || (!effectiveInstitutionId && !isAionInbox)) return
                             const newBotActive = !activeConv.bot_active
-                            await supabase.from('whatsapp_conversations')
-                              .update(newBotActive
-                                ? { bot_active: true, assigned_user_id: null, assigned_user_name: null }
-                                : { bot_active: false, assigned_user_id: user?.id, assigned_user_name: user?.full_name || user?.email, status: 'open' }
-                              )
-                              .eq('institution_id', effectiveInstitutionId)
-                              .eq('remote_jid', rawJid(activeId))
+                            const botUpdate = newBotActive
+                              ? { bot_active: true, assigned_user_id: null, assigned_user_name: null }
+                              : { bot_active: false, assigned_user_id: user?.id, assigned_user_name: user?.full_name || user?.email, status: 'open' }
+                            if (isAionInbox) {
+                              await supabase.from('whatsapp_conversations')
+                                .update(botUpdate)
+                                .eq('is_aion_inbox', true)
+                                .eq('remote_jid', rawJid(activeId))
+                            } else {
+                              await supabase.from('whatsapp_conversations')
+                                .update(botUpdate)
+                                .eq('institution_id', effectiveInstitutionId)
+                                .eq('remote_jid', rawJid(activeId))
+                            }
                             setConversations(prev => prev.map(c =>
                               c.id === activeId
                                 ? { ...c, bot_active: newBotActive, ...(newBotActive
@@ -4937,170 +5310,104 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                   <User style={{ width: 13, height: 13, color: '#0d9488', flexShrink: 0 }} />
                                   <div>
-                                    <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{leadData.responsible_name || '—'}</p>
-                                    {leadData.student_name && (
-                                      <p style={{ margin: 0, fontSize: 11, color: '#64748B' }}>{leadData.student_name}</p>
+                                    <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{leadData.name || '—'}</p>
+                                    {leadData.school_name && (
+                                      <p style={{ margin: 0, fontSize: 11, color: '#64748B' }}>{leadData.school_name}</p>
                                     )}
                                   </div>
                                 </div>
-                                <button onClick={() => { setEditingLead(v => !v); if (!editingLead) setLeadEditForm({ ...leadData }) }}
+                                <button onClick={() => setShowLeadModal(true)}
                                   style={{ fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 7, border: '1px solid #d1fae5', color: '#0d9488', background: 'transparent', cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 }}
                                   onMouseEnter={e => (e.currentTarget.style.background = '#e6f7f5')}
                                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                                  {editingLead ? 'Cancelar' : '✏️ Editar'}
+                                  ✏️ Editar
                                 </button>
                               </div>
 
-                              {/* View mode */}
-                              {!editingLead && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '0 2px' }}>
-                                  {leadData.grade_interest && (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                                      <span style={{ color: '#64748B' }}>Série</span>
-                                      <span style={{ color: '#1A2B4A', fontWeight: 500 }}>{leadData.grade_interest}</span>
-                                    </div>
-                                  )}
-                                  {leadData.email && (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, gap: 8 }}>
-                                      <span style={{ color: '#64748B', flexShrink: 0 }}>E-mail</span>
-                                      <span style={{ color: '#1A2B4A', fontWeight: 500, wordBreak: 'break-all', textAlign: 'right' }}>{leadData.email}</span>
-                                    </div>
-                                  )}
-                                  {/* Lead funnel visual */}
-                                  {(() => {
-                                    const STAGES = [
-                                      { key: 'new',       label: 'Novo'       },
-                                      { key: 'contact',   label: 'Contato'    },
-                                      { key: 'scheduled', label: 'Ag.'        },
-                                      { key: 'visit',     label: 'Visita'     },
-                                      { key: 'proposal',  label: 'Proposta'   },
-                                      { key: 'enrolled',  label: 'Matrícula'  },
-                                    ]
-                                    const curStatus = leadEditForm.status || leadData.status || 'new'
-                                    const curIdx = STAGES.findIndex(s => s.key === curStatus)
-                                    return (
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center' }}>
-                                          {STAGES.map((stage, idx) => {
-                                            const done   = idx < curIdx
-                                            const active = idx === curIdx
-                                            return (
-                                              <React.Fragment key={stage.key}>
-                                                <div
-                                                  title={stage.label}
-                                                  onClick={() => { setLeadEditForm((f: any) => ({ ...f, status: stage.key })); handleSaveLead({ status: stage.key }) }}
-                                                  style={{
-                                                    width: 20, height: 20, borderRadius: '50%', cursor: 'pointer', flexShrink: 0,
-                                                    background: done || active ? '#00A896' : '#E2E8F0',
-                                                    border: active ? '2.5px solid #007A6E' : '2px solid transparent',
-                                                    boxSizing: 'border-box',
-                                                    boxShadow: active ? '0 0 0 2px rgba(0,168,150,0.25)' : 'none',
-                                                    transition: 'all 0.15s',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                  }}
-                                                >
-                                                  {done && <span style={{ fontSize: 8, color: '#fff', fontWeight: 700 }}>✓</span>}
-                                                </div>
-                                                {idx < STAGES.length - 1 && (
-                                                  <div style={{ flex: 1, height: 2, background: done ? '#00A896' : '#E2E8F0', transition: 'background 0.15s' }} />
-                                                )}
-                                              </React.Fragment>
-                                            )
-                                          })}
-                                        </div>
-                                        <div style={{ display: 'flex' }}>
-                                          {STAGES.map((stage, idx) => (
-                                            <span key={stage.key}
-                                              onClick={() => { setLeadEditForm((f: any) => ({ ...f, status: stage.key })); handleSaveLead({ status: stage.key }) }}
-                                              style={{
-                                                flex: 1, fontSize: 9, textAlign: 'center', lineHeight: 1.2, cursor: 'pointer',
-                                                color: idx <= curIdx ? '#0d9488' : '#94A3B8',
-                                                fontWeight: idx === curIdx ? 700 : 400,
-                                              }}>
-                                              {stage.label}
-                                            </span>
-                                          ))}
-                                        </div>
-                                        <button
-                                          onClick={() => { setLeadEditForm((f: any) => ({ ...f, status: 'lost' })); handleSaveLead({ status: 'lost' }) }}
-                                          style={{ fontSize: 10, color: curStatus === 'lost' ? '#fff' : '#EF4444', background: curStatus === 'lost' ? '#EF4444' : 'transparent', border: '1px solid #FECACA', borderRadius: 7, padding: '3px 8px', cursor: 'pointer', alignSelf: 'flex-start', transition: 'all 0.15s' }}
-                                          onMouseEnter={e => { if (curStatus !== 'lost') e.currentTarget.style.background = '#FEE2E2' }}
-                                          onMouseLeave={e => { if (curStatus !== 'lost') e.currentTarget.style.background = 'transparent' }}>
-                                          {curStatus === 'lost' ? '🔴 Perdido' : 'Marcar como Perdido'}
-                                        </button>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '0 2px' }}>
+                                {leadData.city && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                                    <span style={{ color: '#64748B' }}>Cidade</span>
+                                    <span style={{ color: '#1A2B4A', fontWeight: 500 }}>{leadData.city}{leadData.state ? `/${leadData.state}` : ''}</span>
+                                  </div>
+                                )}
+                                {leadData.email && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, gap: 8 }}>
+                                    <span style={{ color: '#64748B', flexShrink: 0 }}>E-mail</span>
+                                    <span style={{ color: '#1A2B4A', fontWeight: 500, wordBreak: 'break-all', textAlign: 'right' }}>{leadData.email}</span>
+                                  </div>
+                                )}
+                                {/* Funil de estágios do CRM comercial (crm_leads.stage) */}
+                                {(() => {
+                                  const curIdx = CRM_STAGES.findIndex(s => s.id === leadData.stage)
+                                  return (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                                        {CRM_STAGES.map((stage, idx) => {
+                                          const done   = idx < curIdx
+                                          const active = idx === curIdx
+                                          return (
+                                            <React.Fragment key={stage.id}>
+                                              <div
+                                                title={stage.label}
+                                                onClick={() => handleSaveLead({ stage: stage.id })}
+                                                style={{
+                                                  width: 20, height: 20, borderRadius: '50%', cursor: 'pointer', flexShrink: 0,
+                                                  background: done || active ? stage.color : '#E2E8F0',
+                                                  border: active ? `2.5px solid ${stage.color}` : '2px solid transparent',
+                                                  boxSizing: 'border-box',
+                                                  boxShadow: active ? `0 0 0 2px ${stage.bg}` : 'none',
+                                                  transition: 'all 0.15s',
+                                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                }}
+                                              >
+                                                {done && <span style={{ fontSize: 8, color: '#fff', fontWeight: 700 }}>✓</span>}
+                                              </div>
+                                              {idx < CRM_STAGES.length - 1 && (
+                                                <div style={{ flex: 1, height: 2, background: done ? '#00A896' : '#E2E8F0', transition: 'background 0.15s' }} />
+                                              )}
+                                            </React.Fragment>
+                                          )
+                                        })}
                                       </div>
-                                    )
-                                  })()}
-                                  {leadData.source && (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                                      <span style={{ color: '#64748B' }}>Origem</span>
-                                      <span style={{ color: '#1A2B4A', fontWeight: 500 }}>{leadData.source}</span>
+                                      <div style={{ display: 'flex' }}>
+                                        {CRM_STAGES.map((stage, idx) => (
+                                          <span key={stage.id}
+                                            onClick={() => handleSaveLead({ stage: stage.id })}
+                                            style={{
+                                              flex: 1, fontSize: 9, textAlign: 'center', lineHeight: 1.2, cursor: 'pointer',
+                                              color: idx <= curIdx ? '#0d9488' : '#94A3B8',
+                                              fontWeight: idx === curIdx ? 700 : 400,
+                                            }}>
+                                            {stage.label}
+                                          </span>
+                                        ))}
+                                      </div>
                                     </div>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Edit mode */}
-                              {editingLead && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 7, background: '#f0fdfb', borderRadius: 10, padding: '10px 12px', border: '1px solid #d1fae5' }}>
-                                  {[
-                                    { label: 'Responsável', key: 'responsible_name' },
-                                    { label: 'Aluno', key: 'student_name' },
-                                    { label: 'E-mail', key: 'email' },
-                                  ].map(({ label, key }) => (
-                                    <div key={key}>
-                                      <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 3 }}>{label}</label>
-                                      <input value={(leadEditForm as any)[key] || ''}
-                                        onChange={e => setLeadEditForm((f: any) => ({ ...f, [key]: e.target.value }))}
-                                        style={{ width: '100%', padding: '6px 8px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
-                                    </div>
-                                  ))}
-                                  <div>
-                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 3 }}>Série</label>
-                                    <select value={leadEditForm.grade_interest || ''}
-                                      onChange={e => setLeadEditForm((f: any) => ({ ...f, grade_interest: e.target.value }))}
-                                      style={{ width: '100%', padding: '6px 8px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}>
-                                      <option value="">Selecionar...</option>
-                                      {['Educação Infantil','1º Ano','2º Ano','3º Ano','4º Ano','5º Ano','6º Ano','7º Ano','8º Ano','9º Ano','1º EM','2º EM','3º EM'].map(g => (
-                                        <option key={g} value={g}>{g}</option>
-                                      ))}
-                                    </select>
+                                  )
+                                })()}
+                                {leadData.origin && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                                    <span style={{ color: '#64748B' }}>Origem</span>
+                                    <span style={{ color: '#1A2B4A', fontWeight: 500 }}>{leadData.origin}</span>
                                   </div>
-                                  <div>
-                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 3 }}>Status</label>
-                                    <select value={leadEditForm.status || 'new'}
-                                      onChange={e => setLeadEditForm((f: any) => ({ ...f, status: e.target.value }))}
-                                      style={{ width: '100%', padding: '6px 8px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}>
-                                      <option value="new">Novo</option>
-                                      <option value="contact">Em contato</option>
-                                      <option value="scheduled">Visita agendada</option>
-                                      <option value="visit">Visita realizada</option>
-                                      <option value="proposal">Proposta enviada</option>
-                                      <option value="enrolled">Matriculado</option>
-                                      <option value="lost">Perdido</option>
-                                    </select>
-                                  </div>
-                                  <div style={{ display: 'flex', gap: 6 }}>
-                                    <button onClick={() => handleSaveLead()}
-                                      disabled={savingLead}
-                                      style={{ flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600, color: '#fff', background: savingLead ? '#94A3B8' : '#0d9488', border: 'none', borderRadius: 7, cursor: savingLead ? 'not-allowed' : 'pointer' }}>
-                                      {savingLead ? 'Salvando...' : 'Salvar'}
-                                    </button>
-                                    <button onClick={() => setEditingLead(false)}
-                                      style={{ padding: '6px 10px', fontSize: 12, color: '#64748B', border: '1px solid #d1fae5', borderRadius: 7, background: '#fff', cursor: 'pointer' }}>
-                                      Cancelar
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
+                                )}
+                              </div>
 
                               {/* Actions row */}
-                              <button onClick={() => navigate(`/leads?highlight=${activeConv.lead_id}`)}
+                              <button onClick={() => setShowLeadModal(true)}
                                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', background: 'transparent', border: '1px solid #d1fae5', borderRadius: 9, cursor: 'pointer', fontSize: 12, color: '#0d9488', fontWeight: 600, transition: 'all 0.15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.background = '#e6f7f5'; e.currentTarget.style.borderColor = '#0d9488' }}
                                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#d1fae5' }}>
                                 <User style={{ width: 12, height: 12 }} />
-                                Ver no CRM
+                                Ver Lead Completo
+                              </button>
+                              <button onClick={() => setShowProposalGenerator(true)}
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', background: '#0d9488', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 12, color: '#fff', fontWeight: 600, transition: 'all 0.15s' }}
+                                onMouseEnter={e => (e.currentTarget.style.background = '#0c8377')}
+                                onMouseLeave={e => (e.currentTarget.style.background = '#0d9488')}>
+                                <FileText style={{ width: 12, height: 12 }} />
+                                Gerar Proposta
                               </button>
                             </div>
                           ) : (
@@ -5111,15 +5418,15 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                         ) : linkingLead ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                             <input autoFocus value={leadSearch} onChange={e => searchLeads(e.target.value)}
-                              placeholder="Buscar lead por nome ou tel..."
+                              placeholder="Buscar lead por nome, escola ou tel..."
                               style={{ width: '100%', padding: '7px 9px', fontSize: 12, background: '#f0fdfb', border: '1px solid #d1fae5', borderRadius: 8, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
                             {leadResults.map(l => (
                               <button key={l.id} onClick={() => handleLinkLead(l.id)}
                                 style={{ width: '100%', textAlign: 'left', padding: '7px 9px', fontSize: 12, background: '#f0fdfb', border: '1px solid #d1fae5', borderRadius: 8, cursor: 'pointer', transition: 'background 0.15s' }}
                                 onMouseEnter={e => (e.currentTarget.style.background = '#e6f7f5')}
                                 onMouseLeave={e => (e.currentTarget.style.background = '#f0fdfb')}>
-                                <p style={{ fontWeight: 600, color: '#1A2B4A', margin: 0 }}>{l.responsible_name}</p>
-                                <p style={{ color: '#64748B', margin: 0 }}>{l.student_name} · {l.grade_interest}</p>
+                                <p style={{ fontWeight: 600, color: '#1A2B4A', margin: 0 }}>{l.name}</p>
+                                <p style={{ color: '#64748B', margin: 0 }}>{l.school_name}{l.city ? ` · ${l.city}` : ''}</p>
                               </button>
                             ))}
                             <button onClick={() => { setLinkingLead(false); setLeadSearch(''); setLeadResults([]) }}
@@ -5140,7 +5447,15 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                               <ChevronRight style={{ width: 13, height: 13, color: '#94A3B8' }} />
                             </button>
                             {(!activeConv.contact_type || activeConv.contact_type === 'unknown') && (
-                              <button onClick={() => { setLeadForm(prev => ({ ...prev, responsible_name: activeConv.name !== formatPhone(activeConv.id) ? activeConv.name : '', phone: activeConv.phone })); setShowLeadModal(true) }}
+                              <button onClick={() => {
+                                setLeadData({
+                                  name: activeConv.name !== formatPhone(activeConv.id) ? activeConv.name : '',
+                                  phone: activeConv.phone,
+                                  stage: 'interesse',
+                                  origin: 'WhatsApp',
+                                })
+                                setShowLeadModal(true)
+                              }}
                                 style={{ width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, color: '#0d9488', background: 'transparent', border: '1px dashed #d1fae5', borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.background = '#e6f7f5'; e.currentTarget.style.borderColor = '#0d9488' }}
                                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#d1fae5' }}>
@@ -5149,6 +5464,60 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                             )}
                           </div>
                         )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── SEÇÃO: MENSAGENS AGENDADAS (só Inbox Áion) ──────────────── */}
+                {isAionInbox && !activeConv.isGroup && (
+                  <div style={{ borderBottom: '1px solid #e2f5f3' }}>
+                    <button onClick={() => setCollapseScheduled(v => !v)}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fefd', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#edfaf8')}
+                      onMouseLeave={e => (e.currentTarget.style.background = '#f8fefd')}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Mensagens Agendadas{scheduledMessages.length > 0 ? ` (${scheduledMessages.length})` : ''}</span>
+                      {collapseScheduled
+                        ? <ChevronRight style={{ width: 14, height: 14, color: '#0d9488' }} />
+                        : <ChevronDown style={{ width: 14, height: 14, color: '#0d9488' }} />}
+                    </button>
+                    {!collapseScheduled && (
+                      <div style={{ padding: '0 12px 12px' }}>
+                        {loadingScheduled ? (
+                          <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0' }}>
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#0d9488] border-t-transparent" />
+                          </div>
+                        ) : scheduledMessages.length === 0 ? (
+                          <div style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '6px 0' }}>
+                            Nenhuma mensagem agendada pra este contato.
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {scheduledMessages.map(m => (
+                              <div key={m.id} style={{ background: '#fff', border: '1px solid #d1fae5', borderRadius: 8, padding: '8px 10px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <Clock style={{ width: 11, height: 11 }} />
+                                    {new Date(m.send_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  <button onClick={() => cancelScheduledMessage(m.id)} title="Cancelar"
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: 2, flexShrink: 0 }}>
+                                    <X style={{ width: 13, height: 13 }} />
+                                  </button>
+                                </div>
+                                <p style={{ fontSize: 12, color: '#64748B', margin: '4px 0 0', lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any }}>
+                                  {m.content}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <button onClick={openScheduleModal}
+                          style={{ width: '100%', marginTop: 8, padding: '8px 0', fontSize: 12, fontWeight: 600, color: '#0d9488', background: 'transparent', border: '1px dashed #d1fae5', borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#e6f7f5'; e.currentTarget.style.borderColor = '#0d9488' }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#d1fae5' }}>
+                          + Agendar mensagem
+                        </button>
                       </div>
                     )}
                   </div>
@@ -5355,16 +5724,102 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
         </div>
       )}
 
-      {effectiveInstitutionId && user?.id && (
+      {showScheduleModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-96 shadow-2xl border border-[#E2E8F0] max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-[#1A2B4A]">Agendar Mensagem</h3>
+              <button onClick={() => setShowScheduleModal(false)}
+                className="p-1 text-[#64748B] hover:text-[#1A2B4A]"><X className="w-4 h-4" /></button>
+            </div>
+            {loadingAionTemplates ? (
+              <div className="flex justify-center py-6">
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-[#0d9488] border-t-transparent" />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-[#64748B] mb-1">Template</label>
+                  <select value={scheduleTemplateName} onChange={e => {
+                    const name = e.target.value
+                    setScheduleTemplateName(name)
+                    const tmpl = aionTemplates.find(t => t.name === name)
+                    const bodyComp = tmpl?.components?.find((c: any) => c.type === 'BODY')
+                    const matches = bodyComp?.text ? [...bodyComp.text.matchAll(/\{\{(\d+)\}\}/g)] : []
+                    const autoVars: Record<string, string> = {}
+                    matches.forEach(([, n]) => { autoVars[n] = getDefaultVarValue(parseInt(n)) })
+                    setScheduleTemplateVars(autoVars)
+                  }}
+                    className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
+                    <option value="">Selecionar template...</option>
+                    {aionTemplates.map(t => (
+                      <option key={t.id || t.name} value={t.name}>{t.name}</option>
+                    ))}
+                  </select>
+                  {aionTemplates.length === 0 && (
+                    <p className="text-xs text-[#64748B] bg-[#FEF3C7] p-3 rounded-lg mt-2">
+                      Nenhum template aprovado encontrado no WhatsApp da Áion.
+                    </p>
+                  )}
+                </div>
+                {scheduleTemplateName && (() => {
+                  const tmpl = aionTemplates.find(t => t.name === scheduleTemplateName)
+                  const bodyComp = tmpl?.components?.find((c: any) => c.type === 'BODY')
+                  if (!bodyComp?.text) return null
+                  const matches = [...bodyComp.text.matchAll(/\{\{(\d+)\}\}/g)]
+                  if (matches.length === 0) return null
+                  return (
+                    <div>
+                      <label className="block text-xs font-medium text-[#64748B] mb-2">Variáveis</label>
+                      <div className="space-y-2">
+                        {matches.map(([, n]) => (
+                          <input key={n}
+                            value={scheduleTemplateVars[n] || ''}
+                            onChange={e => setScheduleTemplateVars(v => ({ ...v, [n]: e.target.value }))}
+                            placeholder={`Variável ${n}`}
+                            className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none" />
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
+                <div>
+                  <label className="block text-xs font-medium text-[#64748B] mb-1">Data e hora de envio</label>
+                  <input type="datetime-local" value={scheduleSendAt} onChange={e => setScheduleSendAt(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none" />
+                </div>
+              </div>
+            )}
+            {scheduleError && (
+              <div className="mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                {scheduleError}
+              </div>
+            )}
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setShowScheduleModal(false)}
+                className="flex-1 py-2.5 text-xs font-medium text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
+                Cancelar
+              </button>
+              <button onClick={handleSchedule} disabled={savingSchedule || !scheduleTemplateName || !scheduleSendAt}
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
+                {savingSchedule ? 'Agendando...' : 'Agendar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(isAionInbox ? aionPlatformId : effectiveInstitutionId) && user?.id && (
         <QuickReplyManagerModal
           isOpen={showQRManager}
           onClose={() => setShowQRManager(false)}
-          institutionId={effectiveInstitutionId}
+          institutionId={isAionInbox ? aionPlatformId : effectiveInstitutionId}
           userId={user.id}
           onSaved={() => {
+            const scopeId = isAionInbox ? aionPlatformId : effectiveInstitutionId
             supabase.from('whatsapp_quick_replies')
               .select('id, title, message, order_index, user_id, shortcut')
-              .eq('institution_id', effectiveInstitutionId)
+              .eq('institution_id', scopeId)
               .order('order_index', { ascending: true })
               .then(({ data }) => {
                 if (!data) return

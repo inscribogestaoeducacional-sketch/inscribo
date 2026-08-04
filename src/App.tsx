@@ -48,10 +48,8 @@ import TopBar  from './components/layout/TopBar'
 import AdminHome        from './components/superadmin/AdminHome'
 import AdminSchools     from './components/superadmin/AdminSchools'
 import AdminFinancial   from './components/superadmin/AdminFinancial'
-import AdminContracts   from './components/superadmin/AdminContracts'
 import AdminSettings    from './components/superadmin/AdminSettings'
 import AdminCRM         from './components/superadmin/AdminCRM'
-import AdminOnboarding  from './components/superadmin/AdminOnboarding'
 import AdminConsultants from './components/superadmin/AdminConsultants'
 import AdminUpdates     from './components/superadmin/AdminUpdates'
 import AdminProfile     from './components/superadmin/AdminProfile.tsx'
@@ -266,14 +264,12 @@ function AppContent() {
       <Routes>
         <Route path="/super-admin"                    element={<AdminHome />} />
         <Route path="/super-admin/crm"                element={<AdminCRM />} />
-        <Route path="/super-admin/onboarding"         element={<AdminOnboarding />} />
         <Route path="/super-admin/schools"              element={<AdminSchools />} />
         <Route path="/super-admin/schools/:id"        element={<InstitutionDetails />} />
         <Route path="/super-admin/market-intelligence" element={<AdminMarketIntelligence />} />
         <Route path="/super-admin/consultants"        element={<AdminConsultants />} />
         <Route path="/super-admin/consultants/:id"    element={<ConsultantDetails />} />
         <Route path="/super-admin/financial"          element={<AdminFinancial />} />
-        <Route path="/super-admin/contracts"          element={<AdminContracts />} />
         <Route path="/super-admin/settings"           element={<AdminSettings />} />
         <Route path="/super-admin/updates"           element={<AdminUpdates />} />
         <Route path="/super-admin/whatsapp"          element={<AdminWhatsApp />} />

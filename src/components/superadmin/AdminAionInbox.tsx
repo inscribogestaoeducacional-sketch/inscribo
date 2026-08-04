@@ -8,7 +8,7 @@ import {
   Plus, Trash2, Copy, Check, ToggleLeft, ToggleRight, Save, Loader2,
   TrendingUp, Users, Clock, Edit2,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -791,10 +791,14 @@ function CampaignsTab() {
 
 export default function AdminAionInbox() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [checking, setChecking]         = useState(true)
   const [isConnected, setIsConnected]   = useState(false)
   const [aionPlatformId, setAionPlatformId] = useState<string>('')
-  const [tab, setTab]                   = useState<Tab>('inbox')
+  // Permite deep-link (ex: navigate('/super-admin/aion-inbox?tab=settings')
+  // vindo do próprio AionInboxHub quando falta configurar templates/conexão).
+  const initialTab = (searchParams.get('tab') as Tab | null)
+  const [tab, setTab]                   = useState<Tab>(initialTab && ['inbox','flow','qrcodes','settings'].includes(initialTab) ? initialTab : 'inbox')
 
   useEffect(() => {
     supabase

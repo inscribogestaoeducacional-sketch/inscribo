@@ -159,7 +159,7 @@ export default function AdminHome() {
   if (pendingSchools > 0)
     alerts.push({ msg: `${pendingSchools} escola${pendingSchools > 1 ? 's' : ''} aguardando ativação`, type: 'blue', path: '/super-admin/schools' })
   if (todayMeetings.length > 0)
-    alerts.push({ msg: `${todayMeetings.length} reunião${todayMeetings.length > 1 ? 'ões' : ''} hoje`, type: 'blue', path: '/super-admin/onboarding' })
+    alerts.push({ msg: `${todayMeetings.length} reunião${todayMeetings.length > 1 ? 'ões' : ''} hoje`, type: 'blue', path: '/super-admin/schools' })
 
   // ── Enviar notificação ────────────────────────────────────
   const handleSendNotif = async () => {
@@ -252,7 +252,7 @@ export default function AdminHome() {
         {/* KPIs secundários */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard label="Total escolas"     value={institutions.length}  icon={Building2}  grad="from-slate-500 to-gray-600"    loading={loading} />
-          <KpiCard label="Reuniões hoje"     value={todayMeetings.length} sub={todayMeetings.length > 0 ? todayMeetings[0]?.title : undefined} icon={Calendar}   grad={todayMeetings.length > 0 ? "from-cyan-500 to-teal-500" : "from-gray-400 to-gray-500"} loading={loading} onClick={() => navigate('/super-admin/onboarding')} />
+          <KpiCard label="Reuniões hoje"     value={todayMeetings.length} sub={todayMeetings.length > 0 ? todayMeetings[0]?.title : undefined} icon={Calendar}   grad={todayMeetings.length > 0 ? "from-cyan-500 to-teal-500" : "from-gray-400 to-gray-500"} loading={loading} onClick={() => navigate('/super-admin/schools')} />
           <KpiCard label="Follow-ups vencidos" value={overdueLeads.length} icon={Clock}     grad={overdueLeads.length > 0 ? "from-amber-500 to-orange-500" : "from-gray-400 to-gray-500"} loading={loading} onClick={() => navigate('/super-admin/crm')} />
           <KpiCard label="Clientes CRM"      value={leads.filter(l => l.stage === 'cliente').length} sub={`${leads.filter(l => l.stage === 'fechado').length} fechados`} icon={Star} grad="from-purple-500 to-violet-600" loading={loading} onClick={() => navigate('/super-admin/crm')} />
         </div>
@@ -327,7 +327,7 @@ export default function AdminHome() {
                 <Calendar className="w-4 h-4 text-cyan-500" />
                 <h2 className="font-bold text-gray-900 text-sm">Próximas reuniões</h2>
               </div>
-              <Link to="/super-admin/onboarding" className="text-xs text-cyan-600 font-semibold hover:text-cyan-700">
+              <Link to="/super-admin/schools" className="text-xs text-cyan-600 font-semibold hover:text-cyan-700">
                 Ver todas →
               </Link>
             </div>
@@ -368,7 +368,7 @@ export default function AdminHome() {
                 <FileText className="w-4 h-4 text-indigo-500" />
                 <h2 className="font-bold text-gray-900 text-sm">Últimos contratos</h2>
               </div>
-              <Link to="/super-admin/contracts" className="text-xs text-cyan-600 font-semibold hover:text-cyan-700">
+              <Link to="/super-admin/schools" className="text-xs text-cyan-600 font-semibold hover:text-cyan-700">
                 Ver todos →
               </Link>
             </div>
@@ -412,8 +412,8 @@ export default function AdminHome() {
               {[
                 { label: 'Nova escola',          icon: Building2,  path: '/super-admin/schools',    grad: 'from-cyan-500 to-blue-600' },
                 { label: 'Novo lead CRM',        icon: TrendingUp, path: '/super-admin/crm',        grad: 'from-indigo-500 to-violet-600' },
-                { label: 'Agendar reunião',      icon: Calendar,   path: '/super-admin/onboarding', grad: 'from-teal-500 to-cyan-600' },
-                { label: 'Novo contrato',        icon: FileText,   path: '/super-admin/contracts',  grad: 'from-purple-500 to-violet-600' },
+                { label: 'Agendar reunião',      icon: Calendar,   path: '/super-admin/schools',    grad: 'from-teal-500 to-cyan-600' },
+                { label: 'Novo contrato',        icon: FileText,   path: '/super-admin/schools',    grad: 'from-purple-500 to-violet-600' },
                 { label: 'Ver financeiro',       icon: DollarSign, path: '/super-admin/financial',  grad: 'from-green-500 to-emerald-600' },
                 { label: 'Enviar notificação',   icon: Bell,       path: null,                      grad: 'from-amber-500 to-orange-500', onClick: () => setNotifModal(true) },
               ].map(a => (

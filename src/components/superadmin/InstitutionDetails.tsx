@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 import SuperAdminLayout from './SuperAdminLayout'
 import { createGoogleMeet, buildEndDatetime } from '../../lib/googleMeet'
 import AttendeesPicker from '../shared/AttendeesPicker'
@@ -13,7 +14,7 @@ import {
   Edit2, Save, Phone, Mail, MapPin, Calendar,
   Zap, BookOpen, TrendingUp, Star, Ban, Video,
   CheckSquare, ChevronDown, ChevronRight, Link as LinkIcon,
-  AlertCircle
+  AlertCircle, Archive, Rocket, Target, ArrowRight
 } from 'lucide-react'
 
 const inp = 'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none bg-white transition-all'
@@ -53,19 +54,34 @@ const CONTRACT_STATUS: Record<string, { l: string; c: string; bg: string }> = {
   signed:    { l: 'Assinado ✓',           c: '#16a34a', bg: '#f0fdf4' },
   cancelled: { l: 'Cancelado',            c: '#dc2626', bg: '#fef2f2' },
 }
+const CYCLE_STATUS: Record<string, { l: string; c: string; bg: string }> = {
+  draft:     { l: 'Rascunho',         c: '#6b7280', bg: '#f3f4f6' },
+  setup:     { l: 'Em configuração',  c: '#a16207', bg: '#fef9c3' },
+  active:    { l: 'Ativa',            c: '#2563eb', bg: '#eff6ff' },
+  released:  { l: 'Liberada',         c: '#16a34a', bg: '#f0fdf4' },
+  completed: { l: 'Concluída',        c: '#7c3aed', bg: '#f5f3ff' },
+  archived:  { l: 'Arquivada',        c: '#6b7280', bg: '#f3f4f6' },
+}
 
-type TimelinePhaseId = 'contract' | 'payment' | 'kickoff' | 'implementation' | 'training' | 'campaign' | 'active'
+// 5 fases reais de onboarding_processes.current_phase — mesma taxonomia usada
+// em toda a implantação (antes duplicada em AdminOnboarding.tsx, agora
+// consolidada só aqui). Nada de fases virtuais/derivadas: o que a tela mostra
+// é exatamente o que está gravado no banco.
+type TimelinePhaseId = 'contract' | 'implementation' | 'training' | 'campaign' | 'monthly'
 
 const TIMELINE_PHASES: Array<{ id: TimelinePhaseId; label: string; icon: any; color: string }> = [
-  { id: 'contract',       label: 'Contrato',    icon: FileText,   color: '#6366F1' },
-  { id: 'payment',        label: 'Pagamento',   icon: CreditCard, color: '#D97706' },
-  { id: 'kickoff',        label: 'Kickoff',     icon: Video,      color: '#0891B2' },
-  { id: 'implementation', label: 'Implantação', icon: Zap,        color: '#2563EB' },
-  { id: 'training',       label: 'Treinamento', icon: BookOpen,   color: '#7C3AED' },
-  { id: 'campaign',       label: 'Campanha',    icon: TrendingUp, color: '#EA580C' },
-  { id: 'active',         label: 'Ativo',       icon: Star,       color: '#16A34A' },
+  { id: 'contract',       label: 'Contrato',       icon: FileText,   color: '#6366F1' },
+  { id: 'implementation', label: 'Implantação',    icon: Zap,        color: '#2563EB' },
+  { id: 'training',       label: 'Treinamento',    icon: BookOpen,   color: '#7C3AED' },
+  { id: 'campaign',       label: 'Campanha',       icon: TrendingUp, color: '#EA580C' },
+  { id: 'monthly',        label: 'Acompanhamento', icon: Star,       color: '#16A34A' },
 ]
 
+const DEFAULT_TASKS_CONTRACT = [
+  { title: 'Contrato enviado via Autentique',      description: 'Enviar contrato para assinatura digital' },
+  { title: 'Contrato assinado pela escola',        description: 'Confirmar assinatura do responsável' },
+  { title: 'Pagamento da implantação confirmado',  description: 'Verificar pagamento no Asaas' },
+]
 const DEFAULT_TASKS_IMPL = [
   { title: 'Kickoff agendado e realizado',         description: 'Realizar reunião de kickoff com a escola' },
   { title: 'Dados do ERP importados',              description: 'Importar histórico do sistema atual' },
@@ -86,41 +102,10 @@ const DEFAULT_TASKS_CAMPAIGN = [
   { title: 'Metas revisadas e aprovadas',         description: 'Gestor aprovou as metas sugeridas' },
   { title: 'Campanha liberada pelo admin',        description: 'Admin liberou o acesso à campanha' },
 ]
-
-const months = [
-  { v: 1, l: 'Jan' }, { v: 2, l: 'Fev' }, { v: 3, l: 'Mar' },
-  { v: 4, l: 'Abr' }, { v: 5, l: 'Mai' }, { v: 6, l: 'Jun' },
-  { v: 7, l: 'Jul' }, { v: 8, l: 'Ago' }, { v: 9, l: 'Set' },
-  { v: 10, l: 'Out' }, { v: 11, l: 'Nov' }, { v: 12, l: 'Dez' },
+const DEFAULT_TASKS_MONTHLY = [
+  { title: '1ª reunião mensal realizada', description: 'Primeiro acompanhamento mensal' },
+  { title: 'Relatório do mês enviado',    description: 'Relatório de performance enviado' },
 ]
-
-function getCurrentPhase(institution: any, contract: any, onboardingProcess: any, tasks: any[] = []): TimelinePhaseId {
-  if (!institution) return 'contract'
-  const status = institution.plan_status
-  if (!contract || contract.status === 'draft') return 'contract'
-  if (contract.status === 'sent') return 'contract'
-  if (status === 'pending_payment') return 'payment'
-  if (status === 'pending_contract') return 'contract'
-  if (!onboardingProcess) return 'kickoff'
-  const phase = onboardingProcess.current_phase
-  if (phase === 'contract') return 'kickoff'
-  if (phase === 'implementation') {
-    const implTasks = tasks.filter(t => t.phase === 'implementation')
-    if (implTasks.length > 0 && implTasks.every(t => t.done)) return 'training'
-    return 'implementation'
-  }
-  if (phase === 'training') {
-    const trainTasks = tasks.filter(t => t.phase === 'training')
-    if (trainTasks.length > 0 && trainTasks.every(t => t.done)) return 'campaign'
-    return 'training'
-  }
-  if (phase === 'campaign') {
-    const campTasks = tasks.filter(t => t.phase === 'campaign')
-    if (campTasks.length > 0 && campTasks.every(t => t.done)) return 'active'
-    return 'campaign'
-  }
-  return 'active'
-}
 
 // ── MeetingModal ──────────────────────────────────────────────────────────────
 function MeetingModal({
@@ -243,6 +228,7 @@ function MeetingModal({
 export default function InstitutionDetails() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const cancelledRef = useRef(false)
 
   const [institution,       setInstitution]       = useState<any>(null)
@@ -252,7 +238,7 @@ export default function InstitutionDetails() {
   const [onboardingProcess, setOnboardingProcess] = useState<any>(null)
   const [onboardingTasks,   setOnboardingTasks]   = useState<any[]>([])
   const [meetings,          setMeetings]          = useState<any[]>([])
-  const [cycle,             setCycle]             = useState<any>(null)
+  const [cycles,            setCycles]            = useState<any[]>([])
   const [consultants,       setConsultants]       = useState<any[]>([])
   const [waUsage,           setWaUsage]           = useState({ count: 0, limit: 1000, initiated: 0, received: 0 })
   const [updatingLimit,    setUpdatingLimit]     = useState(false)
@@ -289,9 +275,17 @@ export default function InstitutionDetails() {
   const [waForm,   setWaForm]   = useState({ phone_id: '', phone_number: '', display_name: '', waba_id: '' })
   const [savingWa, setSavingWa] = useState(false)
 
-  // Campaign form
-  const [campaignForm,      setCampaignForm]      = useState({ startMonth: 8, startDate: '', endDate: '' })
-  const [releasingCampaign, setReleasingCampaign] = useState(false)
+  // Campanhas — antes havia um mini-formulário (mês + liberar) direto na fase
+  // "campaign" do onboarding; consolidado na aba Campanhas nova (evita duas
+  // UIs divergentes fazendo a mesma coisa, mesmo motivo da consolidação de
+  // Contratos/Onboarding da rodada anterior). Criar novo ciclo:
+  const [showNewCampaign, setShowNewCampaign] = useState(false)
+  const [newCampaignForm, setNewCampaignForm] = useState({
+    year: new Date().getFullYear() + 1,
+    startDate: '', endDate: '', targetNewStudents: '',
+  })
+  const [savingCampaign,    setSavingCampaign]    = useState(false)
+  const [releasingCycleId,  setReleasingCycleId]  = useState<string | null>(null)
 
   // Meeting modal
   const [meetingModal, setMeetingModal] = useState<{ phase: string; title: string } | null>(null)
@@ -299,8 +293,12 @@ export default function InstitutionDetails() {
   // Init process
   const [initingProcess, setInitingProcess] = useState(false)
 
+  // Avançar fase — confirmação visual (substitui window.confirm)
+  const [showAdvanceConfirm, setShowAdvanceConfirm] = useState(false)
+  const [advancingPhase,     setAdvancingPhase]     = useState(false)
+
   // Gestão da escola tabs
-  const [mgmtTab, setMgmtTab] = useState<'users' | 'whatsapp' | 'financial' | 'templates'>('users')
+  const [mgmtTab, setMgmtTab] = useState<'users' | 'whatsapp' | 'financial' | 'templates' | 'campaigns'>('users')
 
   // Templates tab state
   const [waTemplates, setWaTemplates] = useState<any[]>([])
@@ -331,7 +329,7 @@ export default function InstitutionDetails() {
         supabase.from('payments').select('*').eq('institution_id', id).order('created_at', { ascending: false }),
         supabase.from('contracts').select('*').eq('institution_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('onboarding_processes').select('*').eq('institution_id', id).maybeSingle(),
-        supabase.from('campaign_cycles').select('*').eq('institution_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('campaign_cycles').select('*').eq('institution_id', id).order('created_at', { ascending: false }),
         supabase.from('users').select('id, full_name, email').eq('user_type', 'consultant').order('full_name'),
         supabase.from('whatsapp_phone_numbers').select('waba_id').eq('institution_id', id).maybeSingle(),
       ])
@@ -345,7 +343,7 @@ export default function InstitutionDetails() {
       setUsers(usersRes.data || [])
       setPayments(paymentsRes.data || [])
       setContract(contractRes.data ?? null)
-      setCycle(cycleRes.data ?? null)
+      setCycles(cycleRes.data || [])
       setConsultants(consultantsRes.data || [])
 
       if (inst) {
@@ -431,7 +429,8 @@ export default function InstitutionDetails() {
 
   const handleSuspend = async () => {
     if (!confirm(`Suspender acesso de "${institution?.name}"?`)) return
-    await supabase.from('institutions').update({ plan_status: 'suspended' }).eq('id', id)
+    const { error } = await supabase.from('institutions').update({ plan_status: 'suspended' }).eq('id', id)
+    if (error) { showToast(`Erro ao suspender: ${error.message}`, false); return }
     try { await supabase.functions.invoke('send-email', { body: { type: 'suspended', to: institution?.email, data: { institution_name: institution?.name, dias_atraso: '0' } } }) } catch {}
     showToast('Escola suspensa.')
     loadAll()
@@ -439,7 +438,8 @@ export default function InstitutionDetails() {
 
   const handleReactivate = async () => {
     if (!confirm(`Reativar acesso de "${institution?.name}"?`)) return
-    await supabase.from('institutions').update({ plan_status: 'active' }).eq('id', id)
+    const { error } = await supabase.from('institutions').update({ plan_status: 'active' }).eq('id', id)
+    if (error) { showToast(`Erro ao reativar: ${error.message}`, false); return }
     try { await supabase.functions.invoke('send-email', { body: { type: 'reactivated', to: institution?.email, data: { institution_name: institution?.name, link_acesso: 'https://app.aionedu.com.br/login' } } }) } catch {}
     showToast('Escola reativada!')
     loadAll()
@@ -488,17 +488,21 @@ export default function InstitutionDetails() {
 
   const handleMarkContractSigned = async () => {
     if (!confirm('Marcar contrato como assinado manualmente?')) return
-    await supabase.from('contracts').update({ status: 'signed' }).eq('id', contract.id)
-    await supabase.from('institutions').update({ plan_status: 'pending_payment' }).eq('id', id)
+    const { error: contractErr } = await supabase.from('contracts').update({ status: 'signed' }).eq('id', contract.id)
+    if (contractErr) { showToast(`Erro ao marcar contrato: ${contractErr.message}`, false); return }
+    const { error: instErr } = await supabase.from('institutions').update({ plan_status: 'pending_payment' }).eq('id', id)
+    if (instErr) { showToast(`Contrato marcado, mas erro ao atualizar status da escola: ${instErr.message}`, false); loadAll(); return }
     showToast('Contrato marcado como assinado!')
     loadAll()
   }
 
   const handleMarkPaid = async (paymentId: string, isImpl: boolean) => {
     if (!confirm('Marcar como pago manualmente?')) return
-    await supabase.from('payments').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', paymentId)
+    const { error } = await supabase.from('payments').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', paymentId)
+    if (error) { showToast(`Erro ao marcar pagamento: ${error.message}`, false); return }
     if (isImpl) {
-      await supabase.from('institutions').update({ plan_status: 'active' }).eq('id', id)
+      const { error: instErr } = await supabase.from('institutions').update({ plan_status: 'active' }).eq('id', id)
+      if (instErr) { showToast(`Pagamento confirmado, mas erro ao ativar escola: ${instErr.message}`, false); loadAll(); return }
       try { await supabase.functions.invoke('send-email', { body: { type: 'new_institution', to: institution?.email, data: { institution_name: institution?.name, login_url: 'https://app.aionedu.com.br/login' } } }) } catch {}
     }
     showToast('Pagamento confirmado!')
@@ -508,7 +512,8 @@ export default function InstitutionDetails() {
   const handleCancelPayment = async (paymentId: string, asaasId?: string) => {
     if (!confirm('Cancelar esta cobrança?')) return
     if (asaasId) { try { await supabase.functions.invoke('asaas-cancel-charge', { body: { payment_id: asaasId } }) } catch {} }
-    await supabase.from('payments').update({ status: 'cancelled' }).eq('id', paymentId)
+    const { error } = await supabase.from('payments').update({ status: 'cancelled' }).eq('id', paymentId)
+    if (error) { showToast(`Erro ao cancelar cobrança: ${error.message}`, false); return }
     showToast('Cobrança cancelada.')
     loadAll()
   }
@@ -810,61 +815,128 @@ export default function InstitutionDetails() {
     finally { setSavingWa(false) }
   }
 
-  const handleReleaseCampaign = async () => {
-    setReleasingCampaign(true)
+  // Cria um novo ciclo de campanha (aba Campanhas → "Criar Nova Campanha").
+  // Sempre nasce em status='draft' — "Liberar para a escola" é uma ação
+  // separada e explícita (handleReleaseCampaign), não acontece na criação.
+  const handleCreateCampaign = async () => {
+    if (!id) return
+    const { year, startDate, endDate, targetNewStudents } = newCampaignForm
+    if (!startDate || !endDate) { showToast('Preencha as datas de início e fim.', false); return }
+    if (new Date(endDate) <= new Date(startDate)) { showToast('A data de fim precisa ser depois da de início.', false); return }
+    setSavingCampaign(true)
     try {
-      const campaignYear = new Date().getFullYear() + 1
-      const sd = campaignForm.startDate || `${new Date().getFullYear()}-${String(campaignForm.startMonth).padStart(2, '0')}-01`
-      const ed = campaignForm.endDate || `${campaignYear}-02-28`
-      if (cycle) {
-        await supabase.from('campaign_cycles').update({ status: 'released', campaign_start_month: campaignForm.startMonth, start_date: sd, end_date: ed }).eq('id', cycle.id)
-      } else {
-        await supabase.from('campaign_cycles').insert({
-          institution_id: id, status: 'released', campaign_start_month: campaignForm.startMonth,
-          year: campaignYear, label: `Campanha ${campaignYear}`, start_date: sd, end_date: ed,
-          target_new_students: 0, target_reenrollment_rate: 85,
-          base_students: 0, monthly_targets: [], market_data: {},
-          historical_input: [], generation_mode: 'benchmark', ai_reasoning: '', realism_score: 'realistic',
-        })
-      }
-      await supabase.from('system_notifications').insert({ institution_id: id, title: `Campanha ${campaignYear} liberada! 🎉`, message: 'Sua campanha de matrículas foi liberada.', type: 'info', read: false })
-      showToast(`Campanha ${campaignYear} liberada!`)
+      const { error } = await supabase.from('campaign_cycles').insert({
+        institution_id: id, status: 'draft',
+        year, label: `Campanha ${year}`,
+        start_date: startDate, end_date: endDate,
+        campaign_start_month: new Date(startDate + 'T12:00:00').getMonth() + 1,
+        target_new_students: Number(targetNewStudents) || 0, target_reenrollment_rate: 85,
+        base_students: 0, monthly_targets: [], market_data: {},
+        historical_input: [], generation_mode: 'benchmark', ai_reasoning: '', realism_score: 'realistic',
+      })
+      if (error) throw error
+      showToast(`Campanha ${year} criada como rascunho!`)
+      setShowNewCampaign(false)
+      setNewCampaignForm({ year: new Date().getFullYear() + 1, startDate: '', endDate: '', targetNewStudents: '' })
       loadAll()
-    } catch (e: any) { showToast(e.message || 'Erro.', false) }
-    finally { setReleasingCampaign(false) }
+    } catch (e: any) {
+      showToast(e?.message || 'Erro ao criar campanha.', false)
+    } finally {
+      setSavingCampaign(false)
+    }
+  }
+
+  // Libera um ciclo específico pra escola (aba Campanhas, ação por linha).
+  const handleReleaseCampaign = async (cycleId: string) => {
+    const target = cycles.find(c => c.id === cycleId)
+    if (!target) return
+    setReleasingCycleId(cycleId)
+    try {
+      const { error } = await supabase.from('campaign_cycles').update({
+        status: 'released',
+        released_at: new Date().toISOString(),
+        released_by: user?.id || null,
+      }).eq('id', cycleId)
+      if (error) throw error
+
+      const { error: notifErr } = await supabase.from('system_notifications').insert({
+        institution_id: id, title: `Campanha ${target.year} liberada! 🎉`,
+        message: 'Sua campanha de matrículas foi liberada.', type: 'info', read: false,
+      })
+      if (notifErr) console.error('[handleReleaseCampaign] erro ao notificar escola:', notifErr.message)
+
+      showToast(`Campanha ${target.year} liberada!`)
+      loadAll()
+    } catch (e: any) {
+      showToast(e?.message || 'Erro ao liberar campanha.', false)
+    } finally {
+      setReleasingCycleId(null)
+    }
   }
 
   const handleToggleTask = async (taskId: string, done: boolean) => {
-    await supabase.from('onboarding_tasks').update({ done, done_at: done ? new Date().toISOString() : null }).eq('id', taskId)
-    setOnboardingTasks(prev => prev.map(t => t.id === taskId ? { ...t, done, done_at: done ? new Date().toISOString() : null } : t))
+    const done_at = done ? new Date().toISOString() : null
+    const { error } = await supabase.from('onboarding_tasks').update({ done, done_at }).eq('id', taskId)
+    if (error) { showToast(`Erro ao salvar tarefa: ${error.message}`, false); return }
+    setOnboardingTasks(prev => prev.map(t => t.id === taskId ? { ...t, done, done_at } : t))
     loadAll(true)
   }
 
   const handleMarkMeetingDone = async (meetingId: string) => {
-    await supabase.from('onboarding_meetings').update({ status: 'done' }).eq('id', meetingId)
+    const { error } = await supabase.from('onboarding_meetings').update({ status: 'done' }).eq('id', meetingId)
+    if (error) { showToast(`Erro ao marcar reunião: ${error.message}`, false); return }
     showToast('Reunião marcada como realizada!')
     loadAll()
+  }
+
+  // Checklist é sempre manual (item 5) — o avanço de fase é uma ação
+  // explícita do admin, não é derivado automaticamente da conclusão das
+  // tarefas. Confirmação visual (showAdvanceConfirm) substitui o window.confirm
+  // antigo pra deixar claro de/para qual fase a escola está indo.
+  const handleAdvancePhase = () => {
+    if (!onboardingProcess) return
+    setShowAdvanceConfirm(true)
+  }
+
+  const confirmAdvancePhase = async () => {
+    if (!onboardingProcess) return
+    const idx = TIMELINE_PHASES.findIndex(p => p.id === onboardingProcess.current_phase)
+    const next = TIMELINE_PHASES[idx + 1]
+    if (!next) { setShowAdvanceConfirm(false); return }
+    setAdvancingPhase(true)
+    try {
+      const { error } = await supabase.from('onboarding_processes').update({ current_phase: next.id }).eq('id', onboardingProcess.id)
+      if (error) { showToast(`Erro ao avançar fase: ${error.message}`, false); return }
+      setOnboardingProcess((p: any) => p ? { ...p, current_phase: next.id } : p)
+      showToast(`Fase avançada para "${next.label}"!`)
+      setShowAdvanceConfirm(false)
+    } finally {
+      setAdvancingPhase(false)
+    }
   }
 
   const handleInitProcess = async () => {
     if (!id) return
     setInitingProcess(true)
     try {
-      const { data: proc, error } = await supabase.from('onboarding_processes').insert({ institution_id: id, current_phase: 'implementation', status: 'active' }).select().single()
+      const { data: proc, error } = await supabase.from('onboarding_processes').insert({ institution_id: id, current_phase: 'contract', status: 'active' }).select().single()
       if (error) throw error
       const allTasks: any[] = []
       let order = 0
       const tasksByPhase = [
+        { phase: 'contract', tasks: DEFAULT_TASKS_CONTRACT },
         { phase: 'implementation', tasks: DEFAULT_TASKS_IMPL },
         { phase: 'training', tasks: DEFAULT_TASKS_TRAINING },
         { phase: 'campaign', tasks: DEFAULT_TASKS_CAMPAIGN },
+        { phase: 'monthly', tasks: DEFAULT_TASKS_MONTHLY },
       ]
       for (const { phase, tasks } of tasksByPhase) {
         for (const t of tasks) {
           allTasks.push({ process_id: proc.id, phase, title: t.title, description: t.description, done: false, sort_order: order++ })
         }
       }
-      await supabase.from('onboarding_tasks').insert(allTasks)
+      const { error: tasksErr } = await supabase.from('onboarding_tasks').insert(allTasks)
+      if (tasksErr) throw tasksErr
       showToast('Onboarding iniciado!')
       loadAll()
     } catch (e: any) { showToast(e.message || 'Erro ao iniciar onboarding.', false) }
@@ -897,9 +969,9 @@ export default function InstitutionDetails() {
   const monthlyPayments = payments.filter(p => p.payment_type === 'monthly')
   const contractSt     = contract ? (CONTRACT_STATUS[contract.status] || CONTRACT_STATUS.draft) : null
   const usagePct       = Math.min(100, Math.round((waUsage.count / waUsage.limit) * 100))
-  console.log('[InstitutionDetails] tasks:', onboardingTasks)
-  const currentPhase   = getCurrentPhase(institution, contract, onboardingProcess, onboardingTasks)
-  console.log('[InstitutionDetails] currentPhase:', currentPhase, 'onboardingProcess.current_phase:', onboardingProcess?.current_phase)
+  // Sempre o valor real gravado em onboarding_processes.current_phase — sem
+  // heurística derivada (a tela mostra exatamente o que está no banco).
+  const currentPhase: TimelinePhaseId = (onboardingProcess?.current_phase as TimelinePhaseId) || 'contract'
   const currentPhaseIdx = TIMELINE_PHASES.findIndex(p => p.id === currentPhase)
 
   const phaseState = (phaseId: TimelinePhaseId): 'done' | 'active' | 'pending' => {
@@ -911,6 +983,81 @@ export default function InstitutionDetails() {
 
   const tasksForPhase = (phase: string) => onboardingTasks.filter(t => t.phase === phase)
   const meetingsForPhase = (phase: string) => meetings.filter(m => m.type === phase)
+
+  // Tarefa "Campanha liberada pelo admin" é derivada, não manual — é
+  // literalmente a mesma ação do botão "Liberar" na aba Campanhas, então em
+  // vez de o admin marcar à mão, ela reflete sozinha se já existe algum ciclo
+  // liberado pra essa escola.
+  const campaignReleasedByAdmin = cycles.some(c => c.status === 'released')
+  const isDerivedTask = (phaseId: TimelinePhaseId, task: any) => phaseId === 'campaign' && task.title === 'Campanha liberada pelo admin'
+  const isTaskDone = (phaseId: TimelinePhaseId, task: any) => isDerivedTask(phaseId, task) ? (task.done || campaignReleasedByAdmin) : task.done
+
+  // Checklist da fase em formato de cards + indicador "X de Y concluídas",
+  // reaproveitado nas 5 fases (Part 1 do pedido: reforma visual sem tocar na
+  // lógica de dados já corrigida).
+  const renderTaskChecklist = (phaseId: TimelinePhaseId) => {
+    const tasks = tasksForPhase(phaseId)
+    if (tasks.length === 0) return null
+    const doneCount = tasks.filter(t => isTaskDone(phaseId, t)).length
+    const color = TIMELINE_PHASES.find(p => p.id === phaseId)?.color || '#6b7280'
+    return (
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-gray-700">Checklist da fase</p>
+          <span className="text-xs font-bold text-gray-400">{doneCount} de {tasks.length} concluídas</span>
+        </div>
+        <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(doneCount / tasks.length) * 100}%`, background: color }} />
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {tasks.map(task => {
+            const derived = isDerivedTask(phaseId, task)
+            const done = isTaskDone(phaseId, task)
+            return (
+              <div key={task.id}
+                onClick={() => !derived && handleToggleTask(task.id, !task.done)}
+                className={`flex items-start gap-3 rounded-xl border p-3 transition-all ${derived ? 'cursor-default' : 'cursor-pointer group'} ${done ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200 hover:border-gray-300'}`}>
+                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${done ? 'bg-green-500 border-green-500' : 'border-gray-300 group-hover:border-gray-400'}`}>
+                  {done && <CheckCircle2 className="w-3 h-3 text-white" />}
+                </div>
+                <div className="min-w-0">
+                  <p className={`text-sm font-medium ${done ? 'text-gray-500 line-through' : 'text-gray-700'}`}>{task.title}</p>
+                  {done && !derived && task.done_at && <p className="text-xs text-green-500 mt-0.5">Concluído em {fmtDate(task.done_at)}</p>}
+                  {derived && done && <p className="text-xs text-green-600 mt-0.5 flex items-center gap-1 font-medium"><Rocket className="w-3 h-3" /> Automático — campanha liberada</p>}
+                  {derived && !done && <p className="text-xs text-gray-400 mt-0.5">Automático — libere um ciclo na aba Campanhas</p>}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  // Reuniões da fase, sempre em cards — reaproveitado nas fases com reunião.
+  const renderMeetingList = (phaseType: string) => {
+    const list = meetingsForPhase(phaseType)
+    if (list.length === 0) return <p className="text-sm text-gray-400 italic">Nenhuma reunião agendada.</p>
+    return (
+      <div className="space-y-2">
+        {list.map(m => (
+          <div key={m.id} className={`rounded-xl border p-3.5 ${m.status === 'done' ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900">{m.title}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{fmtDateTime(m.scheduled_at)}{m.duration_min ? ` · ${m.duration_min}min` : ''}</p>
+                {m.meet_link && <a href={m.meet_link} target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-600 font-semibold mt-1 flex items-center gap-1"><Video className="w-3 h-3" /> Entrar no Meet</a>}
+              </div>
+              {m.status !== 'done'
+                ? <button onClick={() => handleMarkMeetingDone(m.id)} className="text-xs px-2.5 py-1 bg-green-100 text-green-700 rounded-lg font-semibold flex-shrink-0">Realizado</button>
+                : <span className="text-xs px-2.5 py-1 bg-green-100 text-green-700 rounded-lg font-semibold flex-shrink-0 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Feita</span>
+              }
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <SuperAdminLayout>
@@ -957,7 +1104,7 @@ export default function InstitutionDetails() {
             </div>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={loadAll} className="p-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-500">
+            <button onClick={() => loadAll()} className="p-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-500">
               <RefreshCw className="w-4 h-4" />
             </button>
             <button onClick={() => setEditingInfo(v => !v)} className="flex items-center gap-2 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
@@ -1041,6 +1188,39 @@ export default function InstitutionDetails() {
           })}
         </div>
 
+        {/* ── Jornada de implantação: stepper horizontal compacto ── */}
+        {onboardingProcess && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm font-bold text-gray-900">Jornada de implantação</p>
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: TIMELINE_PHASES[currentPhaseIdx]?.color, background: TIMELINE_PHASES[currentPhaseIdx]?.color + '18' }}>
+                Fase {currentPhaseIdx + 1} de {TIMELINE_PHASES.length} · {TIMELINE_PHASES[currentPhaseIdx]?.label}
+              </span>
+            </div>
+            <div className="flex items-center">
+              {TIMELINE_PHASES.map((phase, idx) => {
+                const state = phaseState(phase.id)
+                const Icon = phase.icon
+                return (
+                  <Fragment key={phase.id}>
+                    <div className="flex flex-col items-center gap-1.5 flex-shrink-0" style={{ width: 76 }}>
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${state === 'done' ? 'bg-green-500' : state === 'active' ? 'ring-4' : 'bg-gray-100'}`}
+                        style={state === 'active' ? { background: phase.color, boxShadow: `0 0 0 4px ${phase.color}22` } : {}}>
+                        {state === 'done'
+                          ? <CheckCircle2 className="w-4.5 h-4.5 text-white" />
+                          : <Icon className="w-4 h-4" style={{ color: state === 'active' ? '#fff' : '#9ca3af' }} />
+                        }
+                      </div>
+                      <span className={`text-[11px] font-semibold text-center leading-tight ${state === 'active' ? 'text-gray-900' : state === 'done' ? 'text-gray-500' : 'text-gray-300'}`}>{phase.label}</span>
+                    </div>
+                    {idx < TIMELINE_PHASES.length - 1 && <div className={`flex-1 h-0.5 -mt-5 ${idx < currentPhaseIdx ? 'bg-green-300' : 'bg-gray-200'}`} />}
+                  </Fragment>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ── Vertical Timeline ── */}
         <div className="space-y-0">
           {TIMELINE_PHASES.map((phase, idx) => {
@@ -1054,8 +1234,8 @@ export default function InstitutionDetails() {
                 <div className="flex flex-col items-center w-10 flex-shrink-0">
                   {idx > 0 && <div className={`w-0.5 h-4 ${state === 'done' || (idx <= currentPhaseIdx) ? 'bg-green-300' : 'bg-gray-200'}`} />}
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all
-                    ${state === 'done' ? 'bg-green-500' : state === 'active' ? 'ring-4 ring-blue-100' : 'bg-gray-100'}`}
-                    style={state === 'active' ? { background: phase.color } : {}}>
+                    ${state === 'done' ? 'bg-green-500' : state === 'active' ? 'ring-4 shadow-md' : 'bg-gray-100'}`}
+                    style={state === 'active' ? { background: phase.color, boxShadow: `0 0 0 4px ${phase.color}22` } : {}}>
                     {state === 'done'
                       ? <CheckCircle2 className="w-5 h-5 text-white" />
                       : <Icon className="w-4 h-4" style={{ color: state === 'active' ? '#fff' : '#9ca3af' }} />
@@ -1070,7 +1250,17 @@ export default function InstitutionDetails() {
                   <div className="flex items-center gap-2 h-9 mb-2">
                     <span className={`font-bold text-sm ${state === 'active' ? 'text-gray-900' : state === 'done' ? 'text-gray-500' : 'text-gray-400'}`}>{phase.label}</span>
                     {state === 'active' && <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ color: phase.color, background: phase.color + '18' }}>Fase atual</span>}
-                    {state === 'done' && <span className="text-xs text-green-600 font-semibold">✓ Concluído</span>}
+                    {state === 'done' && <span className="text-xs text-green-600 font-semibold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Concluído</span>}
+                    {/* Avanço de fase é sempre manual (item 5) — nunca derivado da
+                        conclusão das tarefas, só por clique explícito do admin,
+                        com confirmação visual (modal showAdvanceConfirm). */}
+                    {state === 'active' && onboardingProcess && idx < TIMELINE_PHASES.length - 1 && (
+                      <button onClick={handleAdvancePhase}
+                        className="ml-auto flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-semibold text-white transition-colors shadow-sm"
+                        style={{ background: phase.color }}>
+                        Avançar fase <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
 
                   {/* Phase body — only show for active */}
@@ -1172,204 +1362,164 @@ export default function InstitutionDetails() {
                               )}
                             </>
                           )}
-                        </div>
-                      )}
 
-                      {/* ── Phase 2: Payment ── */}
-                      {phase.id === 'payment' && (
-                        <div className="p-5 space-y-4">
-                          <p className="text-sm font-semibold text-gray-700">Taxa de implantação</p>
-                          {!implPayment ? (
-                            <p className="text-sm text-gray-400 italic">Nenhuma cobrança de implantação gerada. O webhook criará automaticamente após a assinatura.</p>
-                          ) : (
-                            <div className="space-y-3">
-                              <div className="flex items-center gap-3">
-                                <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: PAYMENT_STATUS[implPayment.status]?.c, background: PAYMENT_STATUS[implPayment.status]?.bg }}>{PAYMENT_STATUS[implPayment.status]?.l || implPayment.status}</span>
-                                <span className="text-sm font-bold text-gray-900">{fmtBRL(implPayment.amount)}</span>
-                                <span className="text-xs text-gray-400">Vence {fmtDate(implPayment.due_date)}</span>
-                                {implPayment.status === 'paid' && <span className="text-xs text-green-600 font-semibold">Pago em {fmtDate(implPayment.paid_at)}</span>}
-                              </div>
-                              {implPayment.asaas_charge_url && (
-                                <div className="flex items-center gap-2">
-                                  <input readOnly className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-700 truncate" value={implPayment.asaas_charge_url} />
-                                  <button onClick={() => copyToClipboard(implPayment.asaas_charge_url, 'impl')} className="p-2 border border-gray-200 rounded-lg">{copied === 'impl' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-gray-400" />}</button>
-                                  <a href={implPayment.asaas_charge_url} target="_blank" rel="noopener noreferrer" className="p-2 bg-cyan-50 border border-cyan-200 rounded-lg"><ExternalLink className="w-4 h-4 text-cyan-600" /></a>
-                                  <button onClick={() => handleResendPaymentEmail(implPayment)} className="p-2 bg-blue-50 border border-blue-200 rounded-lg"><Send className="w-4 h-4 text-blue-600" /></button>
-                                  <button onClick={() => handleSendWhatsAppPayment(implPayment)} className="p-2 bg-green-50 border border-green-200 rounded-lg"><MessageCircle className="w-4 h-4 text-green-600" /></button>
+                          {/* Taxa de implantação — antes fase própria "Pagamento", agora
+                              parte da fase Contrato (o pagamento é uma das 3 tarefas
+                              dessa fase, não um passo separado) */}
+                          <div className="border-t border-gray-100 pt-4">
+                            <p className="text-sm font-semibold text-gray-700 mb-3">Taxa de implantação</p>
+                            {!implPayment ? (
+                              <p className="text-sm text-gray-400 italic">Nenhuma cobrança de implantação gerada. O webhook criará automaticamente após a assinatura.</p>
+                            ) : (
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: PAYMENT_STATUS[implPayment.status]?.c, background: PAYMENT_STATUS[implPayment.status]?.bg }}>{PAYMENT_STATUS[implPayment.status]?.l || implPayment.status}</span>
+                                  <span className="text-sm font-bold text-gray-900">{fmtBRL(implPayment.amount)}</span>
+                                  <span className="text-xs text-gray-400">Vence {fmtDate(implPayment.due_date)}</span>
+                                  {implPayment.status === 'paid' && <span className="text-xs text-green-600 font-semibold">Pago em {fmtDate(implPayment.paid_at)}</span>}
                                 </div>
-                              )}
-                              <div className="flex gap-2">
-                                {implPayment.status === 'pending' && (
-                                  <button onClick={() => handleMarkPaid(implPayment.id, true)} className="flex items-center gap-1.5 px-3 py-2 bg-green-50 text-green-700 border border-green-200 rounded-xl text-xs font-semibold">
-                                    <CheckCircle2 className="w-3.5 h-3.5" /> Marcar pago
-                                  </button>
+                                {implPayment.asaas_charge_url && (
+                                  <div className="flex items-center gap-2">
+                                    <input readOnly className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-700 truncate" value={implPayment.asaas_charge_url} />
+                                    <button onClick={() => copyToClipboard(implPayment.asaas_charge_url, 'impl')} className="p-2 border border-gray-200 rounded-lg">{copied === 'impl' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-gray-400" />}</button>
+                                    <a href={implPayment.asaas_charge_url} target="_blank" rel="noopener noreferrer" className="p-2 bg-cyan-50 border border-cyan-200 rounded-lg"><ExternalLink className="w-4 h-4 text-cyan-600" /></a>
+                                    <button onClick={() => handleResendPaymentEmail(implPayment)} className="p-2 bg-blue-50 border border-blue-200 rounded-lg"><Send className="w-4 h-4 text-blue-600" /></button>
+                                    <button onClick={() => handleSendWhatsAppPayment(implPayment)} className="p-2 bg-green-50 border border-green-200 rounded-lg"><MessageCircle className="w-4 h-4 text-green-600" /></button>
+                                  </div>
                                 )}
-                                {implPayment.status !== 'cancelled' && implPayment.status !== 'paid' && (
-                                  <button onClick={() => handleCancelPayment(implPayment.id, implPayment.asaas_payment_id)} className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-xs font-semibold">
-                                    <Ban className="w-3.5 h-3.5" /> Cancelar
-                                  </button>
-                                )}
+                                <div className="flex gap-2">
+                                  {implPayment.status === 'pending' && (
+                                    <button onClick={() => handleMarkPaid(implPayment.id, true)} className="flex items-center gap-1.5 px-3 py-2 bg-green-50 text-green-700 border border-green-200 rounded-xl text-xs font-semibold">
+                                      <CheckCircle2 className="w-3.5 h-3.5" /> Marcar pago
+                                    </button>
+                                  )}
+                                  {implPayment.status !== 'cancelled' && implPayment.status !== 'paid' && (
+                                    <button onClick={() => handleCancelPayment(implPayment.id, implPayment.asaas_payment_id)} className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-xs font-semibold">
+                                      <Ban className="w-3.5 h-3.5" /> Cancelar
+                                    </button>
+                                  )}
+                                </div>
                               </div>
+                            )}
+                          </div>
+
+                          {/* Checklist da fase — semeado junto com o processo de onboarding */}
+                          {tasksForPhase('contract').length > 0 && (
+                            <div className="border-t border-gray-100 pt-4">
+                              {renderTaskChecklist('contract')}
                             </div>
                           )}
-                        </div>
-                      )}
 
-                      {/* ── Phase 3: Kickoff ── */}
-                      {phase.id === 'kickoff' && (
-                        <div className="p-5 space-y-4">
-                          {!onboardingProcess ? (
-                            <div className="text-center py-4">
-                              <p className="text-sm text-gray-500 mb-3">Inicie o processo de onboarding para agendar o kickoff.</p>
+                          {/* Escola legada sem processo de implantação — fallback manual
+                              (item 3 já cobre escolas novas automaticamente) */}
+                          {!onboardingProcess && (
+                            <div className="border-t border-gray-100 pt-4 text-center">
+                              <p className="text-sm text-gray-500 mb-3">Esta escola ainda não tem um processo de implantação.</p>
                               <button onClick={handleInitProcess} disabled={initingProcess}
                                 className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500 text-white rounded-xl font-semibold text-sm mx-auto disabled:opacity-60">
                                 {initingProcess ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Zap className="w-4 h-4" />}
                                 Iniciar onboarding
                               </button>
                             </div>
-                          ) : (
-                            <>
-                              <div className="flex items-center justify-between">
-                                <p className="text-sm font-semibold text-gray-700">Reunião de kickoff</p>
-                                <button onClick={() => setMeetingModal({ phase: 'kickoff', title: `Kickoff — ${institution.name}` })}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded-xl text-xs font-semibold">
-                                  <Plus className="w-3 h-3" /> Agendar
-                                </button>
-                              </div>
-                              {meetingsForPhase('kickoff').length === 0 ? (
-                                <p className="text-sm text-gray-400 italic">Nenhuma reunião agendada.</p>
-                              ) : meetingsForPhase('kickoff').map(m => (
-                                <div key={m.id} className={`rounded-xl border p-4 ${m.status === 'done' ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div>
-                                      <p className="text-sm font-semibold text-gray-900">{m.title}</p>
-                                      <p className="text-xs text-gray-500 mt-0.5">{fmtDateTime(m.scheduled_at)} · {m.duration_min}min</p>
-                                      {m.meet_link && <a href={m.meet_link} target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-600 font-semibold mt-1 flex items-center gap-1"><Video className="w-3 h-3" /> Entrar no Meet</a>}
-                                    </div>
-                                    {m.status !== 'done' && (
-                                      <button onClick={() => handleMarkMeetingDone(m.id)} className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-lg font-semibold flex-shrink-0">Realizado</button>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </>
                           )}
                         </div>
                       )}
 
-                      {/* ── Phase 4: Implementation ── */}
+                      {/* ── Phase: Implementation (inclui kickoff — 1ª tarefa da fase) ── */}
                       {phase.id === 'implementation' && (
                         <div className="p-5 space-y-4">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-semibold text-gray-700">Tarefas de implantação</p>
-                            <button onClick={() => setMeetingModal({ phase: 'implementation', title: `Reunião de Implantação — ${institution.name}` })}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl text-xs font-semibold">
-                              <Calendar className="w-3 h-3" /> Agendar reunião
-                            </button>
-                          </div>
-                          {tasksForPhase('implementation').map(task => (
-                            <label key={task.id} className="flex items-start gap-3 cursor-pointer group">
-                              <div onClick={() => handleToggleTask(task.id, !task.done)}
-                                className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${task.done ? 'bg-green-500 border-green-500' : 'border-gray-300 group-hover:border-cyan-400'}`}>
-                                {task.done && <CheckCircle2 className="w-3 h-3 text-white" />}
-                              </div>
-                              <div>
-                                <p className={`text-sm font-medium ${task.done ? 'line-through text-gray-400' : 'text-gray-700'}`}>{task.title}</p>
-                                {task.done && task.done_at && <p className="text-xs text-green-500 mt-0.5">Concluído em {fmtDate(task.done_at)}</p>}
-                              </div>
-                            </label>
-                          ))}
-                          {meetingsForPhase('implementation').map(m => (
-                            <div key={m.id} className={`rounded-xl border p-3 ${m.status === 'done' ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
-                              <div className="flex items-center justify-between gap-2">
-                                <div>
-                                  <p className="text-sm font-semibold text-gray-900">{m.title}</p>
-                                  <p className="text-xs text-gray-500">{fmtDateTime(m.scheduled_at)}</p>
-                                  {m.meet_link && <a href={m.meet_link} target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-600 font-semibold flex items-center gap-1"><Video className="w-3 h-3" /> Meet</a>}
-                                </div>
-                                {m.status !== 'done' && <button onClick={() => handleMarkMeetingDone(m.id)} className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-lg font-semibold">Realizado</button>}
-                              </div>
+                          {/* Reunião de kickoff — antes fase própria, agora vinculada à
+                              1ª tarefa da fase Implantação */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-semibold text-gray-700">Reunião de kickoff</p>
+                              <button onClick={() => setMeetingModal({ phase: 'kickoff', title: `Kickoff — ${institution.name}` })}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded-xl text-xs font-semibold">
+                                <Plus className="w-3 h-3" /> Agendar
+                              </button>
                             </div>
-                          ))}
+                            {renderMeetingList('kickoff')}
+                          </div>
+
+                          <div className="border-t border-gray-100 pt-4 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-semibold text-gray-700">Reunião de implantação</p>
+                              <button onClick={() => setMeetingModal({ phase: 'implementation', title: `Reunião de Implantação — ${institution.name}` })}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl text-xs font-semibold">
+                                <Calendar className="w-3 h-3" /> Agendar reunião
+                              </button>
+                            </div>
+                            {renderMeetingList('implementation')}
+                          </div>
+
+                          <div className="border-t border-gray-100 pt-4">
+                            {renderTaskChecklist('implementation')}
+                          </div>
                         </div>
                       )}
 
                       {/* ── Phase 5: Training ── */}
                       {phase.id === 'training' && (
                         <div className="p-5 space-y-4">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-semibold text-gray-700">Tarefas de treinamento</p>
-                            <button onClick={() => setMeetingModal({ phase: 'training', title: `Treinamento — ${institution.name}` })}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-xl text-xs font-semibold">
-                              <Calendar className="w-3 h-3" /> Agendar sessão
-                            </button>
-                          </div>
-                          {tasksForPhase('training').map(task => (
-                            <label key={task.id} className="flex items-start gap-3 cursor-pointer group">
-                              <div onClick={() => handleToggleTask(task.id, !task.done)}
-                                className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${task.done ? 'bg-green-500 border-green-500' : 'border-gray-300 group-hover:border-cyan-400'}`}>
-                                {task.done && <CheckCircle2 className="w-3 h-3 text-white" />}
-                              </div>
-                              <div>
-                                <p className={`text-sm font-medium ${task.done ? 'line-through text-gray-400' : 'text-gray-700'}`}>{task.title}</p>
-                                {task.done && task.done_at && <p className="text-xs text-green-500 mt-0.5">Concluído em {fmtDate(task.done_at)}</p>}
-                              </div>
-                            </label>
-                          ))}
-                          {meetingsForPhase('training').map(m => (
-                            <div key={m.id} className={`rounded-xl border p-3 ${m.status === 'done' ? 'bg-green-50 border-green-200' : 'bg-purple-50 border-purple-200'}`}>
-                              <div className="flex items-center justify-between gap-2">
-                                <div>
-                                  <p className="text-sm font-semibold text-gray-900">{m.title}</p>
-                                  <p className="text-xs text-gray-500">{fmtDateTime(m.scheduled_at)}</p>
-                                  {m.meet_link && <a href={m.meet_link} target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-600 font-semibold flex items-center gap-1"><Video className="w-3 h-3" /> Meet</a>}
-                                </div>
-                                {m.status !== 'done' && <button onClick={() => handleMarkMeetingDone(m.id)} className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-lg font-semibold">Realizado</button>}
-                              </div>
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-semibold text-gray-700">Sessões de treinamento</p>
+                              <button onClick={() => setMeetingModal({ phase: 'training', title: `Treinamento — ${institution.name}` })}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-xl text-xs font-semibold">
+                                <Calendar className="w-3 h-3" /> Agendar sessão
+                              </button>
                             </div>
-                          ))}
+                            {renderMeetingList('training')}
+                          </div>
+                          <div className="border-t border-gray-100 pt-4">
+                            {renderTaskChecklist('training')}
+                          </div>
                         </div>
                       )}
 
-                      {/* ── Phase 6: Campaign ── */}
+                      {/* ── Phase: Campaign — o mini-form (mês + liberar) que existia
+                          direto aqui foi consolidado na aba "Campanhas" nova, que lista
+                          todos os ciclos (não só o mais recente) e libera um por vez. */}
                       {phase.id === 'campaign' && (
                         <div className="p-5 space-y-4">
-                          {tasksForPhase('campaign').length > 0 && (
-                            <div className="space-y-2">
-                              <p className="text-sm font-semibold text-gray-700">Checklist de campanha</p>
-                              {tasksForPhase('campaign').map(task => (
-                                <label key={task.id} className="flex items-start gap-3 cursor-pointer group">
-                                  <div onClick={() => handleToggleTask(task.id, !task.done)}
-                                    className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${task.done ? 'bg-green-500 border-green-500' : 'border-gray-300 group-hover:border-orange-400'}`}>
-                                    {task.done && <CheckCircle2 className="w-3 h-3 text-white" />}
-                                  </div>
-                                  <p className={`text-sm font-medium mt-0.5 ${task.done ? 'line-through text-gray-400' : 'text-gray-700'}`}>{task.title}</p>
-                                </label>
-                              ))}
-                            </div>
-                          )}
+                          {renderTaskChecklist('campaign')}
                           <div className="border-t border-gray-100 pt-4">
-                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">{cycle ? 'Atualizar campanha' : 'Liberar campanha'}</p>
-                            <div className="grid grid-cols-4 gap-2 mb-3">
-                              {months.map(m => (
-                                <button key={m.v} onClick={() => setCampaignForm(f => ({ ...f, startMonth: m.v }))}
-                                  className={`py-1.5 rounded-lg text-xs font-semibold transition-colors ${campaignForm.startMonth === m.v ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                                  {m.l}
-                                </button>
-                              ))}
+                            <div className="flex items-center justify-between gap-3 rounded-xl border border-orange-200 bg-orange-50 p-4">
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold text-orange-900">
+                                  {cycles.length === 0 ? 'Nenhum ciclo de campanha criado' : `${cycles.length} ciclo${cycles.length > 1 ? 's' : ''} de campanha`}
+                                </p>
+                                <p className="text-xs text-orange-700 mt-0.5">
+                                  {campaignReleasedByAdmin ? 'Campanha já liberada para a escola.' : 'Crie e libere um ciclo na aba Campanhas.'}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => { setMgmtTab('campaigns'); document.getElementById('mgmt-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}
+                                className="flex items-center gap-1.5 px-3.5 py-2 bg-orange-500 text-white rounded-xl text-xs font-semibold flex-shrink-0 hover:bg-orange-600 transition-colors">
+                                <Megaphone className="w-3.5 h-3.5" /> Ir para Campanhas
+                              </button>
                             </div>
-                            <button onClick={handleReleaseCampaign} disabled={releasingCampaign}
-                              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-rose-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
-                              {releasingCampaign ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Megaphone className="w-4 h-4" />}
-                              {cycle ? 'Atualizar' : 'Liberar campanha'}
-                            </button>
                           </div>
                         </div>
                       )}
 
-                      {/* ── Phase 7: Active ── */}
-                      {phase.id === 'active' && (
+                      {/* ── Phase: Monthly (acompanhamento contínuo, antes "Ativo") ── */}
+                      {phase.id === 'monthly' && (
                         <div className="divide-y divide-gray-100">
+                          {/* Checklist + reunião mensal */}
+                          <div className="p-5 space-y-4">
+                            {renderTaskChecklist('monthly')}
+                            <div className="border-t border-gray-100 pt-4 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <p className="text-sm font-semibold text-gray-700">Reuniões mensais</p>
+                                <button onClick={() => setMeetingModal({ phase: 'monthly', title: `Reunião Mensal — ${institution.name}` })}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 border border-green-200 rounded-xl text-xs font-semibold">
+                                  <Calendar className="w-3 h-3" /> Agendar reunião
+                                </button>
+                              </div>
+                              {renderMeetingList('monthly')}
+                            </div>
+                          </div>
                           {/* Financial history */}
                           <div className="p-5">
                             <div className="flex items-center justify-between mb-3">
@@ -1474,10 +1624,10 @@ export default function InstitutionDetails() {
 
                   {/* Done phase summary */}
                   {state === 'done' && phase.id === 'contract' && contract && (
-                    <p className="text-xs text-gray-400">Contrato {contractSt?.l} em {fmtDate(contract.created_at)}</p>
-                  )}
-                  {state === 'done' && phase.id === 'payment' && implPayment && (
-                    <p className="text-xs text-gray-400">Implantação {fmtBRL(implPayment.amount)} paga em {fmtDate(implPayment.paid_at)}</p>
+                    <p className="text-xs text-gray-400">
+                      Contrato {contractSt?.l} em {fmtDate(contract.created_at)}
+                      {implPayment?.status === 'paid' && ` · Implantação paga em ${fmtDate(implPayment.paid_at)}`}
+                    </p>
                   )}
                 </div>
               </div>
@@ -1487,7 +1637,7 @@ export default function InstitutionDetails() {
 
         {/* ── Gestão da escola ── */}
         {(institution.plan_status === 'active' || institution.plan_status === 'pending_payment') && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div id="mgmt-section" className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden scroll-mt-4">
             <div className="px-6 pt-5 pb-0 border-b border-gray-100">
               <h2 className="text-base font-bold text-gray-900 mb-4">Gestão da escola</h2>
               <div className="flex gap-1">
@@ -1496,6 +1646,7 @@ export default function InstitutionDetails() {
                   { id: 'whatsapp',  label: 'WhatsApp' },
                   { id: 'templates', label: 'Templates' },
                   { id: 'financial', label: 'Financeiro' },
+                  { id: 'campaigns', label: 'Campanhas' },
                 ] as const).map(t => (
                   <button
                     key={t.id}
@@ -1873,6 +2024,78 @@ export default function InstitutionDetails() {
                 )
               })()}
 
+              {/* Tab: Campanhas */}
+              {mgmtTab === 'campaigns' && (
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-sm font-semibold text-gray-700">Ciclos de campanha ({cycles.length})</p>
+                    <button
+                      onClick={() => setShowNewCampaign(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 text-orange-700 border border-orange-200 rounded-xl text-xs font-semibold hover:bg-orange-100"
+                    >
+                      <Plus className="w-3 h-3" /> Criar nova campanha
+                    </button>
+                  </div>
+
+                  {cycles.length === 0 ? (
+                    <p className="text-sm text-gray-400 italic text-center py-8">Nenhum ciclo de campanha criado ainda.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {cycles.map(c => {
+                        const cst = CYCLE_STATUS[c.status] || CYCLE_STATUS.draft
+                        const canRelease = c.status === 'draft' || c.status === 'setup' || c.status === 'active'
+                        return (
+                          <div key={c.id} className="rounded-xl border border-gray-200 p-4">
+                            <div className="flex items-start justify-between gap-3 flex-wrap">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap mb-1">
+                                  <p className="text-sm font-bold text-gray-900">{c.label || `Campanha ${c.year}`}</p>
+                                  <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ color: cst.c, background: cst.bg }}>{cst.l}</span>
+                                </div>
+                                <p className="text-xs text-gray-500">
+                                  {fmtDate(c.start_date)} — {fmtDate(c.end_date)}
+                                  {c.released_at && <span className="ml-2 text-green-600 font-medium">· Liberada em {fmtDate(c.released_at)}</span>}
+                                </p>
+                              </div>
+                              {canRelease && (
+                                <button
+                                  onClick={() => handleReleaseCampaign(c.id)}
+                                  disabled={releasingCycleId === c.id}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-rose-600 text-white rounded-xl text-xs font-semibold disabled:opacity-60 flex-shrink-0"
+                                >
+                                  {releasingCycleId === c.id ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
+                                  Liberar para a escola
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Métricas já coletadas, quando existirem */}
+                            {(c.target_new_students || c.base_students || c.projected_cpa) ? (
+                              <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-gray-100">
+                                <div className="text-center">
+                                  <p className="text-xs text-gray-400">Meta de novos alunos</p>
+                                  <p className="text-sm font-bold text-gray-900">{c.target_new_students || '—'}</p>
+                                </div>
+                                <div className="text-center">
+                                  <p className="text-xs text-gray-400">Base de alunos</p>
+                                  <p className="text-sm font-bold text-gray-900">{c.base_students || '—'}</p>
+                                </div>
+                                <div className="text-center">
+                                  <p className="text-xs text-gray-400">CPA projetado</p>
+                                  <p className="text-sm font-bold text-gray-900">{c.projected_cpa ? fmtBRL(c.projected_cpa) : '—'}</p>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-gray-400 italic mt-3 pt-3 border-t border-gray-100">Métricas ainda não preenchidas pela escola.</p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
             </div>
           </div>
         )}
@@ -1958,6 +2181,96 @@ export default function InstitutionDetails() {
                 <button onClick={() => setShowNewUser(false)} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">Cancelar</button>
                 <button onClick={handleCreateUser} disabled={savingUser} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
                   {savingUser ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Criar usuário'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Modal: Confirmar avanço de fase ── */}
+        {showAdvanceConfirm && onboardingProcess && (() => {
+          const curIdx = TIMELINE_PHASES.findIndex(p => p.id === onboardingProcess.current_phase)
+          const cur = TIMELINE_PHASES[curIdx]
+          const next = TIMELINE_PHASES[curIdx + 1]
+          if (!cur || !next) return null
+          const CurIcon = cur.icon
+          const NextIcon = next.icon
+          const pending = tasksForPhase(cur.id).filter(t => !isTaskDone(cur.id, t)).length
+          return (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-4">
+              <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-bold text-gray-900">Avançar fase</h2>
+                  <button onClick={() => setShowAdvanceConfirm(false)}><X className="w-5 h-5 text-gray-400" /></button>
+                </div>
+                <div className="flex items-center justify-center gap-3 mb-4">
+                  <div className="flex flex-col items-center gap-1.5">
+                    <div className="w-11 h-11 rounded-full flex items-center justify-center" style={{ background: cur.color + '18' }}>
+                      <CurIcon className="w-5 h-5" style={{ color: cur.color }} />
+                    </div>
+                    <span className="text-xs font-semibold text-gray-500">{cur.label}</span>
+                  </div>
+                  <ArrowRight className="w-5 h-5 text-gray-300 flex-shrink-0" />
+                  <div className="flex flex-col items-center gap-1.5">
+                    <div className="w-11 h-11 rounded-full flex items-center justify-center" style={{ background: next.color }}>
+                      <NextIcon className="w-5 h-5 text-white" />
+                    </div>
+                    <span className="text-xs font-bold text-gray-900">{next.label}</span>
+                  </div>
+                </div>
+                {pending > 0 && (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-4 text-center">
+                    {pending} tarefa{pending > 1 ? 's' : ''} pendente{pending > 1 ? 's' : ''} na fase "{cur.label}" — dá pra avançar mesmo assim.
+                  </p>
+                )}
+                <p className="text-sm text-gray-500 text-center mb-5">
+                  A escola passará da fase <strong className="text-gray-700">{cur.label}</strong> para <strong className="text-gray-700">{next.label}</strong>.
+                </p>
+                <div className="flex gap-3">
+                  <button onClick={() => setShowAdvanceConfirm(false)} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">Cancelar</button>
+                  <button onClick={confirmAdvancePhase} disabled={advancingPhase}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 text-white rounded-xl font-semibold text-sm disabled:opacity-60"
+                    style={{ background: next.color }}>
+                    {advancingPhase ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <>Avançar <ArrowRight className="w-4 h-4" /></>}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ── Modal: Criar nova campanha ── */}
+        {showNewCampaign && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-lg font-bold text-gray-900">Criar nova campanha</h2>
+                <button onClick={() => setShowNewCampaign(false)}><X className="w-5 h-5 text-gray-400" /></button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className={lbl}>Ano *</label>
+                  <input type="number" className={inp} value={newCampaignForm.year} onChange={e => setNewCampaignForm(f => ({ ...f, year: Number(e.target.value) }))} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={lbl}>Data início *</label>
+                    <input type="date" className={inp} value={newCampaignForm.startDate} onChange={e => setNewCampaignForm(f => ({ ...f, startDate: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className={lbl}>Data fim *</label>
+                    <input type="date" className={inp} value={newCampaignForm.endDate} onChange={e => setNewCampaignForm(f => ({ ...f, endDate: e.target.value }))} />
+                  </div>
+                </div>
+                <div>
+                  <label className={lbl}>Meta de novos alunos</label>
+                  <input type="number" className={inp} value={newCampaignForm.targetNewStudents} onChange={e => setNewCampaignForm(f => ({ ...f, targetNewStudents: e.target.value }))} placeholder="Ex: 50" />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-5">
+                <button onClick={() => setShowNewCampaign(false)} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">Cancelar</button>
+                <button onClick={handleCreateCampaign} disabled={savingCampaign} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-orange-500 to-rose-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
+                  {savingCampaign ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Criar campanha'}
                 </button>
               </div>
             </div>
