@@ -287,10 +287,28 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
       ...(quoted_message_id ? { quoted_message_id, quoted_content: quoted_content || null, quoted_from_me: quoted_from_me ?? null } : {}),
     })
 
-    // ── Update conversation last_message ──
+    // ── Find the conversation to know whether this is its first human reply ──
+    // (first_response_at, gravado só por sendAutoMessage() em webhook.ts, mede
+    // o bot — first_human_response_at é o equivalente pra mensagem humana,
+    // usado pelo KPI "Tempo de resposta" e pelo Ranking em GestorHome.tsx)
+    let convSelect = supabase.from('whatsapp_conversations').select('id, first_human_response_at')
+    if (conversation_id) {
+      convSelect = convSelect.eq('id', conversation_id)
+    } else if (isAionSend) {
+      convSelect = convSelect.eq('is_aion_inbox', true).eq('remote_jid', to)
+    } else {
+      convSelect = convSelect.eq('institution_id', institution_id).eq('remote_jid', to)
+    }
+    const { data: convRow } = await convSelect.maybeSingle()
+
+    // ── Update conversation last_message (+ first_human_response_at se ainda não tiver) ──
+    const convUpdatePayload: Record<string, any> = { last_message: preview, last_message_at: new Date().toISOString() }
+    if (convRow && !convRow.first_human_response_at) {
+      convUpdatePayload.first_human_response_at = new Date().toISOString()
+    }
     const convUpdate = supabase
       .from('whatsapp_conversations')
-      .update({ last_message: preview, last_message_at: new Date().toISOString() })
+      .update(convUpdatePayload)
 
     if (conversation_id) {
       await convUpdate.eq('id', conversation_id)

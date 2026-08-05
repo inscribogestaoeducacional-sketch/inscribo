@@ -2267,7 +2267,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               if (btnId === 'survey_2') score = 2
               if (btnId === 'survey_3') score = 3
             } else {
-              score = parseInt(text.trim(), 10)
+              // Fallback de texto livre é 1-5 (regex isSurveyReply acima), mas
+              // satisfaction_score usa a mesma escala 1-3 dos botões — mapeia
+              // em vez de gravar o dígito cru, senão 4/5 nunca batiam no
+              // filtro `<= 3` do GestorHome.tsx e eram descartados em
+              // silêncio (achado da auditoria anterior).
+              const rawScore = parseInt(text.trim(), 10)
+              score = rawScore <= 1 ? 1 : rawScore <= 3 ? 2 : 3
             }
 
             if (score > 0) {

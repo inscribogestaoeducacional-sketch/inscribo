@@ -21,6 +21,9 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import CampaignGeneratorModal from '../../components/reports/CampaignGeneratorModal'
 import SchoolSetupModal from '../../components/onboarding/SchoolSetupModal'
+import AttendantDetailModal from '../../components/gestor/AttendantDetailModal'
+import SatisfactionFullModal from '../../components/gestor/SatisfactionFullModal'
+import MarketReportModal from '../../components/gestor/MarketReportModal'
 import type { FunnelMetrics } from '../../lib/supabase'
 import { createNotification } from '../../lib/notifications'
 
@@ -88,6 +91,77 @@ const MONTH_NAMES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','J
 
 function fmt(n: number) { return new Intl.NumberFormat('pt-BR').format(n) }
 function fmtBRL(n: number) { return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }) }
+
+// ─── Tempo de resposta — média de TODOS os intervalos cliente→humano ──────────
+// (não só o primeiro, ao contrário de first_human_response_at, que continua
+// existindo só pra saber "quando a primeira resposta humana aconteceu").
+//
+// DECISÃO client-side vs RPC: calculado aqui no client, reaproveitando a
+// query de whatsapp_messages que o dashboard já faz pra outras métricas
+// (totalMessages/waSent/waReceived) — só acrescenta 2 colunas (direction,
+// is_bot_message) ao select existente, sem round-trip novo. Pro volume de um
+// único período de uma escola isso é O(mensagens do período), a mesma
+// complexidade que uma function SQL teria — não compensa manter uma RPC
+// separada só pra isso. Se o volume crescer a ponto de whatsapp_messages sem
+// LIMIT virar problema, essa é uma característica pré-existente de todo o
+// load() (totalMessages já sofre do mesmo jeito), não algo introduzido aqui.
+//
+// Critério bot vs humano: is_bot_message = false (coluna dedicada, ver
+// migration 20260701000007_whatsapp_bot_message_flag.sql) — mesmo critério
+// que api/whatsapp/send.ts (nunca marca is_bot_message) usa implicitamente
+// ao gravar first_human_response_at, só que aqui de forma explícita porque
+// precisamos reconhecer histórico de mensagens já gravadas, não só o
+// momento do envio.
+export interface ResponseIntervalMsg {
+  created_at: string
+  remote_jid: string
+  direction: string | null
+  from_me: boolean
+  is_bot_message: boolean
+}
+
+// Retorna, por conversa (chave = remote_jid cru, o mesmo valor gravado em
+// whatsapp_conversations.remote_jid), a MÉDIA dos intervalos cliente→humano
+// encontrados nela — não a lista de intervalos crus, porque o KPI e o
+// Ranking agregam "a média entre as conversas", dando peso igual a cada
+// conversa independente de quantas trocas ela teve.
+function computePerConversationResponseAvg(
+  messages: ResponseIntervalMsg[],
+  validJids: Set<string>
+): Map<string, number> {
+  const byJid = new Map<string, ResponseIntervalMsg[]>()
+  messages.forEach(m => {
+    if (!validJids.has(m.remote_jid)) return // fora do escopo (grupo, ou conversa fora do período)
+    if (!byJid.has(m.remote_jid)) byJid.set(m.remote_jid, [])
+    byJid.get(m.remote_jid)!.push(m)
+  })
+
+  const result = new Map<string, number>()
+  byJid.forEach((msgs, jid) => {
+    const sorted = [...msgs].sort((a, b) => a.created_at.localeCompare(b.created_at))
+    const intervals: number[] = []
+    let pendingSince: string | null = null
+    for (const m of sorted) {
+      if (m.direction === 'inbound') {
+        // várias mensagens seguidas do cliente sem resposta contam como UMA
+        // espera só (a partir da primeira da leva), não uma por mensagem
+        if (!pendingSince) pendingSince = m.created_at
+      } else if (m.direction === 'outbound' && m.from_me && !m.is_bot_message) {
+        if (pendingSince) {
+          const diff = (new Date(m.created_at).getTime() - new Date(pendingSince).getTime()) / 60000
+          if (diff > 0 && diff < 1440) intervals.push(diff)
+          pendingSince = null
+        }
+      }
+      // mensagem do bot (is_bot_message=true): ignorada, não resolve nem
+      // reinicia a espera pendente — só uma resposta humana resolve.
+    }
+    if (intervals.length > 0) {
+      result.set(jid, intervals.reduce((s, v) => s + v, 0) / intervals.length)
+    }
+  })
+  return result
+}
 
 function renderMarkdown(text: string): JSX.Element {
   const lines = text.split('\n')
@@ -242,7 +316,8 @@ export default function GestorHome() {
   const [transfers, setTransfers] = useState<StudentTransfer[]>([])
   const [leads, setLeads] = useState<{ id: string; status: string; created_at: string; grade_interest?: string; source?: string }[]>([])
   const [visits, setVisits] = useState<{ id: string; status: string; created_at: string }[]>([])
-  const [waMessages, setWaMessages] = useState<{ id: string; created_at: string; from_me: boolean; remote_jid: string }[]>([])
+  const [waMessages, setWaMessages] = useState<{ id: string; created_at: string; from_me: boolean; remote_jid: string; direction: string | null; is_bot_message: boolean }[]>([])
+  const [avgResponseByAttendant, setAvgResponseByAttendant] = useState<Record<string, number>>({})
   const [waPhoneRecord, setWaPhoneRecord] = useState<{ phone_number: string; display_name: string } | null>(null)
   const [waConvStats, setWaConvStats] = useState<{ total: number; byBot: number; byTeam: number; closed: number; daily: { day: string; count: number }[]; avgSatisfaction: number | null } | null>(null)
   const [waTeamRanking, setWaTeamRanking] = useState<{ userId: string; count: number }[]>([])
@@ -263,7 +338,10 @@ export default function GestorHome() {
   const [aiExpanded, setAiExpanded] = useState(false)
   const mountedRef = useRef(true)
   const [periodFilter, setPeriodFilter] = useState('mes')
-  const [waConvsRaw, setWaConvsRaw] = useState<{ id: string; created_at: string; status: string; assigned_user_name: string | null; assigned_user_id: string | null; bot_active: boolean | null; satisfaction_score: number | null; first_response_at: string | null; remote_jid: string }[]>([])
+  const [waConvsRaw, setWaConvsRaw] = useState<{ id: string; created_at: string; status: string; assigned_user_name: string | null; assigned_user_id: string | null; bot_active: boolean | null; satisfaction_score: number | null; first_human_response_at: string | null; remote_jid: string; contact_name: string | null; last_message: string | null }[]>([])
+  const [selectedAttendant, setSelectedAttendant] = useState<{ user_id: string; full_name: string; role: string; enrollments_count: number; wa_count: number; satisf_score: number | null; avg_response: number | null; score: number } | null>(null)
+  const [showSatisfactionModal, setShowSatisfactionModal] = useState(false)
+  const [showMarketReportModal, setShowMarketReportModal] = useState(false)
   const [surveyScoresList, setSurveyScoresList] = useState<{ satisfaction_score: number | null }[]>([])
   const [aiLastUpdated, setAiLastUpdated] = useState<number | null>(null)
   const dashboardRef = useRef<HTMLDivElement>(null)
@@ -322,11 +400,11 @@ export default function GestorHome() {
         supabase.from('student_transfers').select('id,student_name,course_grade,transfer_date,reason_category').eq('institution_id', institutionId).is('deleted_at', null).order('transfer_date', { ascending: false }).limit(5),
         supabase.from('leads').select('id,status,created_at,grade_interest,source').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end),
         supabase.from('visits').select('id,status,created_at').eq('institution_id', institutionId).gte('created_at', start),
-        supabase.from('whatsapp_messages').select('id,created_at,from_me,remote_jid').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end),
+        supabase.from('whatsapp_messages').select('id,created_at,from_me,remote_jid,direction,is_bot_message').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end),
         supabase.from('enrollments').select('id,user_id,created_at').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end),
         supabase.from('users').select('id,full_name,role').eq('institution_id', institutionId),
         supabase.from('whatsapp_phone_numbers').select('phone_number,display_name').eq('institution_id', institutionId).limit(1).maybeSingle(),
-        supabase.from('whatsapp_conversations').select('id,created_at,status,assigned_user_name,assigned_user_id,bot_active,satisfaction_score,first_response_at,remote_jid').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end).not('remote_jid', 'ilike', '%@g.us'),
+        supabase.from('whatsapp_conversations').select('id,created_at,status,assigned_user_name,assigned_user_id,bot_active,satisfaction_score,first_human_response_at,remote_jid,contact_name,last_message').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end).not('remote_jid', 'ilike', '%@g.us'),
         // Alertas de inadimplência gravados por overdue-payment-reminders — não
         // filtrados pelo period do dashboard, são "pendências atuais", igual
         // Inadimplência já não é period-filtrada em AdminFinancial.tsx.
@@ -362,7 +440,7 @@ export default function GestorHome() {
       setTransfers((transferRes.data ?? []) as StudentTransfer[])
       setLeads((leadsRes.data ?? []) as { id: string; status: string; created_at: string }[])
       setVisits((visitsRes.data ?? []) as { id: string; status: string; created_at: string }[])
-      const waMsgs = (waRes.data ?? []) as { id: string; created_at: string; from_me: boolean; remote_jid: string }[]
+      const waMsgs = (waRes.data ?? []) as { id: string; created_at: string; from_me: boolean; remote_jid: string; direction: string | null; is_bot_message: boolean }[]
       setWaMessages(waMsgs)
 
       // Calcular ranking de usuários
@@ -404,7 +482,7 @@ export default function GestorHome() {
       setWaPhoneRecord((waPhoneRes.data as { phone_number: string; display_name: string } | null) ?? null)
 
       // WA conversation stats (last 30 days)
-      const waConvs = (waConvsRes.data ?? []) as { id: string; created_at: string; status: string; assigned_user_name: string | null; assigned_user_id: string | null; bot_active: boolean | null; satisfaction_score: number | null; first_response_at: string | null; remote_jid: string }[]
+      const waConvs = (waConvsRes.data ?? []) as { id: string; created_at: string; status: string; assigned_user_name: string | null; assigned_user_id: string | null; bot_active: boolean | null; satisfaction_score: number | null; first_human_response_at: string | null; remote_jid: string; contact_name: string | null; last_message: string | null }[]
 
       // Open convs count — sem filtro de data (todas as conversas ativas agora)
       const { data: openConvs } = await supabase
@@ -414,14 +492,33 @@ export default function GestorHome() {
         .in('status', ['open', 'waiting'])
         .not('remote_jid', 'ilike', '%@g.us')
       setActiveConvsNow(openConvs?.length ?? 0)
-      const respTimes: number[] = []
+
+      // Tempo de resposta REAL da equipe — média de TODOS os intervalos
+      // cliente→humano de cada conversa (não só o primeiro; first_human_
+      // response_at continua existindo e é usado só pra saber quando a
+      // primeira resposta humana aconteceu, não pra esse cálculo). Ver
+      // computePerConversationResponseAvg() no topo do arquivo pra decisão
+      // de implementação (client-side, reaproveitando a query de
+      // whatsapp_messages já feita acima) e critério bot vs humano.
+      const validConvJids = new Set(waConvs.map(c => c.remote_jid))
+      const perConvRespAvg = computePerConversationResponseAvg(waMsgs, validConvJids)
+      const convAvgValues = Array.from(perConvRespAvg.values())
+      setWaAvgResponse(convAvgValues.length > 0 ? Math.round(convAvgValues.reduce((s, v) => s + v, 0) / convAvgValues.length) : null)
+
+      // Por atendente — mesma agregação (média das médias por conversa),
+      // agrupada pelo assigned_user_id da conversa — usado pelo Ranking.
+      const respByAttendantAcc: Record<string, number[]> = {}
       waConvs.forEach(c => {
-        if (c.first_response_at && c.created_at) {
-          const diff = (new Date(c.first_response_at).getTime() - new Date(c.created_at).getTime()) / 60000
-          if (diff > 0 && diff < 1440) respTimes.push(diff)
-        }
+        if (!c.assigned_user_id) return
+        const convAvg = perConvRespAvg.get(c.remote_jid)
+        if (convAvg === undefined) return
+        ;(respByAttendantAcc[c.assigned_user_id] ??= []).push(convAvg)
       })
-      setWaAvgResponse(respTimes.length > 0 ? Math.round(respTimes.reduce((s, v) => s + v, 0) / respTimes.length) : null)
+      const respByAttendant: Record<string, number> = {}
+      Object.entries(respByAttendantAcc).forEach(([userId, values]) => {
+        respByAttendant[userId] = Math.round(values.reduce((s, v) => s + v, 0) / values.length)
+      })
+      setAvgResponseByAttendant(respByAttendant)
       const waTotal = waConvs.length
       const waByBot = waConvs.filter(c => c.bot_active === true).length
       const waByTeam = waConvs.filter(c => c.bot_active !== true).length
@@ -791,7 +888,12 @@ export default function GestorHome() {
   const totalLeads = leads.length
   const totalVisitsCount = visits.length
   const totalEnrolled = allEnrollments.length
-  const conversionRateNum = totalLeads > 0 ? +((totalEnrolled / totalLeads) * 100).toFixed(1) : 0
+  // Conversão de COORTE: dos leads CRIADOS dentro do período, quantos JÁ
+  // CONVERTERAM até agora (não importa quando a matrícula aconteceu) — antes
+  // era "matrículas do período ÷ leads do período", duas bases temporais
+  // diferentes (a matrícula podia ser de um lead criado em outro período).
+  const cohortConvertedCount = leads.filter(l => l.status === 'enrolled').length
+  const conversionRateNum = totalLeads > 0 ? +((cohortConvertedCount / totalLeads) * 100).toFixed(1) : 0
   const totalMessages = waMessages.length
   const waSent = waMessages.filter(m => m.from_me === true).length
   const waReceived = waMessages.filter(m => m.from_me === false).length
@@ -1499,7 +1601,7 @@ export default function GestorHome() {
             </div>
             <div>
               <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Ranking da Equipe</h3>
-              <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Todas as métricas</p>
+              <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Score: matrículas + resposta + satisfação · clique num atendente pra ver o detalhe</p>
             </div>
           </div>
           <button onClick={() => navigate('/reports')} style={{ fontSize: 11, color: '#F59E0B', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1510,7 +1612,7 @@ export default function GestorHome() {
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 16 }}>{[...Array(4)].map((_, i) => <div key={i} style={{ height: 36, borderRadius: 8, background: '#f1f5f9' }} />)}</div>
           ) : (() => {
-            const teamStats = userRankings.map(u => {
+            const statsBase = userRankings.map(u => {
               const waData = waTeamRanking.find(w => w.userId === u.user_id)
               const satisfConvs = waConvsRaw.filter(c =>
                 c.assigned_user_id === u.user_id &&
@@ -1520,29 +1622,67 @@ export default function GestorHome() {
               const satisfScore = satisfConvs.length > 0
                 ? satisfConvs.reduce((s, c) => s + (c.satisfaction_score || 0), 0) / satisfConvs.length
                 : null
-              const respDiffs = waConvsRaw
-                .filter(c => c.assigned_user_id === u.user_id && c.first_response_at)
-                .map(c => (new Date(c.first_response_at!).getTime() - new Date(c.created_at).getTime()) / 60000)
-                .filter(d => d > 0 && d < 1440)
-              const avgResp = respDiffs.length > 0
-                ? Math.round(respDiffs.reduce((s, v) => s + v, 0) / respDiffs.length)
-                : null
+              // Tempo de resposta REAL da equipe — média de todos os
+              // intervalos cliente→humano (não só o primeiro), pré-calculada
+              // em load() via computePerConversationResponseAvg() e
+              // agregada por atendente em avgResponseByAttendant.
+              const avgResp = avgResponseByAttendant[u.user_id] ?? null
               return { ...u, wa_count: waData?.count ?? 0, satisf_score: satisfScore, avg_response: avgResp }
-            }).sort((a, b) => b.enrollments_count - a.enrollments_count)
+            })
+
+            // ── Score composto do Ranking ───────────────────────────────────
+            // Pesos: Matrículas 50, Tempo de resposta humano 25, Satisfação 25
+            // (soma 100 — matrículas pesa mais por ser o resultado de negócio
+            // final; resposta e satisfação pesam igual entre si, como
+            // qualidade de atendimento). Cada métrica é normalizada pra 0-100
+            // relativo ao time (matrículas: proporção do maior número do
+            // período; resposta: min-max invertido — quem responde mais rápido
+            // tira nota maior; satisfação: já é 0-100 via toSatisfPct).
+            // Atendente SEM dado numa métrica (nunca teve conversa medida,
+            // p.ex.) não é penalizado nem beneficiado por isso — o peso
+            // daquela métrica é redistribuído proporcionalmente entre as que
+            // ele tem dado, em vez de contar como 0 ou 100 por padrão.
+            const SCORE_WEIGHTS = { enrollments: 50, response: 25, satisfaction: 25 }
+            const maxEnrollments = Math.max(0, ...statsBase.map(u => u.enrollments_count))
+            const respValues = statsBase.map(u => u.avg_response).filter((v): v is number => v !== null)
+            const minResp = respValues.length > 0 ? Math.min(...respValues) : 0
+            const maxResp = respValues.length > 0 ? Math.max(...respValues) : 0
+
+            const teamStats = statsBase.map(u => {
+              const parts: { weight: number; value: number }[] = [
+                { weight: SCORE_WEIGHTS.enrollments, value: maxEnrollments > 0 ? (u.enrollments_count / maxEnrollments) * 100 : 0 },
+              ]
+              if (u.avg_response !== null) {
+                const responseNorm = maxResp > minResp
+                  ? 100 * (1 - (u.avg_response - minResp) / (maxResp - minResp))
+                  : 100
+                parts.push({ weight: SCORE_WEIGHTS.response, value: responseNorm })
+              }
+              if (u.satisf_score !== null) {
+                parts.push({ weight: SCORE_WEIGHTS.satisfaction, value: toSatisfPct(u.satisf_score) ?? 0 })
+              }
+              const totalWeight = parts.reduce((s, p) => s + p.weight, 0)
+              const score = totalWeight > 0
+                ? Math.round(parts.reduce((s, p) => s + p.weight * p.value, 0) / totalWeight)
+                : 0
+              return { ...u, score }
+            }).sort((a, b) => b.score - a.score)
+
             if (teamStats.length === 0) return (
               <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8' }}>
                 <Users size={28} />
                 <p style={{ margin: '8px 0 0', fontSize: 13 }}>Nenhum dado disponível</p>
               </div>
             )
-            const leader = teamStats[0]?.enrollments_count ?? 0
+            const leaderScore = teamStats[0]?.score ?? 0
             const medalColors = ['#F59E0B', '#9CA3AF', '#CD7C4B']
             return (
               <div style={{ maxHeight: 320, overflowY: 'auto', scrollbarWidth: 'thin', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 52px 52px 64px 56px', gap: 4, padding: '4px 8px 8px', borderBottom: '1px solid #f1f5f9', marginBottom: 4 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 44px 52px 52px 64px 56px', gap: 4, padding: '4px 8px 8px', borderBottom: '1px solid #f1f5f9', marginBottom: 4 }}>
                   {[
                     { icon: 'ti-award', label: '' },
                     { icon: 'ti-user', label: 'Atendente' },
+                    { icon: 'ti-bolt', label: 'Score' },
                     { icon: 'ti-school', label: 'Mat.' },
                     { icon: 'ti-brand-whatsapp', label: 'WA' },
                     { icon: 'ti-clock', label: 'T. Resp.' },
@@ -1554,10 +1694,13 @@ export default function GestorHome() {
                   ))}
                 </div>
                 {teamStats.map((u, i) => {
-                  const barPct = leader > 0 ? Math.round((u.enrollments_count / leader) * 100) : 0
+                  const barPct = leaderScore > 0 ? Math.round((u.score / leaderScore) * 100) : 0
                   const initials = (u.full_name || '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
                   return (
-                    <div key={u.user_id} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 52px 52px 64px 56px', gap: 4, alignItems: 'center', padding: '7px 8px', borderRadius: 8, background: i % 2 === 1 ? '#f8fafc' : '#fff' }}>
+                    <div key={u.user_id} onClick={() => setSelectedAttendant(u)}
+                      style={{ display: 'grid', gridTemplateColumns: '28px 1fr 44px 52px 52px 64px 56px', gap: 4, alignItems: 'center', padding: '7px 8px', borderRadius: 8, background: i % 2 === 1 ? '#f8fafc' : '#fff', cursor: 'pointer', transition: 'background 0.15s' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#eef2ff')}
+                      onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 1 ? '#f8fafc' : '#fff')}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {i < 3
                           ? i === 0
@@ -1570,12 +1713,13 @@ export default function GestorHome() {
                           <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#4f46e5', flexShrink: 0 }}>{initials}</div>
                           <span style={{ fontSize: 12, fontWeight: 600, color: '#1e2d6b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.full_name}</span>
                         </div>
-                        {leader > 0 && (
+                        {leaderScore > 0 && (
                           <div style={{ height: 3, background: '#f1f5f9', borderRadius: 9999, marginTop: 4, marginLeft: 28 }}>
                             <div style={{ height: 3, width: `${barPct}%`, background: i === 0 ? '#F59E0B' : '#6366f1', borderRadius: 9999, transition: 'width 0.6s ease' }} />
                           </div>
                         )}
                       </div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#F59E0B', textAlign: 'center' }}>{u.score}</div>
                       <div style={{ fontSize: 13, fontWeight: 700, color: '#7C3AED', textAlign: 'center' }}>{u.enrollments_count}</div>
                       <div style={{ fontSize: 12, fontWeight: 600, color: '#25D366', textAlign: 'center' }}>{u.wa_count}</div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: '#EF4444', textAlign: 'center' }}>
@@ -1778,6 +1922,10 @@ export default function GestorHome() {
                 )
               })}
             </div>
+            <button onClick={() => setShowSatisfactionModal(true)}
+              style={{ width: '100%', padding: '9px 0', borderRadius: 10, background: '#FFFBEB', border: '1px solid #FDE68A', color: '#B45309', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+              Ver mais <ChevronRight size={13} />
+            </button>
           </SectionCard>
         )}
       </div>
@@ -2034,14 +2182,7 @@ export default function GestorHome() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                 <Sparkles size={14} color="#6366f1" />
                 <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>Análise estratégica</span>
-                <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 2 }}>via IA</span>
-                {inepHasData && (
-                  <button
-                    onClick={() => { marketInsightFetched.current = false; fetchMarketInsight(marketSchools, inepMyStudents ?? totalStudents, true) }}
-                    style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 6, background: 'none', border: '1px solid #e5e7eb', cursor: 'pointer', fontSize: 11, color: '#6b7280' }}>
-                    <RefreshCw size={12} /> Atualizar
-                  </button>
-                )}
+                <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 2 }}>via IA · atualiza sozinha a cada 24h</span>
               </div>
 
               {marketInsightLoading ? (
@@ -2056,8 +2197,15 @@ export default function GestorHome() {
               ) : (
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '20px 0', color: '#94a3b8' }}>
                   <Bot size={28} />
-                  <span style={{ fontSize: 12, textAlign: 'center' }}>Clique em Atualizar para gerar análise estratégica</span>
+                  <span style={{ fontSize: 12, textAlign: 'center' }}>{inepHasData ? 'Preparando análise estratégica...' : 'Sem dados INEP suficientes pra gerar análise ainda.'}</span>
                 </div>
+              )}
+
+              {inepMyCode && (
+                <button onClick={() => setShowMarketReportModal(true)}
+                  style={{ marginTop: 4, width: '100%', padding: '9px 0', borderRadius: 10, background: '#EEF2FF', border: '1px solid #C7D2FE', color: '#4338CA', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                  Ver relatório completo <ChevronRight size={13} />
+                </button>
               )}
             </div>
           </div>
@@ -2277,6 +2425,30 @@ export default function GestorHome() {
           institutionId={institutionId}
           initialStep={setupInitialStep}
           onComplete={() => { setShowSetup(false); setSetupInitialStep(1); load() }}
+        />
+      )}
+
+      {selectedAttendant && (
+        <AttendantDetailModal
+          attendant={selectedAttendant}
+          conversations={waConvsRaw}
+          onClose={() => setSelectedAttendant(null)}
+        />
+      )}
+
+      {showSatisfactionModal && (
+        <SatisfactionFullModal
+          conversations={waConvsRaw}
+          onClose={() => setShowSatisfactionModal(false)}
+        />
+      )}
+
+      {showMarketReportModal && inepMyCode && (
+        <MarketReportModal
+          coEntidade={inepMyCode}
+          city={marketCity}
+          state={marketState}
+          onClose={() => setShowMarketReportModal(false)}
         />
       )}
     </div>
