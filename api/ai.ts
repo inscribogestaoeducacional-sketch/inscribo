@@ -83,6 +83,7 @@ async function callClaude(prompt: string, maxTokens = 1024): Promise<string> {
     body: JSON.stringify({
       model: 'claude-sonnet-5',
       max_tokens: maxTokens,
+      thinking: { type: 'disabled' },
       messages: [{ role: 'user', content: prompt }]
     })
   })
@@ -106,6 +107,7 @@ async function callClaudeWithDocument(pdfBase64: string, textPrompt: string, max
     body: JSON.stringify({
       model: 'claude-sonnet-5',
       max_tokens: maxTokens,
+      thinking: { type: 'disabled' },
       messages: [{
         role: 'user',
         content: [
@@ -728,6 +730,7 @@ Gere uma análise em 3 parágrafos curtos:
         body: JSON.stringify({
           model: 'claude-sonnet-5',
           max_tokens: 300,
+          thinking: { type: 'disabled' },
           system: systemPrompt,
           messages: [{ role: 'user', content: userPrompt }]
         })
