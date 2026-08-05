@@ -90,7 +90,12 @@
       "Skill(claude-api)",
       "Skill(claude-api:*)",
       "Bash(echo \"---exit $?---\")",
-      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\"; grep -n \"lat\\\\|lng\\\\|geocod\" {}')"
+      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\"; grep -n \"lat\\\\|lng\\\\|geocod\" {}')",
+      "Bash(node -e \"console.log\\(require\\('./package.json'\\).dependencies['@supabase/supabase-js']\\)\")",
+      "Bash(node \"C:/Users/VICTOR~1/AppData/Local/Temp/claude/c--Users-Victor-Almeida-AIONEDU/7980d240-88a3-4884-9b1a-7defd32b1840/scratchpad/check_enrollments.mjs\")",
+      "Bash(node _tmp_check_enrollments.mjs)",
+      "Bash(node _tmp_check_lead.mjs)",
+      "Bash(node _tmp_check_lead2.mjs)"
     ],
     "additionalDirectories": [
       "\\tmp"

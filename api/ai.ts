@@ -34,6 +34,44 @@ function calcRealReenrollDistribution(
   for (const [m, v] of Object.entries(raw)) result[Number(m)] = v / totalSum
   return result
 }
+// ── Extração robusta do texto da resposta da Anthropic ───────────────────────
+// Não confia em content[0] ser o bloco de texto — procura o primeiro bloco
+// com type === 'text' explicitamente. Lança erro claro se nenhum existir, em
+// vez de deixar `undefined` se propagar e quebrar mais adiante sem contexto.
+function extractClaudeText(data: { content?: Array<{ type: string; text?: string }> }): string {
+  const block = data.content?.find(b => b.type === 'text' && typeof b.text === 'string')
+  if (!block?.text) throw new Error('Resposta da Anthropic sem conteúdo de texto')
+  return block.text
+}
+
+// ── Extração tolerante de JSON de uma resposta em texto livre ────────────────
+// 1. Remove cercas de markdown (```json ... ```) se existirem.
+// 2. Extrai do primeiro `{` até a chave de FECHAMENTO CORRESPONDENTE (chaves
+//    balanceadas, ignorando chaves dentro de strings) — não até a última `}`
+//    da resposta inteira, que quebra se o modelo escrever qualquer texto
+//    (nota, explicação) depois do JSON.
+function extractJsonObject(raw: string): string {
+  const cleaned = raw.replace(/```json\s*|```/g, '').trim()
+  const start = cleaned.indexOf('{')
+  if (start === -1) return cleaned
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let i = start; i < cleaned.length; i++) {
+    const ch = cleaned[i]
+    if (escaped) { escaped = false; continue }
+    if (ch === '\\') { escaped = true; continue }
+    if (ch === '"') { inString = !inString; continue }
+    if (inString) continue
+    if (ch === '{') depth++
+    else if (ch === '}') {
+      depth--
+      if (depth === 0) return cleaned.slice(start, i + 1)
+    }
+  }
+  return cleaned.slice(start) // sem fechamento balanceado — deixa o JSON.parse acusar o erro real
+}
+
 async function callClaude(prompt: string, maxTokens = 1024): Promise<string> {
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
@@ -52,8 +90,8 @@ async function callClaude(prompt: string, maxTokens = 1024): Promise<string> {
     const err = await response.text()
     throw new Error(`Anthropic API error ${response.status}: ${err}`)
   }
-  const data = await response.json() as { content: { text: string }[] }
-  return data.content[0].text
+  const data = await response.json() as { content: Array<{ type: string; text?: string }> }
+  return extractClaudeText(data)
 }
 
 async function callClaudeWithDocument(pdfBase64: string, textPrompt: string, maxTokens = 2000): Promise<string> {
@@ -81,8 +119,8 @@ async function callClaudeWithDocument(pdfBase64: string, textPrompt: string, max
     const err = await response.text()
     throw new Error(`Anthropic API error ${response.status}: ${err}`)
   }
-  const data = await response.json() as { content: { text: string }[] }
-  return data.content[0].text
+  const data = await response.json() as { content: Array<{ type: string; text?: string }> }
+  return extractClaudeText(data)
 }
 
 // ─── Helper: sazonalidade real a partir do historical_funnel ─────────────────
@@ -265,9 +303,9 @@ ${fileContent.slice(0, 8000)}`
 
       let parsed: unknown
       try {
-        const match = raw.match(/\{[\s\S]*\}/)
-        parsed = JSON.parse(match ? match[0] : raw)
+        parsed = JSON.parse(extractJsonObject(raw))
       } catch {
+        console.error('[extract_file] falha ao parsear resposta da IA. Raw completo:', raw)
         return res.status(422).json({ error: 'Não foi possível extrair dados estruturados do arquivo', raw })
       }
 
@@ -299,9 +337,7 @@ Respostas: ${JSON.stringify(responses)}
       const raw = await callClaude(prompt, 600)
       let parsed
       try {
-        const jsonMatch = raw.match(/\{[\s\S]*\}/)
-        if (!jsonMatch) throw new Error('JSON não encontrado')
-        parsed = JSON.parse(jsonMatch[0])
+        parsed = JSON.parse(extractJsonObject(raw))
       } catch {
         parsed = { primary_reason: 'other', confidence: 30, diagnosis: raw.substring(0, 400), risk_factors: [], retention_opportunity: false, retention_note: 'Análise manual necessária' }
       }
@@ -347,8 +383,7 @@ Para ${city}, ${state}, retorne SOMENTE JSON válido. Se não tiver dados precis
       let parsed = fallback
       try {
         const result = await callClaude(prompt, 700)
-        const jsonMatch = result.match(/\{[\s\S]*\}/)
-        parsed = JSON.parse(jsonMatch ? jsonMatch[0] : result)
+        parsed = JSON.parse(extractJsonObject(result))
       } catch { }
       return res.json({ result: parsed })
     }
@@ -529,11 +564,11 @@ Retorne SOMENTE JSON válido:
 }`
 
       const result = await callClaude(prompt, 3000)
-      const jsonMatch = result.match(/\{[\s\S]*\}/)
       let parsed: Record<string, unknown>
       try {
-        parsed = JSON.parse(jsonMatch ? jsonMatch[0] : result)
+        parsed = JSON.parse(extractJsonObject(result)) as Record<string, unknown>
       } catch {
+        console.error('[generate_campaign] falha ao parsear resposta da IA. Raw completo:', result)
         return res.status(422).json({ error: 'Erro ao parsear resposta da IA', raw: result })
       }
 // ✅ Sobrescrever rematrículas com distribuição real — não confiar na IA para isso
@@ -657,9 +692,7 @@ Comentários: ${JSON.stringify(comments)}
       const raw = await callClaude(prompt, 800)
       let parsed
       try {
-        const jsonMatch = raw.match(/\{[\s\S]*\}/)
-        if (!jsonMatch) throw new Error('JSON não encontrado')
-        parsed = JSON.parse(jsonMatch[0])
+        parsed = JSON.parse(extractJsonObject(raw))
       } catch {
         parsed = { overall_score: 0, summary: raw.substring(0, 300), strengths: [], weaknesses: [], reenrollment_risk: 'médio', reenrollment_analysis: 'Análise manual necessária.', priority_actions: [], retention_opportunities: 'Análise manual necessária.' }
       }
@@ -703,8 +736,8 @@ Gere uma análise em 3 parágrafos curtos:
         const err = await response.text()
         throw new Error(`Anthropic API error ${response.status}: ${err}`)
       }
-      const data = await response.json() as { content: { text: string }[] }
-      return res.json({ result: data.content[0].text })
+      const data = await response.json() as { content: Array<{ type: string; text?: string }> }
+      return res.json({ result: extractClaudeText(data) })
     }
 
     return res.status(400).json({ error: `Action desconhecida: ${action}` })
