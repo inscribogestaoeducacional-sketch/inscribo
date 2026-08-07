@@ -95,7 +95,8 @@
       "Bash(node \"C:/Users/VICTOR~1/AppData/Local/Temp/claude/c--Users-Victor-Almeida-AIONEDU/7980d240-88a3-4884-9b1a-7defd32b1840/scratchpad/check_enrollments.mjs\")",
       "Bash(node _tmp_check_enrollments.mjs)",
       "Bash(node _tmp_check_lead.mjs)",
-      "Bash(node _tmp_check_lead2.mjs)"
+      "Bash(node _tmp_check_lead2.mjs)",
+      "Bash(tee /tmp/tsc_out.txt)"
     ],
     "additionalDirectories": [
       "\\tmp"

@@ -27,6 +27,10 @@ CREATE TABLE IF NOT EXISTS aion_broadcasts (
   -- Preview de exemplo (calculado no client com o 1º contato da audiência no
   -- momento da criação) — só fallback caso template_body_text esteja vazio.
   preview_text         TEXT        NOT NULL DEFAULT '',
+  -- URL pública (bucket whatsapp-media) da mídia de header, quando o template
+  -- tiver HEADER format IMAGE/VIDEO/DOCUMENT — mesma URL pra todos os
+  -- destinatários da campanha (upload único na criação, não por destinatário).
+  header_media_url     TEXT,
   filter_tags          JSONB       NOT NULL DEFAULT '[]',
   status               TEXT        NOT NULL DEFAULT 'draft'
                         CHECK (status IN ('draft', 'scheduled', 'sending', 'completed', 'cancelled')),

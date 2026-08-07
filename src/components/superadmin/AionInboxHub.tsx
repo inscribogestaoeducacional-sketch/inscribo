@@ -12,6 +12,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, WhatsappMessage, WhatsappConversation, User as UserType, supabase } from '../../lib/supabase'
 import LeadModal, { STAGES as CRM_STAGES } from '../shared/LeadModal'
 import ProposalGenerator from './ProposalGenerator'
+import { buildSendComponents, getTemplateHeaderMediaFormat, uploadTemplateHeaderMedia } from '../../lib/whatsappTemplate'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MsgType = 'text' | 'audio' | 'image' | 'video' | 'document' | 'sticker' | 'deleted'
@@ -228,13 +229,18 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
     }]
   })
 
-  // Include conversations that exist in whatsapp_conversations but have no messages loaded
+  // Include conversations that exist in whatsapp_conversations but have no messages loaded.
+  // Bug corrigido: o `continue` abaixo excluía justamente as conversas
+  // recém-criadas sem nenhuma mensagem ainda (ex: handleNewConv, antes de o
+  // primeiro template ser enviado com sucesso) — o oposto do que o comentário
+  // acima diz que este bloco faz. Uma conversa com row real em
+  // whatsapp_conversations (status 'waiting'/'open') deve aparecer na lista
+  // mesmo sem last_message/last_message_at ainda.
   if (convMap) {
     const coveredJids = new Set(result.map(c => c.id))
     for (const [remoteJid, conv] of convMap.entries()) {
       const normJid = normalizeJid(remoteJid)
       if (coveredJids.has(normJid) || coveredJids.has(remoteJid)) continue
-      if (!conv.last_message && !conv.last_message_at) continue
       const isGroup = normJid.endsWith('@g.us')
       result.push({
         id: normJid,
@@ -305,6 +311,43 @@ function buildTemplatePreview(tmpl: any, vars: Record<string, string>): string {
     text = text.replace(new RegExp(`\\{\\{${n}\\}\\}`, 'g'), val)
   })
   return text
+}
+
+// ─── Campo de upload de mídia de header (IMAGE/VIDEO/DOCUMENT) ─────────────────
+// Compartilhado pelos 3 pontos de envio de template (agora, nova conversa,
+// agendamento) — cada um mantém seu próprio estado de URL/uploading e passa
+// via props, já que showTemplateModal/showTemplatePanel usam um par de
+// estados e showScheduleModal usa outro.
+function TemplateHeaderMediaField({
+  format, url, uploading, onUpload, onClear,
+}: {
+  format: 'IMAGE' | 'VIDEO' | 'DOCUMENT'
+  url: string | null
+  uploading: boolean
+  onUpload: (file: File) => void
+  onClear: () => void
+}) {
+  const accept = format === 'IMAGE' ? 'image/*' : format === 'VIDEO' ? 'video/*' : '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx'
+  const label  = format === 'IMAGE' ? 'imagem' : format === 'VIDEO' ? 'vídeo' : 'documento'
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 600, color: '#64748B' }}>
+        Arquivo de {label} (cabeçalho do template) *
+      </p>
+      {url ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 10px', background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, fontSize: 12, color: '#0d9488' }}>
+          <span>Arquivo enviado ✓</span>
+          <button onClick={onClear} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', fontSize: 13 }}>✕</button>
+        </div>
+      ) : (
+        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 10px', fontSize: 12, color: '#64748B', border: '1.5px dashed #CBD5E1', borderRadius: 8, cursor: uploading ? 'not-allowed' : 'pointer', background: '#fff' }}>
+          {uploading ? 'Enviando...' : 'Selecionar arquivo'}
+          <input type="file" accept={accept} style={{ display: 'none' }} disabled={uploading}
+            onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(f) }} />
+        </label>
+      )}
+    </div>
+  )
 }
 
 function getLastMsgPreview(lastMessage: string): { icon?: string; text: string } {
@@ -1072,6 +1115,11 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   const [templateVars, setTemplateVars] = useState<Record<string, string>>({})
   const [sendingTemplate, setSendingTemplate] = useState(false)
   const [templateError, setTemplateError] = useState<string | null>(null)
+  // Mídia de header (IMAGE/VIDEO/DOCUMENT) — compartilhado entre showTemplateModal
+  // (handleSendTemplate) e showTemplatePanel (handleSendNewConvTemplate), já que
+  // os dois reaproveitam o mesmo selectedTemplate/templateVars.
+  const [templateHeaderMediaUrl, setTemplateHeaderMediaUrl] = useState<string | null>(null)
+  const [uploadingTemplateMedia, setUploadingTemplateMedia] = useState(false)
   const [institutionName, setInstitutionName] = useState('')
   const [sendingReactivate, setSendingReactivate] = useState(false)
   const [hubToast, setHubToast] = useState<string | null>(null)
@@ -1088,6 +1136,8 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   const [loadingAionTemplates, setLoadingAionTemplates] = useState(false)
   const [scheduleTemplateName, setScheduleTemplateName] = useState('')
   const [scheduleTemplateVars, setScheduleTemplateVars] = useState<Record<string, string>>({})
+  const [scheduleHeaderMediaUrl, setScheduleHeaderMediaUrl] = useState<string | null>(null)
+  const [uploadingScheduleMedia, setUploadingScheduleMedia] = useState(false)
   const [scheduleSendAt, setScheduleSendAt] = useState('')
   const [savingSchedule, setSavingSchedule] = useState(false)
   const [scheduleError, setScheduleError] = useState('')
@@ -2732,12 +2782,16 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
     const tmpl = templates.find(t => t.id === selectedTemplate) ||
       { id: '', name: selectedTemplate, language: 'pt_BR', components: [] }
     const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
-    const varKeys = Object.keys(templateVars)
-    const components = varKeys.length > 0
-      ? [{ type: 'body', parameters: varKeys.map(k => ({ type: 'text', text: templateVars[k] })) }]
-      : tmpl.components ?? []
 
     setTemplateError(null)
+    let components: any[]
+    try {
+      components = buildSendComponents(tmpl, templateVars, templateHeaderMediaUrl)
+    } catch (e: any) {
+      setTemplateError(e?.message || 'Erro ao montar o template.')
+      return
+    }
+
     setSendingTemplate(true)
     const preview = buildTemplatePreview(tmpl, templateVars)
     console.log('[TEMPLATE PREVIEW]', { tmpl: tmpl?.name, components: tmpl?.components, vars: templateVars, preview })
@@ -2814,6 +2868,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       setShowTemplateModal(false)
       setSelectedTemplate('')
       setTemplateVars({})
+      setTemplateHeaderMediaUrl(null)
       setTemplateError(null)
       setHubToast('✅ Template enviado!')
       setTimeout(() => setHubToast(null), 3000)
@@ -3275,8 +3330,11 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
               .update({ contact_name: name, status: 'open' })
               .eq('id', existingAionConv.id)
           } else {
+            // last_message_at setado na criação (mesmo sem mensagem ainda) —
+            // sem isso a conversa nova ordenava pro fim da lista (buildConversations
+            // usa new Date(0) como fallback de ordenação quando ausente).
             await supabase.from('whatsapp_conversations')
-              .insert({ remote_jid: normalized, institution_id: null, is_aion_inbox: true, contact_name: name, status: 'open' })
+              .insert({ remote_jid: normalized, institution_id: null, is_aion_inbox: true, contact_name: name, status: 'open', last_message_at: new Date().toISOString() })
           }
         } catch {}
       } else if (effectiveInstitutionId) {
@@ -3350,10 +3408,14 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
     const tmpl = templates.find(t => t.id === selectedTemplate) ||
       { id: '', name: selectedTemplate, language: 'pt_BR', components: [] }
     const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
-    const varKeys = Object.keys(templateVars)
-    const components = varKeys.length > 0
-      ? [{ type: 'body', parameters: varKeys.map(k => ({ type: 'text', text: templateVars[k] })) }]
-      : []
+
+    let components: any[]
+    try {
+      components = buildSendComponents(tmpl, templateVars, templateHeaderMediaUrl)
+    } catch (e: any) {
+      setSendError(e?.message || 'Erro ao montar o template.')
+      return
+    }
 
     setSendingTemplate(true)
     try {
@@ -3375,7 +3437,13 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
           sender_user_id: user?.id,
         }),
       })
-      if (!res.ok) throw new Error('Erro ao enviar template')
+      // Antes: `throw new Error('Erro ao enviar template')` genérico, sem ler o
+      // corpo — a causa real (ex: template rejeitado pela Meta) nunca chegava
+      // no toast de erro, só um texto fixo que não ajudava a diagnosticar.
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Erro ao enviar template')
+      }
 
       const optimistic: Message = {
         id: `temp-tmpl-${Date.now()}`,
@@ -3426,6 +3494,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       setShowTemplatePanel(false)
       setSelectedTemplate('')
       setTemplateVars({})
+      setTemplateHeaderMediaUrl(null)
       setHubToast('Template enviado! Aguardando resposta...')
       setTimeout(() => setHubToast(null), 4000)
     } catch (err: any) {
@@ -3490,10 +3559,13 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
     const sendAtIso = new Date(scheduleSendAt).toISOString()
     if (new Date(sendAtIso).getTime() <= Date.now()) { setScheduleError('A data/hora precisa ser no futuro.'); return }
 
-    const varKeys = Object.keys(scheduleTemplateVars)
-    const components = varKeys.length > 0
-      ? [{ type: 'body', parameters: varKeys.map(k => ({ type: 'text', text: scheduleTemplateVars[k] })) }]
-      : (tmpl.components ?? [])
+    let components: any[]
+    try {
+      components = buildSendComponents(tmpl, scheduleTemplateVars, scheduleHeaderMediaUrl)
+    } catch (e: any) {
+      setScheduleError(e?.message || 'Erro ao montar o template.')
+      return
+    }
     const preview = buildTemplatePreview(tmpl, scheduleTemplateVars)
     const rJid = rawJid(activeId)
 
@@ -3512,6 +3584,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       })
       if (error) throw error
       setShowScheduleModal(false)
+      setScheduleHeaderMediaUrl(null)
       await loadScheduledMessages(rJid)
       setHubToast('Mensagem agendada!')
       setTimeout(() => setHubToast(null), 3000)
@@ -4390,7 +4463,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                       const bodyText = tpl.components?.find((c: any) => c.type === 'BODY')?.text || tpl.name
                       const isSelected = selectedTemplate === tpl.id
                       return (
-                        <button key={tpl.id} onClick={() => { setSelectedTemplate(tpl.id); setTemplateVars({}) }}
+                        <button key={tpl.id} onClick={() => { setSelectedTemplate(tpl.id); setTemplateVars({}); setTemplateHeaderMediaUrl(null) }}
                           style={{ textAlign: 'left', padding: '8px 10px', background: isSelected ? '#CCFBF1' : '#FFFFFF', border: `1.5px solid ${isSelected ? '#0d9488' : '#D1FAE5'}`, borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s' }}>
                           <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{tpl.name}</p>
                           <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bodyText}</p>
@@ -4399,6 +4472,29 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                     })}
                   </div>
                 )}
+                {selectedTemplate && (() => {
+                  const tmpl = templates.find(t => t.id === selectedTemplate)
+                  const headerFormat = getTemplateHeaderMediaFormat(tmpl)
+                  if (!headerFormat) return null
+                  return (
+                    <TemplateHeaderMediaField
+                      format={headerFormat}
+                      url={templateHeaderMediaUrl}
+                      uploading={uploadingTemplateMedia}
+                      onClear={() => setTemplateHeaderMediaUrl(null)}
+                      onUpload={async file => {
+                        setUploadingTemplateMedia(true)
+                        try {
+                          setTemplateHeaderMediaUrl(await uploadTemplateHeaderMedia(file))
+                        } catch (err: any) {
+                          setSendError(err?.message || 'Erro no upload do arquivo.')
+                        } finally {
+                          setUploadingTemplateMedia(false)
+                        }
+                      }}
+                    />
+                  )
+                })()}
                 {selectedTemplate && (() => {
                   const tmpl = templates.find(t => t.id === selectedTemplate)
                   if (!tmpl) return null
@@ -4427,7 +4523,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                     Cancelar
                   </button>
                   <button onClick={handleSendNewConvTemplate}
-                    disabled={sendingTemplate || !selectedTemplate}
+                    disabled={sendingTemplate || !selectedTemplate || uploadingTemplateMedia || (!!getTemplateHeaderMediaFormat(templates.find(t => t.id === selectedTemplate)) && !templateHeaderMediaUrl)}
                     style={{ flex: 2, padding: '8px 0', fontSize: 12, fontWeight: 700, color: '#fff', background: sendingTemplate || !selectedTemplate ? '#94A3B8' : '#0d9488', border: 'none', borderRadius: 9, cursor: sendingTemplate || !selectedTemplate ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
                     {sendingTemplate ? 'Enviando...' : 'Enviar Template'}
                   </button>
@@ -5478,7 +5574,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
           <div className="bg-white rounded-2xl p-6 w-96 shadow-2xl border border-[#E2E8F0] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-[#1A2B4A]">Enviar Template WhatsApp</h3>
-              <button onClick={() => { setShowTemplateModal(false); setSelectedTemplate(''); setTemplateVars({}) }}
+              <button onClick={() => { setShowTemplateModal(false); setSelectedTemplate(''); setTemplateVars({}); setTemplateHeaderMediaUrl(null) }}
                 className="p-1 text-[#64748B] hover:text-[#1A2B4A]"><X className="w-4 h-4" /></button>
             </div>
             <div className="space-y-3">
@@ -5493,6 +5589,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                   const autoVars: Record<string, string> = {}
                   matches.forEach(([, n]) => { autoVars[n] = getDefaultVarValue(parseInt(n)) })
                   setTemplateVars(autoVars)
+                  setTemplateHeaderMediaUrl(null)
                 }}
                   className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
                   <option value="">Selecionar template...</option>
@@ -5504,6 +5601,29 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                   ))}
                 </select>
               </div>
+              {selectedTemplate && (() => {
+                const tmpl = templates.find(t => t.id === selectedTemplate)
+                const headerFormat = getTemplateHeaderMediaFormat(tmpl)
+                if (!headerFormat) return null
+                return (
+                  <TemplateHeaderMediaField
+                    format={headerFormat}
+                    url={templateHeaderMediaUrl}
+                    uploading={uploadingTemplateMedia}
+                    onClear={() => setTemplateHeaderMediaUrl(null)}
+                    onUpload={async file => {
+                      setUploadingTemplateMedia(true)
+                      try {
+                        setTemplateHeaderMediaUrl(await uploadTemplateHeaderMedia(file))
+                      } catch (err: any) {
+                        setTemplateError(err?.message || 'Erro no upload do arquivo.')
+                      } finally {
+                        setUploadingTemplateMedia(false)
+                      }
+                    }}
+                  />
+                )
+              })()}
               {selectedTemplate && (() => {
                 const tmpl = templates.find(t => t.id === selectedTemplate)
                 if (!tmpl) return null
@@ -5542,11 +5662,12 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
               </div>
             )}
             <div className="flex gap-2 mt-4">
-              <button onClick={() => { setShowTemplateModal(false); setSelectedTemplate(''); setTemplateVars({}); setTemplateError(null) }}
+              <button onClick={() => { setShowTemplateModal(false); setSelectedTemplate(''); setTemplateVars({}); setTemplateHeaderMediaUrl(null); setTemplateError(null) }}
                 className="flex-1 py-2.5 text-xs font-medium text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
                 Cancelar
               </button>
-              <button onClick={handleSendTemplate} disabled={sendingTemplate || (!selectedTemplate && templates.length > 0)}
+              <button onClick={handleSendTemplate}
+                disabled={sendingTemplate || (!selectedTemplate && templates.length > 0) || uploadingTemplateMedia || (!!getTemplateHeaderMediaFormat(templates.find(t => t.id === selectedTemplate)) && !templateHeaderMediaUrl)}
                 className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
                 {sendingTemplate ? 'Enviando...' : 'Enviar Template'}
               </button>
@@ -5580,6 +5701,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                     const autoVars: Record<string, string> = {}
                     matches.forEach(([, n]) => { autoVars[n] = getDefaultVarValue(parseInt(n)) })
                     setScheduleTemplateVars(autoVars)
+                    setScheduleHeaderMediaUrl(null)
                   }}
                     className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
                     <option value="">Selecionar template...</option>
@@ -5593,6 +5715,29 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                     </p>
                   )}
                 </div>
+                {scheduleTemplateName && (() => {
+                  const tmpl = aionTemplates.find(t => t.name === scheduleTemplateName)
+                  const headerFormat = getTemplateHeaderMediaFormat(tmpl)
+                  if (!headerFormat) return null
+                  return (
+                    <TemplateHeaderMediaField
+                      format={headerFormat}
+                      url={scheduleHeaderMediaUrl}
+                      uploading={uploadingScheduleMedia}
+                      onClear={() => setScheduleHeaderMediaUrl(null)}
+                      onUpload={async file => {
+                        setUploadingScheduleMedia(true)
+                        try {
+                          setScheduleHeaderMediaUrl(await uploadTemplateHeaderMedia(file))
+                        } catch (err: any) {
+                          setScheduleError(err?.message || 'Erro no upload do arquivo.')
+                        } finally {
+                          setUploadingScheduleMedia(false)
+                        }
+                      }}
+                    />
+                  )
+                })()}
                 {scheduleTemplateName && (() => {
                   const tmpl = aionTemplates.find(t => t.name === scheduleTemplateName)
                   const bodyComp = tmpl?.components?.find((c: any) => c.type === 'BODY')
@@ -5627,11 +5772,12 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
               </div>
             )}
             <div className="flex gap-2 mt-4">
-              <button onClick={() => setShowScheduleModal(false)}
+              <button onClick={() => { setShowScheduleModal(false); setScheduleHeaderMediaUrl(null) }}
                 className="flex-1 py-2.5 text-xs font-medium text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
                 Cancelar
               </button>
-              <button onClick={handleSchedule} disabled={savingSchedule || !scheduleTemplateName || !scheduleSendAt}
+              <button onClick={handleSchedule}
+                disabled={savingSchedule || !scheduleTemplateName || !scheduleSendAt || uploadingScheduleMedia || (!!getTemplateHeaderMediaFormat(aionTemplates.find(t => t.name === scheduleTemplateName)) && !scheduleHeaderMediaUrl)}
                 className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
                 {savingSchedule ? 'Agendando...' : 'Agendar'}
               </button>

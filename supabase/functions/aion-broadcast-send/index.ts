@@ -39,6 +39,7 @@ interface Broadcast {
   // ClaimedRecipient.template_components, já resolvido por destinatário.
   template_body_text: string | null
   preview_text: string | null
+  scheduled_at: string | null
 }
 
 interface ClaimedRecipient {
@@ -89,10 +90,15 @@ serve(async (req) => {
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
+    // scheduled_at NULL = dispara assim que sair de 'draft' (comportamento de
+    // sempre); preenchido = só entra na lista quando now() >= scheduled_at —
+    // até lá a campanha fica 'scheduled' sem ser tocada por este cron.
+    const nowIso = new Date().toISOString()
     const { data: broadcasts, error: broadcastsErr } = await supabase
       .from('aion_broadcasts')
-      .select('id, status, template_name, template_language, template_body_text, preview_text')
+      .select('id, status, template_name, template_language, template_body_text, preview_text, scheduled_at')
       .in('status', ['scheduled', 'sending'])
+      .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso}`)
       .order('created_at', { ascending: true })
 
     if (broadcastsErr) {

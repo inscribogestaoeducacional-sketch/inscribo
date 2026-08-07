@@ -11,6 +11,7 @@ import {
   Search, Upload, Download, FileText, Radio, ChevronRight, UserX,
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { buildSendComponents, getTemplateHeaderMediaFormat, uploadTemplateHeaderMedia, type MediaHeaderFormat } from '../../lib/whatsappTemplate'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1005,9 +1006,16 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
   const [importErrors, setImportErrors]       = useState<string[]>([])
   const [importResult, setImportResult]       = useState<{ imported: number; duplicates: number } | null>(null)
   const [importLoading, setImportLoading]     = useState(false)
+  const [importTags, setImportTags]           = useState<string[]>([])
 
   const [editingContact, setEditingContact]   = useState<AionContact | null>(null)
   const [editSaving, setEditSaving]           = useState(false)
+
+  // Seleção múltipla + tag em massa
+  const [selectedIds, setSelectedIds]         = useState<Set<string>>(new Set())
+  const [showBulkTagModal, setShowBulkTagModal] = useState(false)
+  const [bulkTagNames, setBulkTagNames]       = useState<string[]>([])
+  const [bulkTagSaving, setBulkTagSaving]     = useState(false)
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '9px 12px', border: '1.5px solid #E2E8F0',
@@ -1161,6 +1169,7 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
           source: 'csv_import',
           conversation_id,
           aion_lead_id,
+          tags: importTags,
           created_by: user?.id || null,
         })
         if (!error) imported++
@@ -1200,6 +1209,49 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
     load()
   }
 
+  function toggleImportTag(tagName: string) {
+    setImportTags(prev => prev.includes(tagName) ? prev.filter(t => t !== tagName) : [...prev, tagName])
+  }
+
+  // ── Seleção múltipla + tag em massa ───────────────────────
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds(prev => prev.size === contacts.length ? new Set() : new Set(contacts.map(c => c.id)))
+  }
+
+  function toggleBulkTagName(tagName: string) {
+    setBulkTagNames(prev => prev.includes(tagName) ? prev.filter(t => t !== tagName) : [...prev, tagName])
+  }
+
+  async function applyBulkTags() {
+    if (bulkTagNames.length === 0 || selectedIds.size === 0) return
+    setBulkTagSaving(true)
+    try {
+      const ids = Array.from(selectedIds)
+      for (const id of ids) {
+        const contact = contacts.find(c => c.id === id)
+        if (!contact) continue
+        const merged = Array.from(new Set([...contact.tags, ...bulkTagNames]))
+        await supabase.from('aion_contacts').update({ tags: merged }).eq('id', id)
+      }
+      setContacts(prev => prev.map(c =>
+        selectedIds.has(c.id) ? { ...c, tags: Array.from(new Set([...c.tags, ...bulkTagNames])) } : c
+      ))
+      setShowBulkTagModal(false)
+      setBulkTagNames([])
+      setSelectedIds(new Set())
+    } finally {
+      setBulkTagSaving(false)
+    }
+  }
+
   return (
     <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
@@ -1208,7 +1260,7 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
           <div style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>{total} contato{total === 1 ? '' : 's'} cadastrado{total === 1 ? '' : 's'}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setShowImportModal(true)}
+          <button onClick={() => { setImportTags([]); setShowImportModal(true) }}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: '#fff', color: '#64748B', fontSize: 13, fontWeight: 600, borderRadius: 10, border: '1.5px solid #E2E8F0', cursor: 'pointer' }}>
             <Upload style={{ width: 15, height: 15 }} /> Importar CSV
           </button>
@@ -1232,6 +1284,23 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
         </select>
       </div>
 
+      {/* Barra de ação em massa — só aparece com seleção ativa */}
+      {selectedIds.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 16px', background: '#F0FDFA', border: '1.5px solid #99F6E4', borderRadius: 10, marginBottom: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#0d9488' }}>{selectedIds.size} contato{selectedIds.size === 1 ? '' : 's'} selecionado{selectedIds.size === 1 ? '' : 's'}</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setSelectedIds(new Set())}
+              style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, color: '#64748B', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, cursor: 'pointer' }}>
+              Limpar seleção
+            </button>
+            <button onClick={() => { setBulkTagNames([]); setShowBulkTagModal(true) }}
+              style={{ padding: '7px 14px', fontSize: 12, fontWeight: 700, color: '#fff', background: '#00A896', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+              Aplicar tag aos selecionados
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Lista */}
       <div style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, overflow: 'hidden' }}>
         {loading ? (
@@ -1244,9 +1313,16 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
           </div>
         ) : (
           <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '9px 18px', borderBottom: '1px solid #F1F5F9', background: '#F8FAFC' }}>
+              <input type="checkbox" checked={selectedIds.size > 0 && selectedIds.size === contacts.length} onChange={toggleSelectAll}
+                style={{ width: 15, height: 15, accentColor: '#00A896', cursor: 'pointer', flexShrink: 0 }} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Selecionar todos</span>
+            </div>
             {contacts.map(c => (
               <div key={c.id} onClick={() => setEditingContact(c)}
                 style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 18px', borderBottom: '1px solid #F1F5F9', cursor: 'pointer', opacity: c.opted_out ? 0.55 : 1 }}>
+                <input type="checkbox" checked={selectedIds.has(c.id)} onClick={e => e.stopPropagation()} onChange={() => toggleSelect(c.id)}
+                  style={{ width: 15, height: 15, accentColor: '#00A896', cursor: 'pointer', flexShrink: 0 }} />
                 <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#3B82F6', fontWeight: 700, fontSize: 13 }}>
                   {(c.name || c.phone).slice(0, 1).toUpperCase()}
                 </div>
@@ -1350,6 +1426,22 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
               </div>
               <input type="file" accept=".csv" onChange={handleFileChange} style={{ display: 'none' }} />
             </label>
+            {availTags.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={labelStyle}>Aplicar tag a todos os importados</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {availTags.map(t => {
+                    const active = importTags.includes(t.name)
+                    return (
+                      <button key={t.id} onClick={() => toggleImportTag(t.name)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, padding: '5px 11px', borderRadius: 20, cursor: 'pointer', border: active ? 'none' : '1.5px solid #E2E8F0', background: active ? t.color : '#fff', color: active ? '#fff' : '#64748B' }}>
+                        {active && <Check style={{ width: 11, height: 11 }} />} {t.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
             {importErrors.length > 0 && (
               <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
                 {importErrors.map((err, i) => <p key={i} style={{ margin: i > 0 ? '4px 0 0' : 0, fontSize: 12, color: '#DC2626' }}>{err}</p>)}
@@ -1446,6 +1538,45 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
           </div>
         </div>
       )}
+
+      {/* Modal: Aplicar tag aos selecionados */}
+      {showBulkTagModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={e => { if (e.target === e.currentTarget) setShowBulkTagModal(false) }}>
+          <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 420, padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1A2B4A' }}>Aplicar tag aos selecionados</h2>
+              <button onClick={() => setShowBulkTagModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 20, lineHeight: 1 }}>✕</button>
+            </div>
+            <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 14px' }}>{selectedIds.size} contato{selectedIds.size === 1 ? '' : 's'} selecionado{selectedIds.size === 1 ? '' : 's'} — as tags escolhidas serão adicionadas (não substituem as já existentes).</p>
+            {availTags.length === 0 ? (
+              <p style={{ fontSize: 12, color: '#94A3B8' }}>Nenhuma etiqueta cadastrada. Crie em Configurações → Etiquetas.</p>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
+                {availTags.map(t => {
+                  const active = bulkTagNames.includes(t.name)
+                  return (
+                    <button key={t.id} onClick={() => toggleBulkTagName(t.name)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, padding: '5px 11px', borderRadius: 20, cursor: 'pointer', border: active ? 'none' : '1.5px solid #E2E8F0', background: active ? t.color : '#fff', color: active ? '#fff' : '#64748B' }}>
+                      {active && <Check style={{ width: 11, height: 11 }} />} {t.name}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowBulkTagModal(false)}
+                style={{ padding: '9px 18px', border: '1px solid #E2E8F0', borderRadius: 9, background: '#fff', color: '#64748B', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
+                Cancelar
+              </button>
+              <button onClick={applyBulkTags} disabled={bulkTagSaving || bulkTagNames.length === 0}
+                style={{ padding: '9px 18px', border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700, opacity: (bulkTagSaving || bulkTagNames.length === 0) ? 0.5 : 1 }}>
+                {bulkTagSaving ? 'Aplicando...' : 'Aplicar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1492,6 +1623,41 @@ function buildBroadcastPreview(tmpl: GraphTemplate | undefined, vars: Record<str
   return text
 }
 
+// Mesmo componente de upload de mídia de header usado em AionInboxHub.tsx —
+// duplicado aqui (não exportável de whatsappTemplate.ts, que é .ts puro sem
+// JSX) porque é só uma peça de UI pequena, sem lógica própria.
+function TemplateHeaderMediaField({
+  format, url, uploading, onUpload, onClear,
+}: {
+  format: MediaHeaderFormat
+  url: string | null
+  uploading: boolean
+  onUpload: (file: File) => void
+  onClear: () => void
+}) {
+  const accept = format === 'IMAGE' ? 'image/*' : format === 'VIDEO' ? 'video/*' : '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx'
+  const label  = format === 'IMAGE' ? 'imagem' : format === 'VIDEO' ? 'vídeo' : 'documento'
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ fontSize: 12, fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, display: 'block' }}>
+        Arquivo de {label} (cabeçalho do template) *
+      </label>
+      {url ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, fontSize: 13, color: '#0d9488' }}>
+          <span>Arquivo enviado ✓</span>
+          <button onClick={onClear} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', fontSize: 14 }}>✕</button>
+        </div>
+      ) : (
+        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 12px', fontSize: 13, color: '#64748B', border: '1.5px dashed #CBD5E1', borderRadius: 8, cursor: uploading ? 'not-allowed' : 'pointer', background: '#fff' }}>
+          {uploading ? 'Enviando...' : 'Selecionar arquivo'}
+          <input type="file" accept={accept} style={{ display: 'none' }} disabled={uploading}
+            onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(f) }} />
+        </label>
+      )}
+    </div>
+  )
+}
+
 const BROADCAST_STATUS_CFG: Record<AionBroadcast['status'], { label: string; color: string; bg: string }> = {
   draft:     { label: 'Rascunho',   color: '#64748B', bg: '#F1F5F9' },
   scheduled: { label: 'Agendada',   color: '#1D4ED8', bg: '#DBEAFE' },
@@ -1521,6 +1687,22 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
   const [previewContactName, setPreviewContactName] = useState<string | null>(null)
   const [creating, setCreating]                 = useState(false)
   const [createError, setCreateError]           = useState('')
+
+  // Mídia de header (IMAGE/VIDEO/DOCUMENT) — mesma URL pra toda a campanha.
+  const [headerMediaUrl, setHeaderMediaUrl]         = useState<string | null>(null)
+  const [uploadingHeaderMedia, setUploadingHeaderMedia] = useState(false)
+
+  // Seleção manual de contatos — combina com o filtro de tags acima: os
+  // candidatos listados aqui já respeitam audienceTags, e o modo 'manual'
+  // deixa refinar pessoa por pessoa a partir desse resultado.
+  const [audienceMode, setAudienceMode]         = useState<'tags' | 'manual'>('tags')
+  const [manualCandidates, setManualCandidates] = useState<{ id: string; name: string | null; phone: string }[]>([])
+  const [manualSelectedIds, setManualSelectedIds] = useState<Set<string>>(new Set())
+  const [loadingManualCandidates, setLoadingManualCandidates] = useState(false)
+
+  // Agendamento — vazio = dispara assim que sair de 'draft' (mesmo padrão de
+  // hoje); preenchido = aion-broadcast-send só processa quando now() >= scheduled_at.
+  const [scheduledAt, setScheduledAt]           = useState('')
 
   const [detailBroadcast, setDetailBroadcast]   = useState<AionBroadcast | null>(null)
   const [recipients, setRecipients]             = useState<AionBroadcastRecipient[]>([])
@@ -1587,6 +1769,9 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
 
   function openCreateModal() {
     setCampaignName(''); setTemplateName(''); setTemplateVars({}); setAudienceTags([]); setCreateError('')
+    setHeaderMediaUrl(null); setUploadingHeaderMedia(false)
+    setAudienceMode('tags'); setManualCandidates([]); setManualSelectedIds(new Set())
+    setScheduledAt('')
     setShowCreateModal(true)
     loadTemplatesFromGraph()
   }
@@ -1628,6 +1813,51 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
     setAudienceTags(prev => prev.includes(tagName) ? prev.filter(t => t !== tagName) : [...prev, tagName])
   }
 
+  // ── Candidatos pra seleção manual — mesma filtragem por tag de cima,
+  // recarrega toda vez que a tag muda enquanto em modo manual. Limitado a 500
+  // (mesmo teto usado no detalhe de campanha) — audiências maiores devem
+  // refinar por tag antes de ligar o modo manual. ──
+  const MANUAL_CANDIDATES_LIMIT = 500
+  async function loadManualCandidates() {
+    setLoadingManualCandidates(true)
+    try {
+      const q = applyAudienceTagFilter(
+        supabase.from('aion_contacts').select('id, name, phone').eq('opted_out', false) as any
+      ).order('name', { ascending: true }).limit(MANUAL_CANDIDATES_LIMIT)
+      const { data } = await q
+      const list = (data as { id: string; name: string | null; phone: string }[]) ?? []
+      setManualCandidates(list)
+      setManualSelectedIds(new Set(list.map(c => c.id))) // começa com todos marcados
+    } finally {
+      setLoadingManualCandidates(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!showCreateModal || audienceMode !== 'manual') return
+    loadManualCandidates()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCreateModal, audienceMode, audienceTags])
+
+  function toggleManualContact(id: string) {
+    setManualSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleManualSelectAll() {
+    setManualSelectedIds(prev => prev.size === manualCandidates.length ? new Set() : new Set(manualCandidates.map(c => c.id)))
+  }
+
+  // Valores efetivos de audiência — no modo manual são derivados da seleção
+  // local (sem query), no modo tag vêm da contagem ao vivo já existente.
+  const effectiveAudienceCount = audienceMode === 'manual' ? manualSelectedIds.size : audienceCount
+  const effectivePreviewName = audienceMode === 'manual'
+    ? (manualCandidates.find(c => manualSelectedIds.has(c.id))?.name || null)
+    : previewContactName
+
   const selectedTemplate = templates.find(t => t.name === templateName)
   const templateVarNumbers = (() => {
     const bodyComp = selectedTemplate?.components?.find((c: any) => c.type === 'BODY')
@@ -1639,19 +1869,13 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
 
   // {{1}} = nome do contato (fallback "Cliente"), demais posições = valor fixo
   // definido na campanha — mesma ordem de templateVarNumbers pros dois lados
-  // (client aqui e Edge Function na hora de reconstruir o preview).
+  // (client aqui e Edge Function na hora de reconstruir o preview). Usa o
+  // mesmo buildSendComponents() dos outros 3 pontos de envio — antes esta
+  // function reimplementava a lógica na mão e não tratava header de mídia.
   function resolveRecipientComponents(tmpl: GraphTemplate, contactName: string | null): any[] {
-    if (templateVarNumbers.length === 0) {
-      return tmpl.components?.some((c: any) => c.type === 'BODY') ? [] : (tmpl.components ?? [])
-    }
-    return [{
-      type: 'body',
-      parameters: templateVarNumbers.map(n =>
-        n === '1'
-          ? { type: 'text', text: contactName?.trim() || FALLBACK_CONTACT_NAME }
-          : { type: 'text', text: templateVars[n] || '' }
-      ),
-    }]
+    const bodyVars = { ...templateVars }
+    if (templateVarNumbers.includes('1')) bodyVars['1'] = contactName?.trim() || FALLBACK_CONTACT_NAME
+    return buildSendComponents(tmpl, bodyVars, headerMediaUrl)
   }
 
   // ── Cria a campanha: aion_broadcasts (status='scheduled') + insert em lote
@@ -1662,6 +1886,12 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
     const tmpl = templates.find(t => t.name === templateName)
     if (!tmpl) { setCreateError('Selecione um template aprovado.'); return }
 
+    let scheduledAtIso: string | null = null
+    if (scheduledAt) {
+      scheduledAtIso = new Date(scheduledAt).toISOString()
+      if (new Date(scheduledAtIso).getTime() <= Date.now()) { setCreateError('A data/hora de agendamento precisa ser no futuro.'); return }
+    }
+
     setCreating(true)
     setCreateError('')
     try {
@@ -1670,18 +1900,31 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
 
       // Snapshot só de auditoria em aion_broadcasts — {{1}} fica sem valor de
       // propósito, é resolvido por destinatário (ver resolveRecipientComponents).
-      const campaignSnapshotComponents = templateVarNumbers.length > 0
-        ? [{ type: 'body', parameters: templateVarNumbers.map(n => ({ type: 'text', text: n === '1' ? '' : (templateVars[n] || '') })) }]
-        : (tmpl.components?.some((c: any) => c.type === 'BODY') ? [] : (tmpl.components ?? []))
-      const preview = buildBroadcastPreview(tmpl, { ...templateVars, ...(templateVarNumbers.includes('1') ? { '1': previewContactName?.trim() || FALLBACK_CONTACT_NAME } : {}) })
-
-      const audQuery = applyAudienceTagFilter(
-        supabase.from('aion_contacts').select('id, phone, name').eq('opted_out', false) as any
+      // Usa buildSendComponents (mesmo helper dos outros 3 pontos de envio) —
+      // valida aqui, antes de qualquer insert, se falta mídia de header.
+      const campaignSnapshotComponents = buildSendComponents(
+        tmpl,
+        { ...templateVars, ...(templateVarNumbers.includes('1') ? { '1': '' } : {}) },
+        headerMediaUrl
       )
-      const { data: audience, error: audErr } = await audQuery
-      if (audErr) throw audErr
-      const list = (audience as { id: string; phone: string; name: string | null }[]) ?? []
-      if (list.length === 0) { setCreateError('Nenhum contato na audiência selecionada.'); setCreating(false); return }
+      const preview = buildBroadcastPreview(tmpl, { ...templateVars, ...(templateVarNumbers.includes('1') ? { '1': effectivePreviewName?.trim() || FALLBACK_CONTACT_NAME } : {}) })
+
+      // Audiência: seleção manual (lista já em memória) ou filtro por tag
+      // (query ao vivo) — podem ser combinados, já que a lista manual é
+      // carregada a partir do mesmo filtro de tags (ver loadManualCandidates).
+      let list: { id: string; phone: string; name: string | null }[]
+      if (audienceMode === 'manual') {
+        list = manualCandidates.filter(c => manualSelectedIds.has(c.id))
+        if (list.length === 0) { setCreateError('Selecione ao menos um contato.'); setCreating(false); return }
+      } else {
+        const audQuery = applyAudienceTagFilter(
+          supabase.from('aion_contacts').select('id, phone, name').eq('opted_out', false) as any
+        )
+        const { data: audience, error: audErr } = await audQuery
+        if (audErr) throw audErr
+        list = (audience as { id: string; phone: string; name: string | null }[]) ?? []
+        if (list.length === 0) { setCreateError('Nenhum contato na audiência selecionada.'); setCreating(false); return }
+      }
 
       const { data: broadcast, error: bErr } = await supabase.from('aion_broadcasts').insert({
         name:                campaignName.trim(),
@@ -1690,8 +1933,10 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
         template_components: campaignSnapshotComponents,
         template_body_text:  templateBodyText,
         preview_text:        preview,
+        header_media_url:    headerMediaUrl,
         filter_tags:         audienceTags,
         status:              'scheduled',
+        scheduled_at:        scheduledAtIso,
         total_recipients:    list.length,
         created_by:          user?.id || null,
       }).select('id').single()
@@ -1777,7 +2022,12 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                   </div>
                   <span style={{ fontSize: 12, color: '#94A3B8' }}>{new Date(b.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                 </div>
-                <div style={{ fontSize: 12, color: '#64748B', marginBottom: 8 }}>Template: {b.template_name}</div>
+                <div style={{ fontSize: 12, color: '#64748B', marginBottom: 8 }}>
+                  Template: {b.template_name}
+                  {b.status === 'scheduled' && b.scheduled_at && (
+                    <> · agendada para {new Date(b.scheduled_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</>
+                  )}
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ flex: 1, height: 6, background: '#F1F5F9', borderRadius: 20, overflow: 'hidden' }}>
                     <div style={{ width: `${pct}%`, height: '100%', background: b.failed_count > 0 ? '#F59E0B' : '#00A896', transition: 'width 0.3s' }} />
@@ -1815,7 +2065,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                 </div>
               ) : (
                 <>
-                  <select value={templateName} onChange={e => { setTemplateName(e.target.value); setTemplateVars({}) }} style={inputStyle}>
+                  <select value={templateName} onChange={e => { setTemplateName(e.target.value); setTemplateVars({}); setHeaderMediaUrl(null) }} style={inputStyle}>
                     <option value="">Selecionar template...</option>
                     {templates.map(t => <option key={t.id || t.name} value={t.name}>{t.name}</option>)}
                   </select>
@@ -1827,6 +2077,29 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                 </>
               )}
             </div>
+
+            {selectedTemplate && (() => {
+              const headerFormat = getTemplateHeaderMediaFormat(selectedTemplate)
+              if (!headerFormat) return null
+              return (
+                <TemplateHeaderMediaField
+                  format={headerFormat}
+                  url={headerMediaUrl}
+                  uploading={uploadingHeaderMedia}
+                  onClear={() => setHeaderMediaUrl(null)}
+                  onUpload={async file => {
+                    setUploadingHeaderMedia(true)
+                    try {
+                      setHeaderMediaUrl(await uploadTemplateHeaderMedia(file))
+                    } catch (err: any) {
+                      setCreateError(err?.message || 'Erro no upload do arquivo.')
+                    } finally {
+                      setUploadingHeaderMedia(false)
+                    }
+                  }}
+                />
+              )
+            })()}
 
             {templateVarNumbers.length > 0 && (
               <div style={{ marginBottom: 14 }}>
@@ -1852,12 +2125,12 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                 <div style={{ padding: '10px 14px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, fontSize: 13, color: '#475569', whiteSpace: 'pre-wrap' }}>
                   {buildBroadcastPreview(selectedTemplate, {
                     ...templateVars,
-                    ...(templateVarNumbers.includes('1') ? { '1': previewContactName?.trim() || FALLBACK_CONTACT_NAME } : {}),
+                    ...(templateVarNumbers.includes('1') ? { '1': effectivePreviewName?.trim() || FALLBACK_CONTACT_NAME } : {}),
                   })}
                 </div>
                 {templateVarNumbers.includes('1') && (
                   <p style={{ fontSize: 11, color: '#94A3B8', margin: '6px 0 0' }}>
-                    Preview de exemplo usando "{previewContactName?.trim() || FALLBACK_CONTACT_NAME}" (1º contato da audiência) — {'{{1}}'} será substituído automaticamente pelo nome de cada pessoa no envio real.
+                    Preview de exemplo usando "{effectivePreviewName?.trim() || FALLBACK_CONTACT_NAME}" (1º contato da audiência) — {'{{1}}'} será substituído automaticamente pelo nome de cada pessoa no envio real.
                   </p>
                 )}
               </div>
@@ -1882,10 +2155,60 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
               )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: '#F0FDFA', borderRadius: 9, marginBottom: 18, border: '1px solid #CCFBF1' }}>
-              {audienceLoading && <div style={{ width: 12, height: 12, border: '2px solid #00A896', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', flexShrink: 0 }} />}
+            {/* Seleção manual — refina o resultado do filtro de tags acima */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input type="checkbox" checked={audienceMode === 'manual'}
+                  onChange={e => setAudienceMode(e.target.checked ? 'manual' : 'tags')}
+                  style={{ width: 15, height: 15, accentColor: '#00A896', cursor: 'pointer' }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A' }}>Selecionar manualmente a partir destes contatos</span>
+              </label>
+              {audienceMode === 'manual' && (
+                <div style={{ marginTop: 10, border: '1.5px solid #E2E8F0', borderRadius: 10, overflow: 'hidden' }}>
+                  {loadingManualCandidates ? (
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}>
+                      <Loader2 style={{ width: 18, height: 18, color: '#00A896', animation: 'spin 1s linear infinite' }} />
+                    </div>
+                  ) : manualCandidates.length === 0 ? (
+                    <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: '#94A3B8' }}>Nenhum contato elegível com esse filtro.</div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
+                        <input type="checkbox" checked={manualSelectedIds.size > 0 && manualSelectedIds.size === manualCandidates.length} onChange={toggleManualSelectAll}
+                          style={{ width: 14, height: 14, accentColor: '#00A896', cursor: 'pointer' }} />
+                        <span style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Selecionar todos ({manualCandidates.length}{manualCandidates.length === MANUAL_CANDIDATES_LIMIT ? '+' : ''})
+                        </span>
+                      </div>
+                      <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+                        {manualCandidates.map(c => (
+                          <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', borderBottom: '1px solid #F8FAFC', cursor: 'pointer' }}>
+                            <input type="checkbox" checked={manualSelectedIds.has(c.id)} onChange={() => toggleManualContact(c.id)}
+                              style={{ width: 14, height: 14, accentColor: '#00A896', cursor: 'pointer', flexShrink: 0 }} />
+                            <span style={{ fontSize: 12, color: '#1A2B4A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {c.name || formatContactPhone(c.phone)}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: '#F0FDFA', borderRadius: 9, marginBottom: 14, border: '1px solid #CCFBF1' }}>
+              {audienceMode === 'tags' && audienceLoading && <div style={{ width: 12, height: 12, border: '2px solid #00A896', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', flexShrink: 0 }} />}
               <p style={{ margin: 0, fontSize: 13, color: '#00A896', fontWeight: 600 }}>
-                {audienceLoading ? 'Calculando...' : `${audienceCount} contato(s) elegível(is) — opt-out excluído`}
+                {audienceMode === 'tags' && audienceLoading ? 'Calculando...' : `${effectiveAudienceCount} contato(s) elegível(is) — opt-out excluído`}
+              </p>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Agendar envio (opcional)</label>
+              <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} style={inputStyle} />
+              <p style={{ fontSize: 11, color: '#94A3B8', margin: '6px 0 0' }}>
+                Deixe em branco para disparar assim que a campanha for criada.
               </p>
             </div>
 
@@ -1898,10 +2221,11 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                 style={{ padding: '9px 18px', border: '1px solid #E2E8F0', borderRadius: 9, background: '#fff', color: '#64748B', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
                 Cancelar
               </button>
-              <button onClick={handleCreateBroadcast} disabled={creating || !campaignName.trim() || !templateName || audienceCount === 0}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700, opacity: (creating || !campaignName.trim() || !templateName || audienceCount === 0) ? 0.5 : 1 }}>
+              <button onClick={handleCreateBroadcast}
+                disabled={creating || !campaignName.trim() || !templateName || effectiveAudienceCount === 0 || uploadingHeaderMedia || (!!getTemplateHeaderMediaFormat(selectedTemplate) && !headerMediaUrl)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700, opacity: (creating || !campaignName.trim() || !templateName || effectiveAudienceCount === 0) ? 0.5 : 1 }}>
                 {creating ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> : <Send style={{ width: 14, height: 14 }} />}
-                {creating ? 'Criando...' : `Criar e enviar para ${audienceCount}`}
+                {creating ? 'Criando...' : scheduledAt ? `Agendar para ${effectiveAudienceCount}` : `Criar e enviar para ${effectiveAudienceCount}`}
               </button>
             </div>
           </div>

@@ -371,9 +371,20 @@ export default function GestorHome() {
       case 'hoje':
         start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString(); break
       case 'semana': {
-        const d = new Date(now)
-        d.setDate(d.getDate() - 7)
-        start = d.toISOString(); break
+        // Bug corrigido: antes fazia `d.setDate(d.getDate() - 7)` a partir do
+        // instante exato de "agora" (sem truncar hora/minuto/segundo) — um
+        // range rolante de "exatamente 7×24h atrás" em vez de "início da
+        // semana", inconsistente com todos os outros filtros (hoje/mês/ano),
+        // que truncam pro início do período em horário LOCAL antes de
+        // converter pra UTC. Isso fazia matrículas de início do dia, 7 dias
+        // atrás, ficarem de fora por horas (ex: matrícula às 09h de uma
+        // semana atrás não entrava se "agora" fosse 14h). Agora trunca pro
+        // início da semana (segunda-feira) à meia-noite local, mesmo padrão
+        // dos demais filtros.
+        const day = now.getDay() // 0=dom .. 6=sáb
+        const diffToMonday = day === 0 ? 6 : day - 1
+        start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMonday).toISOString()
+        break
       }
       case 'ano':
         start = new Date(now.getFullYear(), 0, 1).toISOString(); break
@@ -448,22 +459,30 @@ export default function GestorHome() {
       const users = (usersRes.data ?? []) as { id: string; full_name: string; role: string }[]
       const leadsData = (leadsRes.data ?? []) as { id: string; status: string; created_at: string }[]
 
+      // Coluna correta é `assigned_to` — a tabela `leads` não tem
+      // `responsible_id` (esse nome é da interface CrmLead, do CRM comercial
+      // interno da Áion, um schema diferente). A query antiga voltava 400 Bad
+      // Request (coluna inexistente); o supabase-js não lança exceção nesse
+      // caso (resolve com data:null, error:{...}), então o erro nunca
+      // aparecia — só o ranking de matrículas ficava sempre incompleto
+      // (perdia leads marcados 'enrolled' sem linha correspondente em
+      // enrollments) sem nenhum sinal visível do porquê.
       const { data: leadsForEnrollData } = await supabase
         .from('leads')
-        .select('id, responsible_id')
+        .select('id, assigned_to')
         .eq('institution_id', institutionId)
         .eq('status', 'enrolled')
         .gte('updated_at', start)
         .lte('updated_at', end)
-      const leadsForEnroll = (leadsForEnrollData ?? []) as { id: string; responsible_id: string | null }[]
+      const leadsForEnroll = (leadsForEnrollData ?? []) as { id: string; assigned_to: string | null }[]
 
       const enrollCountByUser: Record<string, number> = {}
       enrollments.forEach(e => {
         if (e.user_id) enrollCountByUser[e.user_id] = (enrollCountByUser[e.user_id] || 0) + 1
       })
       leadsForEnroll.forEach(l => {
-        if (l.responsible_id && !enrollments.find(e => e.user_id === l.responsible_id)) {
-          enrollCountByUser[l.responsible_id] = (enrollCountByUser[l.responsible_id] || 0) + 1
+        if (l.assigned_to && !enrollments.find(e => e.user_id === l.assigned_to)) {
+          enrollCountByUser[l.assigned_to] = (enrollCountByUser[l.assigned_to] || 0) + 1
         }
       })
 
