@@ -54,9 +54,16 @@ const RAIOX_CSS = `
 .rx-gate-anim-3 { animation-delay: 0.45s; }
 .rx-gate-anim-4 { animation-delay: 0.65s; }
 .rx-gate-anim-5 { animation-delay: 0.9s; }
+@keyframes rxCtaPulse { 0% { transform: scale(1); } 50% { transform: scale(1.03); } 100% { transform: scale(1); } }
+@keyframes rxCtaArrowNudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(4px); } }
+.rx-gate-btn-primary { animation: rxCtaPulse 2s ease-in-out infinite; transition: transform .2s ease, box-shadow .2s ease; }
+.rx-gate-btn-primary:hover { animation-play-state: paused; transform: translateY(-3px) scale(1.03); box-shadow: 0 14px 34px rgba(0,0,0,0.38); }
+.rx-cta-arrow { display: inline-flex; animation: rxCtaArrowNudge 1.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
   .rx-gate-hero { animation: none; }
   .rx-gate-anim { animation: none; opacity: 1; }
+  .rx-gate-btn-primary { animation: none; }
+  .rx-cta-arrow { animation: none; }
 }
 @media (max-width: 480px) {
   .rx-hero { padding: 32px 16px 104px !important; }
@@ -180,6 +187,15 @@ function WhatsAppIcon({ size = 18, color = '#fff' }: { size?: number; color?: st
   )
 }
 
+function ArrowRightIcon({ size = 18, color = VD }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <line x1="4" y1="12" x2="19" y2="12" />
+      <polyline points="13 6 19 12 13 18" />
+    </svg>
+  )
+}
+
 const AION_WHATSAPP_URL = 'https://wa.me/5583993444383?text=Ol%C3%A1!%20Vi%20o%20Raio-X%20Estrat%C3%A9gico%20da%20%C3%81ion%20Edu%20e%20quero%20saber%20mais.'
 
 function GateScreen({ onStart }: { onStart: () => void }) {
@@ -227,8 +243,9 @@ function GateScreen({ onStart }: { onStart: () => void }) {
           </div>
 
           <div className="rx-gate-anim rx-gate-anim-5" style={{ marginTop: 34, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-            <button type="button" className="btn-white rx-gate-btn" onClick={onStart} style={{ fontSize: 15, padding: '17px 44px' }}>
-              GERAR RAIO-X GRATUITO
+            <button type="button" className="btn-white rx-gate-btn rx-gate-btn-primary" onClick={onStart} style={{ fontSize: 15, padding: '17px 44px', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+              CLIQUE AQUI E GERE AGORA SEU RAIO-X
+              <span className="rx-cta-arrow"><ArrowRightIcon size={18} color={VD} /></span>
             </button>
             <a
               href={AION_WHATSAPP_URL}

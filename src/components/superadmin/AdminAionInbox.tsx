@@ -1697,6 +1697,19 @@ function isBroadcastEditable(b: AionBroadcast): boolean {
 function isBroadcastCancellable(b: AionBroadcast): boolean {
   return b.status === 'sending'
 }
+// 'scheduled' com data no passado — o cron deveria ter virado isso pra
+// 'sending', mas não virou (cron não rodou, ou está atrasado). Sem esse
+// predicado a campanha caía entre isBroadcastEditable (exige data futura) e
+// isBroadcastCancellable (exige status já 'sending'): nenhum botão aparecia.
+function isBroadcastStalled(b: AionBroadcast): boolean {
+  return b.status === 'scheduled' && !!b.scheduled_at && new Date(b.scheduled_at).getTime() <= Date.now()
+}
+// 'sending' ou 'scheduled' com pelo menos 1 destinatário ainda não
+// processado — usado pra decidir se o botão "Processar agora" aparece.
+function isBroadcastProcessableNow(b: AionBroadcast): boolean {
+  return (b.status === 'sending' || b.status === 'scheduled') &&
+    (b.total_recipients - b.sent_count - b.failed_count) > 0
+}
 
 interface AionBroadcastRecipient {
   id: string
@@ -1780,6 +1793,9 @@ function getBroadcastBadge(b: AionBroadcast): { label: string; color: string; bg
     const processed = b.sent_count + b.failed_count
     return { label: `Enviando... ${processed}/${b.total_recipients}`, color: '#D97706', bg: '#FEF3C7' }
   }
+  if (isBroadcastStalled(b)) {
+    return { label: 'Atrasada', color: '#B45309', bg: '#FEF3C7' }
+  }
   if (b.status === 'scheduled' && b.scheduled_at && new Date(b.scheduled_at).getTime() > Date.now()) {
     const when = new Date(b.scheduled_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
     return { label: `Agendada para ${when}`, color: '#1D4ED8', bg: '#DBEAFE' }
@@ -1836,10 +1852,20 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
   const [recipients, setRecipients]             = useState<AionBroadcastRecipient[]>([])
   const [loadingRecipients, setLoadingRecipients] = useState(false)
 
+  // IDs em andamento pros botões "Enviar agora" / "Processar agora" (loading
+  // por campanha, já que pode haver mais de um card na lista).
+  const [sendingNowIds, setSendingNowIds]       = useState<Set<string>>(new Set())
+  const [processingNowIds, setProcessingNowIds] = useState<Set<string>>(new Set())
+
   // Tabela de preços (whatsapp_pricing) — carregada uma vez, usada só pra
   // mostrar uma estimativa de custo antes do disparo (total_recipients ×
   // preço da categoria do template, país BR).
   const [pricing, setPricing] = useState<{ category: string; price_usd: number }[]>([])
+
+  // Cotação USD/BRL — buscada de novo toda vez que o modal de criação abre
+  // (não uma vez só), pra refletir a cotação atual no momento da decisão.
+  const [usdToBrl, setUsdToBrl]           = useState<number | null>(null)
+  const [loadingExchangeRate, setLoadingExchangeRate] = useState(false)
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '9px 12px', border: '1.5px solid #E2E8F0',
@@ -1885,6 +1911,30 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
   useEffect(() => { loadBroadcasts() }, [])
   useEffect(() => { loadTags() }, [aionPlatformId])
   useEffect(() => { loadPricing() }, [])
+
+  // Cotação USD/BRL — busca de novo toda vez que o modal abre (create ou
+  // edit, os dois setam showCreateModal=true), pra refletir o câmbio atual
+  // no momento da decisão. Falha da API não quebra a tela — só volta a
+  // mostrar a estimativa em USD sozinho (ver render do custo estimado).
+  useEffect(() => {
+    if (!showCreateModal) return
+    let cancelled = false
+    setLoadingExchangeRate(true)
+    setUsdToBrl(null)
+    fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL')
+      .then(res => { if (!res.ok) throw new Error(`status ${res.status}`); return res.json() })
+      .then(data => {
+        if (cancelled) return
+        const bid = parseFloat(data?.USDBRL?.bid)
+        if (!isNaN(bid) && bid > 0) setUsdToBrl(bid)
+      })
+      .catch(e => {
+        console.error('[broadcast] erro ao buscar cotação USD/BRL:', e)
+        if (!cancelled) setUsdToBrl(null)
+      })
+      .finally(() => { if (!cancelled) setLoadingExchangeRate(false) })
+    return () => { cancelled = true }
+  }, [showCreateModal])
 
   // Enquanto houver campanha em andamento, atualiza o progresso a cada 5s —
   // sent_count/failed_count avançam em background pela Edge Function/cron.
@@ -1992,6 +2042,58 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
     await supabase.from('aion_broadcast_recipients').update({ status: 'skipped' }).eq('broadcast_id', b.id).eq('status', 'pending')
     await loadBroadcasts()
     if (detailBroadcast?.id === b.id) setDetailBroadcast(prev => prev ? { ...prev, status: 'cancelled' } : prev)
+  }
+
+  // Converte uma campanha 'scheduled' (futura ou atrasada/"stalled") pra
+  // disparo imediato — só muda status/scheduled_at, sinalizando "pronta pro
+  // próximo ciclo do cron". Se o cron não estiver rodando, isso sozinho não
+  // resolve nada — complementar com "Processar agora" (processBroadcastNow).
+  async function sendBroadcastNow(b: AionBroadcast) {
+    if (b.status !== 'scheduled') return
+    if (!window.confirm(`Disparar a campanha "${b.name}" agora, sem esperar a data agendada?`)) return
+    setSendingNowIds(prev => new Set(prev).add(b.id))
+    try {
+      const { error } = await supabase.from('aion_broadcasts')
+        .update({ status: 'sending', scheduled_at: null, started_at: new Date().toISOString() })
+        .eq('id', b.id)
+      if (error) throw error
+      await loadBroadcasts()
+      if (detailBroadcast?.id === b.id) {
+        setDetailBroadcast(prev => prev ? { ...prev, status: 'sending', scheduled_at: null } : prev)
+      }
+    } catch (e: any) {
+      alert(e?.message || 'Erro ao disparar a campanha agora.')
+    } finally {
+      setSendingNowIds(prev => { const next = new Set(prev); next.delete(b.id); return next })
+    }
+  }
+
+  // Chama a Edge Function diretamente (sem esperar o cron) — processa um
+  // lote na hora. Rede de segurança: a migration que agenda o cron.schedule()
+  // da aion-broadcast-send exige um passo manual único no SQL Editor (ver
+  // 20260806000200_aion_broadcast_send_cron.sql) que pode nunca ter rodado —
+  // esse botão dá um jeito de disparar o processamento sem depender disso.
+  async function processBroadcastNow(b: AionBroadcast) {
+    setProcessingNowIds(prev => new Set(prev).add(b.id))
+    try {
+      const { data, error } = await supabase.functions.invoke('aion-broadcast-send', { body: {} })
+      if (error) throw error
+      await loadBroadcasts()
+      if (detailBroadcast?.id === b.id) {
+        const { data: fresh } = await supabase.from('aion_broadcasts').select('*').eq('id', b.id).maybeSingle()
+        if (fresh) await openDetail(fresh as AionBroadcast)
+      }
+      const result = data as { processed?: number; sent?: number; failed?: number; rate_limited?: boolean } | null
+      if (result?.rate_limited) {
+        alert('Limite de mensageria da Meta atingido nas últimas 24h — tente novamente em alguns minutos.')
+      } else if (result && (result.processed ?? 0) === 0) {
+        alert('Nenhum destinatário pendente foi encontrado pra processar agora — a campanha pode já estar completa, ou aguardando uma data futura de agendamento.')
+      }
+    } catch (e: any) {
+      alert(e?.message || 'Erro ao chamar a Edge Function de envio.')
+    } finally {
+      setProcessingNowIds(prev => { const next = new Set(prev); next.delete(b.id); return next })
+    }
   }
 
   // Busca contatos elegíveis (opted_out=false) batendo com QUALQUER uma das
@@ -2208,19 +2310,30 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
         created_by:          user?.id || null,
       }).select('id').single()
       if (bErr) throw bErr
+      const broadcastId = (broadcast as { id: string }).id
 
       // Insert em lote, em chunks — evita payload único gigante pra audiências
       // grandes. template_components é resolvido individualmente por contato.
-      const CHUNK = 500
-      for (let i = 0; i < list.length; i += CHUNK) {
-        const chunk = list.slice(i, i + CHUNK).map(c => ({
-          broadcast_id:        (broadcast as { id: string }).id,
-          contact_id:          c.id,
-          remote_jid:          c.phone,
-          template_components: resolveRecipientComponents(tmpl, c.name),
-        }))
-        const { error: recErr } = await supabase.from('aion_broadcast_recipients').insert(chunk)
-        if (recErr) throw recErr
+      try {
+        const CHUNK = 500
+        for (let i = 0; i < list.length; i += CHUNK) {
+          const chunk = list.slice(i, i + CHUNK).map(c => ({
+            broadcast_id:        broadcastId,
+            contact_id:          c.id,
+            remote_jid:          c.phone,
+            template_components: resolveRecipientComponents(tmpl, c.name),
+          }))
+          const { error: recErr } = await supabase.from('aion_broadcast_recipients').insert(chunk)
+          if (recErr) throw recErr
+        }
+      } catch (recipientsErr) {
+        // Rollback — sem isso a linha de aion_broadcasts já inserida acima
+        // ficava órfã: status 'sending'/'scheduled' com total_recipients > 0
+        // mas zero recipients reais, travada pra sempre (claim_aion_broadcast_
+        // recipients nunca acha nada pra reivindicar). Achado da investigação
+        // de Transmissão — "campanha fantasma" sem erro visível anexado a ela.
+        await supabase.from('aion_broadcasts').delete().eq('id', broadcastId)
+        throw recipientsErr
       }
 
       setShowCreateModal(false)
@@ -2280,8 +2393,12 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
             const cfg = getBroadcastBadge(b)
             const processed = b.sent_count + b.failed_count
             const pct = b.total_recipients > 0 ? Math.round((processed / b.total_recipients) * 100) : 0
-            const editable    = isBroadcastEditable(b)
-            const cancellable = isBroadcastCancellable(b)
+            const editable      = isBroadcastEditable(b)
+            const cancellable   = isBroadcastCancellable(b)
+            const stalled       = isBroadcastStalled(b)
+            const processableNow = isBroadcastProcessableNow(b)
+            const sendingNow    = sendingNowIds.has(b.id)
+            const processingNow = processingNowIds.has(b.id)
             return (
               <div key={b.id} onClick={() => openDetail(b)}
                 style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '16px 20px', cursor: 'pointer' }}>
@@ -2301,8 +2418,8 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                     {processed}/{b.total_recipients} {b.failed_count > 0 ? `(${b.failed_count} falha${b.failed_count === 1 ? '' : 's'})` : ''}
                   </span>
                 </div>
-                {(editable || cancellable) && (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }} onClick={e => e.stopPropagation()}>
+                {(editable || cancellable || stalled) && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
                     {editable && (
                       <>
                         <button onClick={() => openEditModal(b)}
@@ -2319,6 +2436,19 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                       <button onClick={() => cancelBroadcast(b)}
                         style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, color: '#DC2626', background: '#FEF2F2', border: 'none', borderRadius: 7, cursor: 'pointer' }}>
                         Cancelar envio
+                      </button>
+                    )}
+                    {b.status === 'scheduled' && (
+                      <button onClick={() => sendBroadcastNow(b)} disabled={sendingNow}
+                        style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, color: '#065F46', background: '#D1FAE5', border: 'none', borderRadius: 7, cursor: sendingNow ? 'not-allowed' : 'pointer', opacity: sendingNow ? 0.6 : 1 }}>
+                        {sendingNow ? 'Disparando...' : 'Enviar agora'}
+                      </button>
+                    )}
+                    {processableNow && (
+                      <button onClick={() => processBroadcastNow(b)} disabled={processingNow}
+                        style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, color: '#64748B', background: '#F1F5F9', border: 'none', borderRadius: 7, cursor: processingNow ? 'not-allowed' : 'pointer', opacity: processingNow ? 0.6 : 1 }}
+                        title="Chama a Edge Function de envio direto, sem esperar o cron">
+                        {processingNow ? 'Processando...' : 'Processar agora'}
                       </button>
                     )}
                   </div>
@@ -2504,7 +2634,10 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
               <div style={{ marginBottom: 14, padding: '9px 12px', background: '#FFFBEB', borderRadius: 9, border: '1px solid #FDE68A' }}>
                 {estimatedCostUsd !== null ? (
                   <p style={{ margin: 0, fontSize: 12, color: '#92400E' }}>
-                    ≈ <strong>US$ {estimatedCostUsd.toFixed(2)}</strong> estimado para {effectiveAudienceCount} destinatário{effectiveAudienceCount === 1 ? '' : 's'} — categoria {selectedTemplate.category || '—'}
+                    ≈ <strong>US$ {estimatedCostUsd.toFixed(2)}</strong>
+                    {usdToBrl !== null && <> (≈ <strong>R$ {(estimatedCostUsd * usdToBrl).toFixed(2)}</strong>)</>}
+                    {usdToBrl === null && loadingExchangeRate && <span style={{ color: '#B45309' }}> (buscando cotação R$...)</span>}
+                    {' '}estimado para {effectiveAudienceCount} destinatário{effectiveAudienceCount === 1 ? '' : 's'} — categoria {selectedTemplate.category || '—'}
                   </p>
                 ) : (
                   <p style={{ margin: 0, fontSize: 12, color: '#92400E' }}>
@@ -2567,8 +2700,8 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
             <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 12 }}>
               Template: {detailBroadcast.template_name} · {detailBroadcast.sent_count} enviados, {detailBroadcast.failed_count} falhas, de {detailBroadcast.total_recipients}
             </div>
-            {(isBroadcastEditable(detailBroadcast) || isBroadcastCancellable(detailBroadcast)) && (
-              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            {(isBroadcastEditable(detailBroadcast) || isBroadcastCancellable(detailBroadcast) || isBroadcastStalled(detailBroadcast)) && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
                 {isBroadcastEditable(detailBroadcast) && (
                   <>
                     <button onClick={() => { const b = detailBroadcast; setDetailBroadcast(null); openEditModal(b) }}
@@ -2585,6 +2718,19 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                   <button onClick={() => cancelBroadcast(detailBroadcast)}
                     style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, color: '#DC2626', background: '#FEF2F2', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
                     Cancelar envio
+                  </button>
+                )}
+                {detailBroadcast.status === 'scheduled' && (
+                  <button onClick={() => sendBroadcastNow(detailBroadcast)} disabled={sendingNowIds.has(detailBroadcast.id)}
+                    style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, color: '#065F46', background: '#D1FAE5', border: 'none', borderRadius: 8, cursor: sendingNowIds.has(detailBroadcast.id) ? 'not-allowed' : 'pointer', opacity: sendingNowIds.has(detailBroadcast.id) ? 0.6 : 1 }}>
+                    {sendingNowIds.has(detailBroadcast.id) ? 'Disparando...' : 'Enviar agora'}
+                  </button>
+                )}
+                {isBroadcastProcessableNow(detailBroadcast) && (
+                  <button onClick={() => processBroadcastNow(detailBroadcast)} disabled={processingNowIds.has(detailBroadcast.id)}
+                    style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, color: '#64748B', background: '#F1F5F9', border: 'none', borderRadius: 8, cursor: processingNowIds.has(detailBroadcast.id) ? 'not-allowed' : 'pointer', opacity: processingNowIds.has(detailBroadcast.id) ? 0.6 : 1 }}
+                    title="Chama a Edge Function de envio direto, sem esperar o cron">
+                    {processingNowIds.has(detailBroadcast.id) ? 'Processando...' : 'Processar agora'}
                   </button>
                 )}
               </div>

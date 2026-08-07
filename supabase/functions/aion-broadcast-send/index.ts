@@ -118,6 +118,14 @@ serve(async (req) => {
     }
 
     const activeBroadcasts = (broadcasts ?? []) as Broadcast[]
+
+    // Log incondicional, mesmo com 0 resultados — sem isso não dava pra
+    // diferenciar "a function rodou e não achou nada pra fazer" de "a
+    // function nunca chegou a ser chamada" (ex: cron.schedule() nunca
+    // aplicado no banco — ver 20260806000200_aion_broadcast_send_cron.sql,
+    // que exige um passo manual único no SQL Editor).
+    console.log(`[aion-broadcast-send] Encontradas ${activeBroadcasts.length} campanhas ativas`)
+
     if (activeBroadcasts.length === 0) {
       return new Response(JSON.stringify({ processed: 0, sent: 0, failed: 0, rate_limited: false }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
