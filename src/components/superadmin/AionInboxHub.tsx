@@ -350,12 +350,32 @@ function TemplateHeaderMediaField({
   )
 }
 
+// Reconhece tanto o rótulo em português capitalizado (formato legado, usado
+// em api/whatsapp/send.ts) quanto o `[${msgType}]` em inglês minúsculo
+// gravado por processAionMessage (api/whatsapp/webhook.ts) — generalizar
+// aqui é mais seguro que forçar todo write-path a usar o mesmo formato de
+// string, e cobre qualquer outro lugar que já dependa do formato atual.
+const MSG_TYPE_PREVIEW: Record<string, { icon: string; text: string }> = {
+  image:       { icon: '🖼️', text: 'Imagem' },
+  imagem:      { icon: '🖼️', text: 'Imagem' },
+  audio:       { icon: '🎵', text: 'Áudio' },
+  'áudio':     { icon: '🎵', text: 'Áudio' },
+  ptt:         { icon: '🎵', text: 'Áudio' },
+  video:       { icon: '🎬', text: 'Vídeo' },
+  'vídeo':     { icon: '🎬', text: 'Vídeo' },
+  document:    { icon: '📄', text: 'Documento' },
+  documento:   { icon: '📄', text: 'Documento' },
+  sticker:     { icon: '🎭', text: 'Figurinha' },
+  figurinha:   { icon: '🎭', text: 'Figurinha' },
+  interactive: { icon: '🔘', text: 'Menu interativo' },
+}
+
 function getLastMsgPreview(lastMessage: string): { icon?: string; text: string } {
-  if (lastMessage === '[Imagem]')    return { icon: '🖼️', text: 'Imagem' }
-  if (lastMessage === '[Áudio]')     return { icon: '🎵', text: 'Áudio' }
-  if (lastMessage === '[Vídeo]')     return { icon: '🎬', text: 'Vídeo' }
-  if (lastMessage === '[Documento]') return { icon: '📄', text: 'Documento' }
-  if (lastMessage === '[Figurinha]') return { icon: '🎭', text: 'Figurinha' }
+  const match = /^\[(.+)\]$/.exec((lastMessage || '').trim())
+  if (match) {
+    const mapped = MSG_TYPE_PREVIEW[match[1].toLowerCase()]
+    if (mapped) return mapped
+  }
   return { text: lastMessage }
 }
 

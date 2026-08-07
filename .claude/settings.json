@@ -96,7 +96,10 @@
       "Bash(node _tmp_check_enrollments.mjs)",
       "Bash(node _tmp_check_lead.mjs)",
       "Bash(node _tmp_check_lead2.mjs)",
-      "Bash(tee /tmp/tsc_out.txt)"
+      "Bash(tee /tmp/tsc_out.txt)",
+      "WebFetch(domain:developers.facebook.com)",
+      "WebFetch(domain:whautomate.com)",
+      "Bash(tee /tmp/tsc_out2.txt)"
     ],
     "additionalDirectories": [
       "\\tmp"

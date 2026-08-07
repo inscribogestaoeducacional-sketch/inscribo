@@ -996,6 +996,12 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
   const [filterTag, setFilterTag] = useState('all')
   const [availTags, setAvailTags] = useState<WaTag[]>([])
 
+  // Paginação real (mesmo padrão de ContactsModule.tsx) — antes era um
+  // .limit(50) fixo, sem forma de ver o resto da lista.
+  const [offset, setOffset]           = useState(0)
+  const [hasMore, setHasMore]         = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+
   const [showAddModal, setShowAddModal]       = useState(false)
   const [addForm, setAddForm]                 = useState({ phone: '', name: '', email: '', notes: '' })
   const [addSaving, setAddSaving]              = useState(false)
@@ -1013,6 +1019,11 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
 
   // Seleção múltipla + tag em massa
   const [selectedIds, setSelectedIds]         = useState<Set<string>>(new Set())
+  // true quando a seleção veio de "selecionar todos os X do filtro" (busca só
+  // de IDs, sem limit) — diferencia da seleção "só os carregados na tela",
+  // pra rotular certo na barra de ação.
+  const [selectedAllFilter, setSelectedAllFilter] = useState(false)
+  const [selectingAllFilter, setSelectingAllFilter] = useState(false)
   const [showBulkTagModal, setShowBulkTagModal] = useState(false)
   const [bulkTagNames, setBulkTagNames]       = useState<string[]>([])
   const [bulkTagSaving, setBulkTagSaving]     = useState(false)
@@ -1033,26 +1044,72 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
     setAvailTags((data as WaTag[]) ?? [])
   }
 
-  async function load() {
-    setLoading(true)
-    let query = supabase.from('aion_contacts').select('*', { count: 'exact' }).order('created_at', { ascending: false }).limit(CONTACTS_PAGE_SIZE)
+  // Aplica busca + filtro de tag atuais a uma query base — reaproveitado por
+  // load() (paginado) e selectAllMatchingFilter() (só IDs, sem limit).
+  function applyContactFilters<T extends { or: (s: string) => any; filter: (c: string, o: string, v: string) => any }>(query: T): T {
+    let q: any = query
     if (search.trim().length >= 2) {
-      query = query.or(`name.ilike.%${search.trim()}%,phone.ilike.%${search.trim()}%`)
+      q = q.or(`name.ilike.%${search.trim()}%,phone.ilike.%${search.trim()}%`)
     }
     if (filterTag !== 'all') {
-      query = (query as any).filter('tags', 'cs', `["${filterTag}"]`)
+      q = q.filter('tags', 'cs', `["${filterTag}"]`)
     }
+    return q
+  }
+
+  async function load(params: { reset?: boolean; from?: number } = {}) {
+    const { reset = true, from: fromArg } = params
+    const from = fromArg ?? (reset ? 0 : offset)
+    const to   = from + CONTACTS_PAGE_SIZE - 1
+
+    if (reset) { setLoading(true); setContacts([]) }
+    else         setLoadingMore(true)
+
+    const query = applyContactFilters(
+      supabase.from('aion_contacts').select('*', { count: 'exact' }).order('created_at', { ascending: false }).range(from, to) as any
+    )
     const { data, error, count } = await query
-    if (error) { console.error('aion_contacts load error:', error); setLoading(false); return }
-    setContacts(((data as any[]) ?? []).map(c => ({ ...c, tags: c.tags ?? [] })) as AionContact[])
-    setTotal(count || 0)
-    setLoading(false)
+    if (error) {
+      console.error('aion_contacts load error:', error)
+      reset ? setLoading(false) : setLoadingMore(false)
+      return
+    }
+    const newList   = ((data as any[]) ?? []).map(c => ({ ...c, tags: c.tags ?? [] })) as AionContact[]
+    const newOffset = from + newList.length
+    const totalCount = count || 0
+
+    if (reset) setContacts(newList)
+    else       setContacts(prev => [...prev, ...newList])
+    setOffset(newOffset)
+    setTotal(totalCount)
+    setHasMore(newOffset < totalCount)
+    reset ? setLoading(false) : setLoadingMore(false)
+  }
+
+  function handleLoadMore() {
+    if (loadingMore || !hasMore) return
+    load({ reset: false, from: offset })
+  }
+
+  // Busca só os IDs que batem com o filtro atual, sem limit — diferente de
+  // "selecionar todos" (que só marca os já carregados na tela).
+  async function selectAllMatchingFilter() {
+    setSelectingAllFilter(true)
+    try {
+      const query = applyContactFilters(supabase.from('aion_contacts').select('id') as any)
+      const { data, error } = await query
+      if (error) { console.error('selectAllMatchingFilter error:', error); return }
+      setSelectedIds(new Set(((data as any[]) ?? []).map(c => c.id)))
+      setSelectedAllFilter(true)
+    } finally {
+      setSelectingAllFilter(false)
+    }
   }
 
   useEffect(() => { loadTags() }, [aionPlatformId])
-  useEffect(() => { load() }, [filterTag])
+  useEffect(() => { load({ reset: true }) }, [filterTag])
   useEffect(() => {
-    const t = setTimeout(() => load(), 350)
+    const t = setTimeout(() => load({ reset: true }), 350)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search])
@@ -1215,6 +1272,7 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
 
   // ── Seleção múltipla + tag em massa ───────────────────────
   function toggleSelect(id: string) {
+    setSelectedAllFilter(false)
     setSelectedIds(prev => {
       const next = new Set(prev)
       next.has(id) ? next.delete(id) : next.add(id)
@@ -1223,6 +1281,7 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
   }
 
   function toggleSelectAll() {
+    setSelectedAllFilter(false)
     setSelectedIds(prev => prev.size === contacts.length ? new Set() : new Set(contacts.map(c => c.id)))
   }
 
@@ -1235,10 +1294,21 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
     setBulkTagSaving(true)
     try {
       const ids = Array.from(selectedIds)
+      // "Selecionar todos do filtro" pode incluir IDs que não estão
+      // carregados em `contacts` — busca as tags atuais de todos os
+      // selecionados direto do banco (em lotes) em vez de depender só do
+      // que já está na tela, senão contato não-carregado perderia a tag.
+      const tagsById = new Map<string, string[]>()
+      const CHUNK = 200
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const slice = ids.slice(i, i + CHUNK)
+        const { data } = await supabase.from('aion_contacts').select('id, tags').in('id', slice)
+        for (const row of (data as { id: string; tags: string[] | null }[]) ?? []) {
+          tagsById.set(row.id, row.tags ?? [])
+        }
+      }
       for (const id of ids) {
-        const contact = contacts.find(c => c.id === id)
-        if (!contact) continue
-        const merged = Array.from(new Set([...contact.tags, ...bulkTagNames]))
+        const merged = Array.from(new Set([...(tagsById.get(id) ?? []), ...bulkTagNames]))
         await supabase.from('aion_contacts').update({ tags: merged }).eq('id', id)
       }
       setContacts(prev => prev.map(c =>
@@ -1247,6 +1317,7 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
       setShowBulkTagModal(false)
       setBulkTagNames([])
       setSelectedIds(new Set())
+      setSelectedAllFilter(false)
     } finally {
       setBulkTagSaving(false)
     }
@@ -1287,9 +1358,12 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
       {/* Barra de ação em massa — só aparece com seleção ativa */}
       {selectedIds.size > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 16px', background: '#F0FDFA', border: '1.5px solid #99F6E4', borderRadius: 10, marginBottom: 12 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#0d9488' }}>{selectedIds.size} contato{selectedIds.size === 1 ? '' : 's'} selecionado{selectedIds.size === 1 ? '' : 's'}</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#0d9488' }}>
+            {selectedIds.size} contato{selectedIds.size === 1 ? '' : 's'} selecionado{selectedIds.size === 1 ? '' : 's'}
+            {selectedAllFilter ? ' (todos do filtro)' : ''}
+          </span>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setSelectedIds(new Set())}
+            <button onClick={() => { setSelectedIds(new Set()); setSelectedAllFilter(false) }}
               style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, color: '#64748B', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, cursor: 'pointer' }}>
               Limpar seleção
             </button>
@@ -1316,7 +1390,13 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '9px 18px', borderBottom: '1px solid #F1F5F9', background: '#F8FAFC' }}>
               <input type="checkbox" checked={selectedIds.size > 0 && selectedIds.size === contacts.length} onChange={toggleSelectAll}
                 style={{ width: 15, height: 15, accentColor: '#00A896', cursor: 'pointer', flexShrink: 0 }} />
-              <span style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Selecionar todos</span>
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Selecionar carregados ({contacts.length})</span>
+              {total > contacts.length && (
+                <button onClick={selectAllMatchingFilter} disabled={selectingAllFilter}
+                  style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#00A896', fontSize: 11, fontWeight: 700, cursor: selectingAllFilter ? 'not-allowed' : 'pointer', padding: 0 }}>
+                  {selectingAllFilter ? 'Buscando...' : `Selecionar todos os ${total} contatos deste filtro`}
+                </button>
+              )}
             </div>
             {contacts.map(c => (
               <div key={c.id} onClick={() => setEditingContact(c)}
@@ -1359,8 +1439,14 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
           </div>
         )}
         {!loading && contacts.length > 0 && (
-          <div style={{ padding: '12px 18px', borderTop: '1px solid #F1F5F9', fontSize: 12, color: '#94A3B8' }}>
-            Mostrando {contacts.length} de {total} {total > CONTACTS_PAGE_SIZE ? '— refine a busca para ver mais' : ''}
+          <div style={{ padding: '12px 18px', borderTop: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <span style={{ fontSize: 12, color: '#94A3B8' }}>Mostrando {contacts.length} de {total}</span>
+            {hasMore && (
+              <button onClick={handleLoadMore} disabled={loadingMore}
+                style={{ padding: '7px 16px', fontSize: 12, fontWeight: 600, color: '#64748B', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, cursor: loadingMore ? 'not-allowed' : 'pointer', opacity: loadingMore ? 0.6 : 1 }}>
+                {loadingMore ? 'Carregando...' : `Carregar mais ${Math.min(CONTACTS_PAGE_SIZE, total - contacts.length)}`}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -1607,7 +1693,9 @@ interface AionBroadcastRecipient {
   aion_contacts: { name: string | null } | null
 }
 
-interface GraphTemplate { id?: string; name: string; language: string; status?: string; components?: any[] }
+// category vem pronto da Graph API (MARKETING/UTILITY/AUTHENTICATION) e antes
+// era ignorado — usado agora pra estimar custo (ver whatsapp_pricing).
+interface GraphTemplate { id?: string; name: string; language: string; status?: string; category?: string; components?: any[] }
 
 // Mesma lógica de buildTemplatePreview() em AionInboxHub.tsx (linha 299) —
 // substitui {{n}} pelo valor preenchido, pra gravar em aion_broadcasts.preview_text
@@ -1699,6 +1787,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
   const [manualCandidates, setManualCandidates] = useState<{ id: string; name: string | null; phone: string }[]>([])
   const [manualSelectedIds, setManualSelectedIds] = useState<Set<string>>(new Set())
   const [loadingManualCandidates, setLoadingManualCandidates] = useState(false)
+  const [manualSearch, setManualSearch]         = useState('')
 
   // Agendamento — vazio = dispara assim que sair de 'draft' (mesmo padrão de
   // hoje); preenchido = aion-broadcast-send só processa quando now() >= scheduled_at.
@@ -1707,6 +1796,11 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
   const [detailBroadcast, setDetailBroadcast]   = useState<AionBroadcast | null>(null)
   const [recipients, setRecipients]             = useState<AionBroadcastRecipient[]>([])
   const [loadingRecipients, setLoadingRecipients] = useState(false)
+
+  // Tabela de preços (whatsapp_pricing) — carregada uma vez, usada só pra
+  // mostrar uma estimativa de custo antes do disparo (total_recipients ×
+  // preço da categoria do template, país BR).
+  const [pricing, setPricing] = useState<{ category: string; price_usd: number }[]>([])
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '9px 12px', border: '1.5px solid #E2E8F0',
@@ -1730,8 +1824,28 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
     setAvailTags((data as WaTag[]) ?? [])
   }
 
+  // Preço vigente por categoria pra BR — pega a linha mais recente
+  // (effective_from <= hoje) por categoria; se a Meta reajustar, uma linha
+  // nova é inserida em vez de alterar a existente, então "mais recente" já
+  // resolve isso sem lógica extra aqui.
+  async function loadPricing() {
+    const { data } = await supabase
+      .from('whatsapp_pricing')
+      .select('category, price_usd, effective_from')
+      .eq('country_code', 'BR')
+      .lte('effective_from', new Date().toISOString().slice(0, 10))
+      .order('effective_from', { ascending: false })
+    const rows = (data as { category: string; price_usd: number; effective_from: string }[]) ?? []
+    const latestByCategory = new Map<string, number>()
+    for (const r of rows) {
+      if (!latestByCategory.has(r.category)) latestByCategory.set(r.category, r.price_usd)
+    }
+    setPricing(Array.from(latestByCategory.entries()).map(([category, price_usd]) => ({ category, price_usd })))
+  }
+
   useEffect(() => { loadBroadcasts() }, [])
   useEffect(() => { loadTags() }, [aionPlatformId])
+  useEffect(() => { loadPricing() }, [])
 
   // Enquanto houver campanha em andamento, atualiza o progresso a cada 5s —
   // sent_count/failed_count avançam em background pela Edge Function/cron.
@@ -1770,18 +1884,40 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
   function openCreateModal() {
     setCampaignName(''); setTemplateName(''); setTemplateVars({}); setAudienceTags([]); setCreateError('')
     setHeaderMediaUrl(null); setUploadingHeaderMedia(false)
-    setAudienceMode('tags'); setManualCandidates([]); setManualSelectedIds(new Set())
+    setAudienceMode('tags'); setManualCandidates([]); setManualSelectedIds(new Set()); setManualSearch('')
     setScheduledAt('')
     setShowCreateModal(true)
     loadTemplatesFromGraph()
   }
 
-  // Aplica o mesmo filtro de audiência (OR de etiquetas) a uma query já
-  // filtrada por opted_out=false — usado pra contagem, preview e criação, um
-  // único lugar pra manter os três em sincronia.
-  function applyAudienceTagFilter<T extends { or: (s: string) => any }>(query: T): T {
-    if (audienceTags.length === 0) return query
-    return query.or(audienceTags.map(t => `tags.cs.["${t}"]`).join(','))
+  // Busca contatos elegíveis (opted_out=false) batendo com QUALQUER uma das
+  // tags selecionadas — N queries (uma por tag), cada uma usando
+  // .filter('tags','cs', '["tag"]') (o mesmo padrão que já funciona em
+  // ContactsTab.load()), com merge/dedupe por id no client.
+  //
+  // Antes disso montava um único .or('tags.cs.["a"],tags.cs.["b"]') manual:
+  // o operador `cs` de jsonb dentro de uma expressão `or=(...)` aninhada não
+  // é reinterpretado do mesmo jeito que num parâmetro top-level — a condição
+  // nunca dava erro, só nunca casava com nenhuma linha (filtro "não funciona").
+  async function fetchAudienceContacts(selectStr: string): Promise<any[]> {
+    const base = () => supabase.from('aion_contacts').select(selectStr).eq('opted_out', false)
+    if (audienceTags.length === 0) {
+      const { data, error } = await base()
+      if (error) throw error
+      return data ?? []
+    }
+    const perTag = await Promise.all(
+      audienceTags.map(async tag => {
+        const { data, error } = await (base() as any).filter('tags', 'cs', `["${tag}"]`)
+        if (error) throw error
+        return (data as any[]) ?? []
+      })
+    )
+    const merged = new Map<string, any>()
+    for (const rows of perTag) {
+      for (const row of rows) merged.set(row.id, row)
+    }
+    return Array.from(merged.values())
   }
 
   // ── Contagem de audiência em tempo real (exclui opted_out) + nome do 1º
@@ -1791,16 +1927,14 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
     const t = setTimeout(async () => {
       setAudienceLoading(true)
       try {
-        const countQuery = applyAudienceTagFilter(
-          supabase.from('aion_contacts').select('id', { count: 'exact', head: true }).eq('opted_out', false) as any
-        )
-        const nameQuery = applyAudienceTagFilter(
-          supabase.from('aion_contacts').select('name').eq('opted_out', false) as any
-        ).order('created_at', { ascending: true }).limit(1).maybeSingle()
-
-        const [{ count }, { data: firstContact }] = await Promise.all([countQuery, nameQuery])
-        setAudienceCount(count || 0)
-        setPreviewContactName((firstContact as any)?.name || null)
+        const rows = await fetchAudienceContacts('id, name, created_at')
+        setAudienceCount(rows.length)
+        const sorted = [...rows].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        setPreviewContactName(sorted[0]?.name || null)
+      } catch (e) {
+        console.error('[broadcast] erro ao calcular audiência:', e)
+        setAudienceCount(0)
+        setPreviewContactName(null)
       } finally {
         setAudienceLoading(false)
       }
@@ -1821,13 +1955,15 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
   async function loadManualCandidates() {
     setLoadingManualCandidates(true)
     try {
-      const q = applyAudienceTagFilter(
-        supabase.from('aion_contacts').select('id, name, phone').eq('opted_out', false) as any
-      ).order('name', { ascending: true }).limit(MANUAL_CANDIDATES_LIMIT)
-      const { data } = await q
-      const list = (data as { id: string; name: string | null; phone: string }[]) ?? []
+      const rows = await fetchAudienceContacts('id, name, phone') as { id: string; name: string | null; phone: string }[]
+      const list = rows
+        .sort((a, b) => (a.name || a.phone).localeCompare(b.name || b.phone))
+        .slice(0, MANUAL_CANDIDATES_LIMIT)
       setManualCandidates(list)
       setManualSelectedIds(new Set(list.map(c => c.id))) // começa com todos marcados
+    } catch (e) {
+      console.error('[broadcast] erro ao carregar candidatos manuais:', e)
+      setManualCandidates([])
     } finally {
       setLoadingManualCandidates(false)
     }
@@ -1851,6 +1987,17 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
     setManualSelectedIds(prev => prev.size === manualCandidates.length ? new Set() : new Set(manualCandidates.map(c => c.id)))
   }
 
+  // Filtro de busca por nome/telefone — só client-side, lista já é pequena
+  // (capada em MANUAL_CANDIDATES_LIMIT), sem necessidade de nova query.
+  const filteredManualCandidates = (() => {
+    const q = manualSearch.trim().toLowerCase()
+    if (!q) return manualCandidates
+    const qDigits = manualSearch.replace(/\D/g, '')
+    return manualCandidates.filter(c =>
+      (c.name || '').toLowerCase().includes(q) || (qDigits.length > 0 && c.phone.includes(qDigits))
+    )
+  })()
+
   // Valores efetivos de audiência — no modo manual são derivados da seleção
   // local (sem query), no modo tag vêm da contagem ao vivo já existente.
   const effectiveAudienceCount = audienceMode === 'manual' ? manualSelectedIds.size : audienceCount
@@ -1864,6 +2011,13 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
     if (!bodyComp?.text) return [] as string[]
     return [...(bodyComp.text as string).matchAll(/\{\{(\d+)\}\}/g)].map(m => m[1])
   })()
+
+  // Custo estimado — total_recipients × preço da categoria do template (BR).
+  // category vem da Graph API em maiúsculo (MARKETING/UTILITY/AUTHENTICATION),
+  // whatsapp_pricing.category fica em minúsculo — normaliza na comparação.
+  const templateCategory = selectedTemplate?.category?.toLowerCase() || null
+  const templatePriceUsd = templateCategory ? (pricing.find(p => p.category === templateCategory)?.price_usd ?? null) : null
+  const estimatedCostUsd = templatePriceUsd !== null ? templatePriceUsd * effectiveAudienceCount : null
 
   const FALLBACK_CONTACT_NAME = 'Cliente'
 
@@ -1917,12 +2071,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
         list = manualCandidates.filter(c => manualSelectedIds.has(c.id))
         if (list.length === 0) { setCreateError('Selecione ao menos um contato.'); setCreating(false); return }
       } else {
-        const audQuery = applyAudienceTagFilter(
-          supabase.from('aion_contacts').select('id, phone, name').eq('opted_out', false) as any
-        )
-        const { data: audience, error: audErr } = await audQuery
-        if (audErr) throw audErr
-        list = (audience as { id: string; phone: string; name: string | null }[]) ?? []
+        list = await fetchAudienceContacts('id, phone, name') as { id: string; phone: string; name: string | null }[]
         if (list.length === 0) { setCreateError('Nenhum contato na audiência selecionada.'); setCreating(false); return }
       }
 
@@ -2173,15 +2322,23 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                     <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: '#94A3B8' }}>Nenhum contato elegível com esse filtro.</div>
                   ) : (
                     <>
+                      <div style={{ padding: '8px 12px', borderBottom: '1px solid #F1F5F9', position: 'relative' }}>
+                        <Search style={{ position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)', width: 13, height: 13, color: '#94A3B8' }} />
+                        <input value={manualSearch} onChange={e => setManualSearch(e.target.value)} placeholder="Buscar por nome ou telefone..."
+                          style={{ width: '100%', padding: '6px 10px 6px 28px', border: '1.5px solid #E2E8F0', borderRadius: 7, fontSize: 12, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
+                      </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
                         <input type="checkbox" checked={manualSelectedIds.size > 0 && manualSelectedIds.size === manualCandidates.length} onChange={toggleManualSelectAll}
                           style={{ width: 14, height: 14, accentColor: '#00A896', cursor: 'pointer' }} />
                         <span style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                           Selecionar todos ({manualCandidates.length}{manualCandidates.length === MANUAL_CANDIDATES_LIMIT ? '+' : ''})
+                          {manualSearch.trim() && ` — ${filteredManualCandidates.length} encontrado(s)`}
                         </span>
                       </div>
                       <div style={{ maxHeight: 220, overflowY: 'auto' }}>
-                        {manualCandidates.map(c => (
+                        {filteredManualCandidates.length === 0 ? (
+                          <div style={{ padding: 14, textAlign: 'center', fontSize: 12, color: '#94A3B8' }}>Nenhum contato encontrado pra "{manualSearch}".</div>
+                        ) : filteredManualCandidates.map(c => (
                           <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', borderBottom: '1px solid #F8FAFC', cursor: 'pointer' }}>
                             <input type="checkbox" checked={manualSelectedIds.has(c.id)} onChange={() => toggleManualContact(c.id)}
                               style={{ width: 14, height: 14, accentColor: '#00A896', cursor: 'pointer', flexShrink: 0 }} />
@@ -2197,12 +2354,30 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
               )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: '#F0FDFA', borderRadius: 9, marginBottom: 14, border: '1px solid #CCFBF1' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: '#F0FDFA', borderRadius: 9, marginBottom: selectedTemplate ? 8 : 14, border: '1px solid #CCFBF1' }}>
               {audienceMode === 'tags' && audienceLoading && <div style={{ width: 12, height: 12, border: '2px solid #00A896', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', flexShrink: 0 }} />}
               <p style={{ margin: 0, fontSize: 13, color: '#00A896', fontWeight: 600 }}>
                 {audienceMode === 'tags' && audienceLoading ? 'Calculando...' : `${effectiveAudienceCount} contato(s) elegível(is) — opt-out excluído`}
               </p>
             </div>
+
+            {/* Custo estimado — total_recipients × preço da categoria do template (BR) */}
+            {selectedTemplate && (
+              <div style={{ marginBottom: 14, padding: '9px 12px', background: '#FFFBEB', borderRadius: 9, border: '1px solid #FDE68A' }}>
+                {estimatedCostUsd !== null ? (
+                  <p style={{ margin: 0, fontSize: 12, color: '#92400E' }}>
+                    ≈ <strong>US$ {estimatedCostUsd.toFixed(2)}</strong> estimado para {effectiveAudienceCount} destinatário{effectiveAudienceCount === 1 ? '' : 's'} — categoria {selectedTemplate.category || '—'}
+                  </p>
+                ) : (
+                  <p style={{ margin: 0, fontSize: 12, color: '#92400E' }}>
+                    Custo estimado indisponível{templateCategory ? ` (sem preço cadastrado para "${selectedTemplate.category}")` : ' (categoria do template não informada pela Meta)'}.
+                  </p>
+                )}
+                <p style={{ margin: '4px 0 0', fontSize: 10, color: '#B45309' }}>
+                  Estimativa com base na rate card pública da Meta pra Brasil — cobrança real pode variar (mensagens dentro da janela de 24h de atendimento não são cobradas pra utility/authentication).
+                </p>
+              </div>
+            )}
 
             <div style={{ marginBottom: 14 }}>
               <label style={labelStyle}>Agendar envio (opcional)</label>

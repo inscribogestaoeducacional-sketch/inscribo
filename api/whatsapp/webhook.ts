@@ -1678,6 +1678,27 @@ async function processAionMessage({
     const msgType     = (msg.type as string) || 'text'
     const timestamp   = new Date(parseInt(msg.timestamp) * 1000).toISOString()
 
+    // ── Reaction — mesmo padrão do lado escola (linha ~2159): atualiza a
+    // mensagem original, não cria linha nova, e não mexe em conversa/unread
+    // (não é uma mensagem nova pedindo resposta do atendente). Antes disso,
+    // processAionMessage não tinha esse caso e a reação virava uma linha
+    // órfã com message_type='reaction', nunca aparecendo anexada à mensagem
+    // reagida no frontend (que só lê a coluna `reaction` da msg original).
+    if (msgType === 'reaction') {
+      const { message_id: reactionTargetId, emoji } = (msg as any).reaction || {}
+      if (reactionTargetId) {
+        const emojiValue = emoji || null // null = reação removida
+        const { error: reactionErr } = await supabase
+          .from('whatsapp_messages')
+          .update({ reaction: emojiValue })
+          .eq('message_id', reactionTargetId)
+          .eq('is_aion_inbox', true)
+        if (reactionErr) console.error('❌ [aion] erro ao gravar reaction:', reactionErr)
+        console.log('[aion] reaction', emojiValue, 'em', reactionTargetId)
+      }
+      return
+    }
+
     const text =
       msg.text?.body        ||
       msg.image?.caption    ||
@@ -1685,16 +1706,24 @@ async function processAionMessage({
       msg.document?.caption ||
       ''
 
-    // Extract interactive reply ID for bot menu routing
+    // Extract interactive reply ID (roteamento de bot) + título legível (o
+    // que o usuário efetivamente clicou) — mesmo padrão do lado escola
+    // (linha ~2189-2204). Antes só capturava o ID (opt_0, opt_1...), então
+    // o content gravado abaixo caía sempre no placeholder genérico
+    // `[interactive]`, nunca no texto real do botão.
     let interactiveChoiceId = ''
+    let interactiveTitle    = ''
     if (msgType === 'interactive') {
       const ia = msg.interactive
       if (ia?.type === 'button_reply') {
         interactiveChoiceId = (ia.button_reply?.id as string) || ''
+        interactiveTitle    = ia.button_reply?.title || ''
       } else if (ia?.type === 'list_reply') {
         interactiveChoiceId = (ia.list_reply?.id as string) || ''
+        interactiveTitle    = ia.list_reply?.title || ''
       }
     }
+    const contentText = interactiveTitle || text
 
     const queue = await detectAionQueue(rawPhone, supabase)
 
@@ -1716,7 +1745,7 @@ async function processAionMessage({
           contact_name:    contactName,
           queue,
           status:          'waiting',
-          last_message:    text || `[${msgType}]`,
+          last_message:    contentText || `[${msgType}]`,
           last_message_at: timestamp,
           last_customer_message_at: timestamp,
           is_aion_inbox:   true,
@@ -1736,7 +1765,7 @@ async function processAionMessage({
           queue,
           contact_name:    contactName,
           status:          'waiting',
-          last_message:    text || `[${msgType}]`,
+          last_message:    contentText || `[${msgType}]`,
           last_message_at: timestamp,
           last_customer_message_at: timestamp,
         })
@@ -1762,7 +1791,20 @@ async function processAionMessage({
       const mediaObj = msg[msgType as keyof typeof msg] as any
       if (mediaObj?.id) {
         const mimeType = (mediaObj.mime_type as string) || 'application/octet-stream'
+        // TEMP LOG — investigação do achado não confirmado de que figurinha
+        // não aparece no Inbox: confirma se o upload pro Storage funciona ou
+        // se resolveMediaUrl está caindo no fallback de URL temporária da
+        // Meta (que expira e não bate no filtro de getMediaUrl no frontend).
+        // Remover depois de confirmar.
+        if (msgType === 'sticker') {
+          console.log('[STICKER DEBUG] mediaId:', mediaObj.id, '| mimeType:', mimeType)
+        }
         mediaUrl = await resolveMediaUrl(mediaObj.id, 'aion', mimeType)
+        if (msgType === 'sticker') {
+          const isStorageUrl = !!mediaUrl && mediaUrl.includes('.supabase.co/storage/')
+          console.log('[STICKER DEBUG] resolved url:', mediaUrl, '| isSupabaseStorage:', isStorageUrl,
+            isStorageUrl ? '' : '⚠️ fallback pra URL temporária da Meta ou upload falhou')
+        }
       }
     }
 
@@ -1773,7 +1815,7 @@ async function processAionMessage({
       remote_jid:      remoteJid,
       message_id:      msg.id,
       instance_name:   'cloud-api',
-      content:         text || `[${msgType}]`,
+      content:         contentText || `[${msgType}]`,
       message_type:    msgType,
       from_me:         false,
       contact_name:    contactName,
