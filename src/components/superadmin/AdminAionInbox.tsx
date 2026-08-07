@@ -1674,13 +1674,28 @@ interface AionBroadcast {
   name: string
   template_name: string
   template_language: string
+  template_components: any[] | null
+  header_media_url: string | null
+  filter_tags: string[] | null
   status: 'draft' | 'scheduled' | 'sending' | 'completed' | 'cancelled'
   total_recipients: number
   sent_count: number
   failed_count: number
   created_at: string
   scheduled_at: string | null
+  started_at: string | null
   completed_at: string | null
+}
+
+// 'draft' (se algum dia passar a ser usado) ou 'scheduled' com data no futuro
+// — editável/excluível sem risco, já que não há envio em andamento.
+function isBroadcastEditable(b: AionBroadcast): boolean {
+  return b.status === 'draft' ||
+    (b.status === 'scheduled' && !!b.scheduled_at && new Date(b.scheduled_at).getTime() > Date.now())
+}
+// 'sending' — já em andamento, só dá pra cancelar o que falta processar.
+function isBroadcastCancellable(b: AionBroadcast): boolean {
+  return b.status === 'sending'
 }
 
 interface AionBroadcastRecipient {
@@ -1754,6 +1769,24 @@ const BROADCAST_STATUS_CFG: Record<AionBroadcast['status'], { label: string; col
   cancelled: { label: 'Cancelada',  color: '#DC2626', bg: '#FEE2E2' },
 }
 
+// Badge dinâmico — 'sending' mostra o progresso direto no rótulo, 'scheduled'
+// só mostra "Agendada" com a data quando realmente há uma data futura (com o
+// novo status inicial em handleCreateBroadcast, uma campanha sem scheduled_at
+// já nasce 'sending', então esse caso passou a significar sempre "aguardando
+// o horário marcado" — antes toda campanha nova mostrava "Agendada" mesmo
+// quando já estava pronta pra disparar no próximo ciclo do cron).
+function getBroadcastBadge(b: AionBroadcast): { label: string; color: string; bg: string } {
+  if (b.status === 'sending') {
+    const processed = b.sent_count + b.failed_count
+    return { label: `Enviando... ${processed}/${b.total_recipients}`, color: '#D97706', bg: '#FEF3C7' }
+  }
+  if (b.status === 'scheduled' && b.scheduled_at && new Date(b.scheduled_at).getTime() > Date.now()) {
+    const when = new Date(b.scheduled_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    return { label: `Agendada para ${when}`, color: '#1D4ED8', bg: '#DBEAFE' }
+  }
+  return BROADCAST_STATUS_CFG[b.status]
+}
+
 function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
   const { user } = useAuth()
 
@@ -1792,6 +1825,12 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
   // Agendamento — vazio = dispara assim que sair de 'draft' (mesmo padrão de
   // hoje); preenchido = aion-broadcast-send só processa quando now() >= scheduled_at.
   const [scheduledAt, setScheduledAt]           = useState('')
+
+  // Não-nulo quando o modal de criação está aberto em modo edição — troca
+  // handleCreateBroadcast pra "apagar a campanha antiga e recriar" (mais
+  // simples e seguro que fazer patch parcial, já que audiência/template
+  // podem mudar e os recipients precisam ser refeitos do zero).
+  const [editingBroadcastId, setEditingBroadcastId] = useState<string | null>(null)
 
   const [detailBroadcast, setDetailBroadcast]   = useState<AionBroadcast | null>(null)
   const [recipients, setRecipients]             = useState<AionBroadcastRecipient[]>([])
@@ -1858,36 +1897,101 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
 
   // ── Templates aprovados direto da Graph API — mesmo padrão de
   // AionInboxHub.tsx:loadAionAgendaTemplates() ──
-  async function loadTemplatesFromGraph() {
+  // Retorna a lista buscada (além de setar o state) — usado por
+  // openEditModal() pra recuperar as variáveis salvas sem depender do timing
+  // assíncrono do setState do React.
+  async function loadTemplatesFromGraph(): Promise<GraphTemplate[]> {
     setLoadingTemplates(true)
     try {
       const { data: waRow } = await supabase.from('platform_whatsapp').select('waba_id').eq('connected', true).maybeSingle()
       const wabaId = (waRow as any)?.waba_id
-      if (!wabaId) { setTemplates([]); return }
+      if (!wabaId) { setTemplates([]); return [] }
       const { data: tokenRow } = await supabase.from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
       const token = (tokenRow as any)?.value || ''
-      if (!token) { setTemplates([]); return }
+      if (!token) { setTemplates([]); return [] }
       const res = await fetch(`https://graph.facebook.com/v19.0/${wabaId}/message_templates?limit=50`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
       const approved = ((data.data || []) as any[]).filter(t => t.status?.toUpperCase() === 'APPROVED')
       setTemplates(approved)
+      return approved
     } catch (e) {
       console.error('[broadcast] erro ao carregar templates:', e)
       setTemplates([])
+      return []
     } finally {
       setLoadingTemplates(false)
     }
   }
 
   function openCreateModal() {
+    setEditingBroadcastId(null)
     setCampaignName(''); setTemplateName(''); setTemplateVars({}); setAudienceTags([]); setCreateError('')
     setHeaderMediaUrl(null); setUploadingHeaderMedia(false)
     setAudienceMode('tags'); setManualCandidates([]); setManualSelectedIds(new Set()); setManualSearch('')
     setScheduledAt('')
     setShowCreateModal(true)
     loadTemplatesFromGraph()
+  }
+
+  function toDatetimeLocalValue(iso: string): string {
+    const d = new Date(iso)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+
+  // Reabre o modal de criação pré-preenchido com os dados da campanha —
+  // audiência sempre volta em modo 'tags' (filter_tags é o único filtro de
+  // audiência persistido; se a campanha original usou seleção manual, essa
+  // seleção pessoa-por-pessoa não é reconstruída aqui, só o filtro de tag).
+  async function openEditModal(b: AionBroadcast) {
+    setEditingBroadcastId(b.id)
+    setCampaignName(b.name)
+    setTemplateName(b.template_name)
+    setTemplateVars({})
+    setHeaderMediaUrl(b.header_media_url || null)
+    setUploadingHeaderMedia(false)
+    setAudienceTags(b.filter_tags || [])
+    setAudienceMode('tags'); setManualCandidates([]); setManualSelectedIds(new Set()); setManualSearch('')
+    setScheduledAt(b.scheduled_at ? toDatetimeLocalValue(b.scheduled_at) : '')
+    setCreateError('')
+    setShowCreateModal(true)
+
+    const fetched = await loadTemplatesFromGraph()
+    const tmpl = fetched.find(t => t.name === b.template_name)
+    if (!tmpl) return
+    const bodyComp = tmpl.components?.find((c: any) => c.type === 'BODY')
+    const varNumbers = bodyComp?.text ? [...(bodyComp.text as string).matchAll(/\{\{(\d+)\}\}/g)].map(m => m[1]) : []
+    const savedBodyComp = (b.template_components || []).find((c: any) => c.type === 'body')
+    const savedParams = savedBodyComp?.parameters || []
+    const vars: Record<string, string> = {}
+    varNumbers.forEach((n, idx) => {
+      if (n === '1') return // personalizado automaticamente por contato, não é editável aqui
+      vars[n] = savedParams[idx]?.text || ''
+    })
+    setTemplateVars(vars)
+  }
+
+  async function deleteBroadcast(b: AionBroadcast) {
+    if (!isBroadcastEditable(b)) return
+    if (!window.confirm(`Excluir a campanha "${b.name}"? Essa ação não pode ser desfeita.`)) return
+    await supabase.from('aion_broadcasts').delete().eq('id', b.id)
+    setBroadcasts(prev => prev.filter(x => x.id !== b.id))
+    if (detailBroadcast?.id === b.id) setDetailBroadcast(null)
+  }
+
+  // Marca a campanha 'cancelled' e os destinatários ainda 'pending' como
+  // 'skipped' — aion-broadcast-send já exclui 'cancelled' da query de
+  // campanhas ativas (.in('status', ['scheduled','sending'])), então isso
+  // sozinho impede novos lotes de serem processados a partir do próximo ciclo.
+  async function cancelBroadcast(b: AionBroadcast) {
+    if (!isBroadcastCancellable(b)) return
+    if (!window.confirm(`Cancelar o envio da campanha "${b.name}"? Destinatários ainda não processados não vão receber a mensagem.`)) return
+    await supabase.from('aion_broadcasts').update({ status: 'cancelled' }).eq('id', b.id)
+    await supabase.from('aion_broadcast_recipients').update({ status: 'skipped' }).eq('broadcast_id', b.id).eq('status', 'pending')
+    await loadBroadcasts()
+    if (detailBroadcast?.id === b.id) setDetailBroadcast(prev => prev ? { ...prev, status: 'cancelled' } : prev)
   }
 
   // Busca contatos elegíveis (opted_out=false) batendo com QUALQUER uma das
@@ -2049,6 +2153,15 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
     setCreating(true)
     setCreateError('')
     try {
+      // Editar = apaga a campanha antiga (cascade limpa os recipients) e
+      // recria do zero — mais simples e seguro que fazer patch parcial, já
+      // que audiência/template podem ter mudado e os recipients (com
+      // template_components resolvido por contato) precisam ser refeitos.
+      if (editingBroadcastId) {
+        const { error: delErr } = await supabase.from('aion_broadcasts').delete().eq('id', editingBroadcastId)
+        if (delErr) throw delErr
+      }
+
       const bodyComp = tmpl.components?.find((c: any) => c.type === 'BODY')
       const templateBodyText = bodyComp?.text || ''
 
@@ -2084,8 +2197,13 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
         preview_text:        preview,
         header_media_url:    headerMediaUrl,
         filter_tags:         audienceTags,
-        status:              'scheduled',
+        // Sem data = já nasce 'sending' (pronta pro próximo ciclo do cron
+        // pegar) em vez de 'scheduled' — antes toda campanha nova mostrava o
+        // badge "Agendada" mesmo quando ia disparar em minutos, o que
+        // confundia sobre se ela já estava sendo processada ou não.
+        status:              scheduledAtIso ? 'scheduled' : 'sending',
         scheduled_at:        scheduledAtIso,
+        started_at:          scheduledAtIso ? null : new Date().toISOString(),
         total_recipients:    list.length,
         created_by:          user?.id || null,
       }).select('id').single()
@@ -2106,6 +2224,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
       }
 
       setShowCreateModal(false)
+      setEditingBroadcastId(null)
       loadBroadcasts()
     } catch (e: any) {
       setCreateError(e?.message || 'Erro ao criar campanha.')
@@ -2158,9 +2277,11 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {broadcasts.map(b => {
-            const cfg = BROADCAST_STATUS_CFG[b.status]
+            const cfg = getBroadcastBadge(b)
             const processed = b.sent_count + b.failed_count
             const pct = b.total_recipients > 0 ? Math.round((processed / b.total_recipients) * 100) : 0
+            const editable    = isBroadcastEditable(b)
+            const cancellable = isBroadcastCancellable(b)
             return (
               <div key={b.id} onClick={() => openDetail(b)}
                 style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '16px 20px', cursor: 'pointer' }}>
@@ -2171,12 +2292,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                   </div>
                   <span style={{ fontSize: 12, color: '#94A3B8' }}>{new Date(b.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                 </div>
-                <div style={{ fontSize: 12, color: '#64748B', marginBottom: 8 }}>
-                  Template: {b.template_name}
-                  {b.status === 'scheduled' && b.scheduled_at && (
-                    <> · agendada para {new Date(b.scheduled_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</>
-                  )}
-                </div>
+                <div style={{ fontSize: 12, color: '#64748B', marginBottom: 8 }}>Template: {b.template_name}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ flex: 1, height: 6, background: '#F1F5F9', borderRadius: 20, overflow: 'hidden' }}>
                     <div style={{ width: `${pct}%`, height: '100%', background: b.failed_count > 0 ? '#F59E0B' : '#00A896', transition: 'width 0.3s' }} />
@@ -2185,20 +2301,42 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                     {processed}/{b.total_recipients} {b.failed_count > 0 ? `(${b.failed_count} falha${b.failed_count === 1 ? '' : 's'})` : ''}
                   </span>
                 </div>
+                {(editable || cancellable) && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }} onClick={e => e.stopPropagation()}>
+                    {editable && (
+                      <>
+                        <button onClick={() => openEditModal(b)}
+                          style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, color: '#1D4ED8', background: '#EFF6FF', border: 'none', borderRadius: 7, cursor: 'pointer' }}>
+                          Editar
+                        </button>
+                        <button onClick={() => deleteBroadcast(b)}
+                          style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, color: '#DC2626', background: '#FEF2F2', border: 'none', borderRadius: 7, cursor: 'pointer' }}>
+                          Excluir
+                        </button>
+                      </>
+                    )}
+                    {cancellable && (
+                      <button onClick={() => cancelBroadcast(b)}
+                        style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, color: '#DC2626', background: '#FEF2F2', border: 'none', borderRadius: 7, cursor: 'pointer' }}>
+                        Cancelar envio
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}
         </div>
       )}
 
-      {/* Modal: Nova transmissão */}
+      {/* Modal: Nova transmissão / Editar transmissão */}
       {showCreateModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-          onClick={e => { if (e.target === e.currentTarget) setShowCreateModal(false) }}>
+          onClick={e => { if (e.target === e.currentTarget) { setShowCreateModal(false); setEditingBroadcastId(null) } }}>
           <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto', padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1A2B4A' }}>Nova transmissão</h2>
-              <button onClick={() => setShowCreateModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 20, lineHeight: 1 }}>✕</button>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1A2B4A' }}>{editingBroadcastId ? 'Editar transmissão' : 'Nova transmissão'}</h2>
+              <button onClick={() => { setShowCreateModal(false); setEditingBroadcastId(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 20, lineHeight: 1 }}>✕</button>
             </div>
 
             <div style={{ marginBottom: 14 }}>
@@ -2392,7 +2530,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
             )}
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowCreateModal(false)}
+              <button onClick={() => { setShowCreateModal(false); setEditingBroadcastId(null) }}
                 style={{ padding: '9px 18px', border: '1px solid #E2E8F0', borderRadius: 9, background: '#fff', color: '#64748B', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
                 Cancelar
               </button>
@@ -2400,7 +2538,11 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                 disabled={creating || !campaignName.trim() || !templateName || effectiveAudienceCount === 0 || uploadingHeaderMedia || (!!getTemplateHeaderMediaFormat(selectedTemplate) && !headerMediaUrl)}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700, opacity: (creating || !campaignName.trim() || !templateName || effectiveAudienceCount === 0) ? 0.5 : 1 }}>
                 {creating ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> : <Send style={{ width: 14, height: 14 }} />}
-                {creating ? 'Criando...' : scheduledAt ? `Agendar para ${effectiveAudienceCount}` : `Criar e enviar para ${effectiveAudienceCount}`}
+                {creating
+                  ? (editingBroadcastId ? 'Salvando...' : 'Criando...')
+                  : scheduledAt
+                    ? `${editingBroadcastId ? 'Salvar e agendar' : 'Agendar'} para ${effectiveAudienceCount}`
+                    : `${editingBroadcastId ? 'Salvar e enviar' : 'Criar e enviar'} para ${effectiveAudienceCount}`}
               </button>
             </div>
           </div>
@@ -2412,13 +2554,41 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
           onClick={e => { if (e.target === e.currentTarget) setDetailBroadcast(null) }}>
           <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 620, maxHeight: '90vh', overflowY: 'auto', padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1A2B4A' }}>{detailBroadcast.name}</h2>
-              <button onClick={() => setDetailBroadcast(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 20, lineHeight: 1 }}>✕</button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1A2B4A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{detailBroadcast.name}</h2>
+                {(() => {
+                  const cfg = getBroadcastBadge(detailBroadcast)
+                  return <span style={{ fontSize: 11, fontWeight: 700, color: cfg.color, background: cfg.bg, padding: '2px 9px', borderRadius: 20, flexShrink: 0 }}>{cfg.label}</span>
+                })()}
+              </div>
+              <button onClick={() => setDetailBroadcast(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 20, lineHeight: 1, flexShrink: 0 }}>✕</button>
             </div>
-            <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 12 }}>
               Template: {detailBroadcast.template_name} · {detailBroadcast.sent_count} enviados, {detailBroadcast.failed_count} falhas, de {detailBroadcast.total_recipients}
             </div>
+            {(isBroadcastEditable(detailBroadcast) || isBroadcastCancellable(detailBroadcast)) && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                {isBroadcastEditable(detailBroadcast) && (
+                  <>
+                    <button onClick={() => { const b = detailBroadcast; setDetailBroadcast(null); openEditModal(b) }}
+                      style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, color: '#1D4ED8', background: '#EFF6FF', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                      Editar
+                    </button>
+                    <button onClick={() => deleteBroadcast(detailBroadcast)}
+                      style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, color: '#DC2626', background: '#FEF2F2', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                      Excluir
+                    </button>
+                  </>
+                )}
+                {isBroadcastCancellable(detailBroadcast) && (
+                  <button onClick={() => cancelBroadcast(detailBroadcast)}
+                    style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, color: '#DC2626', background: '#FEF2F2', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                    Cancelar envio
+                  </button>
+                )}
+              </div>
+            )}
             {loadingRecipients ? (
               <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}>
                 <Loader2 style={{ width: 22, height: 22, color: '#00A896', animation: 'spin 1s linear infinite' }} />

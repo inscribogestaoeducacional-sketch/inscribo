@@ -93,6 +93,15 @@ serve(async (req) => {
     // scheduled_at NULL = dispara assim que sair de 'draft' (comportamento de
     // sempre); preenchido = só entra na lista quando now() >= scheduled_at —
     // até lá a campanha fica 'scheduled' sem ser tocada por este cron.
+    //
+    // status inicial: AdminAionInbox.tsx:handleCreateBroadcast agora grava
+    // 'sending' direto (não mais 'scheduled') quando não há scheduled_at, pra
+    // refletir que a campanha já está pronta pro próximo ciclo — o
+    // .in('status', ['scheduled','sending']) abaixo cobre os dois casos sem
+    // precisar de ajuste. 'cancelled' (setado por cancelBroadcast() no
+    // client, que também já marca os recipients 'pending' como 'skipped')
+    // fica de fora desse .in() por construção — nenhuma campanha cancelada
+    // volta a ser reivindicada por este cron a partir do próximo ciclo.
     const nowIso = new Date().toISOString()
     const { data: broadcasts, error: broadcastsErr } = await supabase
       .from('aion_broadcasts')
