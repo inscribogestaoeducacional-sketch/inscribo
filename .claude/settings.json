@@ -101,7 +101,8 @@
       "WebFetch(domain:whautomate.com)",
       "Bash(tee /tmp/tsc_out2.txt)",
       "Bash(tee /tmp/tsc_out3.txt)",
-      "Bash(tee /tmp/tsc_out4.txt)"
+      "Bash(tee /tmp/tsc_out4.txt)",
+      "Bash(tee /tmp/tsc_out5.txt)"
     ],
     "additionalDirectories": [
       "\\tmp"

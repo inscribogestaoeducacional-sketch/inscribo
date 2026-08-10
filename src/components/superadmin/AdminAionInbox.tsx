@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { buildSendComponents, getTemplateHeaderMediaFormat, uploadTemplateHeaderMedia, type MediaHeaderFormat } from '../../lib/whatsappTemplate'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1677,7 +1678,7 @@ interface AionBroadcast {
   template_components: any[] | null
   header_media_url: string | null
   filter_tags: string[] | null
-  status: 'draft' | 'scheduled' | 'sending' | 'completed' | 'cancelled'
+  status: 'draft' | 'scheduled' | 'sending' | 'paused' | 'completed' | 'cancelled'
   total_recipients: number
   sent_count: number
   failed_count: number
@@ -1693,9 +1694,17 @@ function isBroadcastEditable(b: AionBroadcast): boolean {
   return b.status === 'draft' ||
     (b.status === 'scheduled' && !!b.scheduled_at && new Date(b.scheduled_at).getTime() > Date.now())
 }
-// 'sending' — já em andamento, só dá pra cancelar o que falta processar.
+// 'sending' ou 'paused' — dá pra cancelar o que falta processar nos dois casos
+// (campanha pausada sem intenção de retomar não deveria ficar presa pra sempre).
 function isBroadcastCancellable(b: AionBroadcast): boolean {
+  return b.status === 'sending' || b.status === 'paused'
+}
+// Só dá pra pausar o que está de fato em andamento.
+function isBroadcastPausable(b: AionBroadcast): boolean {
   return b.status === 'sending'
+}
+function isBroadcastResumable(b: AionBroadcast): boolean {
+  return b.status === 'paused'
 }
 // 'scheduled' com data no passado — o cron deveria ter virado isso pra
 // 'sending', mas não virou (cron não rodou, ou está atrasado). Sem esse
@@ -1778,6 +1787,7 @@ const BROADCAST_STATUS_CFG: Record<AionBroadcast['status'], { label: string; col
   draft:     { label: 'Rascunho',   color: '#64748B', bg: '#F1F5F9' },
   scheduled: { label: 'Agendada',   color: '#1D4ED8', bg: '#DBEAFE' },
   sending:   { label: 'Enviando',   color: '#D97706', bg: '#FEF3C7' },
+  paused:    { label: 'Pausada',    color: '#64748B', bg: '#E2E8F0' },
   completed: { label: 'Concluída',  color: '#065F46', bg: '#D1FAE5' },
   cancelled: { label: 'Cancelada',  color: '#DC2626', bg: '#FEE2E2' },
 }
@@ -1851,6 +1861,30 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
   const [detailBroadcast, setDetailBroadcast]   = useState<AionBroadcast | null>(null)
   const [recipients, setRecipients]             = useState<AionBroadcastRecipient[]>([])
   const [loadingRecipients, setLoadingRecipients] = useState(false)
+  // Paginação real da lista de destinatários (antes era um .limit(500) único,
+  // sem "carregar mais" nem "ver todos").
+  const [recipientsOffset, setRecipientsOffset]   = useState(0)
+  const [recipientsHasMore, setRecipientsHasMore] = useState(false)
+  const [loadingMoreRecipients, setLoadingMoreRecipients] = useState(false)
+  const [loadingAllRecipients, setLoadingAllRecipients]   = useState(false)
+
+  // Contagem ao vivo por status, direto de aion_broadcast_recipients — fonte
+  // de verdade, não depende de aion_broadcasts.sent_count/failed_count (que
+  // já teve bug de ficar travado — ver investigação). Atualizada de novo a
+  // cada poll enquanto o modal está aberto com status='sending'.
+  const [liveCounts, setLiveCounts] = useState<{ pending: number; sent: number; failed: number; skipped: number } | null>(null)
+
+  // Métricas de engajamento pós-envio (resposta/conversão) — calculadas à
+  // parte de liveCounts, que só reflete status de entrega. Ver
+  // loadCampaignMetrics() pra detalhes de como cada número é cruzado.
+  const [campaignMetrics, setCampaignMetrics] = useState<{ totalSent: number; responded: number; hasLead: number; converted: number } | null>(null)
+  const [loadingMetrics, setLoadingMetrics]   = useState(false)
+
+  // Falhas sempre buscadas à parte, sem depender da paginação geral acima —
+  // senão numa campanha grande a seção de falhas podia ficar incompleta se
+  // os recipients falhos estivessem fora da 1ª página carregada.
+  const [failedRecipients, setFailedRecipients]   = useState<AionBroadcastRecipient[]>([])
+  const [loadingFailedRecipients, setLoadingFailedRecipients] = useState(false)
 
   // IDs em andamento pros botões "Enviar agora" / "Processar agora" (loading
   // por campanha, já que pode haver mais de um card na lista).
@@ -2042,6 +2076,23 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
     await supabase.from('aion_broadcast_recipients').update({ status: 'skipped' }).eq('broadcast_id', b.id).eq('status', 'pending')
     await loadBroadcasts()
     if (detailBroadcast?.id === b.id) setDetailBroadcast(prev => prev ? { ...prev, status: 'cancelled' } : prev)
+  }
+
+  // 'paused' fica de fora do .in('status', ['scheduled','sending']) que
+  // aion-broadcast-send usa pra buscar campanhas ativas — não precisa de
+  // nenhuma lógica adicional na Edge Function pra ser ignorada.
+  async function pauseBroadcast(b: AionBroadcast) {
+    if (!isBroadcastPausable(b)) return
+    await supabase.from('aion_broadcasts').update({ status: 'paused' }).eq('id', b.id)
+    await loadBroadcasts()
+    if (detailBroadcast?.id === b.id) setDetailBroadcast(prev => prev ? { ...prev, status: 'paused' } : prev)
+  }
+
+  async function resumeBroadcast(b: AionBroadcast) {
+    if (!isBroadcastResumable(b)) return
+    await supabase.from('aion_broadcasts').update({ status: 'sending' }).eq('id', b.id)
+    await loadBroadcasts()
+    if (detailBroadcast?.id === b.id) setDetailBroadcast(prev => prev ? { ...prev, status: 'sending' } : prev)
   }
 
   // Converte uma campanha 'scheduled' (futura ou atrasada/"stalled") pra
@@ -2346,18 +2397,187 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
     }
   }
 
-  async function openDetail(b: AionBroadcast) {
-    setDetailBroadcast(b)
-    setLoadingRecipients(true)
-    const { data } = await supabase
-      .from('aion_broadcast_recipients')
-      .select('id, remote_jid, status, wamid, error_message, sent_at, aion_contacts(name)')
+  const RECIPIENTS_PAGE_SIZE = 100
+  const RECIPIENTS_SELECT = 'id, remote_jid, status, wamid, error_message, sent_at, aion_contacts(name)'
+
+  // all=true ignora a paginação e busca tudo de uma vez ("Ver todos") — usado
+  // também pelo botão de mesmo nome, ver handleLoadAllRecipients.
+  async function loadRecipientsPage(b: AionBroadcast, params: { reset?: boolean; from?: number; all?: boolean } = {}) {
+    const { reset = true, from: fromArg, all = false } = params
+    const from = fromArg ?? (reset ? 0 : recipientsOffset)
+
+    if (all) setLoadingAllRecipients(true)
+    else if (reset) setLoadingRecipients(true)
+    else setLoadingMoreRecipients(true)
+
+    let q = supabase.from('aion_broadcast_recipients').select(RECIPIENTS_SELECT)
       .eq('broadcast_id', b.id)
       .order('created_at', { ascending: true })
-      .limit(500)
-    setRecipients((data as any as AionBroadcastRecipient[]) ?? [])
-    setLoadingRecipients(false)
+    if (!all) q = (q as any).range(from, from + RECIPIENTS_PAGE_SIZE - 1)
+
+    const { data } = await q
+    const list = (data as any as AionBroadcastRecipient[]) ?? []
+
+    if (reset || all) setRecipients(list)
+    else setRecipients(prev => [...prev, ...list])
+
+    const newOffset = all ? list.length : from + list.length
+    setRecipientsOffset(newOffset)
+    setRecipientsHasMore(!all && newOffset < b.total_recipients)
+
+    if (all) setLoadingAllRecipients(false)
+    else if (reset) setLoadingRecipients(false)
+    else setLoadingMoreRecipients(false)
   }
+
+  function handleLoadMoreRecipients() {
+    if (!detailBroadcast || loadingMoreRecipients || !recipientsHasMore) return
+    loadRecipientsPage(detailBroadcast, { reset: false, from: recipientsOffset })
+  }
+
+  function handleLoadAllRecipients() {
+    if (!detailBroadcast) return
+    loadRecipientsPage(detailBroadcast, { all: true })
+  }
+
+  // Recontagem ao vivo — mesma lógica de fonte de verdade usada agora em
+  // aion-broadcast-send (recontar aion_broadcast_recipients em vez de
+  // confiar só em aion_broadcasts.sent_count/failed_count).
+  async function loadLiveCounts(broadcastId: string) {
+    const statuses: Array<AionBroadcastRecipient['status']> = ['pending', 'sent', 'failed', 'skipped']
+    const results = await Promise.all(statuses.map(s =>
+      supabase.from('aion_broadcast_recipients').select('id', { count: 'exact', head: true }).eq('broadcast_id', broadcastId).eq('status', s)
+    ))
+    setLiveCounts({
+      pending: results[0].count ?? 0,
+      sent:    results[1].count ?? 0,
+      failed:  results[2].count ?? 0,
+      skipped: results[3].count ?? 0,
+    })
+  }
+
+  async function loadFailedRecipients(broadcastId: string) {
+    setLoadingFailedRecipients(true)
+    const { data } = await supabase.from('aion_broadcast_recipients')
+      .select(RECIPIENTS_SELECT)
+      .eq('broadcast_id', broadcastId)
+      .eq('status', 'failed')
+      .order('created_at', { ascending: true })
+      .limit(300)
+    setFailedRecipients((data as any as AionBroadcastRecipient[]) ?? [])
+    setLoadingFailedRecipients(false)
+  }
+
+  // Taxa de resposta e de conversão da campanha — cruza
+  // aion_broadcast_recipients (quem recebeu, e quando) com
+  // whatsapp_conversations/whatsapp_messages (se respondeu depois) e
+  // crm_leads (se o contato tem lead vinculado e avançou de estágio depois
+  // do envio). Feito no client em vez de RPC: mesmo padrão já usado pra
+  // "Tempo de resposta" no GestorHome, e o volume por campanha (recipients
+  // de uma lista de transmissão) é pequeno o bastante pra isso ser trivial.
+  // Cap de 2000 destinatários "sent" analisados — suficiente pro uso real
+  // (campanhas de uma escola/plataforma única) sem virar um relatório
+  // pesado; campanhas maiores que isso só teriam a amostra dos 2000 primeiros.
+  async function loadCampaignMetrics(broadcastId: string) {
+    setLoadingMetrics(true)
+    try {
+      const { data: sentRecipients } = await supabase
+        .from('aion_broadcast_recipients')
+        .select('remote_jid, sent_at')
+        .eq('broadcast_id', broadcastId)
+        .eq('status', 'sent')
+        .not('sent_at', 'is', null)
+        .limit(2000)
+
+      const recipients = (sentRecipients ?? []) as { remote_jid: string; sent_at: string }[]
+      if (recipients.length === 0) {
+        setCampaignMetrics({ totalSent: 0, responded: 0, hasLead: 0, converted: 0 })
+        return
+      }
+
+      const jids = recipients.map(r => r.remote_jid)
+      const earliestSentAt = recipients.reduce((min, r) => r.sent_at < min ? r.sent_at : min, recipients[0].sent_at)
+
+      const [{ data: convs }, { data: inboundMsgs }] = await Promise.all([
+        // Conversa vinculada a cada destinatário (pra achar aion_lead_id) —
+        // whatsapp_conversations.remote_jid é o mesmo valor gravado em
+        // aion_broadcast_recipients.remote_jid.
+        supabase.from('whatsapp_conversations')
+          .select('remote_jid, aion_lead_id')
+          .eq('is_aion_inbox', true)
+          .in('remote_jid', jids),
+        // Mensagens recebidas desses contatos desde o envio mais antigo da
+        // campanha — a comparação exata (depois do sent_at DESSE destinatário
+        // específico) é feita abaixo, por jid.
+        supabase.from('whatsapp_messages')
+          .select('remote_jid, timestamp')
+          .eq('is_aion_inbox', true)
+          .eq('direction', 'inbound')
+          .in('remote_jid', jids)
+          .gte('timestamp', earliestSentAt),
+      ])
+
+      const inboundByJid = new Map<string, string[]>()
+      ;((inboundMsgs ?? []) as { remote_jid: string; timestamp: string }[]).forEach(m => {
+        if (!inboundByJid.has(m.remote_jid)) inboundByJid.set(m.remote_jid, [])
+        inboundByJid.get(m.remote_jid)!.push(m.timestamp)
+      })
+      const responded = recipients.filter(r =>
+        (inboundByJid.get(r.remote_jid) ?? []).some(t => t > r.sent_at)
+      ).length
+
+      const leadIdByJid = new Map<string, string>()
+      ;((convs ?? []) as { remote_jid: string; aion_lead_id: string | null }[]).forEach(c => {
+        if (c.aion_lead_id) leadIdByJid.set(c.remote_jid, c.aion_lead_id)
+      })
+      const leadIds = [...new Set(leadIdByJid.values())]
+
+      let converted = 0
+      if (leadIds.length > 0) {
+        const { data: leads } = await supabase.from('crm_leads').select('id, stage, updated_at').in('id', leadIds)
+        const sentAtByLeadId = new Map<string, string>()
+        recipients.forEach(r => {
+          const leadId = leadIdByJid.get(r.remote_jid)
+          if (leadId) sentAtByLeadId.set(leadId, r.sent_at)
+        })
+        // "Avançou de estágio desde o envio": stage não é mais o inicial
+        // ('interesse', mesmo enum de src/components/shared/LeadModal.tsx)
+        // e a última atualização do lead veio depois do sent_at — proxy
+        // razoável já que crm_leads não guarda histórico de mudança de
+        // estágio por timestamp próprio.
+        converted = ((leads ?? []) as { id: string; stage: string; updated_at: string }[]).filter(l => {
+          const sentAt = sentAtByLeadId.get(l.id)
+          return !!sentAt && l.stage !== 'interesse' && l.updated_at > sentAt
+        }).length
+      }
+
+      setCampaignMetrics({ totalSent: recipients.length, responded, hasLead: leadIds.length, converted })
+    } finally {
+      setLoadingMetrics(false)
+    }
+  }
+
+  async function openDetail(b: AionBroadcast) {
+    setDetailBroadcast(b)
+    setRecipients([]); setRecipientsOffset(0); setRecipientsHasMore(false)
+    setLiveCounts(null); setFailedRecipients([]); setCampaignMetrics(null)
+    await Promise.all([
+      loadRecipientsPage(b, { reset: true }),
+      loadLiveCounts(b.id),
+      loadFailedRecipients(b.id),
+      loadCampaignMetrics(b.id),
+    ])
+  }
+
+  // Enquanto o modal de detalhe estiver aberto numa campanha 'sending',
+  // reconta ao vivo a cada 4s — bem mais responsivo que os 5s do polling da
+  // lista (que só recarrega aion_broadcasts.*, e o modal nem escutava isso).
+  useEffect(() => {
+    if (!detailBroadcast || detailBroadcast.status !== 'sending') return
+    const id = detailBroadcast.id
+    const t = setInterval(() => loadLiveCounts(id), 4000)
+    return () => clearInterval(t)
+  }, [detailBroadcast?.id, detailBroadcast?.status])
 
   const RECIPIENT_STATUS_CFG: Record<AionBroadcastRecipient['status'], { label: string; color: string }> = {
     pending: { label: 'Pendente', color: '#94A3B8' },
@@ -2396,6 +2616,8 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
             const editable      = isBroadcastEditable(b)
             const cancellable   = isBroadcastCancellable(b)
             const stalled       = isBroadcastStalled(b)
+            const pausable      = isBroadcastPausable(b)
+            const resumable     = isBroadcastResumable(b)
             const processableNow = isBroadcastProcessableNow(b)
             const sendingNow    = sendingNowIds.has(b.id)
             const processingNow = processingNowIds.has(b.id)
@@ -2418,7 +2640,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                     {processed}/{b.total_recipients} {b.failed_count > 0 ? `(${b.failed_count} falha${b.failed_count === 1 ? '' : 's'})` : ''}
                   </span>
                 </div>
-                {(editable || cancellable || stalled) && (
+                {(editable || cancellable || stalled || pausable || resumable) && (
                   <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
                     {editable && (
                       <>
@@ -2431,6 +2653,18 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                           Excluir
                         </button>
                       </>
+                    )}
+                    {pausable && (
+                      <button onClick={() => pauseBroadcast(b)}
+                        style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, color: '#475569', background: '#F1F5F9', border: 'none', borderRadius: 7, cursor: 'pointer' }}>
+                        Pausar
+                      </button>
+                    )}
+                    {resumable && (
+                      <button onClick={() => resumeBroadcast(b)}
+                        style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, color: '#065F46', background: '#D1FAE5', border: 'none', borderRadius: 7, cursor: 'pointer' }}>
+                        Retomar
+                      </button>
                     )}
                     {cancellable && (
                       <button onClick={() => cancelBroadcast(b)}
@@ -2698,9 +2932,67 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
               <button onClick={() => setDetailBroadcast(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 20, lineHeight: 1, flexShrink: 0 }}>✕</button>
             </div>
             <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 12 }}>
-              Template: {detailBroadcast.template_name} · {detailBroadcast.sent_count} enviados, {detailBroadcast.failed_count} falhas, de {detailBroadcast.total_recipients}
+              Template: {detailBroadcast.template_name} · {liveCounts ? liveCounts.sent : detailBroadcast.sent_count} enviados, {liveCounts ? liveCounts.failed : detailBroadcast.failed_count} falhas, de {detailBroadcast.total_recipients}
+              {liveCounts && detailBroadcast.status === 'sending' && <span style={{ color: '#00A896' }}> · ao vivo</span>}
             </div>
-            {(isBroadcastEditable(detailBroadcast) || isBroadcastCancellable(detailBroadcast) || isBroadcastStalled(detailBroadcast)) && (
+
+            {/* Métricas visuais — status de envio (rosca, de liveCounts) +
+                resposta/conversão pós-envio (de campaignMetrics) */}
+            {liveCounts && (() => {
+              const statusData = (['sent', 'pending', 'failed', 'skipped'] as const)
+                .map(s => ({ key: s, label: RECIPIENT_STATUS_CFG[s].label, value: liveCounts[s], color: RECIPIENT_STATUS_CFG[s].color }))
+                .filter(d => d.value > 0)
+              const responseRate = campaignMetrics && campaignMetrics.totalSent > 0
+                ? Math.round((campaignMetrics.responded / campaignMetrics.totalSent) * 100) : null
+              const conversionRate = campaignMetrics && campaignMetrics.hasLead > 0
+                ? Math.round((campaignMetrics.converted / campaignMetrics.hasLead) * 100) : null
+              return (
+                <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16, padding: '14px 18px', background: '#F8FAFC', borderRadius: 12, border: '1px solid #E2E8F0' }}>
+                  <div style={{ width: 92, height: 92, flexShrink: 0, position: 'relative' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={statusData} dataKey="value" nameKey="label" innerRadius={28} outerRadius={44} paddingAngle={2} stroke="none">
+                          {statusData.map(d => <Cell key={d.key} fill={d.color} />)}
+                        </Pie>
+                        <Tooltip formatter={(v, n) => [`${v}`, n]} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: '#1A2B4A', lineHeight: 1 }}>{detailBroadcast.total_recipients}</span>
+                      <span style={{ fontSize: 9, color: '#94A3B8' }}>total</span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: RECIPIENT_STATUS_CFG.sent.color, lineHeight: 1 }}>{liveCounts.sent}</div>
+                      <div style={{ fontSize: 11, color: '#64748B', marginTop: 3 }}>Enviados</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: RECIPIENT_STATUS_CFG.failed.color, lineHeight: 1 }}>{liveCounts.failed}</div>
+                      <div style={{ fontSize: 11, color: '#64748B', marginTop: 3 }}>Falhas</div>
+                    </div>
+                    <div>
+                      {loadingMetrics
+                        ? <Loader2 style={{ width: 18, height: 18, color: '#94A3B8', animation: 'spin 1s linear infinite' }} />
+                        : <div style={{ fontSize: 20, fontWeight: 800, color: '#1D4ED8', lineHeight: 1 }}>{responseRate !== null ? `${responseRate}%` : '—'}</div>}
+                      <div style={{ fontSize: 11, color: '#64748B', marginTop: 3 }}>
+                        Responderam{campaignMetrics ? ` (${campaignMetrics.responded}/${campaignMetrics.totalSent})` : ''}
+                      </div>
+                    </div>
+                    <div>
+                      {loadingMetrics
+                        ? <Loader2 style={{ width: 18, height: 18, color: '#94A3B8', animation: 'spin 1s linear infinite' }} />
+                        : <div style={{ fontSize: 20, fontWeight: 800, color: '#7C3AED', lineHeight: 1 }}>{conversionRate !== null ? `${conversionRate}%` : '—'}</div>}
+                      <div style={{ fontSize: 11, color: '#64748B', marginTop: 3 }}>
+                        Conversão{campaignMetrics ? ` (${campaignMetrics.converted}/${campaignMetrics.hasLead} c/ lead)` : ''}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
+
+            {(isBroadcastEditable(detailBroadcast) || isBroadcastCancellable(detailBroadcast) || isBroadcastStalled(detailBroadcast) || isBroadcastPausable(detailBroadcast) || isBroadcastResumable(detailBroadcast)) && (
               <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
                 {isBroadcastEditable(detailBroadcast) && (
                   <>
@@ -2713,6 +3005,18 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                       Excluir
                     </button>
                   </>
+                )}
+                {isBroadcastPausable(detailBroadcast) && (
+                  <button onClick={() => pauseBroadcast(detailBroadcast)}
+                    style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, color: '#475569', background: '#F1F5F9', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                    Pausar
+                  </button>
+                )}
+                {isBroadcastResumable(detailBroadcast) && (
+                  <button onClick={() => resumeBroadcast(detailBroadcast)}
+                    style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, color: '#065F46', background: '#D1FAE5', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                    Retomar
+                  </button>
                 )}
                 {isBroadcastCancellable(detailBroadcast) && (
                   <button onClick={() => cancelBroadcast(detailBroadcast)}
@@ -2735,30 +3039,72 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                 )}
               </div>
             )}
+            {/* Seção de falhas — destacada, sempre completa (busca própria,
+                não depende da paginação da lista geral abaixo) */}
+            {!loadingFailedRecipients && failedRecipients.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#DC2626', marginBottom: 6 }}>
+                  {failedRecipients.length} falha{failedRecipients.length === 1 ? '' : 's'} de envio
+                </div>
+                <div style={{ border: '1.5px solid #FECACA', background: '#FEF2F2', borderRadius: 10, overflow: 'hidden', maxHeight: 220, overflowY: 'auto' }}>
+                  {failedRecipients.map(r => (
+                    <div key={r.id} style={{ padding: '9px 14px', borderBottom: '1px solid #FEE2E2' }}>
+                      <div style={{ fontSize: 13, color: '#7F1D1D', fontWeight: 600 }}>
+                        {r.aion_contacts?.name || formatContactPhone(r.remote_jid)}
+                        <span style={{ fontWeight: 400, color: '#B91C1C' }}> · {formatContactPhone(r.remote_jid)}</span>
+                      </div>
+                      {r.error_message && <div style={{ fontSize: 11, color: '#DC2626', marginTop: 2 }}>{r.error_message}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {loadingRecipients ? (
               <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}>
                 <Loader2 style={{ width: 22, height: 22, color: '#00A896', animation: 'spin 1s linear infinite' }} />
               </div>
             ) : (
-              <div style={{ border: '1px solid #E2E8F0', borderRadius: 10, overflow: 'hidden' }}>
-                {recipients.map(r => {
-                  const rc = RECIPIENT_STATUS_CFG[r.status]
-                  return (
-                    <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 14px', borderBottom: '1px solid #F1F5F9' }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 13, color: '#1A2B4A', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {r.aion_contacts?.name || formatContactPhone(r.remote_jid)}
+              <>
+                <div style={{ border: '1px solid #E2E8F0', borderRadius: 10, overflow: 'hidden' }}>
+                  {recipients.map(r => {
+                    const rc = RECIPIENT_STATUS_CFG[r.status]
+                    return (
+                      <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 14px', borderBottom: '1px solid #F1F5F9' }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 13, color: '#1A2B4A', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {r.aion_contacts?.name || formatContactPhone(r.remote_jid)}
+                          </div>
+                          {r.error_message && <div style={{ fontSize: 11, color: '#DC2626', marginTop: 2 }}>{r.error_message}</div>}
                         </div>
-                        {r.error_message && <div style={{ fontSize: 11, color: '#DC2626', marginTop: 2 }}>{r.error_message}</div>}
+                        <span style={{ fontSize: 11, fontWeight: 700, color: rc.color, flexShrink: 0 }}>{rc.label}</span>
                       </div>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: rc.color, flexShrink: 0 }}>{rc.label}</span>
-                    </div>
-                  )
-                })}
-                {recipients.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: 24, color: '#94A3B8', fontSize: 13 }}>Nenhum destinatário.</div>
+                    )
+                  })}
+                  {recipients.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: 24, color: '#94A3B8', fontSize: 13 }}>Nenhum destinatário.</div>
+                  )}
+                </div>
+                {recipients.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 10 }}>
+                    <span style={{ fontSize: 12, color: '#94A3B8' }}>
+                      Mostrando {recipients.length} de {detailBroadcast.total_recipients}
+                      {recipientsHasMore ? ` — faltam ${detailBroadcast.total_recipients - recipients.length}` : ''}
+                    </span>
+                    {recipientsHasMore && (
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={handleLoadMoreRecipients} disabled={loadingMoreRecipients || loadingAllRecipients}
+                          style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, color: '#64748B', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 7, cursor: (loadingMoreRecipients || loadingAllRecipients) ? 'not-allowed' : 'pointer', opacity: (loadingMoreRecipients || loadingAllRecipients) ? 0.6 : 1 }}>
+                          {loadingMoreRecipients ? 'Carregando...' : `+${Math.min(RECIPIENTS_PAGE_SIZE, detailBroadcast.total_recipients - recipients.length)}`}
+                        </button>
+                        <button onClick={handleLoadAllRecipients} disabled={loadingMoreRecipients || loadingAllRecipients}
+                          style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, color: '#00A896', background: '#F0FDFA', border: '1px solid #CCFBF1', borderRadius: 7, cursor: (loadingMoreRecipients || loadingAllRecipients) ? 'not-allowed' : 'pointer', opacity: (loadingMoreRecipients || loadingAllRecipients) ? 0.6 : 1 }}>
+                          {loadingAllRecipients ? 'Carregando...' : 'Ver todos de uma vez'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
-              </div>
+              </>
             )}
           </div>
         </div>

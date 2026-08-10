@@ -304,20 +304,35 @@ serve(async (req) => {
       totalSent += sent
       totalFailed += failed
 
-      await supabase.rpc('increment_aion_broadcast_counts', {
-        p_broadcast_id: broadcast.id, p_sent_delta: sent, p_failed_delta: failed,
-      })
+      // Recontagem direta em aion_broadcast_recipients em vez de incrementar
+      // via RPC — achado da investigação: increment_aion_broadcast_counts()
+      // era chamada mas seu resultado (data/error) nunca era checado, então
+      // se a função não existisse no banco (migration nunca aplicada) ou
+      // falhasse por qualquer outro motivo, o erro era descartado em
+      // silêncio e sent_count/failed_count ficavam travados em 0 pra sempre,
+      // mesmo com os recipients já corretamente marcados 'sent'/'failed'
+      // individualmente. Recontar do zero a cada lote é mais simples e
+      // autocorretivo — sempre reflete a fonte de verdade (os recipients),
+      // não depende de nenhuma função auxiliar existir no banco.
+      const [{ count: sentCount, error: sentCountErr }, { count: failedCount, error: failedCountErr }, { count: pendingCount }] = await Promise.all([
+        supabase.from('aion_broadcast_recipients').select('id', { count: 'exact', head: true }).eq('broadcast_id', broadcast.id).eq('status', 'sent'),
+        supabase.from('aion_broadcast_recipients').select('id', { count: 'exact', head: true }).eq('broadcast_id', broadcast.id).eq('status', 'failed'),
+        supabase.from('aion_broadcast_recipients').select('id', { count: 'exact', head: true }).eq('broadcast_id', broadcast.id).eq('status', 'pending'),
+      ])
 
-      const { count: remaining } = await supabase
-        .from('aion_broadcast_recipients')
-        .select('id', { count: 'exact', head: true })
-        .eq('broadcast_id', broadcast.id)
-        .eq('status', 'pending')
+      if (sentCountErr || failedCountErr) {
+        console.error('[aion-broadcast-send] erro ao recontar recipients:', sentCountErr?.message || failedCountErr?.message)
+      }
 
-      if ((remaining ?? 0) === 0) {
-        await supabase.from('aion_broadcasts')
-          .update({ status: 'completed', completed_at: new Date().toISOString() })
-          .eq('id', broadcast.id)
+      const updatePayload: Record<string, unknown> = { sent_count: sentCount ?? 0, failed_count: failedCount ?? 0 }
+      if ((pendingCount ?? 0) === 0) {
+        updatePayload.status = 'completed'
+        updatePayload.completed_at = new Date().toISOString()
+      }
+
+      const { error: updErr } = await supabase.from('aion_broadcasts').update(updatePayload).eq('id', broadcast.id)
+      if (updErr) {
+        console.error('[aion-broadcast-send] erro ao atualizar aion_broadcasts:', updErr.message)
       }
     }
 

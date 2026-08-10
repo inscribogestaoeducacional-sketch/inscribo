@@ -1831,8 +1831,22 @@ async function processAionMessage({
     console.log('[aion] mensagem recebida de', rawPhone, '→ fila:', queue)
 
     // ── Bot processing ────────────────────────────────────────────────────────
-    // Priority: whatsapp_flows (FlowEditor) keyed by platform_whatsapp.id
+    // Fonte de verdade: whatsapp_flows (editado pelo FlowEditor visual, "🤖
+    // Robô ativo/inativo"), sempre que existir uma linha explícita pra esse
+    // platformWAId — inclusive quando ela diz "desabilitado" (bot_enabled=
+    // false). aion_flows é uma tabela LEGADA: um único registro global, sem
+    // institution_id nem qualquer outro escopo de plataforma, editado à
+    // parte na aba "Configurações" (SettingsTab) sem relação nenhuma com o
+    // FlowEditor. Ela só deve ser consultada quando NÃO existir nenhuma
+    // configuração em whatsapp_flows pra essa instância — nunca como
+    // substituto silencioso de um "desligado" explícito. Antes desta
+    // correção, "existe mas desabilitado" e "não existe nenhuma linha"
+    // caíam no mesmo `if (!aionFlow)`, então desligar o bot no editor visual
+    // não impedia o fluxo legado (sempre ativo desde a migration que o
+    // seedou) de responder no lugar, com uma mensagem completamente
+    // diferente da configurada.
     let aionFlow: any = null
+    let whatsappFlowsRowExists = false
     if (platformWAId) {
       const { data: wflow, error: wflowErr } = await supabase
         .from('whatsapp_flows')
@@ -1840,12 +1854,18 @@ async function processAionMessage({
         .eq('institution_id', platformWAId)
         .maybeSingle()
       if (wflowErr) console.error('❌ [aion] erro ao buscar whatsapp_flows:', wflowErr)
-      if (wflow?.is_active && wflow?.bot_enabled && wflow?.bot_flow?.nodes?.length) {
-        aionFlow = wflow
+      if (wflow) {
+        whatsappFlowsRowExists = true
+        if (wflow.is_active && wflow.bot_enabled && wflow.bot_flow?.nodes?.length) {
+          aionFlow = wflow
+        }
       }
     }
-    // Fallback: legacy aion_flows table
-    if (!aionFlow) {
+    // Fallback: tabela legada aion_flows — só quando não há NENHUMA
+    // configuração em whatsapp_flows pra essa plataforma (linha inexistente).
+    // Se a linha existe e está desabilitada, respeita essa decisão e não
+    // busca nada aqui.
+    if (!aionFlow && !whatsappFlowsRowExists) {
       const { data: legacyFlow, error: legacyFlowErr } = await supabase
         .from('aion_flows')
         .select('*')
