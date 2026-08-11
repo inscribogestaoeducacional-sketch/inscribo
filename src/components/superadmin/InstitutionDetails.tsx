@@ -695,9 +695,14 @@ export default function InstitutionDetails() {
                   : t.status?.toLowerCase() === 'rejected' ? 'rejected'
                   : 'pending',
           }))
-          const { error: upsertErr } = await supabase
+          // TEMP DIAG — remover depois de confirmar a causa do upsert que não
+          // persiste (investigação whatsapp_templates 0 linhas / Santa Teresa).
+          console.log('[DIAG templates] institution_id:', id, '| metaTemplates.length:', metaTemplates.length, '| nomes:', toUpsert.map(t => t.name))
+          const { data: upsertData, error: upsertErr } = await supabase
             .from('whatsapp_templates')
             .upsert(toUpsert, { onConflict: 'institution_id,name' })
+            .select('id, name')
+          console.log('[DIAG templates] upsert result — data:', upsertData, '| error:', upsertErr)
           if (upsertErr) console.error('[templates] erro ao salvar cache:', upsertErr)
         }
       }
