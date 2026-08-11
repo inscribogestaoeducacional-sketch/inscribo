@@ -1960,6 +1960,33 @@ async function processAionMessage({
       if (keywordErr) console.error('❌ [aion] erro ao buscar aion_keywords:', keywordErr)
 
       if (keyword) {
+        // Log de todo match — inclusive repetido, inclusive quando não vira
+        // lead — pra medir "quantas vezes essa keyword foi mandada", separado
+        // da atribuição de primeiro toque abaixo (que é 1 valor por conversa).
+        const { error: hitErr } = await supabase.from('aion_keyword_hits').insert({
+          keyword_id:      keyword.id,
+          remote_jid:      remoteJid,
+          conversation_id: conv?.id ?? null,
+          matched_at:      new Date().toISOString(),
+        })
+        if (hitErr) console.error('❌ [aion] erro ao gravar aion_keyword_hits:', hitErr)
+
+        // Atribuição de primeiro toque — só grava se a conversa ainda não tem
+        // uma keyword de origem (o .is('source_keyword_id', null) no WHERE
+        // faz isso atomicamente: se já tiver valor, o update casa 0 linhas e
+        // não sobrescreve, sem precisar ler o valor atual antes).
+        if (conv?.id) {
+          const { error: srcKwErr } = await supabase
+            .from('whatsapp_conversations')
+            .update({
+              source_keyword_id:         keyword.id,
+              source_keyword_matched_at: new Date().toISOString(),
+            })
+            .eq('id', conv.id)
+            .is('source_keyword_id', null)
+          if (srcKwErr) console.error('❌ [aion] erro ao gravar source_keyword_id:', srcKwErr)
+        }
+
         if (keyword.create_lead) {
           const cleanPhone = rawPhone.replace(/^55/, '')
           const { data: existingLead, error: existingLeadErr } = await supabase

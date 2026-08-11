@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import SuperAdminLayout from './SuperAdminLayout'
@@ -8,11 +8,15 @@ import {
   Settings, MessageCircle, GitBranch, QrCode, Megaphone,
   Plus, Trash2, Copy, Check, ToggleLeft, ToggleRight, Save, Loader2,
   TrendingUp, Users, Clock, Edit2, Send, AlertCircle, X,
-  Search, Upload, Download, FileText, Radio, ChevronRight, UserX,
+  Search, Upload, Download, FileText, Radio, ChevronRight, UserX, Percent,
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { buildSendComponents, getTemplateHeaderMediaFormat, uploadTemplateHeaderMedia, type MediaHeaderFormat } from '../../lib/whatsappTemplate'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
+import { STAGES } from '../shared/LeadModal'
+import {
+  PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Legend, BarChart, Bar,
+} from 'recharts'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -55,6 +59,34 @@ interface RaioXLead {
   email: string
   school_name: string
   created_at: string
+}
+
+// Lead rastreado via crm_leads.notes (ver CAMPAIGN_NOTE_PREFIX, CampaignsTab).
+interface CampaignLead {
+  id: string
+  name: string
+  phone: string
+  stage: string
+  notes: string
+  created_at: string
+}
+
+// Conversa com atribuição de primeiro toque (whatsapp_conversations.source_keyword_id
+// — ver migration 20260811000000_aion_keyword_hits_tracking.sql).
+interface KeywordConv {
+  id: string
+  source_keyword_id: string
+  remote_jid: string
+  contact_name: string | null
+  created_at: string
+}
+
+// Todo match de keyword, inclusive repetido (aion_keyword_hits).
+interface KeywordHit {
+  id: string
+  remote_jid: string
+  matched_at: string
+  conversation_id: string | null
 }
 
 interface ConsultantUser {
@@ -505,9 +537,15 @@ function periodCutoffIso(period: Period): string | null {
 }
 
 function CampaignsTab() {
+  const navigate = useNavigate()
   const [keywords, setKeywords]   = useState<AionKeyword[]>([])
   const [aionTags, setAionTags]   = useState<{id:string;name:string;color:string}[]>([])
-  const [campaignLeads, setCampaignLeads] = useState<{ notes: string; created_at: string }[]>([])
+  const [campaignLeads, setCampaignLeads] = useState<CampaignLead[]>([])
+  // Conversas com atribuição de primeiro toque (source_keyword_id) — todas as
+  // keywords de uma vez, reaproveitado na visão geral e no detalhe por
+  // campanha, pra não multiplicar queries. Ver migration
+  // 20260811000000_aion_keyword_hits_tracking.sql.
+  const [keywordConvs, setKeywordConvs] = useState<KeywordConv[]>([])
   // Raio-X Estratégico (landing page INEP) é uma origem de lead separada das
   // keywords de QR Code acima — crm_leads.origin='raio_x_inep', sem o prefixo
   // "Veio via QR Code:" em notes, então nunca batia com keywordStats. Contado
@@ -527,22 +565,29 @@ function CampaignsTab() {
   const [resendingId, setResendingId] = useState<string | null>(null)
   const [toast, setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
 
+  // Detalhe de campanha — aberto ao clicar num card da lista "Por keyword".
+  const [detailKeyword, setDetailKeyword]         = useState<AionKeyword | null>(null)
+  const [detailHits, setDetailHits]               = useState<KeywordHit[]>([])
+  const [detailHitsLoading, setDetailHitsLoading] = useState(false)
+
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok })
     setTimeout(() => setToast(null), 4500)
   }
 
   const load = async () => {
-    const [{ data: kws }, { data: tags }, { data: leads }, { data: raioX }, { data: linkedConvs }] = await Promise.all([
+    const [{ data: kws }, { data: tags }, { data: leads }, { data: convs }, { data: raioX }, { data: linkedConvs }] = await Promise.all([
       supabase.from('aion_keywords').select('*').order('created_at', { ascending: false }),
       supabase.from('aion_tags').select('*').order('name'),
-      supabase.from('crm_leads').select('notes, created_at').ilike('notes', `${CAMPAIGN_NOTE_PREFIX}%`),
+      supabase.from('crm_leads').select('id, name, phone, stage, notes, created_at').ilike('notes', `${CAMPAIGN_NOTE_PREFIX}%`),
+      supabase.from('whatsapp_conversations').select('id, source_keyword_id, remote_jid, contact_name, created_at').not('source_keyword_id', 'is', null),
       supabase.from('crm_leads').select('id, name, phone, email, school_name, created_at').eq('origin', 'raio_x_inep').order('created_at', { ascending: false }),
       supabase.from('whatsapp_conversations').select('aion_lead_id').eq('is_aion_inbox', true).not('aion_lead_id', 'is', null),
     ])
     setKeywords((kws as AionKeyword[]) ?? [])
     setAionTags(tags ?? [])
-    setCampaignLeads((leads as { notes: string; created_at: string }[]) ?? [])
+    setCampaignLeads((leads as CampaignLead[]) ?? [])
+    setKeywordConvs((convs as KeywordConv[]) ?? [])
     setRaioXLeads((raioX as RaioXLead[]) ?? [])
     setLinkedLeadIds(new Set((linkedConvs ?? []).map((c: any) => c.aion_lead_id as string)))
     setLoading(false)
@@ -550,17 +595,46 @@ function CampaignsTab() {
 
   useEffect(() => { load() }, [])
 
-  // Contagem/última-vez por keyword — comparação exata contra o texto que o
-  // webhook grava (Veio via QR Code: {label}), não substring, pra um label não
-  // "vazar" contagem de outro que o contenha como prefixo.
+  // Contagem por keyword:
+  // - conversas: whatsapp_conversations.source_keyword_id, atribuição de
+  //   primeiro toque — só existe a partir de quando essa coluna passou a ser
+  //   gravada (migration 20260811000000), não é retroativo.
+  // - leads: comparação exata contra o texto que o webhook grava em
+  //   crm_leads.notes ("Veio via QR Code: {label}"), não substring, pra um
+  //   label não "vazar" contagem de outro que o contenha como prefixo — fonte
+  //   mais antiga (existe desde sempre que a keyword tem create_lead=true).
+  // Como as duas fontes têm históricos de tamanhos diferentes, a taxa de
+  // conversão pode passar de 100% logo após o deploy dessa migration (leads
+  // acumulados há mais tempo que conversas rastreadas) — tende a se
+  // normalizar conforme novas conversas forem sendo contadas.
   const keywordStats = keywords.map(kw => {
+    const convs = keywordConvs.filter(c => c.source_keyword_id === kw.id)
     const expected = `${CAMPAIGN_NOTE_PREFIX} ${kw.label}`
-    const matches  = campaignLeads.filter(l => l.notes === expected)
-    const lastUsed = matches.length
-      ? matches.reduce((max, l) => (l.created_at > max ? l.created_at : max), matches[0].created_at)
-      : null
-    return { keyword: kw, count: matches.length, lastUsed }
+    const leads = campaignLeads.filter(l => l.notes === expected)
+    const lastConvAt = convs.reduce((max, c) => c.created_at > max ? c.created_at : max, '')
+    const lastLeadAt = leads.reduce((max, l) => l.created_at > max ? l.created_at : max, '')
+    const lastActivity = [lastConvAt, lastLeadAt].filter(Boolean).sort().pop() || null
+    const conversionPct = convs.length > 0 ? Math.round((leads.length / convs.length) * 100) : null
+    return { keyword: kw, convCount: convs.length, leadCount: leads.length, conversionPct, lastActivity }
   })
+
+  // Busca o log completo de toques (todo match, inclusive repetido) só quando
+  // o detalhe de uma campanha é aberto — aion_keyword_hits pode crescer bem
+  // mais que as outras tabelas já carregadas de uma vez em load(), então não
+  // vale a pena buscar de todas as keywords antecipadamente.
+  const openDetail = async (kw: AionKeyword) => {
+    setDetailKeyword(kw)
+    setDetailHits([])
+    setDetailHitsLoading(true)
+    const { data, error } = await supabase
+      .from('aion_keyword_hits')
+      .select('id, remote_jid, matched_at, conversation_id')
+      .eq('keyword_id', kw.id)
+      .order('matched_at', { ascending: true })
+    if (error) { showToast(error.message, false) } else { setDetailHits((data as KeywordHit[]) ?? []) }
+    setDetailHitsLoading(false)
+  }
+  const closeDetail = () => { setDetailKeyword(null); setDetailHits([]) }
 
   const cutoff = periodCutoffIso(period)
   const totalInPeriod = campaignLeads.filter(l => !cutoff || l.created_at >= cutoff).length
@@ -648,6 +722,41 @@ function CampaignsTab() {
     fontSize: 12, fontWeight: 600, color: '#64748B',
     textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, display: 'block',
   }
+
+  // ── Dados derivados do detalhe de campanha (só quando detailKeyword != null) ──
+  const detailConvs = useMemo(
+    () => detailKeyword ? keywordConvs.filter(c => c.source_keyword_id === detailKeyword.id) : [],
+    [detailKeyword, keywordConvs]
+  )
+  const detailLeads = useMemo(
+    () => detailKeyword ? campaignLeads.filter(l => l.notes === `${CAMPAIGN_NOTE_PREFIX} ${detailKeyword.label}`) : [],
+    [detailKeyword, campaignLeads]
+  )
+  const detailConversionPct = detailConvs.length > 0 ? Math.round((detailLeads.length / detailConvs.length) * 100) : null
+
+  // Evolução por dia — conversas (primeiro toque) e leads convertidos,
+  // mescladas num único eixo de data pra caber no mesmo LineChart.
+  const dailySeries = useMemo(() => {
+    const byDay: Record<string, { day: string; conversas: number; leads: number }> = {}
+    detailConvs.forEach(c => {
+      const day = c.created_at.slice(0, 10)
+      ;(byDay[day] ??= { day, conversas: 0, leads: 0 }).conversas++
+    })
+    detailLeads.forEach(l => {
+      const day = l.created_at.slice(0, 10)
+      ;(byDay[day] ??= { day, conversas: 0, leads: 0 }).leads++
+    })
+    return Object.values(byDay)
+      .sort((a, b) => a.day.localeCompare(b.day))
+      .map(d => ({ ...d, label: new Date(d.day + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) }))
+  }, [detailConvs, detailLeads])
+
+  // Funil — distribuição dos leads dessa campanha por stage, na ordem oficial
+  // do CRM (STAGES, de ../shared/LeadModal — mesma taxonomia do AdminCRM).
+  const funnelData = useMemo(
+    () => STAGES.map(s => ({ stage: s.label, count: detailLeads.filter(l => l.stage === s.id).length, color: s.color })),
+    [detailLeads]
+  )
 
   return (
     <div style={{ padding: '24px 24px' }}>
@@ -766,7 +875,8 @@ function CampaignsTab() {
           )}
         </div>
 
-        {/* Por keyword */}
+        {/* Por keyword — cada card é uma campanha isolada; clique abre o
+            detalhe completo (gráficos + lista de leads) só dela. */}
         {keywords.length === 0 ? (
           <div style={{ background: '#F8FAFC', border: '1.5px dashed #CBD5E1', borderRadius: 14, padding: '32px 24px', textAlign: 'center' }}>
             <Megaphone style={{ width: 32, height: 32, color: '#94A3B8', margin: '0 auto 12px' }} />
@@ -777,10 +887,11 @@ function CampaignsTab() {
             </div>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-            {keywordStats.map(({ keyword, count, lastUsed }) => (
-              <div key={keyword.id} style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '14px 16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
+            {keywordStats.map(({ keyword, convCount, leadCount, conversionPct, lastActivity }) => (
+              <button key={keyword.id} onClick={() => openDetail(keyword)}
+                style={{ background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: '14px 16px', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {keyword.label}
                   </span>
@@ -788,18 +899,29 @@ function CampaignsTab() {
                     {keyword.keyword}
                   </span>
                 </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', lineHeight: 1 }}>{convCount}</div>
+                    <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 2 }}>conversa{convCount === 1 ? '' : 's'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: '#00A896', lineHeight: 1 }}>{leadCount}</div>
+                    <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 2 }}>lead{leadCount === 1 ? '' : 's'}</div>
+                  </div>
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                  <Users style={{ width: 13, height: 13, color: '#94A3B8' }} />
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A' }}>{count}</span>
-                  <span style={{ fontSize: 12, color: '#64748B' }}>lead{count === 1 ? '' : 's'}</span>
+                  <Percent style={{ width: 13, height: 13, color: '#94A3B8' }} />
+                  <span style={{ fontSize: 12, color: '#64748B' }}>
+                    {conversionPct !== null ? `${conversionPct}% conversa → lead` : 'Sem conversas rastreadas ainda'}
+                  </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Clock style={{ width: 13, height: 13, color: '#94A3B8' }} />
                   <span style={{ fontSize: 12, color: '#64748B' }}>
-                    {lastUsed ? `Última vez: ${new Date(lastUsed).toLocaleDateString('pt-BR')}` : 'Ainda não usada'}
+                    {lastActivity ? `Última vez: ${new Date(lastActivity).toLocaleDateString('pt-BR')}` : 'Ainda não usada'}
                   </span>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -965,6 +1087,115 @@ function CampaignsTab() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Detalhe de campanha — aberto ao clicar num card de "Por keyword" */}
+      {detailKeyword && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={e => { if (e.target === e.currentTarget) closeDetail() }}>
+          <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 900, maxHeight: '90vh', overflowY: 'auto', padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1A2B4A' }}>{detailKeyword.label}</h2>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#00A896', background: '#E6F7F5', padding: '2px 8px', borderRadius: 20 }}>{detailKeyword.keyword}</span>
+                </div>
+                <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 3 }}>{detailKeyword.whatsapp_link}</div>
+              </div>
+              <button onClick={closeDetail} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 20, lineHeight: 1 }}>✕</button>
+            </div>
+
+            {/* Cards de resumo */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 24 }}>
+              {[
+                { label: 'Toques (QR/link)', value: detailHitsLoading ? '…' : String(detailHits.length), icon: QrCode, color: '#6366F1', bg: '#EEF2FF' },
+                { label: 'Conversas únicas', value: String(detailConvs.length), icon: MessageCircle, color: '#00A896', bg: '#E6F7F5' },
+                { label: 'Leads convertidos', value: String(detailLeads.length), icon: Users, color: '#7C3AED', bg: '#F5F3FF' },
+                { label: 'Conversa → lead', value: detailConversionPct !== null ? `${detailConversionPct}%` : '—', icon: Percent, color: '#D97706', bg: '#FFFBEB' },
+              ].map(c => (
+                <div key={c.label} style={{ background: c.bg, borderRadius: 12, padding: '12px 14px' }}>
+                  <c.icon style={{ width: 16, height: 16, color: c.color, marginBottom: 6 }} />
+                  <div style={{ fontSize: 20, fontWeight: 800, color: '#1A2B4A', lineHeight: 1 }}>{c.value}</div>
+                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 3 }}>{c.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Evolução no tempo */}
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 10 }}>Evolução ao longo do tempo</div>
+              {dailySeries.length === 0 ? (
+                <div style={{ padding: '24px 0', textAlign: 'center', color: '#94A3B8', fontSize: 13 }}>Sem atividade registrada ainda.</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={dailySeries} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} width={28} allowDecimals={false} />
+                    <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Line type="monotone" dataKey="conversas" name="Conversas" stroke="#00A896" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                    <Line type="monotone" dataKey="leads" name="Leads" stroke="#7C3AED" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* Funil por stage */}
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 10 }}>Funil dos leads gerados</div>
+              {detailLeads.length === 0 ? (
+                <div style={{ padding: '24px 0', textAlign: 'center', color: '#94A3B8', fontSize: 13 }}>Nenhum lead convertido ainda.</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart layout="vertical" data={funnelData} margin={{ top: 0, right: 24, left: 0, bottom: 0 }}>
+                    <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <YAxis type="category" dataKey="stage" tick={{ fontSize: 11 }} width={90} />
+                    <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }} />
+                    <Bar dataKey="count" name="Leads" radius={[0, 4, 4, 0]}>
+                      {funnelData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* Lista de leads/contatos */}
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', marginBottom: 10 }}>Leads gerados por essa campanha</div>
+              {detailLeads.length === 0 ? (
+                <div style={{ padding: '16px 0', textAlign: 'center', color: '#94A3B8', fontSize: 13 }}>Nenhum lead ainda.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {detailLeads
+                    .slice()
+                    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+                    .map(lead => {
+                      const stageInfo = STAGES.find(s => s.id === lead.stage)
+                      return (
+                        <div key={lead.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', border: '1px solid #F1F5F9', borderRadius: 10 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.name || '—'}</div>
+                            <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 1 }}>{lead.phone} · {new Date(lead.created_at).toLocaleDateString('pt-BR')}</div>
+                          </div>
+                          {stageInfo && (
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20, color: stageInfo.color, background: stageInfo.bg, whiteSpace: 'nowrap' }}>
+                              {stageInfo.label}
+                            </span>
+                          )}
+                          <button onClick={() => navigate(`/super-admin/aion-inbox?tab=inbox&phone=${encodeURIComponent(lead.phone)}`)}
+                            title="Abrir conversa"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700, border: '1px solid #A7F3D0', background: '#E6F7F5', color: '#00523C', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                            <MessageCircle style={{ width: 12, height: 12 }} /> Abrir conversa
+                          </button>
+                        </div>
+                      )
+                    })}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
