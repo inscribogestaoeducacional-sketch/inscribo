@@ -44,6 +44,8 @@ interface AionKeyword {
   whatsapp_link: string
   is_active: boolean
   created_at: string
+  cta_button_text: string | null
+  cta_button_url: string | null
 }
 
 interface RaioXLead {
@@ -481,7 +483,7 @@ function QuickRepliesSection({ institutionId }: { institutionId: string }) {
 
 // ─── CampaignsTab ───────────────────────────────────────────────────────────────
 
-const EMPTY_KW = { keyword: '', label: '', description: '', auto_response: '', tag: '', source: 'whatsapp', create_lead: true }
+const EMPTY_KW = { keyword: '', label: '', description: '', auto_response: '', tag: '', source: 'whatsapp', create_lead: true, cta_enabled: false, cta_button_text: '', cta_button_url: '' }
 
 // Rastreio de lead por campanha: não existe FK entre crm_leads e aion_keywords —
 // o webhook (api/whatsapp/webhook.ts) grava a origem só como texto livre em
@@ -577,7 +579,7 @@ function CampaignsTab() {
   const saveKeyword = async () => {
     if (!form.keyword.trim() || !form.label.trim()) return
     setSaving(true)
-    await supabase.from('aion_keywords').insert({
+    const { error } = await supabase.from('aion_keywords').insert({
       keyword:       form.keyword.trim().toUpperCase(),
       label:         form.label.trim(),
       description:   form.description.trim() || null,
@@ -586,21 +588,26 @@ function CampaignsTab() {
       source:        form.source || 'whatsapp',
       create_lead:   form.create_lead,
       is_active:     true,
+      cta_button_text: form.cta_enabled ? (form.cta_button_text.trim() || null) : null,
+      cta_button_url:  form.cta_enabled ? (form.cta_button_url.trim() || null) : null,
     })
+    setSaving(false)
+    if (error) { showToast(error.message, false); return }
     setForm({ ...EMPTY_KW })
     setShowForm(false)
-    setSaving(false)
     await load()
   }
 
   const toggleActive = async (kw: AionKeyword) => {
-    await supabase.from('aion_keywords').update({ is_active: !kw.is_active }).eq('id', kw.id)
+    const { error } = await supabase.from('aion_keywords').update({ is_active: !kw.is_active }).eq('id', kw.id)
+    if (error) { showToast(error.message, false); return }
     setKeywords(prev => prev.map(k => k.id === kw.id ? { ...k, is_active: !k.is_active } : k))
   }
 
   const deleteKeyword = async (id: string) => {
     if (!confirm('Excluir esta keyword?')) return
-    await supabase.from('aion_keywords').delete().eq('id', id)
+    const { error } = await supabase.from('aion_keywords').delete().eq('id', id)
+    if (error) { showToast(error.message, false); return }
     setKeywords(prev => prev.filter(k => k.id !== id))
   }
 
@@ -862,13 +869,41 @@ function CampaignsTab() {
                 Criar lead automaticamente
               </label>
             </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 20, gridColumn: '1 / -1' }}>
+              <input type="checkbox" id="cta_enabled" checked={form.cta_enabled}
+                onChange={e => setForm({ ...form, cta_enabled: e.target.checked })}
+                style={{ width: 16, height: 16, accentColor: '#00A896' }} />
+              <label htmlFor="cta_enabled" style={{ fontSize: 13, color: '#1A2B4A', cursor: 'pointer' }}>
+                Adicionar botão CTA (link) na resposta automática
+              </label>
+            </div>
+            {form.cta_enabled && (
+              <>
+                <div>
+                  <label style={labelStyle}>Texto do botão</label>
+                  <input value={form.cta_button_text} onChange={e => setForm({ ...form, cta_button_text: e.target.value })}
+                    placeholder="Ex: Ver mais" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>URL do botão</label>
+                  <input value={form.cta_button_url} onChange={e => setForm({ ...form, cta_button_url: e.target.value })}
+                    placeholder="https://..." style={inputStyle} />
+                </div>
+              </>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={saveKeyword} disabled={saving || !form.keyword.trim() || !form.label.trim()}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 9, border: 'none', cursor: (saving || !form.keyword.trim() || !form.label.trim()) ? 'not-allowed' : 'pointer', opacity: (saving || !form.keyword.trim() || !form.label.trim()) ? 0.6 : 1 }}>
-              {saving ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> : <Check style={{ width: 14, height: 14 }} />}
-              Salvar
-            </button>
+            {(() => {
+              const ctaIncomplete = form.cta_enabled && (!form.cta_button_text.trim() || !form.cta_button_url.trim())
+              const disabled = saving || !form.keyword.trim() || !form.label.trim() || ctaIncomplete
+              return (
+                <button onClick={saveKeyword} disabled={disabled}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, borderRadius: 9, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1 }}>
+                  {saving ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> : <Check style={{ width: 14, height: 14 }} />}
+                  Salvar
+                </button>
+              )
+            })()}
             <button onClick={() => { setShowForm(false); setForm({ ...EMPTY_KW }) }}
               style={{ padding: '9px 16px', background: '#F1F5F9', color: '#64748B', fontSize: 13, fontWeight: 600, borderRadius: 9, border: 'none', cursor: 'pointer' }}>
               Cancelar

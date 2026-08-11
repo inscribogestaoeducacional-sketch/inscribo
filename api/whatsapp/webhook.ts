@@ -1485,6 +1485,76 @@ async function sendAionInteractiveMenu(
   }
 }
 
+// ── Send a CTA URL button via Áion platform_whatsapp ──────────────────────────
+// Usado pela resposta automática de aion_keywords quando cta_button_text e
+// cta_button_url estão preenchidos (ver CampaignsTab). Cai pra texto puro
+// (sendAionMessage) se platformWA não estiver conectado ou se o envio falhar.
+async function sendAionCtaButton(
+  to:         string,
+  bodyText:   string,
+  buttonText: string,
+  buttonUrl:  string
+): Promise<void> {
+  try {
+    const { data: platformWA } = await supabase
+      .from('platform_whatsapp')
+      .select('phone_number_id, access_token')
+      .eq('connected', true)
+      .maybeSingle()
+
+    if (!platformWA?.phone_number_id || !platformWA.access_token) {
+      await sendAionMessage(to, bodyText)
+      return
+    }
+
+    const resp = await fetch(`${GRAPH_URL}/${platformWA.phone_number_id}/messages`, {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${platformWA.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type:    'individual',
+        to,
+        type:              'interactive',
+        interactive: {
+          type: 'cta_url',
+          body: { text: bodyText.slice(0, 1024) },
+          action: {
+            name: 'cta_url',
+            parameters: {
+              display_text: buttonText.slice(0, 20),
+              url:          buttonUrl,
+            },
+          },
+        },
+      }),
+    })
+
+    if (resp.ok) {
+      const d = await resp.json()
+      await supabase.from('whatsapp_messages').insert({
+        institution_id: null,
+        remote_jid:     to,
+        message_id:     d.messages?.[0]?.id,
+        instance_name:  'cloud-api',
+        content:        bodyText,
+        message_type:   'interactive',
+        from_me:        true,
+        contact_name:   '_bot_',
+        is_bot_message: true,
+        status:         'sent',
+        direction:      'outbound',
+        is_aion_inbox:  true,
+        timestamp:      new Date().toISOString(),
+      })
+    } else {
+      await sendAionMessage(to, bodyText)
+    }
+  } catch (e) {
+    console.error('❌ sendAionCtaButton error:', e)
+    try { await sendAionMessage(to, bodyText) } catch {}
+  }
+}
+
 // ── Simplified flow processor for the Áion inbox ─────────────────────────────
 // Handles node types: start, message, menu, transfer, end
 async function processAionFlow(
@@ -1928,7 +1998,11 @@ async function processAionMessage({
           }
         }
         if (keyword.auto_response) {
-          await sendAionMessage(remoteJid, keyword.auto_response)
+          if (keyword.cta_button_text && keyword.cta_button_url) {
+            await sendAionCtaButton(remoteJid, keyword.auto_response, keyword.cta_button_text, keyword.cta_button_url)
+          } else {
+            await sendAionMessage(remoteJid, keyword.auto_response)
+          }
         }
         return
       }
