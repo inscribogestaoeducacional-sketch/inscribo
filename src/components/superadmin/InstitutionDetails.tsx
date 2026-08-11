@@ -286,6 +286,16 @@ export default function InstitutionDetails() {
   })
   const [savingCampaign,    setSavingCampaign]    = useState(false)
   const [releasingCycleId,  setReleasingCycleId]  = useState<string | null>(null)
+  // Editar (draft/setup) reaproveita showNewCampaign/newCampaignForm — só muda
+  // o destino do submit (insert vs update) conforme editingCampaignId.
+  const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null)
+  const [deletingCampaignId, setDeletingCampaignId] = useState<string | null>(null)
+  const [archivingCampaignId, setArchivingCampaignId] = useState<string | null>(null)
+  // Edição limitada (released/active/completed) — só meta e data fim, modal
+  // separado e mais simples do que o de criação/edição de rascunho.
+  const [limitedEditCampaign, setLimitedEditCampaign] = useState<any | null>(null)
+  const [limitedEditForm, setLimitedEditForm] = useState({ endDate: '', targetNewStudents: '' })
+  const [savingLimitedEdit, setSavingLimitedEdit] = useState(false)
 
   // Meeting modal
   const [meetingModal, setMeetingModal] = useState<{ phase: string; title: string } | null>(null)
@@ -859,6 +869,122 @@ export default function InstitutionDetails() {
       showToast(e?.message || 'Erro ao criar campanha.', false)
     } finally {
       setSavingCampaign(false)
+    }
+  }
+
+  // Abre o mesmo modal de "Criar nova campanha" em modo edição, pré-preenchido
+  // — só pra ciclos draft/setup (a escola ainda não viu essa campanha).
+  const openEditCampaign = (c: any) => {
+    setEditingCampaignId(c.id)
+    setNewCampaignForm({
+      year: c.year ?? new Date().getFullYear() + 1,
+      startDate: c.start_date ?? '',
+      endDate: c.end_date ?? '',
+      targetNewStudents: c.target_new_students != null ? String(c.target_new_students) : '',
+    })
+    setShowNewCampaign(true)
+  }
+
+  // Salva a edição de um ciclo draft/setup (mesmo form do handleCreateCampaign,
+  // mas update por id em vez de insert).
+  const handleUpdateCampaign = async () => {
+    if (!editingCampaignId) return
+    const { year, startDate, endDate, targetNewStudents } = newCampaignForm
+    if (!startDate || !endDate) { showToast('Preencha as datas de início e fim.', false); return }
+    if (new Date(endDate) <= new Date(startDate)) { showToast('A data de fim precisa ser depois da de início.', false); return }
+    setSavingCampaign(true)
+    try {
+      const { error } = await supabase.from('campaign_cycles').update({
+        year, label: `Campanha ${year}`,
+        start_date: startDate, end_date: endDate,
+        campaign_start_month: new Date(startDate + 'T12:00:00').getMonth() + 1,
+        target_new_students: Number(targetNewStudents) || 0,
+      }).eq('id', editingCampaignId)
+      if (error) throw error
+      showToast(`Campanha ${year} atualizada!`)
+      setShowNewCampaign(false)
+      setEditingCampaignId(null)
+      setNewCampaignForm({ year: new Date().getFullYear() + 1, startDate: '', endDate: '', targetNewStudents: '' })
+      loadAll()
+    } catch (e: any) {
+      showToast(e?.message || 'Erro ao atualizar campanha.', false)
+    } finally {
+      setSavingCampaign(false)
+    }
+  }
+
+  // Exclusão física — só draft/setup, a escola nunca viu essa campanha, nada
+  // depende dela ainda (ver investigação: campaign_cycles não tem FK filha).
+  const handleDeleteCampaign = async (cycleId: string) => {
+    const target = cycles.find(c => c.id === cycleId)
+    if (!target) return
+    if (!confirm(`Excluir a campanha "${target.label || target.year}"? Essa ação não pode ser desfeita.`)) return
+    setDeletingCampaignId(cycleId)
+    try {
+      const { error } = await supabase.from('campaign_cycles').delete().eq('id', cycleId)
+      if (error) throw error
+      showToast(`Campanha ${target.year} excluída.`)
+      loadAll()
+    } catch (e: any) {
+      showToast(e?.message || 'Erro ao excluir campanha.', false)
+    } finally {
+      setDeletingCampaignId(null)
+    }
+  }
+
+  // Arquivar — equivalente a "excluir" pra released/active/completed, mas sem
+  // apagar a linha: a escola já pode ter dados de funil/matrículas atrelados
+  // a esse período, então só some do que conta como campanha ativa/liberada.
+  const handleArchiveCampaign = async (cycleId: string) => {
+    const target = cycles.find(c => c.id === cycleId)
+    if (!target) return
+    if (!confirm(`Arquivar a campanha "${target.label || target.year}"? Ela deixa de aparecer como ativa/liberada para a escola.`)) return
+    setArchivingCampaignId(cycleId)
+    try {
+      const { error } = await supabase.from('campaign_cycles').update({ status: 'archived' }).eq('id', cycleId)
+      if (error) throw error
+      showToast(`Campanha ${target.year} arquivada.`)
+      loadAll()
+    } catch (e: any) {
+      showToast(e?.message || 'Erro ao arquivar campanha.', false)
+    } finally {
+      setArchivingCampaignId(null)
+    }
+  }
+
+  // Edição limitada — só released/active/completed. Sem year/start_date de
+  // propósito: mudar o início de uma campanha que a escola já está rodando
+  // bagunçaria a leitura de funnel_metrics/monthly_reenrollments já gravados
+  // contra o período antigo.
+  const openLimitedEdit = (c: any) => {
+    setLimitedEditCampaign(c)
+    setLimitedEditForm({
+      endDate: c.end_date ?? '',
+      targetNewStudents: c.target_new_students != null ? String(c.target_new_students) : '',
+    })
+  }
+
+  const handleSaveLimitedEdit = async () => {
+    if (!limitedEditCampaign) return
+    const { endDate, targetNewStudents } = limitedEditForm
+    if (!endDate) { showToast('Preencha a data de fim.', false); return }
+    if (limitedEditCampaign.start_date && new Date(endDate) <= new Date(limitedEditCampaign.start_date)) {
+      showToast('A data de fim precisa ser depois da de início.', false); return
+    }
+    setSavingLimitedEdit(true)
+    try {
+      const { error } = await supabase.from('campaign_cycles').update({
+        end_date: endDate,
+        target_new_students: Number(targetNewStudents) || 0,
+      }).eq('id', limitedEditCampaign.id)
+      if (error) throw error
+      showToast('Campanha atualizada!')
+      setLimitedEditCampaign(null)
+      loadAll()
+    } catch (e: any) {
+      showToast(e?.message || 'Erro ao atualizar campanha.', false)
+    } finally {
+      setSavingLimitedEdit(false)
     }
   }
 
@@ -2046,7 +2172,11 @@ export default function InstitutionDetails() {
                   <div className="flex items-center justify-between mb-4">
                     <p className="text-sm font-semibold text-gray-700">Ciclos de campanha ({cycles.length})</p>
                     <button
-                      onClick={() => setShowNewCampaign(true)}
+                      onClick={() => {
+                        setEditingCampaignId(null)
+                        setNewCampaignForm({ year: new Date().getFullYear() + 1, startDate: '', endDate: '', targetNewStudents: '' })
+                        setShowNewCampaign(true)
+                      }}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 text-orange-700 border border-orange-200 rounded-xl text-xs font-semibold hover:bg-orange-100"
                     >
                       <Plus className="w-3 h-3" /> Criar nova campanha
@@ -2060,6 +2190,8 @@ export default function InstitutionDetails() {
                       {cycles.map(c => {
                         const cst = CYCLE_STATUS[c.status] || CYCLE_STATUS.draft
                         const canRelease = c.status === 'draft' || c.status === 'setup' || c.status === 'active'
+                        const isDraftLike = c.status === 'draft' || c.status === 'setup'
+                        const isLiveLike = c.status === 'released' || c.status === 'active' || c.status === 'completed'
                         return (
                           <div key={c.id} className="rounded-xl border border-gray-200 p-4">
                             <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -2073,16 +2205,54 @@ export default function InstitutionDetails() {
                                   {c.released_at && <span className="ml-2 text-green-600 font-medium">· Liberada em {fmtDate(c.released_at)}</span>}
                                 </p>
                               </div>
-                              {canRelease && (
-                                <button
-                                  onClick={() => handleReleaseCampaign(c.id)}
-                                  disabled={releasingCycleId === c.id}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-rose-600 text-white rounded-xl text-xs font-semibold disabled:opacity-60 flex-shrink-0"
-                                >
-                                  {releasingCycleId === c.id ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
-                                  Liberar para a escola
-                                </button>
-                              )}
+                              <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
+                                {isDraftLike && (
+                                  <>
+                                    <button
+                                      onClick={() => openEditCampaign(c)}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-xl text-xs font-semibold hover:bg-gray-50"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" /> Editar
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteCampaign(c.id)}
+                                      disabled={deletingCampaignId === c.id}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 rounded-xl text-xs font-semibold hover:bg-red-50 disabled:opacity-60"
+                                    >
+                                      {deletingCampaignId === c.id ? <div className="w-3.5 h-3.5 border-2 border-red-600 border-t-transparent rounded-full animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                      Excluir
+                                    </button>
+                                  </>
+                                )}
+                                {isLiveLike && (
+                                  <>
+                                    <button
+                                      onClick={() => openLimitedEdit(c)}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-xl text-xs font-semibold hover:bg-gray-50"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" /> Editar
+                                    </button>
+                                    <button
+                                      onClick={() => handleArchiveCampaign(c.id)}
+                                      disabled={archivingCampaignId === c.id}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-xl text-xs font-semibold hover:bg-gray-50 disabled:opacity-60"
+                                    >
+                                      {archivingCampaignId === c.id ? <div className="w-3.5 h-3.5 border-2 border-gray-600 border-t-transparent rounded-full animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
+                                      Arquivar
+                                    </button>
+                                  </>
+                                )}
+                                {canRelease && (
+                                  <button
+                                    onClick={() => handleReleaseCampaign(c.id)}
+                                    disabled={releasingCycleId === c.id}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-rose-600 text-white rounded-xl text-xs font-semibold disabled:opacity-60 flex-shrink-0"
+                                  >
+                                    {releasingCycleId === c.id ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
+                                    Liberar para a escola
+                                  </button>
+                                )}
+                              </div>
                             </div>
 
                             {/* Métricas já coletadas, quando existirem */}
@@ -2255,13 +2425,13 @@ export default function InstitutionDetails() {
           )
         })()}
 
-        {/* ── Modal: Criar nova campanha ── */}
+        {/* ── Modal: Criar/editar campanha (draft/setup) ── */}
         {showNewCampaign && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-4">
             <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
               <div className="flex items-center justify-between mb-5">
-                <h2 className="text-lg font-bold text-gray-900">Criar nova campanha</h2>
-                <button onClick={() => setShowNewCampaign(false)}><X className="w-5 h-5 text-gray-400" /></button>
+                <h2 className="text-lg font-bold text-gray-900">{editingCampaignId ? 'Editar campanha' : 'Criar nova campanha'}</h2>
+                <button onClick={() => { setShowNewCampaign(false); setEditingCampaignId(null) }}><X className="w-5 h-5 text-gray-400" /></button>
               </div>
               <div className="space-y-3">
                 <div>
@@ -2284,9 +2454,40 @@ export default function InstitutionDetails() {
                 </div>
               </div>
               <div className="flex gap-3 mt-5">
-                <button onClick={() => setShowNewCampaign(false)} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">Cancelar</button>
-                <button onClick={handleCreateCampaign} disabled={savingCampaign} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-orange-500 to-rose-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
-                  {savingCampaign ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Criar campanha'}
+                <button onClick={() => { setShowNewCampaign(false); setEditingCampaignId(null) }} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">Cancelar</button>
+                <button onClick={editingCampaignId ? handleUpdateCampaign : handleCreateCampaign} disabled={savingCampaign} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-orange-500 to-rose-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
+                  {savingCampaign ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : (editingCampaignId ? 'Salvar alterações' : 'Criar campanha')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Modal: Editar campanha (limitado — released/active/completed) ── */}
+        {limitedEditCampaign && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-4">
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6">
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-lg font-bold text-gray-900">Editar campanha</h2>
+                <button onClick={() => setLimitedEditCampaign(null)}><X className="w-5 h-5 text-gray-400" /></button>
+              </div>
+              <p className="text-xs text-gray-500 mb-4">
+                Campanha já {CYCLE_STATUS[limitedEditCampaign.status]?.l.toLowerCase() || limitedEditCampaign.status} — ano e data de início não podem ser alterados.
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className={lbl}>Data fim *</label>
+                  <input type="date" className={inp} value={limitedEditForm.endDate} onChange={e => setLimitedEditForm(f => ({ ...f, endDate: e.target.value }))} />
+                </div>
+                <div>
+                  <label className={lbl}>Meta de novos alunos</label>
+                  <input type="number" className={inp} value={limitedEditForm.targetNewStudents} onChange={e => setLimitedEditForm(f => ({ ...f, targetNewStudents: e.target.value }))} placeholder="Ex: 50" />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-5">
+                <button onClick={() => setLimitedEditCampaign(null)} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">Cancelar</button>
+                <button onClick={handleSaveLimitedEdit} disabled={savingLimitedEdit} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-orange-500 to-rose-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
+                  {savingLimitedEdit ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Salvar alterações'}
                 </button>
               </div>
             </div>
