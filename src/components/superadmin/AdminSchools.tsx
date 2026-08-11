@@ -1144,7 +1144,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
                       { label: 'Phone Number ID (Meta)',                        key: 'phone_id',     type: 'text', placeholder: '1007880222413531' },
                       { label: 'Número de telefone',                            key: 'phone_number', type: 'text', placeholder: '5583999990001' },
                       { label: 'Nome de exibição no WhatsApp',                  key: 'display_name', type: 'text', placeholder: 'Colégio São João' },
-                      { label: 'WABA ID (deixe vazio se usar o WABA da Áion)', key: 'waba_id',      type: 'text', placeholder: '2812701862456294' },
+                      { label: 'WABA ID (deixe vazio se usar o WABA da Áion)', key: 'waba_id',      type: 'text', placeholder: 'Deixe vazio, ou informe o WABA ID desta escola' },
                     ].map(f => (
                       <div key={f.key}>
                         <label className={lbl}>{f.label}</label>

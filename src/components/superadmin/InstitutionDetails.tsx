@@ -674,21 +674,32 @@ export default function InstitutionDetails() {
       const metaTemplates: any[] = data.data || []
       setWaTemplates(metaTemplates)
 
-      if (metaTemplates.length > 0 && id) {
-        const toUpsert = metaTemplates.map((t: any) => ({
-          institution_id: id,
-          name: t.name,
-          language: t.language || 'pt_BR',
-          category: t.category || 'UTILITY',
-          components: t.components || [],
-          template_id: t.id,
-          status: t.status?.toLowerCase() === 'approved' ? 'approved'
-                : t.status?.toLowerCase() === 'rejected' ? 'rejected'
-                : 'pending',
-        }))
-        await supabase
-          .from('whatsapp_templates')
-          .upsert(toUpsert, { onConflict: 'institution_id,name' })
+      if (id) {
+        // Limpa o cache antigo antes de recriar — evita templates órfãos
+        // sobrando de uma sincronização anterior contra um WABA diferente
+        // (ex.: waba_id da instituição corrigido depois de estar errado),
+        // já que upsert sozinho só insere/atualiza, nunca remove o que não
+        // veio na resposta atual da Graph API.
+        const { error: delErr } = await supabase.from('whatsapp_templates').delete().eq('institution_id', id)
+        if (delErr) console.error('[templates] erro ao limpar cache antigo:', delErr)
+
+        if (metaTemplates.length > 0) {
+          const toUpsert = metaTemplates.map((t: any) => ({
+            institution_id: id,
+            name: t.name,
+            language: t.language || 'pt_BR',
+            category: t.category || 'UTILITY',
+            components: t.components || [],
+            template_id: t.id,
+            status: t.status?.toLowerCase() === 'approved' ? 'approved'
+                  : t.status?.toLowerCase() === 'rejected' ? 'rejected'
+                  : 'pending',
+          }))
+          const { error: upsertErr } = await supabase
+            .from('whatsapp_templates')
+            .upsert(toUpsert, { onConflict: 'institution_id,name' })
+          if (upsertErr) console.error('[templates] erro ao salvar cache:', upsertErr)
+        }
       }
     } catch (e) {
       console.error('[templates] erro ao carregar:', e)
