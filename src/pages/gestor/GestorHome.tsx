@@ -13,7 +13,7 @@ import {
   Building2, CheckCircle, Bell, ChevronRight, Star,
   TrendingDown, Eye, Clock, Award, BarChart2,
   Filter, ClipboardCheck, ArrowLeftRight,
-  Smile, Meh, Frown, Sunrise, Sun, Moon, Bot, Database,
+  Smile, Meh, Frown, Sunrise, Sun, Moon, Database,
   ClipboardX, Download, ArrowUp, ArrowDown, User,
   PieChart as LucidePieChart
 } from 'lucide-react'
@@ -176,36 +176,6 @@ function computePerConversationResponseAvg(
   return result
 }
 
-function renderMarkdown(text: string): JSX.Element {
-  const lines = text.split('\n')
-  const elements: JSX.Element[] = []
-  let key = 0
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    if (trimmed.startsWith('## ')) {
-      elements.push(
-        <h3 key={key++} style={{ fontSize: 13, fontWeight: 600, color: '#00A896', margin: '8px 0 4px' }}>
-          {trimmed.replace(/^##\s*/, '')}
-        </h3>
-      )
-    } else {
-      const parts = trimmed.split(/(\*\*[^*]+\*\*)/)
-      const rendered = parts.map((part, j) =>
-        part.startsWith('**') && part.endsWith('**')
-          ? <strong key={j}>{part.slice(2, -2)}</strong>
-          : <React.Fragment key={j}>{part}</React.Fragment>
-      )
-      elements.push(
-        <p key={key++} style={{ fontSize: 13, lineHeight: 1.6, margin: '0 0 8px' }}>
-          {rendered}
-        </p>
-      )
-    }
-  }
-  return <>{elements}</>
-}
-
 function calcCampaignTiming(startMonth = 8) {
   const today = new Date()
   const campaignYear = today.getFullYear() + 1
@@ -353,12 +323,9 @@ export default function GestorHome() {
   const [activeConvsNow, setActiveConvsNow] = useState(0)
   const [badgeTooltip, setBadgeTooltip] = useState(false)
   const [allEnrollments, setAllEnrollments] = useState<{ id: string; user_id: string; created_at: string }[]>([])
-  const [npsData, setNpsData] = useState<{ id: string; title: string; created_at: string; satisfaction_responses: { answers: Record<string, number | string> | null }[] } | null>(null)
+  const [npsData, setNpsData] = useState<{ id: string; title: string; created_at: string; survey_mode: string; satisfaction_responses: { answers: Record<string, number | string> | null; custom_answers: Record<string, number | string> | null }[] } | null>(null)
   const [institutionData, setInstitutionData] = useState<{ inep_code: string | null } | null>(null)
   const [marketSchools, setMarketSchools] = useState<MarketSchool[]>([])
-  const [marketInsight, setMarketInsight] = useState<string | null>(null)
-  const [marketInsightLoading, setMarketInsightLoading] = useState(false)
-  const marketInsightFetched = useRef(false)
   const [mapSchools, setMapSchools] = useState<any[]>([])
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const leafletInstanceRef = useRef<any>(null)
@@ -456,10 +423,14 @@ export default function GestorHome() {
         // data de cadastro do lead, uma base temporal diferente.
         supabase.from('leads').select('id,status,created_at').eq('institution_id', institutionId).gte('created_at', prevStart).lt('created_at', start),
         supabase.from('enrollments').select('id').eq('institution_id', institutionId).gte('created_at', prevStart).lt('created_at', start),
-        // NPS — última pesquisa de satisfação. satisfaction_responses NÃO tem
-        // coluna `score` — a nota vem de `answers` (JSONB), ver
-        // respondentOverallScore10() no topo do arquivo.
-        supabase.from('satisfaction_surveys').select('id, title, created_at, satisfaction_responses(answers)').eq('institution_id', institutionId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        // NPS — última pesquisa de satisfação com respostas de verdade
+        // (status != 'draft' evita trocar pra um rascunho vazio recém-criado
+        // em vez da pesquisa ativa/fechada que já tem respostas reais).
+        // satisfaction_responses NÃO tem coluna `score` — a nota vem de
+        // `answers` (modo default) ou `custom_answers` (modo custom, sem
+        // estrutura fixa — ver respondentOverallScore10() no topo do arquivo
+        // e o branch de survey_mode==='custom' no card "Pesquisa de satisfação").
+        supabase.from('satisfaction_surveys').select('id, title, created_at, survey_mode, satisfaction_responses(answers, custom_answers)').eq('institution_id', institutionId).neq('status', 'draft').order('created_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('institutions').select('inep_code').eq('id', institutionId).single(),
       ])
       if (npsErr) console.error('[GestorHome] erro ao buscar NPS:', npsErr)
@@ -660,7 +631,6 @@ export default function GestorHome() {
         setMarketSchools([])
         setMapSchools([])
       }
-      marketInsightFetched.current = false
 
       const alreadySetup = loadedCycles.some(c => ['setup','draft','active','completed','released'].includes(c.status ?? ''))
       if (!alreadySetup) setShowSetup(true)
@@ -785,53 +755,6 @@ export default function GestorHome() {
     } catch { } finally { setAiInsightLoading(false) }
   }
 
-  const MARKET_CACHE_KEY = `market_insight_${institutionId}`
-  const MARKET_CACHE_TTL = 24 * 60 * 60 * 1000
-
-  async function fetchMarketInsight(schools: MarketSchool[], myStudents: number, forceRefresh = false) {
-    if (marketInsightFetched.current && !forceRefresh) return
-    marketInsightFetched.current = true
-    if (!forceRefresh) {
-      try {
-        const cached = localStorage.getItem(MARKET_CACHE_KEY)
-        if (cached) {
-          const { text, timestamp } = JSON.parse(cached)
-          if (Date.now() - timestamp < MARKET_CACHE_TTL) { setMarketInsight(text); return }
-        }
-      } catch { }
-    }
-    const maxYear = schools.length > 0 ? Math.max(...schools.map(s => s.ano_censo)) : null
-    if (!maxYear) return
-    const privateSchools = schools.filter(s => s.ano_censo === maxYear && s.tp_dependencia === 4)
-    if (privateSchools.length === 0) return
-    setMarketInsightLoading(true)
-    try {
-      const totalStudents = privateSchools.reduce((s, sch) => s + (sch.qt_mat_total ?? 0), 0)
-      const competitors = [...privateSchools]
-        .sort((a, b) => (b.qt_mat_total ?? 0) - (a.qt_mat_total ?? 0))
-        .slice(0, 5)
-        .map(s => ({ name: s.no_entidade, students: s.qt_mat_total ?? 0 }))
-      const res = await fetch('/api/ai', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'market_insight',
-          payload: {
-            city: marketCity, state: marketState, year: maxYear,
-            totalPrivateSchools: privateSchools.length,
-            totalPrivateStudents: totalStudents,
-            myStudents,
-            competitors,
-          }
-        }),
-      })
-      const json = await res.json()
-      if (json.result) {
-        setMarketInsight(json.result)
-        try { localStorage.setItem(MARKET_CACHE_KEY, JSON.stringify({ text: json.result, timestamp: Date.now() })) } catch { }
-      }
-    } catch { } finally { setMarketInsightLoading(false) }
-  }
-
   function getGreeting() {
     const h = new Date().getHours()
     if (h < 12) return 'Bom dia'
@@ -908,9 +831,6 @@ export default function GestorHome() {
   // diferentes (a matrícula podia ser de um lead criado em outro período).
   const cohortConvertedCount = leads.filter(l => l.status === 'enrolled').length
   const conversionRateNum = totalLeads > 0 ? +((cohortConvertedCount / totalLeads) * 100).toFixed(1) : 0
-  const totalMessages = waMessages.length
-  const waSent = waMessages.filter(m => m.from_me === true).length
-  const waReceived = waMessages.filter(m => m.from_me === false).length
 
   const pieData = [
     { name: 'Matriculados', value: totalEnrolled, fill: '#0F6E56' },
@@ -1057,10 +977,6 @@ export default function GestorHome() {
   const toSatisfPct = (score: number | null) => score !== null ? Math.round(((score - 1) / 2) * 100) : null
   const satisfPct = toSatisfPct(avgSatisfaction)
   const satisfPctColor = (pct: number | null) => pct !== null ? pct >= 75 ? '#00A896' : pct >= 40 ? '#F59E0B' : '#EF4444' : '#94a3b8'
-
-  useEffect(() => {
-    if (inepHasData && !marketInsightFetched.current) fetchMarketInsight(marketSchools, inepMyStudents ?? totalStudents)
-  }, [marketSchools.length, inepHasData])
 
   // Salvar score
   useEffect(() => {
@@ -1760,7 +1676,7 @@ export default function GestorHome() {
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
         {waConvStats?.daily && (
           <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><MessageCircle size={16} color="#25D366" style={{marginRight:6}} />WhatsApp por dia</h3>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: '0 0 16px', display: 'flex', alignItems: 'center' }}><MessageCircle size={16} color="#25D366" style={{marginRight:6}} />WhatsApp por dia (conversas)</h3>
             <div style={{ flex: 1, minHeight: 120 }}><ResponsiveContainer width="100%" height="100%">
               <BarChart data={waConvStats.daily} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
@@ -2126,101 +2042,74 @@ export default function GestorHome() {
             </button>
           </div>
         ) : inepHasData ? (
-          /* Layout 2 colunas */
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20 }}>
-
-            {/* Coluna esquerda — métricas */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                {[
-                  { label: 'Escolas privadas', value: fmt(inepTotalSchools), icon: <Building2 size={16} color="#7C3AED" />, bg: '#f5f3ff' },
-                  { label: 'Alunos no setor', value: fmt(inepTotalStudents), icon: <Users size={16} color="#00A896" />, bg: '#e6f7f5' },
-                  { label: 'Média por escola', value: inepAvgStudents ? fmt(inepAvgStudents) : '—', icon: <BarChart2 size={16} color="#F59E0B" />, bg: '#fef3c7' },
-                  { label: 'Market share', value: inepSharePct !== null ? `${inepSharePct}%` : '—', icon: <Trophy size={16} color="#00A896" />, bg: '#e6f7f5' },
-                ].map(item => (
-                  <div key={item.label} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 30, height: 30, borderRadius: 8, background: item.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      {item.icon}
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: '#1e2d6b', lineHeight: 1.1 }}>{item.value}</div>
-                      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{item.label}</div>
-                    </div>
+          /* Métricas + concorrentes — coluna única (a análise via IA que
+             ocupava a coluna direita foi removida, ver "Ver relatório
+             completo" abaixo, que só depende de dados INEP já calculados). */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 10 }}>
+              {[
+                { label: 'Escolas privadas', value: fmt(inepTotalSchools), icon: <Building2 size={16} color="#7C3AED" />, bg: '#f5f3ff' },
+                { label: 'Alunos no setor', value: fmt(inepTotalStudents), icon: <Users size={16} color="#00A896" />, bg: '#e6f7f5' },
+                { label: 'Média por escola', value: inepAvgStudents ? fmt(inepAvgStudents) : '—', icon: <BarChart2 size={16} color="#F59E0B" />, bg: '#fef3c7' },
+                { label: 'Market share', value: inepSharePct !== null ? `${inepSharePct}%` : '—', icon: <Trophy size={16} color="#00A896" />, bg: '#e6f7f5' },
+              ].map(item => (
+                <div key={item.label} style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: 8, background: item.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {item.icon}
                   </div>
-                ))}
-              </div>
-
-              {/* Ranking / Posição */}
-              {(inepMyRank !== null && inepMyRank > 0) && (
-                <div style={{ background: '#fafafa', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <Trophy size={18} color="#d97706" />
                   <div>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b' }}>
-                      {inepMyRank}º lugar
-                    </span>
-                    <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 6 }}>entre {inepTotalSchools} escolas privadas</span>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#1e2d6b', lineHeight: 1.1 }}>{item.value}</div>
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{item.label}</div>
                   </div>
                 </div>
-              )}
+              ))}
+            </div>
 
-              {/* Top concorrentes */}
-              {inepCompetitors.length > 0 && (
+            {/* Ranking / Posição */}
+            {(inepMyRank !== null && inepMyRank > 0) && (
+              <div style={{ background: '#fafafa', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Trophy size={18} color="#d97706" />
                 <div>
-                  <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Principais concorrentes
-                  </p>
-                  {inepCompetitors.map((sch, i) => {
-                    const pct = inepTotalStudents > 0 ? Math.round(((sch.qt_mat_total ?? 0) / inepTotalStudents) * 100) : 0
-                    return (
-                      <div key={sch.co_entidade} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', minWidth: 16 }}>{i + 1}</span>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 11, fontWeight: 600, color: '#374151', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {sch.no_entidade}
-                          </div>
-                          <div style={{ height: 4, background: '#e5e7eb', borderRadius: 9999 }}>
-                            <div style={{ height: 4, width: `${pct}%`, background: '#6366f1', borderRadius: 9999 }} />
-                          </div>
-                        </div>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: '#6366f1', minWidth: 44, textAlign: 'right' }}>{fmt(sch.qt_mat_total ?? 0)}</span>
-                      </div>
-                    )
-                  })}
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b' }}>
+                    {inepMyRank}º lugar
+                  </span>
+                  <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 6 }}>entre {inepTotalSchools} escolas privadas</span>
                 </div>
-              )}
-            </div>
-
-            {/* Coluna direita — análise IA */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                <Sparkles size={14} color="#6366f1" />
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>Análise estratégica</span>
-                <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 2 }}>via IA · atualiza sozinha a cada 24h</span>
               </div>
+            )}
 
-              {marketInsightLoading ? (
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '24px 0', color: '#94a3b8' }}>
-                  <div style={{ width: 28, height: 28, border: '3px solid #e5e7eb', borderTopColor: '#6366f1', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                  <span style={{ fontSize: 12 }}>Analisando mercado...</span>
-                </div>
-              ) : marketInsight ? (
-                <div style={{ background: '#f5f3ff', borderRadius: 12, padding: '14px 16px', border: '1px solid #e0e7ff', flex: 1 }}>
-                  {renderMarkdown(marketInsight)}
-                </div>
-              ) : (
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '20px 0', color: '#94a3b8' }}>
-                  <Bot size={28} />
-                  <span style={{ fontSize: 12, textAlign: 'center' }}>{inepHasData ? 'Preparando análise estratégica...' : 'Sem dados INEP suficientes pra gerar análise ainda.'}</span>
-                </div>
-              )}
+            {/* Top concorrentes */}
+            {inepCompetitors.length > 0 && (
+              <div>
+                <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Principais concorrentes
+                </p>
+                {inepCompetitors.map((sch, i) => {
+                  const pct = inepTotalStudents > 0 ? Math.round(((sch.qt_mat_total ?? 0) / inepTotalStudents) * 100) : 0
+                  return (
+                    <div key={sch.co_entidade} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', minWidth: 16 }}>{i + 1}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#374151', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {sch.no_entidade}
+                        </div>
+                        <div style={{ height: 4, background: '#e5e7eb', borderRadius: 9999 }}>
+                          <div style={{ height: 4, width: `${pct}%`, background: '#6366f1', borderRadius: 9999 }} />
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#6366f1', minWidth: 44, textAlign: 'right' }}>{fmt(sch.qt_mat_total ?? 0)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
 
-              {inepMyCode && (
-                <button onClick={() => setShowMarketReportModal(true)}
-                  style={{ marginTop: 4, width: '100%', padding: '9px 0', borderRadius: 10, background: '#EEF2FF', border: '1px solid #C7D2FE', color: '#4338CA', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                  Ver relatório completo <ChevronRight size={13} />
-                </button>
-              )}
-            </div>
+            {inepMyCode && (
+              <button onClick={() => setShowMarketReportModal(true)}
+                style={{ marginTop: 4, width: '100%', padding: '9px 0', borderRadius: 10, background: '#EEF2FF', border: '1px solid #C7D2FE', color: '#4338CA', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                Ver relatório completo <ChevronRight size={13} />
+              </button>
+            )}
           </div>
         ) : null}
       </div>
@@ -2302,6 +2191,34 @@ export default function GestorHome() {
           ) : (() => {
             const responses = npsData.satisfaction_responses ?? []
             const total = responses.length
+
+            // Pesquisas custom têm perguntas livres definidas pelo gestor —
+            // não existe uma "nota geral" fixa pra calcular (o formulário
+            // público grava answers:{} pra esse modo, ver SatisfactionPage.tsx
+            // — o próprio GestorSurveys.tsx também não computa nota geral pra
+            // custom, só pro modo default). Forçar um % aqui mostraria
+            // "0% satisfação" mesmo com respostas boas — melhor avisar e
+            // mandar pra tela com as respostas completas.
+            if (npsData.survey_mode === 'custom') {
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>{npsData.title} · {new Date(npsData.created_at).toLocaleDateString('pt-BR')}</p>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px 12px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: '#1e2d6b', lineHeight: 1 }}>{total}</div>
+                    <div style={{ fontSize: 11, color: '#94a3b8' }}>{total === 1 ? 'resposta' : 'respostas'}</div>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 8, padding: '10px 12px', background: '#f5f3ff', borderRadius: 10, textAlign: 'left' }}>
+                      <Info size={14} color="#6366f1" style={{ flexShrink: 0, marginTop: 1 }} />
+                      <p style={{ margin: 0, fontSize: 12, color: '#4338ca', lineHeight: 1.5 }}>Pesquisa com perguntas personalizadas — sem nota geral automática.</p>
+                    </div>
+                    <button onClick={() => navigate('/pesquisas')}
+                      style={{ marginTop: 4, fontSize: 12, fontWeight: 700, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      Ver respostas completas <ChevronRight size={13} />
+                    </button>
+                  </div>
+                </div>
+              )
+            }
+
             // Nota 0–10 por respondente (respondentOverallScore10, topo do
             // arquivo) — satisfaction_responses não tem coluna `score`.
             // Bucket igual ao NPS clássico usado em GestorSurveys.tsx

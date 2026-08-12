@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, Trophy, Users, TrendingUp, MapPin, Award, Target } from 'lucide-react'
+import { X, Trophy, Users, TrendingUp, MapPin, Award, Target, ArrowUpRight, ArrowDownRight, Building2 } from 'lucide-react'
 import { calculateRaioXMetrics, buildInterpretation, type RaioXMetrics } from '../../lib/raioXMetrics'
 
 // ─── carrossel de "gerando relatório" — mesma estrutura visual/tempo de
@@ -141,9 +141,21 @@ export default function MarketReportModal({
                 <div>
                   <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#1e2d6b' }}>{metrics.schoolName}</h2>
                   <p style={{ margin: '2px 0 0', fontSize: 13, color: '#64748b' }}>{metrics.city}/{metrics.state} · Censo Escolar {metrics.anoCenso}</p>
-                  <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: scoreBg(metrics.marketScore), color: scoreColor(metrics.marketScore) }}>
-                    {metrics.scoreLabel}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                    <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: scoreBg(metrics.marketScore), color: scoreColor(metrics.marketScore) }}>
+                      {metrics.scoreLabel}
+                    </span>
+                    {metrics.yearOverYear && (
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999,
+                        background: (metrics.yearOverYear.growthPct ?? 0) >= 0 ? '#F0FDF4' : '#FEF2F2',
+                        color: (metrics.yearOverYear.growthPct ?? 0) >= 0 ? '#16A34A' : '#DC2626',
+                      }}>
+                        {(metrics.yearOverYear.growthPct ?? 0) >= 0 ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
+                        {metrics.yearOverYear.growthPct !== null ? `${metrics.yearOverYear.growthPct}%` : '—'} vs. Censo {metrics.yearOverYear.previousYear}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -204,6 +216,24 @@ export default function MarketReportModal({
                         <>
                           <div style={{ fontSize: 16, fontWeight: 800, color: '#1e2d6b' }}>{fmt(seg.schoolValue)} <span style={{ fontSize: 11, fontWeight: 500, color: '#94a3b8' }}>alunos</span></div>
                           <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{seg.ranking}º de {seg.totalActive} · {seg.marketSharePct?.toFixed(1)}% de share</div>
+                          {seg.topCompetitors.length > 0 && (
+                            <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #e2e8f0' }}>
+                              <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>
+                                Concorrentes nessa etapa
+                              </div>
+                              {seg.topCompetitors.map((c, i) => (
+                                <div key={c.co_entidade} style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
+                                  <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', minWidth: 12 }}>{i + 1}</span>
+                                  <span style={{ flex: 1, fontSize: 10.5, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {c.no_entidade}
+                                  </span>
+                                  <span style={{ fontSize: 10, fontWeight: 600, color: '#64748b', flexShrink: 0 }}>
+                                    {fmt(c.value)} ({c.marketSharePct.toFixed(0)}%)
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </>
                       ) : (
                         <div style={{ fontSize: 12, color: '#94a3b8' }}>Sem atuação nessa etapa</div>
@@ -212,6 +242,35 @@ export default function MarketReportModal({
                   ))}
                 </div>
               </div>
+
+              {/* Distribuição por rede de ensino (privada vs pública) */}
+              {metrics.dependencyBreakdown.length > 0 && (() => {
+                const totalStudentsAllNetworks = metrics.dependencyBreakdown.reduce((s, d) => s + d.totalStudents, 0)
+                const depColor: Record<string, string> = { Privada: '#00A896', Federal: '#6366F1', Estadual: '#F59E0B', Municipal: '#94A3B8' }
+                return (
+                  <div>
+                    <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1e2d6b', margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Building2 size={14} color="#6366f1" /> Distribuição por rede de ensino
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {metrics.dependencyBreakdown.map(d => {
+                        const pct = totalStudentsAllNetworks > 0 ? (d.totalStudents / totalStudentsAllNetworks) * 100 : 0
+                        return (
+                          <div key={d.tp_dependencia} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ width: 66, flexShrink: 0, fontSize: 12, fontWeight: 600, color: '#374151' }}>{d.label}</span>
+                            <div style={{ flex: 1, height: 8, background: '#e5e7eb', borderRadius: 9999, overflow: 'hidden' }}>
+                              <div style={{ width: `${pct}%`, height: '100%', background: depColor[d.label] ?? '#94A3B8' }} />
+                            </div>
+                            <span style={{ fontSize: 11, color: '#64748b', flexShrink: 0, minWidth: 150, textAlign: 'right' }}>
+                              {fmt(d.schoolCount)} {d.schoolCount === 1 ? 'escola' : 'escolas'} · {fmt(d.totalStudents)} alunos ({pct.toFixed(0)}%)
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* Interpretação */}
               {interpretation.length > 0 && (

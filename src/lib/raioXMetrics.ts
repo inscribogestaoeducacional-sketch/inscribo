@@ -31,6 +31,19 @@ export interface SegmentMetric {
   topCompetitors: SegmentCompetitorRow[] // top 3 concorrentes desse segmento (exclui a própria escola)
 }
 
+export interface DependencyBreakdown {
+  tp_dependencia: number
+  label: string
+  schoolCount: number
+  totalStudents: number
+}
+
+export interface YearOverYear {
+  previousYear: number
+  previousQtMatTotal: number
+  growthPct: number | null // null se a escola não tinha matrículas no ano anterior (divisão por zero)
+}
+
 export interface RaioXMetrics {
   co_entidade: string
   schoolName: string
@@ -61,11 +74,15 @@ export interface RaioXMetrics {
 
   segments: SegmentMetric[]
 
+  dependencyBreakdown: DependencyBreakdown[]
+  yearOverYear: YearOverYear | null
+
   marketScore: number
   scoreLabel: string
 }
 
 const PRIVATE_DEPENDENCIA = 4 // tp_dependencia: 1 Federal, 2 Estadual, 3 Municipal, 4 Privada
+const DEPENDENCIA_LABELS: Record<number, string> = { 1: 'Federal', 2: 'Estadual', 3: 'Municipal', 4: 'Privada' }
 
 interface RawSchoolRow {
   co_entidade: string
@@ -123,6 +140,38 @@ export async function calculateRaioXMetrics(
   const qtMatTotal = school.qt_mat_total ?? 0
   const marketSharePct = totalPrivateStudents > 0 ? (qtMatTotal / totalPrivateStudents) * 100 : 0
 
+  // Distribuição por rede (privada vs pública) — todas as escolas do
+  // município no ano de referência, não só as privadas usadas no ranking
+  // acima (esse universo mais amplo já vem na query, só não era agregado).
+  const dependencyBreakdown: DependencyBreakdown[] = Object.entries(DEPENDENCIA_LABELS)
+    .map(([tpStr, label]) => {
+      const tp = Number(tpStr)
+      const rowsOfType = latest.filter(r => r.tp_dependencia === tp)
+      return {
+        tp_dependencia: tp,
+        label,
+        schoolCount: rowsOfType.length,
+        totalStudents: rowsOfType.reduce((s, r) => s + (r.qt_mat_total ?? 0), 0),
+      }
+    })
+    .filter(d => d.schoolCount > 0)
+    .sort((a, b) => b.totalStudents - a.totalStudents)
+
+  // Comparação ano a ano — só existe se houver mais de um ano_censo
+  // importado pra essa escola (import de INEP costuma trazer só o ano mais
+  // recente; quando há histórico, comparamos com o ano anterior disponível,
+  // não necessariamente anoCenso-1).
+  const priorYearRow = schoolRows
+    .filter(r => r.ano_censo < anoCenso)
+    .sort((a, b) => b.ano_censo - a.ano_censo)[0] ?? null
+  const yearOverYear: YearOverYear | null = priorYearRow ? {
+    previousYear: priorYearRow.ano_censo,
+    previousQtMatTotal: priorYearRow.qt_mat_total ?? 0,
+    growthPct: (priorYearRow.qt_mat_total ?? 0) > 0
+      ? +(((qtMatTotal - (priorYearRow.qt_mat_total ?? 0)) / (priorYearRow.qt_mat_total ?? 0)) * 100).toFixed(1)
+      : null,
+  } : null
+
   const leaderTotal = sorted[0]?.qt_mat_total ?? 0
   const distanceToLeader = Math.max(0, leaderTotal - qtMatTotal)
   const fifthTotal = sorted[4]?.qt_mat_total ?? null
@@ -169,7 +218,7 @@ export async function calculateRaioXMetrics(
 
     const topCompetitors: SegmentCompetitorRow[] = segSorted
       .filter(r => r.co_entidade !== coEntidade)
-      .slice(0, 3)
+      .slice(0, 5)
       .map(r => ({
         co_entidade: r.co_entidade,
         no_entidade: r.no_entidade ?? '—',
@@ -225,6 +274,8 @@ export async function calculateRaioXMetrics(
     cityAvgFund,
     cityAvgMed,
     segments,
+    dependencyBreakdown,
+    yearOverYear,
     marketScore,
     scoreLabel,
   }

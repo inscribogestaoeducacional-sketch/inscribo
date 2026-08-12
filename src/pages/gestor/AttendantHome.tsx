@@ -338,7 +338,7 @@ export default function AttendantHome() {
         <div style={{ display: 'grid', gridTemplateColumns: kpiCols, gap: 16 }}>
           <StatCard label="Leads hoje" value={leadsTodayCount} icon={<Users size={18} color="#8b5cf6" />} iconBg="#f5f3ff" onClick={() => navigate('/leads')} />
           <StatCard label="Visitas agendadas" value={visitsScheduled} icon={<Calendar size={18} color="#0F6E56" />} iconBg="#f0fdf4" onClick={() => navigate('/visits')} />
-          <StatCard label="WhatsApp 24h" value={waReceived} icon={<MessageCircle size={18} color="#10B981" />} iconBg="#d1fae5" onClick={() => navigate('/whatsapp')} />
+          <StatCard label="Mensagens (24h)" value={waReceived} icon={<MessageCircle size={18} color="#10B981" />} iconBg="#d1fae5" onClick={() => navigate('/whatsapp')} />
           <StatCard
             label="Transferências pendentes" value={transfersPending}
             icon={<ArrowRightLeft size={18} color={transfersPending > 0 ? '#dc2626' : '#64748b'} />}
@@ -547,11 +547,11 @@ export default function AttendantHome() {
             <div style={{ display: 'flex', gap: 12 }}>
               <div style={{ flex: 1, background: '#f0fdf4', borderRadius: 10, padding: '12px 16px', textAlign: 'center' }}>
                 <div style={{ fontSize: 28, fontWeight: 800, color: '#0F6E56' }}>{waReceived}</div>
-                <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Recebidas</div>
+                <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Mensagens recebidas</div>
               </div>
               <div style={{ flex: 1, background: '#f8fafc', borderRadius: 10, padding: '12px 16px', textAlign: 'center' }}>
                 <div style={{ fontSize: 28, fontWeight: 800, color: '#64748B' }}>{waSent}</div>
-                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>Enviadas</div>
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>Mensagens enviadas</div>
               </div>
             </div>
           )}
