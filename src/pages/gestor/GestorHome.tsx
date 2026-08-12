@@ -14,7 +14,7 @@ import {
   TrendingDown, Eye, Clock, Award, BarChart2,
   Filter, ClipboardCheck, ArrowLeftRight,
   Smile, Meh, Frown, Sunrise, Sun, Moon, Bot, Database,
-  ClipboardX, Download, ArrowUp, ArrowDown,
+  ClipboardX, Download, ArrowUp, ArrowDown, User,
   PieChart as LucidePieChart
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
@@ -71,7 +71,7 @@ interface MarketData {
 
 interface UserRanking {
   user_id: string; full_name: string; role: string
-  enrollments_count: number; leads_count: number
+  enrollments_count: number
 }
 
 interface StudentTransfer {
@@ -91,6 +91,19 @@ const MONTH_NAMES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','J
 
 function fmt(n: number) { return new Intl.NumberFormat('pt-BR').format(n) }
 function fmtBRL(n: number) { return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }) }
+
+// Nota geral (0–10) de UM respondente de satisfaction_responses. A tabela não
+// tem coluna `score` — a nota vem de `answers` (JSONB, 1–5 por categoria),
+// mesma lógica de GestorSurveys.tsx:respondentOverallScore10 (general,
+// teaching, communication, infrastructure, cost_benefit, escalado 1–5 → 0–10).
+function respondentOverallScore10(answers: Record<string, number | string> | null | undefined): number {
+  const a = answers || {}
+  const nums = [a.general, a.teaching, a.communication, a.infrastructure, a.cost_benefit]
+    .filter((v): v is number => typeof v === 'number')
+  if (nums.length === 0) return 0
+  const avg = nums.reduce((s, v) => s + v, 0) / nums.length
+  return Math.round(((avg - 1) / 4) * 10 * 10) / 10
+}
 
 // ─── Tempo de resposta — média de TODOS os intervalos cliente→humano ──────────
 // (não só o primeiro, ao contrário de first_human_response_at, que continua
@@ -199,16 +212,6 @@ function calcCampaignTiming(startMonth = 8) {
   const campaignDate = new Date(today.getFullYear(), startMonth - 1, 1)
   const monthsUntil = Math.max(0, (campaignDate.getFullYear() - today.getFullYear()) * 12 + campaignDate.getMonth() - today.getMonth())
   return { monthsUntil, campaignStartMonth: `${MONTH_NAMES_PT[startMonth - 1]}/${today.getFullYear()}`, campaignYear }
-}
-
-function getCampaignMonthsList(startDate?: string, endDate?: string): number[] {
-  if (!startDate || !endDate) return [8, 9, 10, 11, 12, 1, 2]
-  const months: number[] = []
-  const start = new Date(startDate + 'T12:00:00')
-  const end = new Date(endDate + 'T12:00:00')
-  const cur = new Date(start)
-  while (cur <= end && months.length < 12) { months.push(cur.getMonth() + 1); cur.setMonth(cur.getMonth() + 1) }
-  return months.length > 0 ? months : [8, 9, 10, 11, 12, 1, 2]
 }
 
 function entryYear(e: HistoricalEntry) { return e.detected_year ?? e.year ?? 0 }
@@ -350,7 +353,7 @@ export default function GestorHome() {
   const [activeConvsNow, setActiveConvsNow] = useState(0)
   const [badgeTooltip, setBadgeTooltip] = useState(false)
   const [allEnrollments, setAllEnrollments] = useState<{ id: string; user_id: string; created_at: string }[]>([])
-  const [npsData, setNpsData] = useState<{ id: string; title: string; created_at: string; satisfaction_responses: { score: number | null }[] } | null>(null)
+  const [npsData, setNpsData] = useState<{ id: string; title: string; created_at: string; satisfaction_responses: { answers: Record<string, number | string> | null }[] } | null>(null)
   const [institutionData, setInstitutionData] = useState<{ inep_code: string | null } | null>(null)
   const [marketSchools, setMarketSchools] = useState<MarketSchool[]>([])
   const [marketInsight, setMarketInsight] = useState<string | null>(null)
@@ -405,7 +408,23 @@ export default function GestorHome() {
     setLoading(true)
     try {
       const { start, end } = getPeriodRange()
-      const [cyclesRes, funnelRes, transferRes, leadsRes, visitsRes, waRes, enrollRes, usersRes, waPhoneRes, waConvsRes, overdueNotifRes] = await Promise.all([
+      // prevStart/duration só dependem de start/end (já calculados acima),
+      // então já entram no batch principal — antes ficavam pra uma rodada
+      // separada, mais tarde, sem motivo (não dependem de nenhum outro
+      // resultado). Mesma lógica pra leadsForEnrollData/openConvs/npsRes/
+      // instData: nenhum depende de cyclesRes nem um do outro, só de
+      // institutionId/start/end — juntar tudo num Promise.all só troca ~6
+      // round-trips sequenciais por 1.
+      const duration = new Date(end).getTime() - new Date(start).getTime()
+      const prevStart = new Date(new Date(start).getTime() - duration).toISOString()
+
+      const [
+        cyclesRes, funnelRes, transferRes, leadsRes, visitsRes, waRes, enrollRes, usersRes,
+        waPhoneRes, waConvsRes, overdueNotifRes,
+        { data: leadsForEnrollData }, { data: openConvs },
+        { data: prevLeadsData }, { data: prevEnrollData },
+        { data: npsRes, error: npsErr }, { data: instData },
+      ] = await Promise.all([
         supabase.from('campaign_cycles').select('*').eq('institution_id', institutionId).order('created_at', { ascending: false }),
         supabase.from('funnel_metrics').select('*').eq('institution_id', institutionId).order('created_at', { ascending: true }),
         supabase.from('student_transfers').select('id,student_name,course_grade,transfer_date,reason_category').eq('institution_id', institutionId).is('deleted_at', null).order('transfer_date', { ascending: false }).limit(5),
@@ -420,12 +439,36 @@ export default function GestorHome() {
         // filtrados pelo period do dashboard, são "pendências atuais", igual
         // Inadimplência já não é period-filtrada em AdminFinancial.tsx.
         supabase.from('system_notifications').select('id,message,action_url').eq('institution_id', institutionId).eq('type', 'overdue_reminder').is('read_at', null).order('created_at', { ascending: false }),
+        // Coluna correta é `assigned_to` — a tabela `leads` não tem
+        // `responsible_id` (esse nome é da interface CrmLead, do CRM comercial
+        // interno da Áion, um schema diferente). A query antiga voltava 400 Bad
+        // Request (coluna inexistente); o supabase-js não lança exceção nesse
+        // caso (resolve com data:null, error:{...}), então o erro nunca
+        // aparecia — só o ranking de matrículas ficava sempre incompleto
+        // (perdia leads marcados 'enrolled' sem linha correspondente em
+        // enrollments) sem nenhum sinal visível do porquê.
+        supabase.from('leads').select('id, assigned_to').eq('institution_id', institutionId).eq('status', 'enrolled').gte('updated_at', start).lte('updated_at', end),
+        // Open convs count — sem filtro de data (todas as conversas ativas agora)
+        supabase.from('whatsapp_conversations').select('id').eq('institution_id', institutionId).in('status', ['open', 'waiting']).not('remote_jid', 'ilike', '%@g.us'),
+        // prevEnrolled usa a mesma fonte/campo de data que totalEnrolled
+        // (enrollments.created_at) — antes comparava matrículas do período atual
+        // (evento de matrícula) contra leads do período anterior filtrados por
+        // data de cadastro do lead, uma base temporal diferente.
+        supabase.from('leads').select('id,status,created_at').eq('institution_id', institutionId).gte('created_at', prevStart).lt('created_at', start),
+        supabase.from('enrollments').select('id').eq('institution_id', institutionId).gte('created_at', prevStart).lt('created_at', start),
+        // NPS — última pesquisa de satisfação. satisfaction_responses NÃO tem
+        // coluna `score` — a nota vem de `answers` (JSONB), ver
+        // respondentOverallScore10() no topo do arquivo.
+        supabase.from('satisfaction_surveys').select('id, title, created_at, satisfaction_responses(answers)').eq('institution_id', institutionId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('institutions').select('inep_code').eq('id', institutionId).single(),
       ])
+      if (npsErr) console.error('[GestorHome] erro ao buscar NPS:', npsErr)
 
       const loadedCycles = (cyclesRes.data ?? []) as CampaignCycle[]
       setCycles(loadedCycles)
 
-      // Dados da campanha ativa para o gráfico de evolução
+      // Dados da campanha ativa para o gráfico de evolução — depende de
+      // loadedCycles (batch acima), por isso continua numa rodada separada.
       const chartActive = loadedCycles.find(c => c.status === 'active') ?? null
       if (chartActive) {
         const [leadsAtivosRes, reenrollRes] = await Promise.all([
@@ -457,23 +500,7 @@ export default function GestorHome() {
       // Calcular ranking de usuários
       const enrollments = (enrollRes.data ?? []) as { id: string; user_id: string; created_at: string }[]
       const users = (usersRes.data ?? []) as { id: string; full_name: string; role: string }[]
-      const leadsData = (leadsRes.data ?? []) as { id: string; status: string; created_at: string }[]
 
-      // Coluna correta é `assigned_to` — a tabela `leads` não tem
-      // `responsible_id` (esse nome é da interface CrmLead, do CRM comercial
-      // interno da Áion, um schema diferente). A query antiga voltava 400 Bad
-      // Request (coluna inexistente); o supabase-js não lança exceção nesse
-      // caso (resolve com data:null, error:{...}), então o erro nunca
-      // aparecia — só o ranking de matrículas ficava sempre incompleto
-      // (perdia leads marcados 'enrolled' sem linha correspondente em
-      // enrollments) sem nenhum sinal visível do porquê.
-      const { data: leadsForEnrollData } = await supabase
-        .from('leads')
-        .select('id, assigned_to')
-        .eq('institution_id', institutionId)
-        .eq('status', 'enrolled')
-        .gte('updated_at', start)
-        .lte('updated_at', end)
       const leadsForEnroll = (leadsForEnrollData ?? []) as { id: string; assigned_to: string | null }[]
 
       const enrollCountByUser: Record<string, number> = {}
@@ -491,7 +518,6 @@ export default function GestorHome() {
         full_name: u.full_name || 'Usuário',
         role: u.role || 'gestor',
         enrollments_count: enrollCountByUser[u.id] || 0,
-        leads_count: 0,
       })).sort((a, b) => b.enrollments_count - a.enrollments_count).slice(0, 5)
 
       setUserRankings(rankings)
@@ -503,13 +529,6 @@ export default function GestorHome() {
       // WA conversation stats (last 30 days)
       const waConvs = (waConvsRes.data ?? []) as { id: string; created_at: string; status: string; assigned_user_name: string | null; assigned_user_id: string | null; bot_active: boolean | null; satisfaction_score: number | null; first_human_response_at: string | null; remote_jid: string; contact_name: string | null; last_message: string | null }[]
 
-      // Open convs count — sem filtro de data (todas as conversas ativas agora)
-      const { data: openConvs } = await supabase
-        .from('whatsapp_conversations')
-        .select('id')
-        .eq('institution_id', institutionId)
-        .in('status', ['open', 'waiting'])
-        .not('remote_jid', 'ilike', '%@g.us')
       setActiveConvsNow(openConvs?.length ?? 0)
 
       // Tempo de resposta REAL da equipe — média de TODOS os intervalos
@@ -544,13 +563,21 @@ export default function GestorHome() {
       const waClosed = waConvs.filter(c => c.status === 'closed').length
       const scores = waConvs.map(c => c.satisfaction_score).filter((s): s is number => typeof s === 'number' && s >= 1 && s <= 3)
       const waAvgSatisfaction = scores.length > 0 ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10 : null
-      const now7 = new Date()
+
+      // Evolução diária de conversas — respeita o período selecionado (mesmo
+      // critério de "Leads por dia": do início do período até hoje, no máximo
+      // 30 pontos, pra não virar um gráfico de centenas de barras quando o
+      // filtro for "Ano"). Antes eram sempre os últimos 7 dias corridos,
+      // ignorando periodFilter — um filtro "Hoje"/"Semana" fazia a maioria das
+      // barras aparecer zerada mesmo com conversas fora dessa janela fixa.
+      const todayForDaily = new Date()
+      const dayCursor = new Date(start)
       const waDaily: { day: string; count: number }[] = []
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date(now7); d.setDate(d.getDate() - i)
-        const dayStr = d.toISOString().slice(0, 10)
-        const label = d.toLocaleDateString('pt-BR', { weekday: 'short' })
+      while (dayCursor <= todayForDaily && waDaily.length < 30) {
+        const dayStr = dayCursor.toISOString().slice(0, 10)
+        const label = dayCursor.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
         waDaily.push({ day: label, count: waConvs.filter(c => c.created_at.slice(0, 10) === dayStr).length })
+        dayCursor.setDate(dayCursor.getDate() + 1)
       }
       setWaConvStats({ total: waTotal, byBot: waByBot, byTeam: waByTeam, closed: waClosed, daily: waDaily, avgSatisfaction: waAvgSatisfaction })
       setWaConvsRaw(waConvs)
@@ -585,48 +612,17 @@ export default function GestorHome() {
       })
       setWaTeamRanking(Object.entries(waRankMap).map(([userId, count]) => ({ userId, count })).sort((a, b) => b.count - a.count).slice(0, 5))
 
-      const duration = new Date(end).getTime() - new Date(start).getTime()
-      const prevStart = new Date(new Date(start).getTime() - duration).toISOString()
-      // prevEnrolled usa a mesma fonte/campo de data que totalEnrolled
-      // (enrollments.created_at) — antes comparava matrículas do período atual
-      // (evento de matrícula) contra leads do período anterior filtrados por
-      // data de cadastro do lead, uma base temporal diferente.
-      const [prevLeadsRes, prevEnrollRes] = await Promise.all([
-        supabase
-          .from('leads')
-          .select('id,status,created_at')
-          .eq('institution_id', institutionId)
-          .gte('created_at', prevStart)
-          .lt('created_at', start),
-        supabase
-          .from('enrollments')
-          .select('id')
-          .eq('institution_id', institutionId)
-          .gte('created_at', prevStart)
-          .lt('created_at', start),
-      ])
-      setPrevLeadsCount(prevLeadsRes.data?.length ?? 0)
-      setPrevEnrolled(prevEnrollRes.data?.length ?? 0)
+      setPrevLeadsCount(prevLeadsData?.length ?? 0)
+      setPrevEnrolled(prevEnrollData?.length ?? 0)
 
-      // NPS data — última pesquisa de satisfação
-      const { data: npsRes } = await supabase
-        .from('satisfaction_surveys')
-        .select('id, title, created_at, satisfaction_responses(score)')
-        .eq('institution_id', institutionId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
       setNpsData((npsRes as typeof npsData) ?? null)
 
-      // Institution data (inep_code)
-      const { data: instData } = await supabase
-        .from('institutions')
-        .select('inep_code')
-        .eq('id', institutionId)
-        .single()
       setInstitutionData((instData as { inep_code: string | null } | null) ?? null)
 
-      // INEP market schools — match by city name and UF from setup cycle
+      // INEP market schools — match by city name and UF from setup cycle.
+      // Depende de loadedCycles (batch acima), então continua sequencial;
+      // marketSchoolsData e mapSchoolsData não dependem uma da outra, viraram
+      // Promise.all em vez de 2 awaits em sequência.
       const cycleWithCity = loadedCycles.find(c => c.school_data?.city && c.school_data?.state)
       const inepCity = cycleWithCity?.school_data?.city as string | undefined
       const inepState = cycleWithCity?.school_data?.state as string | undefined
@@ -644,22 +640,21 @@ export default function GestorHome() {
           .maybeSingle()
         const latestCensusYear = yearRow?.ano_censo ?? new Date().getFullYear()
 
-        const { data: marketSchoolsData, error: marketError } = await supabase
-          .from('inep_escolas')
-          .select('co_entidade, no_entidade, tp_dependencia, qt_mat_total, ano_censo')
-          .eq('no_municipio', inepCity)
-          .eq('sg_uf', inepState?.toUpperCase() ?? '')
-          .eq('ano_censo', latestCensusYear)
+        const [{ data: marketSchoolsData }, { data: mapSchoolsData }] = await Promise.all([
+          supabase.from('inep_escolas')
+            .select('co_entidade, no_entidade, tp_dependencia, qt_mat_total, ano_censo')
+            .eq('no_municipio', inepCity)
+            .eq('sg_uf', inepState?.toUpperCase() ?? '')
+            .eq('ano_censo', latestCensusYear),
+          supabase.from('inep_escolas')
+            .select('co_entidade, no_entidade, tp_dependencia, qt_mat_total, lat, lng')
+            .eq('no_municipio', inepCity)
+            .eq('sg_uf', inepState?.toUpperCase() ?? '')
+            .eq('ano_censo', latestCensusYear)
+            .not('lat', 'is', null)
+            .not('lng', 'is', null),
+        ])
         setMarketSchools((marketSchoolsData ?? []) as unknown as MarketSchool[])
-
-        const { data: mapSchoolsData } = await supabase
-          .from('inep_escolas')
-          .select('co_entidade, no_entidade, tp_dependencia, qt_mat_total, lat, lng')
-          .eq('no_municipio', inepCity)
-          .eq('sg_uf', inepState?.toUpperCase() ?? '')
-          .eq('ano_censo', latestCensusYear)
-          .not('lat', 'is', null)
-          .not('lng', 'is', null)
         setMapSchools(mapSchoolsData || [])
       } else {
         setMarketSchools([])
@@ -1053,16 +1048,15 @@ export default function GestorHome() {
   const sourceSorted = Object.entries(sourceData).sort(([, a], [, b]) => b - a).map(([name, value]) => ({ name, value, fill: SOURCE_COLORS[name] ?? '#9CA3AF' }))
 
   const schoolName = user?.institution_name || 'Sua escola'
-  const avgSatisfaction = waConvStats?.avgSatisfaction ?? null
+  // Mesma fonte do card "Satisfação dos Atendimentos" (waSatisfStats.avgScore)
+  // — antes usava waConvStats.avgSatisfaction, que é o mesmo cálculo mas
+  // pré-arredondado a 1 casa antes de virar %, dando um número ligeiramente
+  // diferente do card ao lado pro mesmo dado.
+  const avgSatisfaction = waSatisfStats?.avgScore ?? null
   const avgResponseTime = waAvgResponse
   const toSatisfPct = (score: number | null) => score !== null ? Math.round(((score - 1) / 2) * 100) : null
   const satisfPct = toSatisfPct(avgSatisfaction)
   const satisfPctColor = (pct: number | null) => pct !== null ? pct >= 75 ? '#00A896' : pct >= 40 ? '#F59E0B' : '#EF4444' : '#94a3b8'
-
-  const campaignMonthsList = getCampaignMonthsList(activeCycle?.start_date ?? anyCycle?.start_date, activeCycle?.end_date ?? anyCycle?.end_date)
-  const defaultSeasonality: Record<number, number> = { 1: 12, 2: 7, 8: 12, 9: 15, 10: 20, 11: 18, 12: 16 }
-  const calendarMax = Math.max(...campaignMonthsList.map(m => defaultSeasonality[m] ?? 10))
-  const peakMonth = campaignMonthsList.reduce((best, m) => (defaultSeasonality[m] ?? 0) > (defaultSeasonality[best] ?? 0) ? m : best, campaignMonthsList[0])
 
   useEffect(() => {
     if (inepHasData && !marketInsightFetched.current) fetchMarketInsight(marketSchools, inepMyStudents ?? totalStudents)
@@ -1167,7 +1161,7 @@ export default function GestorHome() {
   }
   if (score >= 75) alerts.push({ msg: `Score ${score} — escola com desempenho acima da média!`, type: 'success' })
   const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
-  const leadsNoContact = leads.filter(l => l.created_at < fiveDaysAgo && l.status !== 'matriculado' && l.status !== 'enrolled' && l.status !== 'descartado').length
+  const leadsNoContact = leads.filter(l => l.created_at < fiveDaysAgo && l.status !== 'enrolled' && l.status !== 'lost').length
   if (leadsNoContact > 0) alerts.push({ msg: `${leadsNoContact} leads sem contato há mais de 5 dias`, type: 'warning', action: 'Ver leads', path: '/leads' })
   if (avgSatisfaction !== null && avgSatisfaction < 2.5) alerts.push({ msg: `Satisfação média abaixo de 2.5 (${avgSatisfaction.toFixed(1)}/3) — atenção ao atendimento`, type: 'warning', action: 'Ver pesquisas', path: '/pesquisas' })
 
@@ -1180,7 +1174,7 @@ export default function GestorHome() {
       { label: 'Visitas', icon: Calendar, path: '/visits', bg: '#FEF3C7', color: '#D97706' },
       { label: 'WhatsApp', icon: MessageCircle, path: '/whatsapp', bg: '#D1FAE5', color: '#059669' },
       { label: 'Relatórios', icon: BarChart3, path: '/reports', bg: '#DBEAFE', color: '#2563EB' },
-      { label: 'Transferências', icon: TrendingDown, path: '/transfers', bg: '#FEE2E2', color: '#DC2626' },
+      { label: 'Transferências', icon: TrendingDown, path: '/transferencias', bg: '#FEE2E2', color: '#DC2626' },
       { label: 'Pesquisas', icon: Star, path: '/pesquisas', bg: '#F5F3FF', color: '#7C3AED' },
     ]
     const alertColors = { warning: { bg: '#FEF3C7', color: '#B45309', border: '#FDE68A' }, info: { bg: '#DBEAFE', color: '#1D4ED8', border: '#BFDBFE' }, success: { bg: '#D1FAE5', color: '#065F46', border: '#6EE7B7' } }
@@ -1699,16 +1693,16 @@ export default function GestorHome() {
               <div style={{ maxHeight: 320, overflowY: 'auto', scrollbarWidth: 'thin', display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 44px 52px 52px 64px 56px', gap: 4, padding: '4px 8px 8px', borderBottom: '1px solid #f1f5f9', marginBottom: 4 }}>
                   {[
-                    { icon: 'ti-award', label: '' },
-                    { icon: 'ti-user', label: 'Atendente' },
-                    { icon: 'ti-bolt', label: 'Score' },
-                    { icon: 'ti-school', label: 'Mat.' },
-                    { icon: 'ti-brand-whatsapp', label: 'WA' },
-                    { icon: 'ti-clock', label: 'T. Resp.' },
-                    { icon: 'ti-star', label: 'Satisf.' },
+                    { Icon: Award, label: '' },
+                    { Icon: User, label: 'Atendente' },
+                    { Icon: Zap, label: 'Score' },
+                    { Icon: GraduationCap, label: 'Mat.' },
+                    { Icon: MessageCircle, label: 'WA' },
+                    { Icon: Clock, label: 'T. Resp.' },
+                    { Icon: Star, label: 'Satisf.' },
                   ].map(h => (
                     <div key={h.label} style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap' }}>
-                      <i className={`ti ${h.icon}`} style={{ fontSize: 11 }} />{h.label}
+                      <h.Icon size={11} />{h.label}
                     </div>
                   ))}
                 </div>
@@ -1924,15 +1918,15 @@ export default function GestorHome() {
             })()}
             <div style={{ marginBottom: 16 }}>
               {[
-                { icon: 'ti-mood-smile', label: 'Ótimo', score: 3, color: '#10B981' },
-                { icon: 'ti-mood-neutral', label: 'Regular', score: 2, color: '#F59E0B' },
-                { icon: 'ti-mood-sad', label: 'Ruim', score: 1, color: '#EF4444' },
+                { Icon: Smile, label: 'Ótimo', score: 3, color: '#10B981' },
+                { Icon: Meh, label: 'Regular', score: 2, color: '#F59E0B' },
+                { Icon: Frown, label: 'Ruim', score: 1, color: '#EF4444' },
               ].map(item => {
                 const count = surveyScoresList.filter(c => c.satisfaction_score === item.score).length
                 const pct = surveyScoresList.length > 0 ? Math.round(count / surveyScoresList.length * 100) : 0
                 return (
                   <div key={item.score} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                    <span style={{ fontSize: 13, minWidth: 68, color: item.color, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}><i className={`ti ${item.icon}`} style={{ fontSize: 16 }} />{item.label}</span>
+                    <span style={{ fontSize: 13, minWidth: 68, color: item.color, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}><item.Icon size={16} />{item.label}</span>
                     <div style={{ flex: 1, height: 8, borderRadius: 4, background: '#F3F4F6', overflow: 'hidden' }}>
                       <div style={{ width: `${pct}%`, height: '100%', background: item.color, borderRadius: 4, transition: 'width 0.8s ease' }}/>
                     </div>
@@ -2308,13 +2302,17 @@ export default function GestorHome() {
           ) : (() => {
             const responses = npsData.satisfaction_responses ?? []
             const total = responses.length
-            const validScores = responses.filter(r => typeof r.score === 'number') as { score: number }[]
-            const avg = validScores.length > 0 ? validScores.reduce((s, r) => s + r.score, 0) / validScores.length : 0
-            const avgPct = toSatisfPct(avg) ?? 0
+            // Nota 0–10 por respondente (respondentOverallScore10, topo do
+            // arquivo) — satisfaction_responses não tem coluna `score`.
+            // Bucket igual ao NPS clássico usado em GestorSurveys.tsx
+            // (npsFromScores): promotor >=9, neutro 7–8, detrator <=6.
+            const scores10 = responses.map(r => respondentOverallScore10(r.answers)).filter(s => s > 0)
+            const avg10 = scores10.length > 0 ? scores10.reduce((s, v) => s + v, 0) / scores10.length : 0
+            const avgPct = Math.round(avg10 * 10)
             const pieNps = [
-              { name: 'Ótimo', value: validScores.filter(r => r.score >= 4).length, fill: '#10B981' },
-              { name: 'Regular', value: validScores.filter(r => r.score === 3).length, fill: '#F59E0B' },
-              { name: 'Ruim', value: validScores.filter(r => r.score <= 2).length, fill: '#EF4444' },
+              { name: 'Ótimo', value: scores10.filter(s => s >= 9).length, fill: '#10B981' },
+              { name: 'Regular', value: scores10.filter(s => s >= 7 && s < 9).length, fill: '#F59E0B' },
+              { name: 'Ruim', value: scores10.filter(s => s < 7).length, fill: '#EF4444' },
             ].filter(d => d.value > 0)
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
