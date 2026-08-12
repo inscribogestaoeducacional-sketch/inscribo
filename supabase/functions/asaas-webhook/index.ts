@@ -106,7 +106,7 @@ serve(async (req) => {
       // na criação da cobrança (asaas-create-charge/asaas-generate-monthly)
       // e este insert vira no-op.
       if (pmt?.id) {
-        await createPendingInvoice(sb, pmt.id, institutionId)
+        await createPendingInvoice(sb, pmt.id, institutionId, pmt.amount)
       }
 
       if (pmt?.payment_type === 'implementation') {
@@ -266,12 +266,12 @@ serve(async (req) => {
 })
 
 // ─── Nota Fiscal — cria a linha 'pending' em payment_invoices, se ainda não existir ──
-async function createPendingInvoice(sb: any, paymentId: string, institutionId: string) {
+async function createPendingInvoice(sb: any, paymentId: string, institutionId: string, amount: number) {
   try {
     const { data: existing } = await sb.from('payment_invoices').select('id').eq('payment_id', paymentId).maybeSingle()
     if (existing) return
 
-    const { data: inst } = await sb.from('institutions').select('nf_issue_timing').eq('id', institutionId).single()
+    const { data: inst } = await sb.from('institutions').select('name, nf_issue_timing').eq('id', institutionId).single()
     const issueTiming = inst?.nf_issue_timing || 'after_payment'
 
     const { error } = await sb.from('payment_invoices').insert({
@@ -280,10 +280,38 @@ async function createPendingInvoice(sb: any, paymentId: string, institutionId: s
       status: 'pending',
       issue_timing: issueTiming,
     })
-    if (error) console.error('[asaas-webhook] erro ao criar payment_invoices:', error)
-    else console.log('[asaas-webhook] payment_invoices criado (pending) para payment:', paymentId)
+    if (error) { console.error('[asaas-webhook] erro ao criar payment_invoices:', error); return }
+    console.log('[asaas-webhook] payment_invoices criado (pending) para payment:', paymentId)
+
+    // Notifica o sino do admin_geral. Só roda neste ponto — o `existing`
+    // checado acima já garante que isso dispara no máximo 1x por payment_id
+    // (a linha só é criada uma vez, o UNIQUE(payment_id) impede duplicata).
+    await notifyNfPending(sb, inst?.name, amount)
   } catch (e) {
     console.error('[asaas-webhook] erro em createPendingInvoice:', String(e))
+  }
+}
+
+// ─── Notifica o sino do admin_geral (institution_id IS NULL, ver
+// SuperAdminLayout.tsx:loadNotifications) sobre uma nova nota fiscal
+// pendente. Reaproveitada pelo caminho after_payment (acima). O caminho
+// before_payment tem a mesma função em nf-pending-check/index.ts. ──
+async function notifyNfPending(sb: any, institutionName: string | undefined, amount: number) {
+  try {
+    const amountFmt = Number(amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+    const { error } = await sb.from('system_notifications').insert({
+      institution_id: null,
+      type: 'nf_pending',
+      title: 'Nova nota fiscal pendente',
+      message: `Nova nota fiscal pendente: ${institutionName || 'Escola'} - R$ ${amountFmt}`,
+      severity: 'warning',
+      action_url: '/super-admin/financial',
+      read: false,
+      created_at: new Date().toISOString(),
+    })
+    if (error) console.error('[asaas-webhook] erro ao notificar nf_pending:', error)
+  } catch (e) {
+    console.error('[asaas-webhook] erro ao notificar nf_pending:', String(e))
   }
 }
 

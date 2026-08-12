@@ -108,7 +108,10 @@
       "Bash(tee /tmp/tsc_after.txt)",
       "Bash(xargs ls -la)",
       "Bash(sort -k6,7)",
-      "Bash(tee /tmp/tsc_nf.txt)"
+      "Bash(tee /tmp/tsc_nf.txt)",
+      "Bash(xargs grep -l \"whatsapp_phone_number\\\\|phone_number_id\")",
+      "Bash(tee /tmp/tsc_notif.txt)",
+      "Bash(grep -n \"'menu'\\\\|case 'menu'\\\\|opt-\\\\${\" api/whatsapp/webhook.ts)"
     ],
     "additionalDirectories": [
       "\\tmp"

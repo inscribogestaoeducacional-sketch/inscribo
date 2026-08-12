@@ -71,12 +71,17 @@ serve(async (req) => {
     // 2. Cobranças pendentes dessas escolas, vencendo dentro da janela.
     const { data: payments, error: fetchErr } = await sb
       .from('payments')
-      .select('id, institution_id, due_date')
+      .select('id, institution_id, due_date, amount, institutions(name)')
       .eq('status', 'pending')
       .in('institution_id', institutionIds)
       .gte('due_date', todayStr)
       .lte('due_date', limitDateStr)
     if (fetchErr) throw new Error(fetchErr.message)
+
+    // payment_id -> dados pro texto da notificação (evita re-buscar depois).
+    const paymentInfoById = new Map<string, { amount: number; institutionName: string }>(
+      (payments || []).map((p: any) => [p.id, { amount: p.amount, institutionName: p.institutions?.name || 'Escola' }])
+    )
 
     const evaluated = payments?.length || 0
     if (evaluated === 0) {
@@ -119,11 +124,21 @@ serve(async (req) => {
         console.error('[nf-pending-check] insert em lote falhou, tentando um a um:', insErr.message)
         for (const row of toInsert) {
           const { error: rowErr } = await sb.from('payment_invoices').insert(row)
-          if (rowErr) errors.push({ payment_id: row.payment_id, error: rowErr.message })
-          else created++
+          if (rowErr) { errors.push({ payment_id: row.payment_id, error: rowErr.message }); continue }
+          created++
+          const info = paymentInfoById.get(row.payment_id)
+          await notifyNfPending(sb, info?.institutionName, info?.amount ?? 0)
         }
       } else {
+        // Insert em lote é atômico (tudo-ou-nada) — se chegou aqui sem erro,
+        // toda linha de `toInsert` foi criada de verdade, então dá pra
+        // notificar direto a partir dela (sem precisar reler `insData`, que
+        // só tem `id`, não `payment_id`).
         created = insData?.length ?? toInsert.length
+        for (const row of toInsert) {
+          const info = paymentInfoById.get(row.payment_id)
+          await notifyNfPending(sb, info?.institutionName, info?.amount ?? 0)
+        }
       }
     }
 
@@ -144,6 +159,29 @@ serve(async (req) => {
     )
   }
 })
+
+// ─── Notifica o sino do admin_geral (institution_id IS NULL, ver
+// SuperAdminLayout.tsx:loadNotifications) sobre uma nova nota fiscal
+// pendente. Mesma função (duplicada de propósito, cada Edge Function é
+// isolada) usada pelo caminho after_payment em asaas-webhook/index.ts. ──
+async function notifyNfPending(sb: any, institutionName: string | undefined, amount: number) {
+  try {
+    const amountFmt = Number(amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+    const { error } = await sb.from('system_notifications').insert({
+      institution_id: null,
+      type: 'nf_pending',
+      title: 'Nova nota fiscal pendente',
+      message: `Nova nota fiscal pendente: ${institutionName || 'Escola'} - R$ ${amountFmt}`,
+      severity: 'warning',
+      action_url: '/super-admin/financial',
+      read: false,
+      created_at: new Date().toISOString(),
+    })
+    if (error) console.error('[nf-pending-check] erro ao notificar nf_pending:', error)
+  } catch (e) {
+    console.error('[nf-pending-check] erro ao notificar nf_pending:', String(e))
+  }
+}
 
 // =============================================================================
 // AGENDAMENTO — ver supabase/migrations/20260812000400_nf_pending_check_cron.sql

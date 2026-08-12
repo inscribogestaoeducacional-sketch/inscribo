@@ -1931,7 +1931,7 @@ export default function AdminFinancial() {
               <div className="px-6 py-4 border-b border-gray-100">
                 <h2 className="font-bold text-gray-900">Notas fiscais</h2>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  Controle manual (Fase 1) — a linha nasce sozinha quando um pagamento é confirmado (ou na criação da cobrança, pra escolas que emitem nota antes de receber). Número, PDF/link e envio pro financeiro da escola são preenchidos aqui.
+                  Controle manual (Fase 1) — a linha nasce sozinha quando um pagamento é confirmado (ou, pra escolas que emitem nota antes do pagamento, alguns dias antes do vencimento da cobrança). Número, PDF/link e envio pro financeiro da escola são preenchidos aqui.
                 </p>
               </div>
               {loading ? (
