@@ -105,7 +105,10 @@
       "Bash(tee /tmp/tsc_out5.txt)",
       "Bash(tee /tmp/tsc_final.txt)",
       "Bash(tee /tmp/tsc_final2.txt)",
-      "Bash(tee /tmp/tsc_after.txt)"
+      "Bash(tee /tmp/tsc_after.txt)",
+      "Bash(xargs ls -la)",
+      "Bash(sort -k6,7)",
+      "Bash(tee /tmp/tsc_nf.txt)"
     ],
     "additionalDirectories": [
       "\\tmp"
