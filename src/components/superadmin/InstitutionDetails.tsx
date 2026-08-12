@@ -364,6 +364,7 @@ export default function InstitutionDetails() {
           plan: inst.plan || 'escola', consultant_id: inst.consultant_id || '',
           monthly_value: String(inst.monthly_value || 550),
           implementation_value: String(inst.implementation_value || 550),
+          nf_issue_timing: inst.nf_issue_timing || 'after_payment',
         })
         setWaForm({
           phone_id:     inst.whatsapp_phone_id || '',
@@ -428,6 +429,7 @@ export default function InstitutionDetails() {
         plan: editForm.plan, consultant_id: editForm.consultant_id || null,
         monthly_value: Number(editForm.monthly_value),
         implementation_value: Number(editForm.implementation_value),
+        nf_issue_timing: editForm.nf_issue_timing || 'after_payment',
       }).eq('id', id)
       if (error) throw error
       showToast('Dados atualizados!')
@@ -1300,6 +1302,14 @@ export default function InstitutionDetails() {
                   <option value="">Sem consultor</option>
                   {consultants.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
                 </select>
+              </div>
+              <div>
+                <label className={lbl}>Emissão de Nota Fiscal</label>
+                <select className={inp} value={editForm.nf_issue_timing} onChange={e => setEditForm((p: any) => ({ ...p, nf_issue_timing: e.target.value }))}>
+                  <option value="after_payment">Depois do pagamento</option>
+                  <option value="before_payment">Antes do pagamento</option>
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Quando gerar a linha de controle de nota (aba Financeiro → Nota Fiscal) pra cobranças desta escola.</p>
               </div>
             </div>
           </div>

@@ -312,6 +312,35 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     `, `Nova proposta da Aion Edu para ${data.school_name}`)
   }),
 
+  nota_fiscal_emitida: (data) => ({
+    subject: `Nota Fiscal emitida - ${data.institution_name}`,
+    html: wrap(`
+      <p style="margin:0 0 4px;">${badge('Nota Fiscal', '#16A34A', '#166534')}</p>
+      ${h1('Sua nota fiscal foi emitida', '#166534')}
+      ${p(`Ola! A nota fiscal referente ao pagamento de <strong>${data.institution_name}</strong> foi emitida. Segue os dados abaixo.`)}
+      ${box(`
+        <table cellpadding="0" cellspacing="0" width="100%">
+          <tr>
+            <td style="padding:5px 0;font-size:14px;">Numero</td>
+            <td style="padding:5px 0;font-size:14px;font-weight:700;text-align:right;">${data.invoice_number || '—'}</td>
+          </tr>
+          ${data.invoice_series ? `<tr><td style="padding:5px 0;font-size:14px;">Serie</td><td style="padding:5px 0;font-size:14px;font-weight:700;text-align:right;">${data.invoice_series}</td></tr>` : ''}
+          <tr>
+            <td style="padding:5px 0;font-size:14px;">Referente a</td>
+            <td style="padding:5px 0;font-size:14px;font-weight:700;text-align:right;">${data.description || 'Pagamento'}</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;font-size:14px;">Valor</td>
+            <td style="padding:5px 0;font-size:14px;font-weight:700;text-align:right;">R$ ${data.value}</td>
+          </tr>
+        </table>
+      `, '#F0FDF4', '#BBF7D0', '#166534')}
+      ${data.invoice_url_pdf ? btn('Baixar Nota Fiscal (PDF)', data.invoice_url_pdf, '#16A34A') : ''}
+      ${p('Guarde este e-mail para sua contabilidade.')}
+      ${supportLine()}
+    `)
+  }),
+
   raio_x_boas_vindas: (data) => ({
     subject: `Seu Raio-X Estrategico da ${data.escola || 'sua escola'} chegou!`,
     html: wrap(`
@@ -350,6 +379,12 @@ serve(async (req) => {
     if (type === 'proposal' && data?.proposal_id) {
       brevoBody.params = { ...(brevoBody.params || {}), proposal_id: data.proposal_id }
       brevoBody.tags = ['proposal']
+    }
+    // Nota Fiscal — Brevo busca o arquivo pela URL e anexa de verdade ao
+    // e-mail (além do link clicavel já no corpo do template, redundância
+    // proposital caso o fetch da Brevo falhe por algum motivo).
+    if (type === 'nota_fiscal_emitida' && data?.invoice_url_pdf) {
+      brevoBody.attachment = [{ url: data.invoice_url_pdf, name: `NF-${data.invoice_number || 'documento'}.pdf` }]
     }
 
     const res = await fetch('https://api.brevo.com/v3/smtp/email', {

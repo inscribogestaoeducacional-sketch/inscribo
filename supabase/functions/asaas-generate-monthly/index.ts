@@ -52,7 +52,7 @@ serve(async (req) => {
     tenDaysFromNow.setDate(tenDaysFromNow.getDate() + 10)
     const dueDateLimit = tenDaysFromNow.toISOString().split('T')[0]
 
-    const selectFields = 'id,institution_id,amount,due_date,description,payment_type,institutions!inner(id,name,email,cnpj,asaas_customer_id,plan_status)'
+    const selectFields = 'id,institution_id,amount,due_date,description,payment_type,institutions!inner(id,name,email,cnpj,asaas_customer_id,plan_status,nf_issue_timing)'
 
     let paymentsPath = `payments?payment_type=eq.monthly&status=eq.pending&asaas_charge_url=is.null&select=${selectFields}&institutions.plan_status=eq.active`
 
@@ -153,6 +153,24 @@ serve(async (req) => {
           },
           'return=minimal'
         )
+
+        // Nota Fiscal "antes do pagamento" — mesma lógica do asaas-create-charge:
+        // se a escola emite a nota antes de receber, cria a linha 'pending' já
+        // aqui, na criação da cobrança, sem esperar o webhook de confirmação.
+        if (inst.nf_issue_timing === 'before_payment') {
+          const { status: invStatus } = await dbFetch(
+            'payment_invoices',
+            'POST',
+            {
+              payment_id: payment.id,
+              institution_id: payment.institution_id,
+              status: 'pending',
+              issue_timing: 'before_payment',
+            },
+            'return=minimal'
+          )
+          if (invStatus >= 400) console.error(`[asaas-generate-monthly] erro ao criar payment_invoices pra ${payment.id}: status ${invStatus}`)
+        }
 
         // Envia email via Brevo
         if (inst.email) {

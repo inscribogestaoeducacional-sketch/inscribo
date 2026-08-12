@@ -43,7 +43,7 @@ serve(async (req) => {
 
     // 2. Buscar ou criar cliente Asaas
     const { data: inst } = await sb.from('institutions')
-      .select('asaas_customer_id, cnpj, name, email')
+      .select('asaas_customer_id, cnpj, name, email, nf_issue_timing')
       .eq('id', institution_id)
       .single()
 
@@ -87,6 +87,20 @@ serve(async (req) => {
 
     if (payErr) console.error('[asaas-create-charge] erro ao inserir payment:', payErr)
     const paymentId = paymentRecord?.id
+
+    // 3b. Nota Fiscal "antes do pagamento" — se a escola emite a nota antes
+    // de receber, já cria a linha de controle 'pending' aqui, no nascimento
+    // da cobrança, sem esperar a confirmação do pagamento (webhook cobre o
+    // caso padrão 'after_payment' e é idempotente com isso via UNIQUE(payment_id)).
+    if (paymentId && inst?.nf_issue_timing === 'before_payment') {
+      const { error: invErr } = await sb.from('payment_invoices').insert({
+        payment_id: paymentId,
+        institution_id,
+        status: 'pending',
+        issue_timing: 'before_payment',
+      })
+      if (invErr) console.error('[asaas-create-charge] erro ao criar payment_invoices:', invErr)
+    }
 
     // 4. Criar cobrança no Asaas
     const chargeRes = await fetch(`${ASAAS_URL}/payments`, {

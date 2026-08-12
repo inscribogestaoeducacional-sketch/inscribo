@@ -12,7 +12,7 @@ import {
   ExternalLink, AlertCircle, Send, Plus, Copy, CreditCard, Ban,
   MessageCircle, Unlock, Lock, Eye, ChevronRight, ChevronLeft,
   Users, Calendar, SlidersHorizontal, Wallet, Briefcase, ArrowUpDown,
-  Edit2, Trash2,
+  Edit2, Trash2, FileText,
 } from 'lucide-react'
 
 function fmtBRL(n: number) {
@@ -21,6 +21,14 @@ function fmtBRL(n: number) {
 function daysLate(dueDate: string) {
   return Math.max(0, Math.floor((Date.now() - new Date(dueDate + 'T12:00:00').getTime()) / 86400000))
 }
+// Igual a daysLate, mas pra timestamps completos (created_at) em vez de
+// colunas DATE puras — usado no alerta de nota fiscal pendente há muito tempo.
+function daysSince(dateStr: string) {
+  return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000))
+}
+// Quantos dias uma nota fiscal pode ficar 'pending' antes de virar alerta
+// visual (mesmo padrão de destaque usado na aba Inadimplência).
+const NF_ALERT_DAYS = 3
 
 type Period = { start: Date; end: Date }
 
@@ -59,7 +67,7 @@ function costEffectiveDate(c: any): Date | null {
   return null
 }
 
-type Tab = 'overview' | 'revenue' | 'costs' | 'commissions' | 'overdue'
+type Tab = 'overview' | 'revenue' | 'costs' | 'commissions' | 'overdue' | 'invoices'
 
 const STATUS_MAP: Record<string, { l: string; c: string; bg: string }> = {
   pending:   { l: 'Pendente',  c: '#6b7280', bg: '#f3f4f6' },
@@ -100,6 +108,15 @@ const COMMISSION_STATUS_MAP: Record<string, { l: string; c: string; bg: string }
   pendente:  { l: 'Pendente',  c: '#d97706', bg: '#fffbeb' },
   paga:      { l: 'Paga',      c: '#16a34a', bg: '#f0fdf4' },
   cancelada: { l: 'Cancelada', c: '#9ca3af', bg: '#f9fafb' },
+}
+
+const NF_STATUS_MAP: Record<string, { l: string; c: string; bg: string }> = {
+  not_required: { l: 'Não exigida',  c: '#9ca3af', bg: '#f9fafb' },
+  pending:      { l: 'Pendente',     c: '#d97706', bg: '#fffbeb' },
+  issued:       { l: 'Emitida',      c: '#0891b2', bg: '#ecfeff' },
+  sent:         { l: 'Enviada',      c: '#16a34a', bg: '#f0fdf4' },
+  error:        { l: 'Erro no envio', c: '#dc2626', bg: '#fef2f2' },
+  cancelled:    { l: 'Cancelada',    c: '#9ca3af', bg: '#f3f4f6' },
 }
 
 const inp = 'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all bg-white'
@@ -317,6 +334,136 @@ function PaymentDetailModal({ payment, onClose, onAction }: {
           )}
           <button onClick={onClose} className="py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm hover:bg-gray-50">
             Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Modal Marcar Nota Fiscal como gerada ──────────────────────────────────
+function InvoiceIssueModal({ invoice, onClose, onSuccess, showToast }: {
+  invoice: any; onClose: () => void; onSuccess: () => void; showToast: (m: string, ok?: boolean) => void
+}) {
+  const [form, setForm] = useState({
+    invoice_number: invoice.invoice_number || '',
+    invoice_series: invoice.invoice_series || '',
+    invoice_url_pdf: invoice.invoice_url_pdf || '',
+  })
+  const [file, setFile] = useState<File | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleConfirm = async () => {
+    if (!form.invoice_number.trim()) { showToast('Informe o número da nota.', false); return }
+    setSaving(true)
+    try {
+      let pdfUrl = form.invoice_url_pdf.trim() || null
+
+      // Upload opcional do PDF — mesmo padrão de bucket público já usado em
+      // proposals (ProposalGenerator.tsx): cria o bucket se ainda não existir.
+      if (file) {
+        const { data: buckets } = await supabase.storage.listBuckets()
+        if (!buckets?.some(b => b.name === 'invoices')) {
+          await supabase.storage.createBucket('invoices', { public: true })
+        }
+        const path = `${invoice.institution_id}/${invoice.payment_id}.pdf`
+        const { error: upErr } = await supabase.storage.from('invoices').upload(path, file, { contentType: 'application/pdf', upsert: true })
+        if (upErr) throw new Error('Erro no upload do PDF: ' + upErr.message)
+        const { data: { publicUrl } } = supabase.storage.from('invoices').getPublicUrl(path)
+        pdfUrl = publicUrl
+      }
+
+      const { error: updErr } = await supabase.from('payment_invoices').update({
+        status: 'issued',
+        invoice_number: form.invoice_number.trim(),
+        invoice_series: form.invoice_series.trim() || null,
+        invoice_url_pdf: pdfUrl,
+        issued_at: new Date().toISOString(),
+        last_error: null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', invoice.id)
+      if (updErr) throw updErr
+
+      // Envio automático pro financeiro da escola (mesmo e-mail já usado nos
+      // outros avisos financeiros — não existe campo separado de "e-mail do
+      // financeiro" no schema de institutions). Falha aqui não desfaz o que
+      // já foi salvo: a nota fica em 'issued' (não avança pra 'sent') e o
+      // erro fica registrado em last_error pra nova tentativa manual.
+      const email = invoice.institutions?.email
+      if (!email) {
+        showToast('Nota salva, mas a escola não tem e-mail cadastrado — envio pulado.', false)
+      } else {
+        try {
+          const { error: mailErr } = await supabase.functions.invoke('send-email', {
+            body: {
+              type: 'nota_fiscal_emitida',
+              to: email,
+              data: {
+                institution_name: invoice.institutions?.name,
+                invoice_number: form.invoice_number.trim(),
+                invoice_series: form.invoice_series.trim() || null,
+                description: invoice.payments?.description || 'Pagamento',
+                value: fmtBRL(invoice.payments?.amount || 0).replace('R$ ', ''),
+                invoice_url_pdf: pdfUrl,
+              },
+            },
+          })
+          if (mailErr) throw new Error(mailErr.message)
+          await supabase.from('payment_invoices').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', invoice.id)
+          showToast('Nota gerada e e-mail enviado pro financeiro da escola!')
+        } catch (e: any) {
+          await supabase.from('payment_invoices').update({ status: 'error', last_error: e?.message || 'Erro ao enviar e-mail' }).eq('id', invoice.id)
+          showToast('Nota salva, mas o e-mail não foi enviado: ' + (e?.message || 'erro desconhecido'), false)
+        }
+      }
+
+      onSuccess()
+      onClose()
+    } catch (e: any) {
+      showToast(e?.message || 'Erro ao salvar nota fiscal.', false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">{invoice.status === 'error' ? 'Reenviar nota fiscal' : 'Marcar nota como gerada'}</h2>
+            <p className="text-xs text-gray-400 mt-1">{invoice.institutions?.name} · {fmtBRL(invoice.payments?.amount || 0)}</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Número da nota *</label>
+              <input className={inp} value={form.invoice_number} onChange={e => set('invoice_number', e.target.value)} placeholder="Ex: 1234" />
+            </div>
+            <div>
+              <label className={lbl}>Série</label>
+              <input className={inp} value={form.invoice_series} onChange={e => set('invoice_series', e.target.value)} placeholder="Ex: 1" />
+            </div>
+          </div>
+          <div>
+            <label className={lbl}>PDF da nota (opcional)</label>
+            <input type="file" accept="application/pdf" className={inp} onChange={e => setFile(e.target.files?.[0] || null)} />
+          </div>
+          <div>
+            <label className={lbl}>Ou link da nota (opcional)</label>
+            <input className={inp} value={form.invoice_url_pdf} onChange={e => set('invoice_url_pdf', e.target.value)} placeholder="https://..." disabled={!!file} />
+            <p className="text-xs text-gray-400 mt-1">Anexar um PDF acima tem prioridade sobre o link.</p>
+          </div>
+        </div>
+        <div className="flex gap-3 mt-5">
+          <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">Cancelar</button>
+          <button onClick={handleConfirm} disabled={saving}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
+            {saving ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Salvando...</> : <><CheckCircle2 className="w-4 h-4" />Confirmar emissão</>}
           </button>
         </div>
       </div>
@@ -863,12 +1010,14 @@ export default function AdminFinancial() {
   const [entries,      setEntries]      = useState<any[]>([])
   const [commissions,  setCommissions]  = useState<any[]>([])
   const [consultants,  setConsultants]  = useState<any[]>([])
+  const [invoices,     setInvoices]     = useState<any[]>([])
   const [settings,     setSettings]     = useState<Record<string, string>>({})
   const [loading,      setLoading]      = useState(true)
   const [tab,          setTab]          = useState<Tab>('overview')
   const [toast,        setToast]        = useState<{ msg: string; ok: boolean } | null>(null)
   const [showNewCharge, setShowNewCharge] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState<any | null>(null)
+  const [invoiceModal, setInvoiceModal] = useState<any | null>(null)
   const [costModal, setCostModal] = useState<any | null | 'new'>(null)
   const [entryModal, setEntryModal] = useState<any | null | 'new'>(null)
   const [entryModalType, setEntryModalType] = useState<'entrada' | 'saida'>('entrada')
@@ -907,7 +1056,7 @@ export default function AdminFinancial() {
 
   const loadData = async () => {
     setLoading(true)
-    const [instRes, payRes, cfgRes, costRes, entryRes, commRes, consRes] = await Promise.all([
+    const [instRes, payRes, cfgRes, costRes, entryRes, commRes, consRes, invRes] = await Promise.all([
       supabase.from('institutions').select('id, name, city, plan, plan_status, asaas_customer_id, monthly_value, email, cnpj, phone').order('name'),
       supabase.from('payments').select('*, institutions(name)').order('created_at', { ascending: false }),
       supabase.from('platform_settings').select('key, value'),
@@ -915,6 +1064,7 @@ export default function AdminFinancial() {
       supabase.from('financial_entries').select('*, institutions(name)').order('entry_date', { ascending: false }),
       supabase.from('consultant_commissions').select('*, institutions(name)').order('created_at', { ascending: false }),
       supabase.from('users').select('id, full_name').eq('user_type', 'consultant').order('full_name'),
+      supabase.from('payment_invoices').select('*, payments(amount, description, payment_type, paid_at, due_date), institutions(name, email)').order('created_at', { ascending: false }),
     ])
     if (cancelledRef.current) return
     setInstitutions(instRes.data || [])
@@ -923,6 +1073,7 @@ export default function AdminFinancial() {
     setEntries(entryRes.data || [])
     setCommissions(commRes.data || [])
     setConsultants(consRes.data || [])
+    setInvoices(invRes.data || [])
     const cfg: Record<string, string> = {}
     for (const s of cfgRes.data || []) cfg[s.key] = s.value
     setSettings(cfg)
@@ -1146,6 +1297,10 @@ export default function AdminFinancial() {
 
   const overdueGroups = Object.values(overdueByInst).sort((a: any, b: any) => b.maxDays - a.maxDays)
 
+  // ── Nota Fiscal — não filtrado por período (mesma lógica de "situação atual" da Inadimplência) ──
+  const nfPending = invoices.filter(i => i.status === 'pending')
+  const nfLateCount = nfPending.filter(i => daysSince(i.created_at) >= NF_ALERT_DAYS).length
+
   const openNewEntry = (type: 'entrada' | 'saida') => { setEntryModalType(type); setEntryModal('new') }
 
   return (
@@ -1206,6 +1361,7 @@ export default function AdminFinancial() {
             { id: 'costs'       as Tab, label: `Custos (${costRows.length})` },
             { id: 'commissions' as Tab, label: `Comissões (${commissionsInPeriod.length})` },
             { id: 'overdue'     as Tab, label: `Inadimplência${overdueGroups.length > 0 ? ` (${overdueGroups.length})` : ''}`, alert: overdueGroups.length > 0 },
+            { id: 'invoices'    as Tab, label: `Nota Fiscal${nfPending.length > 0 ? ` (${nfPending.length})` : ''}`, alert: nfLateCount > 0 },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap
@@ -1239,6 +1395,7 @@ export default function AdminFinancial() {
                 { label: 'Saldo em caixa acumulado', value: fmtBRL(saldoCaixa), sub: 'histórico até o fim do período', icon: Wallet, grad: saldoCaixa >= 0 ? 'from-cyan-500 to-blue-600' : 'from-red-500 to-rose-600' },
                 { label: 'Margem',  value: `${margemPeriodo}%`, sub: `${fmtBRL(lucroPeriodo)} de lucro no período`, icon: CheckCircle2, grad: margemPeriodo >= 0 ? 'from-emerald-500 to-teal-600' : 'from-red-500 to-rose-600' },
                 { label: 'Inadimplência atual', value: fmtBRL(overdueTotal), sub: `${overdueList.length} cobranças em atraso (não filtrado por período)`, icon: AlertCircle, grad: overdueTotal > 0 ? 'from-amber-500 to-orange-500' : 'from-gray-400 to-gray-500' },
+                { label: 'Notas fiscais pendentes', value: String(nfPending.length), sub: nfLateCount > 0 ? `${nfLateCount} há mais de ${NF_ALERT_DAYS} dias sem gerar` : nfPending.length > 0 ? 'Dentro do prazo' : 'Nenhuma pendência', icon: FileText, grad: nfLateCount > 0 ? 'from-red-500 to-rose-600' : nfPending.length > 0 ? 'from-amber-500 to-orange-500' : 'from-gray-400 to-gray-500' },
               ].map(k => {
                 const Icon = k.icon
                 return (
@@ -1753,6 +1910,91 @@ export default function AdminFinancial() {
           </div>
         )}
 
+        {/* ══════════════════════════ TAB: Nota Fiscal ══════════════════════════ */}
+        {tab === 'invoices' && (
+          <div className="space-y-4">
+            <div className={`border rounded-2xl p-5 flex items-center gap-3 ${nfLateCount > 0 ? 'bg-red-50 border-red-200' : nfPending.length > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
+              <FileText className={`w-8 h-8 flex-shrink-0 ${nfLateCount > 0 ? 'text-red-500' : nfPending.length > 0 ? 'text-amber-500' : 'text-gray-300'}`} />
+              <div>
+                <p className={`font-bold ${nfLateCount > 0 ? 'text-red-800' : 'text-gray-900'}`}>
+                  {nfPending.length} nota{nfPending.length !== 1 ? 's' : ''} pendente{nfPending.length !== 1 ? 's' : ''} de emissão
+                </p>
+                <p className={`text-sm ${nfLateCount > 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                  {nfLateCount > 0
+                    ? `${nfLateCount} há mais de ${NF_ALERT_DAYS} dias sem gerar`
+                    : nfPending.length > 0 ? 'Todas dentro do prazo' : 'Nenhuma pendência — tudo em dia'}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100">
+                <h2 className="font-bold text-gray-900">Notas fiscais</h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Controle manual (Fase 1) — a linha nasce sozinha quando um pagamento é confirmado (ou na criação da cobrança, pra escolas que emitem nota antes de receber). Número, PDF/link e envio pro financeiro da escola são preenchidos aqui.
+                </p>
+              </div>
+              {loading ? (
+                <div className="p-6 space-y-3">{Array(4).fill(0).map((_, i) => <div key={i} className="h-10 bg-gray-50 rounded animate-pulse" />)}</div>
+              ) : invoices.length === 0 ? (
+                <div className="p-12 text-center text-gray-400">
+                  <FileText className="w-10 h-10 mx-auto mb-2 text-gray-200" />
+                  <p className="text-sm">Nenhuma nota fiscal ainda</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100">
+                        {['Escola', 'Referente a', 'Valor', 'Data do pagamento', 'Emissão', 'Status', 'Ações'].map(h => (
+                          <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {invoices.map(inv => {
+                        const st = NF_STATUS_MAP[inv.status] || NF_STATUS_MAP.pending
+                        const late = inv.status === 'pending' && daysSince(inv.created_at) >= NF_ALERT_DAYS
+                        return (
+                          <tr key={inv.id} className="hover:bg-gray-50">
+                            <td className="px-5 py-3 font-semibold text-gray-900 text-sm">{inv.institutions?.name || '—'}</td>
+                            <td className="px-5 py-3 text-sm text-gray-500">{inv.payments?.description || TYPE_MAP[inv.payments?.payment_type] || '—'}</td>
+                            <td className="px-5 py-3 font-bold text-gray-800 text-sm">{fmtBRL(inv.payments?.amount || 0)}</td>
+                            <td className="px-5 py-3 text-sm text-gray-500">{inv.payments?.paid_at ? new Date(inv.payments.paid_at).toLocaleDateString('pt-BR') : '—'}</td>
+                            <td className="px-5 py-3 text-xs text-gray-500">{inv.issue_timing === 'before_payment' ? 'Antes do pgto' : 'Depois do pgto'}</td>
+                            <td className="px-5 py-3">
+                              <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: st.c, background: st.bg }}>{st.l}</span>
+                              {late && <span className="ml-2 text-[10px] font-bold text-red-600">{daysSince(inv.created_at)}d</span>}
+                            </td>
+                            <td className="px-5 py-3">
+                              {inv.status === 'pending' ? (
+                                <button onClick={() => setInvoiceModal(inv)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg text-xs font-semibold whitespace-nowrap">
+                                  <FileText className="w-3.5 h-3.5" /> Marcar como gerada
+                                </button>
+                              ) : inv.status === 'error' ? (
+                                <button onClick={() => setInvoiceModal(inv)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-semibold whitespace-nowrap">
+                                  <Send className="w-3.5 h-3.5" /> Tentar reenviar
+                                </button>
+                              ) : inv.invoice_url_pdf ? (
+                                <a href={inv.invoice_url_pdf} target="_blank" rel="noopener noreferrer"
+                                  className="flex items-center gap-1.5 text-cyan-600 text-xs font-semibold whitespace-nowrap">
+                                  <ExternalLink className="w-3.5 h-3.5" /> Ver PDF
+                                </a>
+                              ) : '—'}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
       </div>
 
       {showNewCharge && (
@@ -1769,6 +2011,15 @@ export default function AdminFinancial() {
           payment={selectedPayment}
           onClose={() => setSelectedPayment(null)}
           onAction={handlePaymentAction}
+        />
+      )}
+
+      {invoiceModal && (
+        <InvoiceIssueModal
+          invoice={invoiceModal}
+          onClose={() => setInvoiceModal(null)}
+          onSuccess={loadData}
+          showToast={showToast}
         />
       )}
 

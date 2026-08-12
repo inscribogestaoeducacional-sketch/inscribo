@@ -98,6 +98,17 @@ serve(async (req) => {
         ? await sb.from('payments').select('*').eq('id', paymentId).single()
         : await sb.from('payments').select('*').eq('asaas_payment_id', payment.id).single()
 
+      // 2b. Nota Fiscal — cria a linha de controle em payment_invoices assim
+      // que o pagamento é confirmado, se ainda não existir uma pra esse
+      // payment_id. Idempotente (webhook da Asaas pode repetir o evento) e
+      // também cobre o caso em que a escola emite nota ANTES do pagamento
+      // (nf_issue_timing='before_payment'): nesse caso a linha já foi criada
+      // na criação da cobrança (asaas-create-charge/asaas-generate-monthly)
+      // e este insert vira no-op.
+      if (pmt?.id) {
+        await createPendingInvoice(sb, pmt.id, institutionId)
+      }
+
       if (pmt?.payment_type === 'implementation') {
         // 3a. Implantação paga → ativa a instituição e gera mensalidades
         await sb.from('institutions')
@@ -253,6 +264,28 @@ serve(async (req) => {
     })
   }
 })
+
+// ─── Nota Fiscal — cria a linha 'pending' em payment_invoices, se ainda não existir ──
+async function createPendingInvoice(sb: any, paymentId: string, institutionId: string) {
+  try {
+    const { data: existing } = await sb.from('payment_invoices').select('id').eq('payment_id', paymentId).maybeSingle()
+    if (existing) return
+
+    const { data: inst } = await sb.from('institutions').select('nf_issue_timing').eq('id', institutionId).single()
+    const issueTiming = inst?.nf_issue_timing || 'after_payment'
+
+    const { error } = await sb.from('payment_invoices').insert({
+      payment_id: paymentId,
+      institution_id: institutionId,
+      status: 'pending',
+      issue_timing: issueTiming,
+    })
+    if (error) console.error('[asaas-webhook] erro ao criar payment_invoices:', error)
+    else console.log('[asaas-webhook] payment_invoices criado (pending) para payment:', paymentId)
+  } catch (e) {
+    console.error('[asaas-webhook] erro em createPendingInvoice:', String(e))
+  }
+}
 
 // ─── Gera mensalidades dos próximos 12 meses ─────────────────────────────────
 async function generateMonthlyPayments(sb: any, institutionId: string, payment: any) {

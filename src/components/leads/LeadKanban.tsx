@@ -324,9 +324,9 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete, institut
   const [familyMatch, setFamilyMatch] = useState<FamilyMatch | null>(null)
   const [checkingFamily, setCheckingFamily] = useState(false)
   const [familyMatchId, setFamilyMatchId] = useState<string | null>(null)
-  // Item 3 (fluxo novo) — filhos além do primeiro, preenchidos na mesma tela
-  // ao criar. O primeiro aluno continua em formData (mantém o fluxo de edição
-  // de lead único intacto); isso aqui só é usado ao criar (!editingLead).
+  // Item 3 — filhos além do primeiro, preenchidos na mesma tela (tanto ao
+  // criar quanto ao editar um lead já existente). O primeiro aluno continua
+  // em formData (mantém o fluxo de edição de lead único intacto).
   const [extraStudents, setExtraStudents] = useState<StudentEntry[]>([])
   const addStudent = () => setExtraStudents(s => [...s, { student_name: '', grade_interest: '', shift_interest: '', origin_school: '' }])
   const updateStudent = (idx: number, patch: Partial<StudentEntry>) => setExtraStudents(s => s.map((st, i) => i === idx ? { ...st, ...patch } : st))
@@ -510,9 +510,7 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete, institut
     try {
       // Filhos extras com nome em branco são descartados silenciosamente —
       // é um bloco que o usuário abriu e não chegou a preencher, não um erro.
-      const additionalStudents = !editingLead
-        ? extraStudents.filter(s => s.student_name.trim()).map(s => ({ ...s, student_name: s.student_name.trim() }))
-        : []
+      const additionalStudents = extraStudents.filter(s => s.student_name.trim()).map(s => ({ ...s, student_name: s.student_name.trim() }))
       await onSave({ ...formData, lead_temperature: formData.lead_temperature || null, familyMatchId, additionalStudents })
       onClose()
     } finally { setSaving(false) }
@@ -605,7 +603,7 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete, institut
             {formData.student_name && (
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 Aluno: {formData.student_name}
-                {!editingLead && extraStudents.filter(s => s.student_name.trim()).length > 0 && ` + ${extraStudents.filter(s => s.student_name.trim()).length} irmão(s)`}
+                {extraStudents.filter(s => s.student_name.trim()).length > 0 && ` + ${extraStudents.filter(s => s.student_name.trim()).length} irmão(s)`}
               </div>
             )}
             <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
@@ -733,9 +731,12 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete, institut
                   </div>
                 </div>
 
-                {/* Filhos extras — fluxo novo: cria tudo (família + N leads) na
-                    mesma tela, sem depender de detecção retroativa por telefone. */}
-                {!editingLead && extraStudents.map((st, idx) => (
+                {/* Filhos extras — cria tudo (família + N leads) na mesma tela,
+                    sem depender de detecção retroativa por telefone. Funciona
+                    tanto ao criar quanto ao editar um lead existente (nesse
+                    caso, vincula à família do lead se já existir, ou cria
+                    uma nova família na hora). */}
+                {extraStudents.map((st, idx) => (
                   <div key={idx} style={{ marginTop: 12, padding: 12, borderRadius: 10, border: '1px dashed #CBD5E1', background: '#F8FAFC', position: 'relative' }}>
                     <button onClick={() => removeStudent(idx)} title="Remover aluno" type="button"
                       style={{ position: 'absolute', top: 8, right: 8, width: 22, height: 22, borderRadius: 7, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8' }}>
@@ -774,11 +775,16 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete, institut
                     </div>
                   </div>
                 ))}
-                {!editingLead && (
-                  <button onClick={addStudent} type="button"
-                    style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1.5px dashed #14b8a6', background: '#F0FDFB', color: '#0d9488', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                    <Plus size={14} /> Adicionar outro filho
-                  </button>
+                <button onClick={addStudent} type="button"
+                  style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1.5px dashed #14b8a6', background: '#F0FDFB', color: '#0d9488', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  <Plus size={14} /> Adicionar outro filho
+                </button>
+                {editingLead && (
+                  <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 6 }}>
+                    {editingLead.family_id
+                      ? 'O(s) novo(s) filho(s) serão vinculados à mesma família deste lead.'
+                      : 'Ao salvar, será criada uma família vinculando este lead ao(s) novo(s) filho(s) adicionado(s).'}
+                  </p>
                 )}
               </div>
 
@@ -1622,6 +1628,56 @@ export default function LeadKanban() {
     try {
       const { supabase: db } = await import('../../lib/supabase')
 
+      // Um insert por aluno, compartilhando os dados da família (telefone,
+      // responsável, origem, atendente, etc.) e o family_id resolvido pelo
+      // chamador. Reaproveitado tanto ao criar um lead novo (com filhos
+      // extras na mesma tela) quanto ao editar um lead existente (adicionar
+      // um irmão a ele).
+      const insertStudentLead = async (
+        student: { student_name?: string | null; grade_interest?: string | null; shift_interest?: string | null; origin_school?: string | null },
+        shared: {
+          responsible_name?: string; phone?: string; email?: string; address?: string; city?: string | null
+          source?: string; budget_range?: string; notes?: string; assigned_to?: string | null
+          next_followup?: string | null; lead_temperature?: 'frio' | 'morno' | 'quente' | null
+          referral_source?: string | null; contest_name?: string | null
+          family_id: string | null; campaign_cycle_id?: string | null; auditSuffix?: string
+        }
+      ) => {
+        const { data: newLead, error } = await db.from('leads').insert({
+          institution_id:   instId,
+          student_name:     student.student_name,
+          responsible_name: shared.responsible_name,
+          phone:             shared.phone,
+          email:             shared.email,
+          address:           shared.address,
+          city:              shared.city || null,
+          grade_interest:    student.grade_interest || null,
+          shift_interest:    student.shift_interest || null,
+          source:            shared.source,
+          budget_range:      shared.budget_range,
+          notes:             shared.notes,
+          status:            'new',
+          assigned_to:       shared.assigned_to || null,
+          next_followup:     shared.next_followup || null,
+          lead_temperature:  shared.lead_temperature || null,
+          origin_school:     student.origin_school || null,
+          referral_source:   shared.referral_source || null,
+          contest_name:      shared.contest_name || null,
+          family_id:         shared.family_id,
+          campaign_cycle_id: shared.campaign_cycle_id ?? null,
+        }).select().single()
+        if (error) throw error
+        await db.from('audit_logs').insert({
+          institution_id: instId, module: 'lead', record_id: newLead.id,
+          action: 'Lead criado',
+          field_changed: `Aluno: ${newLead.student_name}${newLead.grade_interest ? ` · ${newLead.grade_interest}` : ''}${newLead.source ? ` · Origem: ${newLead.source}` : ''}${shared.auditSuffix ?? ''}`,
+          new_value: newLead.phone || '',
+          user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
+        })
+        await logAudit({ institution_id: instId, module: 'leads', record_id: newLead.id, action: 'created', new_value: `${newLead.student_name} — ${newLead.grade_interest}`, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
+        return newLead
+      }
+
       if (editingLead) {
         const { error } = await db.from('leads').update({
           student_name:      leadData.student_name      ?? editingLead.student_name,
@@ -1677,6 +1733,48 @@ export default function LeadKanban() {
             user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
           })
         }
+
+        // Item 3 (fluxo de edição) — "+ Adicionar outro filho" também
+        // disponível ao editar. Se o lead ainda não tem family_id, cria a
+        // família na hora e promove o próprio lead editado pra ela; se já
+        // tem, só usa o family_id existente.
+        if (additionalStudents && additionalStudents.length > 0) {
+          let familyId = editingLead.family_id ?? null
+          const sharedEdit = {
+            responsible_name: leadData.responsible_name ?? editingLead.responsible_name,
+            phone:            leadData.phone ?? editingLead.phone,
+            email:            leadData.email ?? editingLead.email,
+            address:          leadData.address ?? editingLead.address,
+            city:             leadData.city !== undefined ? leadData.city : editingLead.city,
+            source:           leadData.source ?? editingLead.source,
+            budget_range:     leadData.budget_range ?? editingLead.budget_range,
+            notes:            leadData.notes ?? editingLead.notes,
+            assigned_to:      leadData.assigned_to !== undefined ? (leadData.assigned_to || null) : (editingLead.assigned_to || null),
+            next_followup:    leadData.next_followup !== undefined ? (leadData.next_followup || null) : (editingLead.next_followup || null),
+            lead_temperature: leadData.lead_temperature !== undefined ? (leadData.lead_temperature || null) : (editingLead.lead_temperature || null),
+            referral_source:  leadData.referral_source !== undefined ? (leadData.referral_source || null) : (editingLead.referral_source || null),
+            contest_name:     leadData.contest_name !== undefined ? (leadData.contest_name || null) : (editingLead.contest_name || null),
+            family_id:        null as string | null,
+            campaign_cycle_id: editingLead.campaign_cycle_id ?? null,
+            auditSuffix:      ` (irmão de ${editingLead.student_name})`,
+          }
+          if (!familyId) {
+            const { data: newFamily, error: famErr } = await db.from('lead_families').insert({
+              institution_id: instId,
+              responsible_name: sharedEdit.responsible_name,
+              phone: sharedEdit.phone,
+              email: sharedEdit.email || null,
+              address: sharedEdit.address || null,
+            }).select().single()
+            if (famErr) throw famErr
+            familyId = newFamily.id
+            await db.from('leads').update({ family_id: familyId }).eq('id', editingLead.id)
+          }
+          sharedEdit.family_id = familyId
+          for (const student of additionalStudents) {
+            await insertStudentLead(student, sharedEdit)
+          }
+        }
       } else {
         // Item 3 — família com múltiplos filhos. Caminho principal agora:
         // todos os filhos preenchidos na mesma tela (additionalStudents) viram
@@ -1716,42 +1814,22 @@ export default function LeadKanban() {
           familyId = newFamily.id
         }
 
-        // Um insert por aluno, compartilhando os dados da família (telefone,
-        // responsável, origem, atendente, etc.) e o family_id resolvido acima.
-        const insertStudentLead = async (student: { student_name?: string | null; grade_interest?: string | null; shift_interest?: string | null; origin_school?: string | null }) => {
-          const { data: newLead, error } = await db.from('leads').insert({
-            institution_id:   instId,
-            student_name:     student.student_name,
-            responsible_name: leadData.responsible_name,
-            phone:            leadData.phone,
-            email:            leadData.email,
-            address:          leadData.address,
-            city:             leadData.city || null,
-            grade_interest:   student.grade_interest || null,
-            shift_interest:   student.shift_interest || null,
-            source:           leadData.source,
-            budget_range:     leadData.budget_range,
-            notes:            leadData.notes,
-            status:           'new',
-            assigned_to:      leadData.assigned_to || null,
-            next_followup:    leadData.next_followup || null,
-            lead_temperature: leadData.lead_temperature || null,
-            origin_school:    student.origin_school || null,
-            referral_source:  leadData.referral_source || null,
-            contest_name:     leadData.contest_name || null,
-            family_id:        familyId,
-            campaign_cycle_id: activeCampaignCycle?.id ?? null,
-          }).select().single()
-          if (error) throw error
-          await db.from('audit_logs').insert({
-            institution_id: instId, module: 'lead', record_id: newLead.id,
-            action: 'Lead criado',
-            field_changed: `Aluno: ${newLead.student_name}${newLead.grade_interest ? ` · ${newLead.grade_interest}` : ''}${newLead.source ? ` · Origem: ${newLead.source}` : ''}`,
-            new_value: newLead.phone || '',
-            user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
-          })
-          await logAudit({ institution_id: instId, module: 'leads', record_id: newLead.id, action: 'created', new_value: `${newLead.student_name} — ${newLead.grade_interest}`, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
-          return newLead
+        const sharedCreate = {
+          responsible_name: leadData.responsible_name,
+          phone:             leadData.phone,
+          email:             leadData.email,
+          address:           leadData.address,
+          city:              leadData.city || null,
+          source:            leadData.source,
+          budget_range:      leadData.budget_range,
+          notes:             leadData.notes,
+          assigned_to:       leadData.assigned_to || null,
+          next_followup:     leadData.next_followup || null,
+          lead_temperature:  leadData.lead_temperature || null,
+          referral_source:   leadData.referral_source || null,
+          contest_name:      leadData.contest_name || null,
+          family_id:         familyId,
+          campaign_cycle_id: activeCampaignCycle?.id ?? null,
         }
 
         const newLead = await insertStudentLead({
@@ -1759,12 +1837,12 @@ export default function LeadKanban() {
           grade_interest: leadData.grade_interest,
           shift_interest: (leadData as any).shift_interest,
           origin_school: leadData.origin_school,
-        })
+        }, sharedCreate)
         savedLeadId = newLead.id
 
         if (additionalStudents) {
           for (const student of additionalStudents) {
-            await insertStudentLead(student)
+            await insertStudentLead(student, sharedCreate)
           }
         }
       }
