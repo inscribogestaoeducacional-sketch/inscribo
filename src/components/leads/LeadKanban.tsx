@@ -258,10 +258,19 @@ function LostReasonModal({ isOpen, lead, onConfirm, onCancel }: LostReasonModalP
 // ─── NewLeadModal ─────────────────────────────────────────────────────────────
 interface SimpleUser { id: string; full_name: string; role?: string }
 
+// Um filho a mais além do primeiro (que continua vivendo em formData, pra não
+// mexer no fluxo de edição de lead único). Usado só no fluxo de criação.
+interface StudentEntry {
+  student_name: string
+  grade_interest: string
+  shift_interest: string
+  origin_school: string
+}
+
 interface NewLeadModalProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (data: Partial<Lead> & { familyMatchId?: string | null }) => Promise<void>
+  onSave: (data: Partial<Lead> & { familyMatchId?: string | null; additionalStudents?: StudentEntry[] }) => Promise<void>
   editingLead?: Lead | null
   onDelete?: (id: string) => void
   institutionId: string
@@ -315,6 +324,13 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete, institut
   const [familyMatch, setFamilyMatch] = useState<FamilyMatch | null>(null)
   const [checkingFamily, setCheckingFamily] = useState(false)
   const [familyMatchId, setFamilyMatchId] = useState<string | null>(null)
+  // Item 3 (fluxo novo) — filhos além do primeiro, preenchidos na mesma tela
+  // ao criar. O primeiro aluno continua em formData (mantém o fluxo de edição
+  // de lead único intacto); isso aqui só é usado ao criar (!editingLead).
+  const [extraStudents, setExtraStudents] = useState<StudentEntry[]>([])
+  const addStudent = () => setExtraStudents(s => [...s, { student_name: '', grade_interest: '', shift_interest: '', origin_school: '' }])
+  const updateStudent = (idx: number, patch: Partial<StudentEntry>) => setExtraStudents(s => s.map((st, i) => i === idx ? { ...st, ...patch } : st))
+  const removeStudent = (idx: number) => setExtraStudents(s => s.filter((_, i) => i !== idx))
   const [formData, setFormData] = useState({
     student_name: '', grade_interest: '', shift_interest: '',
     responsible_name: '', phone: '', email: '', address: '', city: '',
@@ -366,6 +382,7 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete, institut
     setHistory([])
     setFamilyMatch(null)
     setFamilyMatchId(null)
+    setExtraStudents([])
   }, [editingLead, isOpen])
 
   useEffect(() => {
@@ -491,7 +508,12 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete, institut
     if (!validate()) { setActiveTab('dados'); return }
     setSaving(true)
     try {
-      await onSave({ ...formData, lead_temperature: formData.lead_temperature || null, familyMatchId })
+      // Filhos extras com nome em branco são descartados silenciosamente —
+      // é um bloco que o usuário abriu e não chegou a preencher, não um erro.
+      const additionalStudents = !editingLead
+        ? extraStudents.filter(s => s.student_name.trim()).map(s => ({ ...s, student_name: s.student_name.trim() }))
+        : []
+      await onSave({ ...formData, lead_temperature: formData.lead_temperature || null, familyMatchId, additionalStudents })
       onClose()
     } finally { setSaving(false) }
   }
@@ -580,7 +602,12 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete, institut
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formData.responsible_name || 'Novo Lead'}</div>
-            {formData.student_name && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Aluno: {formData.student_name}</div>}
+            {formData.student_name && (
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Aluno: {formData.student_name}
+                {!editingLead && extraStudents.filter(s => s.student_name.trim()).length > 0 && ` + ${extraStudents.filter(s => s.student_name.trim()).length} irmão(s)`}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
               {formData.status && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(255,255,255,0.25)', color: '#fff' }}>{statusConfig[formData.status]?.label}</span>}
               {formData.lead_temperature && (() => {
@@ -673,7 +700,7 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete, institut
               </div>
 
               <div>
-                <p style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Dados do Aluno</p>
+                <p style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>{editingLead ? 'Dados do Aluno' : 'Aluno(s)'}</p>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                   <div style={{ gridColumn: '1 / -1' }}>
                     <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Nome do aluno *</label>
@@ -705,6 +732,54 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete, institut
                       style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
                   </div>
                 </div>
+
+                {/* Filhos extras — fluxo novo: cria tudo (família + N leads) na
+                    mesma tela, sem depender de detecção retroativa por telefone. */}
+                {!editingLead && extraStudents.map((st, idx) => (
+                  <div key={idx} style={{ marginTop: 12, padding: 12, borderRadius: 10, border: '1px dashed #CBD5E1', background: '#F8FAFC', position: 'relative' }}>
+                    <button onClick={() => removeStudent(idx)} title="Remover aluno" type="button"
+                      style={{ position: 'absolute', top: 8, right: 8, width: 22, height: 22, borderRadius: 7, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8' }}>
+                      <X size={13} />
+                    </button>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 8 }}>Filho {idx + 2}</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Nome do aluno</label>
+                        <input value={st.student_name} onChange={e => updateStudent(idx, { student_name: e.target.value })} placeholder="Nome completo do aluno"
+                          style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Série de interesse</label>
+                        <select value={st.grade_interest} onChange={e => updateStudent(idx, { grade_interest: e.target.value })}
+                          style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
+                          <option value="">Selecione</option>
+                          {gradeNames.map(g => <option key={g} value={g}>{g}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Turno</label>
+                        <select value={st.shift_interest} onChange={e => updateStudent(idx, { shift_interest: e.target.value })}
+                          style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
+                          <option value="">Selecione</option>
+                          <option value="Manhã">Manhã</option>
+                          <option value="Tarde">Tarde</option>
+                          <option value="Integral">Integral</option>
+                        </select>
+                      </div>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Escola de origem</label>
+                        <input value={st.origin_school} onChange={e => updateStudent(idx, { origin_school: e.target.value })} placeholder="Escola onde o aluno estuda/estudou (opcional)"
+                          style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {!editingLead && (
+                  <button onClick={addStudent} type="button"
+                    style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1.5px dashed #14b8a6', background: '#F0FDFB', color: '#0d9488', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                    <Plus size={14} /> Adicionar outro filho
+                  </button>
+                )}
               </div>
 
               <div>
@@ -1435,7 +1510,7 @@ export default function LeadKanban() {
 
   // ── Item 2: propriedade do lead / lembretes ───────────────────────────────
   const [users, setUsers] = useState<SimpleUser[]>([])
-  const [ownerFilter, setOwnerFilter] = useState<string>('mine') // 'mine' | 'all' | 'unassigned' | <user id>
+  const [ownerFilter, setOwnerFilter] = useState<string>('all') // 'mine' | 'all' | 'unassigned' | <user id>
   const [reminderModal, setReminderModal] = useState<{ open: boolean; lead: Lead | null }>({ open: false, lead: null })
 
   // ── Item 7 — temperatura ───────────────────────────────────────────────────
@@ -1537,12 +1612,12 @@ export default function LeadKanban() {
     }
   }
 
-  const handleSave = async (data: Partial<Lead> & { familyMatchId?: string | null }) => {
+  const handleSave = async (data: Partial<Lead> & { familyMatchId?: string | null; additionalStudents?: { student_name: string; grade_interest: string; shift_interest: string; origin_school: string }[] }) => {
     console.log('[LEAD SAVE] iniciando...', data)
     setError('')
     const instId = user!.institution_id
     let savedLeadId: string = editingLead?.id ?? ''
-    const { familyMatchId, ...leadData } = data
+    const { familyMatchId, additionalStudents, ...leadData } = data
 
     try {
       const { supabase: db } = await import('../../lib/supabase')
@@ -1603,9 +1678,14 @@ export default function LeadKanban() {
           })
         }
       } else {
-        // Item 3b — família com múltiplos filhos: vincula a uma família já
-        // existente, ou promove um lead avulso antigo (mesmo telefone) pra
-        // uma família nova, agrupando os dois.
+        // Item 3 — família com múltiplos filhos. Caminho principal agora:
+        // todos os filhos preenchidos na mesma tela (additionalStudents) viram
+        // 1 lead_families + N leads criados juntos, sem precisar voltar depois.
+        // A detecção por telefone (familyMatchId) continua existindo como
+        // fallback pro caso de alguém criar um lead novo separadamente meses
+        // depois — se ela encontrar uma família, tem prioridade sobre criar
+        // uma nova (também cobre o caso combinado: adicionar 2+ filhos novos
+        // a uma família já existente, tudo na mesma tela).
         let familyId: string | null = null
         if (familyMatchId) {
           if (familyMatchId.startsWith('retro:')) {
@@ -1624,41 +1704,69 @@ export default function LeadKanban() {
           } else {
             familyId = familyMatchId
           }
+        } else if (additionalStudents && additionalStudents.length > 0) {
+          const { data: newFamily, error: famErr } = await db.from('lead_families').insert({
+            institution_id: instId,
+            responsible_name: leadData.responsible_name,
+            phone: leadData.phone,
+            email: leadData.email || null,
+            address: leadData.address || null,
+          }).select().single()
+          if (famErr) throw famErr
+          familyId = newFamily.id
         }
 
-        const { data: newLead, error } = await db.from('leads').insert({
-          institution_id:   instId,
-          student_name:     leadData.student_name,
-          responsible_name: leadData.responsible_name,
-          phone:            leadData.phone,
-          email:            leadData.email,
-          address:          leadData.address,
-          city:             leadData.city || null,
-          grade_interest:   leadData.grade_interest,
-          shift_interest:   (leadData as any).shift_interest || null,
-          source:           leadData.source,
-          budget_range:     leadData.budget_range,
-          notes:            leadData.notes,
-          status:           'new',
-          assigned_to:      leadData.assigned_to || null,
-          next_followup:    leadData.next_followup || null,
-          lead_temperature: leadData.lead_temperature || null,
-          origin_school:    leadData.origin_school || null,
-          referral_source:  leadData.referral_source || null,
-          contest_name:     leadData.contest_name || null,
-          family_id:        familyId,
-          campaign_cycle_id: activeCampaignCycle?.id ?? null,
-        }).select().single()
-        if (error) throw error
-        savedLeadId = newLead.id
-        await db.from('audit_logs').insert({
-          institution_id: instId, module: 'lead', record_id: newLead.id,
-          action: 'Lead criado',
-          field_changed: `Aluno: ${newLead.student_name}${newLead.grade_interest ? ` · ${newLead.grade_interest}` : ''}${newLead.source ? ` · Origem: ${newLead.source}` : ''}`,
-          new_value: newLead.phone || '',
-          user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
+        // Um insert por aluno, compartilhando os dados da família (telefone,
+        // responsável, origem, atendente, etc.) e o family_id resolvido acima.
+        const insertStudentLead = async (student: { student_name?: string | null; grade_interest?: string | null; shift_interest?: string | null; origin_school?: string | null }) => {
+          const { data: newLead, error } = await db.from('leads').insert({
+            institution_id:   instId,
+            student_name:     student.student_name,
+            responsible_name: leadData.responsible_name,
+            phone:            leadData.phone,
+            email:            leadData.email,
+            address:          leadData.address,
+            city:             leadData.city || null,
+            grade_interest:   student.grade_interest || null,
+            shift_interest:   student.shift_interest || null,
+            source:           leadData.source,
+            budget_range:     leadData.budget_range,
+            notes:            leadData.notes,
+            status:           'new',
+            assigned_to:      leadData.assigned_to || null,
+            next_followup:    leadData.next_followup || null,
+            lead_temperature: leadData.lead_temperature || null,
+            origin_school:    student.origin_school || null,
+            referral_source:  leadData.referral_source || null,
+            contest_name:     leadData.contest_name || null,
+            family_id:        familyId,
+            campaign_cycle_id: activeCampaignCycle?.id ?? null,
+          }).select().single()
+          if (error) throw error
+          await db.from('audit_logs').insert({
+            institution_id: instId, module: 'lead', record_id: newLead.id,
+            action: 'Lead criado',
+            field_changed: `Aluno: ${newLead.student_name}${newLead.grade_interest ? ` · ${newLead.grade_interest}` : ''}${newLead.source ? ` · Origem: ${newLead.source}` : ''}`,
+            new_value: newLead.phone || '',
+            user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
+          })
+          await logAudit({ institution_id: instId, module: 'leads', record_id: newLead.id, action: 'created', new_value: `${newLead.student_name} — ${newLead.grade_interest}`, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
+          return newLead
+        }
+
+        const newLead = await insertStudentLead({
+          student_name: leadData.student_name,
+          grade_interest: leadData.grade_interest,
+          shift_interest: (leadData as any).shift_interest,
+          origin_school: leadData.origin_school,
         })
-        await logAudit({ institution_id: instId, module: 'leads', record_id: newLead.id, action: 'created', new_value: `${newLead.student_name} — ${newLead.grade_interest}`, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
+        savedLeadId = newLead.id
+
+        if (additionalStudents) {
+          for (const student of additionalStudents) {
+            await insertStudentLead(student)
+          }
+        }
       }
     } catch (err) {
       console.error('[LEAD SAVE] erro:', err)
@@ -2017,7 +2125,7 @@ export default function LeadKanban() {
   const activeLead = activeId ? leads.find(l => l.id === activeId) : null
   const visibleStatuses = filterStatus ? Object.keys(statusConfig).filter(s => s === filterStatus) : Object.keys(statusConfig)
   const filteredTotal = visibleStatuses.reduce((sum, s) => sum + getLeadsByStatus(s as Lead['status']).length, 0)
-  const hasActiveFilters = searchTerm !== '' || filterSource !== '' || filterStatus !== '' || periodFilter !== 'all' || gradeFilter !== 'all' || shiftFilter !== 'all' || temperatureFilter !== '' || ownerFilter !== 'mine'
+  const hasActiveFilters = searchTerm !== '' || filterSource !== '' || filterStatus !== '' || periodFilter !== 'all' || gradeFilter !== 'all' || shiftFilter !== 'all' || temperatureFilter !== '' || ownerFilter !== 'all'
 
   const cardActions = {
     onSchedule: (lead: Lead) => { setLeadToSchedule(lead); setShowScheduleVisitModal(true) },
@@ -2042,7 +2150,7 @@ export default function LeadKanban() {
   const clearAllFilters = () => {
     setSearchTerm(''); setFilterSource(''); setFilterStatus(''); setPeriodFilter('all')
     setCustomStart(''); setCustomEnd(''); setGradeFilter('all'); setShiftFilter('all')
-    setTemperatureFilter(''); setOwnerFilter('mine')
+    setTemperatureFilter(''); setOwnerFilter('all')
   }
 
   const filterDrawerEl = (
@@ -2092,6 +2200,11 @@ export default function LeadKanban() {
               style={{ width: '100%', paddingLeft: 36, paddingRight: 12, height: 44, background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, fontSize: 16, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}
             />
           </div>
+          {/* Atalho rápido "Meus leads" — alterna direto sem abrir o drawer completo */}
+          <button onClick={() => setOwnerFilter(o => o === 'mine' ? 'all' : 'mine')} title="Meus leads"
+            style={{ width: 44, height: 44, borderRadius: 12, background: ownerFilter === 'mine' ? '#00A896' : '#fff', border: '1.5px solid ' + (ownerFilter === 'mine' ? '#00A896' : '#E2E8F0'), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <UserCog style={{ width: 17, height: 17, color: ownerFilter === 'mine' ? '#fff' : '#64748B' }} />
+          </button>
           <button onClick={() => setFilterDrawerOpen(true)} style={{ position: 'relative', width: 44, height: 44, borderRadius: 12, background: hasActiveFilters ? '#00A896' : '#fff', border: '1.5px solid ' + (hasActiveFilters ? '#00A896' : '#E2E8F0'), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             <SlidersHorizontal style={{ width: 17, height: 17, color: hasActiveFilters ? '#fff' : '#64748B' }} />
           </button>
@@ -2223,6 +2336,13 @@ export default function LeadKanban() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
           <input type="text" placeholder="Buscar por nome..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 pr-4 py-2.5 w-full border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none transition-all text-sm shadow-sm" />
         </div>
+        {/* Atalho rápido "Meus leads" — alterna direto sem abrir o drawer completo */}
+        <button
+          onClick={() => setOwnerFilter(o => o === 'mine' ? 'all' : 'mine')}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1.5px solid ' + (ownerFilter === 'mine' ? '#00A896' : '#E2E8F0'), background: ownerFilter === 'mine' ? '#00A896' : '#fff', color: ownerFilter === 'mine' ? '#fff' : '#64748B', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
+        >
+          <UserCog style={{ width: 14, height: 14 }} /> Meus Leads
+        </button>
         <button
           onClick={() => setFilterDrawerOpen(true)}
           style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1.5px solid ' + (hasActiveFilters ? '#00A896' : '#E2E8F0'), background: hasActiveFilters ? '#F0FDFB' : '#fff', color: hasActiveFilters ? '#00A896' : '#64748B', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
