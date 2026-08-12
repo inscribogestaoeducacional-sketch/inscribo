@@ -26,6 +26,7 @@ import SatisfactionFullModal from '../../components/gestor/SatisfactionFullModal
 import MarketReportModal from '../../components/gestor/MarketReportModal'
 import type { FunnelMetrics } from '../../lib/supabase'
 import { createNotification } from '../../lib/notifications'
+import { getLeadReminderInfo, REMINDER_COLORS } from '../../lib/leadReminders'
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 interface HistoricalEntry {
@@ -72,6 +73,10 @@ interface MarketData {
 interface UserRanking {
   user_id: string; full_name: string; role: string
   enrollments_count: number
+  // Item 8 — volume de leads trabalhados, agora que assigned_to é
+  // efetivamente preenchido (antes só existia a coluna e nunca era gravada).
+  assigned_count: number
+  advanced_count: number
 }
 
 interface StudentTransfer {
@@ -297,6 +302,10 @@ export default function GestorHome() {
   const [waAvgResponse, setWaAvgResponse] = useState<number | null>(null)
   const [waSatisfStats, setWaSatisfStats] = useState<{ total: number; ruim: number; regular: number; otimo: number; avgScore: number; byAttendant: { name: string; total: number; sum: number }[] } | null>(null)
   const [userRankings, setUserRankings] = useState<UserRanking[]>([])
+  // Item 2d — agregado de lembretes de leads (todos os atendentes), pro
+  // gestor ver overdue/hoje/futuros sem entrar em cada lead individualmente.
+  const [leadReminders, setLeadReminders] = useState<{ id: string; student_name: string; responsible_name: string; status: string; created_at: string; next_followup: string | null; assigned_to: string | null }[]>([])
+  const [allUsers, setAllUsers] = useState<{ id: string; full_name: string }[]>([])
   const [marketData, setMarketData] = useState<MarketData | null>(null)
   const [marketLoading, setMarketLoading] = useState(false)
   const [showModal, setShowModal] = useState(false)
@@ -312,7 +321,7 @@ export default function GestorHome() {
   const mountedRef = useRef(true)
   const [periodFilter, setPeriodFilter] = useState('mes')
   const [waConvsRaw, setWaConvsRaw] = useState<{ id: string; created_at: string; status: string; assigned_user_name: string | null; assigned_user_id: string | null; bot_active: boolean | null; satisfaction_score: number | null; first_human_response_at: string | null; remote_jid: string; contact_name: string | null; last_message: string | null }[]>([])
-  const [selectedAttendant, setSelectedAttendant] = useState<{ user_id: string; full_name: string; role: string; enrollments_count: number; wa_count: number; satisf_score: number | null; avg_response: number | null; score: number } | null>(null)
+  const [selectedAttendant, setSelectedAttendant] = useState<{ user_id: string; full_name: string; role: string; enrollments_count: number; assigned_count: number; advanced_count: number; wa_count: number; satisf_score: number | null; avg_response: number | null; score: number } | null>(null)
   const [showSatisfactionModal, setShowSatisfactionModal] = useState(false)
   const [showMarketReportModal, setShowMarketReportModal] = useState(false)
   const [surveyScoresList, setSurveyScoresList] = useState<{ satisfaction_score: number | null }[]>([])
@@ -385,12 +394,17 @@ export default function GestorHome() {
       const duration = new Date(end).getTime() - new Date(start).getTime()
       const prevStart = new Date(new Date(start).getTime() - duration).toISOString()
 
+      // Item 8/2d — janela de "avanço no funil" (mudanças de status recentes),
+      // mesmo horizonte usado no resto do dashboard pra métricas "recentes".
+      const advancedSinceIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+
       const [
         cyclesRes, funnelRes, transferRes, leadsRes, visitsRes, waRes, enrollRes, usersRes,
         waPhoneRes, waConvsRes, overdueNotifRes,
         { data: leadsForEnrollData }, { data: openConvs },
         { data: prevLeadsData }, { data: prevEnrollData },
         { data: npsRes, error: npsErr }, { data: instData },
+        { data: allLeadsForOwnershipData }, { data: statusChangeLogsData },
       ] = await Promise.all([
         supabase.from('campaign_cycles').select('*').eq('institution_id', institutionId).order('created_at', { ascending: false }),
         supabase.from('funnel_metrics').select('*').eq('institution_id', institutionId).order('created_at', { ascending: true }),
@@ -432,6 +446,16 @@ export default function GestorHome() {
         // e o branch de survey_mode==='custom' no card "Pesquisa de satisfação").
         supabase.from('satisfaction_surveys').select('id, title, created_at, survey_mode, satisfaction_responses(answers, custom_answers)').eq('institution_id', institutionId).neq('status', 'draft').order('created_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('institutions').select('inep_code').eq('id', institutionId).single(),
+        // Item 8 — todos os leads com responsável atual, pra "Leads
+        // atribuídos"/"avançados no funil" no ranking e pro agregado de
+        // lembretes (item 2d, filtrado depois via getLeadReminderInfo, que já
+        // exclui enrolled/lost). Sem filtro de período — é "estado atual da
+        // carteira", não volume do período selecionado.
+        supabase.from('leads').select('id, student_name, responsible_name, status, created_at, next_followup, assigned_to').eq('institution_id', institutionId),
+        // Item 8 — "avançados no funil": leads cujo status mudou nos
+        // últimos 30 dias, pra contar por responsável atual (join em JS
+        // contra allLeadsForOwnershipData, ver abaixo).
+        supabase.from('audit_logs').select('record_id').eq('institution_id', institutionId).eq('module', 'lead').in('action', ['Status alterado', 'Lead reaberto']).gte('created_at', advancedSinceIso),
       ])
       if (npsErr) console.error('[GestorHome] erro ao buscar NPS:', npsErr)
 
@@ -484,15 +508,35 @@ export default function GestorHome() {
         }
       })
 
+      // Item 8 — volume de leads trabalhados por atendente, agora que
+      // assigned_to é realmente gravado (LeadKanban.tsx handleSave/item 1b).
+      const allLeadsForOwnership = (allLeadsForOwnershipData ?? []) as { id: string; student_name: string; responsible_name: string; status: string; created_at: string; next_followup: string | null; assigned_to: string | null }[]
+      const leadAssignedToById = new Map(allLeadsForOwnership.map(l => [l.id, l.assigned_to]))
+      const assignedCountByUser: Record<string, number> = {}
+      allLeadsForOwnership.forEach(l => { if (l.assigned_to) assignedCountByUser[l.assigned_to] = (assignedCountByUser[l.assigned_to] || 0) + 1 })
+      const advancedCountByUser: Record<string, number> = {}
+      const statusChangeLogs = (statusChangeLogsData ?? []) as { record_id: string }[]
+      statusChangeLogs.forEach(log => {
+        const ownerId = leadAssignedToById.get(log.record_id)
+        if (ownerId) advancedCountByUser[ownerId] = (advancedCountByUser[ownerId] || 0) + 1
+      })
+
       const rankings: UserRanking[] = users.map(u => ({
         user_id: u.id,
         full_name: u.full_name || 'Usuário',
         role: u.role || 'gestor',
         enrollments_count: enrollCountByUser[u.id] || 0,
+        assigned_count: assignedCountByUser[u.id] || 0,
+        advanced_count: advancedCountByUser[u.id] || 0,
       })).sort((a, b) => b.enrollments_count - a.enrollments_count).slice(0, 5)
 
       setUserRankings(rankings)
       setAllEnrollments(enrollments)
+      setAllUsers(users)
+
+      // Item 2d — agregado de lembretes (todos os atendentes); a UI usa
+      // getLeadReminderInfo (lib/leadReminders.ts) pra decidir o que exibir.
+      setLeadReminders(allLeadsForOwnership)
 
       // WhatsApp phone record (detection)
       setWaPhoneRecord((waPhoneRes.data as { phone_number: string; display_name: string } | null) ?? null)
@@ -1607,11 +1651,13 @@ export default function GestorHome() {
             const medalColors = ['#F59E0B', '#9CA3AF', '#CD7C4B']
             return (
               <div style={{ maxHeight: 320, overflowY: 'auto', scrollbarWidth: 'thin', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 44px 52px 52px 64px 56px', gap: 4, padding: '4px 8px 8px', borderBottom: '1px solid #f1f5f9', marginBottom: 4 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 44px 44px 44px 52px 52px 64px 56px', gap: 4, padding: '4px 8px 8px', borderBottom: '1px solid #f1f5f9', marginBottom: 4 }}>
                   {[
                     { Icon: Award, label: '' },
                     { Icon: User, label: 'Atendente' },
                     { Icon: Zap, label: 'Score' },
+                    { Icon: Users, label: 'Atrib.' },
+                    { Icon: TrendingUp, label: 'Avanç.' },
                     { Icon: GraduationCap, label: 'Mat.' },
                     { Icon: MessageCircle, label: 'WA' },
                     { Icon: Clock, label: 'T. Resp.' },
@@ -1627,7 +1673,7 @@ export default function GestorHome() {
                   const initials = (u.full_name || '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
                   return (
                     <div key={u.user_id} onClick={() => setSelectedAttendant(u)}
-                      style={{ display: 'grid', gridTemplateColumns: '28px 1fr 44px 52px 52px 64px 56px', gap: 4, alignItems: 'center', padding: '7px 8px', borderRadius: 8, background: i % 2 === 1 ? '#f8fafc' : '#fff', cursor: 'pointer', transition: 'background 0.15s' }}
+                      style={{ display: 'grid', gridTemplateColumns: '28px 1fr 44px 44px 44px 52px 52px 64px 56px', gap: 4, alignItems: 'center', padding: '7px 8px', borderRadius: 8, background: i % 2 === 1 ? '#f8fafc' : '#fff', cursor: 'pointer', transition: 'background 0.15s' }}
                       onMouseEnter={e => (e.currentTarget.style.background = '#eef2ff')}
                       onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 1 ? '#f8fafc' : '#fff')}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1649,6 +1695,8 @@ export default function GestorHome() {
                         )}
                       </div>
                       <div style={{ fontSize: 13, fontWeight: 800, color: '#F59E0B', textAlign: 'center' }}>{u.score}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#1e2d6b', textAlign: 'center' }} title="Leads atribuídos">{u.assigned_count}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#0d9488', textAlign: 'center' }} title="Leads avançados no funil (30 dias)">{u.advanced_count}</div>
                       <div style={{ fontSize: 13, fontWeight: 700, color: '#7C3AED', textAlign: 'center' }}>{u.enrollments_count}</div>
                       <div style={{ fontSize: 12, fontWeight: 600, color: '#25D366', textAlign: 'center' }}>{u.wa_count}</div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: '#EF4444', textAlign: 'center' }}>
@@ -1665,6 +1713,54 @@ export default function GestorHome() {
           })()}
         </div>
       </div>
+
+      {/* Item 2d — lembretes de leads agregados (todos os atendentes) */}
+      {(() => {
+        const usersMap = new Map(allUsers.map(u => [u.id, u.full_name]))
+        const withReminder = leadReminders
+          .map(l => ({ lead: l, reminder: getLeadReminderInfo(l) }))
+          .filter((x): x is { lead: typeof leadReminders[number]; reminder: NonNullable<ReturnType<typeof getLeadReminderInfo>> } => x.reminder !== null)
+          .sort((a, b) => {
+            const order = { overdue: 0, today: 1, stale: 2, upcoming: 3 } as const
+            return order[a.reminder.urgency] - order[b.reminder.urgency]
+          })
+          .slice(0, 8)
+        if (withReminder.length === 0) return null
+        return (
+          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 10, background: '#FFFBEB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Bell size={16} color="#D97706" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e2d6b', margin: 0 }}>Lembretes da equipe</h3>
+                  <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>Follow-ups atrasados, de hoje e leads sem contato</p>
+                </div>
+              </div>
+              <button onClick={() => navigate('/leads')} style={{ fontSize: 11, color: '#D97706', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                Ver leads <ChevronRight size={12} />
+              </button>
+            </div>
+            <div style={{ padding: '8px 12px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {withReminder.map(({ lead, reminder }) => {
+                const colors = REMINDER_COLORS[reminder.urgency]
+                return (
+                  <div key={lead.id} onClick={() => navigate(`/leads?highlight=${lead.id}`)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 10, cursor: 'pointer', background: colors.bg, border: `1px solid ${colors.border}` }}>
+                    <Bell size={13} color={colors.color} style={{ flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1e2d6b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.responsible_name} <span style={{ fontWeight: 400, color: '#94a3b8' }}>· {lead.student_name}</span></p>
+                      <p style={{ margin: 0, fontSize: 11, color: colors.color, fontWeight: 600 }}>{reminder.label}</p>
+                    </div>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: '#64748b', flexShrink: 0 }}>{lead.assigned_to ? (usersMap.get(lead.assigned_to) || '—') : 'Sem responsável'}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── BLOCO 2: WhatsApp ────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0' }}>

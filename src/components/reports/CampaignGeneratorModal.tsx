@@ -5,6 +5,7 @@ import {
   Edit3, FileText, Calendar, Users, DollarSign, TrendingUp
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { useGradeLevels } from '../../hooks/useGradeLevels'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer
@@ -149,7 +150,9 @@ function redistributePlan(plan: GeneratedPlan, newTotal: number, reenrollTotal: 
   return u
 }
 
-const GRADE_OPTIONS = ['Infantil I','Infantil II','Infantil III','Infantil IV','Infantil V','1º ao 5º EF','6º ao 9º EF','Ensino Médio']
+// Item 4c — GRADE_OPTIONS antes hardcoded aqui (bandas grosseiras, incompatíveis
+// com "formandos por série"); agora vem de school_grade_levels via
+// useGradeLevels(institutionId), dentro de Step3Config.
 const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 const GEN_MSGS = ['Analisando histórico e sazonalidade...','Calculando taxas de conversão...','Definindo metas mensais...','Estimando investimento...','Preparando plano completo...']
 const STEP_LABELS = ['Upload','Diagnóstico','Configurar','Gerando','Revisar']
@@ -511,7 +514,7 @@ if (existingCycle) {
           {draftToast&&<div style={{background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:10,padding:'10px 16px',marginBottom:12,fontSize:13,color:'#166534',display:'flex',alignItems:'center',gap:8}}><Check size={14} color="#16a34a"/>{draftToast}</div>}
           {step===1&&<Step1Upload erpFiles={erpFiles} setErpFiles={setErpFiles} loadingFile={loadingFile} multiFileProgress={multiFileProgress} fileInputRef={fileInputRef} onFileChange={handleFileChange} historicalData={historicalData} setHistoricalData={setHistoricalData}/>}
           {step===2&&<Step2Analysis erpFiles={erpFiles} aiAnalysis={aiAnalysis} loading={loadingAnalysis} error={error} onRetry={analyzeWithAI}/>}
-          {step===3&&<Step3Config schoolData={schoolData} setSchoolData={setSchoolData} growthTarget={growthTarget} setGrowthTarget={setGrowthTarget} aiAnalysis={aiAnalysis} totalExits={totalExits}/>}
+          {step===3&&<Step3Config schoolData={schoolData} setSchoolData={setSchoolData} growthTarget={growthTarget} setGrowthTarget={setGrowthTarget} aiAnalysis={aiAnalysis} totalExits={totalExits} institutionId={institutionId}/>}
           {step===4&&<Step4Generating loading={loadingGenerate} progress={genProgress} msgIdx={genMsgIdx} msgs={GEN_MSGS} error={error} onRetry={generateCampaign}/>}
           {step===5&&adjustedPlan&&<Step5Review plan={adjustedPlan} basePlan={generatedPlan!} ambitiousLevel={ambitiousLevel} campaignYear={campaignYear} startDate={schoolData.start_date||`${executionYear}-09-01`} endDate={schoolData.end_date||`${executionYear+1}-02-28`} erpFiles={erpFiles} totalExits={totalExits} currentStudents={schoolData.current_students} monthsUntilCampaign={monthsUntil} campaignStartMonth={campaignStartMonth} onAmbitiousChange={handleAmbitiousChange} onManualTargets={handleManualTargets} onUpdateCell={updateMonthlyCell} onRegenerate={()=>{setStep(4);generateCampaign()}}/>}
         </div>
@@ -634,7 +637,8 @@ function Step2Analysis({ erpFiles, aiAnalysis, loading, error, onRetry }: { erpF
 }
 
 // ─── Passo 3 — Configurar ────────────────────────────────────────
-function Step3Config({ schoolData, setSchoolData, growthTarget, setGrowthTarget, aiAnalysis, totalExits }: { schoolData:SchoolData; setSchoolData:React.Dispatch<React.SetStateAction<SchoolData>>; growthTarget:GrowthTarget; setGrowthTarget:React.Dispatch<React.SetStateAction<GrowthTarget>>; aiAnalysis:AIAnalysis|null; totalExits:number }) {
+function Step3Config({ schoolData, setSchoolData, growthTarget, setGrowthTarget, aiAnalysis, totalExits, institutionId }: { schoolData:SchoolData; setSchoolData:React.Dispatch<React.SetStateAction<SchoolData>>; growthTarget:GrowthTarget; setGrowthTarget:React.Dispatch<React.SetStateAction<GrowthTarget>>; aiAnalysis:AIAnalysis|null; totalExits:number; institutionId:string }) {
+  const { names: GRADE_OPTIONS } = useGradeLevels(institutionId)
   return (
     <div style={{paddingBottom:24}}>
       <h2 style={{fontSize:22,fontWeight:800,color:'#1A2B4A',marginBottom:6}}>Configure a campanha</h2>

@@ -26,7 +26,7 @@ export interface Lead {
   grade_interest: string
   source: string
   status: 'new' | 'contact' | 'scheduled' | 'visit' | 'proposal' | 'enrolled' | 'lost'
-  assigned_to?: string
+  assigned_to?: string | null
   notes?: string
   institution_id: string
   created_at: string
@@ -35,6 +35,17 @@ export interface Lead {
   budget_range?: string
   cpf?: string
   tags?: string[]
+  // Reforma do módulo de Leads (ver migrations 20260812000000/100/200):
+  next_followup?: string | null
+  lead_temperature?: 'frio' | 'morno' | 'quente' | null
+  campaign_cycle_id?: string | null
+  city?: string | null
+  origin_school?: string | null
+  referral_source?: string | null
+  contest_name?: string | null
+  family_id?: string | null
+  lost_reason?: string | null
+  lost_reason_detail?: string | null
 }
 
 // CRM comercial interno da Áion (venda do produto pra escolas) — não confundir

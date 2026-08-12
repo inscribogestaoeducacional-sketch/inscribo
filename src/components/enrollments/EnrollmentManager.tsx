@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Plus, User, Calendar, DollarSign, Edit, GraduationCap, Trash2, Search, Filter, TrendingUp, BarChart3, X } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, Enrollment, Lead } from '../../lib/supabase'
+import { useGradeLevels } from '../../hooks/useGradeLevels'
 
 interface NewEnrollmentModalProps {
   isOpen: boolean
@@ -12,6 +13,8 @@ interface NewEnrollmentModalProps {
 }
 
 function NewEnrollmentModal({ isOpen, onClose, onSave, editingEnrollment, leads }: NewEnrollmentModalProps) {
+  const { user } = useAuth()
+  const { names: gradeOptions } = useGradeLevels(user?.institution_id)
   const [formData, setFormData] = useState({
     lead_id: '',
     student_name: '',
@@ -46,13 +49,6 @@ function NewEnrollmentModal({ isOpen, onClose, onSave, editingEnrollment, leads 
   }
 
   if (!isOpen) return null
-
-  const gradeOptions = [
-    'Infantil I', 'Infantil II', 'Infantil III', 'Infantil IV', 'Infantil V',
-    '1º Ano EF', '2º Ano EF', '3º Ano EF', '4º Ano EF', '5º Ano EF',
-    '6º Ano EF', '7º Ano EF', '8º Ano EF', '9º Ano EF',
-    '1ª Série EM', '2ª Série EM', '3ª Série EM'
-  ]
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,43,74,0.35)', backdropFilter: 'blur(3px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
@@ -220,6 +216,7 @@ export default function EnrollmentManager() {
   const [editingEnrollment, setEditingEnrollment] = useState<Enrollment | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterGrade, setFilterGrade] = useState('')
+  const { names: filterGradeOptions } = useGradeLevels(user?.institution_id)
 
   useEffect(() => {
     if (user?.institution_id) {
@@ -462,10 +459,7 @@ export default function EnrollmentManager() {
             className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
           >
             <option value="">Todas as séries</option>
-            {['Infantil I', 'Infantil II', 'Infantil III', 'Infantil IV', 'Infantil V',
-              '1º Ano EF', '2º Ano EF', '3º Ano EF', '4º Ano EF', '5º Ano EF',
-              '6º Ano EF', '7º Ano EF', '8º Ano EF', '9º Ano EF',
-              '1ª Série EM', '2ª Série EM', '3ª Série EM'].map(grade => (
+            {filterGradeOptions.map(grade => (
               <option key={grade} value={grade}>{grade}</option>
             ))}
           </select>

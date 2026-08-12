@@ -9,6 +9,7 @@ import {
   ExternalLink, ChevronRight, GraduationCap, Target, Bell,
   ArrowUpRight, ArrowDownRight,
 } from 'lucide-react'
+import { getLeadReminderInfo, REMINDER_COLORS } from '../../lib/leadReminders'
 
 // ─── tipos ──────────────────────────────────────────────────────────────────
 interface Lead {
@@ -19,6 +20,7 @@ interface Lead {
   created_at: string
   phone: string | null
   grade_interest?: string | null
+  next_followup?: string | null
 }
 
 interface LeadStatusOnly {
@@ -218,10 +220,11 @@ export default function AttendantHome() {
         .select('id', { count: 'exact', head: true })
         .eq('institution_id', institutionId).eq('assigned_to', userId)
         .gte('created_at', prevMonthStart.toISOString()).lt('created_at', monthStart.toISOString()),
-      // Leads em aberto (nem matriculado nem perdido) — base dos lembretes de
-      // "sem contato há X dias".
+      // Leads em aberto (nem matriculado nem perdido) — base dos lembretes
+      // (manual via next_followup + automático "sem contato", ver
+      // lib/leadReminders.ts, mesma fonte usada no LeadKanban e no GestorHome).
       supabase.from('leads')
-        .select('id, student_name, responsible_name, status, created_at, phone')
+        .select('id, student_name, responsible_name, status, created_at, phone, next_followup')
         .eq('institution_id', institutionId).eq('assigned_to', userId)
         .not('status', 'in', '(enrolled,lost)')
         .order('created_at', { ascending: true }).limit(20),
@@ -289,13 +292,17 @@ export default function AttendantHome() {
   const convertedMonthCount = leadsMonth.filter(l => l.status === 'enrolled').length
   const conversionRate = leadsMonthCount > 0 ? +((convertedMonthCount / leadsMonthCount) * 100).toFixed(1) : 0
 
-  // ── Lembretes: meus leads em aberto sem contato há mais de 5 dias ─────────
-  // Não existe tabela de lembretes/tarefas no schema — aproximação combinada
-  // com o gestor: mesmo critério do alerta "leads sem contato" do GestorHome
-  // (status fora de enrolled/lost, sem atividade há 5+ dias), filtrado por
-  // assigned_to = eu.
-  const fiveDaysAgoIso = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
-  const reminders = openLeads.filter(l => l.created_at < fiveDaysAgoIso)
+  // ── Lembretes: meus leads em aberto com follow-up manual ou "sem contato" ──
+  // Ligado à fonte real agora (leads.next_followup, item 2c/2d da reforma) —
+  // antes era só uma aproximação por created_at, sem o lembrete manual.
+  // Mesma lógica de lib/leadReminders.ts usada no LeadKanban e no GestorHome.
+  const reminders = openLeads
+    .map(l => ({ lead: l, reminder: getLeadReminderInfo(l) }))
+    .filter((x): x is { lead: Lead; reminder: NonNullable<ReturnType<typeof getLeadReminderInfo>> } => x.reminder !== null)
+    .sort((a, b) => {
+      const order = { overdue: 0, today: 1, stale: 2, upcoming: 3 } as const
+      return order[a.reminder.urgency] - order[b.reminder.urgency]
+    })
 
   const greeting = () => {
     const h = new Date().getHours()
@@ -503,28 +510,31 @@ export default function AttendantHome() {
           ) : reminders.length === 0 ? (
             <div style={{ padding: '32px 16px', textAlign: 'center', color: '#94a3b8' }}>
               <CheckCircle size={28} style={{ margin: '0 auto 8px', opacity: 0.4, color: '#0F6E56' }} />
-              <p style={{ fontSize: 12 }}>Nenhum lead seu parado há mais de 5 dias</p>
+              <p style={{ fontSize: 12 }}>Nenhum lembrete pendente</p>
             </div>
           ) : (
             <div>
-              {reminders.slice(0, 5).map(lead => (
-                <div key={lead.id} style={{ padding: '10px 18px', borderBottom: '1px solid #f8fafc', display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <AlertTriangle size={13} color="#d97706" />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {lead.student_name || lead.responsible_name || '—'}
+              {reminders.slice(0, 5).map(({ lead, reminder }) => {
+                const colors = REMINDER_COLORS[reminder.urgency]
+                return (
+                  <div key={lead.id} style={{ padding: '10px 18px', borderBottom: '1px solid #f8fafc', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: colors.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Bell size={13} color={colors.color} />
                     </div>
-                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>Sem contato desde {fmtDate(lead.created_at)}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {lead.student_name || lead.responsible_name || '—'}
+                      </div>
+                      <div style={{ fontSize: 10, color: colors.color, fontWeight: 600, marginTop: 1 }}>{reminder.label}</div>
+                    </div>
+                    <button
+                      onClick={() => navigate(`/leads?highlight=${lead.id}`)}
+                      style={{ fontSize: 10, fontWeight: 600, color: colors.color, background: colors.bg, border: 'none', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                      Retomar
+                    </button>
                   </div>
-                  <button
-                    onClick={() => navigate('/leads')}
-                    style={{ fontSize: 10, fontWeight: 600, color: '#d97706', background: '#fffbeb', border: 'none', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                    Retomar
-                  </button>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

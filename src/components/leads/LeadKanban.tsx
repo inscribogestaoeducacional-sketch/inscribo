@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Plus, Phone, Calendar, Edit, Edit2, Trash2, X, Search,
   Clock, Users, Send, CheckCircle, Save,
-  MessageCircle, AlertTriangle, ChevronDown, ChevronRight
+  MessageCircle, AlertTriangle, ChevronDown, ChevronRight, ChevronUp,
+  Flame, Sun, Snowflake, Bell, UserCog, SlidersHorizontal,
+  LayoutGrid, Rows3, Tag, Megaphone, MapPin, GraduationCap, UserPlus2,
 } from 'lucide-react'
 import { logAudit } from '../../hooks/useAudit'
 import AuditModal from '../common/AuditModal'
@@ -16,8 +18,10 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { useAuth } from '../../contexts/AuthContext'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { DatabaseService, Lead, ActivityLog } from '../../lib/supabase'
+import { DatabaseService, Lead, supabase } from '../../lib/supabase'
 import { createNotification } from '../../lib/notifications'
+import { useGradeLevels } from '../../hooks/useGradeLevels'
+import { getLeadReminderInfo, REMINDER_COLORS } from '../../lib/leadReminders'
 
 type AuditEntry = {
   id: string; action: string; record_id: string; module: string
@@ -51,21 +55,26 @@ const LOST_REASONS = [
   { value: 'outro',             label: 'Outro motivo',                        fator: 'Interno', subfator: 'Administrativo' },
 ]
 
-const sourceOptions = ['Facebook', 'Instagram', 'Google', 'Site', 'Indicação', 'WhatsApp', 'Outros']
+// 'Concurso de Bolsas' adicionado pra dar sentido ao campo condicional
+// contest_name (item 11) — antes não existia nenhuma origem relacionada a
+// concurso/bolsa na lista, então o campo nunca teria como ficar visível.
+const sourceOptions = ['Facebook', 'Instagram', 'Google', 'Site', 'Indicação', 'WhatsApp', 'Concurso de Bolsas', 'Outros']
 
-const gradeOptions = [
-  'Infantil I', 'Infantil II', 'Infantil III', 'Infantil IV', 'Infantil V',
-  '1º Ano EF', '2º Ano EF', '3º Ano EF', '4º Ano EF', '5º Ano EF',
-  '6º Ano EF', '7º Ano EF', '8º Ano EF', '9º Ano EF',
-  '1ª Série EM', '2ª Série EM', '3ª Série EM'
-]
+// Séries — antes existiam DUAS listas hardcoded divergentes aqui mesmo
+// (gradeOptions usada pra salvar, GRADES usada só pro filtro, com Ensino
+// Médio em nomenclaturas diferentes — o filtro nunca encontrava nada).
+// Agora vêm de school_grade_levels via useGradeLevels(), configurável por
+// escola (Configurações → Escola). Ver hooks/useGradeLevels.ts.
 
-const GRADES = [
-  'Infantil I', 'Infantil II', 'Infantil III', 'Infantil IV', 'Infantil V',
-  '1º Ano EF', '2º Ano EF', '3º Ano EF', '4º Ano EF', '5º Ano EF',
-  '6º Ano EF', '7º Ano EF', '8º Ano EF', '9º Ano EF',
-  'Ensino Médio 1', 'Ensino Médio 2', 'Ensino Médio 3',
-]
+// ─── Temperatura do lead ──────────────────────────────────────────────────────
+const LEAD_TEMPERATURES = [
+  { value: 'quente', label: 'Quente', icon: Flame,     color: '#EF4444', bg: '#FEF2F2', border: '#FECACA' },
+  { value: 'morno',  label: 'Morno',  icon: Sun,       color: '#F59E0B', bg: '#FFFBEB', border: '#FDE68A' },
+  { value: 'frio',   label: 'Frio',   icon: Snowflake, color: '#3B82F6', bg: '#EFF6FF', border: '#BFDBFE' },
+] as const
+
+// Lógica de lembrete (manual + automático "sem contato") vive em
+// lib/leadReminders.ts — reaproveitada aqui, no GestorHome e no AttendantHome.
 
 const timeSlots = [
   '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
@@ -247,12 +256,18 @@ function LostReasonModal({ isOpen, lead, onConfirm, onCancel }: LostReasonModalP
 }
 
 // ─── NewLeadModal ─────────────────────────────────────────────────────────────
+interface SimpleUser { id: string; full_name: string; role?: string }
+
 interface NewLeadModalProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (data: Partial<Lead>) => Promise<void>
+  onSave: (data: Partial<Lead> & { familyMatchId?: string | null }) => Promise<void>
   editingLead?: Lead | null
   onDelete?: (id: string) => void
+  institutionId: string
+  users: SimpleUser[]
+  activeCampaignLabel?: string | null
+  institutionCity?: string
 }
 
 const LEAD_STAGES = [
@@ -271,8 +286,23 @@ function avatarColor(name: string): string {
   return colors[Math.abs(h) % colors.length]
 }
 
-function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLeadModalProps) {
+// Resultado da checagem de telefone já cadastrado (item 3b). id pode ser um
+// UUID real de lead_families (família já existe) OU `retro:<leadId>` — um
+// lead avulso antigo com esse telefone que ainda não foi agrupado; nesse
+// caso o handleSave do componente pai cria a família na hora e promove os
+// dois leads (o antigo + o novo) pra ela.
+interface FamilyMatch {
+  id: string
+  responsible_name: string
+  phone: string
+  email: string | null
+  address: string | null
+  childrenCount: number
+}
+
+function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete, institutionId, users, activeCampaignLabel, institutionCity }: NewLeadModalProps) {
   const { user: modalUser } = useAuth()
+  const { names: gradeNames } = useGradeLevels(institutionId)
   const [activeTab, setActiveTab] = useState<'dados' | 'historico' | 'anotacoes'>('dados')
   const [saving, setSaving] = useState(false)
   const [savingNote, setSavingNote] = useState(false)
@@ -282,11 +312,18 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLea
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [quickNote, setQuickNote] = useState('')
   const [activityForm, setActivityForm] = useState({ tipo: 'Ligação', descricao: '', data: new Date().toISOString().split('T')[0] })
+  const [familyMatch, setFamilyMatch] = useState<FamilyMatch | null>(null)
+  const [checkingFamily, setCheckingFamily] = useState(false)
+  const [familyMatchId, setFamilyMatchId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     student_name: '', grade_interest: '', shift_interest: '',
-    responsible_name: '', phone: '', email: '', address: '',
-    budget_range: '', source: '', notes: '', sales_rep: '',
+    responsible_name: '', phone: '', email: '', address: '', city: '',
+    budget_range: '', source: '', notes: '',
     status: 'new' as Lead['status'],
+    assigned_to: '' as string,
+    next_followup: '' as string,
+    lead_temperature: '' as '' | 'frio' | 'morno' | 'quente',
+    origin_school: '', referral_source: '', contest_name: '',
   })
 
   useEffect(() => {
@@ -300,19 +337,35 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLea
         phone: editingLead.phone ?? '',
         email: editingLead.email ?? '',
         address: editingLead.address ?? '',
+        city: editingLead.city ?? '',
         budget_range: editingLead.budget_range ?? '',
         source: editingLead.source ?? '',
         notes: editingLead.notes ?? '',
-        sales_rep: (editingLead as any).sales_rep ?? '',
         status: editingLead.status ?? 'new',
+        assigned_to: editingLead.assigned_to ?? '',
+        next_followup: editingLead.next_followup ? editingLead.next_followup.slice(0, 10) : '',
+        lead_temperature: editingLead.lead_temperature ?? '',
+        origin_school: editingLead.origin_school ?? '',
+        referral_source: editingLead.referral_source ?? '',
+        contest_name: editingLead.contest_name ?? '',
       })
     } else {
-      setFormData({ student_name: '', grade_interest: '', shift_interest: '', responsible_name: '', phone: '', email: '', address: '', budget_range: '', source: '', notes: '', sales_rep: '', status: 'new' })
+      setFormData({
+        student_name: '', grade_interest: '', shift_interest: '',
+        responsible_name: '', phone: '', email: '', address: '', city: institutionCity ?? '',
+        budget_range: '', source: '', notes: '',
+        status: 'new',
+        assigned_to: modalUser?.id ?? '',
+        next_followup: '', lead_temperature: '',
+        origin_school: '', referral_source: '', contest_name: '',
+      })
     }
     setActiveTab('dados')
     setFieldErrors({})
     setQuickNote('')
     setHistory([])
+    setFamilyMatch(null)
+    setFamilyMatchId(null)
   }, [editingLead, isOpen])
 
   useEffect(() => {
@@ -336,6 +389,95 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLea
     }
   }, [activeTab, editingLead?.id])
 
+  // ── Item 3b: detectar família já cadastrada com esse telefone ────────────
+  // Só roda ao criar (não editar) e só depois que o campo perde foco, pra não
+  // consultar a cada tecla digitada.
+  const checkFamilyByPhone = async () => {
+    if (editingLead || familyMatchId) return
+    const digits = formData.phone.replace(/\D/g, '')
+    if (digits.length < 10 || !institutionId) { setFamilyMatch(null); return }
+    setCheckingFamily(true)
+    try {
+      const { data: fam } = await supabase
+        .from('lead_families')
+        .select('id, responsible_name, phone, email, address')
+        .eq('institution_id', institutionId)
+        .ilike('phone', `%${digits}%`)
+        .limit(1)
+        .maybeSingle()
+      if (fam) {
+        const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('family_id', fam.id)
+        setFamilyMatch({ id: fam.id, responsible_name: fam.responsible_name, phone: fam.phone ?? '', email: fam.email, address: fam.address, childrenCount: count ?? 0 })
+        return
+      }
+      // Lead avulso antigo com esse telefone, nunca agrupado em família.
+      const { data: soloLead } = await supabase
+        .from('leads')
+        .select('id, responsible_name, phone, email, address')
+        .eq('institution_id', institutionId)
+        .is('family_id', null)
+        .ilike('phone', `%${digits}%`)
+        .limit(1)
+        .maybeSingle()
+      if (soloLead) {
+        setFamilyMatch({ id: `retro:${soloLead.id}`, responsible_name: soloLead.responsible_name, phone: soloLead.phone ?? '', email: soloLead.email ?? null, address: soloLead.address ?? null, childrenCount: 1 })
+      } else {
+        setFamilyMatch(null)
+      }
+    } catch { setFamilyMatch(null) } finally { setCheckingFamily(false) }
+  }
+
+  const acceptFamilyMatch = () => {
+    if (!familyMatch) return
+    setFamilyMatchId(familyMatch.id)
+    setFormData(f => ({
+      ...f,
+      responsible_name: familyMatch.responsible_name || f.responsible_name,
+      phone: familyMatch.phone || f.phone,
+      email: familyMatch.email || f.email,
+      address: familyMatch.address || f.address,
+    }))
+  }
+
+  const dismissFamilyMatch = () => { setFamilyMatch(null); setFamilyMatchId(null) }
+
+  // ── Etiquetas (item 9b — precisam poder ser editadas em algum lugar pra
+  // aparecerem no card; portado do HistoryModal, que existia nesse arquivo
+  // mas nunca era instanciado — código morto removido nessa mesma leva). ──
+  const [leadTags, setLeadTags] = useState<string[]>([])
+  const [availableTags, setAvailableTags] = useState<{ id: string; name: string; color: string }[]>([])
+  const [tagToast, setTagToast] = useState('')
+
+  useEffect(() => { setLeadTags(editingLead?.tags || []) }, [editingLead])
+
+  useEffect(() => {
+    if (!institutionId) return
+    ;(async () => {
+      const { data } = await supabase.from('whatsapp_tags').select('id, name, color').eq('institution_id', institutionId).order('name')
+      if (data) setAvailableTags(data as { id: string; name: string; color: string }[])
+    })()
+  }, [institutionId])
+
+  const handleAddLeadTag = async (tagName: string) => {
+    if (!editingLead || leadTags.includes(tagName)) return
+    const newTags = [...leadTags, tagName]
+    setLeadTags(newTags)
+    const { error } = await supabase.from('leads').update({ tags: newTags }).eq('id', editingLead.id)
+    if (error) { console.error('[NewLeadModal] erro ao adicionar etiqueta:', error); setTagToast('Erro ao adicionar etiqueta') }
+    else setTagToast('Etiqueta adicionada!')
+    setTimeout(() => setTagToast(''), 2500)
+  }
+
+  const handleRemoveLeadTag = async (tagName: string) => {
+    if (!editingLead) return
+    const newTags = leadTags.filter(t => t !== tagName)
+    setLeadTags(newTags)
+    const { error } = await supabase.from('leads').update({ tags: newTags }).eq('id', editingLead.id)
+    if (error) { console.error('[NewLeadModal] erro ao remover etiqueta:', error); setTagToast('Erro ao remover etiqueta') }
+    else setTagToast('Etiqueta removida!')
+    setTimeout(() => setTagToast(''), 2500)
+  }
+
   const validate = (): boolean => {
     const errors: Record<string, string> = {}
     if (!formData.student_name.trim()) errors.student_name = 'Obrigatório'
@@ -348,7 +490,10 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLea
   const handleSubmit = async () => {
     if (!validate()) { setActiveTab('dados'); return }
     setSaving(true)
-    try { await onSave(formData); onClose() } finally { setSaving(false) }
+    try {
+      await onSave({ ...formData, lead_temperature: formData.lead_temperature || null, familyMatchId })
+      onClose()
+    } finally { setSaving(false) }
   }
 
   const handleSaveNote = async () => {
@@ -390,6 +535,8 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLea
   const bgColor = avatarColor(formData.responsible_name || formData.student_name || '?')
   const curStageIdx = LEAD_STAGES.findIndex(s => s.key === formData.status)
   const formatDT = (d: string) => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  const showReferral = formData.source === 'Indicação'
+  const showContest = formData.source === 'Concurso de Bolsas'
 
   const getEventIcon = (action: string) => {
     if (action === 'Lead criado') return '📝'
@@ -436,9 +583,18 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLea
             {formData.student_name && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Aluno: {formData.student_name}</div>}
             <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
               {formData.status && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(255,255,255,0.25)', color: '#fff' }}>{statusConfig[formData.status]?.label}</span>}
+              {formData.lead_temperature && (() => {
+                const t = LEAD_TEMPERATURES.find(x => x.value === formData.lead_temperature)!
+                return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(255,255,255,0.25)', color: '#fff' }}><t.icon size={11} />{t.label}</span>
+              })()}
               {formData.phone && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>📞 {formData.phone}</span>}
               {formData.email && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>✉ {formData.email}</span>}
             </div>
+            {(activeCampaignLabel && (!editingLead || editingLead.campaign_cycle_id)) && (
+              <div style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>
+                <Megaphone size={11} /> {editingLead ? `Campanha ${activeCampaignLabel}` : `Será vinculado à campanha ${activeCampaignLabel}`}
+              </div>
+            )}
           </div>
           <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 10, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             <X style={{ width: 15, height: 15, color: '#fff' }} />
@@ -469,7 +625,10 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLea
                   </div>
                   <div>
                     <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Telefone / WhatsApp *</label>
-                    <input value={formData.phone} onChange={e => { setFormData(f => ({ ...f, phone: applyPhoneMask(e.target.value) })); setFieldErrors(p => ({ ...p, phone: '' })) }} placeholder="11 99999-9999"
+                    <input value={formData.phone}
+                      onChange={e => { setFormData(f => ({ ...f, phone: applyPhoneMask(e.target.value) })); setFieldErrors(p => ({ ...p, phone: '' })) }}
+                      onBlur={checkFamilyByPhone}
+                      placeholder="11 99999-9999"
                       style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: fieldErrors.phone ? '1.5px solid #EF4444' : '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
                     {fieldErrors.phone && <p style={{ fontSize: 11, color: '#EF4444', marginTop: 3 }}>{fieldErrors.phone}</p>}
                   </div>
@@ -478,7 +637,39 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLea
                     <input type="email" value={formData.email} onChange={e => setFormData(f => ({ ...f, email: e.target.value }))} placeholder="email@exemplo.com"
                       style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
                   </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Cidade</label>
+                    <input value={formData.city} onChange={e => setFormData(f => ({ ...f, city: e.target.value }))} placeholder="Cidade da família"
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
+                  </div>
                 </div>
+
+                {/* Item 3b — família já cadastrada com esse telefone */}
+                {!editingLead && checkingFamily && (
+                  <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 8 }}>Verificando telefone...</p>
+                )}
+                {!editingLead && familyMatch && !familyMatchId && (
+                  <div style={{ marginTop: 10, background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <UserPlus2 size={16} color="#1D4ED8" style={{ flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#1E40AF' }}>Já existe um cadastro com esse telefone: {familyMatch.responsible_name}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#3B82F6' }}>{familyMatch.childrenCount} aluno{familyMatch.childrenCount === 1 ? '' : 's'} já cadastrado{familyMatch.childrenCount === 1 ? '' : 's'} nessa família</p>
+                    </div>
+                    <button onClick={acceptFamilyMatch} style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 8, background: '#1D4ED8', color: '#fff', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      Adicionar a essa família
+                    </button>
+                    <button onClick={() => setFamilyMatch(null)} title="Ignorar" style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#93C5FD' }}>
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
+                {!editingLead && familyMatchId && (
+                  <div style={{ marginTop: 10, background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <UserPlus2 size={14} color="#16A34A" />
+                    <p style={{ margin: 0, flex: 1, fontSize: 12, fontWeight: 600, color: '#15803D' }}>Vinculado à família de {formData.responsible_name} — este será mais um aluno da mesma família</p>
+                    <button onClick={dismissFamilyMatch} title="Desvincular" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4ADE80' }}><X size={13} /></button>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -495,7 +686,7 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLea
                     <select value={formData.grade_interest} onChange={e => setFormData(f => ({ ...f, grade_interest: e.target.value }))}
                       style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
                       <option value="">Selecione</option>
-                      {gradeOptions.map(g => <option key={g} value={g}>{g}</option>)}
+                      {gradeNames.map(g => <option key={g} value={g}>{g}</option>)}
                     </select>
                   </div>
                   <div>
@@ -507,6 +698,11 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLea
                       <option value="Tarde">Tarde</option>
                       <option value="Integral">Integral</option>
                     </select>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Escola de origem</label>
+                    <input value={formData.origin_school} onChange={e => setFormData(f => ({ ...f, origin_school: e.target.value }))} placeholder="Escola onde o aluno estuda/estudou (opcional)"
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
                   </div>
                 </div>
               </div>
@@ -523,9 +719,48 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLea
                     </select>
                   </div>
                   <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Responsável comercial</label>
-                    <input value={formData.sales_rep} onChange={e => setFormData(f => ({ ...f, sales_rep: e.target.value }))} placeholder="Nome do atendente"
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Responsável (atendente)</label>
+                    <select value={formData.assigned_to} onChange={e => setFormData(f => ({ ...f, assigned_to: e.target.value }))}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
+                      <option value="">Sem responsável</option>
+                      {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                    </select>
+                  </div>
+                  {/* Item 11b — campos condicionais conforme a origem selecionada */}
+                  {showReferral && (
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Quem indicou?</label>
+                      <input value={formData.referral_source} onChange={e => setFormData(f => ({ ...f, referral_source: e.target.value }))} placeholder="Nome de quem indicou"
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
+                    </div>
+                  )}
+                  {showContest && (
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Qual concurso/bolsa?</label>
+                      <input value={formData.contest_name} onChange={e => setFormData(f => ({ ...f, contest_name: e.target.value }))} placeholder="Ex: Concurso de Bolsas 2027"
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
+                    </div>
+                  )}
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Próximo follow-up</label>
+                    <input type="date" value={formData.next_followup} onChange={e => setFormData(f => ({ ...f, next_followup: e.target.value }))}
                       style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Temperatura</label>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {LEAD_TEMPERATURES.map(t => {
+                        const active = formData.lead_temperature === t.value
+                        return (
+                          <button key={t.value} type="button"
+                            onClick={() => setFormData(f => ({ ...f, lead_temperature: active ? '' : t.value }))}
+                            title={t.label}
+                            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '7px 0', borderRadius: 9, border: `1.5px solid ${active ? t.color : '#E2E8F0'}`, background: active ? t.bg : '#fff', color: active ? t.color : '#94A3B8', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                            <t.icon size={13} />{t.label}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -628,6 +863,37 @@ function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete }: NewLea
           {/* ABA ANOTAÇÕES */}
           {activeTab === 'anotacoes' && editingLead && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ background: '#F8FAFC', borderRadius: 12, padding: '14px 16px', border: '1px solid #E2E8F0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}><Tag size={13} color="#6366F1" /> Etiquetas</h4>
+                  {tagToast && <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>{tagToast}</span>}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                  {leadTags.length === 0 && (
+                    <span style={{ fontSize: 12, color: '#94a3b8' }}>
+                      {availableTags.length === 0 ? 'Configure etiquetas em Configurações → Etiquetas' : 'Nenhuma etiqueta'}
+                    </span>
+                  )}
+                  {leadTags.map(tag => {
+                    const color = availableTags.find(t => t.name === tag)?.color || '#6366f1'
+                    return (
+                      <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, background: color, color: '#fff', fontSize: 12, fontWeight: 600 }}>
+                        {tag}
+                        <button onClick={() => handleRemoveLeadTag(tag)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+                      </span>
+                    )
+                  })}
+                </div>
+                {availableTags.length > 0 && (
+                  <select value="" onChange={e => { if (e.target.value) handleAddLeadTag(e.target.value) }}
+                    style={{ fontSize: 12, padding: '5px 10px', borderRadius: 8, border: '1px solid #D1FAE5', background: '#F0FDFB', color: '#1A2B4A', outline: 'none', cursor: 'pointer', maxWidth: 280 }}>
+                    <option value="">+ Adicionar etiqueta...</option>
+                    {availableTags.filter(t => !leadTags.includes(t.name)).map(t => (
+                      <option key={t.id} value={t.name}>{t.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
               <div>
                 <p style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A', marginBottom: 8 }}>Nota sobre este lead</p>
                 <textarea value={quickNote || formData.notes} onChange={e => setQuickNote(e.target.value)} placeholder="Anotações importantes sobre este lead..." rows={6}
@@ -670,322 +936,159 @@ interface ScheduleVisitModalProps {
   onSchedule: (data: { scheduled_date: string; scheduled_time: string; notes: string }) => void
 }
 
+// Redesenhado (item 12) — mesmo padrão inline style + header colorido dos
+// outros modais deste arquivo (LostReasonModal = vermelho, NewLeadModal =
+// teal); antes era o único construído em Tailwind puro, com header sem
+// nenhuma cor de destaque, destoando visualmente do resto do fluxo.
 function ScheduleVisitModal({ isOpen, onClose, lead, onSchedule }: ScheduleVisitModalProps) {
   const [scheduledDate, setScheduledDate] = useState('')
   const [scheduledTime, setScheduledTime] = useState('')
   const [notes, setNotes] = useState('')
+  const [error, setError] = useState('')
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!scheduledDate || !scheduledTime) { alert('Por favor, selecione data e horário!'); return }
-    onSchedule({ scheduled_date: scheduledDate, scheduled_time: scheduledTime, notes })
-    setScheduledDate(''); setScheduledTime(''); setNotes('')
-  }
+  useEffect(() => {
+    if (isOpen) { setScheduledDate(''); setScheduledTime(''); setNotes(''); setError('') }
+  }, [isOpen])
 
   if (!isOpen) return null
 
+  const handleSubmit = () => {
+    if (!scheduledDate || !scheduledTime) { setError('Selecione data e horário.'); return }
+    onSchedule({ scheduled_date: scheduledDate, scheduled_time: scheduledTime, notes })
+  }
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-8 w-full max-w-2xl shadow-2xl">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-2xl font-bold text-[#1e2d6b]">Agendar Visita</h2>
-            <p className="text-gray-500 text-sm mt-1">Lead: <span className="font-semibold text-gray-700">{lead.student_name}</span></p>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ background: '#fff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 560, boxShadow: '0 24px 64px rgba(0,0,0,0.2)', border: '1px solid #BFDBFE' }}>
+        {/* Header — azul, pra diferenciar de "criar" (teal) e "perder" (vermelho) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 12, background: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Calendar style={{ width: 18, height: 18, color: '#2563EB' }} />
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-600"><X className="h-5 w-5" /></button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Agendar visita</h2>
+            <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.student_name} · {lead.responsible_name}</p>
+          </div>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #E2E8F0', background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <X style={{ width: 13, height: 13, color: '#94A3B8' }} />
+          </button>
         </div>
-        <div className="bg-[#1e2d6b]/5 rounded-xl p-5 mb-6 border border-[#1e2d6b]/10">
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div><span className="font-semibold text-gray-600">Responsável:</span><p className="text-gray-900 mt-0.5">{lead.responsible_name}</p></div>
-            <div><span className="font-semibold text-gray-600">Série:</span><p className="text-gray-900 mt-0.5">{lead.grade_interest}</p></div>
-            <div><span className="font-semibold text-gray-600">Telefone:</span><p className="text-gray-900 mt-0.5">{lead.phone || 'Não informado'}</p></div>
-            <div><span className="font-semibold text-gray-600">Origem:</span><p className="text-gray-900 mt-0.5">{lead.source}</p></div>
+
+        {/* Resumo do lead */}
+        <div style={{ background: '#EFF6FF', borderRadius: 12, padding: '12px 16px', marginBottom: 20, border: '1px solid #BFDBFE', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 12 }}>
+          <div><span style={{ fontWeight: 700, color: '#1D4ED8' }}>Série:</span> <span style={{ color: '#1E3A8A' }}>{lead.grade_interest || '—'}</span></div>
+          <div><span style={{ fontWeight: 700, color: '#1D4ED8' }}>Telefone:</span> <span style={{ color: '#1E3A8A' }}>{lead.phone || 'Não informado'}</span></div>
+          <div><span style={{ fontWeight: 700, color: '#1D4ED8' }}>Origem:</span> <span style={{ color: '#1E3A8A' }}>{lead.source || '—'}</span></div>
+          <div><span style={{ fontWeight: 700, color: '#1D4ED8' }}>Status:</span> <span style={{ color: '#1E3A8A' }}>{statusConfig[lead.status]?.label}</span></div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Data *</label>
+            <input type="date" value={scheduledDate} min={new Date().toISOString().split('T')[0]} onChange={e => { setScheduledDate(e.target.value); setError('') }}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Horário *</label>
+            <select value={scheduledTime} onChange={e => { setScheduledTime(e.target.value); setError('') }}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
+              <option value="">Selecione</option>
+              {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
           </div>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="grid grid-cols-2 gap-5">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Data *</label>
-              <input type="date" required value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} min={new Date().toISOString().split('T')[0]} className={inputCls} />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Horário *</label>
-              <select required value={scheduledTime} onChange={(e) => setScheduledTime(e.target.value)} className={inputCls}>
-                <option value="">Selecione o horário</option>
-                {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
+
+        {scheduledDate && scheduledTime && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '10px 14px', marginBottom: 14 }}>
+            <CheckCircle style={{ width: 16, height: 16, color: '#16A34A', flexShrink: 0 }} />
+            <p style={{ margin: 0, fontSize: 12, color: '#166534' }}>
+              {new Date(scheduledDate + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })} às {scheduledTime}
+            </p>
           </div>
-          {scheduledDate && scheduledTime && (
-            <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
-              <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-              <div>
-                <p className="font-semibold text-green-900 text-sm">Visita agendada para:</p>
-                <p className="text-green-700 text-sm">{new Date(scheduledDate).toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} às {scheduledTime}</p>
-              </div>
-            </div>
-          )}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Observações</label>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className={inputCls} rows={3} placeholder="Informações importantes sobre a visita..." />
-          </div>
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-            <button type="button" onClick={onClose} className="px-6 py-3 border-2 border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 font-semibold transition-all">Cancelar</button>
-            <button type="submit" className={btnPrimary}><Save className="w-4 h-4" />Confirmar Agendamento</button>
-          </div>
-        </form>
+        )}
+
+        <div style={{ marginBottom: error ? 8 : 20 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Observações</label>
+          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Informações importantes sobre a visita..."
+            style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', color: '#1A2B4A' }} />
+        </div>
+
+        {error && <p style={{ fontSize: 12, color: '#DC2626', marginBottom: 12 }}>{error}</p>}
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '9px 18px', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#64748B', fontWeight: 500 }}>Cancelar</button>
+          <button onClick={handleSubmit}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', borderRadius: 9, background: '#2563EB', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            <Save style={{ width: 14, height: 14 }} />Confirmar agendamento
+          </button>
+        </div>
       </div>
     </div>
   )
 }
 
-// ─── HistoryModal ─────────────────────────────────────────────────────────────
-interface HistoryModalProps {
+// ─── ReminderModal — lembrete manual (nota livre + data), item 2d ─────────────
+interface ReminderModalProps {
   isOpen: boolean
   onClose: () => void
   lead: Lead | null
-  history: ActivityLog[]
-  loading: boolean
-  newAction: string
-  setNewAction: (t: string) => void
-  savingAction: boolean
-  editingAction: string | null
-  setEditingAction: (id: string | null) => void
-  editingActionText: string
-  setEditingActionText: (t: string) => void
-  onAddAction: () => void
-  onSaveEditAction: (id: string) => void
-  onDeleteAction: (id: string) => void
-  contactForm: { tipo: string; descricao: string; data: string }
-  setContactForm: (f: { tipo: string; descricao: string; data: string }) => void
-  showContactForm: boolean
-  setShowContactForm: (v: boolean) => void
-  savingContact: boolean
-  onSaveContact: () => void
-  onAudit?: (id: string) => void
+  onSave: (date: string, note: string) => Promise<void>
 }
 
-function HistoryModal({
-  isOpen, onClose, lead, history, loading, newAction, setNewAction, savingAction,
-  editingAction, setEditingAction, editingActionText, setEditingActionText,
-  onAddAction, onSaveEditAction, onDeleteAction,
-  contactForm, setContactForm, showContactForm, setShowContactForm, savingContact, onSaveContact,
-  onAudit,
-}: HistoryModalProps) {
-  const [leadTags, setLeadTags] = useState<string[]>(lead?.tags || [])
-  const [availableTags, setAvailableTags] = useState<{ id: string; name: string; color: string }[]>([])
-  const [tagToast, setTagToast] = useState('')
-
-  useEffect(() => { setLeadTags(lead?.tags || []) }, [lead])
+function ReminderModal({ isOpen, onClose, lead, onSave }: ReminderModalProps) {
+  const [date, setDate] = useState('')
+  const [note, setNote] = useState('')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (!lead?.institution_id) return
-    ;(async () => {
-      const { supabase: db } = await import('../../lib/supabase')
-      const { data } = await db.from('whatsapp_tags')
-        .select('id, name, color').eq('institution_id', lead.institution_id).order('name')
-      if (data) setAvailableTags(data as { id: string; name: string; color: string }[])
-    })()
-  }, [lead?.institution_id])
-
-  const handleAddLeadTag = async (tagName: string) => {
-    if (!lead || leadTags.includes(tagName)) return
-    const newTags = [...leadTags, tagName]
-    setLeadTags(newTags)
-    const { supabase: db } = await import('../../lib/supabase')
-    await db.from('leads').update({ tags: newTags }).eq('id', lead.id)
-    setTagToast('Etiqueta adicionada!'); setTimeout(() => setTagToast(''), 2500)
-  }
-
-  const handleRemoveLeadTag = async (tagName: string) => {
-    if (!lead) return
-    const newTags = leadTags.filter(t => t !== tagName)
-    setLeadTags(newTags)
-    const { supabase: db } = await import('../../lib/supabase')
-    await db.from('leads').update({ tags: newTags }).eq('id', lead.id)
-    setTagToast('Etiqueta removida!'); setTimeout(() => setTagToast(''), 2500)
-  }
+    if (isOpen && lead) {
+      setDate(lead.next_followup ? lead.next_followup.slice(0, 10) : '')
+      setNote('')
+    }
+  }, [isOpen, lead])
 
   if (!isOpen || !lead) return null
 
-  const formatDateTime = (d: string) => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  const handleSave = async () => {
+    if (!date) return
+    setSaving(true)
+    try { await onSave(date, note) } finally { setSaving(false) }
+  }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-8 w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-2xl font-bold text-[#1e2d6b]">Histórico — {lead.student_name}</h2>
-            <p className="text-gray-500 text-sm mt-1"><span className="font-semibold text-gray-700">{lead.responsible_name}</span></p>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ background: '#fff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 460, boxShadow: '0 24px 64px rgba(0,0,0,0.2)', border: '1px solid #FDE68A' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 12, background: '#FFFBEB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Bell style={{ width: 18, height: 18, color: '#D97706' }} />
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-600"><X className="h-5 w-5" /></button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Definir lembrete</h2>
+            <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.student_name} · {lead.responsible_name}</p>
+          </div>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #E2E8F0', background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <X style={{ width: 13, height: 13, color: '#94A3B8' }} />
+          </button>
         </div>
 
-        <div className="bg-[#1e2d6b]/5 rounded-xl p-5 mb-6 border border-[#1e2d6b]/10">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div><span className="font-semibold text-gray-600">Série:</span><p className="text-gray-900 mt-0.5">{lead.grade_interest}</p></div>
-            <div><span className="font-semibold text-gray-600">Origem:</span><p className="text-gray-900 mt-0.5">{lead.source}</p></div>
-            {lead.phone && <div><span className="font-semibold text-gray-600">Telefone:</span><p className="text-gray-900 mt-0.5">{lead.phone}</p></div>}
-            <div><span className="font-semibold text-gray-600">Status:</span><p className="text-gray-900 mt-0.5">{statusConfig[lead.status]?.label}</p></div>
-          </div>
-          {/* Motivo de perda se houver */}
-          {lead.status === 'lost' && (lead as any).lost_reason && (
-            <div style={{ marginTop: 12, padding: '8px 12px', background: '#FEF2F2', borderRadius: 8, border: '1px solid #FECACA' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '.05em' }}>Motivo de perda</span>
-              <p style={{ fontSize: 13, color: '#7F1D1D', margin: '4px 0 0' }}>
-                {LOST_REASONS.find(r => r.value === (lead as any).lost_reason)?.label || (lead as any).lost_reason}
-              </p>
-              {(lead as any).lost_reason_detail && (
-                <p style={{ fontSize: 12, color: '#991B1B', margin: '4px 0 0', fontStyle: 'italic' }}>{(lead as any).lost_reason_detail}</p>
-              )}
-            </div>
-          )}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Data do follow-up *</label>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Nota (opcional)</label>
+          <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} placeholder="Ex: Ligar pra confirmar visita, aguardar retorno sobre bolsa..."
+            style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', color: '#1A2B4A' }} />
         </div>
 
-        {/* Etiquetas */}
-        <div style={{ background: '#F8FAFC', borderRadius: 12, padding: '14px 16px', marginBottom: 20, border: '1px solid #E2E8F0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>🏷️ Etiquetas</h4>
-            {tagToast && <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>{tagToast}</span>}
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-            {leadTags.length === 0 && (
-              <span style={{ fontSize: 12, color: '#94a3b8' }}>
-                {availableTags.length === 0 ? 'Configure etiquetas em Configurações → Etiquetas' : 'Nenhuma etiqueta'}
-              </span>
-            )}
-            {leadTags.map(tag => {
-              const color = availableTags.find(t => t.name === tag)?.color || '#6366f1'
-              return (
-                <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, background: color, color: '#fff', fontSize: 12, fontWeight: 600 }}>
-                  {tag}
-                  <button onClick={() => handleRemoveLeadTag(tag)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
-                </span>
-              )
-            })}
-          </div>
-          {availableTags.length > 0 && (
-            <select value="" onChange={e => { if (e.target.value) handleAddLeadTag(e.target.value) }}
-              style={{ fontSize: 12, padding: '5px 10px', borderRadius: 8, border: '1px solid #D1FAE5', background: '#F0FDFB', color: '#1A2B4A', outline: 'none', cursor: 'pointer', maxWidth: 280 }}>
-              <option value="">+ Adicionar etiqueta...</option>
-              {availableTags.filter(t => !leadTags.includes(t.name)).map(t => (
-                <option key={t.id} value={t.name}>{t.name}</option>
-              ))}
-            </select>
-          )}
-        </div>
-
-        <div className="bg-gray-50 rounded-xl p-5 mb-6 border border-gray-200">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-gray-900 flex items-center gap-2"><Plus className="w-4 h-4 text-[#14b8a6]" /> Registrar Contato</h3>
-            <button onClick={() => setShowContactForm(!showContactForm)} className="text-xs text-[#14b8a6] hover:underline font-semibold">{showContactForm ? 'Ocultar' : 'Mostrar'}</button>
-          </div>
-          {showContactForm && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Tipo</label>
-                  <select value={contactForm.tipo} onChange={(e) => setContactForm({ ...contactForm, tipo: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none">
-                    <option value="Ligação">Ligação</option>
-                    <option value="WhatsApp">WhatsApp</option>
-                    <option value="E-mail">E-mail</option>
-                    <option value="Visita">Visita</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Data</label>
-                  <input type="date" value={contactForm.data} onChange={(e) => setContactForm({ ...contactForm, data: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Descrição</label>
-                <textarea value={contactForm.descricao} onChange={(e) => setContactForm({ ...contactForm, descricao: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none" rows={2} placeholder="Descreva o contato realizado..." />
-              </div>
-              <div className="flex justify-end">
-                <button onClick={onSaveContact} disabled={savingContact} className={btnPrimary + ' disabled:opacity-50 disabled:cursor-not-allowed text-sm py-2 px-4'}>
-                  {savingContact ? <><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />Salvando...</> : <><Send className="w-3 h-3" />Registrar</>}
-                </button>
-              </div>
-            </div>
-          )}
-          {!showContactForm && (
-            <div className="flex gap-3">
-              <input type="text" value={newAction} onChange={(e) => setNewAction(e.target.value)} placeholder="Descreva a ação realizada..." className={inputCls + ' flex-1'} onKeyDown={(e) => e.key === 'Enter' && onAddAction()} />
-              <button onClick={onAddAction} disabled={!newAction.trim() || savingAction} className={btnPrimary + ' disabled:opacity-50 disabled:cursor-not-allowed'}>
-                {savingAction ? <><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />Salvando...</> : <><Send className="w-4 h-4" />Adicionar</>}
-              </button>
-            </div>
-          )}
-        </div>
-
-        <h3 className="font-semibold text-gray-900 flex items-center gap-2 mb-4"><Clock className="w-4 h-4 text-[#14b8a6]" /> Histórico de Atividades</h3>
-        {loading ? (
-          <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-4 border-[#14b8a6] border-t-transparent" /></div>
-        ) : history.length === 0 ? (
-          <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-xl border border-gray-200">
-            <Clock className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p className="font-medium">Nenhuma atividade registrada ainda</p>
-          </div>
-        ) : (
-          <div className="space-y-3 max-h-96 overflow-y-auto">
-            {history.map((item) => (
-              <div key={item.id} className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-sm transition-all">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-gray-900">{item.action}</span>
-                      <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">por {item.user_name}</span>
-                    </div>
-                    <p className="text-xs text-gray-400 flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDateTime(item.created_at)}</p>
-                  </div>
-                  {item.action === 'Ação manual adicionada' && (
-                    <div className="flex gap-1">
-                      <button onClick={() => { setEditingAction(item.id); setEditingActionText(item.details?.description || '') }} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-all"><Edit className="w-4 h-4" /></button>
-                      <button onClick={() => onDeleteAction(item.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-all"><Trash2 className="w-4 h-4" /></button>
-                    </div>
-                  )}
-                </div>
-                {editingAction === item.id ? (
-                  <div className="mt-3">
-                    <input type="text" value={editingActionText} onChange={(e) => setEditingActionText(e.target.value)} className={inputCls + ' mb-2'} />
-                    <div className="flex gap-2">
-                      <button onClick={() => onSaveEditAction(item.id)} className="px-4 py-2 bg-[#14b8a6] text-white rounded-lg text-sm font-semibold">Salvar</button>
-                      <button onClick={() => setEditingAction(null)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold">Cancelar</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-2 space-y-2">
-                    {item.details?.description && <p className="text-sm text-gray-700 bg-gray-50 px-3 py-2 rounded-lg">{item.details.description}</p>}
-                    {item.details?.lost_reason && (
-                      <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '6px 10px' }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#DC2626' }}>Motivo: </span>
-                        <span style={{ fontSize: 12, color: '#7F1D1D' }}>
-                          {LOST_REASONS.find(r => r.value === item.details?.lost_reason)?.label || item.details?.lost_reason}
-                        </span>
-                      </div>
-                    )}
-                    {item.details?.previous_status && item.details?.new_status && (
-                      <div className="flex items-center gap-2 text-xs mt-2">
-                        <span className="px-2 py-1 bg-gray-100 rounded-full border border-gray-200 font-medium">{statusConfig[item.details.previous_status as keyof typeof statusConfig]?.label}</span>
-                        <span className="font-bold text-[#14b8a6]">→</span>
-                        <span className="px-2 py-1 bg-[#14b8a6]/10 text-[#0d9488] rounded-full font-medium border border-[#14b8a6]/20">{statusConfig[item.details.new_status as keyof typeof statusConfig]?.label}</span>
-                      </div>
-                    )}
-                    {item.details?.scheduled_time && <p className="text-xs text-gray-500 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">🕐 Horário: {item.details.scheduled_time}</p>}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="flex items-center justify-between mt-6 pt-5 border-t border-gray-200">
-          {onAudit && lead ? (
-            <button onClick={() => { onAudit(lead.id); onClose() }} className="flex items-center gap-2 px-4 py-2 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-xl font-semibold transition-all">
-              Ver histórico de alterações
-            </button>
-          ) : <span />}
-          <button onClick={onClose} className="px-6 py-2.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-semibold transition-all">Fechar</button>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '9px 18px', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#64748B', fontWeight: 500 }}>Cancelar</button>
+          <button onClick={handleSave} disabled={!date || saving}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 20px', borderRadius: 9, background: !date ? '#E2E8F0' : '#D97706', color: !date ? '#94A3B8' : '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: !date || saving ? 'not-allowed' : 'pointer' }}>
+            {saving ? <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" /> : <Bell style={{ width: 14, height: 14 }} />}
+            Salvar lembrete
+          </button>
         </div>
       </div>
     </div>
@@ -998,16 +1101,24 @@ interface CardContentProps {
   config: { accent: string; headerBg: string; headerText: string; badgeBg: string; label: string }
   isFlashing: boolean
   overlay?: boolean
+  compact?: boolean
+  assignedUser?: SimpleUser | null
+  siblings?: Lead[]
   onSchedule: (lead: Lead) => void
   onEdit: (lead: Lead) => void
   onDelete: (id: string) => void
   onStatusChange: (id: string, status: Lead['status']) => void
   onWhatsApp: (lead: Lead) => void
+  onReminder: (lead: Lead) => void
 }
 
-function CardContent({ lead, config, isFlashing, overlay, onSchedule, onEdit, onDelete, onStatusChange, onWhatsApp }: CardContentProps) {
-  const lostReason = (lead as any).lost_reason
+function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser, siblings, onSchedule, onEdit, onDelete, onStatusChange, onWhatsApp, onReminder }: CardContentProps) {
+  const lostReason = lead.lost_reason
   const lostLabel = lostReason ? LOST_REASONS.find(r => r.value === lostReason)?.label : null
+  const temperature = lead.lead_temperature ? LEAD_TEMPERATURES.find(t => t.value === lead.lead_temperature) : null
+  const reminder = getLeadReminderInfo(lead)
+  const reminderColors = reminder ? REMINDER_COLORS[reminder.urgency] : null
+  const assignedInitials = assignedUser ? assignedUser.full_name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() : null
 
   return (
     <div
@@ -1019,14 +1130,22 @@ function CardContent({ lead, config, isFlashing, overlay, onSchedule, onEdit, on
       style={{ borderLeft: `3px solid ${config.accent}` }}
     >
       {/* Card body — clicável para editar */}
-      <div className="p-3">
+      <div className={compact ? 'p-2' : 'p-3'}>
+        {/* Item 9a — responsável/família em destaque, aluno(s) como subtítulo */}
         <div className="flex items-start gap-2 mb-1.5">
-          <div className="w-8 h-8 rounded-full bg-teal-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
-            {lead.student_name.charAt(0).toUpperCase()}
+          <div className={`${compact ? 'w-7 h-7 text-[11px]' : 'w-8 h-8 text-xs'} rounded-full bg-[#1e2d6b] text-white font-bold flex items-center justify-center flex-shrink-0 mt-0.5`}>
+            {(lead.responsible_name || '?').charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <h4 className="text-sm font-semibold text-gray-800 leading-tight truncate">{lead.student_name}</h4>
-            <p className="text-xs text-gray-500 truncate">{lead.responsible_name}</p>
+            <h4 className={`${compact ? 'text-sm' : 'text-[15px]'} font-bold text-gray-900 leading-tight truncate`}>{lead.responsible_name}</h4>
+            <p className="text-xs text-gray-500 truncate">
+              🎓 {lead.student_name}
+              {siblings && siblings.length > 0 && (
+                <span title={siblings.map(s => `${s.student_name} (${statusConfig[s.status]?.label})`).join(', ')} style={{ marginLeft: 5, fontWeight: 600, color: '#8B5CF6' }}>
+                  +{siblings.length} irmão{siblings.length === 1 ? '' : 's'}
+                </span>
+              )}
+            </p>
           </div>
           {!overlay && (
             <button
@@ -1040,15 +1159,61 @@ function CardContent({ lead, config, isFlashing, overlay, onSchedule, onEdit, on
           )}
         </div>
 
-        {(lead.grade_interest || lead.source) && (
-          <div className="flex flex-wrap gap-1 mb-2">
+        {/* Item 9b — badges: série, origem, temperatura, campanha */}
+        {(lead.grade_interest || lead.source || temperature || lead.campaign_cycle_id) && (
+          <div className="flex flex-wrap gap-1 mb-1.5">
             {lead.grade_interest && <span className="inline-flex items-center bg-[#14b8a6]/10 text-[#0d9488] text-xs font-medium px-2 py-0.5 rounded-full border border-[#14b8a6]/20">{lead.grade_interest}</span>}
             {lead.source && (
               lead.source === 'embed'
                 ? <span className="inline-flex items-center gap-1 bg-sky-100 text-sky-700 text-xs font-semibold px-2 py-0.5 rounded-full border border-sky-200">Via site</span>
                 : <span className="inline-flex items-center bg-gray-100 text-gray-500 text-xs font-medium px-2 py-0.5 rounded-full">{lead.source}</span>
             )}
+            {temperature && (
+              <span title={temperature.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: temperature.bg, color: temperature.color, border: `1px solid ${temperature.border}` }}>
+                <temperature.icon size={10} />{!compact && temperature.label}
+              </span>
+            )}
+            {lead.campaign_cycle_id && !compact && (
+              <span title="Vinculado a uma campanha" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: '#F5F3FF', color: '#7C3AED' }}>
+                <Megaphone size={10} />
+              </span>
+            )}
           </div>
+        )}
+
+        {/* Tags (item 9b — antes só apareciam no modal de histórico) */}
+        {!compact && lead.tags && lead.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-1.5">
+            {lead.tags.map(tag => (
+              <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 7px', borderRadius: 999, fontSize: 10, fontWeight: 600, background: '#EEF2FF', color: '#4338CA' }}>
+                <Tag size={9} />{tag}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Telefone + responsável (atendente) */}
+        {!compact && (lead.phone || assignedUser) && (
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            {lead.phone && <span className="text-xs text-gray-500 flex items-center gap-1"><Phone size={10} />{lead.phone}</span>}
+            {assignedUser && (
+              <span title={`Responsável: ${assignedUser.full_name}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 700, color: '#1e2d6b', background: '#EEF2FF', padding: '2px 7px', borderRadius: 999, flexShrink: 0 }}>
+                <UserCog size={10} />{assignedInitials}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Lembrete (item 2d) */}
+        {reminder && reminderColors && (
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); onReminder(lead) }}
+            title="Definir/editar lembrete"
+            style={{ display: 'flex', alignItems: 'center', gap: 4, width: '100%', padding: '4px 8px', borderRadius: 6, marginBottom: 4, background: reminderColors.bg, border: `1px solid ${reminderColors.border}`, cursor: 'pointer' }}>
+            <Bell size={11} color={reminderColors.color} />
+            <span style={{ fontSize: 11, color: reminderColors.color, fontWeight: 600 }}>{reminder.label}</span>
+          </button>
         )}
 
         {lead.status === 'lost' && lostLabel && (
@@ -1093,6 +1258,119 @@ function CardContent({ lead, config, isFlashing, overlay, onSchedule, onEdit, on
   )
 }
 
+// ─── FilterDrawer ─────────────────────────────────────────────────────────────
+// Item 6c — painel lateral com todos os filtros organizados (antes era uma
+// fileira de selects soltos, que já não cabiam nem no desktop com os campos
+// novos de responsável/temperatura). Compartilhado entre desktop e mobile.
+interface FilterDrawerProps {
+  open: boolean
+  onClose: () => void
+  filterStatus: string; setFilterStatus: (v: string) => void
+  filterSource: string; setFilterSource: (v: string) => void
+  periodFilter: string; setPeriodFilter: (v: any) => void
+  customStart: string; setCustomStart: (v: string) => void
+  customEnd: string; setCustomEnd: (v: string) => void
+  gradeFilter: string; setGradeFilter: (v: string) => void
+  gradeNames: string[]
+  shiftFilter: string; setShiftFilter: (v: string) => void
+  temperatureFilter: string; setTemperatureFilter: (v: any) => void
+  ownerFilter: string; setOwnerFilter: (v: string) => void
+  users: SimpleUser[]
+  onClear: () => void
+}
+
+function FilterDrawer(props: FilterDrawerProps) {
+  const { open, onClose, filterStatus, setFilterStatus, filterSource, setFilterSource, periodFilter, setPeriodFilter, customStart, setCustomStart, customEnd, setCustomEnd, gradeFilter, setGradeFilter, gradeNames, shiftFilter, setShiftFilter, temperatureFilter, setTemperatureFilter, ownerFilter, setOwnerFilter, users, onClear } = props
+  if (!open) return null
+
+  const section = (label: string) => (
+    <p style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8, marginTop: 18 }}>{label}</p>
+  )
+  const selCls: React.CSSProperties = { width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', color: '#1A2B4A', background: '#fff', boxSizing: 'border-box' }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1050, display: 'flex', justifyContent: 'flex-end' }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(2px)' }} />
+      <div style={{ position: 'relative', width: '100%', maxWidth: 340, height: '100%', background: '#fff', boxShadow: '-8px 0 32px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid #F1F5F9', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <SlidersHorizontal style={{ width: 16, height: 16, color: '#1A2B4A' }} />
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>Filtros</h3>
+          </div>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #E2E8F0', background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <X style={{ width: 13, height: 13, color: '#94A3B8' }} />
+          </button>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
+          {section('Responsável')}
+          <select value={ownerFilter} onChange={e => setOwnerFilter(e.target.value)} style={selCls}>
+            <option value="mine">Meus leads</option>
+            <option value="all">Todos</option>
+            <option value="unassigned">Sem responsável</option>
+            {users.length > 0 && <optgroup label="Atendente específico">
+              {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+            </optgroup>}
+          </select>
+
+          {section('Status')}
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={selCls}>
+            <option value="">Todos os status</option>
+            {Object.entries(statusConfig).map(([value, cfg]) => <option key={value} value={value}>{cfg.label}</option>)}
+          </select>
+
+          {section('Temperatura')}
+          <select value={temperatureFilter} onChange={e => setTemperatureFilter(e.target.value)} style={selCls}>
+            <option value="">Todas</option>
+            {LEAD_TEMPERATURES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+
+          {section('Origem')}
+          <select value={filterSource} onChange={e => setFilterSource(e.target.value)} style={selCls}>
+            <option value="">Todas as origens</option>
+            {sourceOptions.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+
+          {section('Série de interesse')}
+          <select value={gradeFilter} onChange={e => setGradeFilter(e.target.value)} style={selCls}>
+            <option value="all">Todas as séries</option>
+            {gradeNames.map(g => <option key={g} value={g}>{g}</option>)}
+          </select>
+
+          {section('Turno')}
+          <select value={shiftFilter} onChange={e => setShiftFilter(e.target.value)} style={selCls}>
+            <option value="all">Todos os turnos</option>
+            <option value="Manhã">Manhã</option>
+            <option value="Tarde">Tarde</option>
+            <option value="Integral">Integral</option>
+          </select>
+
+          {section('Período')}
+          <select value={periodFilter} onChange={e => setPeriodFilter(e.target.value)} style={selCls}>
+            <option value="all">Todos os períodos</option>
+            <option value="today">Hoje</option>
+            <option value="week">Esta semana</option>
+            <option value="month">Este mês</option>
+            <option value="year">Este ano</option>
+            <option value="custom">Personalizado</option>
+          </select>
+          {periodFilter === 'custom' && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} style={selCls} />
+              <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} style={selCls} />
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: '14px 20px', borderTop: '1px solid #F1F5F9', display: 'flex', gap: 10, flexShrink: 0 }}>
+          <button onClick={onClear} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Limpar</button>
+          <button onClick={onClose} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Aplicar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── SortableCard ─────────────────────────────────────────────────────────────
 function SortableCard(props: Omit<CardContentProps, 'overlay'>) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: props.lead.id })
@@ -1115,8 +1393,11 @@ function SortableCard(props: Omit<CardContentProps, 'overlay'>) {
 }
 
 // ─── DroppableColumn ──────────────────────────────────────────────────────────
-function DroppableColumn({ id, isOver, children }: { id: string; isOver: boolean; children: React.ReactNode }) {
+// Item 13 — colunas colapsáveis (útil pra colunas com poucos cards, tipo
+// "Matriculado"/"Perdido", ficarem compactas sem sumir do board).
+function DroppableColumn({ id, isOver, collapsed, children }: { id: string; isOver: boolean; collapsed?: boolean; children: React.ReactNode }) {
   const { setNodeRef } = useDroppable({ id })
+  if (collapsed) return <div ref={setNodeRef} style={{ display: 'none' }}>{children}</div>
   return (
     <div ref={setNodeRef} className={`flex-1 overflow-y-auto space-y-3 p-3 rounded-b-xl transition-all duration-200 ${isOver ? 'bg-[#14b8a6]/8 ring-2 ring-dashed ring-[#14b8a6] ring-inset' : 'bg-gray-100/60'}`} style={{ maxHeight: '72vh' }}>
       {children}
@@ -1129,6 +1410,7 @@ export default function LeadKanban() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const { names: gradeNames } = useGradeLevels(user?.institution_id)
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
   const [showNewLeadModal, setShowNewLeadModal] = useState(false)
@@ -1150,7 +1432,25 @@ export default function LeadKanban() {
   const [overColumnId, setOverColumnId] = useState<string | null>(null)
   const [flashingLeadId, setFlashingLeadId] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
-  const [openAccordions, setOpenAccordions] = useState<Set<string>>(new Set(['new', 'contact']))
+
+  // ── Item 2: propriedade do lead / lembretes ───────────────────────────────
+  const [users, setUsers] = useState<SimpleUser[]>([])
+  const [ownerFilter, setOwnerFilter] = useState<string>('mine') // 'mine' | 'all' | 'unassigned' | <user id>
+  const [reminderModal, setReminderModal] = useState<{ open: boolean; lead: Lead | null }>({ open: false, lead: null })
+
+  // ── Item 7 — temperatura ───────────────────────────────────────────────────
+  const [temperatureFilter, setTemperatureFilter] = useState<'' | 'frio' | 'morno' | 'quente'>('')
+
+  // ── Item 6c — drawer de filtros modernizado ────────────────────────────────
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false)
+
+  // ── Item 13 — colunas colapsáveis + view compacta ──────────────────────────
+  const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(new Set())
+  const [compactView, setCompactView] = useState(false)
+
+  // ── Item 10 — campanha ativa da instituição ────────────────────────────────
+  const [activeCampaignCycle, setActiveCampaignCycle] = useState<{ id: string; label: string } | null>(null)
+  const [institutionCity, setInstitutionCity] = useState<string>('')
 
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768)
@@ -1218,8 +1518,17 @@ export default function LeadKanban() {
   const loadData = async () => {
     try {
       setLoading(true); setError('')
-      const leadsData = await DatabaseService.getLeads(user!.institution_id)
+      const instId = user!.institution_id
+      const [leadsData, usersRes, campaignRes, instRes] = await Promise.all([
+        DatabaseService.getLeads(instId),
+        supabase.from('users').select('id, full_name, role').eq('institution_id', instId).order('full_name'),
+        supabase.from('campaign_cycles').select('id, year, label').eq('institution_id', instId).in('status', ['active', 'released']).order('year', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('institutions').select('city').eq('id', instId).maybeSingle(),
+      ])
       setLeads(leadsData)
+      setUsers((usersRes.data as SimpleUser[]) ?? [])
+      setActiveCampaignCycle(campaignRes.data ? { id: campaignRes.data.id, label: campaignRes.data.label || String(campaignRes.data.year) } : null)
+      setInstitutionCity(instRes.data?.city ?? '')
     } catch (err) {
       console.error('Erro ao carregar dados:', err)
       setError('Erro ao carregar dados dos leads')
@@ -1228,61 +1537,117 @@ export default function LeadKanban() {
     }
   }
 
-  const handleSave = async (data: Partial<Lead>) => {
+  const handleSave = async (data: Partial<Lead> & { familyMatchId?: string | null }) => {
     console.log('[LEAD SAVE] iniciando...', data)
     setError('')
     const instId = user!.institution_id
     let savedLeadId: string = editingLead?.id ?? ''
+    const { familyMatchId, ...leadData } = data
 
     try {
       const { supabase: db } = await import('../../lib/supabase')
 
       if (editingLead) {
         const { error } = await db.from('leads').update({
-          student_name:     data.student_name     ?? editingLead.student_name,
-          responsible_name: data.responsible_name ?? editingLead.responsible_name,
-          phone:            data.phone            ?? editingLead.phone,
-          email:            data.email            ?? editingLead.email,
-          address:          data.address          ?? editingLead.address,
-          grade_interest:   data.grade_interest   ?? editingLead.grade_interest,
-          source:           data.source           ?? editingLead.source,
-          budget_range:     data.budget_range     ?? editingLead.budget_range,
-          notes:            data.notes            ?? editingLead.notes,
-          status:           data.status           || editingLead.status,
-          updated_at:       new Date().toISOString(),
+          student_name:      leadData.student_name      ?? editingLead.student_name,
+          responsible_name:  leadData.responsible_name  ?? editingLead.responsible_name,
+          phone:             leadData.phone              ?? editingLead.phone,
+          email:             leadData.email              ?? editingLead.email,
+          address:           leadData.address            ?? editingLead.address,
+          city:              leadData.city               ?? editingLead.city,
+          grade_interest:    leadData.grade_interest      ?? editingLead.grade_interest,
+          shift_interest:    (leadData as any).shift_interest ?? (editingLead as any).shift_interest,
+          source:            leadData.source              ?? editingLead.source,
+          budget_range:      leadData.budget_range        ?? editingLead.budget_range,
+          notes:             leadData.notes               ?? editingLead.notes,
+          status:            leadData.status              || editingLead.status,
+          assigned_to:       leadData.assigned_to !== undefined ? (leadData.assigned_to || null) : editingLead.assigned_to,
+          next_followup:     leadData.next_followup !== undefined ? (leadData.next_followup || null) : editingLead.next_followup,
+          lead_temperature:  leadData.lead_temperature !== undefined ? (leadData.lead_temperature || null) : editingLead.lead_temperature,
+          origin_school:     leadData.origin_school !== undefined ? (leadData.origin_school || null) : editingLead.origin_school,
+          referral_source:   leadData.referral_source !== undefined ? (leadData.referral_source || null) : editingLead.referral_source,
+          contest_name:      leadData.contest_name !== undefined ? (leadData.contest_name || null) : editingLead.contest_name,
+          updated_at:        new Date().toISOString(),
         }).eq('id', editingLead.id)
         if (error) throw error
 
         const changes: Record<string, unknown> = {}
-        const previousData: Record<string, unknown> = {}
-        Object.keys(data).forEach(key => {
-          const nv = (data as Record<string, unknown>)[key]
+        Object.keys(leadData).forEach(key => {
+          const nv = (leadData as Record<string, unknown>)[key]
           const ov = (editingLead as unknown as Record<string, unknown>)[key]
-          if (nv !== ov && nv !== undefined && nv !== null && nv !== '') { changes[key] = nv; previousData[key] = ov }
+          if (nv !== ov && nv !== undefined && nv !== null && nv !== '') { changes[key] = nv }
         })
         if (Object.keys(changes).length > 0) {
           await db.from('audit_logs').insert({
             institution_id: instId, module: 'lead', record_id: editingLead.id,
             action: 'Lead editado',
             field_changed: `Campos: ${Object.keys(changes).join(', ')}`,
-            new_value: data.student_name || editingLead.student_name,
+            new_value: leadData.student_name || editingLead.student_name,
             user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
           })
         }
-        await logAudit({ institution_id: instId, module: 'leads', record_id: editingLead.id, action: 'updated', field_changed: 'dados', old_value: editingLead.student_name, new_value: data.student_name || editingLead.student_name, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
+        await logAudit({ institution_id: instId, module: 'leads', record_id: editingLead.id, action: 'updated', field_changed: 'dados', old_value: editingLead.student_name, new_value: leadData.student_name || editingLead.student_name, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
+
+        // Item 2e — transferência de responsável, logada separadamente pra
+        // ficar clara no histórico ("quem passou pra quem"), não misturada
+        // no log genérico de edição.
+        if (leadData.assigned_to !== undefined && (leadData.assigned_to || null) !== (editingLead.assigned_to || null)) {
+          const fromName = users.find(u => u.id === editingLead.assigned_to)?.full_name || 'Sem responsável'
+          const toName = users.find(u => u.id === leadData.assigned_to)?.full_name || 'Sem responsável'
+          await db.from('audit_logs').insert({
+            institution_id: instId, module: 'lead', record_id: editingLead.id,
+            action: 'Responsável alterado',
+            field_changed: `${fromName} → ${toName}`,
+            new_value: toName,
+            user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
+          })
+        }
       } else {
+        // Item 3b — família com múltiplos filhos: vincula a uma família já
+        // existente, ou promove um lead avulso antigo (mesmo telefone) pra
+        // uma família nova, agrupando os dois.
+        let familyId: string | null = null
+        if (familyMatchId) {
+          if (familyMatchId.startsWith('retro:')) {
+            const soloLeadId = familyMatchId.slice('retro:'.length)
+            const { data: newFamily, error: famErr } = await db.from('lead_families').insert({
+              institution_id: instId,
+              responsible_name: leadData.responsible_name,
+              phone: leadData.phone,
+              email: leadData.email || null,
+              address: leadData.address || null,
+            }).select().single()
+            if (!famErr && newFamily) {
+              familyId = newFamily.id
+              await db.from('leads').update({ family_id: familyId }).eq('id', soloLeadId)
+            }
+          } else {
+            familyId = familyMatchId
+          }
+        }
+
         const { data: newLead, error } = await db.from('leads').insert({
           institution_id:   instId,
-          student_name:     data.student_name,
-          responsible_name: data.responsible_name,
-          phone:            data.phone,
-          email:            data.email,
-          address:          data.address,
-          grade_interest:   data.grade_interest,
-          source:           data.source,
-          budget_range:     data.budget_range,
-          notes:            data.notes,
+          student_name:     leadData.student_name,
+          responsible_name: leadData.responsible_name,
+          phone:            leadData.phone,
+          email:            leadData.email,
+          address:          leadData.address,
+          city:             leadData.city || null,
+          grade_interest:   leadData.grade_interest,
+          shift_interest:   (leadData as any).shift_interest || null,
+          source:           leadData.source,
+          budget_range:     leadData.budget_range,
+          notes:            leadData.notes,
           status:           'new',
+          assigned_to:      leadData.assigned_to || null,
+          next_followup:    leadData.next_followup || null,
+          lead_temperature: leadData.lead_temperature || null,
+          origin_school:    leadData.origin_school || null,
+          referral_source:  leadData.referral_source || null,
+          contest_name:     leadData.contest_name || null,
+          family_id:        familyId,
+          campaign_cycle_id: activeCampaignCycle?.id ?? null,
         }).select().single()
         if (error) throw error
         savedLeadId = newLead.id
@@ -1302,8 +1667,8 @@ export default function LeadKanban() {
     }
 
     // Sync to whatsapp_contacts (upsert) and whatsapp_conversations
-    const phone = (data.phone || editingLead?.phone || '').trim()
-    const responsibleName = data.responsible_name || editingLead?.responsible_name || ''
+    const phone = (leadData.phone || editingLead?.phone || '').trim()
+    const responsibleName = leadData.responsible_name || editingLead?.responsible_name || ''
     if (phone) {
       try {
         const { supabase: db } = await import('../../lib/supabase')
@@ -1367,7 +1732,7 @@ export default function LeadKanban() {
             student_name: currentLead.student_name || currentLead.responsible_name,
             course_grade: currentLead.grade_interest,
             enrollment_date: new Date().toISOString(),
-            user_id: (currentLead as Lead & { responsible_id?: string }).responsible_id ?? user!.id,
+            user_id: currentLead.assigned_to ?? user!.id,
             responsible_name: currentLead.responsible_name,
           })
           createNotification({
@@ -1495,6 +1860,30 @@ export default function LeadKanban() {
     }
   }
 
+  // ── Item 2d — lembrete manual ────────────────────────────────────────────
+  const handleSaveReminder = async (date: string, note: string) => {
+    const lead = reminderModal.lead
+    if (!lead) return
+    try {
+      const { supabase: db } = await import('../../lib/supabase')
+      const { error } = await db.from('leads').update({ next_followup: date }).eq('id', lead.id)
+      if (error) throw error
+      await db.from('audit_logs').insert({
+        institution_id: user!.institution_id, module: 'lead', record_id: lead.id,
+        action: 'Lembrete definido',
+        field_changed: note || `Follow-up em ${new Date(date + 'T12:00:00').toLocaleDateString('pt-BR')}`,
+        new_value: date,
+        user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
+      })
+      setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, next_followup: date } : l))
+      setReminderModal({ open: false, lead: null })
+      showToast('Lembrete salvo!', 'success')
+    } catch (err) {
+      console.error('Erro ao salvar lembrete:', err)
+      showToast('Erro ao salvar lembrete. Tente novamente.', 'error')
+    }
+  }
+
   const getPeriodDates = () => {
     const now = new Date()
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -1515,22 +1904,43 @@ export default function LeadKanban() {
     }
   }
 
+  // Item 2b/6b — filtro de responsável ("Meus leads"/"Todos"/"Sem responsável"/
+  // um atendente específico) + item 7 — filtro de temperatura. Compartilhado
+  // entre a lista desktop (por coluna) e a lista mobile.
+  const matchesLeadFilters = (lead: Lead, { start, end }: { start: Date | null; end: Date | null }) => {
+    if (searchTerm !== '' && !lead.student_name.toLowerCase().includes(searchTerm.toLowerCase()) && !lead.responsible_name.toLowerCase().includes(searchTerm.toLowerCase())) return false
+    if (filterSource !== '' && lead.source !== filterSource) return false
+    if (periodFilter !== 'all') {
+      const created = new Date(lead.created_at)
+      if (start && created < start) return false
+      if (end && created > end) return false
+    }
+    if (gradeFilter !== 'all' && lead.grade_interest !== gradeFilter) return false
+    if (shiftFilter !== 'all' && (lead as any).shift_interest !== shiftFilter) return false
+    if (temperatureFilter !== '' && lead.lead_temperature !== temperatureFilter) return false
+    if (ownerFilter === 'mine') { if (lead.assigned_to !== user?.id) return false }
+    else if (ownerFilter === 'unassigned') { if (lead.assigned_to) return false }
+    else if (ownerFilter !== 'all') { if (lead.assigned_to !== ownerFilter) return false }
+    return true
+  }
+
   const getLeadsByStatus = (status: Lead['status']) => {
     const { start, end } = getPeriodDates()
-    return leads.filter(lead => {
-      if (lead.status !== status) return false
-      if (searchTerm !== '' && !lead.student_name.toLowerCase().includes(searchTerm.toLowerCase()) && !lead.responsible_name.toLowerCase().includes(searchTerm.toLowerCase())) return false
-      if (filterSource !== '' && lead.source !== filterSource) return false
-      if (periodFilter !== 'all') {
-        const created = new Date(lead.created_at)
-        if (start && created < start) return false
-        if (end && created > end) return false
-      }
-      if (gradeFilter !== 'all' && lead.grade_interest !== gradeFilter) return false
-      if (shiftFilter !== 'all' && (lead as any).shift_interest !== shiftFilter) return false
-      return true
-    })
+    return leads.filter(lead => lead.status === status && matchesLeadFilters(lead, { start, end }))
   }
+
+  // Item 3c — agrupamento de irmãos por família, pra mostrar o chip "+N
+  // irmãos" no card sem quebrar o drag-and-drop individual (cada lead
+  // continua sendo arrastado independentemente, isso é só informativo).
+  const familySiblingsMap = React.useMemo(() => {
+    const byFamily = new Map<string, Lead[]>()
+    leads.forEach(l => { if (l.family_id) { const arr = byFamily.get(l.family_id) ?? []; arr.push(l); byFamily.set(l.family_id, arr) } })
+    const map = new Map<string, Lead[]>()
+    byFamily.forEach(group => group.forEach(l => map.set(l.id, group.filter(s => s.id !== l.id))))
+    return map
+  }, [leads])
+
+  const usersById = React.useMemo(() => new Map(users.map(u => [u.id, u])), [users])
 
   const getLeadStats = () => {
     const total = leads.length
@@ -1607,7 +2017,7 @@ export default function LeadKanban() {
   const activeLead = activeId ? leads.find(l => l.id === activeId) : null
   const visibleStatuses = filterStatus ? Object.keys(statusConfig).filter(s => s === filterStatus) : Object.keys(statusConfig)
   const filteredTotal = visibleStatuses.reduce((sum, s) => sum + getLeadsByStatus(s as Lead['status']).length, 0)
-  const hasActiveFilters = searchTerm !== '' || filterSource !== '' || filterStatus !== '' || periodFilter !== 'all' || gradeFilter !== 'all' || shiftFilter !== 'all'
+  const hasActiveFilters = searchTerm !== '' || filterSource !== '' || filterStatus !== '' || periodFilter !== 'all' || gradeFilter !== 'all' || shiftFilter !== 'all' || temperatureFilter !== '' || ownerFilter !== 'mine'
 
   const cardActions = {
     onSchedule: (lead: Lead) => { setLeadToSchedule(lead); setShowScheduleVisitModal(true) },
@@ -1615,6 +2025,7 @@ export default function LeadKanban() {
     onDelete: handleDelete,
     onStatusChange: handleStatusChange,
     onWhatsApp: handleWhatsApp,
+    onReminder: (lead: Lead) => setReminderModal({ open: true, lead }),
   }
 
   if (loading) {
@@ -1628,21 +2039,35 @@ export default function LeadKanban() {
     )
   }
 
+  const clearAllFilters = () => {
+    setSearchTerm(''); setFilterSource(''); setFilterStatus(''); setPeriodFilter('all')
+    setCustomStart(''); setCustomEnd(''); setGradeFilter('all'); setShiftFilter('all')
+    setTemperatureFilter(''); setOwnerFilter('mine')
+  }
+
+  const filterDrawerEl = (
+    <FilterDrawer
+      open={filterDrawerOpen} onClose={() => setFilterDrawerOpen(false)}
+      filterStatus={filterStatus} setFilterStatus={setFilterStatus}
+      filterSource={filterSource} setFilterSource={setFilterSource}
+      periodFilter={periodFilter} setPeriodFilter={setPeriodFilter}
+      customStart={customStart} setCustomStart={setCustomStart}
+      customEnd={customEnd} setCustomEnd={setCustomEnd}
+      gradeFilter={gradeFilter} setGradeFilter={setGradeFilter} gradeNames={gradeNames}
+      shiftFilter={shiftFilter} setShiftFilter={setShiftFilter}
+      temperatureFilter={temperatureFilter} setTemperatureFilter={setTemperatureFilter}
+      ownerFilter={ownerFilter} setOwnerFilter={setOwnerFilter}
+      users={users}
+      onClear={clearAllFilters}
+    />
+  )
+
   // ── Mobile early return ───────────────────────────────────────────────────
   if (isMobile) {
     const { start: pStart, end: pEnd } = getPeriodDates()
     const mobileLeads = leads.filter(l => {
       if (filterStatus !== '' && l.status !== filterStatus) return false
-      if (filterSource !== '' && l.source !== filterSource) return false
-      if (searchTerm !== '' && !l.student_name.toLowerCase().includes(searchTerm.toLowerCase()) && !l.responsible_name.toLowerCase().includes(searchTerm.toLowerCase())) return false
-      if (periodFilter !== 'all') {
-        const created = new Date(l.created_at)
-        if (pStart && created < pStart) return false
-        if (pEnd && created > pEnd) return false
-      }
-      if (gradeFilter !== 'all' && l.grade_interest !== gradeFilter) return false
-      if (shiftFilter !== 'all' && (l as any).shift_interest !== shiftFilter) return false
-      return true
+      return matchesLeadFilters(l, { start: pStart, end: pEnd })
     })
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8f9fb' }}>
@@ -1652,13 +2077,13 @@ export default function LeadKanban() {
           <div style={{ width: 34, height: 34, borderRadius: 10, background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Users style={{ width: 16, height: 16, color: '#8B5CF6' }} />
           </div>
-          <h1 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0 }}>Leads</h1>
+          <h1 style={{ fontSize: 18, fontWeight: 800, color: '#1A2B4A', margin: 0, flex: 1 }}>Leads</h1>
           <span style={{ background: '#EDE9FE', color: '#7C3AED', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 9999 }}>{mobileLeads.length}</span>
         </div>
 
-        {/* Search */}
-        <div style={{ padding: '12px 16px 0', flexShrink: 0 }}>
-          <div style={{ position: 'relative' }}>
+        {/* Search + filtros */}
+        <div style={{ padding: '12px 16px 0', flexShrink: 0, display: 'flex', gap: 8 }}>
+          <div style={{ position: 'relative', flex: 1 }}>
             <Search style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 15, height: 15, color: '#94A3B8' }} />
             <input
               value={searchTerm}
@@ -1667,6 +2092,9 @@ export default function LeadKanban() {
               style={{ width: '100%', paddingLeft: 36, paddingRight: 12, height: 44, background: '#fff', border: '1.5px solid #E2E8F0', borderRadius: 12, fontSize: 16, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}
             />
           </div>
+          <button onClick={() => setFilterDrawerOpen(true)} style={{ position: 'relative', width: 44, height: 44, borderRadius: 12, background: hasActiveFilters ? '#00A896' : '#fff', border: '1.5px solid ' + (hasActiveFilters ? '#00A896' : '#E2E8F0'), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <SlidersHorizontal style={{ width: 17, height: 17, color: hasActiveFilters ? '#fff' : '#64748B' }} />
+          </button>
         </div>
 
         {/* Status chips */}
@@ -1689,25 +2117,36 @@ export default function LeadKanban() {
             </div>
           ) : mobileLeads.map(lead => {
             const cfg = statusConfig[lead.status]
+            const reminder = getLeadReminderInfo(lead)
+            const reminderColors = reminder ? REMINDER_COLORS[reminder.urgency] : null
+            const siblings = familySiblingsMap.get(lead.id)
             return (
               <div key={lead.id} onClick={() => cardActions.onEdit(lead)}
                 style={{ padding: '14px 16px', background: '#fff', borderBottom: '1px solid #F1F5F9', display: 'flex', gap: 12, cursor: 'pointer' }}>
                 <div style={{ width: 44, height: 44, borderRadius: 12, background: cfg?.accent ?? '#6b7280', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: '#fff' }}>
-                  {lead.student_name.charAt(0).toUpperCase()}
+                  {(lead.responsible_name || '?').charAt(0).toUpperCase()}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.student_name}</p>
+                    <p style={{ fontSize: 15, fontWeight: 700, color: '#1A2B4A', margin: 0, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.responsible_name}</p>
                     <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, flexShrink: 0, marginLeft: 6,
                       background: cfg?.accent ? `${cfg.accent}22` : '#f1f5f9',
                       color: cfg?.accent ?? '#64748B' }}>
                       {cfg?.label ?? lead.status}
                     </span>
                   </div>
-                  <p style={{ fontSize: 13, color: '#64748B', margin: '2px 0' }}>{lead.responsible_name}</p>
-                  <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
+                  <p style={{ fontSize: 13, color: '#64748B', margin: '2px 0' }}>
+                    🎓 {lead.student_name}
+                    {siblings && siblings.length > 0 && <span style={{ marginLeft: 5, fontWeight: 600, color: '#8B5CF6' }}>+{siblings.length} irmão{siblings.length === 1 ? '' : 's'}</span>}
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
                     {lead.grade_interest && <span style={{ fontSize: 12, color: '#94A3B8' }}>{lead.grade_interest}</span>}
                     {lead.source && <span style={{ fontSize: 12, color: '#94A3B8' }}>{lead.source}</span>}
+                    {reminder && reminderColors && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: reminderColors.color }}>
+                        <Bell size={10} />{reminder.label}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1721,11 +2160,14 @@ export default function LeadKanban() {
           <Plus style={{ width: 26, height: 26 }} />
         </button>
 
+        {filterDrawerEl}
+
         {/* Modals */}
-        <NewLeadModal isOpen={showNewLeadModal} onClose={() => { setShowNewLeadModal(false); setEditingLead(null) }} onSave={handleSave} editingLead={editingLead} onDelete={handleDelete} />
+        <NewLeadModal isOpen={showNewLeadModal} onClose={() => { setShowNewLeadModal(false); setEditingLead(null) }} onSave={handleSave} editingLead={editingLead} onDelete={handleDelete} institutionId={user!.institution_id} users={users} activeCampaignLabel={activeCampaignCycle?.label} institutionCity={institutionCity} />
         {showScheduleVisitModal && leadToSchedule && (
           <ScheduleVisitModal isOpen={showScheduleVisitModal} onClose={() => { setShowScheduleVisitModal(false); setLeadToSchedule(null) }} lead={leadToSchedule} onSchedule={handleScheduleVisit} />
         )}
+        <ReminderModal isOpen={reminderModal.open} lead={reminderModal.lead} onClose={() => setReminderModal({ open: false, lead: null })} onSave={handleSaveReminder} />
         <LostReasonModal isOpen={lostReasonModal.open} lead={lostReasonModal.lead} onConfirm={handleConfirmLost} onCancel={handleCancelLost} />
         {auditLeadId && <AuditModal recordId={auditLeadId} moduleName="leads" isOpen={!!auditLeadId} onClose={() => setAuditLeadId(null)} />}
         {toast && (
@@ -1755,60 +2197,42 @@ export default function LeadKanban() {
             <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>Gestão do funil de captação</p>
           </div>
         </div>
-        <button
-          onClick={() => { setEditingLead(null); setShowNewLeadModal(true) }}
-          style={{ background: '#00A896', color: 'white', border: 'none', padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,168,150,0.25)', transition: 'all 0.15s' }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#007A6E'; e.currentTarget.style.transform = 'translateY(-1px)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = '#00A896'; e.currentTarget.style.transform = 'translateY(0)' }}
-        >
-          <Plus style={{ width: 16, height: 16 }} /> Novo Lead
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Item 13 — toggle view compacta */}
+          <button
+            onClick={() => setCompactView(v => !v)}
+            title={compactView ? 'Cards normais' : 'Cards compactos'}
+            style={{ width: 38, height: 38, borderRadius: 10, border: '1.5px solid ' + (compactView ? '#00A896' : '#E2E8F0'), background: compactView ? '#F0FDFB' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+          >
+            {compactView ? <Rows3 style={{ width: 16, height: 16, color: '#00A896' }} /> : <LayoutGrid style={{ width: 16, height: 16, color: '#64748B' }} />}
+          </button>
+          <button
+            onClick={() => { setEditingLead(null); setShowNewLeadModal(true) }}
+            style={{ background: '#00A896', color: 'white', border: 'none', padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,168,150,0.25)', transition: 'all 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#007A6E'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#00A896'; e.currentTarget.style.transform = 'translateY(0)' }}
+          >
+            <Plus style={{ width: 16, height: 16 }} /> Novo Lead
+          </button>
+        </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="flex flex-col lg:flex-row gap-3 mb-6 flex-wrap">
-        <div className="relative flex-1 min-w-[180px]">
+      {/* Filter Bar — item 6c: busca + botão de filtros (drawer) */}
+      <div className="flex gap-3 mb-2 flex-wrap items-center">
+        <div className="relative flex-1 min-w-[220px] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
           <input type="text" placeholder="Buscar por nome..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 pr-4 py-2.5 w-full border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none transition-all text-sm shadow-sm" />
         </div>
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-4 py-2.5 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none text-sm shadow-sm text-gray-700">
-          <option value="">Todos os status</option>
-          {Object.entries(statusConfig).map(([value, cfg]) => <option key={value} value={value}>{cfg.label}</option>)}
-        </select>
-        <select value={filterSource} onChange={(e) => setFilterSource(e.target.value)} className="px-4 py-2.5 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none text-sm shadow-sm text-gray-700">
-          <option value="">Todas as origens</option>
-          {sourceOptions.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select value={periodFilter} onChange={(e) => setPeriodFilter(e.target.value as typeof periodFilter)} className="px-4 py-2.5 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none text-sm shadow-sm text-gray-700">
-          <option value="all">Todos os períodos</option>
-          <option value="today">Hoje</option>
-          <option value="week">Esta semana</option>
-          <option value="month">Este mês</option>
-          <option value="year">Este ano</option>
-          <option value="custom">Personalizado</option>
-        </select>
-        {periodFilter === 'custom' && (
-          <div className="flex gap-2">
-            <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="px-3 py-2.5 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] outline-none text-sm shadow-sm text-gray-700" />
-            <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="px-3 py-2.5 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] outline-none text-sm shadow-sm text-gray-700" />
-          </div>
-        )}
-        <select value={gradeFilter} onChange={e => setGradeFilter(e.target.value)} className="px-4 py-2.5 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none text-sm shadow-sm text-gray-700">
-          <option value="all">Todas as séries</option>
-          {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
-        </select>
-        <select value={shiftFilter} onChange={e => setShiftFilter(e.target.value)} className="px-4 py-2.5 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] outline-none text-sm shadow-sm text-gray-700">
-          <option value="all">Todos os turnos</option>
-          <option value="Manhã">Manhã</option>
-          <option value="Tarde">Tarde</option>
-          <option value="Integral">Integral</option>
-        </select>
+        <button
+          onClick={() => setFilterDrawerOpen(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: '1.5px solid ' + (hasActiveFilters ? '#00A896' : '#E2E8F0'), background: hasActiveFilters ? '#F0FDFB' : '#fff', color: hasActiveFilters ? '#00A896' : '#64748B', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
+        >
+          <SlidersHorizontal style={{ width: 14, height: 14 }} /> Filtros
+          {hasActiveFilters && <span style={{ width: 6, height: 6, borderRadius: 999, background: '#00A896' }} />}
+        </button>
         {hasActiveFilters && (
-          <button
-            onClick={() => { setSearchTerm(''); setFilterSource(''); setFilterStatus(''); setPeriodFilter('all'); setCustomStart(''); setCustomEnd(''); setGradeFilter('all'); setShiftFilter('all') }}
-            className="px-4 py-2.5 border border-gray-200 rounded-xl bg-white text-sm shadow-sm text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all font-semibold whitespace-nowrap"
-          >
-            Limpar filtros
+          <button onClick={clearAllFilters} className="px-3 py-2.5 text-sm text-gray-400 hover:text-gray-600 transition-all font-semibold whitespace-nowrap">
+            Limpar
           </button>
         )}
       </div>
@@ -1828,25 +2252,41 @@ export default function LeadKanban() {
               const colLeads = getLeadsByStatus(status as Lead['status'])
               return (
                 <div key={status} className="flex-shrink-0 min-w-[260px] max-w-[260px] flex flex-col">
-                  <div className={`${config.headerBg} rounded-t-xl px-4 py-3 flex items-center justify-between border-b-2`} style={{ borderBottomColor: config.accent }}>
-                    <span className={`text-sm font-bold ${config.headerText}`}>{config.label}</span>
+                  {/* Item 13 — clicável pra colapsar/expandir a coluna */}
+                  <div
+                    onClick={() => setCollapsedColumns(prev => { const next = new Set(prev); if (next.has(status)) next.delete(status); else next.add(status); return next })}
+                    className={`${config.headerBg} rounded-t-xl px-4 py-3 flex items-center justify-between border-b-2 cursor-pointer select-none`}
+                    style={{ borderBottomColor: config.accent }}
+                  >
+                    <span className={`text-sm font-bold ${config.headerText} flex items-center gap-1.5`}>
+                      {collapsedColumns.has(status) ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      {config.label}
+                    </span>
                     <span className={`${config.badgeBg} text-white text-xs font-bold px-2.5 py-0.5 rounded-full min-w-[24px] text-center`}>{colLeads.length}</span>
                   </div>
-                  <DroppableColumn id={status} isOver={overColumnId === status && activeId !== null}>
-                    <SortableContext items={colLeads.map(l => l.id)} strategy={verticalListSortingStrategy}>
-                      {colLeads.map((lead) => (
-                        <SortableCard key={lead.id} lead={lead} config={config} isFlashing={flashingLeadId === lead.id} {...cardActions} />
-                      ))}
-                    </SortableContext>
-                    {colLeads.length === 0 && (
-                      <div className="text-center py-12">
-                        <div className="w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 opacity-20" style={{ backgroundColor: config.accent }}>
-                          <Users className="w-5 h-5 text-white" />
+                  {!collapsedColumns.has(status) && (
+                    <DroppableColumn id={status} isOver={overColumnId === status && activeId !== null}>
+                      <SortableContext items={colLeads.map(l => l.id)} strategy={verticalListSortingStrategy}>
+                        {colLeads.map((lead) => (
+                          <SortableCard
+                            key={lead.id} lead={lead} config={config} isFlashing={flashingLeadId === lead.id}
+                            compact={compactView}
+                            assignedUser={lead.assigned_to ? usersById.get(lead.assigned_to) ?? null : null}
+                            siblings={familySiblingsMap.get(lead.id)}
+                            {...cardActions}
+                          />
+                        ))}
+                      </SortableContext>
+                      {colLeads.length === 0 && (
+                        <div className="text-center py-12">
+                          <div className="w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 opacity-20" style={{ backgroundColor: config.accent }}>
+                            <Users className="w-5 h-5 text-white" />
+                          </div>
+                          <p className="text-xs text-gray-400">Nenhum lead</p>
                         </div>
-                        <p className="text-xs text-gray-400">Nenhum lead</p>
-                      </div>
-                    )}
-                  </DroppableColumn>
+                      )}
+                    </DroppableColumn>
+                  )}
                 </div>
               )
             })}
@@ -1856,18 +2296,28 @@ export default function LeadKanban() {
         <DragOverlay dropAnimation={null}>
           {activeLead ? (
             <div className="w-[260px] rotate-1 cursor-grabbing">
-              <CardContent lead={activeLead} config={statusConfig[activeLead.status]} isFlashing={false} overlay onSchedule={() => {}} onEdit={() => {}} onDelete={() => {}} onStatusChange={() => {}} onWhatsApp={() => {}} />
+              <CardContent
+                lead={activeLead} config={statusConfig[activeLead.status]} isFlashing={false} overlay
+                compact={compactView}
+                assignedUser={activeLead.assigned_to ? usersById.get(activeLead.assigned_to) ?? null : null}
+                siblings={familySiblingsMap.get(activeLead.id)}
+                onSchedule={() => {}} onEdit={() => {}} onDelete={() => {}} onStatusChange={() => {}} onWhatsApp={() => {}} onReminder={() => {}}
+              />
             </div>
           ) : null}
         </DragOverlay>
       </DndContext>
 
+      {filterDrawerEl}
+
       {/* Modals */}
-      <NewLeadModal isOpen={showNewLeadModal} onClose={() => { setShowNewLeadModal(false); setEditingLead(null) }} onSave={handleSave} editingLead={editingLead} />
+      <NewLeadModal isOpen={showNewLeadModal} onClose={() => { setShowNewLeadModal(false); setEditingLead(null) }} onSave={handleSave} editingLead={editingLead} institutionId={user!.institution_id} users={users} activeCampaignLabel={activeCampaignCycle?.label} institutionCity={institutionCity} />
 
       {showScheduleVisitModal && leadToSchedule && (
         <ScheduleVisitModal isOpen={showScheduleVisitModal} onClose={() => { setShowScheduleVisitModal(false); setLeadToSchedule(null) }} lead={leadToSchedule} onSchedule={handleScheduleVisit} />
       )}
+
+      <ReminderModal isOpen={reminderModal.open} lead={reminderModal.lead} onClose={() => setReminderModal({ open: false, lead: null })} onSave={handleSaveReminder} />
 
       {/* Modal de motivo de perda */}
       <LostReasonModal

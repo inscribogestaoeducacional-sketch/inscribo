@@ -2,19 +2,15 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
+import { useGradeLevels } from '../../hooks/useGradeLevels'
 import {
   X, ArrowLeft, ArrowRightLeft, Clock, Check, Loader2,
   MessageCircle, Plus, Eye, Trash2,
 } from 'lucide-react'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-
-const GRADES = [
-  'Infantil I','Infantil II','Infantil III','Infantil IV','Infantil V',
-  '1º Ano EF','2º Ano EF','3º Ano EF','4º Ano EF','5º Ano EF',
-  '6º Ano EF','7º Ano EF','8º Ano EF','9º Ano EF',
-  'Ensino Médio 1','Ensino Médio 2','Ensino Médio 3',
-]
+// Item 4c — GRADES antes hardcoded aqui; agora vem de school_grade_levels via
+// useGradeLevels() dentro do componente (precisa de institutionId).
 const TURNS   = ['Manhã','Tarde','Integral']
 const ORIGINS = ['WhatsApp','Indicação','Instagram','Facebook','Site','Outros']
 
@@ -113,6 +109,7 @@ export default function ContactCard({
   const { user } = useAuth()
   const navigate = useNavigate()
   const mountedRef = useRef(true)
+  const { names: GRADES } = useGradeLevels(institutionId)
 
   // All state hooks — unconditional
   const [loading, setLoading]           = useState(true)

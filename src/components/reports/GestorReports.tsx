@@ -328,8 +328,95 @@ function TabVisaoGeral({ cycle, metrics, reenrollments, loading }: {
   )
 }
 
+// ─── Item 3d — conversão por família vs. por aluno ─────────────────────────────
+// A cascata acima (TabFunil) vem inteira de funnel_metrics, uma tabela de
+// snapshots agregados (populada por import/ERP) — não tem granularidade de
+// lead individual, então não dá pra "contar por família" ali sem mudar como
+// funnel_metrics é alimentada (fora do escopo). Esse card é aditivo: busca
+// leads + lead_families ao vivo só pra taxa de conversão, que foi o KPI
+// explicitamente citado no pedido como fazendo sentido por família.
+//
+// Regra de família "otimista" (decisão do gestor via pergunta direta): uma
+// família conta como convertida se QUALQUER filho matriculou, mesmo que outro
+// tenha sido perdido. Etapa do funil da família = etapa mais avançada entre
+// os filhos.
+const FUNNEL_STAGE_ORDER = ['new', 'contact', 'scheduled', 'visit', 'proposal', 'enrolled', 'lost'] as const
+function mostAdvancedStatus(statuses: string[]): string {
+  const nonLost = statuses.filter(s => s !== 'lost')
+  if (nonLost.length === 0) return 'lost'
+  const order: readonly string[] = FUNNEL_STAGE_ORDER
+  return nonLost.reduce((best, s) => order.indexOf(s) > order.indexOf(best) ? s : best, nonLost[0])
+}
+
+function FamilyConversionCard({ institutionId, cycle }: { institutionId: string; cycle: CampaignCycle | null }) {
+  const [mode, setMode] = useState<'aluno' | 'familia'>('aluno')
+  const [loading, setLoading] = useState(true)
+  const [leadsData, setLeadsData] = useState<{ id: string; status: string; family_id: string | null }[]>([])
+
+  useEffect(() => {
+    if (!institutionId) return
+    ;(async () => {
+      setLoading(true)
+      let q = supabase.from('leads').select('id, status, family_id').eq('institution_id', institutionId)
+      if (cycle) q = q.gte('created_at', cycle.start_date).lte('created_at', cycle.end_date)
+      const { data } = await q
+      setLeadsData((data ?? []) as { id: string; status: string; family_id: string | null }[])
+      setLoading(false)
+    })()
+  }, [institutionId, cycle?.id])
+
+  const perStudent = { total: leadsData.length, converted: leadsData.filter(l => l.status === 'enrolled').length }
+
+  const families = new Map<string, string[]>()
+  leadsData.forEach(l => {
+    const key = l.family_id ?? `solo:${l.id}` // lead avulso conta como família de 1
+    if (!families.has(key)) families.set(key, [])
+    families.get(key)!.push(l.status)
+  })
+  const perFamily = { total: families.size, converted: 0 }
+  families.forEach(statuses => { if (mostAdvancedStatus(statuses) === 'enrolled') perFamily.converted++ })
+
+  const active = mode === 'aluno' ? perStudent : perFamily
+  const rate = active.total > 0 ? (active.converted / active.total) * 100 : 0
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+        <SectionTitle sub="Item 3 — famílias com mais de um filho contam uma vez; matrícula de qualquer filho já converte a família">Taxa de conversão — por aluno ou por família</SectionTitle>
+        <div style={{ display: 'flex', background: '#F1F5F9', borderRadius: 10, padding: 3, gap: 2 }}>
+          {(['aluno', 'familia'] as const).map(m => (
+            <button key={m} onClick={() => setMode(m)}
+              style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                background: mode === m ? '#fff' : 'transparent', color: mode === m ? '#00A896' : '#64748B',
+                boxShadow: mode === m ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+              {m === 'aluno' ? 'Por aluno' : 'Por família'}
+            </button>
+          ))}
+        </div>
+      </div>
+      {loading ? (
+        <div style={{ height: 64, borderRadius: 10, background: '#F1F5F9' }} />
+      ) : (
+        <div style={{ display: 'flex', gap: 32, alignItems: 'baseline', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 32, fontWeight: 900, color: '#00A896', lineHeight: 1 }}>{rate.toFixed(1)}%</div>
+            <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>taxa de conversão ({mode === 'aluno' ? 'por aluno' : 'por família'})</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: '#1A2B4A' }}>{fmt(active.converted)} <span style={{ color: '#94A3B8', fontWeight: 500 }}>/ {fmt(active.total)}</span></div>
+            <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>{mode === 'aluno' ? 'matrículas / leads' : 'famílias matriculadas / famílias'}</div>
+          </div>
+          {mode === 'familia' && perStudent.total !== perFamily.total && (
+            <div style={{ fontSize: 11, color: '#94A3B8' }}>({fmt(perStudent.total)} alunos ao todo, agrupados em {fmt(perFamily.total)} famílias)</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Aba 2 — Funil ────────────────────────────────────────────────────────────
-function TabFunil({ metrics, loading }: { metrics: FunnelMetric[]; loading: boolean }) {
+function TabFunil({ metrics, loading, institutionId, cycle }: { metrics: FunnelMetric[]; loading: boolean; institutionId: string; cycle: CampaignCycle | null }) {
   const total = {
     reg: metrics.reduce((s, m) => s + m.registrations, 0),
     regT: metrics.reduce((s, m) => s + m.registrations_target, 0),
@@ -406,6 +493,8 @@ function TabFunil({ metrics, loading }: { metrics: FunnelMetric[]; loading: bool
           )
         })}
       </div>
+
+      <FamilyConversionCard institutionId={institutionId} cycle={cycle} />
 
       {/* Taxas de conversão */}
       <div style={{ background: '#F8FAFC', borderRadius: 12, padding: 16, display: 'flex', gap: 24, alignItems: 'center', justifyContent: 'center' }}>
@@ -1926,7 +2015,7 @@ export default function GestorReports({ institutionId, institutionName }: Props)
         ) : (
           <>
             {activeTab === 0 && <TabVisaoGeral cycle={cycle} metrics={metrics} reenrollments={reenrollments} loading={loading} />}
-            {activeTab === 1 && <TabFunil metrics={metrics} loading={loading} />}
+            {activeTab === 1 && <TabFunil metrics={metrics} loading={loading} institutionId={institutionId} cycle={cycle} />}
             {activeTab === 2 && <TabMarketing institutionId={institutionId} cycle={cycle} metrics={metrics} />}
             {activeTab === 3 && <TabRematriculas institutionId={institutionId} cycle={cycle} />}
             {activeTab === 4 && <TabTransferencias institutionId={institutionId} />}

@@ -2,18 +2,14 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
+import { useGradeLevels } from '../../hooks/useGradeLevels'
 import {
   X, ArrowRightLeft, FileText, Clock, User, Plus, Check, Loader2,
   Tag as TagIcon,
 } from 'lucide-react'
 
-// ─── Constants ────────────────────────────────────────────────
-const GRADES = [
-  'Infantil I','Infantil II','Infantil III','Infantil IV','Infantil V',
-  '1º Ano EF','2º Ano EF','3º Ano EF','4º Ano EF','5º Ano EF',
-  '6º Ano EF','7º Ano EF','8º Ano EF','9º Ano EF',
-  'Ensino Médio 1','Ensino Médio 2','Ensino Médio 3',
-]
+// Item 4c — série antes hardcoded aqui, agora vem de school_grade_levels
+// via useGradeLevels() dentro do componente (precisa de institutionId).
 
 const HEX_COLORS = ['#00A896','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
 function nameHash(s: string) {
@@ -82,6 +78,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
   const navigate  = useNavigate()
   const mountedRef = useRef(true)
   const contactRef = contact.lead_id || contact.remote_jid || contact.id
+  const { names: GRADES } = useGradeLevels(institutionId)
 
   type TabKey = 'dados' | 'historico' | 'notas' | 'transferencia'
   const [tab, setTab] = useState<TabKey>('dados')

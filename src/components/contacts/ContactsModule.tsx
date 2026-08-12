@@ -7,17 +7,13 @@ import {
   RefreshCw, MessageSquare, ChevronsUpDown, ChevronUp, ChevronDown, ChevronRight,
 } from 'lucide-react'
 import ContactProfile, { UnifiedContact } from './ContactProfile'
+import { useGradeLevels } from '../../hooks/useGradeLevels'
 
 // ─── Constants ───────────────────────────────────────────────
 const HEX_COLORS = ['#00A896','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
 const PAGE_SIZE  = 50
-
-const GRADES_LIST = [
-  'Infantil I','Infantil II','Infantil III','Infantil IV','Infantil V',
-  '1º Ano EF','2º Ano EF','3º Ano EF','4º Ano EF','5º Ano EF',
-  '6º Ano EF','7º Ano EF','8º Ano EF','9º Ano EF',
-  'Ensino Médio 1','Ensino Médio 2','Ensino Médio 3',
-]
+// Item 4c — lista de séries antes hardcoded aqui (divergente do resto do
+// sistema); agora vem de school_grade_levels via useGradeLevels().
 
 const EXPORT_FIELD_DEFS = [
   { key: 'responsible_name', label: 'Nome do responsável' },
@@ -202,6 +198,7 @@ function SkeletonRows() {
 export default function ContactsModule() {
   const { user }       = useAuth()
   const institutionId  = user?.institution_id!
+  const { names: GRADES_LIST } = useGradeLevels(institutionId)
   const schoolName     = (user as any)?.institution_name || ''
   const navigate       = useNavigate()
   const mountedRef     = useRef(true)

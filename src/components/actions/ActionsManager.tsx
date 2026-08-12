@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Plus, Filter, User, Phone, Mail, Calendar, Edit, Trash2, X, Search, Clock, MapPin, DollarSign, Tag, Users, TrendingUp, Eye, MessageSquare } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, Lead, User as AppUser } from '../../lib/supabase'
+import { useGradeLevels } from '../../hooks/useGradeLevels'
 
 const statusConfig = {
   new: { label: 'Novo', color: 'bg-blue-500', bgColor: 'bg-blue-50', textColor: 'text-blue-700', borderColor: 'border-blue-200' },
@@ -23,25 +24,8 @@ const sourceOptions = [
   'Outros'
 ]
 
-const gradeOptions = [
-  'Infantil I',
-  'Infantil II',
-  'Infantil III',
-  'Infantil IV',
-  'Infantil V',
-  '1º Ano EF',
-  '2º Ano EF',
-  '3º Ano EF',
-  '4º Ano EF',
-  '5º Ano EF',
-  '6º Ano EF',
-  '7º Ano EF',
-  '8º Ano EF',
-  '9º Ano EF',
-  '1ª Série EM',
-  '2ª Série EM',
-  '3ª Série EM'
-]
+// Item 4c — gradeOptions antes hardcoded aqui; agora vem de school_grade_levels
+// via useGradeLevels() dentro de NewLeadModal.
 
 interface NewLeadModalProps {
   isOpen: boolean
@@ -51,6 +35,8 @@ interface NewLeadModalProps {
 }
 
 function NewLeadModal({ isOpen, onClose, onSave, editingLead }: NewLeadModalProps) {
+  const { user } = useAuth()
+  const { names: gradeOptions } = useGradeLevels(user?.institution_id)
   const [currentStep, setCurrentStep] = useState(1)
   const [formData, setFormData] = useState({
     student_name: '',

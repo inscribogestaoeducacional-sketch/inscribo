@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../hooks/useAudit'
 import AuditModal from '../../components/common/AuditModal'
 import { createNotification } from '../../lib/notifications'
+import { useGradeLevels } from '../../hooks/useGradeLevels'
 
 // ─── types ────────────────────────────────────────────────────────────────────
 interface Transfer {
@@ -52,12 +53,8 @@ interface TransferForm {
 
 
 // ─── constants ────────────────────────────────────────────────────────────────
-const GRADES = [
-  'Infantil I','Infantil II','Infantil III','Infantil IV','Infantil V',
-  '1º Ano EF','2º Ano EF','3º Ano EF','4º Ano EF','5º Ano EF',
-  '6º Ano EF','7º Ano EF','8º Ano EF','9º Ano EF',
-  'Ensino Médio 1','Ensino Médio 2','Ensino Médio 3',
-]
+// Item 4c — GRADES antes hardcoded aqui; agora vem de school_grade_levels via
+// useGradeLevels() dentro do componente (precisa de institutionId).
 
 const REASON_MAP: Record<string, { label: string; color: string; bg: string }> = {
   financial:    { label: 'Financeiro',     color: '#dc2626', bg: '#fee2e2' },
@@ -108,6 +105,7 @@ export default function GestorTransfers() {
   const isAdmin = user?.role === 'admin' || user?.role === 'manager'
   const userName = user?.full_name || 'Usuário'
   const userRole = user?.role || 'user'
+  const { names: GRADES } = useGradeLevels(institutionId)
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   useEffect(() => {
