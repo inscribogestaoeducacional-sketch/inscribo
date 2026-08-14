@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import { SHARED_CSS } from '../styles/sharedCSS'
+import { supabase } from '../lib/supabase'
+import BrazilStatesMap, { UF_NAMES, type StateSchoolsEntry } from '../components/landing/BrazilStatesMap'
 
 // ── Icons ─────────────────────────────────────────────────────────────────
 function Ic({ children, size = 20, color = 'currentColor', stroke = 1.8 }: { children: React.ReactNode; size?: number; color?: string; stroke?: number }) {
@@ -180,6 +182,80 @@ function Ticker() {
         </div>
       </div>
     </div>
+  )
+}
+
+// ── PROVA SOCIAL: ESCOLAS PARCEIRAS ─────────────────────────────────────────
+interface ShowcaseSchoolRow {
+  id: string
+  school_name: string
+  city: string
+  state: string
+  logo_url: string
+}
+
+function EscolasParceiras() {
+  const r0 = useReveal()
+  // null = ainda carregando (não renderiza nada até saber se há dados —
+  // evita "piscar" uma seção vazia antes do fetch responder). [] = sem
+  // escolas cadastradas ainda (tela Admin "Escolas em Destaque" vazia) —
+  // a seção inteira fica oculta até a primeira escola ser cadastrada.
+  const [schools, setSchools] = useState<ShowcaseSchoolRow[] | null>(null)
+
+  useEffect(() => {
+    supabase
+      .from('showcase_schools')
+      .select('id, school_name, city, state, logo_url')
+      .eq('is_active', true)
+      .order('display_order', { ascending: true })
+      .then(({ data }) => setSchools((data as ShowcaseSchoolRow[]) || []))
+  }, [])
+
+  if (!schools || schools.length === 0) return null
+
+  const statesData: Record<string, StateSchoolsEntry> = {}
+  schools.forEach(s => {
+    const uf = (s.state || '').toUpperCase().trim()
+    if (!UF_NAMES[uf]) return
+    if (!statesData[uf]) statesData[uf] = { cities: [] }
+    let cityEntry = statesData[uf].cities.find(c => c.city === s.city)
+    if (!cityEntry) { cityEntry = { city: s.city, schools: [] }; statesData[uf].cities.push(cityEntry) }
+    cityEntry.schools.push(s.school_name)
+  })
+  const stateCount = Object.keys(statesData).length
+
+  return (
+    <section className="section-pad" style={{ background: '#fff' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div ref={r0} style={{ textAlign: 'center', marginBottom: 56 }}>
+          <div className="tag-g" style={{ marginBottom: 20 }}>Prova social</div>
+          <h2 className="s-title" style={{ fontSize: 'clamp(32px,4vw,52px)', color: '#111827', marginBottom: 16 }}>
+            Escolas de <span style={{ color: '#0DD3BF' }}>todo o Brasil</span><br />já crescem com a ÁION EDU
+          </h2>
+          <p style={{ fontSize: 16, color: '#4B5563', maxWidth: 560, margin: '0 auto', lineHeight: 1.8 }}>
+            {schools.length} escola{schools.length !== 1 ? 's' : ''} parceira{schools.length !== 1 ? 's' : ''} em {stateCount} estado{stateCount !== 1 ? 's' : ''} já usam a plataforma pra captar e converter mais matrículas.
+          </p>
+        </div>
+        <div className="escolas-row">
+          <div style={{ flex: '0 0 380px', maxWidth: 380, width: '100%' }}>
+            <BrazilStatesMap data={statesData} />
+            {stateCount > 0 && (
+              <p style={{ textAlign: 'center', fontSize: 12, color: '#9CA3AF', marginTop: 12 }}>Passe o mouse sobre um estado destacado</p>
+            )}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="escolas-logos-grid">
+              {schools.map(s => (
+                <div key={s.id} className="escolas-logo-card" title={`${s.school_name} — ${s.city}/${s.state}`}
+                  style={{ width: 120, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, background: '#F9FAFB', borderRadius: 12, border: '1px solid #F0F0F0' }}>
+                  <img src={s.logo_url} alt={s.school_name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -640,6 +716,7 @@ export default function Landing() {
       <main>
         <Hero />
         <Ticker />
+        <EscolasParceiras />
         <Dores />
         <Solucoes />
         <MetaPartner />

@@ -116,10 +116,18 @@
       "Bash(./supabase.exe projects *)",
       "Bash(./supabase.exe db *)",
       "Bash(./supabase.exe --help)",
-      "Bash(xargs grep -l \"POLICY\")"
+      "Bash(xargs grep -l \"POLICY\")",
+      "Bash(grep -rln \"FOR SELECT\\\\s*$\\\\|FOR SELECT USING \\(true\\)\\\\|USING \\(true\\)\" supabase/migrations)",
+      "Bash(curl -sL https://raw.githubusercontent.com/luisdalmolin/mapa-brasil-svg/master/mapa.svg -o /tmp/brasil_check.svg)",
+      "WebFetch(domain:github.com)",
+      "Bash(curl -sL https://raw.githubusercontent.com/luisdalmolin/mapa-brasil-svg/master/mapa.html -o /tmp/mapa.html)",
+      "Bash(pwd -W)",
+      "Bash(cygpath -w /tmp/mapa.html)",
+      "Bash(mkdir -p \"/c/Users/VICTOR~1/AppData/Local/Temp/claude/c--Users-Victor-Almeida-AIONEDU/798e1a75-ed7e-40f5-9949-17adf8811eef/scratchpad\" && cp /tmp/mapa.html \"/c/Users/VICTOR~1/AppData/Local/Temp/claude/c--Users-Victor-Almeida-AIONEDU/798e1a75-ed7e-40f5-9949-17adf8811eef/scratchpad/mapa-brasil.html\" && ls -la \"/c/Users/VICTOR~1/AppData/Local/Temp/claude/c--Users-Victor-Almeida-AIONEDU/798e1a75-ed7e-40f5-9949-17adf8811eef/scratchpad/\")"
     ],
     "additionalDirectories": [
-      "\\tmp"
+      "\\tmp",
+      "C:\\Users\\VICTOR~1\\AppData\\Local\\Temp\\claude\\c--Users-Victor-Almeida-AIONEDU\\798e1a75-ed7e-40f5-9949-17adf8811eef\\scratchpad"
     ]
   }
 }

@@ -130,6 +130,12 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; color: #111827; overflow-x:
 /* Section padding */
 .section-pad { padding:112px 48px; }
 
+/* Prova social — faixa de logos + mapa do Brasil */
+.escolas-row { display:flex; gap:56px; align-items:center; }
+.escolas-logos-grid { display:flex; flex-wrap:wrap; gap:20px; align-items:center; }
+.escolas-logo-card { filter:grayscale(1); opacity:.65; transition:filter .25s, opacity .25s, transform .25s; }
+.escolas-logo-card:hover { filter:grayscale(0); opacity:1; transform:translateY(-2px); }
+
 /* Responsive */
 @media (max-width:1100px) {
   .hero-cols { flex-direction:column !important; }
@@ -141,6 +147,7 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; color: #111827; overflow-x:
   .grid-3 { grid-template-columns:1fr 1fr !important; }
   .grid-4 { grid-template-columns:1fr 1fr !important; }
   .steps-g { grid-template-columns:1fr !important; }
+  .escolas-row { flex-direction:column !important; }
 }
 @media (max-width:1024px) {
   .grid-3 { grid-template-columns:1fr 1fr !important; }
@@ -162,6 +169,7 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; color: #111827; overflow-x:
   .form-g { grid-template-columns:1fr !important; }
   .section-pad { padding:72px 24px !important; }
   .footer-grid { grid-template-columns:1fr 1fr !important; }
+  .escolas-logos-grid { justify-content:center !important; }
 }
 @media (max-width:480px) {
   .grid-4 { grid-template-columns:1fr !important; }

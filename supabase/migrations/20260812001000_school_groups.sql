@@ -4,6 +4,15 @@
 -- compartilhado opcional). Cada unidade continua sendo uma institution
 -- independente (CRM/financeiro/nota fiscal 100% isolados) — o grupo é só um
 -- agrupador + dono opcional do número de WhatsApp compartilhado.
+--
+-- ORDEM IMPORTA: toda ALTER TABLE ... ADD COLUMN vem antes de qualquer
+-- CREATE POLICY/CHECK que referencie essa coluna. Uma tentativa anterior de
+-- aplicar esta migration falhou (42703 column "school_group_id" does not
+-- exist) porque a policy school_groups_member_select vinha antes do
+-- ALTER TABLE users ADD COLUMN school_group_id — corrigido reordenando pra:
+-- school_groups (tabela) → institutions.school_group_id →
+-- users.school_group_id/active_institution_id → só então RLS/policies →
+-- funções (que dependem de active_institution_id já existir).
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS school_groups (
@@ -16,19 +25,6 @@ CREATE TABLE IF NOT EXISTS school_groups (
   menu_institution_map   JSONB       NOT NULL DEFAULT '[]',
   created_at             TIMESTAMPTZ DEFAULT now()
 );
-
-ALTER TABLE school_groups ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "school_groups_admin_all" ON school_groups;
-CREATE POLICY "school_groups_admin_all" ON school_groups
-  FOR ALL USING (is_super_admin_user()) WITH CHECK (is_super_admin_user());
-
--- Gestor de rede enxerga (só leitura) o próprio grupo.
-DROP POLICY IF EXISTS "school_groups_member_select" ON school_groups;
-CREATE POLICY "school_groups_member_select" ON school_groups
-  FOR SELECT USING (
-    id IN (SELECT school_group_id FROM users WHERE id = auth.uid() AND school_group_id IS NOT NULL)
-  );
 
 -- ── institutions.school_group_id ────────────────────────────────────────────
 -- Aditivo: escola sem grupo (school_group_id NULL) continua funcionando
@@ -55,6 +51,20 @@ CREATE INDEX IF NOT EXISTS idx_users_school_group ON users(school_group_id);
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_user_type_check;
 ALTER TABLE users ADD CONSTRAINT users_user_type_check
   CHECK (user_type = ANY (ARRAY['school_user'::text, 'consultant'::text, 'admin_geral'::text, 'gestor_rede'::text]));
+
+-- ── RLS de school_groups — só agora, com users.school_group_id já existindo ─
+ALTER TABLE school_groups ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "school_groups_admin_all" ON school_groups;
+CREATE POLICY "school_groups_admin_all" ON school_groups
+  FOR ALL USING (is_super_admin_user()) WITH CHECK (is_super_admin_user());
+
+-- Gestor de rede enxerga (só leitura) o próprio grupo.
+DROP POLICY IF EXISTS "school_groups_member_select" ON school_groups;
+CREATE POLICY "school_groups_member_select" ON school_groups
+  FOR SELECT USING (
+    id IN (SELECT school_group_id FROM users WHERE id = auth.uid() AND school_group_id IS NOT NULL)
+  );
 
 -- ── RLS: COALESCE(institution_id, active_institution_id) ───────────────────
 -- Mudança mínima e retrocompatível: pra todo usuário que já tem institution_id
