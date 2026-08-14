@@ -1,6 +1,59 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 
+// Mesmo bucket/padrão de src/lib/whatsappTemplate.ts (uploadTemplateHeaderMedia),
+// que já funciona para mídia de header de template — os nós de mídia do fluxo
+// nunca tiveram upload real, só um campo de URL manual.
+async function uploadFlowMediaFile(file: File): Promise<string> {
+  const ext = (file.name.split('.').pop() || 'bin').toLowerCase()
+  const path = `flow-media/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`
+
+  const { error } = await supabase.storage
+    .from('whatsapp-media')
+    .upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false })
+  if (error) throw new Error(`Falha no upload: ${error.message}`)
+
+  const { data: { publicUrl } } = supabase.storage.from('whatsapp-media').getPublicUrl(path)
+  return publicUrl
+}
+
+const MEDIA_ACCEPT: Record<string, string> = {
+  image: 'image/*',
+  video: 'video/*',
+  audio: 'audio/*',
+  document: '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+}
+
+function MediaUploadField({
+  mediaType, uploading, onUpload,
+}: {
+  mediaType: string
+  uploading: boolean
+  onUpload: (file: File) => void
+}) {
+  const stop = (e: React.MouseEvent) => e.stopPropagation()
+  return (
+    <label
+      onMouseDown={stop}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+        padding: '7px 8px', fontSize: 11, color: '#3b82f6', fontWeight: 600,
+        border: '1.5px dashed #93c5fd', borderRadius: 7,
+        cursor: uploading ? 'not-allowed' : 'pointer', background: '#eff6ff',
+      }}
+    >
+      {uploading ? 'Enviando...' : '📎 Enviar arquivo do computador'}
+      <input
+        type="file"
+        accept={MEDIA_ACCEPT[mediaType]}
+        style={{ display: 'none' }}
+        disabled={uploading}
+        onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = '' }}
+      />
+    </label>
+  )
+}
+
 type NodeType = 'start'|'message'|'question'|'menu'|'transfer'|'condition'|'action'|'wait'|'media'|'distribute'|'lead'|'end'
 
 interface FlowNode {
@@ -55,9 +108,9 @@ function nodeH(node: { type: NodeType; data: Record<string, any> }): number {
     case 'start':      return 82
     case 'message': {
       const mt = node.data?.mediaType
-      if (mt === 'document') return 160
+      if (mt === 'document') return 196  // upload + url + filename + caption
       if (mt === 'contact')  return 180
-      if (mt && mt !== 'text') return 120  // image / video / audio
+      if (mt && mt !== 'text') return 160  // image / video / audio: upload + url (+ caption)
       return 140
     }
     case 'question':   return 136
@@ -235,6 +288,25 @@ function NodeBody({
 }) {
   const stop = (e: React.MouseEvent) => e.stopPropagation()
   const d = node.data
+  const [uploading, setUploading] = useState(false)
+  const [uploadErr, setUploadErr] = useState<string | null>(null)
+
+  const handleMediaUpload = async (mediaType: string, file: File) => {
+    setUploading(true)
+    setUploadErr(null)
+    try {
+      const url = await uploadFlowMediaFile(file)
+      onChange({
+        ...d,
+        mediaUrl: url,
+        ...(mediaType === 'document' && !d.filename ? { filename: file.name } : {}),
+      })
+    } catch (e: any) {
+      setUploadErr(e?.message || 'Falha no upload')
+    } finally {
+      setUploading(false)
+    }
+  }
 
   switch (node.type) {
     case 'start':
@@ -267,33 +339,43 @@ function NodeBody({
           )}
           {activeTab === 'image' && (
             <>
-              <input style={inputSt} value={d.mediaUrl || ''} placeholder="URL da imagem"
+              <MediaUploadField mediaType="image" uploading={uploading} onUpload={f => handleMediaUpload('image', f)} />
+              <input style={{ ...inputSt, marginTop: 6 }} value={d.mediaUrl || ''} placeholder="ou cole a URL da imagem"
                 onChange={e => onChange({ ...d, mediaUrl: e.target.value })} onMouseDown={stop} />
               <input style={{ ...inputSt, marginTop: 6 }} value={d.caption || ''} placeholder="Legenda (opcional)"
                 onChange={e => onChange({ ...d, caption: e.target.value })} onMouseDown={stop} />
+              {uploadErr && <p style={{ fontSize: 10, color: '#ef4444', margin: '4px 0 0' }}>{uploadErr}</p>}
             </>
           )}
           {activeTab === 'video' && (
             <>
-              <input style={inputSt} value={d.mediaUrl || ''} placeholder="URL do vídeo"
+              <MediaUploadField mediaType="video" uploading={uploading} onUpload={f => handleMediaUpload('video', f)} />
+              <input style={{ ...inputSt, marginTop: 6 }} value={d.mediaUrl || ''} placeholder="ou cole a URL do vídeo"
                 onChange={e => onChange({ ...d, mediaUrl: e.target.value })} onMouseDown={stop} />
               <input style={{ ...inputSt, marginTop: 6 }} value={d.caption || ''} placeholder="Legenda (opcional)"
                 onChange={e => onChange({ ...d, caption: e.target.value })} onMouseDown={stop} />
+              {uploadErr && <p style={{ fontSize: 10, color: '#ef4444', margin: '4px 0 0' }}>{uploadErr}</p>}
             </>
           )}
           {activeTab === 'document' && (
             <>
-              <input style={inputSt} value={d.mediaUrl || ''} placeholder="URL do documento"
+              <MediaUploadField mediaType="document" uploading={uploading} onUpload={f => handleMediaUpload('document', f)} />
+              <input style={{ ...inputSt, marginTop: 6 }} value={d.mediaUrl || ''} placeholder="ou cole a URL do documento"
                 onChange={e => onChange({ ...d, mediaUrl: e.target.value })} onMouseDown={stop} />
               <input style={{ ...inputSt, marginTop: 6 }} value={d.filename || ''} placeholder="Nome do arquivo (ex: proposta.pdf)"
                 onChange={e => onChange({ ...d, filename: e.target.value })} onMouseDown={stop} />
               <input style={{ ...inputSt, marginTop: 6 }} value={d.caption || ''} placeholder="Legenda (opcional)"
                 onChange={e => onChange({ ...d, caption: e.target.value })} onMouseDown={stop} />
+              {uploadErr && <p style={{ fontSize: 10, color: '#ef4444', margin: '4px 0 0' }}>{uploadErr}</p>}
             </>
           )}
           {activeTab === 'audio' && (
-            <input style={inputSt} value={d.mediaUrl || ''} placeholder="URL do áudio"
-              onChange={e => onChange({ ...d, mediaUrl: e.target.value })} onMouseDown={stop} />
+            <>
+              <MediaUploadField mediaType="audio" uploading={uploading} onUpload={f => handleMediaUpload('audio', f)} />
+              <input style={{ ...inputSt, marginTop: 6 }} value={d.mediaUrl || ''} placeholder="ou cole a URL do áudio"
+                onChange={e => onChange({ ...d, mediaUrl: e.target.value })} onMouseDown={stop} />
+              {uploadErr && <p style={{ fontSize: 10, color: '#ef4444', margin: '4px 0 0' }}>{uploadErr}</p>}
+            </>
           )}
           {activeTab === 'contact' && (
             <>
@@ -843,13 +925,29 @@ function migrateEdge(e: any): FlowEdge {
 }
 
 // ── FlowEditor ────────────────────────────────────────────────────────────────
+// institutionId normalmente é uma institutions.id de verdade (escola). Dois
+// outros contextos reaproveitam este mesmo editor com um pseudo-ID: o Inbox
+// Áion (ownerType="platform", institutionId = platform_whatsapp.id) e o
+// WhatsApp compartilhado de um Grupo Escolar (ownerType="group",
+// institutionId = school_groups.id). Cada um grava em whatsapp_flows numa
+// coluna diferente (institution_id / platform_whatsapp_id / school_group_id —
+// ver migration 20260812001200), nunca em institution_id — essa coluna tem FK
+// pra institutions e rejeitaria qualquer pseudo-ID.
+type FlowEditorOwnerType = 'institution' | 'group' | 'platform'
+
 export default function FlowEditor({
   institutionId,
+  ownerType = 'institution',
   onClose,
 }: {
   institutionId: string
+  ownerType?: FlowEditorOwnerType
   onClose: () => void
 }) {
+  const ownerColumn =
+    ownerType === 'group'    ? 'school_group_id' :
+    ownerType === 'platform' ? 'platform_whatsapp_id' :
+    'institution_id'
   const [nodes, setNodes]           = useState<FlowNode[]>([])
   const [edges, setEdges]           = useState<FlowEdge[]>([])
   const [selectedNode, setSelected] = useState<string | null>(null)
@@ -877,27 +975,30 @@ export default function FlowEditor({
 
   // ── Load ─────────────────────────────────────────────────────────────────
   useEffect(() => {
-    console.log('[FlowEditor] mount — institutionId:', institutionId)
+    console.log('[FlowEditor] mount — institutionId:', institutionId, '| ownerType:', ownerType)
     ;(async () => {
-      const [{ data: fl }, { data: us }, { data: grp }, { data: tg }] = await Promise.all([
+      // users/whatsapp_groups/whatsapp_tags são sempre escopados por uma
+      // institution de verdade (transfer/action de atendente, grupos de
+      // conversa, tags) — não fazem sentido pra um pseudo-ID de grupo/
+      // plataforma, então nem consultamos nesses casos (fica vazio).
+      const [{ data: fl }, us, grp, tg] = await Promise.all([
         supabase.from('whatsapp_flows')
           .select('bot_flow, bot_enabled')
-          .eq('institution_id', institutionId)
+          .eq(ownerColumn, institutionId)
           .maybeSingle(),
-        supabase.from('users')
-          .select('id, full_name')
-          .eq('institution_id', institutionId),
-        supabase.from('whatsapp_groups')
-          .select('id, name, emoji')
-          .eq('institution_id', institutionId),
-        supabase.from('whatsapp_tags')
-          .select('id, name, color')
-          .eq('institution_id', institutionId)
-          .order('name'),
+        ownerType === 'institution'
+          ? supabase.from('users').select('id, full_name').eq('institution_id', institutionId)
+          : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
+        ownerType === 'institution'
+          ? supabase.from('whatsapp_groups').select('id, name, emoji').eq('institution_id', institutionId)
+          : Promise.resolve({ data: [] as { id: string; name: string; emoji: string }[] }),
+        ownerType === 'institution'
+          ? supabase.from('whatsapp_tags').select('id, name, color').eq('institution_id', institutionId).order('name')
+          : Promise.resolve({ data: [] as { id: string; name: string; color: string }[] }),
       ])
-      if (us) setUsers(us)
-      if (grp) setGroups(grp as { id: string; name: string; emoji: string }[])
-      if (tg) setAvailableTags(tg as { id: string; name: string; color: string }[])
+      if (us.data) setUsers(us.data)
+      if (grp.data) setGroups(grp.data as { id: string; name: string; emoji: string }[])
+      if (tg.data) setAvailableTags(tg.data as { id: string; name: string; color: string }[])
       if (fl?.bot_enabled != null) setIsActive(fl.bot_enabled)
 
       const bf = fl?.bot_flow as { nodes?: any[]; edges?: any[] } | null
@@ -944,7 +1045,7 @@ export default function FlowEditor({
         setPan({ x: (cw - (maxX - minX) * nz) / 2 - minX * nz + 40, y: (ch - (maxY - minY) * nz) / 2 - minY * nz + 40 })
       }, 100)
     })()
-  }, [institutionId])
+  }, [institutionId, ownerType])
 
   // ── Wheel zoom (cursor-centered) ──────────────────────────────────────────
   useEffect(() => {
@@ -1110,7 +1211,7 @@ export default function FlowEditor({
     const { data: existing, error: selectErr } = await supabase
       .from('whatsapp_flows')
       .select('id')
-      .eq('institution_id', institutionId)
+      .eq(ownerColumn, institutionId)
       .maybeSingle()
 
     if (selectErr) {
