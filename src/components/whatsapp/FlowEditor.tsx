@@ -1225,12 +1225,12 @@ export default function FlowEditor({
       const { error } = await supabase
         .from('whatsapp_flows')
         .update({ bot_flow: botFlow, bot_enabled: isActive })
-        .eq('institution_id', institutionId)
+        .eq(ownerColumn, institutionId)
       saveError = error
     } else {
       const { error } = await supabase
         .from('whatsapp_flows')
-        .insert({ institution_id: institutionId, bot_flow: botFlow, bot_enabled: isActive, is_active: true })
+        .insert({ [ownerColumn]: institutionId, bot_flow: botFlow, bot_enabled: isActive, is_active: true })
       saveError = error
     }
 

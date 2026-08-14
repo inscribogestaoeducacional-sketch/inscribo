@@ -1020,6 +1020,11 @@ export class DatabaseService {
         assigned_user_name: userName,
         transferred_at:     new Date().toISOString(),
         transferred_from:   previousUserId,
+        // Sem isto, o contador de não lidas acumulado sob o atendente
+        // anterior sobrevive pro novo, mas whatsapp_messages_select só
+        // libera mensagens a partir de transferred_at — o badge mostraria
+        // "não lidas" que o novo atendente nem consegue ver.
+        unread_count:       0,
       })
       .eq('institution_id', institutionId)
       .in('remote_jid', [raw, norm])
@@ -1076,7 +1081,16 @@ export class DatabaseService {
   static async closeConversation(institutionId: string, remoteJid: string): Promise<{ count: number; error: any }> {
     const raw  = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     const norm = `${raw}@s.whatsapp.net`
-    const payload = { status: 'closed', bot_active: false, assigned_user_id: null, assigned_user_name: null }
+    // Não zera assigned_user_id/assigned_user_name aqui: a policy de RLS de
+    // whatsapp_conversations só deixa um atendente sem "ver todas as
+    // conversas" enxergar a linha se assigned_user_id = auth.uid() (ou se
+    // estiver sem dono E status='waiting'). Como o fechamento também seta
+    // status='closed', zerar assigned_user_id faz a conversa desaparecer da
+    // visão desse atendente pra sempre (nunca aparece em "Concluídas"), até
+    // uma nova mensagem do contato reabrir como 'waiting'. Manter o dono
+    // preserva a visibilidade e não quebra reatribuição — handleAssignFromClosed
+    // sempre sobrescreve assigned_user_id ao reabrir para outro atendente.
+    const payload = { status: 'closed', bot_active: false }
 
     // Always update both formats in parallel — DB may have either form (legacy + current)
     const [r1, r2] = await Promise.all([

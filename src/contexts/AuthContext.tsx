@@ -8,12 +8,21 @@ interface AppUser {
   full_name: string
   email: string
   role: 'admin' | 'manager' | 'user'
+  // Pra "gestor de rede" (user_type='gestor_rede'), institution_id aqui é a
+  // unidade SELECIONADA no momento (users.active_institution_id), não um
+  // institution_id fixo no banco — todo o resto do app continua lendo esse
+  // campo normalmente e passa a refletir a unidade escolhida, sem precisar
+  // saber que esse usuário pertence a um grupo. Ver switchInstitution().
   institution_id: string
   active: boolean
   institution_name?: string
-  user_type?: 'school_user' | 'consultant' | 'admin_geral'
+  user_type?: 'school_user' | 'consultant' | 'admin_geral' | 'gestor_rede'
   // mantido por compatibilidade com código legado
   is_super_admin?: boolean
+  // Só preenchido pra gestor_rede: id do grupo e unidades disponíveis pro
+  // seletor (TopBar).
+  school_group_id?: string
+  group_institutions?: { id: string; name: string }[]
 }
 
 interface AuthContextType {
@@ -25,6 +34,10 @@ interface AuthContextType {
   signOut: () => Promise<void>
   signUp: (email: string, password: string, fullName: string, role: 'admin' | 'manager' | 'user') => Promise<void>
   refreshSession: () => Promise<void>
+  // Troca a unidade "ativa" do gestor de rede (sem logout/login) — valida
+  // server-side (RPC switch_active_institution) que a unidade pertence ao
+  // grupo do usuário antes de gravar.
+  switchInstitution: (institutionId: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -85,17 +98,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data) {
+        let effectiveInstitutionId = data.institution_id || ''
+        let institutionName = (data as any).institutions?.name as string | undefined
+        let groupInstitutions: { id: string; name: string }[] | undefined
+
+        // Gestor de rede: institution_id é NULL no banco — a unidade
+        // "efetiva" vem de active_institution_id (ver switch_active_institution
+        // / migration school_groups). Sem seleção prévia válida, cai na
+        // primeira unidade do grupo por padrão.
+        if (data.user_type === 'gestor_rede' && data.school_group_id) {
+          const { data: groupInsts } = await supabase
+            .from('institutions')
+            .select('id, name')
+            .eq('school_group_id', data.school_group_id)
+            .order('name')
+          groupInstitutions = (groupInsts as { id: string; name: string }[]) || []
+
+          let activeId = data.active_institution_id as string | null
+          const stillInGroup = !!activeId && groupInstitutions.some(i => i.id === activeId)
+          if (!stillInGroup) {
+            activeId = groupInstitutions[0]?.id || null
+            if (activeId) {
+              const { error: switchErr } = await supabase.rpc('switch_active_institution', { target_institution_id: activeId })
+              if (switchErr) console.error('switch_active_institution error:', switchErr)
+            }
+          }
+          effectiveInstitutionId = activeId || ''
+          institutionName = groupInstitutions.find(i => i.id === activeId)?.name
+        }
+
         const appUser: AppUser = {
-          id:               data.id,
-          full_name:        data.full_name        || '',
-          email:            data.email            || '',
-          role:             data.role             || 'user',
-          institution_id:   data.institution_id   || '',
-          active:           data.active           ?? true,
-          user_type:        data.user_type,
-          institution_name: (data as any).institutions?.name,
+          id:                 data.id,
+          full_name:          data.full_name        || '',
+          email:              data.email            || '',
+          role:               data.role             || 'user',
+          institution_id:     effectiveInstitutionId,
+          active:             data.active           ?? true,
+          user_type:          data.user_type,
+          institution_name:   institutionName,
           // is_super_admin: mantido por compatibilidade
-          is_super_admin:   data.user_type === 'admin_geral',
+          is_super_admin:     data.user_type === 'admin_geral',
+          school_group_id:    data.school_group_id || undefined,
+          group_institutions: groupInstitutions,
         }
         setUser(appUser)
       }
@@ -132,6 +176,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sessionStorage.clear()
       window.location.href = '/login'
     }
+  }
+
+  // ── switchInstitution (gestor de rede) ─────────────────
+  // Único jeito permitido de trocar a unidade ativa: o RPC valida
+  // server-side que institutionId pertence ao mesmo school_group_id do
+  // usuário antes de gravar, então não dá pra "escolher" uma instituição de
+  // outro grupo por aqui. Recarrega o profile pra refletir a nova unidade em
+  // todo o painel (Kanban, financeiro, WhatsApp etc.) sem logout/login.
+  const switchInstitution = async (institutionId: string) => {
+    const { error } = await supabase.rpc('switch_active_institution', { target_institution_id: institutionId })
+    if (error) {
+      console.error('switchInstitution error:', error)
+      throw error
+    }
+    if (session?.user) await loadUserProfile(session.user.id)
   }
 
   // ── signUp ────────────────────────────────────────────
@@ -177,7 +236,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [session?.access_token])
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, initializing, signIn, signOut, signUp, refreshSession }}>
+    <AuthContext.Provider value={{ user, session, loading, initializing, signIn, signOut, signUp, refreshSession, switchInstitution }}>
       {children}
     </AuthContext.Provider>
   )

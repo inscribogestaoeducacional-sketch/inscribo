@@ -311,7 +311,7 @@ function SettingsTab({ aionPlatformId }: { aionPlatformId: string }) {
       </div>
 
       {/* Respostas Rápidas */}
-      <QuickRepliesSection institutionId={aionPlatformId} />
+      <QuickRepliesSection platformWhatsappId={aionPlatformId} />
 
       {/* Salvar */}
       <button onClick={save} disabled={saving}
@@ -333,10 +333,11 @@ function SettingsTab({ aionPlatformId }: { aionPlatformId: string }) {
 
 // ─── QuickRepliesSection ─────────────────────────────────────────────────────
 // Reaproveita whatsapp_quick_replies (mesma tabela do lado escola —
-// WhatsAppHub.tsx / SystemSettings.tsx) usando platform_whatsapp.id como
-// pseudo-institution_id, igual o FlowEditor já faz com whatsapp_flows.
-// Ver migration 20260802000100_whatsapp_quick_replies_aion_inbox.sql pro
-// motivo de precisar de policies de RLS adicionais pra isso funcionar.
+// WhatsAppHub.tsx / SystemSettings.tsx) usando a coluna platform_whatsapp_id
+// (dono explícito, não mais um pseudo-institution_id — ver migration
+// 20260812001200_whatsapp_flows_quick_replies_pseudo_owner.sql: a coluna
+// institution_id tem FK pra institutions e nunca aceitaria o id do Inbox
+// Áion; era por isso que salvar resposta rápida aqui sempre falhava).
 
 interface AionQuickReply {
   id: string
@@ -348,7 +349,7 @@ interface AionQuickReply {
 
 const EMPTY_QR = { title: '', message: '', shortcut: '' }
 
-function QuickRepliesSection({ institutionId }: { institutionId: string }) {
+function QuickRepliesSection({ platformWhatsappId }: { platformWhatsappId: string }) {
   const [items, setItems]         = useState<AionQuickReply[]>([])
   const [loading, setLoading]     = useState(true)
   const [showForm, setShowForm]   = useState(false)
@@ -360,13 +361,13 @@ function QuickRepliesSection({ institutionId }: { institutionId: string }) {
     const { data } = await supabase
       .from('whatsapp_quick_replies')
       .select('id, title, message, shortcut, order_index')
-      .eq('institution_id', institutionId)
+      .eq('platform_whatsapp_id', platformWhatsappId)
       .order('order_index', { ascending: true })
     setItems((data as AionQuickReply[]) ?? [])
     setLoading(false)
   }
 
-  useEffect(() => { if (institutionId) load() }, [institutionId])
+  useEffect(() => { if (platformWhatsappId) load() }, [platformWhatsappId])
 
   const startNew = () => { setEditingId(null); setForm({ ...EMPTY_QR }); setShowForm(true) }
   const startEdit = (item: AionQuickReply) => {
@@ -388,7 +389,7 @@ function QuickRepliesSection({ institutionId }: { institutionId: string }) {
         .eq('id', editingId)
     } else {
       await supabase.from('whatsapp_quick_replies').insert({
-        institution_id: institutionId,
+        platform_whatsapp_id: platformWhatsappId,
         title:          form.title.trim(),
         message:        form.message.trim(),
         shortcut,
@@ -3477,7 +3478,7 @@ export default function AdminAionInbox() {
           {tab === 'inbox' && <AionInboxHub isAionInbox={true} />}
           {tab === 'flow' && (
             aionPlatformId
-              ? <FlowEditor institutionId={aionPlatformId} onClose={() => setTab('inbox')} />
+              ? <FlowEditor institutionId={aionPlatformId} ownerType="platform" onClose={() => setTab('inbox')} />
               : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                   <Loader2 style={{ width: 28, height: 28, color: '#00A896', animation: 'spin 1s linear infinite' }} />
                 </div>

@@ -3272,9 +3272,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
     // 2. Mark as closed locally (filter hides it for 'abertos', keeps it for 'ambos')
     console.log('[CLOSE 3] marcando como closed no estado local')
+    // Mantém assigned_user_id local igual ao que closeConversation() agora
+    // grava no banco — zerá-lo aqui faria a conversa cair fora de
+    // filteredMyConvs/RLS e "sumir" da aba Concluídas.
     setConversations(prev => prev.map(c =>
       c.id === convId
-        ? { ...c, status: 'closed' as ConvStatus, bot_active: false, assigned_user_id: undefined, assigned_user_name: undefined }
+        ? { ...c, status: 'closed' as ConvStatus, bot_active: false }
         : c
     ))
     console.log('[CLOSE 4] setActiveId null')

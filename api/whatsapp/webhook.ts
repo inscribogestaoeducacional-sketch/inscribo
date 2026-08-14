@@ -213,6 +213,294 @@ async function sendInteractiveMenu(
   }
 }
 
+// ── Grupos Escolares: WhatsApp compartilhado (pré-roteamento) ───────────────
+// Versões de sendAutoMessage/sendInteractiveMenu que buscam as credenciais em
+// whatsapp_phone_numbers por school_group_id em vez de institution_id — usadas
+// SÓ enquanto o contato ainda não escolheu a unidade (nenhuma institution real
+// resolvida ainda). De propósito não gravam em whatsapp_messages: ainda não
+// existe uma conversa de uma institution real pra anexar a mensagem. O rastro
+// dessa fase fica só no whatsapp_conversations de pré-roteamento
+// (institution_id NULL + school_group_id preenchido).
+async function sendGroupAutoMessage(schoolGroupId: string, to: string, text: string): Promise<void> {
+  try {
+    const { data: phone } = await supabase
+      .from('whatsapp_phone_numbers')
+      .select('phone_number_id')
+      .eq('school_group_id', schoolGroupId)
+      .eq('is_active', true)
+      .single()
+    const waConfig = await getWAConfig()
+    if (!phone?.phone_number_id || !waConfig.accessToken) return
+    await fetch(`${GRAPH_URL}/${phone.phone_number_id}/messages`, {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${waConfig.accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text', text: { body: text } }),
+    })
+  } catch (e) {
+    console.error('❌ sendGroupAutoMessage error:', e)
+  }
+}
+
+async function sendGroupInteractiveMenu(
+  schoolGroupId: string,
+  to:            string,
+  headerText:    string,
+  bodyText:      string,
+  options:       Array<{ text: string }>
+): Promise<void> {
+  const fallbackText = [headerText, options.map((o, i) => `${i + 1}. ${o.text}`).join('\n')]
+    .filter(Boolean).join('\n\n')
+  try {
+    const { data: phone } = await supabase
+      .from('whatsapp_phone_numbers')
+      .select('phone_number_id')
+      .eq('school_group_id', schoolGroupId)
+      .eq('is_active', true)
+      .single()
+    const waConfig = await getWAConfig()
+    if (!phone?.phone_number_id || !waConfig.accessToken) {
+      if (fallbackText.trim()) await sendGroupAutoMessage(schoolGroupId, to, fallbackText)
+      return
+    }
+
+    const count = Math.min(options.length, 10)
+    let interactive: any
+    if (count <= 3) {
+      interactive = {
+        type: 'button',
+        body: { text: (bodyText || headerText).slice(0, 1024) },
+        action: {
+          buttons: options.slice(0, 3).map((o, i) => ({
+            type: 'reply',
+            reply: { id: `opt_${i}`, title: o.text.slice(0, 20) },
+          })),
+        },
+      }
+      if (headerText && bodyText && headerText !== bodyText) {
+        interactive.header = { type: 'text', text: headerText.slice(0, 60) }
+      }
+    } else {
+      interactive = {
+        type: 'list',
+        body: { text: (bodyText || headerText).slice(0, 1024) },
+        action: {
+          button: 'Ver opções',
+          sections: [{
+            title: 'Opções',
+            rows: options.slice(0, 10).map((o, i) => ({
+              id: `opt_${i}`,
+              title: o.text.slice(0, 24),
+            })),
+          }],
+        },
+      }
+      if (headerText && bodyText && headerText !== bodyText) {
+        interactive.header = { type: 'text', text: headerText.slice(0, 60) }
+      }
+    }
+
+    const resp = await fetch(`${GRAPH_URL}/${phone.phone_number_id}/messages`, {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${waConfig.accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type:    'individual',
+        to,
+        type:              'interactive',
+        interactive,
+      }),
+    })
+
+    if (!resp.ok) {
+      console.error('[sendGroupInteractiveMenu] Meta error:', await resp.text())
+      if (fallbackText.trim()) await sendGroupAutoMessage(schoolGroupId, to, fallbackText)
+    }
+  } catch (e) {
+    console.error('❌ sendGroupInteractiveMenu error:', e)
+    try { if (fallbackText.trim()) await sendGroupAutoMessage(schoolGroupId, to, fallbackText) } catch {}
+  }
+}
+
+// Resolve o institution_id real a partir de uma mensagem chegada no WhatsApp
+// compartilhado de um school_group. Retorna o institution_id quando resolvido
+// (conversa já existente em alguma unidade do grupo, OU o contato acabou de
+// responder o menu de unidade com uma opção mapeada) — nesse caso o chamador
+// deixa o resto do webhook seguir 100% inalterado, idêntico ao caminho de
+// telefone dedicado a uma escola. Retorna null quando ainda não dá pra
+// resolver — a função já cuidou de mandar a mensagem/menu necessária, o
+// chamador só responde 200 e para.
+//
+// Suporta apenas os tipos de nó 'start' / 'message' / 'menu' no bot_flow do
+// grupo — os demais (transfer/action/lead/condition/...) não fazem sentido
+// antes de a unidade ser resolvida, já que dependem de uma institution real
+// (usuários, tags, leads etc. são todos escopados por institution_id).
+async function resolveOrRouteGroupSharedContact(
+  schoolGroupId: string,
+  value:         any
+): Promise<string | null> {
+  const msg = value.messages?.[0]
+  if (!msg) return null // status update etc. sem mensagem — nada pra rotear
+
+  const rawJid = (msg.from as string || '')
+    .replace(/@s\.whatsapp\.net$/, '')
+    .replace(/@g\.us$/, '')
+  if (!rawJid || rawJid.includes('@')) return null
+  const remoteJid = normalizePhone(rawJid)
+
+  // 1. Essa pessoa já tem conversa em alguma unidade do grupo? Já foi
+  //    triada antes — continua na mesma unidade, sem perguntar de novo.
+  const { data: groupInstitutions } = await supabase
+    .from('institutions')
+    .select('id')
+    .eq('school_group_id', schoolGroupId)
+  const groupInstIds = (groupInstitutions || []).map((i: any) => i.id)
+
+  if (groupInstIds.length) {
+    const { data: existingRows } = await supabase
+      .from('whatsapp_conversations')
+      .select('institution_id')
+      .eq('remote_jid', remoteJid)
+      .in('institution_id', groupInstIds)
+      .limit(1)
+    if (existingRows?.length) return existingRows[0].institution_id
+  }
+
+  // 2. Contato novo pro número compartilhado — roda o mini-fluxo de menu do
+  //    grupo (fonte: whatsapp_flows.school_group_id).
+  const { data: groupFlow } = await supabase
+    .from('whatsapp_flows')
+    .select('bot_flow, bot_enabled, is_active')
+    .eq('school_group_id', schoolGroupId)
+    .maybeSingle()
+
+  const bf = groupFlow?.bot_flow as { nodes: any[]; edges: any[] } | null
+  if (!groupFlow?.is_active || !groupFlow?.bot_enabled || !bf?.nodes?.length) {
+    console.log('[group-flow] sem fluxo de menu ativo pro grupo:', schoolGroupId)
+    return null
+  }
+
+  const { data: groupRow } = await supabase
+    .from('school_groups')
+    .select('menu_institution_map')
+    .eq('id', schoolGroupId)
+    .maybeSingle()
+  const menuMap: Array<{ option_index: number; institution_id: string }> = groupRow?.menu_institution_map || []
+
+  const msgType = msg.type as string
+  const text = msg.text?.body || ''
+  let interactiveChoiceId = ''
+  if (msgType === 'interactive') {
+    const ia = msg.interactive
+    if (ia?.type === 'button_reply') interactiveChoiceId = ia.button_reply?.id || ''
+    else if (ia?.type === 'list_reply') interactiveChoiceId = ia.list_reply?.id || ''
+  }
+
+  // Placeholder de conversa (institution_id NULL) — só existe pra rastrear
+  // bot_current_node/bot_variables até a unidade ser resolvida. Mesmo padrão
+  // já usado pelo Inbox Áion (institution_id NULL + is_aion_inbox).
+  const { data: placeholder } = await supabase
+    .from('whatsapp_conversations')
+    .select('id, bot_current_node, bot_variables')
+    .is('institution_id', null)
+    .eq('school_group_id', schoolGroupId)
+    .eq('remote_jid', remoteJid)
+    .maybeSingle()
+
+  let conversationId = placeholder?.id as string | undefined
+  let currentNodeId  = placeholder?.bot_current_node || 'start'
+  let variables: Record<string, string> = (placeholder?.bot_variables as any) || {}
+
+  if (!conversationId) {
+    const { data: created } = await supabase
+      .from('whatsapp_conversations')
+      .insert({
+        institution_id:   null,
+        school_group_id:  schoolGroupId,
+        remote_jid:       remoteJid,
+        status:           'waiting',
+        last_message:     text || `[${msgType}]`,
+        last_message_at:  new Date().toISOString(),
+      })
+      .select('id')
+      .maybeSingle()
+    conversationId = created?.id
+  }
+
+  const findNode = (id: string) => bf.nodes.find((n: any) => n.id === id)
+  const edgesFrom = (fromId: string): any[] => bf.edges.filter((e: any) => (e.fromNodeId ?? e.from) === fromId)
+  const nextId = (e: any): string => e.toNodeId ?? e.to
+
+  let current = findNode(currentNodeId)
+  if (!current) {
+    current = bf.nodes.find((n: any) => n.type === 'start')
+    currentNodeId = current?.id ?? 'start'
+  }
+
+  const persist = async () => {
+    if (conversationId) {
+      await supabase.from('whatsapp_conversations')
+        .update({ bot_current_node: currentNodeId, bot_variables: variables })
+        .eq('id', conversationId)
+    }
+  }
+
+  // Já mandamos o menu e essa mensagem é a resposta — resolve a unidade.
+  if (current?.type === 'menu' && variables[`__menu_sent_${currentNodeId}`]) {
+    const options = current.data?.options || []
+    let optIdx = -1
+    if (/^opt_\d+$/.test(interactiveChoiceId)) {
+      const parsed = parseInt(interactiveChoiceId.replace('opt_', ''), 10)
+      if (parsed >= 0 && parsed < options.length) optIdx = parsed
+    }
+    if (optIdx < 0) {
+      const choice = parseInt(text.trim(), 10)
+      if (!isNaN(choice)) optIdx = options.findIndex((o: any, i: number) => (o.number ?? i + 1) === choice)
+    }
+
+    const mapped = optIdx >= 0 ? menuMap.find(m => m.option_index === optIdx) : undefined
+    if (mapped?.institution_id) {
+      return mapped.institution_id
+    }
+
+    // Opção inválida ou sem unidade mapeada pra essa opção — reenvia o menu.
+    const menuHeader = current.data?.menuText || current.data?.text || 'Escolha uma opção:'
+    await sendGroupAutoMessage(schoolGroupId, remoteJid, 'Não entendi sua resposta 😊 Por favor escolha uma das opções abaixo:')
+    await sendGroupInteractiveMenu(schoolGroupId, remoteJid, menuHeader, menuHeader, options)
+    await persist()
+    return null
+  }
+
+  // Ainda não chegou no nó de menu — anda pelos nós (start/message) até
+  // achar um 'menu' e mandar as opções.
+  let guard = 10
+  while (current && guard-- > 0) {
+    if (current.type === 'start') {
+      const nexts = edgesFrom(current.id)
+      if (!nexts.length) { current = null; break }
+      currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId); continue
+    }
+    if (current.type === 'message') {
+      if (current.data?.text) await sendGroupAutoMessage(schoolGroupId, remoteJid, current.data.text)
+      const nexts = edgesFrom(current.id)
+      if (!nexts.length) { current = null; break }
+      currentNodeId = nextId(nexts[0]); current = findNode(currentNodeId); continue
+    }
+    if (current.type === 'menu') {
+      const options = current.data?.options || []
+      const menuHeader = current.data?.menuText || current.data?.text || 'Escolha uma opção:'
+      await sendGroupInteractiveMenu(schoolGroupId, remoteJid, menuHeader, menuHeader, options)
+      variables[`__menu_sent_${current.id}`] = '1'
+      currentNodeId = current.id
+      await persist()
+      return null
+    }
+    console.warn('[group-flow] tipo de nó não suportado no pré-roteamento:', current.type)
+    current = null
+  }
+
+  return null
+}
+
 // ── Send satisfaction survey buttons via Meta Cloud API ─────────────────────
 async function sendSatisfactionSurvey(institutionId: string, remoteJid: string, message: string): Promise<void> {
   try {
@@ -1921,7 +2209,7 @@ async function processAionMessage({
       const { data: wflow, error: wflowErr } = await supabase
         .from('whatsapp_flows')
         .select('*')
-        .eq('institution_id', platformWAId)
+        .eq('platform_whatsapp_id', platformWAId)
         .maybeSingle()
       if (wflowErr) console.error('❌ [aion] erro ao buscar whatsapp_flows:', wflowErr)
       if (wflow) {
@@ -2197,20 +2485,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Step A: look up in whatsapp_phone_numbers
       const { data: phoneRecord } = await supabase
         .from('whatsapp_phone_numbers')
-        .select('institution_id')
+        .select('institution_id, school_group_id')
         .eq('phone_number_id', phoneNumberId)
         .maybeSingle()
 
       let institutionId: string | null = phoneRecord?.institution_id ?? null
+      const schoolGroupId: string | null = phoneRecord?.school_group_id ?? null
 
-      // Step B: fallback to institutions.whatsapp_phone_id
-      if (!institutionId) {
+      // Step B: fallback to institutions.whatsapp_phone_id — só faz sentido
+      // pro caso de telefone dedicado a UMA escola (schoolGroupId null).
+      if (!institutionId && !schoolGroupId) {
         const { data: instRecord } = await supabase
           .from('institutions')
           .select('id')
           .eq('whatsapp_phone_id', phoneNumberId)
           .maybeSingle()
         institutionId = instRecord?.id ?? null
+      }
+
+      // Grupos Escolares — WhatsApp compartilhado entre unidades. Resolve pra
+      // um institution_id real (conversa já existente no grupo, ou acabou de
+      // responder o menu de unidade) e cai no MESMO caminho de baixo, sem
+      // nenhuma outra mudança — ou ainda não dá pra resolver (a função já
+      // mandou a mensagem/menu necessária) e simplesmente respondemos 200.
+      if (!institutionId && schoolGroupId) {
+        institutionId = await resolveOrRouteGroupSharedContact(schoolGroupId, value)
+        if (!institutionId) {
+          return res.status(200).json({ status: 'ok', reason: 'group_pre_routing' })
+        }
       }
 
       if (!institutionId) {

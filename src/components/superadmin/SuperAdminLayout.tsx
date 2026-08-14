@@ -7,7 +7,7 @@ import {
   Home, Building2, DollarSign, FileText, Settings,
   Bell, LogOut, UserCog, ChevronDown, X, Menu,
   TrendingUp, AlertCircle, CheckCircle2,
-  AlertTriangle, Info, BookOpen, Users, MessageCircle, Inbox, BarChart3
+  AlertTriangle, Info, BookOpen, Users, MessageCircle, Inbox, BarChart3, Network
 } from 'lucide-react'
 
 // ─── tipos ────────────────────────────────────────────────────────────────
@@ -41,7 +41,8 @@ const ADMIN_GROUPS: MenuGroup[] = [
   {
     title: 'Escolas',
     items: [
-      { path: '/super-admin/schools',    label: 'Escolas',       icon: Building2   },
+      { path: '/super-admin/schools',       label: 'Escolas',         icon: Building2 },
+      { path: '/super-admin/school-groups', label: 'Grupos Escolares', icon: Network  },
     ],
   },
   {

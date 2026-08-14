@@ -154,10 +154,17 @@ serve(async (req) => {
     //    continua disparando normalmente (é um trigger de tabela, roda
     //    independente de qual role fez o UPDATE), preservando o acesso do
     //    atendente anterior ao histórico como sempre fez. ──
+    // unread_count zerado aqui: sem isso, o contador acumulado antes da
+    // transferência sobrevive no badge do novo atendente, mas
+    // whatsapp_messages_select só libera pra ele mensagens com
+    // timestamp >= transferred_at — as mensagens que geraram aquele contador
+    // ficam invisíveis, então o badge mostra "não lidas" que não existem
+    // pra quem está olhando.
     const updatePayload: Record<string, unknown> = {
       assigned_user_id:   newUserId,
       assigned_user_name: newUserName,
       transferred_at:     new Date().toISOString(),
+      unread_count:       0,
     }
     if (fromUserId) updatePayload.transferred_from = fromUserId
 

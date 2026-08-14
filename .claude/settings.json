@@ -111,7 +111,12 @@
       "Bash(tee /tmp/tsc_nf.txt)",
       "Bash(xargs grep -l \"whatsapp_phone_number\\\\|phone_number_id\")",
       "Bash(tee /tmp/tsc_notif.txt)",
-      "Bash(grep -n \"'menu'\\\\|case 'menu'\\\\|opt-\\\\${\" api/whatsapp/webhook.ts)"
+      "Bash(grep -n \"'menu'\\\\|case 'menu'\\\\|opt-\\\\${\" api/whatsapp/webhook.ts)",
+      "Bash(./supabase.exe --version)",
+      "Bash(./supabase.exe projects *)",
+      "Bash(./supabase.exe db *)",
+      "Bash(./supabase.exe --help)",
+      "Bash(xargs grep -l \"POLICY\")"
     ],
     "additionalDirectories": [
       "\\tmp"

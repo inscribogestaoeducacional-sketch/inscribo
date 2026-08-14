@@ -57,6 +57,7 @@ import AdminWhatsApp    from './components/superadmin/AdminWhatsApp'
 import AdminAionInbox          from './components/superadmin/AdminAionInbox'
 import AdminMarketIntelligence from './components/superadmin/AdminMarketIntelligence'
 import ConsultantDetails       from './components/superadmin/ConsultantDetails'
+import AdminSchoolGroups       from './components/superadmin/AdminSchoolGroups'
 
 // ── Pending screen ────────────────────────────────────────────────────────
 import PendingScreen from './components/PendingScreen'
@@ -266,6 +267,8 @@ function AppContent() {
         <Route path="/super-admin/crm"                element={<AdminCRM />} />
         <Route path="/super-admin/schools"              element={<AdminSchools />} />
         <Route path="/super-admin/schools/:id"        element={<InstitutionDetails />} />
+        <Route path="/super-admin/school-groups"       element={<AdminSchoolGroups />} />
+        <Route path="/super-admin/school-groups/:id"   element={<AdminSchoolGroups />} />
         <Route path="/super-admin/market-intelligence" element={<AdminMarketIntelligence />} />
         <Route path="/super-admin/consultants"        element={<AdminConsultants />} />
         <Route path="/super-admin/consultants/:id"    element={<ConsultantDetails />} />

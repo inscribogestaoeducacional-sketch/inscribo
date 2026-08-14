@@ -1,8 +1,61 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { LogOut, Settings, User, Menu } from 'lucide-react'
+import { LogOut, Settings, User, Menu, Network, ChevronDown } from 'lucide-react'
 import NotificationBell from './NotificationBell'
+
+// Seletor de unidade pro "gestor de rede" — troca a instituição ativa (ver
+// AuthContext.switchInstitution) sem precisar logout/login. Só aparece pra
+// quem tem group_institutions (institution_id fixo continua igual pra todo
+// mundo, sem seletor nenhum).
+function InstitutionSwitcher() {
+  const { user, switchInstitution } = useAuth()
+  const [open, setOpen] = useState(false)
+  const [switching, setSwitching] = useState(false)
+
+  if (!user?.group_institutions || user.group_institutions.length < 2) return null
+
+  const handleSwitch = async (id: string) => {
+    if (id === user.institution_id) { setOpen(false); return }
+    setSwitching(true)
+    try { await switchInstitution(id) } catch { /* erro já logado no context */ }
+    setSwitching(false)
+    setOpen(false)
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        disabled={switching}
+        style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 12px', borderRadius: 10, background: '#F0FDFB', border: '0.5px solid #D1FAE5', cursor: 'pointer', color: '#1A2B4A' }}>
+        <Network size={14} color="#00A896" />
+        <span style={{ fontSize: 12.5, fontWeight: 600, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {user.institution_name || 'Selecionar unidade'}
+        </span>
+        <ChevronDown size={12} color="#94A3B8" />
+      </button>
+      {open && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setOpen(false)} />
+          <div style={{ position: 'absolute', left: 0, top: 'calc(100% + 8px)', background: '#fff', borderRadius: 12, border: '0.5px solid #D1FAE5', boxShadow: '0 8px 32px rgba(0,168,150,0.12)', zIndex: 50, minWidth: 220, overflow: 'hidden' }}>
+            <div style={{ padding: '10px 14px', borderBottom: '0.5px solid #E2E8F0', background: '#F0FDFB', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.3 }}>
+              Unidades da rede
+            </div>
+            {user.group_institutions.map(inst => (
+              <button key={inst.id} onClick={() => handleSwitch(inst.id)}
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px', fontSize: 13, border: 'none', background: inst.id === user.institution_id ? '#F0FDFB' : 'transparent', color: inst.id === user.institution_id ? '#00A896' : '#1A2B4A', fontWeight: inst.id === user.institution_id ? 700 : 500, cursor: 'pointer' }}
+                onMouseEnter={e => { if (inst.id !== user.institution_id) (e.currentTarget as HTMLElement).style.background = '#F8FAFC' }}
+                onMouseLeave={e => { if (inst.id !== user.institution_id) (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
+                {inst.name}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
 
 export default function TopBar() {
   const { user, signOut } = useAuth()
@@ -58,6 +111,9 @@ export default function TopBar() {
       </div>
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Seletor de unidade — só aparece pro gestor de rede */}
+        <InstitutionSwitcher />
+
         {/* Bell */}
         <NotificationBell institutionId={user?.institution_id || null} isSuperAdmin={user?.user_type === 'admin_geral'} />
 
