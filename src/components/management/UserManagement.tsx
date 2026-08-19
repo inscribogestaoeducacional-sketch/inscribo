@@ -218,7 +218,7 @@ function UserModal({ isOpen, onClose, onSave, editingUser }: {
 
           {!editingUser && (
             <div style={{ background: '#EFF6FF', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#1D4ED8' }}>
-              📧 O usuário receberá um e-mail de boas-vindas com as instruções de acesso.
+              🔑 Nenhum e-mail de boas-vindas é enviado automaticamente — anote a senha acima e compartilhe com o usuário diretamente.
             </div>
           )}
 
@@ -413,7 +413,7 @@ export default function UserManagement() {
         await supabase.from('user_permissions').upsert(rows, { onConflict: 'user_id,module' })
       }
 
-      showToast('Usuário criado! Email de boas-vindas enviado.')
+      showToast('Usuário criado! Compartilhe a senha com ele diretamente.')
     }
     setEditingUser(null)
     await loadUsers()

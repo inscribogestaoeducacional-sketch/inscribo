@@ -517,7 +517,7 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
                   <p className="text-xs text-cyan-700">✅ Criar usuário gestor para <strong>{form.email}</strong></p>
                   {!form.isFree && <p className="text-xs text-cyan-700">✅ Enviar contrato digital via Autentique para assinatura</p>}
                   {!form.isFree && <p className="text-xs text-cyan-700">✅ Gerar cobrança de implantação no Asaas (R$ {form.implementationValue})</p>}
-                  {!form.isFree && <p className="text-xs text-cyan-700">✅ Enviar e-mail com link de pagamento ao gestor</p>}
+                  {!form.isFree && <p className="text-xs text-cyan-700">✅ Enviar e-mail com link de pagamento ao gestor assim que o contrato for assinado</p>}
                   {form.isFree && <p className="text-xs text-cyan-700">✅ Enviar e-mail de acesso imediato ao gestor</p>}
                   <p className="text-xs text-cyan-700">✅ Converter lead para cliente no CRM</p>
                 </div>

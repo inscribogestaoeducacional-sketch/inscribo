@@ -2,6 +2,7 @@ import { supabase } from './supabase'
 
 export type EmailType =
   | 'new_institution'
+  | 'gestor_welcome'
   | 'payment_link'
   | 'monthly_payment'
   | 'contract_sign'

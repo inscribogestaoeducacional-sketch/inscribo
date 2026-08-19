@@ -5,57 +5,88 @@ const BREVO_KEY = Deno.env.get('BREVO_API_KEY')
 const FROM_EMAIL = 'noreply@aionedu.com.br'
 const FROM_NAME = 'Aion Edu'
 const LOGO_URL = 'https://www.aionedu.com.br/aion-logo-full.png'
-const SUPPORT_PHONE = '(83) 98556-6393'
 const SUPPORT_WA = 'https://wa.me/5583985556393'
 // Numero comercial (vendas/demo) — mesmo usado em RaioXPage.tsx, Landing.tsx e Footer.tsx.
 const SALES_WA = 'https://wa.me/5583993444383'
+const SITE_URL = 'https://aionedu.com.br'
+const INSTAGRAM_URL = 'https://instagram.com/aioneduu'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Fontes de marca (Bricolage Grotesque / Plus Jakarta Sans) nao carregam em
+// e-mail — quase todo cliente bloqueia @font-face. Fallback de sistema visualmente
+// proximo, ja usado no restante do sistema; peso tipografico (700/800) fica a
+// cargo do font-weight, nao da fonte em si.
+const FONT_STACK = `'Helvetica Neue',Helvetica,Arial,sans-serif`
+
+const footerLink = (label: string, url: string) =>
+  `<td style="padding:0 10px;"><a href="${url}" style="font-family:${FONT_STACK};color:rgba(255,255,255,0.75);font-size:12px;font-weight:600;text-decoration:none;">${label}</a></td>`
+const footerDivider = () =>
+  `<td style="color:rgba(255,255,255,0.25);font-size:12px;">&middot;</td>`
+
+// Dark mode: a maioria dos e-mails abaixo usa cores fixas dentro do cartao
+// branco (badges/boxes com cores semanticas variadas por template — ver
+// helpers h1/box), entao o cartao de conteudo permanece SEMPRE branco,
+// independente do tema do cliente (evita qualquer risco de contraste ruim
+// nas 14 combinacoes de cor ja usadas pelos templates). O que de fato adapta
+// ao dark mode e a "moldura" ao redor do cartao (bg do body/tabela externa),
+// via custom property com fallback inline (var() + declaracao dupla) + classe
+// com !important como reforco pra clientes que nao entendem var() em style
+// inline mas entendem @media dentro de <style> (Gmail, Outlook novo). Cabecalho
+// e rodape ja sao escuros por design e nao mudam entre os dois temas.
 const wrap = (content: string, preheader = '') => `
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <meta name="x-apple-disable-message-reformatting">
   <title>Aion Edu</title>
-  ${preheader ? `<span style="display:none;max-height:0;overflow:hidden;">${preheader}</span>` : ''}
+  ${preheader ? `<span style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${preheader}</span>` : ''}
+  <style>
+    :root { color-scheme: light dark; supported-color-schemes: light dark; }
+    @media (prefers-color-scheme: dark) {
+      .aion-canvas { background-color: #0B1220 !important; }
+    }
+  </style>
 </head>
-<body style="margin:0;padding:0;background:#F0F4F8;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F0F4F8;padding:40px 0;">
+<body class="aion-canvas" style="margin:0;padding:0;background-color:#F0F4F8;background-color:var(--aion-canvas,#F0F4F8);font-family:${FONT_STACK};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="aion-canvas" style="background-color:#F0F4F8;background-color:var(--aion-canvas,#F0F4F8);padding:40px 0;">
     <tr>
       <td align="center">
-        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
           <tr>
             <td style="background:linear-gradient(135deg,#00523C 0%,#00A896 100%);border-radius:16px 16px 0 0;padding:36px 40px;text-align:center;">
-              <img src="${LOGO_URL}" alt="Aion Edu" height="48" style="display:block;margin:0 auto;filter:brightness(0) invert(1);" />
-              <p style="color:rgba(255,255,255,0.85);margin:12px 0 0;font-size:13px;letter-spacing:0.5px;">Sistema de Gestao Educacional</p>
+              <img src="${LOGO_URL}" alt="Aion Edu" height="44" style="display:block;margin:0 auto;border:0;outline:none;filter:brightness(0) invert(1);" />
+              <p style="font-family:${FONT_STACK};color:rgba(255,255,255,0.85);margin:14px 0 0;font-size:13px;letter-spacing:0.5px;">Sistema de Gestao Educacional</p>
             </td>
           </tr>
           <tr>
-            <td style="background:#ffffff;padding:40px;border-left:1px solid #E2E8F0;border-right:1px solid #E2E8F0;">
+            <td style="background-color:#ffffff;padding:40px;border-left:1px solid #E2E8F0;border-right:1px solid #E2E8F0;">
               ${content}
             </td>
           </tr>
           <tr>
-            <td style="background:#1A2B4A;border-radius:0 0 16px 16px;padding:28px 40px;text-align:center;">
-              <p style="color:rgba(255,255,255,0.9);font-size:13px;margin:0 0 8px;font-weight:600;">Aion Solucoes Tecnologicas LTDA</p>
-              <p style="color:rgba(255,255,255,0.6);font-size:12px;margin:0 0 16px;">CNPJ: 65.835.064/0001-58 &middot; Patos/PB</p>
-              <table cellpadding="0" cellspacing="0" style="margin:0 auto;">
+            <td style="background-color:#1A2B4A;border-radius:0 0 16px 16px;padding:32px 40px;text-align:center;">
+              <p style="font-family:${FONT_STACK};color:rgba(255,255,255,0.9);font-size:13px;margin:0 0 6px;font-weight:600;">Aion Solucoes Tecnologicas LTDA</p>
+              <p style="font-family:${FONT_STACK};color:rgba(255,255,255,0.55);font-size:12px;margin:0 0 18px;">CNPJ: 65.835.064/0001-58 &middot; Patos/PB</p>
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 18px;">
                 <tr>
-                  <td style="padding:0 8px;">
-                    <a href="mailto:contato@aionedu.com.br" style="color:rgba(255,255,255,0.7);font-size:12px;text-decoration:none;">contato@aionedu.com.br</a>
-                  </td>
-                  <td style="color:rgba(255,255,255,0.3);font-size:12px;">|</td>
-                  <td style="padding:0 8px;">
-                    <a href="${SUPPORT_WA}" style="color:rgba(255,255,255,0.7);font-size:12px;text-decoration:none;">${SUPPORT_PHONE}</a>
-                  </td>
+                  ${footerLink('&#128172; Suporte', SUPPORT_WA)}
+                  ${footerDivider()}
+                  ${footerLink('&#128222; Comercial', SALES_WA)}
+                  ${footerDivider()}
+                  ${footerLink('&#127760; aionedu.com.br', SITE_URL)}
+                  ${footerDivider()}
+                  ${footerLink('&#128247; @aioneduu', INSTAGRAM_URL)}
                 </tr>
               </table>
-              <p style="color:rgba(255,255,255,0.3);font-size:11px;margin:16px 0 0;">&copy; ${new Date().getFullYear()} Aion Edu &middot; Todos os direitos reservados</p>
+              <p style="font-family:${FONT_STACK};color:rgba(255,255,255,0.3);font-size:11px;margin:0;">&copy; ${new Date().getFullYear()} Aion Edu &middot; Todos os direitos reservados</p>
             </td>
           </tr>
         </table>
@@ -67,10 +98,10 @@ const wrap = (content: string, preheader = '') => `
 `
 
 const btn = (text: string, url: string, color = '#00A896') => `
-  <table cellpadding="0" cellspacing="0" style="margin:24px auto;">
+  <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px auto;">
     <tr>
-      <td style="background:${color};border-radius:12px;">
-        <a href="${url}" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;letter-spacing:0.3px;">${text}</a>
+      <td style="background-color:${color};border-radius:10px;">
+        <a href="${url}" style="display:inline-block;font-family:${FONT_STACK};padding:14px 36px;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;letter-spacing:0.3px;">${text}</a>
       </td>
     </tr>
   </table>
@@ -80,19 +111,19 @@ const badge = (text: string, bgColor = '#00A896', textColor?: string) => {
   const tc = textColor || bgColor
   const bg = textColor ? bgColor : bgColor + '18'
   const border = textColor ? bgColor : bgColor + '40'
-  return `<span style="display:inline-block;background:${bg};color:${tc};font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;border:1px solid ${border};">${text}</span>`
+  return `<span style="display:inline-block;font-family:${FONT_STACK};background-color:${bg};color:${tc};font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;border:1px solid ${border};">${text}</span>`
 }
 
 const h1 = (text: string, color = '#1A2B4A') =>
-  `<h1 style="color:${color};font-size:24px;font-weight:800;margin:16px 0 8px;">${text}</h1>`
+  `<h1 style="font-family:${FONT_STACK};color:${color};font-size:24px;font-weight:800;line-height:1.3;margin:16px 0 8px;">${text}</h1>`
 
 const p = (text: string) =>
-  `<p style="color:#475569;font-size:15px;line-height:1.7;margin:0 0 24px;">${text}</p>`
+  `<p style="font-family:${FONT_STACK};color:#475569;font-size:15px;line-height:1.7;margin:0 0 24px;">${text}</p>`
 
 const box = (content: string, bgColor = '#F0FDF4', borderColor = '#BBF7D0', textColor = '#166534') => `
-  <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;">
     <tr>
-      <td style="background:${bgColor};border:1px solid ${borderColor};border-radius:12px;padding:20px;color:${textColor};font-size:14px;line-height:1.7;">
+      <td style="background-color:${bgColor};border:1px solid ${borderColor};border-radius:12px;padding:20px;font-family:${FONT_STACK};color:${textColor};font-size:14px;line-height:1.7;">
         ${content}
       </td>
     </tr>
@@ -104,7 +135,7 @@ const infoBox = box
 const divider = () => `<hr style="border:none;border-top:1px solid #E2E8F0;margin:24px 0;">`
 
 const supportLine = () =>
-  `<p style="color:#94A3B8;font-size:13px;text-align:center;margin:0;">Duvidas? <a href="${SUPPORT_WA}" style="color:#00A896;text-decoration:none;font-weight:600;">Fale com seu consultor via WhatsApp</a></p>`
+  `<p style="font-family:${FONT_STACK};color:#94A3B8;font-size:13px;text-align:center;margin:0;">Duvidas? <a href="${SUPPORT_WA}" style="color:#00A896;text-decoration:none;font-weight:600;">Fale com seu consultor via WhatsApp</a></p>`
 
 const templates: Record<string, (data: any) => { subject: string; html: string }> = {
 
@@ -121,6 +152,39 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
           <tr><td style="padding:4px 0;">Cadastrar sua equipe</td></tr>
           <tr><td style="padding:4px 0;">Configurar o WhatsApp Business</td></tr>
           <tr><td style="padding:4px 0;">Criar sua primeira campanha de matricula</td></tr>
+        </table>
+      `)}
+      ${btn('Acessar o sistema', data.login_url || 'https://app.aionedu.com.br/login')}
+      ${divider()}
+      ${supportLine()}
+    `)
+  }),
+
+  // Boas-vindas ao gestor ao concluir a configuracao inicial da campanha
+  // (SchoolSetupModal.tsx) — pessoa ja esta logada nesse momento, por isso
+  // NAO ha senha aqui (so credenciais quando data.temp_password vier
+  // preenchido, util caso este template seja reaproveitado no futuro por um
+  // fluxo de criacao de conta que gere senha provisoria).
+  gestor_welcome: (data) => ({
+    subject: `Tudo pronto, ${data.gestor_name || 'gestor(a)'}! Sua campanha ja esta rodando`,
+    html: wrap(`
+      <p style="margin:0 0 4px;">${badge('Configuracao concluida', '#16A34A', '#166534')}</p>
+      ${h1(`Bem-vindo(a), ${data.gestor_name || 'gestor(a)'}!`, '#166534')}
+      ${p(`A configuracao inicial da <strong>${data.school_name || 'sua escola'}</strong> foi concluida com sucesso. Sua campanha de matriculas ja esta pronta pra rodar na Aion Edu.`)}
+      ${box(`
+        <strong style="display:block;margin-bottom:12px;">Seus dados de acesso:</strong>
+        <table cellpadding="0" cellspacing="0" width="100%">
+          <tr><td style="padding:4px 0;font-size:14px;">E-mail</td><td style="padding:4px 0;font-size:14px;font-weight:700;text-align:right;">${data.email || ''}</td></tr>
+          ${data.temp_password ? `<tr><td style="padding:4px 0;font-size:14px;">Senha provisoria</td><td style="padding:4px 0;font-size:14px;font-weight:700;text-align:right;">${data.temp_password}</td></tr>` : ''}
+        </table>
+      `)}
+      ${box(`
+        <strong style="display:block;margin-bottom:12px;">Primeiros passos:</strong>
+        <table cellpadding="0" cellspacing="0">
+          <tr><td style="padding:4px 0;">Acompanhar o painel de gestao</td></tr>
+          <tr><td style="padding:4px 0;">Cadastrar sua equipe de atendimento</td></tr>
+          <tr><td style="padding:4px 0;">Configurar o WhatsApp Business</td></tr>
+          <tr><td style="padding:4px 0;">Acompanhar os primeiros leads chegando</td></tr>
         </table>
       `)}
       ${btn('Acessar o sistema', data.login_url || 'https://app.aionedu.com.br/login')}

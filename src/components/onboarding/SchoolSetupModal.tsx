@@ -300,15 +300,22 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
         .eq('id', institutionId)
       console.log('[SchoolSetupModal] institution error:', instError)
 
-      // Envia e-mail de boas-vindas ao gestor
-      const latestHistorical = historicalPayload.sort((a, b) => b.detected_year - a.detected_year)[0]
-      const gestorEmail = (await supabase.auth.getUser()).data.user?.email
-      if (gestorEmail) {
-        await sendEmail('welcome', gestorEmail, {
-          school_name: schoolData.name,
-          total_students: latestHistorical?.total_students ?? 0,
-          year: campaignYear,
-        })
+      // Envia e-mail de boas-vindas ao gestor — só na primeira vez que o ciclo
+      // é criado (nunca em edição/reconfiguração de um ciclo já existente,
+      // pra não reenviar "boas-vindas" toda vez que o gestor mexe no setup).
+      // 'welcome' não existia em EmailType nem nos templates do send-email —
+      // corrigido pra 'gestor_welcome' (ver supabase/functions/send-email).
+      if (!editMode && !existing?.id) {
+        const { data: authData } = await supabase.auth.getUser()
+        const gestorEmail = authData.user?.email
+        if (gestorEmail) {
+          await sendEmail('gestor_welcome', gestorEmail, {
+            gestor_name: authData.user?.user_metadata?.full_name || '',
+            school_name: schoolData.name,
+            email: gestorEmail,
+            login_url: 'https://app.aionedu.com.br/login',
+          })
+        }
       }
 
       onComplete()

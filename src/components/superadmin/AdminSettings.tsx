@@ -92,57 +92,6 @@ const CONTRACT_VARS = [
   { key: '{{data_hoje}}',         desc: 'Data atual' },
 ]
 
-const EMAIL_VARS = [
-  { key: '{{gestor}}',            desc: 'Nome do gestor' },
-  { key: '{{escola}}',            desc: 'Nome da escola' },
-  { key: '{{valor_implantacao}}', desc: 'Taxa de implantação' },
-  { key: '{{valor_mensal}}',      desc: 'Mensalidade' },
-  { key: '{{link_pagamento}}',    desc: 'Link de pagamento' },
-  { key: '{{link_acesso}}',       desc: 'Link de acesso' },
-  { key: '{{email_acesso}}',      desc: 'E-mail de acesso' },
-  { key: '{{consultor}}',         desc: 'Consultor responsável' },
-  { key: '{{dias_atraso}}',       desc: 'Dias em atraso' },
-  { key: '{{data_suspensao}}',    desc: 'Data de suspensão' },
-]
-
-function TemplateEditor({ value, onChange, vars, rows = 10, placeholder }:
-  { value: string; onChange: (v: string) => void; vars: typeof CONTRACT_VARS; rows?: number; placeholder?: string }) {
-  const ref = useRef<HTMLTextAreaElement>(null)
-  const insertVar = (v: string) => {
-    const ta = ref.current
-    if (!ta) { onChange(value + v); return }
-    const start = ta.selectionStart
-    const end = ta.selectionEnd
-    const newVal = value.substring(0, start) + v + value.substring(end)
-    onChange(newVal)
-    setTimeout(() => { ta.setSelectionRange(start + v.length, start + v.length); ta.focus() }, 0)
-  }
-  return (
-    <div className="space-y-2">
-      <div>
-        <p className="text-xs font-semibold text-gray-500 mb-1.5">Variáveis disponíveis — clique para inserir</p>
-        <div className="flex flex-wrap gap-1.5">
-          {vars.map(v => (
-            <button key={v.key} onClick={() => insertVar(v.key)} title={v.desc}
-              className="text-xs px-2 py-1 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded-md hover:bg-cyan-100 font-mono transition-colors">
-              {v.key}
-            </button>
-          ))}
-        </div>
-      </div>
-      <textarea
-        ref={ref}
-        rows={rows}
-        className={inp + ' font-mono text-xs resize-y'}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-      />
-      <p className={hint}>Escreva em HTML para e-mails. Para o contrato, texto simples ou HTML são aceitos.</p>
-    </div>
-  )
-}
-
 function RichTextEditor({ value, onChange, vars }: {
   value: string
   onChange: (v: string) => void
@@ -251,10 +200,6 @@ const DEFAULTS: Settings = {
   asaas_environment: 'production',
   // Autentique
   autentique_api_token: '',
-  // Brevo
-  brevo_api_key: '',
-  brevo_from_email: 'noreply@aionedu.com.br',
-  brevo_from_name: 'Áion Edu',
   // Inadimplência
   overdue_warning1_days: '3',
   overdue_warning2_days: '7',
@@ -267,68 +212,12 @@ const DEFAULTS: Settings = {
   platform_whatsapp: '5583985556393',
   platform_email: 'contato@aionedu.com.br',
   platform_site: 'https://aionedu.com.br',
-  // Templates de e-mail
-  email_template_welcome_pending: '',
-  email_template_welcome_free: '',
-  email_template_payment_confirmed: '',
-  email_template_overdue_1: '',
-  email_template_overdue_2: '',
-  email_template_overdue_3: '',
-  email_template_overdue_4: '',
-  email_template_suspended: '',
-  email_template_reactivated: '',
   // Template do contrato
   contract_template_text: '',
   // Google Meet
   google_calendar_id:         '',
   google_oauth_refresh_token: '',
 }
-
-const DEFAULT_EMAIL_WELCOME_PENDING = `<h2>Olá, {{gestor}}! 👋</h2>
-<p>Seja muito bem-vindo(a) à <strong>Áion Edu</strong>!</p>
-<p>Sua escola <strong>{{escola}}</strong> foi cadastrada em nossa plataforma. Para liberar o acesso completo, siga os passos abaixo:</p>
-<ol>
-  <li><strong>Assine o contrato</strong> — você receberá o link em breve</li>
-  <li><strong>Realize o pagamento da implantação</strong> de {{valor_implantacao}}</li>
-</ol>
-{{#if link_pagamento}}
-<p><a href="{{link_pagamento}}" style="background:#00A896;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Pagar agora</a></p>
-{{/if}}
-<p>Após a confirmação, você receberá os dados de acesso ao sistema.</p>
-<p>Dúvidas? Fale com seu consultor: <strong>{{consultor}}</strong></p>
-<p>Equipe Áion Edu</p>`
-
-const DEFAULT_EMAIL_PAYMENT_CONFIRMED = `<h2>Pagamento confirmado! 🎉</h2>
-<p>Olá, <strong>{{gestor}}</strong>!</p>
-<p>Recebemos o pagamento da implantação da escola <strong>{{escola}}</strong>. Seu acesso está liberado!</p>
-<p><strong>Dados de acesso:</strong></p>
-<ul>
-  <li>E-mail: {{email_acesso}}</li>
-  <li>Link: <a href="{{link_acesso}}">{{link_acesso}}</a></li>
-</ul>
-<p>Seu consultor <strong>{{consultor}}</strong> entrará em contato para agendar o kickoff de implantação.</p>
-<p>Equipe Áion Edu</p>`
-
-const DEFAULT_EMAIL_OVERDUE_1 = `<h2>Lembrete de pagamento</h2>
-<p>Olá, <strong>{{gestor}}</strong>!</p>
-<p>Identificamos que a mensalidade da escola <strong>{{escola}}</strong> está com {{dias_atraso}} dias de atraso.</p>
-<p>Para evitar a suspensão do sistema, realize o pagamento o quanto antes.</p>
-{{#if link_pagamento}}<p><a href="{{link_pagamento}}">Clique aqui para pagar</a></p>{{/if}}
-<p>Equipe Áion Edu</p>`
-
-const DEFAULT_EMAIL_OVERDUE_4 = `<h2>Mensalidade em atraso</h2>
-<p>Olá, <strong>{{gestor}}</strong>!</p>
-<p>A mensalidade da escola <strong>{{escola}}</strong> está com {{dias_atraso}} dias de atraso. Pedimos que regularize o quanto antes para manter tudo em dia.</p>
-{{#if link_pagamento}}<p><a href="{{link_pagamento}}">Pagar agora</a></p>{{/if}}
-<p>Se já efetuou o pagamento ou precisar de ajuda, fale com seu consultor.</p>
-<p>Equipe Áion Edu</p>`
-
-const DEFAULT_EMAIL_SUSPENDED = `<h2>Sistema suspenso ⚠️</h2>
-<p>Olá, <strong>{{gestor}}</strong>!</p>
-<p>O acesso da escola <strong>{{escola}}</strong> foi suspenso por falta de pagamento ({{dias_atraso}} dias em atraso).</p>
-<p>Para reativar, regularize o pagamento pendente:</p>
-{{#if link_pagamento}}<p><a href="{{link_pagamento}}" style="background:#EF4444;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Regularizar agora</a></p>{{/if}}
-<p>Equipe Áion Edu</p>`
 
 const DEFAULT_CONTRACT = `CONTRATO DE PRESTAÇÃO DE SERVIÇOS
 
@@ -911,29 +800,7 @@ export default function AdminSettings() {
           </div>
         </Section>
 
-        {/* ── 7. Brevo ── */}
-        <Section icon={Mail} title="Brevo — E-mails automáticos" subtitle="Chave API e configurações de envio" color="teal">
-          <div>
-            <label className={lbl}>Chave API Brevo</label>
-            <SecretInput value={settings.brevo_api_key} onChange={v => set('brevo_api_key', v)} placeholder="xkeysib-..." />
-            <p className={hint}>Obtida em <span className="font-medium">brevo.com → Configurações → Chaves API</span></p>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={lbl}>E-mail remetente</label>
-              <input type="email" className={inp} value={settings.brevo_from_email} onChange={e => set('brevo_from_email', e.target.value)} placeholder="noreply@aionedu.com.br" />
-            </div>
-            <div>
-              <label className={lbl}>Nome remetente</label>
-              <input className={inp} value={settings.brevo_from_name} onChange={e => set('brevo_from_name', e.target.value)} placeholder="Áion Edu" />
-            </div>
-          </div>
-          <div className="flex justify-end pt-2">
-            <SaveBtn keys={['brevo_api_key','brevo_from_email','brevo_from_name']} id="brevo" />
-          </div>
-        </Section>
-
-        {/* ── 8. Google Meet ── */}
+        {/* ── 7. Google Meet ── */}
         <Section icon={Video} title="Google Meet — Videoconferências" subtitle="Integração com Google Calendar para geração automática de links" color="cyan">
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3 text-sm text-blue-800">
             <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -986,100 +853,6 @@ export default function AdminSettings() {
           <div className="flex justify-end pt-2">
             <SaveBtn keys={['google_calendar_id']} id="google_meet" />
           </div>
-        </Section>
-
-        {/* ── 9. Templates de e-mail ── */}
-        <Section icon={Mail} title="Templates de e-mail" subtitle="Personalize cada e-mail automático do sistema" color="cyan">
-          {[
-            {
-              id: 'email_template_welcome_pending',
-              label: '🎉 Boas-vindas — aguardando pagamento',
-              desc: 'Enviado ao gestor quando a escola é criada',
-              default: DEFAULT_EMAIL_WELCOME_PENDING,
-            },
-            {
-              id: 'email_template_welcome_free',
-              label: '🎁 Boas-vindas — acesso gratuito',
-              desc: 'Enviado ao gestor de escola gratuita com dados de acesso',
-              default: `<h2>Bem-vindo(a) à Áion Edu! 🎉</h2>
-<p>Olá, <strong>{{gestor}}</strong>!</p>
-<p>Sua escola <strong>{{escola}}</strong> tem acesso gratuito à plataforma.</p>
-<p><strong>Dados de acesso:</strong></p>
-<ul><li>E-mail: {{email_acesso}}</li><li>Link: <a href="{{link_acesso}}">{{link_acesso}}</a></li></ul>
-<p>Equipe Áion Edu</p>`,
-            },
-            {
-              id: 'email_template_payment_confirmed',
-              label: '✅ Pagamento confirmado — acesso liberado',
-              desc: 'Enviado após confirmação do pagamento da implantação',
-              default: DEFAULT_EMAIL_PAYMENT_CONFIRMED,
-            },
-            {
-              id: 'email_template_overdue_1',
-              label: '⚠️ Inadimplência — 1º aviso',
-              desc: `Enviado em D+${settings.overdue_warning1_days} após vencimento`,
-              default: DEFAULT_EMAIL_OVERDUE_1,
-            },
-            {
-              id: 'email_template_overdue_2',
-              label: '🔴 Inadimplência — 2º aviso',
-              desc: `Enviado em D+${settings.overdue_warning2_days} após vencimento`,
-              default: DEFAULT_EMAIL_OVERDUE_1.replace('lembrete', '2º aviso urgente'),
-            },
-            {
-              id: 'email_template_overdue_3',
-              label: '🚨 Inadimplência — aviso de suspensão',
-              desc: `Enviado em D+${settings.overdue_warning3_days}`,
-              default: `<h2>Aviso de suspensão 🚨</h2>
-<p>Olá, <strong>{{gestor}}</strong>!</p>
-<p>Sua conta será suspensa em <strong>{{data_suspensao}}</strong> por falta de pagamento.</p>
-{{#if link_pagamento}}<p><a href="{{link_pagamento}}">Pagar agora</a></p>{{/if}}
-<p>Equipe Áion Edu</p>`,
-            },
-            {
-              id: 'email_template_overdue_4',
-              label: '📌 Inadimplência — lembrete adicional',
-              desc: `Enviado em D+${settings.overdue_suspend_days}, tom mais brando (sem mencionar suspensão)`,
-              default: DEFAULT_EMAIL_OVERDUE_4,
-            },
-            {
-              id: 'email_template_suspended',
-              label: '🔒 Sistema suspenso',
-              desc: 'Enviado quando o sistema é suspenso por inadimplência',
-              default: DEFAULT_EMAIL_SUSPENDED,
-            },
-            {
-              id: 'email_template_reactivated',
-              label: '✅ Sistema reativado',
-              desc: 'Enviado quando o pagamento é regularizado',
-              default: `<h2>Sistema reativado! ✅</h2>
-<p>Olá, <strong>{{gestor}}</strong>!</p>
-<p>Seu pagamento foi confirmado e o acesso da escola <strong>{{escola}}</strong> foi reativado.</p>
-<p>Acesse agora: <a href="{{link_acesso}}">{{link_acesso}}</a></p>
-<p>Equipe Áion Edu</p>`,
-            },
-          ].map(tpl => (
-            <div key={tpl.id} className="border border-gray-100 rounded-xl overflow-hidden">
-              <div className="bg-gray-50 px-4 py-3 border-b border-gray-100">
-                <p className="text-sm font-bold text-gray-800">{tpl.label}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{tpl.desc}</p>
-              </div>
-              <div className="p-4">
-                <TemplateEditor
-                  value={settings[tpl.id] || tpl.default}
-                  onChange={v => set(tpl.id, v)}
-                  vars={EMAIL_VARS}
-                  rows={8}
-                />
-                <div className="flex items-center justify-between mt-3">
-                  <button onClick={() => set(tpl.id, tpl.default)} className="text-xs text-gray-400 hover:text-gray-600 font-medium">
-                    Restaurar padrão
-                  </button>
-                  <SaveBtn keys={[tpl.id]} id={tpl.id} />
-                </div>
-              </div>
-            </div>
-          ))}
         </Section>
 
       </div>
