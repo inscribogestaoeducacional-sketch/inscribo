@@ -138,8 +138,15 @@ export default function LoginForm() {
       setView('forgot-sent')
     } catch (err: any) {
       console.error('[resetPasswordForEmail]', err)
-      const m = err?.message ?? ''
-      if (m.toLowerCase().includes('rate limit')) setFError('Muitas tentativas de recuperação. Aguarde alguns minutos e tente de novo.')
+      const m = (err?.message ?? '').toLowerCase()
+      if (m.includes('rate limit')) setFError('Muitas tentativas de recuperação. Aguarde alguns minutos e tente de novo.')
+      // Falha do lado do servidor ao despachar o e-mail (SMTP não configurado/
+      // com erro no painel do Supabase Auth) — "verifique o e-mail" engana o
+      // usuário aqui, já que o problema não tem nada a ver com o endereço
+      // digitado. Ver causa raiz completa no relatório da sessão.
+      else if (err?.status >= 500 || m.includes('error sending')) {
+        setFError('Não foi possível enviar o e-mail agora — problema temporário no envio. Tente novamente em alguns minutos ou contate o suporte.')
+      }
       else setFError('Não foi possível enviar. Verifique o e-mail.')
     }
     finally { setFLoading(false) }

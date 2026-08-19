@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { supabase } from '../../lib/supabase'
 import { LogOut, Settings, User, Menu, Network, ChevronDown } from 'lucide-react'
 import NotificationBell from './NotificationBell'
 
@@ -54,6 +55,43 @@ function InstitutionSwitcher() {
         </>
       )}
     </div>
+  )
+}
+
+// Toggle Disponível/Ausente — só afeta a distribuição round-robin de grupo no
+// WhatsApp (nós 'transfer' pra grupo, fallback fora de horário e o cron de
+// timeout, todos em api/whatsapp/webhook.ts e timeout-check.ts). Não tem
+// efeito em conversas já atribuídas nem em escolas com atendente único.
+// Update direto no clique (sem estado de "salvando"), mesmo padrão do toggle
+// de robô em WhatsAppHub.tsx — otimista, reverte se o update falhar.
+function AvailabilityToggle({ userId, initialAvailable }: { userId: string; initialAvailable: boolean }) {
+  const [available, setAvailable] = useState(initialAvailable)
+
+  useEffect(() => { setAvailable(initialAvailable) }, [initialAvailable])
+
+  const toggle = async () => {
+    const next = !available
+    setAvailable(next)
+    const { error } = await supabase.from('users').update({ is_available: next }).eq('id', userId)
+    if (error) setAvailable(!next)
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      title={available ? 'Disponível — pode receber novas conversas de grupos' : 'Ausente — não recebe novas conversas de grupos'}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+        borderRadius: 9999, cursor: 'pointer', flexShrink: 0,
+        border: `1px solid ${available ? '#A7F3D0' : '#FED7AA'}`,
+        background: available ? '#ECFDF5' : '#FFF7ED',
+        transition: 'background 0.15s, border-color 0.15s',
+      }}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: available ? '#16A34A' : '#F97316', flexShrink: 0 }} />
+      <span style={{ fontSize: 12, fontWeight: 700, color: available ? '#059669' : '#C2410C' }}>
+        {available ? 'Disponível' : 'Ausente'}
+      </span>
+    </button>
   )
 }
 
@@ -116,6 +154,9 @@ export default function TopBar() {
 
         {/* Bell */}
         <NotificationBell institutionId={user?.institution_id || null} isSuperAdmin={user?.user_type === 'admin_geral'} />
+
+        {/* Disponível / Ausente */}
+        {user?.id && <AvailabilityToggle userId={user.id} initialAvailable={user.is_available ?? true} />}
 
         {/* User pill */}
         <div style={{ position: 'relative' }}>

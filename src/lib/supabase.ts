@@ -1090,7 +1090,10 @@ export class DatabaseService {
     // uma nova mensagem do contato reabrir como 'waiting'. Manter o dono
     // preserva a visibilidade e não quebra reatribuição — handleAssignFromClosed
     // sempre sobrescreve assigned_user_id ao reabrir para outro atendente.
-    const payload = { status: 'closed', bot_active: false }
+    // closed_at — usado pelo webhook (item A) pra saber se uma mensagem nova
+    // chegou pouco depois do encerramento (reabre silenciosamente, sem
+    // repetir boas-vindas/menu) ou muito depois (trata como atendimento novo).
+    const payload = { status: 'closed', bot_active: false, closed_at: new Date().toISOString() }
 
     // Always update both formats in parallel — DB may have either form (legacy + current)
     const [r1, r2] = await Promise.all([

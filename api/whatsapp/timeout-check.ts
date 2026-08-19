@@ -95,13 +95,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .maybeSingle()
 
           if (group?.member_ids?.length) {
-            const nextIndex = (group.last_assigned_index + 1) % group.member_ids.length
-            assigneeId      = group.member_ids[nextIndex]
-            const { data: u } = await supabase
-              .from('users').select('full_name').eq('id', assigneeId).maybeSingle()
-            assigneeName = (u as any)?.full_name || null
-            await supabase.from('whatsapp_groups')
-              .update({ last_assigned_index: nextIndex }).eq('id', flow.timeout_group_id)
+            // Exclui quem marcou "Ausente" (toggle no TopBar, users.is_available)
+            // da rotação — não mexe em conversas já atribuídas a alguém ausente.
+            const { data: members } = await supabase
+              .from('users').select('id, is_available').in('id', group.member_ids)
+            const availableIds = group.member_ids.filter(
+              (id: string) => (members || []).find((m: any) => m.id === id)?.is_available !== false
+            )
+
+            if (availableIds.length) {
+              const nextIndex = ((group.last_assigned_index ?? -1) + 1) % availableIds.length
+              assigneeId      = availableIds[nextIndex]
+              const { data: u } = await supabase
+                .from('users').select('full_name').eq('id', assigneeId).maybeSingle()
+              assigneeName = (u as any)?.full_name || null
+              await supabase.from('whatsapp_groups')
+                .update({ last_assigned_index: nextIndex }).eq('id', flow.timeout_group_id)
+            }
           }
         } else if (flow.timeout_assignee_id) {
           assigneeId   = flow.timeout_assignee_id
@@ -113,8 +123,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await sendMessage(phoneRecord.phone_number_id, conv.remote_jid, msg, waConfig.accessToken)
         }
 
+        // status: 'open' só quando há um dono real; grupo inteiro ausente e
+        // sem timeout_assignee_id de fallback → 'waiting', nunca limbo sem dono.
         await supabase.from('whatsapp_conversations')
-          .update({ bot_active: false, status: 'open', assigned_user_id: assigneeId, assigned_user_name: assigneeName })
+          .update({ bot_active: false, status: assigneeId ? 'open' : 'waiting', assigned_user_id: assigneeId, assigned_user_name: assigneeName })
           .eq('id', conv.id)
 
         await supabase.from('whatsapp_conversation_events').insert({

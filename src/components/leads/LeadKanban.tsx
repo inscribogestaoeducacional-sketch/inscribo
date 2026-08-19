@@ -21,7 +21,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { DatabaseService, Lead, supabase } from '../../lib/supabase'
 import { createNotification } from '../../lib/notifications'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
-import { getLeadReminderInfo, REMINDER_COLORS } from '../../lib/leadReminders'
+import { getLeadReminderInfo, REMINDER_COLORS, NO_CONTACT_DAYS } from '../../lib/leadReminders'
 import NewLeadModal from './NewLeadModal'
 import { saveLead } from '../../lib/leadSave'
 import {
@@ -570,11 +570,12 @@ interface FilterDrawerProps {
   ownerFilter: string; setOwnerFilter: (v: string) => void
   users: SimpleUser[]
   noContactFilter: boolean; setNoContactFilter: (v: boolean) => void
+  noContactDays: number; setNoContactDays: (v: number) => void
   onClear: () => void
 }
 
 function FilterDrawer(props: FilterDrawerProps) {
-  const { open, onClose, filterStatus, setFilterStatus, filterSource, setFilterSource, periodFilter, setPeriodFilter, customStart, setCustomStart, customEnd, setCustomEnd, gradeFilter, setGradeFilter, gradeNames, shiftFilter, setShiftFilter, temperatureFilter, setTemperatureFilter, ownerFilter, setOwnerFilter, users, noContactFilter, setNoContactFilter, onClear } = props
+  const { open, onClose, filterStatus, setFilterStatus, filterSource, setFilterSource, periodFilter, setPeriodFilter, customStart, setCustomStart, customEnd, setCustomEnd, gradeFilter, setGradeFilter, gradeNames, shiftFilter, setShiftFilter, temperatureFilter, setTemperatureFilter, ownerFilter, setOwnerFilter, users, noContactFilter, setNoContactFilter, noContactDays, setNoContactDays, onClear } = props
   if (!open) return null
 
   const section = (label: string) => (
@@ -624,6 +625,11 @@ function FilterDrawer(props: FilterDrawerProps) {
             <input type="checkbox" checked={noContactFilter} onChange={e => setNoContactFilter(e.target.checked)} />
             Somente leads sem contato
           </label>
+          {noContactFilter && (
+            <select value={noContactDays} onChange={e => setNoContactDays(Number(e.target.value))} style={{ ...selCls, marginTop: 8 }}>
+              {[3, 5, 7, 10, 15, 30].map(d => <option key={d} value={d}>Há mais de {d} dias</option>)}
+            </select>
+          )}
 
           {section('Origem')}
           <select value={filterSource} onChange={e => setFilterSource(e.target.value)} style={selCls}>
@@ -741,10 +747,13 @@ export default function LeadKanban() {
   // ── Item 7 — temperatura ───────────────────────────────────────────────────
   const [temperatureFilter, setTemperatureFilter] = useState<'' | 'frio' | 'morno' | 'quente'>('')
 
-  // Filtro "sem contato" — reaproveita o mesmo critério do badge de lembrete
-  // (getLeadReminderInfo urgency === 'stale', lib/leadReminders.ts) e do
-  // alerta do GestorHome, que navega aqui com ?filter=no_contact.
+  // Filtro "sem contato" — dias configurável no FilterDrawer (default =
+  // NO_CONTACT_DAYS, o mesmo usado no badge de lembrete e no alerta do
+  // GestorHome, que navega aqui com ?filter=no_contact). O badge/lembrete em
+  // si (getLeadReminderInfo) continua fixo em NO_CONTACT_DAYS — só o filtro
+  // é ajustável, por isso a checagem abaixo não reusa mais getLeadReminderInfo.
   const [noContactFilter, setNoContactFilter] = useState(false)
+  const [noContactDays, setNoContactDays] = useState(NO_CONTACT_DAYS)
 
   // ── Item 6c — drawer de filtros modernizado ────────────────────────────────
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false)
@@ -1076,6 +1085,17 @@ export default function LeadKanban() {
     }
   }
 
+  // Mesma regra de elegibilidade de getLeadReminderInfo (lib/leadReminders.ts)
+  // pro critério "automático" — status aberto e sem next_followup manual
+  // (que já tem prioridade/rótulo próprio) — só com o número de dias
+  // configurável em vez do NO_CONTACT_DAYS fixo usado no badge/lembrete.
+  const isLeadNoContact = (lead: Lead, days: number) => {
+    if (lead.status === 'enrolled' || lead.status === 'lost') return false
+    if (lead.next_followup) return false
+    const createdDays = Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 86400000)
+    return createdDays >= days
+  }
+
   // Item 2b/6b — filtro de responsável ("Meus leads"/"Todos"/"Sem responsável"/
   // um atendente específico) + item 7 — filtro de temperatura. Compartilhado
   // entre a lista desktop (por coluna) e a lista mobile.
@@ -1090,7 +1110,7 @@ export default function LeadKanban() {
     if (gradeFilter !== 'all' && lead.grade_interest !== gradeFilter) return false
     if (shiftFilter !== 'all' && (lead as any).shift_interest !== shiftFilter) return false
     if (temperatureFilter !== '' && lead.lead_temperature !== temperatureFilter) return false
-    if (noContactFilter && getLeadReminderInfo(lead)?.urgency !== 'stale') return false
+    if (noContactFilter && !isLeadNoContact(lead, noContactDays)) return false
     if (ownerFilter === 'mine') { if (lead.assigned_to !== user?.id) return false }
     else if (ownerFilter === 'unassigned') { if (lead.assigned_to) return false }
     else if (ownerFilter !== 'all') { if (lead.assigned_to !== ownerFilter) return false }
@@ -1215,7 +1235,7 @@ export default function LeadKanban() {
   const clearAllFilters = () => {
     setSearchTerm(''); setFilterSource(''); setFilterStatus(''); setPeriodFilter('all')
     setCustomStart(''); setCustomEnd(''); setGradeFilter('all'); setShiftFilter('all')
-    setTemperatureFilter(''); setOwnerFilter('all'); setNoContactFilter(false)
+    setTemperatureFilter(''); setOwnerFilter('all'); setNoContactFilter(false); setNoContactDays(NO_CONTACT_DAYS)
   }
 
   const filterDrawerEl = (
@@ -1232,6 +1252,7 @@ export default function LeadKanban() {
       ownerFilter={ownerFilter} setOwnerFilter={setOwnerFilter}
       users={users}
       noContactFilter={noContactFilter} setNoContactFilter={setNoContactFilter}
+      noContactDays={noContactDays} setNoContactDays={setNoContactDays}
       onClear={clearAllFilters}
     />
   )

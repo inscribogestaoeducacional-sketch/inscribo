@@ -32,6 +32,13 @@ const supabase = createClient(
 
 const GRAPH_URL = 'https://graph.facebook.com/v19.0'
 
+// Item A — janela de "reabertura silenciosa": se o cliente manda mensagem
+// nova dentro desse intervalo após a conversa ter sido fechada (encerrada
+// pelo atendente ou pelo bot, ver whatsapp_conversations.closed_at), reabre
+// pro mesmo atendente sem repetir boas-vindas/menu. Passado esse intervalo,
+// comportamento normal de atendimento novo.
+const REOPEN_RECENT_WINDOW_MS = 2 * 60 * 60 * 1000 // 2 horas
+
 const MEDIA_TYPES = ['image', 'video', 'audio', 'document', 'sticker', 'voice'] as const
 type MediaType = (typeof MEDIA_TYPES)[number]
 
@@ -111,6 +118,17 @@ async function sendAutoMessage(
   } catch (e) {
     console.error('❌ sendAutoMessage error:', e)
   }
+}
+
+// ── Disponibilidade manual (toggle no TopBar) ────────────────────────────────
+// Retorna o subconjunto de memberIds com users.is_available !== false.
+// Usado por toda seleção round-robin de grupo (timeout_group_id) — nunca
+// atribui conversa a quem marcou "Ausente". Não mexe em conversas já
+// atribuídas a alguém que ficou ausente depois.
+async function getAvailableMemberIds(memberIds: string[]): Promise<Set<string>> {
+  if (!memberIds.length) return new Set()
+  const { data } = await supabase.from('users').select('id, is_available').in('id', memberIds)
+  return new Set((data || []).filter((u: any) => u.is_available !== false).map((u: any) => u.id))
 }
 
 // ── Send interactive menu (buttons ≤3 / list 4-10) via Meta Cloud API ────────
@@ -984,11 +1002,17 @@ async function processCustomFlow(
           const { data: group } = await supabase
             .from('whatsapp_groups').select('*').eq('id', (flow as any).timeout_group_id).maybeSingle()
           if (group?.member_ids?.length) {
-            const nextIndex = ((group.last_assigned_index ?? -1) + 1) % group.member_ids.length
-            assigneeId = group.member_ids[nextIndex]
-            const { data: u } = await supabase.from('users').select('full_name').eq('id', assigneeId).maybeSingle()
-            assigneeName = (u as any)?.full_name || null
-            await supabase.from('whatsapp_groups').update({ last_assigned_index: nextIndex }).eq('id', (flow as any).timeout_group_id)
+            const availableSet = await getAvailableMemberIds(group.member_ids)
+            const availableIds = group.member_ids.filter((id: string) => availableSet.has(id))
+            if (availableIds.length) {
+              const nextIndex = ((group.last_assigned_index ?? -1) + 1) % availableIds.length
+              assigneeId = availableIds[nextIndex]
+              const { data: u } = await supabase.from('users').select('full_name').eq('id', assigneeId).maybeSingle()
+              assigneeName = (u as any)?.full_name || null
+              await supabase.from('whatsapp_groups').update({ last_assigned_index: nextIndex }).eq('id', (flow as any).timeout_group_id)
+            }
+            // Grupo inteiro ausente: assigneeId fica null, cai no fallback pra
+            // timeout_assignee_id (abaixo) ou, sem nenhum dos dois, 'waiting'.
           }
         }
         if (!assigneeId && (flow as any).timeout_assignee_id) {
@@ -1020,33 +1044,39 @@ async function processCustomFlow(
       }
 
       if (transferType === 'group' && groupId) {
-        // Round-robin distribution across group members, skipping those on lunch
+        // Round-robin distribution across group members, skipping those on
+        // lunch or marcados "Ausente" (users.is_available=false, toggle no
+        // TopBar — não afeta conversas já atribuídas, só a escolha do próximo).
         const { data: group } = await supabase
           .from('whatsapp_groups').select('*').eq('id', groupId).maybeSingle()
 
         if (group && group.member_ids?.length > 0) {
           const { data: members } = await supabase
-            .from('users').select('id,full_name,lunch_start,lunch_end')
+            .from('users').select('id,full_name,lunch_start,lunch_end,is_available')
             .in('id', group.member_ids)
 
-          // Find next available member (not on lunch) starting after last assigned index
+          // Find next available member (not on lunch, not ausente) starting after last assigned index
           const totalMembers = group.member_ids.length
           let assignee: any = null
           let newIndex = group.last_assigned_index
           for (let i = 1; i <= totalMembers; i++) {
-            const idx      = (group.last_assigned_index + i) % totalMembers
+            const idx      = ((group.last_assigned_index ?? -1) + i) % totalMembers
             const memberId = group.member_ids[idx]
             const member   = (members || []).find((m: any) => m.id === memberId)
-            if (member && !isOnLunch(member as any)) {
+            if (member && member.is_available !== false && !isOnLunch(member as any)) {
               assignee = member; newIndex = idx; break
             }
           }
 
           if (!assignee) {
-            console.log('[flow] todos membros do grupo em almoço:', group.name)
+            // Ninguém disponível (todos em almoço e/ou ausentes): nunca deixa
+            // status='open' sem dono — mesmo limbo já corrigido pro gate de
+            // horário (invisível pra atendente sem "ver todas", bot para de
+            // reagir). 'waiting' garante que apareça na fila geral.
+            console.log('[flow] nenhum membro disponível no grupo (almoço ou ausente):', group.name)
             if (lunchMsgText) await sendAutoMessage(institutionId, remoteJid, lunchMsgText)
             await supabase.from('whatsapp_conversations')
-              .update({ bot_active: false, status: 'open' })
+              .update({ bot_active: false, status: 'waiting' })
               .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
           } else {
             if (transferMsg) await sendAutoMessage(institutionId, remoteJid, interp(transferMsg))
@@ -1214,7 +1244,7 @@ async function processCustomFlow(
           }
         } else if (action.actionType === 'close_conversation') {
           await supabase.from('whatsapp_conversations')
-            .update({ status: 'closed', bot_active: false })
+            .update({ status: 'closed', bot_active: false, closed_at: new Date().toISOString() })
             .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
         } else if (action.actionType === 'upsert_lead') {
           const phone  = remoteJid.replace(/@.*/, '')
@@ -1352,7 +1382,7 @@ async function processCustomFlow(
         await sendAutoMessage(institutionId, remoteJid, interp(node.data.message))
       }
       await supabase.from('whatsapp_conversations')
-        .update({ status: 'closed', bot_active: false, assigned_user_id: null, assigned_user_name: null })
+        .update({ status: 'closed', bot_active: false, assigned_user_id: null, assigned_user_name: null, closed_at: new Date().toISOString() })
         .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
       const { data: flowCfg } = await supabase
         .from('whatsapp_flows')
@@ -1541,11 +1571,17 @@ async function processFlow(
           const { data: group } = await supabase
             .from('whatsapp_groups').select('*').eq('id', (flow as any).timeout_group_id).maybeSingle()
           if (group?.member_ids?.length) {
-            const nextIndex = ((group.last_assigned_index ?? -1) + 1) % group.member_ids.length
-            assigneeId = group.member_ids[nextIndex]
-            const { data: u } = await supabase.from('users').select('full_name').eq('id', assigneeId).maybeSingle()
-            assigneeName = (u as any)?.full_name || null
-            await supabase.from('whatsapp_groups').update({ last_assigned_index: nextIndex }).eq('id', (flow as any).timeout_group_id)
+            const availableSet = await getAvailableMemberIds(group.member_ids)
+            const availableIds = group.member_ids.filter((id: string) => availableSet.has(id))
+            if (availableIds.length) {
+              const nextIndex = ((group.last_assigned_index ?? -1) + 1) % availableIds.length
+              assigneeId = availableIds[nextIndex]
+              const { data: u } = await supabase.from('users').select('full_name').eq('id', assigneeId).maybeSingle()
+              assigneeName = (u as any)?.full_name || null
+              await supabase.from('whatsapp_groups').update({ last_assigned_index: nextIndex }).eq('id', (flow as any).timeout_group_id)
+            }
+            // Grupo inteiro ausente: assigneeId fica null, cai no fallback pra
+            // timeout_assignee_id (abaixo) ou, sem nenhum dos dois, 'waiting'.
           }
         }
         if (!assigneeId && (flow as any).timeout_assignee_id) {
@@ -2726,9 +2762,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // ── Check existing conversation ──
+        // assigned_user_id/assigned_user_name e closed_at entram aqui pro item
+        // A (reabertura recente) — antes só vinham 3 campos e o bloco de
+        // reopen mais abaixo lia (existingConv as any).assigned_user_id de um
+        // objeto que nunca tinha essa coluna selecionada (sempre undefined).
         const { data: existingConv } = await supabase
           .from('whatsapp_conversations')
-          .select('status, lead_id, contact_name')
+          .select('status, lead_id, contact_name, assigned_user_id, assigned_user_name, closed_at')
           .eq('institution_id', institutionId)
           .eq('remote_jid', remoteJid)
           .maybeSingle()
@@ -2789,11 +2829,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const contentPreview    = interactiveTitle || effectiveText || `[${msgType}]`
         const upsertStatus      = isNewConversation ? 'waiting' : (existingConv?.status ?? 'waiting')
 
+        // Item A — reabertura recente: a conversa foi fechada DE PROPÓSITO
+        // (atendente encerrou / bot chegou no fim do fluxo) há menos de
+        // REOPEN_RECENT_WINDOW_MS. Diferente do limbo "open + sem dono" (bug
+        // de silêncio do bot corrigido antes) — aqui o fechamento foi
+        // intencional, então uma mensagem nova do cliente não deve reiniciar
+        // boas-vindas/menu do zero, só reabrir silenciosamente.
+        const isRecentReopen = isNewConversation && !!existingConv?.closed_at &&
+          (Date.now() - new Date(existingConv.closed_at as unknown as string).getTime()) < REOPEN_RECENT_WINDOW_MS
+
         console.log('[WEBHOOK UPSERT]', {
           remoteJid,
           existingStatus: existingConv?.status ?? null,
           newStatus: upsertStatus,
           isNewConversation,
+          isRecentReopen,
         })
 
         // Preserve agent-edited name: only use Meta profile name on first message
@@ -2834,7 +2884,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // ── Re-open: reset bot and clear assignee — UNLESS last outbound was a template ──
         // When last msg was a template the attendant sent it intentionally to re-engage
         // the customer; preserve that assignment so the attendant stays on the conversation.
-        if (isNewConversation && existingConv) {
+        if (isNewConversation && existingConv && isRecentReopen) {
+          // Item A: valida se o atendente atribuído ainda existe/está ativo
+          // antes de preservá-lo — senão cai pro comportamento padrão de fila
+          // (sem dono), igual ao fallback "attendant não existe mais" do spec.
+          let reopenAssigneeId: string | null = null
+          let reopenAssigneeName: string | null = null
+          const priorAssigneeId = (existingConv as any).assigned_user_id as string | null
+          if (priorAssigneeId) {
+            const { data: stillActiveUser } = await supabase
+              .from('users')
+              .select('id, full_name, active')
+              .eq('id', priorAssigneeId)
+              .maybeSingle()
+            if (stillActiveUser?.active) {
+              reopenAssigneeId   = stillActiveUser.id
+              reopenAssigneeName = stillActiveUser.full_name
+            }
+          }
+
+          await supabase.from('whatsapp_conversations')
+            .update({
+              assigned_user_id:   reopenAssigneeId,
+              assigned_user_name: reopenAssigneeName,
+              bot_active:         false,
+            })
+            .eq('institution_id', institutionId)
+            .eq('remote_jid', remoteJid)
+
+          await supabase.from('whatsapp_conversation_events').insert({
+            institution_id: institutionId,
+            remote_jid:     remoteJid,
+            event_type:     'reopened',
+            description:    reopenAssigneeName
+              ? `Cliente respondeu pouco depois do encerramento — conversa reaberta para ${reopenAssigneeName}`
+              : 'Cliente respondeu pouco depois do encerramento — conversa reaberta e voltou para fila',
+            metadata:       { previous_status: 'closed', recent_reopen: true },
+          })
+        } else if (isNewConversation && existingConv) {
           await supabase.from('whatsapp_conversations')
             .update({
               assigned_user_id:   lastWasTemplate ? (existingConv as any).assigned_user_id   : null,
@@ -2937,6 +3024,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .update({ bot_active: false, status: 'open' })
             .eq('institution_id', institutionId)
             .eq('remote_jid', remoteJid)
+        } else if (isRecentReopen) {
+          // Item A: reabertura silenciosa — não roda processFlow (nem custom
+          // bot_flow nem fluxo padrão de menu), só confirma o recebimento.
+          // Texto fixo por enquanto, sem configuração por escola.
+          console.log('[flow] reabertura recente pós-encerramento — pulando boas-vindas/menu, só confirmando recebimento')
+          await sendAutoMessage(institutionId, remoteJid, 'Recebemos sua mensagem! Já estamos verificando, um instante 🙂')
         } else {
           await processFlow(institutionId, remoteJid, effectiveText, isNewConversation, interactiveChoiceId)
         }

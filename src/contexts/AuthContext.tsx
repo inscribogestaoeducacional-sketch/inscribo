@@ -15,6 +15,9 @@ interface AppUser {
   // saber que esse usuário pertence a um grupo. Ver switchInstitution().
   institution_id: string
   active: boolean
+  // Disponibilidade manual do atendente (toggle no TopBar) — só afeta
+  // distribuição round-robin de grupo no WhatsApp (timeout_group_id).
+  is_available?: boolean
   institution_name?: string
   user_type?: 'school_user' | 'consultant' | 'admin_geral' | 'gestor_rede'
   // mantido por compatibilidade com código legado
@@ -134,6 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           role:               data.role             || 'user',
           institution_id:     effectiveInstitutionId,
           active:             data.active           ?? true,
+          is_available:       data.is_available     ?? true,
           user_type:          data.user_type,
           institution_name:   institutionName,
           // is_super_admin: mantido por compatibilidade
