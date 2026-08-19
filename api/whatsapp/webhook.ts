@@ -970,19 +970,39 @@ async function processCustomFlow(
 
       if (!withinHours) {
         console.log('[flow] transfer bloqueado — fora do horário:', curDay, `${nowTz.getHours()}:${String(nowTz.getMinutes()).padStart(2,'0')}`)
-        const assigneeId = (flow as any).default_assignee_id || (flow as any).timeout_assignee_id || null
+        // Resolve um responsável de fallback: grupo (round-robin, mesmo critério
+        // de timeout-check.ts) tem prioridade, depois o atendente fixo do flow.
+        // Sem nenhum dos dois configurados, NÃO inventa um assigned_user_id — cai
+        // em 'waiting' (sem dono), que é a única combinação que a fila "Aguardando
+        // atendimento" e a RLS de atendente restrito enxergam. Atribuir a um
+        // assigneeId inexistente e marcar status='open' deixava a conversa presa:
+        // invisível pra quem não tem "ver todas as conversas" e o bot nunca mais
+        // reagia a mensagens seguintes do cliente.
+        let assigneeId:   string | null = null
         let assigneeName: string | null = null
-        if (assigneeId) {
-          const { data: assigneeUser } = await supabase
-            .from('users').select('full_name').eq('id', assigneeId).single()
-          assigneeName = (assigneeUser as any)?.full_name || null
+        if ((flow as any).timeout_group_id) {
+          const { data: group } = await supabase
+            .from('whatsapp_groups').select('*').eq('id', (flow as any).timeout_group_id).maybeSingle()
+          if (group?.member_ids?.length) {
+            const nextIndex = ((group.last_assigned_index ?? -1) + 1) % group.member_ids.length
+            assigneeId = group.member_ids[nextIndex]
+            const { data: u } = await supabase.from('users').select('full_name').eq('id', assigneeId).maybeSingle()
+            assigneeName = (u as any)?.full_name || null
+            await supabase.from('whatsapp_groups').update({ last_assigned_index: nextIndex }).eq('id', (flow as any).timeout_group_id)
+          }
         }
-        // status: 'open' — a conversa já está sendo atribuída a assigneeId aqui, então
-        // 'waiting' (reservado para assigned_user_id IS NULL) a deixaria elegível pra
-        // fila de resgate de outros atendentes assim que ficasse "parada".
+        if (!assigneeId && (flow as any).timeout_assignee_id) {
+          assigneeId = (flow as any).timeout_assignee_id
+          const { data: assigneeUser } = await supabase
+            .from('users').select('full_name').eq('id', assigneeId as string).single()
+          assigneeName = (assigneeUser as any)?.full_name || (flow as any).timeout_assignee_name || null
+        }
+
         await supabase.from('whatsapp_conversations')
           .update({
-            status:             'open',
+            // 'open' só quando realmente há um dono; sem assigneeId resolvido,
+            // 'waiting' (assigned_user_id NULL) é a rede de segurança mínima.
+            status:             assigneeId ? 'open' : 'waiting',
             bot_active:         false,
             assigned_user_id:   assigneeId,
             assigned_user_name: assigneeName,
@@ -994,7 +1014,7 @@ async function processCustomFlow(
           institution_id: institutionId,
           remote_jid:     remoteJid,
           event_type:     'assignment',
-          description:    `Atribuído automaticamente fora do horário para ${assigneeName || 'fila geral'}`,
+          description:    `Atribuído automaticamente fora do horário para ${assigneeName || 'fila geral (sem responsável configurado)'}`,
         })
         currentNodeId = 'end'; break
       }
@@ -1407,7 +1427,7 @@ async function processFlow(
     // um atendente humano já conversando (race condition cliente↔atendente↔bot).
     const { data: guardConvState } = await supabase
       .from('whatsapp_conversations')
-      .select('bot_active, assigned_user_id, bot_variables')
+      .select('bot_active, assigned_user_id, bot_variables, status')
       .eq('institution_id', institutionId)
       .eq('remote_jid', remoteJid)
       .maybeSingle()
@@ -1465,8 +1485,23 @@ async function processFlow(
         return
       }
 
-      // Not new + bot_active=false + no assignee → bot finished, skip
-      console.log('[flow] robô inativo e sem atendente, ignorando')
+      // Not new + bot_active=false + no assignee: bot terminou e ninguém foi
+      // atribuído (herança do limbo status='open'+assigned_user_id NULL do gate
+      // de horário antigo, ou qualquer outra origem — dado antigo já existente).
+      // Nunca ignora silenciosamente uma mensagem nova do cliente: se a conversa
+      // ainda estiver marcada 'open' (não deveria mais acontecer via o gate de
+      // horário, que agora só usa 'open' com dono real), devolve pra 'waiting'
+      // pra aparecer na fila "Aguardando atendimento" de quem tem permissão de
+      // ver todas. Já 'waiting'/'closed' não mexe — não é essa mensagem que
+      // decide reabrir uma conversa encerrada.
+      if (convState?.status === 'open') {
+        await supabase.from('whatsapp_conversations')
+          .update({ status: 'waiting', last_message_at: new Date().toISOString() })
+          .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+        console.log('[flow] robô inativo e sem atendente — conversa em limbo (open+sem dono), devolvida pra waiting')
+      } else {
+        console.log('[flow] robô inativo e sem atendente, ignorando')
+      }
       return
     }
 
@@ -1497,19 +1532,32 @@ async function processFlow(
     // Off-hours: only notify on new conversations
     if (!isOpen) {
       if (isNewConversation && flow.off_hours_message) {
-        const assigneeId = (flow as any).default_assignee_id || (flow as any).timeout_assignee_id || null
+        // Mesma resolução de fallback do nó 'transfer' (grupo round-robin →
+        // atendente fixo → 'waiting' sem dono) — ver comentário lá pra detalhe
+        // do porquê nunca deixar status='open' com assigned_user_id NULL.
+        let assigneeId:   string | null = null
         let assigneeName: string | null = null
-        if (assigneeId) {
-          const { data: assigneeUser } = await supabase
-            .from('users').select('full_name').eq('id', assigneeId).single()
-          assigneeName = (assigneeUser as any)?.full_name || null
+        if ((flow as any).timeout_group_id) {
+          const { data: group } = await supabase
+            .from('whatsapp_groups').select('*').eq('id', (flow as any).timeout_group_id).maybeSingle()
+          if (group?.member_ids?.length) {
+            const nextIndex = ((group.last_assigned_index ?? -1) + 1) % group.member_ids.length
+            assigneeId = group.member_ids[nextIndex]
+            const { data: u } = await supabase.from('users').select('full_name').eq('id', assigneeId).maybeSingle()
+            assigneeName = (u as any)?.full_name || null
+            await supabase.from('whatsapp_groups').update({ last_assigned_index: nextIndex }).eq('id', (flow as any).timeout_group_id)
+          }
         }
-        // status: 'open' — a conversa já está sendo atribuída a assigneeId aqui, então
-        // 'waiting' (reservado para assigned_user_id IS NULL) a deixaria elegível pra
-        // fila de resgate de outros atendentes assim que ficasse "parada".
+        if (!assigneeId && (flow as any).timeout_assignee_id) {
+          assigneeId = (flow as any).timeout_assignee_id
+          const { data: assigneeUser } = await supabase
+            .from('users').select('full_name').eq('id', assigneeId as string).single()
+          assigneeName = (assigneeUser as any)?.full_name || (flow as any).timeout_assignee_name || null
+        }
+
         await supabase.from('whatsapp_conversations')
           .update({
-            status:             'open',
+            status:             assigneeId ? 'open' : 'waiting',
             bot_active:         false,
             assigned_user_id:   assigneeId,
             assigned_user_name: assigneeName,
@@ -1521,7 +1569,7 @@ async function processFlow(
           institution_id: institutionId,
           remote_jid:     remoteJid,
           event_type:     'assignment',
-          description:    `Atribuído automaticamente fora do horário para ${assigneeName || 'fila geral'}`,
+          description:    `Atribuído automaticamente fora do horário para ${assigneeName || 'fila geral (sem responsável configurado)'}`,
         })
       }
       return
@@ -1595,33 +1643,10 @@ async function processFlow(
       }
     }
 
-    // f) Bot message count → transfer to default assignee after threshold
-    if ((flow.transfer_after_messages ?? 0) > 0 && flow.default_assignee_id) {
-      const { count } = await supabase
-        .from('whatsapp_messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('institution_id', institutionId)
-        .eq('remote_jid', remoteJid)
-        .eq('from_me', true)
-
-      if ((count ?? 0) >= flow.transfer_after_messages) {
-        const { data: conv } = await supabase
-          .from('whatsapp_conversations')
-          .select('assigned_user_id')
-          .eq('institution_id', institutionId)
-          .eq('remote_jid', remoteJid)
-          .maybeSingle()
-
-        if (!conv?.assigned_user_id) {
-          await supabase
-            .from('whatsapp_conversations')
-            .update({ assigned_user_id: flow.default_assignee_id })
-            .eq('institution_id', institutionId)
-            .eq('remote_jid', remoteJid)
-          console.log('[flow] transferido para atendente padrão após', count, 'msg do bot')
-        }
-      }
-    }
+    // f) "Bot message count → transfer to default assignee after threshold"
+    // removido: dependia de flow.default_assignee_id, coluna que não existe em
+    // whatsapp_flows — a condição `&& flow.default_assignee_id` era sempre
+    // false (undefined), então este bloco nunca executava.
 
   } catch (e) {
     console.error('❌ processFlow error:', e)

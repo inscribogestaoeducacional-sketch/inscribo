@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { normalizeBrazilianInput } from '../../lib/phone'
 import { useAuth } from '../../contexts/AuthContext'
 import SuperAdminLayout from './SuperAdminLayout'
 import AionInboxHub from './AionInboxHub'
@@ -1225,12 +1226,13 @@ type WaTag = { id: string; name: string; color: string }
 // raio-x-followup/index.ts:toRemoteJid — formulário/CSV normalmente vêm sem o
 // 55 na frente). Guarda o telefone já no formato de remote_jid, pra permitir
 // join direto com whatsapp_conversations.remote_jid sem coluna separada.
+// Delega pra normalizeBrazilianInput (src/lib/phone.ts) — a versão antiga
+// prefixava "55" sempre que o número não começasse com 55, o que corrompia
+// um número internacional já completo (ex.: EUA/Portugal) digitado por
+// engano; a versão compartilhada só prefixa quando o comprimento bate com um
+// celular BR sem DDI (10 ou 11 dígitos).
 function normalizeContactPhone(raw: string): string {
-  let digits = raw.replace(/\D/g, '')
-  if (!digits) return ''
-  if (!digits.startsWith('55')) digits = `55${digits}`
-  if (digits.length === 12) digits = digits.slice(0, 4) + '9' + digits.slice(4)
-  return digits
+  return normalizeBrazilianInput(raw)
 }
 
 function formatContactPhone(phone: string): string {
@@ -1389,6 +1391,23 @@ function ContactsTab({ aionPlatformId }: { aionPlatformId: string }) {
     setAddSaving(true)
     setAddError('')
     try {
+      // Sempre checa se já existe contato com esse telefone (normalizado)
+      // antes de tentar criar — senão o insert estoura a UNIQUE(phone) de
+      // aion_contacts e o usuário só via um erro genérico, sem chance de
+      // abrir o contato que já existe.
+      const { data: existingContact } = await supabase
+        .from('aion_contacts')
+        .select('*')
+        .eq('phone', phone)
+        .maybeSingle()
+
+      if (existingContact) {
+        setShowAddModal(false)
+        setAddForm({ phone: '', name: '', email: '', notes: '' })
+        setEditingContact({ ...(existingContact as any), tags: (existingContact as any).tags ?? [] })
+        return
+      }
+
       const { conversation_id, aion_lead_id } = await autoLinkContact(phone)
       const { error } = await supabase.from('aion_contacts').insert({
         phone,

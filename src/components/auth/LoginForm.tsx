@@ -136,7 +136,12 @@ export default function LoginForm() {
       })
       if (error) throw error
       setView('forgot-sent')
-    } catch { setFError('Não foi possível enviar. Verifique o e-mail.') }
+    } catch (err: any) {
+      console.error('[resetPasswordForEmail]', err)
+      const m = err?.message ?? ''
+      if (m.toLowerCase().includes('rate limit')) setFError('Muitas tentativas de recuperação. Aguarde alguns minutos e tente de novo.')
+      else setFError('Não foi possível enviar. Verifique o e-mail.')
+    }
     finally { setFLoading(false) }
   }
 

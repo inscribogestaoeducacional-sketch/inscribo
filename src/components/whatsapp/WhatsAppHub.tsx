@@ -9,7 +9,11 @@ import {
 } from 'lucide-react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConversationEvent, User as UserType, supabase } from '../../lib/supabase'
+import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConversationEvent, User as UserType, Lead, supabase } from '../../lib/supabase'
+import { normalizeBrazilianInput } from '../../lib/phone'
+import NewLeadModal from '../leads/NewLeadModal'
+import { saveLead } from '../../lib/leadSave'
+import { statusConfig } from '../leads/leadFormShared'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MsgType = 'text' | 'audio' | 'image' | 'video' | 'document' | 'sticker' | 'deleted'
@@ -1051,9 +1055,38 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [showNewConvModal, setShowNewConvModal] = useState(false)
   const [newConvPhone, setNewConvPhone] = useState('')
   const [newConvName, setNewConvName] = useState('')
+  // Item C — busca ao vivo (debounce) no modal "Nova Conversa": avisa antes
+  // de tentar criar se já existe conversa/contato com esse número, pra evitar
+  // o erro de duplicidade na origem em vez de só reagir a ele depois.
+  const [newConvMatch, setNewConvMatch] = useState<{ name: string } | null>(null)
+  const [checkingNewConv, setCheckingNewConv] = useState(false)
+
+  useEffect(() => {
+    if (!showNewConvModal || !newConvPhone.trim() || !effectiveInstitutionId) { setNewConvMatch(null); return }
+    const normalized = normalizeBrazilianInput(newConvPhone.trim())
+    if (normalized.length < 12) { setNewConvMatch(null); return }
+    setCheckingNewConv(true)
+    const t = setTimeout(async () => {
+      const jid = `${normalized}@s.whatsapp.net`
+      const [{ data: convRow }, { data: contactRow }] = await Promise.all([
+        supabase.from('whatsapp_conversations').select('id').eq('institution_id', effectiveInstitutionId).eq('remote_jid', jid).maybeSingle(),
+        supabase.from('whatsapp_contacts').select('name').eq('institution_id', effectiveInstitutionId).eq('phone', normalized).maybeSingle(),
+      ])
+      if (convRow || contactRow) {
+        setNewConvMatch({ name: (contactRow as any)?.name || formatPhone(jid) })
+      } else {
+        setNewConvMatch(null)
+      }
+      setCheckingNewConv(false)
+    }, 400)
+    return () => { clearTimeout(t); setCheckingNewConv(false) }
+  }, [newConvPhone, showNewConvModal, effectiveInstitutionId])
+  // Formulário de lead unificado com o CRM (NewLeadModal, ver
+  // src/components/leads/NewLeadModal.tsx) — leadModalTarget nulo abre em
+  // modo "criar", preenchido abre em modo "editar".
   const [showLeadModal, setShowLeadModal] = useState(false)
+  const [leadModalTarget, setLeadModalTarget] = useState<Lead | null>(null)
   const [showClientModal, setShowClientModal] = useState(false)
-  const [leadForm, setLeadForm] = useState({ responsible_name: '', student_name: '', phone: '', email: '', grade_interest: '', source: 'WhatsApp' })
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [pendingFilePreview, setPendingFilePreview] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -1084,11 +1117,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // Template panel for new outbound conversations
   const [showTemplatePanel, setShowTemplatePanel] = useState(false)
 
-  // Lead data for right panel
+  // Lead data for right panel (visão compacta — edição vai pelo NewLeadModal)
   const [leadData, setLeadData] = useState<any>(null)
-  const [editingLead, setEditingLead] = useState(false)
-  const [leadEditForm, setLeadEditForm] = useState<any>({})
-  const [savingLead, setSavingLead] = useState(false)
 
   // New feature states
   const [showMsgSearch, setShowMsgSearch] = useState(false)
@@ -1418,7 +1448,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (lead) {
       console.log('[LEAD PANEL] linked & loaded:', lead.responsible_name)
       setLeadData(lead)
-      setLeadEditForm(lead)
     }
     setLinkingLead(false)
     setLeadSearch('')
@@ -1566,61 +1595,55 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }
   }
 
-  const handleSaveLead = async (overrides?: Partial<typeof leadEditForm>) => {
-    const form = overrides ? { ...leadEditForm, ...overrides } : leadEditForm
-    if (!activeConv?.lead_id || !form) return
-    setSavingLead(true)
+  // onSave do NewLeadModal unificado (fonte única de verdade em
+  // src/lib/leadSave.ts) — cobre tanto criar um lead novo a partir da
+  // conversa quanto editar um já vinculado. Depois de salvar, garante que a
+  // conversa ativa fique vinculada ao lead (lead_id/contact_type/mensagens)
+  // e atualiza o painel compacto da sidebar.
+  const handleSaveLeadForm = async (data: Partial<Lead> & { familyMatchId?: string | null; additionalStudents?: any[] }) => {
+    if (!effectiveInstitutionId || !user) return
     try {
-      await supabase.from('leads').update({
-        responsible_name: form.responsible_name,
-        student_name: form.student_name,
-        grade_interest: form.grade_interest,
-        email: form.email,
-        status: form.status,
-      }).eq('id', activeConv.lead_id)
-      setLeadData({ ...leadData, ...form })
-      setLeadEditForm({ ...leadData, ...form })
-      setEditingLead(false)
-      setHubToast('Lead atualizado!')
-      setTimeout(() => setHubToast(null), 3000)
+      const leadId = await saveLead({
+        institutionId: effectiveInstitutionId,
+        currentUser: { id: user.id, full_name: user.full_name, role: user.role },
+        users,
+        editingLead: leadModalTarget,
+        data,
+      })
 
-      if (form.responsible_name && effectiveInstitutionId) {
-        const normPhone = (() => {
-          let d = (form.phone || '').replace(/\D/g, '')
-          // Brazilian with CC: 55 + DDD(2) + [9] + local
-          if (d.startsWith('55') && (d.length === 12 || d.length === 13)) {
-            return d.length === 12 ? d.slice(0, 4) + '9' + d.slice(4) : d
-          }
-          // 10-digit bare Brazilian (no valid E.164 is 10 digits globally)
-          if (d.length === 10) return '55' + d.slice(0, 2) + '9' + d.slice(2)
-          // 11-digit NOT starting with '1': unambiguous Brazilian DDD (21-99)
-          if (d.length === 11 && !d.startsWith('1')) return '55' + d
-          // 11-digit starting with '1': could be US/CA (+1) — preserve as-is
-          // 12+ digits: already has a country code — preserve as-is
-          return d
-        })()
-
-        if (normPhone) {
-          await supabase.from('whatsapp_contacts')
-            .update({ name: form.responsible_name })
-            .eq('institution_id', effectiveInstitutionId)
-            .eq('phone', normPhone)
-
-          skipNextNameUpdateRef.current = activeId
-          setConversations(prev => prev.map(c =>
-            c.id === activeId ? { ...c, name: form.responsible_name } : c
-          ))
-          await supabase.from('whatsapp_conversations')
-            .update({ contact_name: form.responsible_name })
-            .eq('institution_id', effectiveInstitutionId)
-            .eq('remote_jid', activeId)
-        }
+      if (activeId) {
+        const rJid = rawJid(activeId)
+        await DatabaseService.updateWhatsappMessageLead(rJid, effectiveInstitutionId, leadId)
+        await DatabaseService.linkConversationLead(effectiveInstitutionId, rJid, leadId)
+        await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, 'lead')
+        skipNextNameUpdateRef.current = activeId
+        setConversations(prev => prev.map(c => c.id === activeId
+          ? { ...c, lead_id: leadId, contact_type: 'lead', name: data.responsible_name || c.name }
+          : c
+        ))
       }
+
+      const { data: refreshed } = await supabase
+        .from('leads')
+        .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at')
+        .eq('id', leadId)
+        .single()
+      if (refreshed) setLeadData(refreshed)
+
+      setHubToast(leadModalTarget ? 'Lead atualizado!' : 'Lead criado!')
+      setTimeout(() => setHubToast(null), 3000)
     } catch {
       setSendError('Erro ao salvar lead.')
-    } finally {
-      setSavingLead(false)
     }
+  }
+
+  // Botão "Editar" do painel compacto — busca o lead completo (o painel só
+  // guarda um select parcial, ver "Load lead data" acima) e abre o
+  // NewLeadModal em modo edição.
+  const openEditLeadModal = async () => {
+    if (!activeConv?.lead_id) return
+    const { data } = await supabase.from('leads').select('*').eq('id', activeConv.lead_id).single()
+    if (data) { setLeadModalTarget(data as Lead); setShowLeadModal(true) }
   }
 
   const loadHistory = async (jid: string) => {
@@ -1886,7 +1909,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           const currentLeadId = conversationsRef.current.find(c => c.id === activeIdRef.current)?.lead_id
           if (payload.new?.id === currentLeadId) {
             setLeadData(payload.new)
-            setLeadEditForm(payload.new)
           }
           if (payload.new?.responsible_name) {
             setConversations(prev => prev.map(c =>
@@ -2201,7 +2223,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   useEffect(() => {
     const leadId = activeConv?.lead_id
     console.log('[LEAD PANEL] activeId:', activeId, '| lead_id:', leadId)
-    if (!leadId) { setLeadData(null); setEditingLead(false); return }
+    if (!leadId) { setLeadData(null); return }
     supabase
       .from('leads')
       .select('id, student_name, responsible_name, phone, email, grade_interest, status, source, created_at')
@@ -2211,7 +2233,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         if (data) {
           console.log('[LEAD PANEL] loaded:', data.responsible_name)
           setLeadData(data)
-          setLeadEditForm(data)
         }
       })
   }, [activeId, activeConv?.lead_id])
@@ -2894,11 +2915,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     console.log('[CONTACT TYPE] chamada com:', type, '| activeId:', activeId, '| institution:', effectiveInstitutionId)
     if (!activeId || !effectiveInstitutionId) return
     if (type === 'lead') {
-      setLeadForm(prev => ({
-        ...prev,
-        responsible_name: activeConv && activeConv.name !== formatPhone(activeConv.id) ? activeConv.name : '',
-        phone: activeConv?.phone || '',
-      }))
+      setLeadModalTarget(null)
       setShowLeadModal(true)
       return
     }
@@ -2909,13 +2926,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const rJid = rawJid(activeId)
     await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, type)
     // Sync whatsapp_contacts.type — normalize to canonical 13-digit format
-    const normContactPhone = (() => {
-      let d = rJid.replace(/@.*/, '').replace(/\D/g, '')
-      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-      if (d.length === 11) d = '55' + d
-      return d
-    })()
+    const normContactPhone = normalizeBrazilianInput(rJid.replace(/@.*/, ''))
     console.log('[SYNC] normPhone:', normContactPhone)
     console.log('[SYNC] institutionId:', effectiveInstitutionId)
     const { data: contactRow, error: contactErr } = await supabase
@@ -3059,23 +3070,40 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   const handleNewConv = async () => {
     if (!newConvPhone.trim()) return
-    const raw = newConvPhone.trim()
-    const digits = raw.replace(/\D/g, '')
-    // Detect explicit international format typed by the user (+ or 00 prefix)
-    const isExplicitIntl = raw.startsWith('+') || raw.startsWith('00')
-    const hasBrCC = digits.startsWith('55') && (digits.length === 12 || digits.length === 13)
-    let normalized: string
-    if (hasBrCC) {
-      normalized = digits.length === 12 ? digits.slice(0, 4) + '9' + digits.slice(4) : digits
-    } else if (!isExplicitIntl && digits.length <= 11) {
-      // Bare number entered without '+' prefix: treat as Brazilian
-      normalized = '55' + (digits.length === 10 ? digits.slice(0, 2) + '9' + digits.slice(2) : digits)
-    } else {
-      // User typed '+' or '00' prefix, or number is 12+ digits: already has country code
-      normalized = digits
-    }
+    // Normalização canônica compartilhada (src/lib/phone.ts) — trata número
+    // digitado com ou sem "55" e com ou sem o 9º dígito sempre pro mesmo
+    // resultado, pra não gerar conversa/contato duplicado por causa do formato.
+    const normalized = normalizeBrazilianInput(newConvPhone.trim())
+    if (!normalized) return
     const jid = `${normalized}@s.whatsapp.net`
-    const existing = conversations.find(c => c.id === jid)
+
+    let existing = conversations.find(c => c.id === jid)
+
+    // A conversa pode já existir no banco sem estar carregada no estado local
+    // (filtro de atendente, paginação etc.) — confirma antes de tratar como
+    // nova, senão a gente cria um card duplicado na UI pro mesmo contato.
+    if (!existing && effectiveInstitutionId) {
+      const { data: existingConvRow } = await supabase
+        .from('whatsapp_conversations')
+        .select('id')
+        .eq('institution_id', effectiveInstitutionId)
+        .eq('remote_jid', jid)
+        .maybeSingle()
+      if (existingConvRow) {
+        const phone = formatPhone(jid)
+        const placeholder: Conversation = {
+          id: jid, name: newConvName || phone, phone,
+          avatarColor: jidToColor(jid),
+          lastMessage: '', lastTime: new Date(),
+          unreadCount: 0, status: 'open', online: false,
+          labels: [], isGroup: false, tags: [],
+          messages: [],
+        }
+        existing = placeholder
+        setConversations(prev => prev.some(c => c.id === jid) ? prev : [placeholder, ...prev])
+      }
+    }
+
     if (existing) {
       if (newConvName) {
         setConversations(prev => prev.map(c => c.id === jid ? { ...c, name: newConvName } : c))
@@ -3118,9 +3146,15 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             .update({ name: newConvName || existingContact.name, updated_at: new Date().toISOString() })
             .eq('id', existingContact.id)
         } else {
+          // Upsert (não insert puro) — se uma corrida entre cliques criou o
+          // contato entre o SELECT acima e este write, isso vira um update
+          // idempotente em vez de estourar violação de UNIQUE(institution_id, phone).
           await supabase
             .from('whatsapp_contacts')
-            .insert({ institution_id: effectiveInstitutionId, phone: normalized, name: newConvName || normalized, type: 'unknown', updated_at: new Date().toISOString() })
+            .upsert(
+              { institution_id: effectiveInstitutionId, phone: normalized, name: newConvName || normalized, type: 'unknown', updated_at: new Date().toISOString() },
+              { onConflict: 'institution_id,phone' }
+            )
         }
 
         const noCode = normalized.startsWith('55') ? normalized.slice(2) : normalized
@@ -3138,12 +3172,15 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             .eq('institution_id', effectiveInstitutionId)
             .eq('phone', normalized)
         }
-      } catch {}
+      } catch (err) {
+        console.error('[handleNewConv] falha ao sincronizar whatsapp_contacts', err)
+      }
     }
 
     setShowNewConvModal(false)
     setNewConvPhone('')
     setNewConvName('')
+    setNewConvMatch(null)
   }
 
   const handleSendNewConvTemplate = async () => {
@@ -3461,49 +3498,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }
   }
 
-  const handleCreateLead = async () => {
-    if (!effectiveInstitutionId || !leadForm.responsible_name) return
-    try {
-      const lead = await DatabaseService.createLead({
-        ...leadForm,
-        institution_id: effectiveInstitutionId,
-        status: 'new',
-      })
-      if (activeId) {
-        const rJid = rawJid(activeId)
-        await DatabaseService.updateWhatsappMessageLead(rJid, effectiveInstitutionId, lead.id)
-        await DatabaseService.linkConversationLead(effectiveInstitutionId, rJid, lead.id)
-        await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, 'lead')
-        setConversations(prev => prev.map(c => c.id === activeId
-          ? { ...c, lead_id: lead.id, contact_type: 'lead', name: leadForm.responsible_name || c.name }
-          : c
-        ))
-      }
-      // Sync to whatsapp_contacts
-      const normPhone = (() => {
-        let d = (leadForm.phone || activeConv?.phone || '').replace(/\D/g, '')
-        if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-        if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-        if (d.length === 11) d = '55' + d
-        return d
-      })()
-      if (normPhone && effectiveInstitutionId) {
-        await supabase
-          .from('whatsapp_contacts')
-          .upsert({
-            institution_id: effectiveInstitutionId,
-            phone: normPhone,
-            name: leadForm.responsible_name || normPhone,
-            type: 'lead',
-            lead_id: lead.id,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'institution_id,phone' })
-      }
-      setShowLeadModal(false)
-      setLeadForm({ responsible_name: '', student_name: '', phone: '', email: '', grade_interest: '', source: 'WhatsApp' })
-    } catch { setSendError('Erro ao criar lead.') }
-  }
-
   const filteredMessages = activeConv
     ? (msgSearchText.trim()
         ? activeConv.messages.filter(m => m.content.toLowerCase().includes(msgSearchText.toLowerCase()))
@@ -3587,81 +3581,51 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               onChange={e => setNewConvPhone(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleNewConv() }}
               placeholder="+55 (00) 00000-0000"
-              className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none mb-4"
+              className="w-full px-3 py-2.5 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-2 focus:ring-[#00A896] outline-none"
             />
+            {checkingNewConv && (
+              <p className="text-[11px] text-[#94A3B8] mt-1.5 mb-2">Verificando...</p>
+            )}
+            {!checkingNewConv && newConvMatch && (
+              <div className="flex items-start gap-1.5 mt-1.5 mb-2 px-2.5 py-2 rounded-lg bg-[#FFFBEB] border border-[#FDE68A]">
+                <Info className="w-3.5 h-3.5 text-[#D97706] flex-shrink-0 mt-0.5" />
+                <p className="text-[11px] text-[#92400E] leading-snug">
+                  Já existe conversa com esse número ({newConvMatch.name}). Ao continuar, a conversa existente será aberta.
+                </p>
+              </div>
+            )}
+            {!checkingNewConv && !newConvMatch && <div className="mb-4" />}
             <div className="flex gap-2">
-              <button onClick={() => { setShowNewConvModal(false); setNewConvPhone(''); setNewConvName('') }}
+              <button onClick={() => { setShowNewConvModal(false); setNewConvPhone(''); setNewConvName(''); setNewConvMatch(null) }}
                 className="flex-1 py-2.5 text-xs font-medium text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
                 Cancelar
               </button>
               <button onClick={handleNewConv} disabled={!newConvPhone.trim()}
                 className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
-                Iniciar
+                {newConvMatch ? 'Abrir conversa' : 'Iniciar'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Lead Modal */}
-      {showLeadModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 w-96 shadow-2xl border border-[#E2E8F0] max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-[#1A2B4A]">Criar Lead</h3>
-              <button onClick={() => setShowLeadModal(false)} className="p-1 text-[#64748B] hover:text-[#1A2B4A]">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-[#64748B] mb-1">Nome do Responsável *</label>
-                <input value={leadForm.responsible_name} onChange={e => setLeadForm(f => ({...f, responsible_name: e.target.value}))}
-                  placeholder="Nome completo"
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[#64748B] mb-1">Nome do Aluno</label>
-                <input value={leadForm.student_name} onChange={e => setLeadForm(f => ({...f, student_name: e.target.value}))}
-                  placeholder="Nome do aluno"
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[#64748B] mb-1">Telefone</label>
-                <input value={leadForm.phone} onChange={e => setLeadForm(f => ({...f, phone: e.target.value}))}
-                  placeholder="+55 00 00000-0000"
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[#64748B] mb-1">E-mail</label>
-                <input type="email" value={leadForm.email} onChange={e => setLeadForm(f => ({...f, email: e.target.value}))}
-                  placeholder="email@exemplo.com"
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] placeholder-[#94A3B8] focus:ring-1 focus:ring-[#00A896] outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[#64748B] mb-1">Série de Interesse</label>
-                <select value={leadForm.grade_interest} onChange={e => setLeadForm(f => ({...f, grade_interest: e.target.value}))}
-                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
-                  <option value="">Selecionar...</option>
-                  {['Educação Infantil','1º Ano','2º Ano','3º Ano','4º Ano','5º Ano','6º Ano','7º Ano','8º Ano','9º Ano','1º EM','2º EM','3º EM'].map(g => (
-                    <option key={g} value={g}>{g}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setShowLeadModal(false)}
-                className="flex-1 py-2.5 text-xs font-medium text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
-                Cancelar
-              </button>
-              <button onClick={handleCreateLead} disabled={!leadForm.responsible_name.trim()}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
-                Criar Lead
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Formulário de lead unificado com o CRM — cria (leadModalTarget nulo)
+          ou edita (preenchido pelo botão "Editar" do painel lateral) o lead
+          da conversa ativa. Ver src/components/leads/NewLeadModal.tsx. */}
+      <NewLeadModal
+        isOpen={showLeadModal}
+        onClose={() => { setShowLeadModal(false); setLeadModalTarget(null) }}
+        onSave={handleSaveLeadForm}
+        editingLead={leadModalTarget}
+        institutionId={effectiveInstitutionId}
+        users={users}
+        createDefaults={!leadModalTarget ? {
+          responsible_name: activeConv && activeConv.name !== formatPhone(activeConv.id) ? activeConv.name : '',
+          phone: activeConv?.phone || '',
+          source: 'WhatsApp',
+          assigned_to: activeConv?.assigned_user_id || user?.id || '',
+        } : undefined}
+      />
 
       {/* Client Modal (placeholder) */}
       {showClientModal && (
@@ -4946,156 +4910,44 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                                     )}
                                   </div>
                                 </div>
-                                <button onClick={() => { setEditingLead(v => !v); if (!editingLead) setLeadEditForm({ ...leadData }) }}
+                                <button onClick={openEditLeadModal}
                                   style={{ fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 7, border: '1px solid #d1fae5', color: '#0d9488', background: 'transparent', cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 }}
                                   onMouseEnter={e => (e.currentTarget.style.background = '#e6f7f5')}
                                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                                  {editingLead ? 'Cancelar' : '✏️ Editar'}
+                                  ✏️ Editar
                                 </button>
                               </div>
 
-                              {/* View mode */}
-                              {!editingLead && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '0 2px' }}>
-                                  {leadData.grade_interest && (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                                      <span style={{ color: '#64748B' }}>Série</span>
-                                      <span style={{ color: '#1A2B4A', fontWeight: 500 }}>{leadData.grade_interest}</span>
-                                    </div>
-                                  )}
-                                  {leadData.email && (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, gap: 8 }}>
-                                      <span style={{ color: '#64748B', flexShrink: 0 }}>E-mail</span>
-                                      <span style={{ color: '#1A2B4A', fontWeight: 500, wordBreak: 'break-all', textAlign: 'right' }}>{leadData.email}</span>
-                                    </div>
-                                  )}
-                                  {/* Lead funnel visual */}
-                                  {(() => {
-                                    const STAGES = [
-                                      { key: 'new',       label: 'Novo'       },
-                                      { key: 'contact',   label: 'Contato'    },
-                                      { key: 'scheduled', label: 'Ag.'        },
-                                      { key: 'visit',     label: 'Visita'     },
-                                      { key: 'proposal',  label: 'Proposta'   },
-                                      { key: 'enrolled',  label: 'Matrícula'  },
-                                    ]
-                                    const curStatus = leadEditForm.status || leadData.status || 'new'
-                                    const curIdx = STAGES.findIndex(s => s.key === curStatus)
-                                    return (
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center' }}>
-                                          {STAGES.map((stage, idx) => {
-                                            const done   = idx < curIdx
-                                            const active = idx === curIdx
-                                            return (
-                                              <React.Fragment key={stage.key}>
-                                                <div
-                                                  title={stage.label}
-                                                  onClick={() => { setLeadEditForm((f: any) => ({ ...f, status: stage.key })); handleSaveLead({ status: stage.key }) }}
-                                                  style={{
-                                                    width: 20, height: 20, borderRadius: '50%', cursor: 'pointer', flexShrink: 0,
-                                                    background: done || active ? '#00A896' : '#E2E8F0',
-                                                    border: active ? '2.5px solid #007A6E' : '2px solid transparent',
-                                                    boxSizing: 'border-box',
-                                                    boxShadow: active ? '0 0 0 2px rgba(0,168,150,0.25)' : 'none',
-                                                    transition: 'all 0.15s',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                  }}
-                                                >
-                                                  {done && <span style={{ fontSize: 8, color: '#fff', fontWeight: 700 }}>✓</span>}
-                                                </div>
-                                                {idx < STAGES.length - 1 && (
-                                                  <div style={{ flex: 1, height: 2, background: done ? '#00A896' : '#E2E8F0', transition: 'background 0.15s' }} />
-                                                )}
-                                              </React.Fragment>
-                                            )
-                                          })}
-                                        </div>
-                                        <div style={{ display: 'flex' }}>
-                                          {STAGES.map((stage, idx) => (
-                                            <span key={stage.key}
-                                              onClick={() => { setLeadEditForm((f: any) => ({ ...f, status: stage.key })); handleSaveLead({ status: stage.key }) }}
-                                              style={{
-                                                flex: 1, fontSize: 9, textAlign: 'center', lineHeight: 1.2, cursor: 'pointer',
-                                                color: idx <= curIdx ? '#0d9488' : '#94A3B8',
-                                                fontWeight: idx === curIdx ? 700 : 400,
-                                              }}>
-                                              {stage.label}
-                                            </span>
-                                          ))}
-                                        </div>
-                                        <button
-                                          onClick={() => { setLeadEditForm((f: any) => ({ ...f, status: 'lost' })); handleSaveLead({ status: 'lost' }) }}
-                                          style={{ fontSize: 10, color: curStatus === 'lost' ? '#fff' : '#EF4444', background: curStatus === 'lost' ? '#EF4444' : 'transparent', border: '1px solid #FECACA', borderRadius: 7, padding: '3px 8px', cursor: 'pointer', alignSelf: 'flex-start', transition: 'all 0.15s' }}
-                                          onMouseEnter={e => { if (curStatus !== 'lost') e.currentTarget.style.background = '#FEE2E2' }}
-                                          onMouseLeave={e => { if (curStatus !== 'lost') e.currentTarget.style.background = 'transparent' }}>
-                                          {curStatus === 'lost' ? '🔴 Perdido' : 'Marcar como Perdido'}
-                                        </button>
-                                      </div>
-                                    )
-                                  })()}
-                                  {leadData.source && (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                                      <span style={{ color: '#64748B' }}>Origem</span>
-                                      <span style={{ color: '#1A2B4A', fontWeight: 500 }}>{leadData.source}</span>
-                                    </div>
-                                  )}
+                              {/* Visão compacta — somente leitura. Edição vai
+                                  toda pelo NewLeadModal (botão Editar acima),
+                                  fonte única de verdade compartilhada com o
+                                  CRM (ver leadFormShared.ts). */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '0 2px' }}>
+                                {leadData.grade_interest && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                                    <span style={{ color: '#64748B' }}>Série</span>
+                                    <span style={{ color: '#1A2B4A', fontWeight: 500 }}>{leadData.grade_interest}</span>
+                                  </div>
+                                )}
+                                {leadData.email && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, gap: 8 }}>
+                                    <span style={{ color: '#64748B', flexShrink: 0 }}>E-mail</span>
+                                    <span style={{ color: '#1A2B4A', fontWeight: 500, wordBreak: 'break-all', textAlign: 'right' }}>{leadData.email}</span>
+                                  </div>
+                                )}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                                  <span style={{ color: '#64748B' }}>Status</span>
+                                  <span style={{ color: statusConfig[leadData.status as keyof typeof statusConfig]?.accent || '#1A2B4A', fontWeight: 700 }}>
+                                    {statusConfig[leadData.status as keyof typeof statusConfig]?.label || leadData.status}
+                                  </span>
                                 </div>
-                              )}
-
-                              {/* Edit mode */}
-                              {editingLead && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 7, background: '#f0fdfb', borderRadius: 10, padding: '10px 12px', border: '1px solid #d1fae5' }}>
-                                  {[
-                                    { label: 'Responsável', key: 'responsible_name' },
-                                    { label: 'Aluno', key: 'student_name' },
-                                    { label: 'E-mail', key: 'email' },
-                                  ].map(({ label, key }) => (
-                                    <div key={key}>
-                                      <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 3 }}>{label}</label>
-                                      <input value={(leadEditForm as any)[key] || ''}
-                                        onChange={e => setLeadEditForm((f: any) => ({ ...f, [key]: e.target.value }))}
-                                        style={{ width: '100%', padding: '6px 8px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }} />
-                                    </div>
-                                  ))}
-                                  <div>
-                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 3 }}>Série</label>
-                                    <select value={leadEditForm.grade_interest || ''}
-                                      onChange={e => setLeadEditForm((f: any) => ({ ...f, grade_interest: e.target.value }))}
-                                      style={{ width: '100%', padding: '6px 8px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}>
-                                      <option value="">Selecionar...</option>
-                                      {['Educação Infantil','1º Ano','2º Ano','3º Ano','4º Ano','5º Ano','6º Ano','7º Ano','8º Ano','9º Ano','1º EM','2º EM','3º EM'].map(g => (
-                                        <option key={g} value={g}>{g}</option>
-                                      ))}
-                                    </select>
+                                {leadData.source && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                                    <span style={{ color: '#64748B' }}>Origem</span>
+                                    <span style={{ color: '#1A2B4A', fontWeight: 500 }}>{leadData.source}</span>
                                   </div>
-                                  <div>
-                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 3 }}>Status</label>
-                                    <select value={leadEditForm.status || 'new'}
-                                      onChange={e => setLeadEditForm((f: any) => ({ ...f, status: e.target.value }))}
-                                      style={{ width: '100%', padding: '6px 8px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', boxSizing: 'border-box' }}>
-                                      <option value="new">Novo</option>
-                                      <option value="contact">Em contato</option>
-                                      <option value="scheduled">Visita agendada</option>
-                                      <option value="visit">Visita realizada</option>
-                                      <option value="proposal">Proposta enviada</option>
-                                      <option value="enrolled">Matriculado</option>
-                                      <option value="lost">Perdido</option>
-                                    </select>
-                                  </div>
-                                  <div style={{ display: 'flex', gap: 6 }}>
-                                    <button onClick={() => handleSaveLead()}
-                                      disabled={savingLead}
-                                      style={{ flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600, color: '#fff', background: savingLead ? '#94A3B8' : '#0d9488', border: 'none', borderRadius: 7, cursor: savingLead ? 'not-allowed' : 'pointer' }}>
-                                      {savingLead ? 'Salvando...' : 'Salvar'}
-                                    </button>
-                                    <button onClick={() => setEditingLead(false)}
-                                      style={{ padding: '6px 10px', fontSize: 12, color: '#64748B', border: '1px solid #d1fae5', borderRadius: 7, background: '#fff', cursor: 'pointer' }}>
-                                      Cancelar
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
+                                )}
+                              </div>
 
                               {/* Actions row */}
                               <button onClick={() => navigate(`/leads?highlight=${activeConv.lead_id}`)}
@@ -5143,7 +4995,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                               <ChevronRight style={{ width: 13, height: 13, color: '#94A3B8' }} />
                             </button>
                             {(!activeConv.contact_type || activeConv.contact_type === 'unknown') && (
-                              <button onClick={() => { setLeadForm(prev => ({ ...prev, responsible_name: activeConv.name !== formatPhone(activeConv.id) ? activeConv.name : '', phone: activeConv.phone })); setShowLeadModal(true) }}
+                              <button onClick={() => { setLeadModalTarget(null); setShowLeadModal(true) }}
                                 style={{ width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, color: '#0d9488', background: 'transparent', border: '1px dashed #d1fae5', borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.background = '#e6f7f5'; e.currentTarget.style.borderColor = '#0d9488' }}
                                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#d1fae5' }}>

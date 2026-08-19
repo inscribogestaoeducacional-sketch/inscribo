@@ -10,6 +10,7 @@ import {
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, WhatsappMessage, WhatsappConversation, User as UserType, supabase } from '../../lib/supabase'
+import { normalizeBrazilianInput } from '../../lib/phone'
 import LeadModal, { STAGES as CRM_STAGES } from '../shared/LeadModal'
 import ProposalGenerator from './ProposalGenerator'
 import { buildSendComponents, getTemplateHeaderMediaFormat, uploadTemplateHeaderMedia } from '../../lib/whatsappTemplate'
@@ -3304,21 +3305,11 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
 
   const handleNewConv = async () => {
     if (!newConvPhone.trim()) return
-    const raw = newConvPhone.trim()
-    const digits = raw.replace(/\D/g, '')
-    // Detect explicit international format typed by the user (+ or 00 prefix)
-    const isExplicitIntl = raw.startsWith('+') || raw.startsWith('00')
-    const hasBrCC = digits.startsWith('55') && (digits.length === 12 || digits.length === 13)
-    let normalized: string
-    if (hasBrCC) {
-      normalized = digits.length === 12 ? digits.slice(0, 4) + '9' + digits.slice(4) : digits
-    } else if (!isExplicitIntl && digits.length <= 11) {
-      // Bare number entered without '+' prefix: treat as Brazilian
-      normalized = '55' + (digits.length === 10 ? digits.slice(0, 2) + '9' + digits.slice(2) : digits)
-    } else {
-      // User typed '+' or '00' prefix, or number is 12+ digits: already has country code
-      normalized = digits
-    }
+    // Normalização canônica compartilhada (src/lib/phone.ts) — mesmo critério
+    // usado em WhatsAppHub.tsx, pra não gerar contato/conversa duplicada por
+    // causa do formato (com/sem 55, com/sem 9º dígito).
+    const normalized = normalizeBrazilianInput(newConvPhone.trim())
+    if (!normalized) return
     const jid = `${normalized}@s.whatsapp.net`
     const existing = conversations.find(c => c.id === jid)
     if (existing) {

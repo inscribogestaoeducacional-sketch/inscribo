@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
+import { normalizeBrazilianInput } from '../../lib/phone'
 import {
   Users, BookUser, Search, Phone, Download, Upload, FileText,
   RefreshCw, MessageSquare, ChevronsUpDown, ChevronUp, ChevronDown, ChevronRight,
@@ -574,12 +575,16 @@ export default function ContactsModule() {
     try {
       const { data: existingLeads } = await supabase
         .from('leads').select('phone').eq('institution_id', institutionId).is('deleted_at', null)
-      const existingPhones = new Set((existingLeads || []).map(l => (l.phone || '').replace(/\D/g, '')))
+      // Normaliza tanto os leads existentes quanto os da planilha pro mesmo
+      // formato canônico (com/sem 55, com/sem 9º dígito) antes de comparar —
+      // senão "8388887777" e "5583988887777" são tratados como diferentes e
+      // o mesmo contato acaba duplicado.
+      const existingPhones = new Set((existingLeads || []).map(l => normalizeBrazilianInput(l.phone || '')).filter(Boolean))
       const seen = new Set<string>()
       let duplicates = 0
       const toInsert: object[] = []
       for (const r of importRows) {
-        const phone = r.telefone.replace(/\D/g, '')
+        const phone = normalizeBrazilianInput(r.telefone)
         if (!phone || seen.has(phone) || existingPhones.has(phone)) { duplicates++; continue }
         seen.add(phone)
         toInsert.push({ institution_id: institutionId, student_name: r.nome || null, responsible_name: r.nome || null, phone, email: r.email || null, status: 'novo' })

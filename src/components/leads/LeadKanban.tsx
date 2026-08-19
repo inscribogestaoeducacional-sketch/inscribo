@@ -3,8 +3,8 @@ import {
   Plus, Phone, Calendar, Edit, Edit2, Trash2, X, Search,
   Clock, Users, Send, CheckCircle, Save,
   MessageCircle, AlertTriangle, ChevronDown, ChevronRight, ChevronUp,
-  Flame, Sun, Snowflake, Bell, UserCog, SlidersHorizontal,
-  LayoutGrid, Rows3, Tag, Megaphone, MapPin, GraduationCap, UserPlus2,
+  Bell, UserCog, SlidersHorizontal,
+  LayoutGrid, Rows3, Tag, Megaphone, MapPin, GraduationCap,
 } from 'lucide-react'
 import { logAudit } from '../../hooks/useAudit'
 import AuditModal from '../common/AuditModal'
@@ -22,24 +22,12 @@ import { DatabaseService, Lead, supabase } from '../../lib/supabase'
 import { createNotification } from '../../lib/notifications'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { getLeadReminderInfo, REMINDER_COLORS } from '../../lib/leadReminders'
-
-type AuditEntry = {
-  id: string; action: string; record_id: string; module: string
-  institution_id: string; user_id: string | null; user_name: string | null
-  user_role: string | null; field_changed: string | null; old_value: string | null
-  new_value: string | null; created_at: string
-}
-
-// ─── Config ───────────────────────────────────────────────────────────────────
-const statusConfig = {
-  new:       { label: 'Novo',             accent: '#6b7280', headerBg: 'bg-gray-100',   headerText: 'text-gray-700',   badgeBg: 'bg-gray-500'   },
-  contact:   { label: 'Em Contato',       accent: '#3b82f6', headerBg: 'bg-blue-50',    headerText: 'text-blue-800',   badgeBg: 'bg-blue-500'   },
-  scheduled: { label: 'Visita Agendada',  accent: '#f59e0b', headerBg: 'bg-amber-50',   headerText: 'text-amber-800',  badgeBg: 'bg-amber-500'  },
-  visit:     { label: 'Visitou',          accent: '#f97316', headerBg: 'bg-orange-50',  headerText: 'text-orange-800', badgeBg: 'bg-orange-500' },
-  proposal:  { label: 'Proposta',         accent: '#8b5cf6', headerBg: 'bg-purple-50',  headerText: 'text-purple-800', badgeBg: 'bg-purple-500' },
-  enrolled:  { label: 'Matriculado',      accent: '#22c55e', headerBg: 'bg-green-50',   headerText: 'text-green-800',  badgeBg: 'bg-green-500'  },
-  lost:      { label: 'Perdido',          accent: '#ef4444', headerBg: 'bg-red-50',     headerText: 'text-red-800',    badgeBg: 'bg-red-500'    },
-}
+import NewLeadModal from './NewLeadModal'
+import { saveLead } from '../../lib/leadSave'
+import {
+  type SimpleUser, type AuditEntry, type StudentEntry,
+  statusConfig, sourceOptions, LEAD_TEMPERATURES,
+} from './leadFormShared'
 
 // ─── Motivos de recusa ────────────────────────────────────────────────────────
 const LOST_REASONS = [
@@ -55,23 +43,11 @@ const LOST_REASONS = [
   { value: 'outro',             label: 'Outro motivo',                        fator: 'Interno', subfator: 'Administrativo' },
 ]
 
-// 'Concurso de Bolsas' adicionado pra dar sentido ao campo condicional
-// contest_name (item 11) — antes não existia nenhuma origem relacionada a
-// concurso/bolsa na lista, então o campo nunca teria como ficar visível.
-const sourceOptions = ['Facebook', 'Instagram', 'Google', 'Site', 'Indicação', 'WhatsApp', 'Concurso de Bolsas', 'Outros']
-
 // Séries — antes existiam DUAS listas hardcoded divergentes aqui mesmo
 // (gradeOptions usada pra salvar, GRADES usada só pro filtro, com Ensino
 // Médio em nomenclaturas diferentes — o filtro nunca encontrava nada).
 // Agora vêm de school_grade_levels via useGradeLevels(), configurável por
 // escola (Configurações → Escola). Ver hooks/useGradeLevels.ts.
-
-// ─── Temperatura do lead ──────────────────────────────────────────────────────
-const LEAD_TEMPERATURES = [
-  { value: 'quente', label: 'Quente', icon: Flame,     color: '#EF4444', bg: '#FEF2F2', border: '#FECACA' },
-  { value: 'morno',  label: 'Morno',  icon: Sun,       color: '#F59E0B', bg: '#FFFBEB', border: '#FDE68A' },
-  { value: 'frio',   label: 'Frio',   icon: Snowflake, color: '#3B82F6', bg: '#EFF6FF', border: '#BFDBFE' },
-] as const
 
 // Lógica de lembrete (manual + automático "sem contato") vive em
 // lib/leadReminders.ts — reaproveitada aqui, no GestorHome e no AttendantHome.
@@ -80,17 +56,6 @@ const timeSlots = [
   '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
   '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
 ]
-
-const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#14b8a6] focus:border-[#14b8a6] transition-all outline-none'
-const btnPrimary = 'px-5 py-2.5 bg-gradient-to-r from-[#14b8a6] to-[#1e2d6b] text-white rounded-lg hover:from-[#0d9488] hover:to-[#151b4e] transition-all font-semibold flex items-center gap-2 text-sm'
-const btnSecondary = 'px-5 py-2.5 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-all font-semibold text-sm'
-
-function applyPhoneMask(value: string): string {
-  const digits = value.replace(/\D/g, '').slice(0, 11)
-  if (digits.length <= 2) return digits
-  if (digits.length <= 7) return `${digits.slice(0, 2)} ${digits.slice(2)}`
-  return `${digits.slice(0, 2)} ${digits.slice(2, 7)}-${digits.slice(7)}`
-}
 
 // ─── LostReasonModal ──────────────────────────────────────────────────────────
 interface LostReasonModalProps {
@@ -255,759 +220,6 @@ function LostReasonModal({ isOpen, lead, onConfirm, onCancel }: LostReasonModalP
   )
 }
 
-// ─── NewLeadModal ─────────────────────────────────────────────────────────────
-interface SimpleUser { id: string; full_name: string; role?: string }
-
-// Um filho a mais além do primeiro (que continua vivendo em formData, pra não
-// mexer no fluxo de edição de lead único). Usado só no fluxo de criação.
-interface StudentEntry {
-  student_name: string
-  grade_interest: string
-  shift_interest: string
-  origin_school: string
-}
-
-interface NewLeadModalProps {
-  isOpen: boolean
-  onClose: () => void
-  onSave: (data: Partial<Lead> & { familyMatchId?: string | null; additionalStudents?: StudentEntry[] }) => Promise<void>
-  editingLead?: Lead | null
-  onDelete?: (id: string) => void
-  institutionId: string
-  users: SimpleUser[]
-  activeCampaignLabel?: string | null
-  institutionCity?: string
-}
-
-const LEAD_STAGES = [
-  { key: 'new',       label: 'Novo'      },
-  { key: 'contact',   label: 'Contato'   },
-  { key: 'scheduled', label: 'Ag.'       },
-  { key: 'visit',     label: 'Visita'    },
-  { key: 'proposal',  label: 'Proposta'  },
-  { key: 'enrolled',  label: 'Matrícula' },
-] as const
-
-function avatarColor(name: string): string {
-  const colors = ['#00A896', '#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444', '#10B981']
-  let h = 0
-  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h)
-  return colors[Math.abs(h) % colors.length]
-}
-
-// Resultado da checagem de telefone já cadastrado (item 3b). id pode ser um
-// UUID real de lead_families (família já existe) OU `retro:<leadId>` — um
-// lead avulso antigo com esse telefone que ainda não foi agrupado; nesse
-// caso o handleSave do componente pai cria a família na hora e promove os
-// dois leads (o antigo + o novo) pra ela.
-interface FamilyMatch {
-  id: string
-  responsible_name: string
-  phone: string
-  email: string | null
-  address: string | null
-  childrenCount: number
-}
-
-function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete, institutionId, users, activeCampaignLabel, institutionCity }: NewLeadModalProps) {
-  const { user: modalUser } = useAuth()
-  const { names: gradeNames } = useGradeLevels(institutionId)
-  const [activeTab, setActiveTab] = useState<'dados' | 'historico' | 'anotacoes'>('dados')
-  const [saving, setSaving] = useState(false)
-  const [savingNote, setSavingNote] = useState(false)
-  const [savingActivity, setSavingActivity] = useState(false)
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
-  const [history, setHistory] = useState<AuditEntry[]>([])
-  const [loadingHistory, setLoadingHistory] = useState(false)
-  const [quickNote, setQuickNote] = useState('')
-  const [activityForm, setActivityForm] = useState({ tipo: 'Ligação', descricao: '', data: new Date().toISOString().split('T')[0] })
-  const [familyMatch, setFamilyMatch] = useState<FamilyMatch | null>(null)
-  const [checkingFamily, setCheckingFamily] = useState(false)
-  const [familyMatchId, setFamilyMatchId] = useState<string | null>(null)
-  // Item 3 — filhos além do primeiro, preenchidos na mesma tela (tanto ao
-  // criar quanto ao editar um lead já existente). O primeiro aluno continua
-  // em formData (mantém o fluxo de edição de lead único intacto).
-  const [extraStudents, setExtraStudents] = useState<StudentEntry[]>([])
-  const addStudent = () => setExtraStudents(s => [...s, { student_name: '', grade_interest: '', shift_interest: '', origin_school: '' }])
-  const updateStudent = (idx: number, patch: Partial<StudentEntry>) => setExtraStudents(s => s.map((st, i) => i === idx ? { ...st, ...patch } : st))
-  const removeStudent = (idx: number) => setExtraStudents(s => s.filter((_, i) => i !== idx))
-  const [formData, setFormData] = useState({
-    student_name: '', grade_interest: '', shift_interest: '',
-    responsible_name: '', phone: '', email: '', address: '', city: '',
-    budget_range: '', source: '', notes: '',
-    status: 'new' as Lead['status'],
-    assigned_to: '' as string,
-    next_followup: '' as string,
-    lead_temperature: '' as '' | 'frio' | 'morno' | 'quente',
-    origin_school: '', referral_source: '', contest_name: '',
-  })
-
-  useEffect(() => {
-    if (!isOpen) return
-    if (editingLead) {
-      setFormData({
-        student_name: editingLead.student_name ?? '',
-        grade_interest: editingLead.grade_interest ?? '',
-        shift_interest: (editingLead as any).shift_interest ?? '',
-        responsible_name: editingLead.responsible_name ?? '',
-        phone: editingLead.phone ?? '',
-        email: editingLead.email ?? '',
-        address: editingLead.address ?? '',
-        city: editingLead.city ?? '',
-        budget_range: editingLead.budget_range ?? '',
-        source: editingLead.source ?? '',
-        notes: editingLead.notes ?? '',
-        status: editingLead.status ?? 'new',
-        assigned_to: editingLead.assigned_to ?? '',
-        next_followup: editingLead.next_followup ? editingLead.next_followup.slice(0, 10) : '',
-        lead_temperature: editingLead.lead_temperature ?? '',
-        origin_school: editingLead.origin_school ?? '',
-        referral_source: editingLead.referral_source ?? '',
-        contest_name: editingLead.contest_name ?? '',
-      })
-    } else {
-      setFormData({
-        student_name: '', grade_interest: '', shift_interest: '',
-        responsible_name: '', phone: '', email: '', address: '', city: institutionCity ?? '',
-        budget_range: '', source: '', notes: '',
-        status: 'new',
-        assigned_to: modalUser?.id ?? '',
-        next_followup: '', lead_temperature: '',
-        origin_school: '', referral_source: '', contest_name: '',
-      })
-    }
-    setActiveTab('dados')
-    setFieldErrors({})
-    setQuickNote('')
-    setHistory([])
-    setFamilyMatch(null)
-    setFamilyMatchId(null)
-    setExtraStudents([])
-  }, [editingLead, isOpen])
-
-  useEffect(() => {
-    if (activeTab === 'historico' && editingLead?.id) {
-      setLoadingHistory(true)
-      ;(async () => {
-        try {
-          const { supabase: db } = await import('../../lib/supabase')
-          const instId = (editingLead as any).institution_id ?? ''
-          const { data } = await db.from('audit_logs')
-            .select('*')
-            .eq('institution_id', instId)
-            .eq('record_id', editingLead.id)
-            .eq('module', 'lead')
-            .order('created_at', { ascending: true })
-            .limit(50)
-          setHistory((data || []) as AuditEntry[])
-        } catch { setHistory([]) }
-        finally { setLoadingHistory(false) }
-      })()
-    }
-  }, [activeTab, editingLead?.id])
-
-  // ── Item 3b: detectar família já cadastrada com esse telefone ────────────
-  // Só roda ao criar (não editar) e só depois que o campo perde foco, pra não
-  // consultar a cada tecla digitada.
-  const checkFamilyByPhone = async () => {
-    if (editingLead || familyMatchId) return
-    const digits = formData.phone.replace(/\D/g, '')
-    if (digits.length < 10 || !institutionId) { setFamilyMatch(null); return }
-    setCheckingFamily(true)
-    try {
-      const { data: fam } = await supabase
-        .from('lead_families')
-        .select('id, responsible_name, phone, email, address')
-        .eq('institution_id', institutionId)
-        .ilike('phone', `%${digits}%`)
-        .limit(1)
-        .maybeSingle()
-      if (fam) {
-        const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('family_id', fam.id)
-        setFamilyMatch({ id: fam.id, responsible_name: fam.responsible_name, phone: fam.phone ?? '', email: fam.email, address: fam.address, childrenCount: count ?? 0 })
-        return
-      }
-      // Lead avulso antigo com esse telefone, nunca agrupado em família.
-      const { data: soloLead } = await supabase
-        .from('leads')
-        .select('id, responsible_name, phone, email, address')
-        .eq('institution_id', institutionId)
-        .is('family_id', null)
-        .ilike('phone', `%${digits}%`)
-        .limit(1)
-        .maybeSingle()
-      if (soloLead) {
-        setFamilyMatch({ id: `retro:${soloLead.id}`, responsible_name: soloLead.responsible_name, phone: soloLead.phone ?? '', email: soloLead.email ?? null, address: soloLead.address ?? null, childrenCount: 1 })
-      } else {
-        setFamilyMatch(null)
-      }
-    } catch { setFamilyMatch(null) } finally { setCheckingFamily(false) }
-  }
-
-  const acceptFamilyMatch = () => {
-    if (!familyMatch) return
-    setFamilyMatchId(familyMatch.id)
-    setFormData(f => ({
-      ...f,
-      responsible_name: familyMatch.responsible_name || f.responsible_name,
-      phone: familyMatch.phone || f.phone,
-      email: familyMatch.email || f.email,
-      address: familyMatch.address || f.address,
-    }))
-  }
-
-  const dismissFamilyMatch = () => { setFamilyMatch(null); setFamilyMatchId(null) }
-
-  // ── Etiquetas (item 9b — precisam poder ser editadas em algum lugar pra
-  // aparecerem no card; portado do HistoryModal, que existia nesse arquivo
-  // mas nunca era instanciado — código morto removido nessa mesma leva). ──
-  const [leadTags, setLeadTags] = useState<string[]>([])
-  const [availableTags, setAvailableTags] = useState<{ id: string; name: string; color: string }[]>([])
-  const [tagToast, setTagToast] = useState('')
-
-  useEffect(() => { setLeadTags(editingLead?.tags || []) }, [editingLead])
-
-  useEffect(() => {
-    if (!institutionId) return
-    ;(async () => {
-      const { data } = await supabase.from('whatsapp_tags').select('id, name, color').eq('institution_id', institutionId).order('name')
-      if (data) setAvailableTags(data as { id: string; name: string; color: string }[])
-    })()
-  }, [institutionId])
-
-  const handleAddLeadTag = async (tagName: string) => {
-    if (!editingLead || leadTags.includes(tagName)) return
-    const newTags = [...leadTags, tagName]
-    setLeadTags(newTags)
-    const { error } = await supabase.from('leads').update({ tags: newTags }).eq('id', editingLead.id)
-    if (error) { console.error('[NewLeadModal] erro ao adicionar etiqueta:', error); setTagToast('Erro ao adicionar etiqueta') }
-    else setTagToast('Etiqueta adicionada!')
-    setTimeout(() => setTagToast(''), 2500)
-  }
-
-  const handleRemoveLeadTag = async (tagName: string) => {
-    if (!editingLead) return
-    const newTags = leadTags.filter(t => t !== tagName)
-    setLeadTags(newTags)
-    const { error } = await supabase.from('leads').update({ tags: newTags }).eq('id', editingLead.id)
-    if (error) { console.error('[NewLeadModal] erro ao remover etiqueta:', error); setTagToast('Erro ao remover etiqueta') }
-    else setTagToast('Etiqueta removida!')
-    setTimeout(() => setTagToast(''), 2500)
-  }
-
-  const validate = (): boolean => {
-    const errors: Record<string, string> = {}
-    if (!formData.student_name.trim()) errors.student_name = 'Obrigatório'
-    if (!formData.responsible_name.trim()) errors.responsible_name = 'Obrigatório'
-    if (!formData.phone.trim()) errors.phone = 'Obrigatório'
-    setFieldErrors(errors)
-    return Object.keys(errors).length === 0
-  }
-
-  const handleSubmit = async () => {
-    if (!validate()) { setActiveTab('dados'); return }
-    setSaving(true)
-    try {
-      // Filhos extras com nome em branco são descartados silenciosamente —
-      // é um bloco que o usuário abriu e não chegou a preencher, não um erro.
-      const additionalStudents = extraStudents.filter(s => s.student_name.trim()).map(s => ({ ...s, student_name: s.student_name.trim() }))
-      await onSave({ ...formData, lead_temperature: formData.lead_temperature || null, familyMatchId, additionalStudents })
-      onClose()
-    } finally { setSaving(false) }
-  }
-
-  const handleSaveNote = async () => {
-    if (!editingLead) return
-    const noteText = quickNote || formData.notes
-    if (!noteText.trim()) return
-    setSavingNote(true)
-    try {
-      const { supabase: db } = await import('../../lib/supabase')
-      await db.from('leads').update({ notes: noteText }).eq('id', editingLead.id)
-      setFormData(f => ({ ...f, notes: noteText }))
-    } catch {} finally { setSavingNote(false) }
-  }
-
-  const handleAddActivity = async () => {
-    if (!editingLead || !activityForm.descricao.trim()) return
-    setSavingActivity(true)
-    try {
-      const { supabase: db } = await import('../../lib/supabase')
-      const instId = (editingLead as any).institution_id ?? ''
-      await db.from('audit_logs').insert({
-        institution_id: instId, module: 'lead', record_id: editingLead.id,
-        action: activityForm.tipo,
-        field_changed: activityForm.descricao,
-        new_value: activityForm.data,
-        user_id: modalUser?.id || null, user_name: modalUser?.full_name || 'Atendente', user_role: '',
-      })
-      setActivityForm({ tipo: 'Ligação', descricao: '', data: new Date().toISOString().split('T')[0] })
-      const { data: h } = await db.from('audit_logs')
-        .select('*').eq('institution_id', instId).eq('record_id', editingLead.id).eq('module', 'lead')
-        .order('created_at', { ascending: true }).limit(50)
-      setHistory((h || []) as AuditEntry[])
-    } catch {} finally { setSavingActivity(false) }
-  }
-
-  if (!isOpen) return null
-
-  const initials = (formData.responsible_name || formData.student_name || '?').charAt(0).toUpperCase()
-  const bgColor = avatarColor(formData.responsible_name || formData.student_name || '?')
-  const curStageIdx = LEAD_STAGES.findIndex(s => s.key === formData.status)
-  const formatDT = (d: string) => new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-  const showReferral = formData.source === 'Indicação'
-  const showContest = formData.source === 'Concurso de Bolsas'
-
-  const getEventIcon = (action: string) => {
-    if (action === 'Lead criado') return '📝'
-    if (action === 'Lead editado') return '✏️'
-    if (action === 'Lead perdido') return '❌'
-    if (action === 'Lead reaberto') return '🔓'
-    if (action === 'Status alterado') return '🔄'
-    if (action === 'Visita agendada') return '📅'
-    if (action === 'Ligação') return '📞'
-    if (action === 'Email' || action === 'E-mail') return '📧'
-    if (action === 'WhatsApp') return '💬'
-    if (action === 'Presencial') return '🤝'
-    return '📌'
-  }
-  const getEventColor = (action: string) => {
-    if (action === 'Lead criado') return '#10B981'
-    if (action === 'Lead editado') return '#3B82F6'
-    if (action === 'Lead perdido') return '#EF4444'
-    if (action === 'Lead reaberto') return '#3B82F6'
-    if (action === 'Status alterado') return '#8B5CF6'
-    if (action === 'Visita agendada') return '#F59E0B'
-    if (action === 'Ligação') return '#06B6D4'
-    if (action === 'WhatsApp') return '#25D366'
-    if (action === 'Email' || action === 'E-mail') return '#3B82F6'
-    if (action === 'Presencial') return '#F97316'
-    return '#94A3B8'
-  }
-  const buildDesc = (item: AuditEntry): string => item.field_changed || item.new_value || ''
-
-  const tabBtn = (tab: typeof activeTab, label: string) => (
-    <button onClick={() => setActiveTab(tab)} style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', borderBottom: activeTab === tab ? '2px solid #00A896' : '2px solid transparent', color: activeTab === tab ? '#00A896' : '#64748B', background: 'transparent', transition: 'all 0.15s' }}>{label}</button>
-  )
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: '#FFFFFF', borderRadius: 20, width: '100%', maxWidth: 680, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.2)', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
-        {/* Header */}
-        <div style={{ background: 'linear-gradient(135deg, #00A896 0%, #007A6E 100%)', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
-          <div style={{ width: 52, height: 52, borderRadius: 16, background: bgColor, border: '2px solid rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
-            {initials}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formData.responsible_name || 'Novo Lead'}</div>
-            {formData.student_name && (
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                Aluno: {formData.student_name}
-                {extraStudents.filter(s => s.student_name.trim()).length > 0 && ` + ${extraStudents.filter(s => s.student_name.trim()).length} irmão(s)`}
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-              {formData.status && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(255,255,255,0.25)', color: '#fff' }}>{statusConfig[formData.status]?.label}</span>}
-              {formData.lead_temperature && (() => {
-                const t = LEAD_TEMPERATURES.find(x => x.value === formData.lead_temperature)!
-                return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(255,255,255,0.25)', color: '#fff' }}><t.icon size={11} />{t.label}</span>
-              })()}
-              {formData.phone && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>📞 {formData.phone}</span>}
-              {formData.email && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>✉ {formData.email}</span>}
-            </div>
-            {(activeCampaignLabel && (!editingLead || editingLead.campaign_cycle_id)) && (
-              <div style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>
-                <Megaphone size={11} /> {editingLead ? `Campanha ${activeCampaignLabel}` : `Será vinculado à campanha ${activeCampaignLabel}`}
-              </div>
-            )}
-          </div>
-          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 10, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-            <X style={{ width: 15, height: 15, color: '#fff' }} />
-          </button>
-        </div>
-
-        {/* Tabs */}
-        <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC', flexShrink: 0, paddingLeft: 8 }}>
-          {tabBtn('dados', 'Dados')}
-          {editingLead && tabBtn('historico', 'Histórico')}
-          {editingLead && tabBtn('anotacoes', 'Anotações')}
-        </div>
-
-        {/* Body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
-
-          {/* ABA DADOS */}
-          {activeTab === 'dados' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-              <div>
-                <p style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Dados do Responsável</p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Nome completo *</label>
-                    <input value={formData.responsible_name} onChange={e => { setFormData(f => ({ ...f, responsible_name: e.target.value })); setFieldErrors(p => ({ ...p, responsible_name: '' })) }} placeholder="Nome do responsável"
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: fieldErrors.responsible_name ? '1.5px solid #EF4444' : '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
-                    {fieldErrors.responsible_name && <p style={{ fontSize: 11, color: '#EF4444', marginTop: 3 }}>{fieldErrors.responsible_name}</p>}
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Telefone / WhatsApp *</label>
-                    <input value={formData.phone}
-                      onChange={e => { setFormData(f => ({ ...f, phone: applyPhoneMask(e.target.value) })); setFieldErrors(p => ({ ...p, phone: '' })) }}
-                      onBlur={checkFamilyByPhone}
-                      placeholder="11 99999-9999"
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: fieldErrors.phone ? '1.5px solid #EF4444' : '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
-                    {fieldErrors.phone && <p style={{ fontSize: 11, color: '#EF4444', marginTop: 3 }}>{fieldErrors.phone}</p>}
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>E-mail</label>
-                    <input type="email" value={formData.email} onChange={e => setFormData(f => ({ ...f, email: e.target.value }))} placeholder="email@exemplo.com"
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
-                  </div>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Cidade</label>
-                    <input value={formData.city} onChange={e => setFormData(f => ({ ...f, city: e.target.value }))} placeholder="Cidade da família"
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
-                  </div>
-                </div>
-
-                {/* Item 3b — família já cadastrada com esse telefone */}
-                {!editingLead && checkingFamily && (
-                  <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 8 }}>Verificando telefone...</p>
-                )}
-                {!editingLead && familyMatch && !familyMatchId && (
-                  <div style={{ marginTop: 10, background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <UserPlus2 size={16} color="#1D4ED8" style={{ flexShrink: 0 }} />
-                    <div style={{ flex: 1 }}>
-                      <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#1E40AF' }}>Já existe um cadastro com esse telefone: {familyMatch.responsible_name}</p>
-                      <p style={{ margin: '2px 0 0', fontSize: 11, color: '#3B82F6' }}>{familyMatch.childrenCount} aluno{familyMatch.childrenCount === 1 ? '' : 's'} já cadastrado{familyMatch.childrenCount === 1 ? '' : 's'} nessa família</p>
-                    </div>
-                    <button onClick={acceptFamilyMatch} style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 8, background: '#1D4ED8', color: '#fff', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                      Adicionar a essa família
-                    </button>
-                    <button onClick={() => setFamilyMatch(null)} title="Ignorar" style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#93C5FD' }}>
-                      <X size={14} />
-                    </button>
-                  </div>
-                )}
-                {!editingLead && familyMatchId && (
-                  <div style={{ marginTop: 10, background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <UserPlus2 size={14} color="#16A34A" />
-                    <p style={{ margin: 0, flex: 1, fontSize: 12, fontWeight: 600, color: '#15803D' }}>Vinculado à família de {formData.responsible_name} — este será mais um aluno da mesma família</p>
-                    <button onClick={dismissFamilyMatch} title="Desvincular" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4ADE80' }}><X size={13} /></button>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <p style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>{editingLead ? 'Dados do Aluno' : 'Aluno(s)'}</p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Nome do aluno *</label>
-                    <input value={formData.student_name} onChange={e => { setFormData(f => ({ ...f, student_name: e.target.value })); setFieldErrors(p => ({ ...p, student_name: '' })) }} placeholder="Nome completo do aluno"
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: fieldErrors.student_name ? '1.5px solid #EF4444' : '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
-                    {fieldErrors.student_name && <p style={{ fontSize: 11, color: '#EF4444', marginTop: 3 }}>{fieldErrors.student_name}</p>}
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Série de interesse</label>
-                    <select value={formData.grade_interest} onChange={e => setFormData(f => ({ ...f, grade_interest: e.target.value }))}
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
-                      <option value="">Selecione</option>
-                      {gradeNames.map(g => <option key={g} value={g}>{g}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Turno</label>
-                    <select value={formData.shift_interest} onChange={e => setFormData(f => ({ ...f, shift_interest: e.target.value }))}
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
-                      <option value="">Selecione</option>
-                      <option value="Manhã">Manhã</option>
-                      <option value="Tarde">Tarde</option>
-                      <option value="Integral">Integral</option>
-                    </select>
-                  </div>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Escola de origem</label>
-                    <input value={formData.origin_school} onChange={e => setFormData(f => ({ ...f, origin_school: e.target.value }))} placeholder="Escola onde o aluno estuda/estudou (opcional)"
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
-                  </div>
-                </div>
-
-                {/* Filhos extras — cria tudo (família + N leads) na mesma tela,
-                    sem depender de detecção retroativa por telefone. Funciona
-                    tanto ao criar quanto ao editar um lead existente (nesse
-                    caso, vincula à família do lead se já existir, ou cria
-                    uma nova família na hora). */}
-                {extraStudents.map((st, idx) => (
-                  <div key={idx} style={{ marginTop: 12, padding: 12, borderRadius: 10, border: '1px dashed #CBD5E1', background: '#F8FAFC', position: 'relative' }}>
-                    <button onClick={() => removeStudent(idx)} title="Remover aluno" type="button"
-                      style={{ position: 'absolute', top: 8, right: 8, width: 22, height: 22, borderRadius: 7, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8' }}>
-                      <X size={13} />
-                    </button>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 8 }}>Filho {idx + 2}</p>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Nome do aluno</label>
-                        <input value={st.student_name} onChange={e => updateStudent(idx, { student_name: e.target.value })} placeholder="Nome completo do aluno"
-                          style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }} />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Série de interesse</label>
-                        <select value={st.grade_interest} onChange={e => updateStudent(idx, { grade_interest: e.target.value })}
-                          style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
-                          <option value="">Selecione</option>
-                          {gradeNames.map(g => <option key={g} value={g}>{g}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Turno</label>
-                        <select value={st.shift_interest} onChange={e => updateStudent(idx, { shift_interest: e.target.value })}
-                          style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
-                          <option value="">Selecione</option>
-                          <option value="Manhã">Manhã</option>
-                          <option value="Tarde">Tarde</option>
-                          <option value="Integral">Integral</option>
-                        </select>
-                      </div>
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Escola de origem</label>
-                        <input value={st.origin_school} onChange={e => updateStudent(idx, { origin_school: e.target.value })} placeholder="Escola onde o aluno estuda/estudou (opcional)"
-                          style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }} />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                <button onClick={addStudent} type="button"
-                  style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1.5px dashed #14b8a6', background: '#F0FDFB', color: '#0d9488', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                  <Plus size={14} /> Adicionar outro filho
-                </button>
-                {editingLead && (
-                  <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 6 }}>
-                    {editingLead.family_id
-                      ? 'O(s) novo(s) filho(s) serão vinculados à mesma família deste lead.'
-                      : 'Ao salvar, será criada uma família vinculando este lead ao(s) novo(s) filho(s) adicionado(s).'}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <p style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Informações do Lead</p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Origem</label>
-                    <select value={formData.source} onChange={e => setFormData(f => ({ ...f, source: e.target.value }))}
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
-                      <option value="">Selecione</option>
-                      {sourceOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Responsável (atendente)</label>
-                    <select value={formData.assigned_to} onChange={e => setFormData(f => ({ ...f, assigned_to: e.target.value }))}
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
-                      <option value="">Sem responsável</option>
-                      {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-                    </select>
-                  </div>
-                  {/* Item 11b — campos condicionais conforme a origem selecionada */}
-                  {showReferral && (
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Quem indicou?</label>
-                      <input value={formData.referral_source} onChange={e => setFormData(f => ({ ...f, referral_source: e.target.value }))} placeholder="Nome de quem indicou"
-                        style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
-                    </div>
-                  )}
-                  {showContest && (
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Qual concurso/bolsa?</label>
-                      <input value={formData.contest_name} onChange={e => setFormData(f => ({ ...f, contest_name: e.target.value }))} placeholder="Ex: Concurso de Bolsas 2027"
-                        style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
-                    </div>
-                  )}
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Próximo follow-up</label>
-                    <input type="date" value={formData.next_followup} onChange={e => setFormData(f => ({ ...f, next_followup: e.target.value }))}
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Temperatura</label>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {LEAD_TEMPERATURES.map(t => {
-                        const active = formData.lead_temperature === t.value
-                        return (
-                          <button key={t.value} type="button"
-                            onClick={() => setFormData(f => ({ ...f, lead_temperature: active ? '' : t.value }))}
-                            title={t.label}
-                            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '7px 0', borderRadius: 9, border: `1.5px solid ${active ? t.color : '#E2E8F0'}`, background: active ? t.bg : '#fff', color: active ? t.color : '#94A3B8', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                            <t.icon size={13} />{t.label}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {editingLead && (
-                <div>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Funil de Status</p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                      {LEAD_STAGES.map((stage, idx) => {
-                        const done = idx < curStageIdx; const active = idx === curStageIdx
-                        return (
-                          <React.Fragment key={stage.key}>
-                            <div onClick={() => setFormData(f => ({ ...f, status: stage.key as Lead['status'] }))} title={stage.label}
-                              style={{ width: 22, height: 22, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: done || active ? '#00A896' : '#E2E8F0', border: active ? '2.5px solid #007A6E' : '2px solid transparent', boxShadow: active ? '0 0 0 3px rgba(0,168,150,0.2)' : 'none', transition: 'all 0.15s' }}>
-                              {done && <span style={{ fontSize: 9, color: '#fff', fontWeight: 700 }}>✓</span>}
-                            </div>
-                            {idx < LEAD_STAGES.length - 1 && <div style={{ flex: 1, height: 2, background: done ? '#00A896' : '#E2E8F0', transition: 'background 0.2s' }} />}
-                          </React.Fragment>
-                        )
-                      })}
-                    </div>
-                    <div style={{ display: 'flex' }}>
-                      {LEAD_STAGES.map((stage, idx) => (
-                        <div key={stage.key} style={{ flex: idx === 0 ? '0 0 22px' : 1, textAlign: idx === 0 ? 'left' : idx === LEAD_STAGES.length - 1 ? 'right' : 'center' }}>
-                          <span style={{ fontSize: 10, color: idx === curStageIdx ? '#00A896' : '#94A3B8', fontWeight: idx === curStageIdx ? 700 : 400 }}>{stage.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <button onClick={() => setFormData(f => ({ ...f, status: 'lost' }))}
-                      style={{ marginTop: 4, alignSelf: 'flex-start', padding: '5px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: formData.status === 'lost' ? '#EF4444' : '#FEF2F2', color: formData.status === 'lost' ? '#fff' : '#DC2626', transition: 'all 0.15s' }}>
-                      {formData.status === 'lost' ? '🔴 Perdido' : 'Marcar como Perdido'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ABA HISTÓRICO */}
-          {activeTab === 'historico' && editingLead && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Registrar atividade */}
-              <div style={{ background: '#F8FAFC', borderRadius: 12, padding: 14, border: '1px solid #E2E8F0' }}>
-                <p style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A', marginBottom: 10 }}>Registrar atividade</p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-                  <select value={activityForm.tipo} onChange={e => setActivityForm(f => ({ ...f, tipo: e.target.value }))}
-                    style={{ padding: '7px 10px', borderRadius: 8, border: '1.5px solid #E2E8F0', fontSize: 12, outline: 'none', background: '#fff', color: '#1A2B4A' }}>
-                    <option>Ligação</option><option>Email</option><option>WhatsApp</option><option>Presencial</option><option>Outro</option>
-                  </select>
-                  <input type="date" value={activityForm.data} onChange={e => setActivityForm(f => ({ ...f, data: e.target.value }))}
-                    style={{ padding: '7px 10px', borderRadius: 8, border: '1.5px solid #E2E8F0', fontSize: 12, outline: 'none', color: '#1A2B4A' }} />
-                </div>
-                <textarea value={activityForm.descricao} onChange={e => setActivityForm(f => ({ ...f, descricao: e.target.value }))} placeholder="Descreva o contato..." rows={2}
-                  style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: '1.5px solid #E2E8F0', fontSize: 12, outline: 'none', resize: 'none', boxSizing: 'border-box', color: '#1A2B4A', marginBottom: 8 }} />
-                <button onClick={handleAddActivity} disabled={savingActivity || !activityForm.descricao.trim()}
-                  style={{ padding: '6px 14px', borderRadius: 8, background: '#00A896', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingActivity || !activityForm.descricao.trim() ? 0.5 : 1 }}>
-                  {savingActivity ? 'Salvando...' : 'Registrar'}
-                </button>
-              </div>
-
-              {/* Timeline */}
-              {loadingHistory
-                ? <div style={{ textAlign: 'center', padding: 32 }}><div className="animate-spin rounded-full h-7 w-7 border-4 border-[#00A896] border-t-transparent mx-auto" /></div>
-                : history.length === 0
-                  ? <div style={{ textAlign: 'center', padding: 32, color: '#94A3B8', fontSize: 13 }}>Nenhuma atividade registrada</div>
-                  : (
-                    <div style={{ position: 'relative', paddingLeft: 28 }}>
-                      <div style={{ position: 'absolute', left: 8, top: 0, bottom: 0, width: 2, background: '#E2E8F0', borderRadius: 1 }} />
-                      {history.map((item, idx) => {
-                        const color = getEventColor(item.action)
-                        const desc = buildDesc(item)
-                        return (
-                          <div key={item.id} style={{ position: 'relative', marginBottom: idx < history.length - 1 ? 12 : 0 }}>
-                            <div style={{
-                              position: 'absolute', left: -25, top: 13,
-                              width: 12, height: 12, borderRadius: '50%',
-                              background: color, border: '2.5px solid #fff',
-                              boxShadow: '0 1px 4px rgba(0,0,0,0.18)', zIndex: 1,
-                            }} />
-                            <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderLeft: `3px solid ${color}`, borderRadius: 10, padding: '10px 14px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 3 }}>
-                                <span style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>
-                                  {getEventIcon(item.action)} {item.action}
-                                </span>
-                                <span style={{ fontSize: 10, color: '#94A3B8', whiteSpace: 'nowrap', marginLeft: 8, flexShrink: 0 }}>{formatDT(item.created_at)}</span>
-                              </div>
-                              {desc && <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 4px', lineHeight: 1.5 }}>{desc}</p>}
-                              <span style={{ fontSize: 11, color: '#94A3B8' }}>por {item.user_name || 'Sistema'}</span>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )
-              }
-            </div>
-          )}
-
-          {/* ABA ANOTAÇÕES */}
-          {activeTab === 'anotacoes' && editingLead && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ background: '#F8FAFC', borderRadius: 12, padding: '14px 16px', border: '1px solid #E2E8F0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1A2B4A', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}><Tag size={13} color="#6366F1" /> Etiquetas</h4>
-                  {tagToast && <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>{tagToast}</span>}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-                  {leadTags.length === 0 && (
-                    <span style={{ fontSize: 12, color: '#94a3b8' }}>
-                      {availableTags.length === 0 ? 'Configure etiquetas em Configurações → Etiquetas' : 'Nenhuma etiqueta'}
-                    </span>
-                  )}
-                  {leadTags.map(tag => {
-                    const color = availableTags.find(t => t.name === tag)?.color || '#6366f1'
-                    return (
-                      <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, background: color, color: '#fff', fontSize: 12, fontWeight: 600 }}>
-                        {tag}
-                        <button onClick={() => handleRemoveLeadTag(tag)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
-                      </span>
-                    )
-                  })}
-                </div>
-                {availableTags.length > 0 && (
-                  <select value="" onChange={e => { if (e.target.value) handleAddLeadTag(e.target.value) }}
-                    style={{ fontSize: 12, padding: '5px 10px', borderRadius: 8, border: '1px solid #D1FAE5', background: '#F0FDFB', color: '#1A2B4A', outline: 'none', cursor: 'pointer', maxWidth: 280 }}>
-                    <option value="">+ Adicionar etiqueta...</option>
-                    {availableTags.filter(t => !leadTags.includes(t.name)).map(t => (
-                      <option key={t.id} value={t.name}>{t.name}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
-              <div>
-                <p style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A', marginBottom: 8 }}>Nota sobre este lead</p>
-                <textarea value={quickNote || formData.notes} onChange={e => setQuickNote(e.target.value)} placeholder="Anotações importantes sobre este lead..." rows={6}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', color: '#1A2B4A', lineHeight: 1.6 }} />
-                <button onClick={handleSaveNote} disabled={savingNote}
-                  style={{ marginTop: 8, padding: '7px 16px', borderRadius: 9, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingNote ? 0.6 : 1 }}>
-                  {savingNote ? 'Salvando...' : 'Salvar nota'}
-                </button>
-              </div>
-              <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>A nota fica visível para toda a equipe.</p>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div style={{ borderTop: '1px solid #E2E8F0', padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, background: '#F8FAFC' }}>
-          {editingLead && onDelete
-            ? <button onClick={() => onDelete(editingLead.id)} style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid #FECACA', background: '#FEF2F2', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#DC2626' }}>Excluir lead</button>
-            : <span />}
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#64748B' }}>Cancelar</button>
-            <button onClick={handleSubmit} disabled={saving}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 20px', borderRadius: 9, background: saving ? '#94A3B8' : '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
-              {saving
-                ? <><div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />Salvando...</>
-                : <><Save style={{ width: 14, height: 14 }} />{editingLead ? 'Salvar alterações' : 'Criar Lead'}</>}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ─── ScheduleVisitModal ────────────────────────────────────────────────────────
 interface ScheduleVisitModalProps {
@@ -1357,11 +569,12 @@ interface FilterDrawerProps {
   temperatureFilter: string; setTemperatureFilter: (v: any) => void
   ownerFilter: string; setOwnerFilter: (v: string) => void
   users: SimpleUser[]
+  noContactFilter: boolean; setNoContactFilter: (v: boolean) => void
   onClear: () => void
 }
 
 function FilterDrawer(props: FilterDrawerProps) {
-  const { open, onClose, filterStatus, setFilterStatus, filterSource, setFilterSource, periodFilter, setPeriodFilter, customStart, setCustomStart, customEnd, setCustomEnd, gradeFilter, setGradeFilter, gradeNames, shiftFilter, setShiftFilter, temperatureFilter, setTemperatureFilter, ownerFilter, setOwnerFilter, users, onClear } = props
+  const { open, onClose, filterStatus, setFilterStatus, filterSource, setFilterSource, periodFilter, setPeriodFilter, customStart, setCustomStart, customEnd, setCustomEnd, gradeFilter, setGradeFilter, gradeNames, shiftFilter, setShiftFilter, temperatureFilter, setTemperatureFilter, ownerFilter, setOwnerFilter, users, noContactFilter, setNoContactFilter, onClear } = props
   if (!open) return null
 
   const section = (label: string) => (
@@ -1405,6 +618,12 @@ function FilterDrawer(props: FilterDrawerProps) {
             <option value="">Todas</option>
             {LEAD_TEMPERATURES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
+
+          {section('Contato')}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E2E8F0', fontSize: 13, color: '#1A2B4A', cursor: 'pointer' }}>
+            <input type="checkbox" checked={noContactFilter} onChange={e => setNoContactFilter(e.target.checked)} />
+            Somente leads sem contato
+          </label>
 
           {section('Origem')}
           <select value={filterSource} onChange={e => setFilterSource(e.target.value)} style={selCls}>
@@ -1522,6 +741,11 @@ export default function LeadKanban() {
   // ── Item 7 — temperatura ───────────────────────────────────────────────────
   const [temperatureFilter, setTemperatureFilter] = useState<'' | 'frio' | 'morno' | 'quente'>('')
 
+  // Filtro "sem contato" — reaproveita o mesmo critério do badge de lembrete
+  // (getLeadReminderInfo urgency === 'stale', lib/leadReminders.ts) e do
+  // alerta do GestorHome, que navega aqui com ?filter=no_contact.
+  const [noContactFilter, setNoContactFilter] = useState(false)
+
   // ── Item 6c — drawer de filtros modernizado ────────────────────────────────
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false)
 
@@ -1549,6 +773,7 @@ export default function LeadKanban() {
   useEffect(() => {
     const highlightId = searchParams.get('highlight')
     if (highlightId) { setFlashingLeadId(highlightId); setTimeout(() => setFlashingLeadId(null), 3000) }
+    if (searchParams.get('filter') === 'no_contact') setNoContactFilter(true)
   }, [searchParams])
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
@@ -1618,266 +843,27 @@ export default function LeadKanban() {
     }
   }
 
-  const handleSave = async (data: Partial<Lead> & { familyMatchId?: string | null; additionalStudents?: { student_name: string; grade_interest: string; shift_interest: string; origin_school: string }[] }) => {
-    console.log('[LEAD SAVE] iniciando...', data)
+  const handleSave = async (data: Partial<Lead> & { familyMatchId?: string | null; additionalStudents?: StudentEntry[] }) => {
     setError('')
-    const instId = user!.institution_id
-    let savedLeadId: string = editingLead?.id ?? ''
-    const { familyMatchId, additionalStudents, ...leadData } = data
-
     try {
-      const { supabase: db } = await import('../../lib/supabase')
-
-      // Um insert por aluno, compartilhando os dados da família (telefone,
-      // responsável, origem, atendente, etc.) e o family_id resolvido pelo
-      // chamador. Reaproveitado tanto ao criar um lead novo (com filhos
-      // extras na mesma tela) quanto ao editar um lead existente (adicionar
-      // um irmão a ele).
-      const insertStudentLead = async (
-        student: { student_name?: string | null; grade_interest?: string | null; shift_interest?: string | null; origin_school?: string | null },
-        shared: {
-          responsible_name?: string; phone?: string; email?: string; address?: string; city?: string | null
-          source?: string; budget_range?: string; notes?: string; assigned_to?: string | null
-          next_followup?: string | null; lead_temperature?: 'frio' | 'morno' | 'quente' | null
-          referral_source?: string | null; contest_name?: string | null
-          family_id: string | null; campaign_cycle_id?: string | null; auditSuffix?: string
-        }
-      ) => {
-        const { data: newLead, error } = await db.from('leads').insert({
-          institution_id:   instId,
-          student_name:     student.student_name,
-          responsible_name: shared.responsible_name,
-          phone:             shared.phone,
-          email:             shared.email,
-          address:           shared.address,
-          city:              shared.city || null,
-          grade_interest:    student.grade_interest || null,
-          shift_interest:    student.shift_interest || null,
-          source:            shared.source,
-          budget_range:      shared.budget_range,
-          notes:             shared.notes,
-          status:            'new',
-          assigned_to:       shared.assigned_to || null,
-          next_followup:     shared.next_followup || null,
-          lead_temperature:  shared.lead_temperature || null,
-          origin_school:     student.origin_school || null,
-          referral_source:   shared.referral_source || null,
-          contest_name:      shared.contest_name || null,
-          family_id:         shared.family_id,
-          campaign_cycle_id: shared.campaign_cycle_id ?? null,
-        }).select().single()
-        if (error) throw error
-        await db.from('audit_logs').insert({
-          institution_id: instId, module: 'lead', record_id: newLead.id,
-          action: 'Lead criado',
-          field_changed: `Aluno: ${newLead.student_name}${newLead.grade_interest ? ` · ${newLead.grade_interest}` : ''}${newLead.source ? ` · Origem: ${newLead.source}` : ''}${shared.auditSuffix ?? ''}`,
-          new_value: newLead.phone || '',
-          user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
-        })
-        await logAudit({ institution_id: instId, module: 'leads', record_id: newLead.id, action: 'created', new_value: `${newLead.student_name} — ${newLead.grade_interest}`, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
-        return newLead
-      }
-
-      if (editingLead) {
-        const { error } = await db.from('leads').update({
-          student_name:      leadData.student_name      ?? editingLead.student_name,
-          responsible_name:  leadData.responsible_name  ?? editingLead.responsible_name,
-          phone:             leadData.phone              ?? editingLead.phone,
-          email:             leadData.email              ?? editingLead.email,
-          address:           leadData.address            ?? editingLead.address,
-          city:              leadData.city               ?? editingLead.city,
-          grade_interest:    leadData.grade_interest      ?? editingLead.grade_interest,
-          shift_interest:    (leadData as any).shift_interest ?? (editingLead as any).shift_interest,
-          source:            leadData.source              ?? editingLead.source,
-          budget_range:      leadData.budget_range        ?? editingLead.budget_range,
-          notes:             leadData.notes               ?? editingLead.notes,
-          status:            leadData.status              || editingLead.status,
-          assigned_to:       leadData.assigned_to !== undefined ? (leadData.assigned_to || null) : editingLead.assigned_to,
-          next_followup:     leadData.next_followup !== undefined ? (leadData.next_followup || null) : editingLead.next_followup,
-          lead_temperature:  leadData.lead_temperature !== undefined ? (leadData.lead_temperature || null) : editingLead.lead_temperature,
-          origin_school:     leadData.origin_school !== undefined ? (leadData.origin_school || null) : editingLead.origin_school,
-          referral_source:   leadData.referral_source !== undefined ? (leadData.referral_source || null) : editingLead.referral_source,
-          contest_name:      leadData.contest_name !== undefined ? (leadData.contest_name || null) : editingLead.contest_name,
-          updated_at:        new Date().toISOString(),
-        }).eq('id', editingLead.id)
-        if (error) throw error
-
-        const changes: Record<string, unknown> = {}
-        Object.keys(leadData).forEach(key => {
-          const nv = (leadData as Record<string, unknown>)[key]
-          const ov = (editingLead as unknown as Record<string, unknown>)[key]
-          if (nv !== ov && nv !== undefined && nv !== null && nv !== '') { changes[key] = nv }
-        })
-        if (Object.keys(changes).length > 0) {
-          await db.from('audit_logs').insert({
-            institution_id: instId, module: 'lead', record_id: editingLead.id,
-            action: 'Lead editado',
-            field_changed: `Campos: ${Object.keys(changes).join(', ')}`,
-            new_value: leadData.student_name || editingLead.student_name,
-            user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
-          })
-        }
-        await logAudit({ institution_id: instId, module: 'leads', record_id: editingLead.id, action: 'updated', field_changed: 'dados', old_value: editingLead.student_name, new_value: leadData.student_name || editingLead.student_name, user_id: user!.id, user_name: user!.full_name, user_role: user!.role })
-
-        // Item 2e — transferência de responsável, logada separadamente pra
-        // ficar clara no histórico ("quem passou pra quem"), não misturada
-        // no log genérico de edição.
-        if (leadData.assigned_to !== undefined && (leadData.assigned_to || null) !== (editingLead.assigned_to || null)) {
-          const fromName = users.find(u => u.id === editingLead.assigned_to)?.full_name || 'Sem responsável'
-          const toName = users.find(u => u.id === leadData.assigned_to)?.full_name || 'Sem responsável'
-          await db.from('audit_logs').insert({
-            institution_id: instId, module: 'lead', record_id: editingLead.id,
-            action: 'Responsável alterado',
-            field_changed: `${fromName} → ${toName}`,
-            new_value: toName,
-            user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
-          })
-        }
-
-        // Item 3 (fluxo de edição) — "+ Adicionar outro filho" também
-        // disponível ao editar. Se o lead ainda não tem family_id, cria a
-        // família na hora e promove o próprio lead editado pra ela; se já
-        // tem, só usa o family_id existente.
-        if (additionalStudents && additionalStudents.length > 0) {
-          let familyId = editingLead.family_id ?? null
-          const sharedEdit = {
-            responsible_name: leadData.responsible_name ?? editingLead.responsible_name,
-            phone:            leadData.phone ?? editingLead.phone,
-            email:            leadData.email ?? editingLead.email,
-            address:          leadData.address ?? editingLead.address,
-            city:             leadData.city !== undefined ? leadData.city : editingLead.city,
-            source:           leadData.source ?? editingLead.source,
-            budget_range:     leadData.budget_range ?? editingLead.budget_range,
-            notes:            leadData.notes ?? editingLead.notes,
-            assigned_to:      leadData.assigned_to !== undefined ? (leadData.assigned_to || null) : (editingLead.assigned_to || null),
-            next_followup:    leadData.next_followup !== undefined ? (leadData.next_followup || null) : (editingLead.next_followup || null),
-            lead_temperature: leadData.lead_temperature !== undefined ? (leadData.lead_temperature || null) : (editingLead.lead_temperature || null),
-            referral_source:  leadData.referral_source !== undefined ? (leadData.referral_source || null) : (editingLead.referral_source || null),
-            contest_name:     leadData.contest_name !== undefined ? (leadData.contest_name || null) : (editingLead.contest_name || null),
-            family_id:        null as string | null,
-            campaign_cycle_id: editingLead.campaign_cycle_id ?? null,
-            auditSuffix:      ` (irmão de ${editingLead.student_name})`,
-          }
-          if (!familyId) {
-            const { data: newFamily, error: famErr } = await db.from('lead_families').insert({
-              institution_id: instId,
-              responsible_name: sharedEdit.responsible_name,
-              phone: sharedEdit.phone,
-              email: sharedEdit.email || null,
-              address: sharedEdit.address || null,
-            }).select().single()
-            if (famErr) throw famErr
-            familyId = newFamily.id
-            await db.from('leads').update({ family_id: familyId }).eq('id', editingLead.id)
-          }
-          sharedEdit.family_id = familyId
-          for (const student of additionalStudents) {
-            await insertStudentLead(student, sharedEdit)
-          }
-        }
-      } else {
-        // Item 3 — família com múltiplos filhos. Caminho principal agora:
-        // todos os filhos preenchidos na mesma tela (additionalStudents) viram
-        // 1 lead_families + N leads criados juntos, sem precisar voltar depois.
-        // A detecção por telefone (familyMatchId) continua existindo como
-        // fallback pro caso de alguém criar um lead novo separadamente meses
-        // depois — se ela encontrar uma família, tem prioridade sobre criar
-        // uma nova (também cobre o caso combinado: adicionar 2+ filhos novos
-        // a uma família já existente, tudo na mesma tela).
-        let familyId: string | null = null
-        if (familyMatchId) {
-          if (familyMatchId.startsWith('retro:')) {
-            const soloLeadId = familyMatchId.slice('retro:'.length)
-            const { data: newFamily, error: famErr } = await db.from('lead_families').insert({
-              institution_id: instId,
-              responsible_name: leadData.responsible_name,
-              phone: leadData.phone,
-              email: leadData.email || null,
-              address: leadData.address || null,
-            }).select().single()
-            if (!famErr && newFamily) {
-              familyId = newFamily.id
-              await db.from('leads').update({ family_id: familyId }).eq('id', soloLeadId)
-            }
-          } else {
-            familyId = familyMatchId
-          }
-        } else if (additionalStudents && additionalStudents.length > 0) {
-          const { data: newFamily, error: famErr } = await db.from('lead_families').insert({
-            institution_id: instId,
-            responsible_name: leadData.responsible_name,
-            phone: leadData.phone,
-            email: leadData.email || null,
-            address: leadData.address || null,
-          }).select().single()
-          if (famErr) throw famErr
-          familyId = newFamily.id
-        }
-
-        const sharedCreate = {
-          responsible_name: leadData.responsible_name,
-          phone:             leadData.phone,
-          email:             leadData.email,
-          address:           leadData.address,
-          city:              leadData.city || null,
-          source:            leadData.source,
-          budget_range:      leadData.budget_range,
-          notes:             leadData.notes,
-          assigned_to:       leadData.assigned_to || null,
-          next_followup:     leadData.next_followup || null,
-          lead_temperature:  leadData.lead_temperature || null,
-          referral_source:   leadData.referral_source || null,
-          contest_name:      leadData.contest_name || null,
-          family_id:         familyId,
-          campaign_cycle_id: activeCampaignCycle?.id ?? null,
-        }
-
-        const newLead = await insertStudentLead({
-          student_name: leadData.student_name,
-          grade_interest: leadData.grade_interest,
-          shift_interest: (leadData as any).shift_interest,
-          origin_school: leadData.origin_school,
-        }, sharedCreate)
-        savedLeadId = newLead.id
-
-        if (additionalStudents) {
-          for (const student of additionalStudents) {
-            await insertStudentLead(student, sharedCreate)
-          }
-        }
-      }
+      await saveLead({
+        institutionId: user!.institution_id,
+        currentUser: { id: user!.id, full_name: user!.full_name, role: user!.role },
+        users,
+        editingLead,
+        data,
+        campaignCycleId: activeCampaignCycle?.id ?? null,
+      })
     } catch (err) {
       console.error('[LEAD SAVE] erro:', err)
       showToast('Erro ao salvar lead. Tente novamente.', 'error')
       throw err
     }
 
-    // Sync to whatsapp_contacts (upsert) and whatsapp_conversations
-    const phone = (leadData.phone || editingLead?.phone || '').trim()
-    const responsibleName = leadData.responsible_name || editingLead?.responsible_name || ''
-    if (phone) {
-      try {
-        const { supabase: db } = await import('../../lib/supabase')
-        const normP = (p: string) => {
-          let d = p.replace(/\D/g, '')
-          if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-          if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-          if (d.length === 11) d = '55' + d
-          return d
-        }
-        const normPhone = normP(phone)
-        await db.from('whatsapp_contacts').upsert({
-          institution_id: instId, phone: normPhone, name: responsibleName || normPhone,
-          type: 'lead', ...(savedLeadId ? { lead_id: savedLeadId } : {}), updated_at: new Date().toISOString(),
-        }, { onConflict: 'institution_id,phone' })
-        await db.from('whatsapp_conversations').update({ contact_name: responsibleName })
-          .eq('institution_id', instId).eq('remote_jid', `${normPhone}@s.whatsapp.net`)
-      } catch {}
-    }
-
     await loadData()
     setEditingLead(null)
   }
+
 
   // ── handleStatusChange — intercept "lost" para pedir motivo ──────────────
   const handleStatusChange = async (leadId: string, newStatus: Lead['status'], skipLostModal = false) => {
@@ -2104,6 +1090,7 @@ export default function LeadKanban() {
     if (gradeFilter !== 'all' && lead.grade_interest !== gradeFilter) return false
     if (shiftFilter !== 'all' && (lead as any).shift_interest !== shiftFilter) return false
     if (temperatureFilter !== '' && lead.lead_temperature !== temperatureFilter) return false
+    if (noContactFilter && getLeadReminderInfo(lead)?.urgency !== 'stale') return false
     if (ownerFilter === 'mine') { if (lead.assigned_to !== user?.id) return false }
     else if (ownerFilter === 'unassigned') { if (lead.assigned_to) return false }
     else if (ownerFilter !== 'all') { if (lead.assigned_to !== ownerFilter) return false }
@@ -2203,7 +1190,7 @@ export default function LeadKanban() {
   const activeLead = activeId ? leads.find(l => l.id === activeId) : null
   const visibleStatuses = filterStatus ? Object.keys(statusConfig).filter(s => s === filterStatus) : Object.keys(statusConfig)
   const filteredTotal = visibleStatuses.reduce((sum, s) => sum + getLeadsByStatus(s as Lead['status']).length, 0)
-  const hasActiveFilters = searchTerm !== '' || filterSource !== '' || filterStatus !== '' || periodFilter !== 'all' || gradeFilter !== 'all' || shiftFilter !== 'all' || temperatureFilter !== '' || ownerFilter !== 'all'
+  const hasActiveFilters = searchTerm !== '' || filterSource !== '' || filterStatus !== '' || periodFilter !== 'all' || gradeFilter !== 'all' || shiftFilter !== 'all' || temperatureFilter !== '' || ownerFilter !== 'all' || noContactFilter
 
   const cardActions = {
     onSchedule: (lead: Lead) => { setLeadToSchedule(lead); setShowScheduleVisitModal(true) },
@@ -2228,7 +1215,7 @@ export default function LeadKanban() {
   const clearAllFilters = () => {
     setSearchTerm(''); setFilterSource(''); setFilterStatus(''); setPeriodFilter('all')
     setCustomStart(''); setCustomEnd(''); setGradeFilter('all'); setShiftFilter('all')
-    setTemperatureFilter(''); setOwnerFilter('all')
+    setTemperatureFilter(''); setOwnerFilter('all'); setNoContactFilter(false)
   }
 
   const filterDrawerEl = (
@@ -2244,6 +1231,7 @@ export default function LeadKanban() {
       temperatureFilter={temperatureFilter} setTemperatureFilter={setTemperatureFilter}
       ownerFilter={ownerFilter} setOwnerFilter={setOwnerFilter}
       users={users}
+      noContactFilter={noContactFilter} setNoContactFilter={setNoContactFilter}
       onClear={clearAllFilters}
     />
   )

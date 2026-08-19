@@ -26,7 +26,7 @@ import SatisfactionFullModal from '../../components/gestor/SatisfactionFullModal
 import MarketReportModal from '../../components/gestor/MarketReportModal'
 import type { FunnelMetrics } from '../../lib/supabase'
 import { createNotification } from '../../lib/notifications'
-import { getLeadReminderInfo, REMINDER_COLORS } from '../../lib/leadReminders'
+import { getLeadReminderInfo, REMINDER_COLORS, NO_CONTACT_DAYS } from '../../lib/leadReminders'
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 interface HistoricalEntry {
@@ -1120,9 +1120,8 @@ export default function GestorHome() {
     if (regPct < 60) alerts.push({ msg: `Cadastros ${regPct.toFixed(0)}% da meta — intensifique captação`, type: 'warning', action: 'Ver funil', path: '/reports' })
   }
   if (score >= 75) alerts.push({ msg: `Score ${score} — escola com desempenho acima da média!`, type: 'success' })
-  const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
-  const leadsNoContact = leads.filter(l => l.created_at < fiveDaysAgo && l.status !== 'enrolled' && l.status !== 'lost').length
-  if (leadsNoContact > 0) alerts.push({ msg: `${leadsNoContact} leads sem contato há mais de 5 dias`, type: 'warning', action: 'Ver leads', path: '/leads' })
+  const leadsNoContact = leads.filter(l => getLeadReminderInfo(l)?.urgency === 'stale').length
+  if (leadsNoContact > 0) alerts.push({ msg: `${leadsNoContact} leads sem contato há mais de ${NO_CONTACT_DAYS} dias`, type: 'warning', action: 'Ver leads', path: '/leads?filter=no_contact' })
   if (avgSatisfaction !== null && avgSatisfaction < 2.5) alerts.push({ msg: `Satisfação média abaixo de 2.5 (${avgSatisfaction.toFixed(1)}/3) — atenção ao atendimento`, type: 'warning', action: 'Ver pesquisas', path: '/pesquisas' })
 
   const avgFee = (setupCycle?.school_data?.avg_monthly_fee as number | null | undefined) || latest?.avg_monthly_fee || latest?.fee || null

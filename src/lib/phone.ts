@@ -34,3 +34,34 @@ export function normalizePhone(raw: string): string {
   // Retorna sem alterar — NÃO prefixa 55.
   return digits
 }
+
+// =============================================================================
+// Normaliza telefone digitado livremente por uma pessoa (form manual de
+// contato/lead, import de CSV, campo de busca do "Iniciar Conversa") — que
+// pode ou não incluir o "55" na frente, e pode ou não ter o 9º dígito.
+// Sempre resolve pro mesmo formato canônico (55 + DDD + 9 + 8 dígitos),
+// indiferente de como foi digitado, então nunca duplica contato por causa
+// disso.
+//
+// Diferente de normalizePhone() acima: aquela assume que o DDI já está
+// presente (payload da Meta) e por isso NUNCA prefixa 55 sozinha — prefixar
+// às cegas corromperia um número internacional real. Esta função só assume
+// "número BR sem DDI" quando o comprimento bate exatamente com DDD+8 (10
+// dígitos) ou DDD+9+8 (11 dígitos), que é como brasileiro digita celular sem
+// código de país; qualquer outro comprimento é tratado como já-internacional
+// e não é mexido.
+// =============================================================================
+export function normalizeBrazilianInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '')
+
+  if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
+    return normalizePhone(digits)
+  }
+
+  // Sem DDI: 10 dígitos = DDD + 8 (sem 9º); 11 dígitos = DDD + 9 + 8.
+  if (digits.length === 10 || digits.length === 11) {
+    return normalizePhone(`55${digits}`)
+  }
+
+  return digits
+}
