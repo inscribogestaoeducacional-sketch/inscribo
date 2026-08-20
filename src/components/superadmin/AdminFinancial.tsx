@@ -372,7 +372,7 @@ function SendCollectionWhatsAppModal({ payment, institution, currentUserId, curr
   showToast: (m: string, ok?: boolean) => void
 }) {
   const isOverdue = payment.status === 'overdue'
-  const [template, setTemplate] = useState<CollectionTemplateKey>(isOverdue ? 'cobranca_vencida' : 'link_mensalidade')
+  const [template, setTemplate] = useState<CollectionTemplateKey>(isOverdue ? 'cobranca_em_atraso' : 'link_mensalidade')
   const [phone, setPhone] = useState(institution?.phone || '')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')

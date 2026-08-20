@@ -10,7 +10,7 @@
 // aprovado ou nome incorreto" (ver handleSendCollection em AdminFinancial.tsx).
 import type { GraphTemplateLike } from './whatsappTemplate'
 
-export type CollectionTemplateKey = 'cobranca_vencida' | 'link_mensalidade'
+export type CollectionTemplateKey = 'cobranca_em_atraso' | 'link_mensalidade'
 
 export interface CollectionTemplateMeta {
   name: CollectionTemplateKey
@@ -23,9 +23,9 @@ export interface CollectionTemplateMeta {
 }
 
 export const COLLECTION_TEMPLATES: Record<CollectionTemplateKey, CollectionTemplateMeta> = {
-  cobranca_vencida: {
-    name: 'cobranca_vencida',
-    label: 'Cobrança vencida',
+  cobranca_em_atraso: {
+    name: 'cobranca_em_atraso',
+    label: 'Cobrança em atraso',
     bodyText: 'Olá! Identificamos que a mensalidade de {{1}} referente a {{2}} está com pagamento em atraso desde {{3}}. Para evitar a suspensão do acesso, regularize agora.',
     requiresOverdue: true,
   },
