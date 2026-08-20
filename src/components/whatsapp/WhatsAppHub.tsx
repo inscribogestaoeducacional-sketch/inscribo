@@ -1058,7 +1058,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // Item C — busca ao vivo (debounce) no modal "Nova Conversa": avisa antes
   // de tentar criar se já existe conversa/contato com esse número, pra evitar
   // o erro de duplicidade na origem em vez de só reagir a ele depois.
-  const [newConvMatch, setNewConvMatch] = useState<{ name: string } | null>(null)
+  // kind diferencia os dois casos porque o texto/ação são diferentes: se já
+  // existe CONVERSA, o botão abre ela; se só existe CONTATO (ex: um dos 460
+  // importados em massa que nunca conversou), o botão ainda cria uma
+  // conversa nova — só reaproveitando nome/registro do contato.
+  const [newConvMatch, setNewConvMatch] = useState<{ kind: 'conversation' | 'contact'; name: string } | null>(null)
   const [checkingNewConv, setCheckingNewConv] = useState(false)
 
   useEffect(() => {
@@ -1072,8 +1076,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         supabase.from('whatsapp_conversations').select('id').eq('institution_id', effectiveInstitutionId).eq('remote_jid', jid).maybeSingle(),
         supabase.from('whatsapp_contacts').select('name').eq('institution_id', effectiveInstitutionId).eq('phone', normalized).maybeSingle(),
       ])
-      if (convRow || contactRow) {
-        setNewConvMatch({ name: (contactRow as any)?.name || formatPhone(jid) })
+      if (convRow) {
+        setNewConvMatch({ kind: 'conversation', name: (contactRow as any)?.name || formatPhone(jid) })
+      } else if (contactRow) {
+        setNewConvMatch({ kind: 'contact', name: (contactRow as any)?.name || formatPhone(jid) })
       } else {
         setNewConvMatch(null)
       }
@@ -3077,6 +3083,22 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (!normalized) return
     const jid = `${normalized}@s.whatsapp.net`
 
+    // Busca o contato já cadastrado ANTES de decidir nome/criar conversa —
+    // é a fonte de verdade do nome. Sem isso, criar conversa pra um contato
+    // que já existe (ex: um dos importados em massa, sem conversa ainda) e
+    // deixar o campo "Nome" em branco fazia a conversa nascer com o telefone
+    // como nome em vez de reaproveitar o nome já cadastrado.
+    let existingContact: { id: string; name: string | null } | null = null
+    if (effectiveInstitutionId) {
+      const { data } = await supabase
+        .from('whatsapp_contacts')
+        .select('id, name')
+        .eq('institution_id', effectiveInstitutionId)
+        .eq('phone', normalized)
+        .maybeSingle()
+      existingContact = data as any
+    }
+
     let existing = conversations.find(c => c.id === jid)
 
     // A conversa pode já existir no banco sem estar carregada no estado local
@@ -3092,7 +3114,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       if (existingConvRow) {
         const phone = formatPhone(jid)
         const placeholder: Conversation = {
-          id: jid, name: newConvName || phone, phone,
+          id: jid, name: newConvName || existingContact?.name || phone, phone,
           avatarColor: jidToColor(jid),
           lastMessage: '', lastTime: new Date(),
           unreadCount: 0, status: 'open', online: false,
@@ -3105,13 +3127,14 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }
 
     if (existing) {
-      if (newConvName) {
-        setConversations(prev => prev.map(c => c.id === jid ? { ...c, name: newConvName } : c))
+      const nameOverride = newConvName || existingContact?.name
+      if (nameOverride) {
+        setConversations(prev => prev.map(c => c.id === jid ? { ...c, name: nameOverride } : c))
       }
       setActiveId(existing.id)
     } else {
       const phone = formatPhone(jid)
-      const name = newConvName || phone
+      const name = newConvName || existingContact?.name || phone
       const newConv: Conversation = {
         id: jid, name, phone,
         avatarColor: jidToColor(jid),
@@ -3133,22 +3156,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
     if (effectiveInstitutionId) {
       try {
-        const { data: existingContact } = await supabase
-          .from('whatsapp_contacts')
-          .select('id, name')
-          .eq('institution_id', effectiveInstitutionId)
-          .eq('phone', normalized)
-          .maybeSingle()
-
         if (existingContact) {
+          // Reaproveita o contato já encontrado acima — mesma linha/id,
+          // nunca cria um segundo registro pro mesmo telefone.
           await supabase
             .from('whatsapp_contacts')
             .update({ name: newConvName || existingContact.name, updated_at: new Date().toISOString() })
             .eq('id', existingContact.id)
         } else {
           // Upsert (não insert puro) — se uma corrida entre cliques criou o
-          // contato entre o SELECT acima e este write, isso vira um update
-          // idempotente em vez de estourar violação de UNIQUE(institution_id, phone).
+          // contato entre o SELECT do início desta função e este write, isso
+          // vira um update idempotente em vez de estourar violação de
+          // UNIQUE(institution_id, phone).
           await supabase
             .from('whatsapp_contacts')
             .upsert(
@@ -3590,7 +3609,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               <div className="flex items-start gap-1.5 mt-1.5 mb-2 px-2.5 py-2 rounded-lg bg-[#FFFBEB] border border-[#FDE68A]">
                 <Info className="w-3.5 h-3.5 text-[#D97706] flex-shrink-0 mt-0.5" />
                 <p className="text-[11px] text-[#92400E] leading-snug">
-                  Já existe conversa com esse número ({newConvMatch.name}). Ao continuar, a conversa existente será aberta.
+                  {newConvMatch.kind === 'conversation'
+                    ? `Já existe conversa com esse número (${newConvMatch.name}). Ao continuar, a conversa existente será aberta.`
+                    : `Contato já cadastrado: ${newConvMatch.name}. Uma conversa nova será iniciada reaproveitando esse nome.`}
                 </p>
               </div>
             )}
@@ -3602,7 +3623,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               </button>
               <button onClick={handleNewConv} disabled={!newConvPhone.trim()}
                 className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
-                {newConvMatch ? 'Abrir conversa' : 'Iniciar'}
+                {newConvMatch?.kind === 'conversation' ? 'Abrir conversa' : 'Iniciar'}
               </button>
             </div>
           </div>
