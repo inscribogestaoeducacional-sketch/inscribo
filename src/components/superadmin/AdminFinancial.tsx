@@ -362,10 +362,11 @@ function PaymentDetailModal({ payment, onClose, onAction, onSendTemplate }: {
 // escola (institutions.whatsapp_phone_id/whatsapp_token) — sempre o número
 // conectado em platform_whatsapp (Inbox Áion). Ação síncrona, sem
 // agendamento/cron — o admin clica, espera a confirmação de envio.
-function SendCollectionWhatsAppModal({ payment, institution, currentUserId, onClose, onSent, showToast }: {
+function SendCollectionWhatsAppModal({ payment, institution, currentUserId, currentUserName, onClose, onSent, showToast }: {
   payment: any
   institution: any
   currentUserId: string
+  currentUserName?: string
   onClose: () => void
   onSent: () => void
   showToast: (m: string, ok?: boolean) => void
@@ -396,7 +397,15 @@ function SendCollectionWhatsAppModal({ payment, institution, currentUserId, onCl
     try {
       // 1. Código curto único (retry em caso de colisão — extremamente
       // improvável com 9 chars, mas é uma feature de cobrança, não custa nada).
-      const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
+      // Bug 2 — causa raiz: o alfabeto misturava maiúsculas/minúsculas
+      // (ex: "zhXgseYcM"), e o botão de URL dinâmica do template chega
+      // normalizado pra minúsculas em algum ponto do caminho até o clique
+      // (app/navegador do WhatsApp) — a comparação exata em
+      // api/pagar-redirect.ts então nunca batia com o código gravado.
+      // Minúsculas só na origem evita a ambiguidade de vez; o lookup no
+      // redirect também passou a ser case-insensitive como segunda camada
+      // (cobre inclusive os códigos já enviados antes deste fix).
+      const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789'
       const generateCode = () => {
         const bytes = crypto.getRandomValues(new Uint8Array(9))
         return Array.from(bytes, b => alphabet[b % alphabet.length]).join('')
@@ -463,20 +472,86 @@ function SendCollectionWhatsAppModal({ payment, institution, currentUserId, onCl
           codigo
         )
 
-        const sendRes = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
+        // 5. Bug 1 — garante a conversa do Inbox Áion (remetente é o número
+        // da plataforma, então a conversa é da Áion, não da escola sendo
+        // cobrada) ANTES de enviar, e o contato correspondente em
+        // aion_contacts. Sem isso a mensagem "desaparece": send.ts (chamado
+        // logo abaixo) só faz UPDATE em whatsapp_conversations, nunca cria.
+        const jid = `${normalizedPhone}@s.whatsapp.net`
+        const { data: existingAionConv } = await supabase
+          .from('whatsapp_conversations')
+          .select('id')
+          .eq('is_aion_inbox', true)
+          .eq('remote_jid', jid)
+          .maybeSingle()
+
+        let conversationId: string
+        if (existingAionConv) {
+          conversationId = existingAionConv.id
+        } else {
+          const { data: newConv, error: convErr } = await supabase
+            .from('whatsapp_conversations')
+            .insert({
+              remote_jid: jid,
+              institution_id: null,
+              is_aion_inbox: true,
+              contact_name: institution?.name || normalizedPhone,
+              status: 'open',
+              assigned_user_id: currentUserId,
+              assigned_user_name: currentUserName || null,
+              bot_active: false,
+              last_message_at: new Date().toISOString(),
+            })
+            .select('id')
+            .single()
+          if (convErr || !newConv) throw new Error(convErr?.message || 'Falha ao criar conversa no Inbox Áion.')
+          conversationId = newConv.id
+        }
+
+        const { data: existingContact } = await supabase
+          .from('aion_contacts')
+          .select('id')
+          .eq('phone', normalizedPhone)
+          .maybeSingle()
+        if (!existingContact) {
+          await supabase.from('aion_contacts').insert({
+            phone: normalizedPhone,
+            name: institution?.name || null,
+            source: 'cobranca_manual',
+            conversation_id: conversationId,
+            created_by: currentUserId,
+          })
+        }
+
+        // 6. Envia via /api/whatsapp/send — mesmo endpoint usado pro resto do
+        // Inbox Áion (texto/mídia/template), que grava em whatsapp_messages e
+        // atualiza whatsapp_conversations.last_message. Enviar direto pra
+        // Graph API (como antes) pulava essa gravação por completo.
+        const previewText = COLLECTION_TEMPLATES[template].bodyText
+          .replace('{{1}}', institution?.name || '')
+          .replace('{{2}}', description)
+          .replace('{{3}}', dueDateFmt)
+
+        const sendRes = await fetch('/api/whatsapp/send', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            messaging_product: 'whatsapp',
+            isAionSend: true,
             to: normalizedPhone,
             type: 'template',
-            template: { name: template, language: { code: 'pt_BR' }, components },
+            templateName: template,
+            templateLanguage: 'pt_BR',
+            templateComponents: components,
+            caption: previewText,
+            sender_name: currentUserName,
+            sender_user_id: currentUserId,
+            conversation_id: conversationId,
           }),
         })
 
         if (!sendRes.ok) {
           const errBody = await sendRes.json().catch(() => null)
-          const metaMsg = errBody?.error?.message as string | undefined
+          const metaMsg = errBody?.error as string | undefined
           const friendly = metaMsg && /template/i.test(metaMsg)
             ? 'Template ainda não aprovado pela Meta ou nome incorreto.'
             : (metaMsg || 'Erro ao enviar mensagem.')
@@ -2252,6 +2327,7 @@ export default function AdminFinancial() {
           payment={templateModalPayment}
           institution={institutions.find(i => i.id === templateModalPayment.institution_id)}
           currentUserId={user!.id}
+          currentUserName={user!.full_name}
           onClose={() => setTemplateModalPayment(null)}
           onSent={loadData}
           showToast={showToast}

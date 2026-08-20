@@ -30,11 +30,21 @@ const INVALID_LINK_HTML = `<!doctype html>
   <p>Esse link de pagamento não foi encontrado. Entre em contato com a escola para receber um novo link.</p>
 </div></body></html>`
 
+// Escapa os caracteres especiais do LIKE/ILIKE (%, _, \) antes de usar o
+// valor recebido como padrão do ilike() abaixo — sem isso, alguém acessando
+// /pagar/% (ou com _ no meio) conseguiria fazer o ilike casar com qualquer
+// linha da tabela em vez de comparar literalmente.
+function escapeForIlike(s: string): string {
+  return s.replace(/[\\%_]/g, m => '\\' + m)
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const codigoParam = req.query.codigo
-  const codigo = Array.isArray(codigoParam) ? codigoParam[0] : codigoParam
+  const rawCodigo = Array.isArray(codigoParam) ? codigoParam[0] : codigoParam
+  const codigo = (rawCodigo || '').trim()
 
-  if (!codigo) {
+  if (!codigo || !/^[A-Za-z0-9]+$/.test(codigo)) {
+    console.log('[pagar-redirect] código ausente ou com caracteres inesperados:', JSON.stringify(rawCodigo))
     res.status(404).setHeader('Content-Type', 'text/html; charset=utf-8')
     return res.send(INVALID_LINK_HTML)
   }
@@ -44,11 +54,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  const { data } = await supabase
+  // Bug 2 — causa raiz: o código era gerado com maiúsculas e minúsculas
+  // misturadas, e algo no caminho até o clique (app/navegador do WhatsApp)
+  // normaliza a URL pra minúsculas antes de chegar aqui, então uma comparação
+  // exata (.eq) nunca batia. ilike (case-insensitive) resolve tanto os
+  // códigos novos (gerados só em minúsculas, ver AdminFinancial.tsx) quanto
+  // os que já foram enviados antes deste fix.
+  const { data, error } = await supabase
     .from('manual_collection_sends')
-    .select('payment_link_real')
-    .eq('codigo', codigo)
+    .select('codigo, payment_link_real')
+    .ilike('codigo', escapeForIlike(codigo))
     .maybeSingle()
+
+  console.log('[pagar-redirect] código recebido:', JSON.stringify(codigo), '| encontrado no banco:', JSON.stringify(data?.codigo ?? null), '| erro:', error?.message ?? null)
 
   if (!data?.payment_link_real) {
     res.status(404).setHeader('Content-Type', 'text/html; charset=utf-8')

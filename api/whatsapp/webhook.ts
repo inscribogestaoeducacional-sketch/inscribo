@@ -682,6 +682,24 @@ function normalizePhone(raw: string): string {
   return digits
 }
 
+// Normaliza telefone digitado livremente por um humano (ex: campo "Telefone"
+// do nó de contato no FlowEditor) — pode ou não vir com o "55" na frente,
+// pode ou não ter o 9º dígito. Diferente de normalizePhone() acima, que
+// assume DDI já presente (payload vindo da própria Meta) e por isso nunca
+// prefixa 55 sozinha. Mesma lógica de src/lib/phone.ts:normalizeBrazilianInput,
+// duplicada aqui pelo mesmo motivo de normalizePhone já ser local a este
+// arquivo — api/ não importa de src/lib neste projeto.
+function normalizeBrazilianInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '')
+  if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
+    return normalizePhone(digits)
+  }
+  if (digits.length === 10 || digits.length === 11) {
+    return normalizePhone(`55${digits}`)
+  }
+  return digits
+}
+
 // ── Create / update contact record ───────────────────────────────────────────
 async function upsertContact(
   institutionId: string,
@@ -906,11 +924,20 @@ async function processCustomFlow(
             .eq('institution_id', institutionId).eq('is_active', true).single()
           const waConfig = await getWAConfig()
           if (phone?.phone_number_id && waConfig.accessToken) {
+            // wa_id precisa ser o número completo em E.164 sem formatação
+            // (só dígitos, com DDI) — é o que a Cloud API usa pra reconhecer
+            // o contato como "já no WhatsApp" e mostrar botão de conversa em
+            // vez de "Convidar para o WhatsApp". Sem wa_id (ou com ele igual
+            // a um "phone" formatado/incompleto), o destinatário sempre vê o
+            // convite, mesmo com o número certo.
+            const contactPhoneDigits = normalizeBrazilianInput(node.data?.contactPhone || '')
             const payload: Record<string, any> = {
               messaging_product: 'whatsapp', to: remoteJid, type: 'contacts',
               contacts: [{
                 name: { formatted_name: node.data?.contactName || '', first_name: node.data?.contactName || '' },
-                phones: [{ phone: node.data?.contactPhone || '', type: 'CELL' }],
+                phones: contactPhoneDigits
+                  ? [{ phone: `+${contactPhoneDigits}`, wa_id: contactPhoneDigits, type: 'CELL' }]
+                  : [],
                 ...(node.data?.contactCompany ? { org: { company: node.data.contactCompany } } : {}),
               }],
             }
