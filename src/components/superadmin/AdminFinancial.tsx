@@ -472,61 +472,17 @@ function SendCollectionWhatsAppModal({ payment, institution, currentUserId, curr
           codigo
         )
 
-        // 5. Bug 1 — garante a conversa do Inbox Áion (remetente é o número
-        // da plataforma, então a conversa é da Áion, não da escola sendo
-        // cobrada) ANTES de enviar, e o contato correspondente em
-        // aion_contacts. Sem isso a mensagem "desaparece": send.ts (chamado
-        // logo abaixo) só faz UPDATE em whatsapp_conversations, nunca cria.
-        const jid = `${normalizedPhone}@s.whatsapp.net`
-        const { data: existingAionConv } = await supabase
-          .from('whatsapp_conversations')
-          .select('id')
-          .eq('is_aion_inbox', true)
-          .eq('remote_jid', jid)
-          .maybeSingle()
-
-        let conversationId: string
-        if (existingAionConv) {
-          conversationId = existingAionConv.id
-        } else {
-          const { data: newConv, error: convErr } = await supabase
-            .from('whatsapp_conversations')
-            .insert({
-              remote_jid: jid,
-              institution_id: null,
-              is_aion_inbox: true,
-              contact_name: institution?.name || normalizedPhone,
-              status: 'open',
-              assigned_user_id: currentUserId,
-              assigned_user_name: currentUserName || null,
-              bot_active: false,
-              last_message_at: new Date().toISOString(),
-            })
-            .select('id')
-            .single()
-          if (convErr || !newConv) throw new Error(convErr?.message || 'Falha ao criar conversa no Inbox Áion.')
-          conversationId = newConv.id
-        }
-
-        const { data: existingContact } = await supabase
-          .from('aion_contacts')
-          .select('id')
-          .eq('phone', normalizedPhone)
-          .maybeSingle()
-        if (!existingContact) {
-          await supabase.from('aion_contacts').insert({
-            phone: normalizedPhone,
-            name: institution?.name || null,
-            source: 'cobranca_manual',
-            conversation_id: conversationId,
-            created_by: currentUserId,
-          })
-        }
-
-        // 6. Envia via /api/whatsapp/send — mesmo endpoint usado pro resto do
+        // 5. Envia via /api/whatsapp/send — mesmo endpoint usado pro resto do
         // Inbox Áion (texto/mídia/template), que grava em whatsapp_messages e
         // atualiza whatsapp_conversations.last_message. Enviar direto pra
-        // Graph API (como antes) pulava essa gravação por completo.
+        // Graph API pulava essa gravação por completo (Bug 1, sessão
+        // anterior). A busca-ou-criação da conversa (+ aion_contacts) agora
+        // acontece DENTRO do endpoint, com service role — fazer esse INSERT
+        // aqui, client-side, batia num 403 de RLS: a policy de INSERT de
+        // whatsapp_conversations só libera institution_id =
+        // current_user_institution_id(), sem a exceção is_aion_inbox que as
+        // policies de SELECT/UPDATE têm (confirmado via pg_policies). Nunca
+        // escrever nessa tabela direto do navegador pro caso is_aion_inbox.
         const previewText = COLLECTION_TEMPLATES[template].bodyText
           .replace('{{1}}', institution?.name || '')
           .replace('{{2}}', description)
@@ -545,7 +501,8 @@ function SendCollectionWhatsAppModal({ payment, institution, currentUserId, curr
             caption: previewText,
             sender_name: currentUserName,
             sender_user_id: currentUserId,
-            conversation_id: conversationId,
+            newContactName: institution?.name || null,
+            contactSource: 'cobranca_manual',
           }),
         })
 

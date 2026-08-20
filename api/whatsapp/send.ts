@@ -164,6 +164,12 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
     templateName,
     templateLanguage,
     templateComponents = [],
+    // Só usados quando isAionSend && !conversation_id && a conversa ainda não
+    // existe — nome sugerido pro contato/conversa nova (ex: nome da escola
+    // sendo cobrada) e a origem a gravar em aion_contacts.source (ver
+    // AdminFinancial.tsx: 'cobranca_manual').
+    newContactName,
+    contactSource = 'whatsapp_send',
   } = req.body ?? {}
 
   // ── Validation ──
@@ -267,6 +273,69 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
     const wamid   = metaData.messages?.[0]?.id
     const preview = contentPreview(type as MsgType, message, caption, filename)
 
+    // ── Aion inbox: garante conversa (+ contato) ANTES de gravar a mensagem ──
+    // Bug corrigido: o client (AdminFinancial.tsx → cobrança manual) tentava
+    // criar a linha em whatsapp_conversations direto do navegador com
+    // institution_id=null e caía num 403 de RLS — a policy de INSERT só
+    // libera institution_id = current_user_institution_id(), sem a exceção
+    // is_aion_inbox que as policies de SELECT/UPDATE têm. Esse endpoint já
+    // roda com service role (bypassa RLS de propósito, é código de servidor
+    // nunca exposto ao cliente), então é aqui — e só aqui — que essa escrita
+    // deve acontecer. Mesmo padrão de busca-ou-cria já usado em
+    // api/whatsapp/webhook.ts (processAionMessage) pra conversas novas.
+    let resolvedConversationId: string | undefined = conversation_id || undefined
+    if (isAionSend && !resolvedConversationId) {
+      const jid = String(to).includes('@') ? to : `${to}@s.whatsapp.net`
+      const { data: existingConv } = await supabase
+        .from('whatsapp_conversations')
+        .select('id')
+        .eq('is_aion_inbox', true)
+        .eq('remote_jid', jid)
+        .maybeSingle()
+
+      if (existingConv) {
+        resolvedConversationId = existingConv.id
+      } else {
+        const { data: newConv, error: newConvErr } = await supabase
+          .from('whatsapp_conversations')
+          .insert({
+            remote_jid:         jid,
+            institution_id:     null,
+            is_aion_inbox:      true,
+            contact_name:       newContactName || to,
+            status:             'open',
+            assigned_user_id:   sender_user_id || null,
+            assigned_user_name: sender_name || null,
+            bot_active:         false,
+            last_message_at:    new Date().toISOString(),
+          })
+          .select('id')
+          .single()
+        if (newConvErr) console.error('❌ [send.ts] erro ao criar conversa Aion:', newConvErr.message)
+        resolvedConversationId = newConv?.id
+      }
+
+      // aion_contacts não sofre do mesmo bug de RLS (is_super_admin_user()
+      // funciona client-side), mas cria aqui junto — precisa do
+      // conversation_id recém-resolvido pra vincular, e evita depender de
+      // dois passos client/server separados pra uma única ação do usuário.
+      const { data: existingContact } = await supabase
+        .from('aion_contacts')
+        .select('id')
+        .eq('phone', to)
+        .maybeSingle()
+      if (!existingContact) {
+        const { error: contactErr } = await supabase.from('aion_contacts').insert({
+          phone:           to,
+          name:            newContactName || null,
+          source:          contactSource,
+          conversation_id: resolvedConversationId || null,
+          created_by:      sender_user_id || null,
+        })
+        if (contactErr) console.error('❌ [send.ts] erro ao criar aion_contacts:', contactErr.message)
+      }
+    }
+
     // ── Persist message ──
     await supabase.from('whatsapp_messages').insert({
       institution_id:    isAionSend ? null : institution_id,
@@ -283,7 +352,7 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
       direction:         'outbound',
       is_aion_inbox:     isAionSend,
       timestamp:         new Date().toISOString(),
-      ...(conversation_id   ? { conversation_id }   : {}),
+      ...(resolvedConversationId ? { conversation_id: resolvedConversationId } : {}),
       ...(quoted_message_id ? { quoted_message_id, quoted_content: quoted_content || null, quoted_from_me: quoted_from_me ?? null } : {}),
     })
 
@@ -292,8 +361,8 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
     // o bot — first_human_response_at é o equivalente pra mensagem humana,
     // usado pelo KPI "Tempo de resposta" e pelo Ranking em GestorHome.tsx)
     let convSelect = supabase.from('whatsapp_conversations').select('id, first_human_response_at')
-    if (conversation_id) {
-      convSelect = convSelect.eq('id', conversation_id)
+    if (resolvedConversationId) {
+      convSelect = convSelect.eq('id', resolvedConversationId)
     } else if (isAionSend) {
       convSelect = convSelect.eq('is_aion_inbox', true).eq('remote_jid', to)
     } else {
@@ -310,8 +379,8 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
       .from('whatsapp_conversations')
       .update(convUpdatePayload)
 
-    if (conversation_id) {
-      await convUpdate.eq('id', conversation_id)
+    if (resolvedConversationId) {
+      await convUpdate.eq('id', resolvedConversationId)
     } else if (isAionSend) {
       await convUpdate.eq('is_aion_inbox', true).eq('remote_jid', to)
     } else {
