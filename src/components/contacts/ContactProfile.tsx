@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
+import { saveLead } from '../../lib/leadSave'
 import {
   X, ArrowRightLeft, FileText, Clock, User, Plus, Check, Loader2,
   Tag as TagIcon,
@@ -249,31 +250,41 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
   async function handleCreateLead() {
     setCreatingLead(true)
     try {
-      const { data: newLead, error } = await supabase
-        .from('leads')
-        .insert({
-          institution_id: institutionId,
+      // Fonte única de verdade (src/lib/leadSave.ts) em vez de insert cru —
+      // o insert cru anterior faltava student_name e grade_interest (ambos
+      // NOT NULL) e mandava status:'novo', valor que nem existe na CHECK
+      // constraint de leads.status ('new'/'contact'/.../'lost'); saveLead()
+      // já lida com os 3 corretamente (status 'new' fixo na criação) e evita
+      // reintroduzir esse tipo de bug se leads ganhar mais colunas
+      // obrigatórias no futuro.
+      const newLeadId = await saveLead({
+        institutionId,
+        currentUser: { id: user!.id, full_name: user!.full_name, role: user!.role },
+        users: [],
+        editingLead: null,
+        data: {
+          student_name: contact.student_name || contact.name,
           responsible_name: contact.name,
-          phone: contact.phone,
-          email: contact.email || null,
-          status: 'novo',
+          phone: contact.phone || undefined,
+          email: contact.email || undefined,
+          // Decisão de produto: sem série definida, grava o literal 'Não
+          // informado' em vez de deixar vazio (grade_interest é NOT NULL).
+          grade_interest: contact.grade || 'Não informado',
           source: 'WhatsApp',
-        })
-        .select('id')
-        .single()
-
-      if (error || !newLead) throw error
+          assigned_to: user?.id || null,
+        },
+      })
 
       await supabase
         .from('whatsapp_contacts')
-        .update({ type: 'lead', lead_id: newLead.id })
+        .update({ type: 'lead', lead_id: newLeadId })
         .eq('id', contact.id)
 
       if (contact.phone) {
         const normPhone = contact.phone.replace(/\D/g, '')
         await supabase
           .from('whatsapp_conversations')
-          .update({ lead_id: newLead.id })
+          .update({ lead_id: newLeadId })
           .eq('institution_id', institutionId)
           .or(
             `remote_jid.eq.${normPhone}@s.whatsapp.net,` +
@@ -281,7 +292,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
           )
       }
 
-      onUpdate(contact.id, { contact_type: 'lead', lead_id: newLead.id })
+      onUpdate(contact.id, { contact_type: 'lead', lead_id: newLeadId })
       showToast('Lead criado com sucesso!')
     } catch (e) {
       console.error('[CREATE LEAD]', e)
