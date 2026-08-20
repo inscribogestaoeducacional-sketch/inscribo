@@ -2,6 +2,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
+import { normalizeBrazilianInput } from '../../lib/phone'
+import { buildSendComponents } from '../../lib/whatsappTemplate'
+import { COLLECTION_TEMPLATES, collectionTemplateAsGraphLike, type CollectionTemplateKey } from '../../lib/collectionTemplates'
 import SuperAdminLayout from './SuperAdminLayout'
 import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -230,8 +233,9 @@ function NewChargeModal({ institutions, onClose, onSuccess, showToast }: {
 }
 
 // ─── Modal Detalhes da Cobrança ────────────────────────────────────────────
-function PaymentDetailModal({ payment, onClose, onAction }: {
+function PaymentDetailModal({ payment, onClose, onAction, onSendTemplate }: {
   payment: any; onClose: () => void; onAction: (action: string, payment: any) => Promise<void>
+  onSendTemplate: (payment: any) => void
 }) {
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -314,6 +318,12 @@ function PaymentDetailModal({ payment, onClose, onAction }: {
                 className="flex items-center justify-center gap-2 py-2.5 bg-emerald-500 text-white rounded-xl font-semibold text-sm hover:bg-emerald-600 disabled:opacity-60">
                 <MessageCircle className="w-4 h-4" /> Enviar link via WhatsApp
               </button>
+              {payment.asaas_charge_url && (
+                <button onClick={() => onSendTemplate(payment)} disabled={loading}
+                  className="flex items-center justify-center gap-2 py-2.5 bg-teal-600 text-white rounded-xl font-semibold text-sm hover:bg-teal-700 disabled:opacity-60">
+                  <MessageCircle className="w-4 h-4" /> Enviar cobrança via WhatsApp (template)
+                </button>
+              )}
               <button onClick={() => act('cancel')} disabled={loading}
                 className="flex items-center justify-center gap-2 py-2.5 bg-red-50 text-red-600 border border-red-200 rounded-xl font-semibold text-sm hover:bg-red-100 disabled:opacity-60">
                 <Ban className="w-4 h-4" /> Cancelar cobrança
@@ -330,10 +340,223 @@ function PaymentDetailModal({ payment, onClose, onAction }: {
                 className="flex items-center justify-center gap-2 py-2.5 bg-blue-500 text-white rounded-xl font-semibold text-sm">
                 <Send className="w-4 h-4" /> Reenviar cobrança por e-mail
               </button>
+              {payment.asaas_charge_url && (
+                <button onClick={() => onSendTemplate(payment)} disabled={loading}
+                  className="flex items-center justify-center gap-2 py-2.5 bg-teal-600 text-white rounded-xl font-semibold text-sm hover:bg-teal-700 disabled:opacity-60">
+                  <MessageCircle className="w-4 h-4" /> Enviar cobrança via WhatsApp (template)
+                </button>
+              )}
             </>
           )}
           <button onClick={onClose} className="py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm hover:bg-gray-50">
             Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Modal Enviar cobrança via WhatsApp (template, número da plataforma Áion) ──
+// Item 4/5 da feature de cobrança manual: NUNCA usa o número da própria
+// escola (institutions.whatsapp_phone_id/whatsapp_token) — sempre o número
+// conectado em platform_whatsapp (Inbox Áion). Ação síncrona, sem
+// agendamento/cron — o admin clica, espera a confirmação de envio.
+function SendCollectionWhatsAppModal({ payment, institution, currentUserId, onClose, onSent, showToast }: {
+  payment: any
+  institution: any
+  currentUserId: string
+  onClose: () => void
+  onSent: () => void
+  showToast: (m: string, ok?: boolean) => void
+}) {
+  const isOverdue = payment.status === 'overdue'
+  const [template, setTemplate] = useState<CollectionTemplateKey>(isOverdue ? 'cobranca_vencida' : 'link_mensalidade')
+  const [phone, setPhone] = useState(institution?.phone || '')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+
+  const isDefaultPhone = phone.trim() === (institution?.phone || '').trim()
+  const description = payment.description || TYPE_MAP[payment.payment_type] || 'Mensalidade'
+  const dueDateFmt = payment.due_date ? new Date(payment.due_date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'
+
+  const handleSend = async () => {
+    setError('')
+    const normalizedPhone = normalizeBrazilianInput(phone)
+    if (!normalizedPhone || normalizedPhone.length < 12) {
+      setError('Telefone inválido. Digite um número de celular válido (com DDD).')
+      return
+    }
+    if (!payment.asaas_charge_url) {
+      setError('Essa cobrança não tem link de pagamento (asaas_charge_url) — não é possível enviar.')
+      return
+    }
+
+    setSending(true)
+    try {
+      // 1. Código curto único (retry em caso de colisão — extremamente
+      // improvável com 9 chars, mas é uma feature de cobrança, não custa nada).
+      const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
+      const generateCode = () => {
+        const bytes = crypto.getRandomValues(new Uint8Array(9))
+        return Array.from(bytes, b => alphabet[b % alphabet.length]).join('')
+      }
+
+      let codigo = generateCode()
+      let insertedId: string | null = null
+      let insertError: any = null
+      for (let attempt = 0; attempt < 3 && !insertedId; attempt++) {
+        if (attempt > 0) codigo = generateCode()
+        const { data: inserted, error: err } = await supabase
+          .from('manual_collection_sends')
+          .insert({
+            codigo,
+            payment_id: payment.id,
+            institution_id: payment.institution_id,
+            template_used: template,
+            recipient_phone: normalizedPhone,
+            recipient_label: isDefaultPhone ? 'Telefone cadastrado da escola' : 'Número digitado manualmente',
+            payment_link_real: payment.asaas_charge_url,
+            sent_by: currentUserId,
+            status: 'sent',
+          })
+          .select('id')
+          .single()
+        if (inserted) { insertedId = inserted.id }
+        else { insertError = err }
+      }
+      if (!insertedId) throw new Error(insertError?.message || 'Falha ao gerar código de cobrança.')
+
+      // A partir daqui a linha já existe em manual_collection_sends (status
+      // default 'sent') — qualquer falha precisa marcar status='failed' +
+      // error_message nela antes de propagar o erro pra UI, senão o registro
+      // fica mentindo que o envio deu certo.
+      try {
+        // 2. Credenciais da plataforma Áion — nunca a da própria escola.
+        const { data: waRow } = await supabase.from('platform_whatsapp').select('phone_number_id, waba_id').eq('connected', true).maybeSingle()
+        const phoneNumberId = (waRow as any)?.phone_number_id
+        const wabaId = (waRow as any)?.waba_id
+        if (!phoneNumberId || !wabaId) throw new Error('WhatsApp da plataforma Áion não está conectado (platform_whatsapp).')
+
+        const { data: tokenRow } = await supabase.from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
+        const token = (tokenRow as any)?.value || ''
+        if (!token) throw new Error('Token de acesso da plataforma Áion não configurado.')
+
+        // 3. Confirma que o template está aprovado antes de tentar enviar —
+        // mesmo padrão de AionInboxHub.tsx (reativar_atendimento), pra dar um
+        // erro claro em vez do genérico da Meta.
+        const checkRes = await fetch(
+          `https://graph.facebook.com/v19.0/${wabaId}/message_templates?name=${template}&status=APPROVED`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        const checkData = await checkRes.json().catch(() => null)
+        if (!checkRes.ok || !checkData?.data?.length) {
+          throw new Error('Template ainda não aprovado pela Meta ou nome incorreto.')
+        }
+
+        // 4. Monta o payload — body com 3 parâmetros + botão de URL dinâmica
+        // com o código (não o link completo).
+        const components = buildSendComponents(
+          collectionTemplateAsGraphLike(template),
+          { '1': institution?.name || '', '2': description, '3': dueDateFmt },
+          undefined,
+          codigo
+        )
+
+        const sendRes = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: normalizedPhone,
+            type: 'template',
+            template: { name: template, language: { code: 'pt_BR' }, components },
+          }),
+        })
+
+        if (!sendRes.ok) {
+          const errBody = await sendRes.json().catch(() => null)
+          const metaMsg = errBody?.error?.message as string | undefined
+          const friendly = metaMsg && /template/i.test(metaMsg)
+            ? 'Template ainda não aprovado pela Meta ou nome incorreto.'
+            : (metaMsg || 'Erro ao enviar mensagem.')
+          throw new Error(friendly)
+        }
+      } catch (sendErr: any) {
+        const friendly = sendErr?.message || 'Erro ao enviar cobrança.'
+        await supabase.from('manual_collection_sends').update({ status: 'failed', error_message: friendly }).eq('id', insertedId)
+        throw sendErr
+      }
+
+      showToast(`Cobrança enviada via WhatsApp (${COLLECTION_TEMPLATES[template].label})!`)
+      onSent()
+      onClose()
+    } catch (e: any) {
+      setError(e?.message || 'Erro ao enviar cobrança.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Enviar cobrança via WhatsApp</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Enviado pelo número oficial da plataforma Áion</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl"><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+
+        {error && (
+          <div className="mb-4 flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />{error}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-2">Template</label>
+            <div className="grid grid-cols-1 gap-2">
+              {(Object.keys(COLLECTION_TEMPLATES) as CollectionTemplateKey[]).map(key => {
+                const meta = COLLECTION_TEMPLATES[key]
+                const disabled = meta.requiresOverdue && !isOverdue
+                return (
+                  <button key={key} type="button" disabled={disabled} onClick={() => setTemplate(key)}
+                    className={`text-left px-4 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all
+                      ${template === key ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-gray-100 text-gray-500'}
+                      ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:border-gray-200'}`}>
+                    {meta.label}
+                    {disabled && <span className="block text-[11px] font-normal text-gray-400 mt-0.5">Disponível só para parcelas vencidas</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Destinatário</label>
+            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="(83) 99999-9999"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none" />
+            <p className="text-[11px] text-gray-400 mt-1">
+              {isDefaultPhone ? 'Telefone cadastrado da escola' : 'Número digitado manualmente'} — será normalizado antes do envio.
+            </p>
+          </div>
+
+          <div className="bg-gray-50 rounded-xl border border-gray-200 p-3 space-y-1.5 text-xs">
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Prévia das variáveis</p>
+            <div className="flex justify-between"><span className="text-gray-400">Escola</span><span className="font-semibold text-gray-800">{institution?.name || '—'}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Referente a</span><span className="font-semibold text-gray-800">{description}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Vencimento</span><span className="font-semibold text-gray-800">{dueDateFmt}</span></div>
+          </div>
+        </div>
+
+        <div className="flex gap-3 mt-5">
+          <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">Cancelar</button>
+          <button onClick={handleSend} disabled={sending}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-teal-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
+            {sending ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Enviando...</> : <><MessageCircle className="w-4 h-4" />Enviar agora</>}
           </button>
         </div>
       </div>
@@ -1017,6 +1240,7 @@ export default function AdminFinancial() {
   const [toast,        setToast]        = useState<{ msg: string; ok: boolean } | null>(null)
   const [showNewCharge, setShowNewCharge] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState<any | null>(null)
+  const [templateModalPayment, setTemplateModalPayment] = useState<any | null>(null)
   const [invoiceModal, setInvoiceModal] = useState<any | null>(null)
   const [costModal, setCostModal] = useState<any | null | 'new'>(null)
   const [entryModal, setEntryModal] = useState<any | null | 'new'>(null)
@@ -1896,9 +2120,17 @@ export default function AdminFinancial() {
                             <span className="font-semibold text-gray-700">{fmtBRL(p.amount)}</span>
                             <span className="text-gray-400">Venceu {p.due_date ? new Date(p.due_date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</span>
                             <span className="font-bold text-red-600">{daysLate(p.due_date)}d</span>
-                            <button onClick={() => setSelectedPayment(p)} className="text-gray-400 hover:text-gray-600">
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                              {p.asaas_charge_url && (
+                                <button onClick={() => setTemplateModalPayment(p)} title="Enviar cobrança via WhatsApp"
+                                  className="text-teal-500 hover:text-teal-700">
+                                  <MessageCircle className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              <button onClick={() => setSelectedPayment(p)} className="text-gray-400 hover:text-gray-600">
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -2011,6 +2243,18 @@ export default function AdminFinancial() {
           payment={selectedPayment}
           onClose={() => setSelectedPayment(null)}
           onAction={handlePaymentAction}
+          onSendTemplate={p => { setSelectedPayment(null); setTemplateModalPayment(p) }}
+        />
+      )}
+
+      {templateModalPayment && (
+        <SendCollectionWhatsAppModal
+          payment={templateModalPayment}
+          institution={institutions.find(i => i.id === templateModalPayment.institution_id)}
+          currentUserId={user!.id}
+          onClose={() => setTemplateModalPayment(null)}
+          onSent={loadData}
+          showToast={showToast}
         />
       )}
 

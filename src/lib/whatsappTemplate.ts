@@ -42,10 +42,18 @@ export function getTemplateBodyVarNumbers(tmpl: GraphTemplateLike | undefined | 
 // `tmpl.components ?? []`/similar na mão). Lança erro se o template tiver
 // header de mídia dinâmica (IMAGE/VIDEO/DOCUMENT) e nenhuma URL for informada
 // — não há como enviar esse tipo de template sem o arquivo.
+//
+// urlButtonParam: valor do único parâmetro dinâmico do botão de URL (index
+// '0') — a Meta concatena esse valor na base já cadastrada no template
+// aprovado. Suporte adicionado pro fluxo de cobrança manual (AdminFinancial),
+// que usa botão de URL dinâmica (.../pagar/{{4}}); os 3 chamadores
+// pré-existentes não passam esse argumento e continuam sem gerar o component
+// de botão, como antes.
 export function buildSendComponents(
   tmpl: GraphTemplateLike,
   bodyVars: Record<string, string>,
-  headerMediaUrl?: string | null
+  headerMediaUrl?: string | null,
+  urlButtonParam?: string
 ): any[] {
   const components: any[] = []
 
@@ -67,8 +75,15 @@ export function buildSendComponents(
   }
 
   // Botões QUICK_REPLY e URL estático (sem {{n}}) não precisam de component —
-  // a Meta resolve a partir da definição aprovada do template. Botão com URL
-  // dinâmica ({{n}} na URL) não é suportado nesta rodada.
+  // a Meta resolve a partir da definição aprovada do template.
+  if (urlButtonParam !== undefined) {
+    components.push({
+      type: 'button',
+      sub_type: 'url',
+      index: '0',
+      parameters: [{ type: 'text', text: urlButtonParam }],
+    })
+  }
 
   return components
 }

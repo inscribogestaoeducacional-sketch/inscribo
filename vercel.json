@@ -5,6 +5,10 @@
       "destination": "/api/$1"
     },
     {
+      "source": "/pagar/:codigo",
+      "destination": "/api/pagar-redirect?codigo=:codigo"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
