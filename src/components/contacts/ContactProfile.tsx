@@ -43,6 +43,14 @@ export interface UnifiedContact {
   profile_picture_url?: string | null
   created_at?: string | null
   subtitle?: string | null
+  // Import de contato (whatsapp_contacts) — informativo, não vem de lead.
+  // Só exibido no perfil (ver bloco "Vínculo com aluno" abaixo); sem edição
+  // aqui de propósito, pra não abrir um segundo caminho de escrita desses
+  // campos além do import.
+  address?: string | null
+  linked_student_name?: string | null
+  student_grade?: string | null
+  relationship?: string | null
 }
 
 // ─── Styles ───────────────────────────────────────────────────
@@ -608,6 +616,26 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
                   {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
               </div>
+
+              {/* Vínculo com aluno — só informativo (import de CSV), sem edição aqui */}
+              {(contact.linked_student_name || contact.student_grade || contact.relationship) && (
+                <div>
+                  <label style={lbl}>Vínculo com aluno</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 13, color: '#475569', padding: '8px 12px', background: '#F8FAFC', borderRadius: 8 }}>
+                    {contact.linked_student_name && <span>Aluno: <strong style={{ color: '#1A2B4A' }}>{contact.linked_student_name}</strong></span>}
+                    {contact.student_grade       && <span>Turma: {contact.student_grade}</span>}
+                    {contact.relationship        && <span>Parentesco: {contact.relationship}</span>}
+                  </div>
+                </div>
+              )}
+
+              {/* Endereço */}
+              {contact.address && (
+                <div>
+                  <label style={lbl}>Endereço</label>
+                  <p style={{ margin: 0, fontSize: 13, color: '#475569', padding: '8px 12px', background: '#F8FAFC', borderRadius: 8 }}>{contact.address}</p>
+                </div>
+              )}
 
               {/* Origem */}
               {contact.source && (

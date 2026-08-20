@@ -30,6 +30,14 @@ const EXPORT_FIELD_DEFS = [
 ] as const
 type ExportFieldKey = typeof EXPORT_FIELD_DEFS[number]['key']
 
+// Import CSV — contato só (whatsapp_contacts, type:'client'), nunca cria lead
+// (import em massa não implica intenção comercial nova — ver ContactProfile
+// "Converter para Lead" pra quando isso fizer sentido individualmente).
+interface ImportRow {
+  nome: string; telefone: string; email: string; endereco: string
+  aluno: string; turma: string; parentesco: string
+}
+
 const LEAD_STATUSES = [
   { value: 'novo',        label: 'Novo'        },
   { value: 'contacted',   label: 'Contatado'   },
@@ -99,11 +107,15 @@ function mapContact(c: any): UnifiedContact {
     lead?.student_name?.trim()     ||
     fmtPhone                       ||
     'Desconhecido'
+  // Sem lead, mas com aluno vinculado (import de contato client): mostra
+  // "Aluno: X" no lugar do telefone — mais útil que repetir o telefone que
+  // já aparece na coluna ao lado (mesmo raciocínio do bug de endereço: dado
+  // guardado mas nunca mostrado em lugar nenhum).
   const subtitle =
     lead?.responsible_name?.trim()
       ? (lead?.student_name?.trim() || '')
       : c.name?.trim()
-        ? (fmtPhone || '')
+        ? (c.linked_student_name?.trim() ? `Aluno: ${c.linked_student_name.trim()}` : (fmtPhone || ''))
         : ''
   return {
     id:                  c.id,
@@ -111,7 +123,11 @@ function mapContact(c: any): UnifiedContact {
     student_name:        lead?.student_name || null,
     subtitle:            subtitle || null,
     phone:               fmtPhone,
-    email:               lead?.email || null,
+    email:               lead?.email || c.email || null,
+    address:             lead?.address || c.address || null,
+    linked_student_name: c.linked_student_name || null,
+    student_grade:       c.student_grade || null,
+    relationship:        c.relationship || null,
     grade:               lead?.grade_interest || null,
     source:              lead?.source || null,
     status_lead:         lead?.status || null,
@@ -248,7 +264,7 @@ export default function ContactsModule() {
 
   // ── Import state ─────────────────────────────────────────
   const [showImport,    setShowImport]    = useState(false)
-  const [importRows,    setImportRows]    = useState<{ nome: string; telefone: string; email: string; endereco: string }[]>([])
+  const [importRows,    setImportRows]    = useState<ImportRow[]>([])
   const [importErrors,  setImportErrors]  = useState<string[]>([])
   const [importResult,  setImportResult]  = useState<{ imported: number; duplicates: number } | null>(null)
   const [importLoading, setImportLoading] = useState(false)
@@ -341,8 +357,8 @@ export default function ContactsModule() {
       const needsInnerJoin = useGrade || useStatus
 
       const selectStr = needsInnerJoin
-        ? 'id, phone, name, profile_picture_url, type, lead_id, last_seen_at, created_at, tags, leads!lead_id!inner(id, student_name, responsible_name, email, grade_interest, source, status)'
-        : 'id, phone, name, profile_picture_url, type, lead_id, last_seen_at, created_at, tags, leads!lead_id(id, student_name, responsible_name, email, grade_interest, source, status)'
+        ? 'id, phone, name, email, address, linked_student_name, student_grade, relationship, profile_picture_url, type, lead_id, last_seen_at, created_at, tags, leads!lead_id!inner(id, student_name, responsible_name, email, address, grade_interest, source, status)'
+        : 'id, phone, name, email, address, linked_student_name, student_grade, relationship, profile_picture_url, type, lead_id, last_seen_at, created_at, tags, leads!lead_id(id, student_name, responsible_name, email, address, grade_interest, source, status)'
 
       let query = supabase
         .from('whatsapp_contacts')
@@ -353,7 +369,11 @@ export default function ContactsModule() {
         .range(from, to)
         .order(sc, { ascending: sd === 'asc', nullsFirst: false })
 
-      if (isSearch)             query = query.or(`name.ilike.%${s.trim()}%,phone.ilike.%${s.trim()}%`)
+      // Item 5 — filtro por turma sem UI nova: a mesma busca já cobre
+      // student_grade (texto livre, direto em whatsapp_contacts, sem o
+      // custo de um inner join como o filtro de série faz pra grade_interest
+      // abaixo). "Ver só os contatos do 6º ano B" = digitar isso na busca.
+      if (isSearch)             query = query.or(`name.ilike.%${s.trim()}%,phone.ilike.%${s.trim()}%,student_grade.ilike.%${s.trim()}%`)
       if (origin === 'lead')    query = query.eq('type', 'lead')
       if (origin === 'client')  query = query.eq('type', 'client')
       if (origin === 'unknown') query = query.or('type.eq.unknown,type.is.null')
@@ -516,7 +536,8 @@ export default function ContactsModule() {
 
   // ── Import / Export ──────────────────────────────────────
   function downloadTemplate() {
-    const csv  = '﻿' + 'nome,telefone,email,endereco\nJoão Silva,11999998888,joao@email.com,"Rua das Flores, 123"\n'
+    const csv  = '﻿' + 'nome,telefone,email,endereco,aluno,turma,parentesco\n'
+      + 'Maria Silva,83999998888,maria@email.com,"Rua X, 123",João Silva,6º Ano B,Mãe\n'
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a'); a.href = url; a.download = 'template-contatos.csv'; a.click()
@@ -535,19 +556,25 @@ export default function ContactsModule() {
     return result
   }
 
-  function parseCSV(text: string): { nome: string; telefone: string; email: string; endereco: string }[] {
+  function parseCSV(text: string): ImportRow[] {
     const lines  = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim())
     if (lines.length < 2) return []
     const header = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''))
     const idx    = (col: string) => header.indexOf(col)
-    const [ni, ti, ei, endi] = [idx('nome'), idx('telefone'), idx('email'), idx('endereco')]
+    const [ni, ti, ei, endi, ai, tui, pi] = [
+      idx('nome'), idx('telefone'), idx('email'), idx('endereco'),
+      idx('aluno'), idx('turma'), idx('parentesco'),
+    ]
     return lines.slice(1).map(line => {
       const cols = parseCSVLine(line)
       return {
-        nome:     ni   >= 0 ? cols[ni]   || '' : '',
-        telefone: ti   >= 0 ? cols[ti]   || '' : '',
-        email:    ei   >= 0 ? cols[ei]   || '' : '',
-        endereco: endi >= 0 ? cols[endi] || '' : '',
+        nome:       ni   >= 0 ? cols[ni]   || '' : '',
+        telefone:   ti   >= 0 ? cols[ti]   || '' : '',
+        email:      ei   >= 0 ? cols[ei]   || '' : '',
+        endereco:   endi >= 0 ? cols[endi] || '' : '',
+        aluno:      ai   >= 0 ? cols[ai]   || '' : '',
+        turma:      tui  >= 0 ? cols[tui]  || '' : '',
+        parentesco: pi   >= 0 ? cols[pi]   || '' : '',
       }
     })
   }
@@ -569,17 +596,24 @@ export default function ContactsModule() {
     reader.readAsText(file, 'utf-8')
   }
 
+  // Import cria só o CONTATO (whatsapp_contacts, type:'client') — nunca um
+  // lead. Import em massa (pais já matriculados, listas antigas etc.) não é
+  // sinal de intenção comercial nova; quem precisar virar lead de verdade
+  // usa "Converter para Lead" individualmente no perfil do contato
+  // (ContactProfile.tsx:handleCreateLead). Dedup por institution_id+phone
+  // direto em whatsapp_contacts (mesma unique constraint que o trigger de
+  // sync via WhatsApp já usa em ON CONFLICT).
   async function handleImport() {
     if (!importRows.length) return
     setImportLoading(true)
     try {
-      const { data: existingLeads } = await supabase
-        .from('leads').select('phone').eq('institution_id', institutionId).is('deleted_at', null)
-      // Normaliza tanto os leads existentes quanto os da planilha pro mesmo
+      const { data: existingContacts } = await supabase
+        .from('whatsapp_contacts').select('phone').eq('institution_id', institutionId)
+      // Normaliza tanto os contatos existentes quanto os da planilha pro mesmo
       // formato canônico (com/sem 55, com/sem 9º dígito) antes de comparar —
       // senão "8388887777" e "5583988887777" são tratados como diferentes e
       // o mesmo contato acaba duplicado.
-      const existingPhones = new Set((existingLeads || []).map(l => normalizeBrazilianInput(l.phone || '')).filter(Boolean))
+      const existingPhones = new Set((existingContacts || []).map(c => normalizeBrazilianInput(c.phone || '')).filter(Boolean))
       const seen = new Set<string>()
       let duplicates = 0
       const toInsert: object[] = []
@@ -587,11 +621,21 @@ export default function ContactsModule() {
         const phone = normalizeBrazilianInput(r.telefone)
         if (!phone || seen.has(phone) || existingPhones.has(phone)) { duplicates++; continue }
         seen.add(phone)
-        toInsert.push({ institution_id: institutionId, student_name: r.nome || null, responsible_name: r.nome || null, phone, email: r.email || null, status: 'novo' })
+        toInsert.push({
+          institution_id: institutionId,
+          phone,
+          name: r.nome || null,
+          email: r.email || null,
+          address: r.endereco || null,
+          linked_student_name: r.aluno || null,
+          student_grade: r.turma || null,
+          relationship: r.parentesco || null,
+          type: 'client',
+        })
       }
       let imported = 0
       if (toInsert.length > 0) {
-        const { data, error } = await supabase.from('leads').insert(toInsert).select('id')
+        const { data, error } = await supabase.from('whatsapp_contacts').insert(toInsert).select('id')
         if (error) { setImportErrors([error.message]); setImportLoading(false); return }
         imported = data?.length || 0
       }
@@ -761,7 +805,7 @@ export default function ContactsModule() {
         </div>
         <button onClick={downloadTemplate}
           style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, border: '1.5px dashed #CBD5E1', background: '#F8FAFC', color: '#475569', fontSize: 13, cursor: 'pointer', marginBottom: 16, width: '100%', boxSizing: 'border-box' }}>
-          <FileText size={16} color="#3B82F6" /> Download template CSV (nome, telefone, email, endereco)
+          <FileText size={16} color="#3B82F6" /> Download template CSV (nome, telefone, email, endereco, aluno, turma, parentesco)
         </button>
         <label style={{ display: 'block', marginBottom: 16, cursor: 'pointer' }}>
           <div style={{ border: '2px dashed #CBD5E1', borderRadius: 10, padding: '24px', textAlign: 'center', background: '#F8FAFC' }}>
@@ -783,7 +827,7 @@ export default function ContactsModule() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ background: '#F8FAFC', position: 'sticky', top: 0 }}>
-                    {['Nome', 'Telefone', 'E-mail', 'Endereço'].map(h => (
+                    {['Nome', 'Telefone', 'E-mail', 'Endereço', 'Aluno', 'Turma', 'Parentesco'].map(h => (
                       <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#94A3B8', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -795,10 +839,13 @@ export default function ContactsModule() {
                       <td style={{ padding: '7px 12px', color: '#475569' }}>{r.telefone}</td>
                       <td style={{ padding: '7px 12px', color: '#475569' }}>{r.email || <span style={{ color: '#CBD5E1' }}>—</span>}</td>
                       <td style={{ padding: '7px 12px', color: '#475569' }}>{r.endereco || <span style={{ color: '#CBD5E1' }}>—</span>}</td>
+                      <td style={{ padding: '7px 12px', color: '#475569' }}>{r.aluno || <span style={{ color: '#CBD5E1' }}>—</span>}</td>
+                      <td style={{ padding: '7px 12px', color: '#475569' }}>{r.turma || <span style={{ color: '#CBD5E1' }}>—</span>}</td>
+                      <td style={{ padding: '7px 12px', color: '#475569' }}>{r.parentesco || <span style={{ color: '#CBD5E1' }}>—</span>}</td>
                     </tr>
                   ))}
                   {importRows.length > 10 && (
-                    <tr><td colSpan={4} style={{ padding: '8px 12px', color: '#94A3B8', fontSize: 12, textAlign: 'center' }}>...e mais {importRows.length - 10} linha(s)</td></tr>
+                    <tr><td colSpan={7} style={{ padding: '8px 12px', color: '#94A3B8', fontSize: 12, textAlign: 'center' }}>...e mais {importRows.length - 10} linha(s)</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1099,7 +1146,7 @@ export default function ContactsModule() {
           <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
             <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar por nome, telefone ou e-mail..."
+              placeholder="Buscar por nome, telefone ou turma..."
               style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px 9px 36px', outline: 'none', width: '100%', color: '#1A2B4A', boxSizing: 'border-box' }} />
           </div>
           <select value={filterOrigin} onChange={e => setFilterOrigin(e.target.value)}
