@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 .env
 .vercel
+
+# Relatórios locais com dados sensíveis (PII de contatos/leads) — nunca commitar
+local-reports/
