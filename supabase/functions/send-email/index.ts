@@ -193,6 +193,36 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     `)
   }),
 
+  // Boas-vindas ao atendente/consultor recem-criado em UserManagement.tsx
+  // (equipe da escola) ou InitialSetup.tsx (admin da escola) — pessoa ainda
+  // NAO esta logada nesse momento, por isso sempre leva a senha provisoria.
+  atendente_welcome: (data) => ({
+    subject: `Bem-vindo(a) a ${data.school_name || 'equipe'}, ${data.user_name || ''}!`,
+    html: wrap(`
+      <p style="margin:0 0 4px;">${badge('Conta criada', '#16A34A', '#166534')}</p>
+      ${h1(`Bem-vindo(a), ${data.user_name || ''}!`, '#166534')}
+      ${p(`Sua conta de acesso ao sistema da <strong>${data.school_name || 'sua escola'}</strong> ja foi criada na Aion Edu. Confira abaixo seus dados de acesso.`)}
+      ${box(`
+        <strong style="display:block;margin-bottom:12px;">Seus dados de acesso:</strong>
+        <table cellpadding="0" cellspacing="0" width="100%">
+          <tr><td style="padding:4px 0;font-size:14px;">E-mail</td><td style="padding:4px 0;font-size:14px;font-weight:700;text-align:right;">${data.email || ''}</td></tr>
+          ${data.temp_password ? `<tr><td style="padding:4px 0;font-size:14px;">Senha provisoria</td><td style="padding:4px 0;font-size:14px;font-weight:700;text-align:right;">${data.temp_password}</td></tr>` : ''}
+        </table>
+      `)}
+      ${box(`
+        <strong style="display:block;margin-bottom:12px;">Primeiros passos:</strong>
+        <table cellpadding="0" cellspacing="0">
+          <tr><td style="padding:4px 0;">Fazer login com o e-mail e senha acima</td></tr>
+          <tr><td style="padding:4px 0;">Conferir os leads e conversas atribuidos a voce</td></tr>
+          <tr><td style="padding:4px 0;">Explorar o hub de atendimento do WhatsApp</td></tr>
+        </table>
+      `)}
+      ${btn('Acessar o sistema', data.login_url || 'https://app.aionedu.com.br/login')}
+      ${divider()}
+      ${supportLine()}
+    `)
+  }),
+
   payment_link: (data) => ({
     subject: `Link de pagamento - ${data.institution_name}`,
     html: wrap(`

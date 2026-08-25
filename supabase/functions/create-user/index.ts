@@ -28,6 +28,17 @@
 //    gravado em users.consultant_type (20260720000100_add_consultant_type.sql)
 //    — rejeitado com 400 se vier junto de um user_type diferente de
 //    'consultant'.
+// 3) autorização do chamador agora também aceita admin de escola
+//    (user_type='school_user' AND role='admin'), usado por
+//    UserManagement.tsx para criar atendentes/gestores sem trocar a sessão
+//    ativa do navegador (problema do supabase.auth.signUp() client-side).
+//    Esse chamador só pode criar user_type='school_user' e somente dentro
+//    da própria institution_id — nunca admin_geral/consultant nem
+//    institution_id de outra escola. InitialSetup.tsx (bootstrap do 1º
+//    admin de uma escola nova) continua em signUp(): não há sessão de
+//    chamador pra proteger nesse fluxo (visitante anônimo virando o
+//    próprio admin), então o create-user (que exige Bearer token de um
+//    chamador já autorizado) não se aplica.
 //
 // NÃO FAÇA DEPLOY AUTOMÁTICO A PARTIR DESTE COMMIT. Depois de revisar,
 // rode manualmente: supabase functions deploy create-user
@@ -76,17 +87,25 @@ serve(async (req) => {
 
     const { data: callerProfile, error: callerProfileErr } = await supabaseAdmin
       .from('users')
-      .select('user_type, consultant_type')
+      .select('user_type, consultant_type, role, institution_id')
       .eq('id', callerAuth.user.id)
       .single()
 
-    const callerIsAuthorized =
+    const callerIsSuperOrConsultant =
       !callerProfileErr &&
       (callerProfile?.user_type === 'admin_geral' ||
         (callerProfile?.user_type === 'consultant' && callerProfile?.consultant_type === 'interno'))
 
-    if (!callerIsAuthorized) {
-      return new Response(JSON.stringify({ error: 'Não autorizado: apenas admin_geral ou consultor interno pode criar usuários.' }), {
+    // Admin de escola (UserManagement.tsx / InitialSetup.tsx) pode criar
+    // usuários — mas só dentro da própria instituição, e nunca com
+    // user_type/institution_id fora dela (checado abaixo, após ler o body).
+    const callerIsSchoolAdmin =
+      !callerProfileErr &&
+      callerProfile?.user_type === 'school_user' &&
+      callerProfile?.role === 'admin'
+
+    if (!callerIsSuperOrConsultant && !callerIsSchoolAdmin) {
+      return new Response(JSON.stringify({ error: 'Não autorizado: apenas admin_geral, consultor interno ou admin de escola pode criar usuários.' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -118,6 +137,25 @@ serve(async (req) => {
       })
     }
 
+    // Admin de escola não pode criar admin_geral/consultant nem apontar
+    // institution_id de outra instituição — sempre força a própria.
+    let resolvedInstitutionId = institution_id || null
+    if (callerIsSchoolAdmin) {
+      if (user_type && user_type !== 'school_user') {
+        return new Response(JSON.stringify({ error: 'Admin de escola só pode criar usuários do tipo school_user.' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      if (institution_id && institution_id !== callerProfile.institution_id) {
+        return new Response(JSON.stringify({ error: 'Admin de escola só pode criar usuários na própria instituição.' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      resolvedInstitutionId = callerProfile.institution_id
+    }
+
     const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -138,7 +176,7 @@ serve(async (req) => {
       full_name: full_name || email,
       role: role || 'admin',
       user_type: user_type || 'school_user',
-      institution_id: institution_id || null,
+      institution_id: resolvedInstitutionId,
       consultant_type: user_type === 'consultant' ? (consultant_type || null) : null,
       active: true,
     })

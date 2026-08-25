@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { supabase } from '../../lib/supabase'
+import { sendEmail } from '../../lib/email'
 import {
   Users, Plus, Edit, Trash2, Shield, UserCheck, Search,
   Eye, EyeOff, Mail, Calendar, CheckCircle, XCircle, Key, X,
@@ -218,7 +219,7 @@ function UserModal({ isOpen, onClose, onSave, editingUser }: {
 
           {!editingUser && (
             <div style={{ background: '#EFF6FF', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#1D4ED8' }}>
-              🔑 Nenhum e-mail de boas-vindas é enviado automaticamente — anote a senha acima e compartilhe com o usuário diretamente.
+              🔑 Um e-mail de boas-vindas com os dados de acesso será enviado automaticamente para o usuário.
             </div>
           )}
 
@@ -378,42 +379,71 @@ export default function UserManagement() {
 
       showToast('Usuário atualizado com sucesso!')
     } else {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: userData.email,
-        password: userData.password,
-        options: {
-          data: { full_name: userData.full_name, role: userData.role },
-          emailRedirectTo: `${window.location.origin}/login`
+      // Cria via edge function (service role) em vez de supabase.auth.signUp()
+      // client-side: signUp() autentica automaticamente quem chamou na sessão
+      // do usuário recém-criado, podendo trocar a sessão ativa deste admin
+      // sem aviso. create-user roda no servidor e nunca toca na sessão do
+      // navegador que fez a chamada.
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            email: userData.email,
+            password: userData.password,
+            full_name: userData.full_name,
+            role: userData.role,
+            user_type: 'school_user',
+            institution_id: user!.institution_id,
+          }),
         }
-      })
-      if (authError) throw authError
-      if (!authData.user) throw new Error('Erro ao criar usuário')
+      )
+      const fnData = await res.json()
+      if (!res.ok || fnData?.error) {
+        const errMsg = fnData?.error || 'Erro ao criar usuário'
+        throw new Error(errMsg.includes('already been registered') || errMsg.includes('already registered')
+          ? 'Este e-mail já está cadastrado no sistema.'
+          : errMsg)
+      }
+      const newUserId = fnData.user_id
 
+      // create-user sempre grava active:true e não conhece os campos de
+      // visibilidade de conversas — completa aqui com o que veio do form.
       const { error: profileError } = await supabase
         .from('users')
-        .upsert({
-          id: authData.user.id,
-          email: userData.email,
-          full_name: userData.full_name,
-          role: userData.role,
-          institution_id: user!.institution_id,
+        .update({
           active: userData.active,
           can_see_all_conversations: !!userData.can_see_all_conversations,
           can_see_full_history: !!userData.can_see_full_history
-        }, { onConflict: 'id' })
+        })
+        .eq('id', newUserId)
       if (profileError) throw profileError
 
       if (isConsultor(userData.role) && permissions) {
         const rows = PERM_MODULES.map(m => ({
           institution_id: user!.institution_id,
-          user_id: authData.user!.id,
+          user_id: newUserId,
           module: m.id,
           enabled: permissions[m.id] ?? true,
         }))
         await supabase.from('user_permissions').upsert(rows, { onConflict: 'user_id,module' })
       }
 
-      showToast('Usuário criado! Compartilhe a senha com ele diretamente.')
+      await sendEmail('atendente_welcome', userData.email, {
+        user_name: userData.full_name,
+        email: userData.email,
+        temp_password: userData.password,
+        school_name: user?.institution_name || '',
+        login_url: `${window.location.origin}/login`,
+      })
+
+      showToast('Usuário criado! Um e-mail com os dados de acesso foi enviado.')
     }
     setEditingUser(null)
     await loadUsers()
