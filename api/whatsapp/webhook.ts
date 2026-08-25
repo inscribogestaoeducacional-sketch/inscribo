@@ -2167,7 +2167,19 @@ async function processAionMessage({
         interactiveTitle    = ia.list_reply?.title || ''
       }
     }
-    const contentText = interactiveTitle || text
+    // type:'unsupported' — confirmado via raw_data de mensagens reais (3
+    // ocorrências, 17-25/08/2026): a Meta manda `errors:[{code:131051,
+    // message:"Message type unknown"}]` e `unsupported:{raw_type:"unknown"}`,
+    // SEM nenhum campo de conteúdo (sem text/image/video/document/caption) —
+    // não é bug de parsing nosso, a Cloud API genuinamente não repassa o
+    // conteúdo pra esses casos (visualização única, enquete, alguns
+    // stickers/encaminhamentos restritos). Sem este caso especial, `text`
+    // fica vazio e o fallback `[${msgType}]` gravava o literal "[unsupported]"
+    // como content, sem explicar nada pro atendente.
+    const contentText =
+      msgType === 'unsupported'
+        ? '📎 Este tipo de conteúdo não pode ser recebido pelo WhatsApp Business (ex: visualização única, enquete, sticker restrito) — peça para reenviarem como texto, imagem ou documento comum.'
+        : (interactiveTitle || text)
 
     const queue = await detectAionQueue(rawPhone, supabase)
 
