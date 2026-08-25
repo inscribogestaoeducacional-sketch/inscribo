@@ -2696,10 +2696,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           continue
         }
 
-        // ── Deleted message (unsupported type from Meta) ──
+        // ── Deleted message OR genuinely unsupported content (both arrive as
+        // type:'unsupported' from Meta) ──
         if ((msg.type as string) === 'unsupported') {
           const originalId = msg.context?.id as string | undefined
           if (originalId) {
+            // context.id presente → notificação de mensagem apagada.
             const { data: originalMsg } = await supabase
               .from('whatsapp_messages')
               .select('content')
@@ -2715,7 +2717,69 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               })
               .eq('message_id', originalId)
               .eq('institution_id', institutionId)
+            continue
           }
+
+          // Sem context.id → não é notificação de apagada, é conteúdo
+          // genuinamente não suportado pela Cloud API (visualização única,
+          // enquete, sticker restrito etc.) — confirmado via raw_data de
+          // mensagens reais (mesmo achado do Inbox Áion, ver
+          // processAionMessage() acima: a Meta manda `errors:[{code:131051}]`
+          // e nenhum campo de conteúdo, não é bug de parsing nosso). Antes,
+          // caía direto no `continue` no fim deste bloco e a mensagem sumia
+          // sem nenhum rastro pro atendente da escola. Insere normalmente
+          // com texto explicativo, mesmo padrão do Inbox Áion.
+          const unsupportedText =
+            '📎 Este tipo de conteúdo não pode ser recebido pelo WhatsApp Business (ex: visualização única, enquete, sticker restrito) — peça para reenviarem como texto, imagem ou documento comum.'
+          const unsupportedTimestamp   = new Date(parseInt(msg.timestamp) * 1000).toISOString()
+          const unsupportedContactName = (value.contacts?.[0]?.profile?.name as string | undefined) || remoteJid
+
+          const { data: existingConvUnsup } = await supabase
+            .from('whatsapp_conversations')
+            .select('status')
+            .eq('institution_id', institutionId)
+            .eq('remote_jid', remoteJid)
+            .maybeSingle()
+
+          const { error: convUnsupErr } = await supabase
+            .from('whatsapp_conversations')
+            .upsert(
+              {
+                institution_id:  institutionId,
+                remote_jid:      remoteJid,
+                contact_name:    unsupportedContactName,
+                last_message:    unsupportedText,
+                last_message_at: unsupportedTimestamp,
+                last_customer_message_at: unsupportedTimestamp,
+                status: existingConvUnsup && existingConvUnsup.status !== 'closed' ? existingConvUnsup.status : 'waiting',
+              },
+              { onConflict: 'institution_id,remote_jid' }
+            )
+          if (convUnsupErr) console.error('❌ conv upsert error (unsupported):', convUnsupErr.message)
+
+          const { error: rpcUnsupErr } = await supabase
+            .rpc('increment_conversation_unread', {
+              p_institution_id: institutionId,
+              p_remote_jid:     remoteJid,
+            })
+          if (rpcUnsupErr) console.error('❌ unread increment error (unsupported):', rpcUnsupErr.message)
+
+          const { error: msgUnsupErr } = await supabase.from('whatsapp_messages').insert({
+            institution_id: institutionId,
+            remote_jid:     remoteJid,
+            message_id:     msg.id,
+            instance_name:  'cloud-api',
+            content:        unsupportedText,
+            message_type:   'unsupported',
+            from_me:        false,
+            contact_name:   unsupportedContactName,
+            timestamp:      unsupportedTimestamp,
+            status:         'received',
+            direction:      'inbound',
+            raw_data:       msg,
+          })
+          if (msgUnsupErr) console.error('❌ msg insert error (unsupported):', msgUnsupErr.message)
+
           continue
         }
 

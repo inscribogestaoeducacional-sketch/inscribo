@@ -3,13 +3,17 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { normalizeBrazilianInput } from '../../lib/phone'
+import * as XLSX from 'xlsx'
 import {
-  Users, BookUser, Search, Phone, Download, Upload, FileText,
+  Users, BookUser, Search, Phone, Download, Upload, FileText, Plus,
   RefreshCw, MessageSquare, ChevronsUpDown, ChevronUp, ChevronDown, ChevronRight,
+  GitMerge, Settings2, Trash2, Tag as TagIcon, X, Loader2, CheckCircle2, AlertCircle,
 } from 'lucide-react'
 import ContactProfile, { UnifiedContact } from './ContactProfile'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { statusConfig } from '../leads/leadFormShared'
+import DuplicateContactsModal from './DuplicateContactsModal'
+import CustomFieldsAdminModal from './CustomFieldsAdminModal'
 
 // ─── Constants ───────────────────────────────────────────────
 const HEX_COLORS = ['#00A896','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
@@ -17,7 +21,7 @@ const PAGE_SIZE  = 50
 // PostgREST limita a resposta a um número fixo de linhas por requisição
 // (tipicamente 1000). Exportar sem paginar cortava o CSV em silêncio pra
 // escolas com mais contatos que isso — busca em lotes desse tamanho até
-// esgotar os resultados (ver exportCSVWithFields).
+// esgotar os resultados (ver fetchAllContactsForExport).
 const EXPORT_BATCH_SIZE = 1000
 // Item 4c — lista de séries antes hardcoded aqui (divergente do resto do
 // sistema); agora vem de school_grade_levels via useGradeLevels().
@@ -41,7 +45,7 @@ type ExportFieldKey = typeof EXPORT_FIELD_DEFS[number]['key']
 // "Converter para Lead" pra quando isso fizer sentido individualmente).
 interface ImportRow {
   nome: string; telefone: string; email: string; endereco: string
-  aluno: string; turma: string; parentesco: string
+  aluno: string; turma: string; parentesco: string; tags: string
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -189,6 +193,9 @@ function SkeletonRows() {
     <>
       {Array.from({ length: 5 }).map((_, i) => (
         <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+          <td style={{ padding: '12px 12px' }}>
+            <div className="animate-pulse" style={{ width: 16, height: 16, borderRadius: 4, background: '#E2E8F0' }} />
+          </td>
           <td style={{ padding: '12px 16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div className="animate-pulse" style={{ width: 36, height: 36, borderRadius: '50%', background: '#E2E8F0', flexShrink: 0 }} />
@@ -267,6 +274,34 @@ export default function ContactsModule() {
   const [importErrors,  setImportErrors]  = useState<string[]>([])
   const [importResult,  setImportResult]  = useState<{ imported: number; duplicates: number } | null>(null)
   const [importLoading, setImportLoading] = useState(false)
+
+  // ── Seleção em massa (item 3) — mesmo padrão de AdminAionInbox.tsx ───────
+  const [selectedIds,        setSelectedIds]        = useState<Set<string>>(new Set())
+  const [selectedAllFilter,  setSelectedAllFilter]  = useState(false)
+  const [selectingAllFilter, setSelectingAllFilter] = useState(false)
+  const [showBulkTagModal,   setShowBulkTagModal]   = useState(false)
+  const [bulkTagNames,       setBulkTagNames]       = useState<string[]>([])
+  const [bulkTagSaving,      setBulkTagSaving]      = useState(false)
+  const [showBulkDelete,     setShowBulkDelete]     = useState(false)
+  const [checkingBulkDelete, setCheckingBulkDelete] = useState(false)
+  const [bulkDeleting,       setBulkDeleting]       = useState(false)
+  const [bulkRelatedInfo,    setBulkRelatedInfo]    = useState<{ leadCount: number; conversationCount: number; noteCount: number } | null>(null)
+
+  // ── Duplicados / Campos personalizados (itens 1 e 2) ─────────────────────
+  const [showDuplicates,   setShowDuplicates]   = useState(false)
+  const [showCustomFields, setShowCustomFields] = useState(false)
+
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
+  function showToast(msg: string, ok = true) { setToast({ msg, ok }); setTimeout(() => setToast(null), 3500) }
+
+  // ── New contact (manual, 1-a-1) state ────────────────────
+  const [showNewContact,   setShowNewContact]   = useState(false)
+  const [newContact,       setNewContact]       = useState({
+    name: '', phone: '', email: '', address: '', linked_student_name: '', student_grade: '', relationship: '',
+  })
+  const [newContactTags,   setNewContactTags]   = useState<string[]>([])
+  const [savingNewContact, setSavingNewContact] = useState(false)
+  const [newContactError,  setNewContactError]  = useState('')
 
   const [searchParams] = useSearchParams()
   useEffect(() => {
@@ -414,6 +449,155 @@ export default function ContactsModule() {
     }
   }
 
+  // ── Seleção em massa (item 3) — mesmo padrão de AdminAionInbox.tsx ───────
+  function toggleSelect(id: string) {
+    setSelectedAllFilter(false)
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAllLoaded() {
+    setSelectedAllFilter(false)
+    setSelectedIds(prev => prev.size === contacts.length ? new Set() : new Set(contacts.map(c => c.id)))
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set())
+    setSelectedAllFilter(false)
+  }
+
+  // Mesmos filtros de load() acima, mas sem paginação — só os IDs que batem,
+  // pra "selecionar todos os N contatos deste filtro" (não só a página
+  // carregada na tela).
+  async function selectAllMatchingFilter() {
+    if (!institutionId) return
+    setSelectingAllFilter(true)
+    try {
+      const s = search.trim()
+      const isSearch  = s.length >= 2
+      const useGrade  = filterGrade  !== 'all'
+      const useTag    = filterTag    !== 'all'
+      const useStatus = filterStatus !== 'all'
+      const needsInnerJoin = useGrade || useStatus
+
+      const selectStr = needsInnerJoin ? 'id, leads!lead_id!inner(id)' : 'id, leads!lead_id(id)'
+      let query = supabase
+        .from('whatsapp_contacts')
+        .select(selectStr)
+        .eq('institution_id', institutionId)
+        .not('phone', 'ilike', '%@g.us%')
+        .filter('phone', 'not.ilike', '%1491304248%')
+
+      if (isSearch)                    query = query.or(`name.ilike.%${s}%,phone.ilike.%${s}%,student_grade.ilike.%${s}%`)
+      if (filterOrigin === 'lead')     query = query.eq('type', 'lead')
+      if (filterOrigin === 'client')   query = query.eq('type', 'client')
+      if (filterOrigin === 'unknown')  query = query.or('type.eq.unknown,type.is.null')
+      if (useGrade)                    query = query.eq('leads.grade_interest', filterGrade)
+      if (useStatus)                   query = query.eq('leads.status', filterStatus)
+      if (useTag)                      query = (query as any).filter('tags', 'cs', `{"${filterTag}"}`)
+
+      const { data, error } = await query
+      if (error) { console.error('selectAllMatchingFilter error:', error); return }
+      setSelectedIds(new Set(((data as any[]) ?? []).map(c => c.id)))
+      setSelectedAllFilter(true)
+    } finally {
+      setSelectingAllFilter(false)
+    }
+  }
+
+  async function applyBulkTags() {
+    if (bulkTagNames.length === 0 || selectedIds.size === 0) return
+    setBulkTagSaving(true)
+    try {
+      const ids = Array.from(selectedIds)
+      // "Selecionar todos do filtro" pode incluir ids que não estão
+      // carregados em `contacts` — busca as tags atuais de todos direto do
+      // banco (em lotes) em vez de depender só do que já está na tela.
+      const tagsById = new Map<string, string[]>()
+      const CHUNK = 200
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const slice = ids.slice(i, i + CHUNK)
+        const { data } = await supabase.from('whatsapp_contacts').select('id, tags').in('id', slice)
+        for (const row of (data as { id: string; tags: string[] | null }[]) ?? []) {
+          tagsById.set(row.id, row.tags ?? [])
+        }
+      }
+      // Cada contato pode precisar de um valor de tags diferente (união com
+      // o que já tinha) — não dá pra fazer isso num único UPDATE do
+      // supabase-js sem RPC, então é um await por id (mesmo padrão do
+      // AdminAionInbox.tsx).
+      for (const id of ids) {
+        const merged = Array.from(new Set([...(tagsById.get(id) ?? []), ...bulkTagNames]))
+        await supabase.from('whatsapp_contacts').update({ tags: merged }).eq('id', id)
+      }
+      showToast(`Etiqueta(s) aplicada(s) a ${ids.length} contato(s).`)
+      setShowBulkTagModal(false); setBulkTagNames([]); clearSelection()
+      load({ reset: true })
+    } catch (e: any) {
+      showToast('Erro ao aplicar etiquetas: ' + (e?.message || 'tente novamente'), false)
+    } finally {
+      setBulkTagSaving(false)
+    }
+  }
+
+  // Mesmo aviso de vínculos órfãos da exclusão individual (ContactProfile.tsx
+  // openDeleteConfirm), agregado pros N contatos selecionados.
+  async function openBulkDeleteConfirm() {
+    setShowBulkDelete(true)
+    setCheckingBulkDelete(true)
+    try {
+      const ids = Array.from(selectedIds)
+      const rows: { id: string; phone: string | null; lead_id: string | null }[] = []
+      const CHUNK = 200
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const slice = ids.slice(i, i + CHUNK)
+        const { data } = await supabase.from('whatsapp_contacts').select('id, phone, lead_id').in('id', slice)
+        rows.push(...(((data as any[]) ?? [])))
+      }
+      const leadCount = rows.filter(r => r.lead_id).length
+
+      const { data: convs } = await supabase.from('whatsapp_conversations').select('remote_jid').eq('institution_id', institutionId)
+      const convPhones = new Set((convs || []).map((c: any) => (c.remote_jid || '').split('@')[0]))
+      const conversationCount = rows.filter(r => convPhones.has(normalizeBrazilianInput(r.phone || ''))).length
+
+      // Mesmo contactRef de ContactProfile.tsx/mapContact: lead_id > remote_jid > id.
+      const refs = rows.map(r => r.lead_id || (r.phone ? `${r.phone}@s.whatsapp.net` : null) || r.id).filter(Boolean) as string[]
+      let noteCount = 0
+      if (refs.length) {
+        const { count } = await supabase.from('contact_notes').select('id', { count: 'exact', head: true })
+          .eq('institution_id', institutionId).in('contact_ref_id', refs)
+        noteCount = count || 0
+      }
+      setBulkRelatedInfo({ leadCount, conversationCount, noteCount })
+    } catch (e) {
+      console.error('openBulkDeleteConfirm error:', e)
+      setBulkRelatedInfo({ leadCount: 0, conversationCount: 0, noteCount: 0 })
+    } finally {
+      setCheckingBulkDelete(false)
+    }
+  }
+
+  async function handleBulkDelete() {
+    setBulkDeleting(true)
+    try {
+      const ids = Array.from(selectedIds)
+      const CHUNK = 200
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        await supabase.from('whatsapp_contacts').delete().in('id', ids.slice(i, i + CHUNK))
+      }
+      showToast(`${ids.length} contato(s) excluído(s).`)
+      setShowBulkDelete(false); setBulkRelatedInfo(null); clearSelection()
+      load({ reset: true }); refreshKpiCounts()
+    } catch (e: any) {
+      showToast('Erro ao excluir: ' + (e?.message || 'tente novamente'), false)
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
   // ── Mount: initial load + real-time subscription ─────────
   useEffect(() => {
     mountedRef.current = true
@@ -535,8 +719,8 @@ export default function ContactsModule() {
 
   // ── Import / Export ──────────────────────────────────────
   function downloadTemplate() {
-    const csv  = '﻿' + 'nome,telefone,email,endereco,aluno,turma,parentesco\n'
-      + 'Maria Silva,83999998888,maria@email.com,"Rua X, 123",João Silva,6º Ano B,Mãe\n'
+    const csv  = '﻿' + 'nome,telefone,email,endereco,aluno,turma,parentesco,tags\n'
+      + 'Maria Silva,83999998888,maria@email.com,"Rua X, 123",João Silva,6º Ano B,Mãe,Visitante|Cliente\n'
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a'); a.href = url; a.download = 'template-contatos.csv'; a.click()
@@ -560,9 +744,9 @@ export default function ContactsModule() {
     if (lines.length < 2) return []
     const header = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''))
     const idx    = (col: string) => header.indexOf(col)
-    const [ni, ti, ei, endi, ai, tui, pi] = [
+    const [ni, ti, ei, endi, ai, tui, pi, tgi] = [
       idx('nome'), idx('telefone'), idx('email'), idx('endereco'),
-      idx('aluno'), idx('turma'), idx('parentesco'),
+      idx('aluno'), idx('turma'), idx('parentesco'), idx('tags'),
     ]
     return lines.slice(1).map(line => {
       const cols = parseCSVLine(line)
@@ -574,6 +758,7 @@ export default function ContactsModule() {
         aluno:      ai   >= 0 ? cols[ai]   || '' : '',
         turma:      tui  >= 0 ? cols[tui]  || '' : '',
         parentesco: pi   >= 0 ? cols[pi]   || '' : '',
+        tags:       tgi  >= 0 ? cols[tgi]  || '' : '',
       }
     })
   }
@@ -629,6 +814,11 @@ export default function ContactsModule() {
           linked_student_name: r.aluno || null,
           student_grade: r.turma || null,
           relationship: r.parentesco || null,
+          // Mesmo separador usado no template baixável e no export (pipe
+          // evita conflito com nomes de tag que já tenham vírgula, o
+          // delimitador do CSV) — padronizado nos dois sentidos, senão um
+          // arquivo exportado por aqui não reimportava as tags de volta.
+          tags: r.tags ? r.tags.split('|').map(t => t.trim()).filter(Boolean) : [],
           type: 'client',
         })
       }
@@ -647,53 +837,117 @@ export default function ContactsModule() {
     }
   }
 
-  async function exportCSVWithFields() {
+  // Criação manual de 1 contato. Mesma regra de dedup do import CSV: chave é
+  // institution_id+phone (telefone normalizado) — nunca cria duplicata. Se já
+  // existir um contato com esse telefone, abre o perfil dele em vez de
+  // inserir de novo.
+  async function handleSaveNewContact() {
+    setNewContactError('')
+    const phoneDigits = newContact.phone.replace(/\D/g, '')
+    const phone = normalizeBrazilianInput(newContact.phone)
+    if (!phone || phoneDigits.length < 8) {
+      setNewContactError('Informe um telefone válido.')
+      return
+    }
+    setSavingNewContact(true)
+    try {
+      // Mesmo select de load() (sem inner join) — já vem pronto pra virar
+      // UnifiedContact via mapContact() se encontrar um contato existente.
+      const { data: existing, error: existingErr } = await supabase
+        .from('whatsapp_contacts')
+        .select('id, phone, name, email, address, linked_student_name, student_grade, relationship, profile_picture_url, type, lead_id, last_seen_at, created_at, tags, leads!lead_id(id, student_name, responsible_name, email, address, grade_interest, source, status)')
+        .eq('institution_id', institutionId)
+        .eq('phone', phone)
+        .maybeSingle()
+      if (existingErr) throw existingErr
+
+      if (existing) {
+        setShowNewContact(false)
+        setProfileContact(mapContact(existing))
+        alert('Já existe um contato com esse telefone — abrindo o existente.')
+        return
+      }
+
+      const { error: insertErr } = await supabase.from('whatsapp_contacts').insert({
+        institution_id: institutionId,
+        phone,
+        name: newContact.name.trim() || null,
+        email: newContact.email.trim() || null,
+        address: newContact.address.trim() || null,
+        linked_student_name: newContact.linked_student_name.trim() || null,
+        student_grade: newContact.student_grade.trim() || null,
+        relationship: newContact.relationship.trim() || null,
+        tags: newContactTags,
+        // Mesma convenção do import CSV manual: contato criado à mão vira
+        // 'client', nunca lead (sem intenção comercial implícita).
+        type: 'client',
+      })
+      if (insertErr) throw insertErr
+
+      setShowNewContact(false)
+      load()
+      refreshKpiCounts()
+    } catch (e: any) {
+      console.error('handleSaveNewContact error:', e)
+      setNewContactError(e.message || 'Erro ao criar contato.')
+    } finally {
+      setSavingNewContact(false)
+    }
+  }
+
+  // Busca TODOS os contatos que batem com os filtros de exportação, em lotes
+  // de EXPORT_BATCH_SIZE até esgotar os resultados — uma única query sem
+  // .range() ficava sujeita ao limite padrão de linhas do PostgREST (~1000)
+  // e cortava o export sem avisar em escolas com mais contatos que isso.
+  // Compartilhada pelos dois formatos de export (CSV e XLSX) — só muda o
+  // jeito de escrever o arquivo final, não como os dados são buscados.
+  async function fetchAllContactsForExport(): Promise<UnifiedContact[]> {
+    const useGrade   = exportFilterGrade  !== 'all'
+    const useStatus  = exportFilterStatus !== 'all'
+    const needsInner = useGrade || useStatus
+    const selectStr  = needsInner
+      ? 'id, phone, name, type, lead_id, last_seen_at, created_at, tags, leads!lead_id!inner(id, student_name, responsible_name, email, grade_interest, source, status)'
+      : 'id, phone, name, type, lead_id, last_seen_at, created_at, tags, leads!lead_id(id, student_name, responsible_name, email, grade_interest, source, status)'
+
+    const allRows: any[] = []
+    let from = 0
+    while (true) {
+      let q = supabase
+        .from('whatsapp_contacts')
+        .select(selectStr)
+        .eq('institution_id', institutionId)
+        .order(sortCol, { ascending: sortDir === 'asc', nullsFirst: false })
+        .range(from, from + EXPORT_BATCH_SIZE - 1)
+
+      if (exportSearch.trim().length >= 2)
+        q = q.or(`name.ilike.%${exportSearch.trim()}%,phone.ilike.%${exportSearch.trim()}%`)
+      if (exportFilterOrigin === 'lead')    q = q.eq('type', 'lead')
+      if (exportFilterOrigin === 'client')  q = q.eq('type', 'client')
+      if (exportFilterOrigin === 'unknown') q = q.or('type.eq.unknown,type.is.null')
+      if (useGrade)  q = q.eq('leads.grade_interest', exportFilterGrade)
+      if (useStatus) q = q.eq('leads.status', exportFilterStatus)
+
+      const { data, error } = await q
+      if (error) throw error
+
+      allRows.push(...(data || []))
+      if (mountedRef.current) setExportProgress(allRows.length)
+
+      if (!data || data.length < EXPORT_BATCH_SIZE) break
+      from += EXPORT_BATCH_SIZE
+    }
+
+    return allRows.map(mapContact)
+  }
+
+  async function exportContacts(format: 'csv' | 'xlsx') {
     const active = EXPORT_FIELD_DEFS.filter(f => exportFields[f.key])
     if (!active.length) { alert('Selecione ao menos um campo.'); return }
 
     setExportLoading(true)
     setExportProgress(0)
     try {
-      const useGrade   = exportFilterGrade  !== 'all'
-      const useStatus  = exportFilterStatus !== 'all'
-      const needsInner = useGrade || useStatus
-      const selectStr  = needsInner
-        ? 'id, phone, name, type, lead_id, last_seen_at, created_at, tags, leads!lead_id!inner(id, student_name, responsible_name, email, grade_interest, source, status)'
-        : 'id, phone, name, type, lead_id, last_seen_at, created_at, tags, leads!lead_id(id, student_name, responsible_name, email, grade_interest, source, status)'
-
-      // Busca em lotes de EXPORT_BATCH_SIZE até esgotar os resultados — uma
-      // única query sem .range() ficava sujeita ao limite padrão de linhas
-      // do PostgREST (~1000) e cortava o CSV sem avisar em escolas com mais
-      // contatos que isso.
-      const allRows: any[] = []
-      let from = 0
-      while (true) {
-        let q = supabase
-          .from('whatsapp_contacts')
-          .select(selectStr)
-          .eq('institution_id', institutionId)
-          .order(sortCol, { ascending: sortDir === 'asc', nullsFirst: false })
-          .range(from, from + EXPORT_BATCH_SIZE - 1)
-
-        if (exportSearch.trim().length >= 2)
-          q = q.or(`name.ilike.%${exportSearch.trim()}%,phone.ilike.%${exportSearch.trim()}%`)
-        if (exportFilterOrigin === 'lead')    q = q.eq('type', 'lead')
-        if (exportFilterOrigin === 'client')  q = q.eq('type', 'client')
-        if (exportFilterOrigin === 'unknown') q = q.or('type.eq.unknown,type.is.null')
-        if (useGrade)  q = q.eq('leads.grade_interest', exportFilterGrade)
-        if (useStatus) q = q.eq('leads.status', exportFilterStatus)
-
-        const { data, error } = await q
-        if (error) { console.error('Export query error:', error); alert('Erro ao exportar. Tente novamente.'); return }
-
-        allRows.push(...(data || []))
-        if (mountedRef.current) setExportProgress(allRows.length)
-
-        if (!data || data.length < EXPORT_BATCH_SIZE) break
-        from += EXPORT_BATCH_SIZE
-      }
-
-      const allContacts = allRows.map(mapContact)
+      const allContacts = await fetchAllContactsForExport()
       const fieldGetters: Record<ExportFieldKey, (c: UnifiedContact) => string> = {
         responsible_name: c => c.name,
         student_name:     c => c.student_name || '',
@@ -701,24 +955,35 @@ export default function ContactsModule() {
         email:            c => c.email || '',
         grade:            c => c.grade || '',
         type:             c => c.origin_label,
-        tags:             c => (c.tags || []).join('; '),
+        // Mesmo separador do import CSV (handleImport: split('|')) — antes
+        // era '; ', então um arquivo exportado por aqui nunca reimportava as
+        // tags corretas de volta (round-trip quebrado).
+        tags:             c => (c.tags || []).join('|'),
         last_contact:     c => fmtDate(c.last_contact),
         created_at:       c => fmtCreated(c.created_at),
         status:           c => c.status_lead || '',
       }
-      const header = active.map(f => f.label).join(',')
-      const rows   = allContacts.map(c =>
-        active.map(f => `"${String(fieldGetters[f.key](c)).replace(/"/g, '""')}"`).join(',')
-      )
-      const csv  = '﻿' + [header, ...rows].join('\n')
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement('a'); a.href = url; a.download = 'contatos.csv'; a.click()
-      URL.revokeObjectURL(url)
+      const header = active.map(f => f.label)
+      const rows   = allContacts.map(c => active.map(f => fieldGetters[f.key](c)))
+
+      if (format === 'xlsx') {
+        const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, 'Contatos')
+        XLSX.writeFile(wb, 'contatos.xlsx')
+      } else {
+        const csvHeader = header.join(',')
+        const csvRows   = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+        const csv  = '﻿' + [csvHeader, ...csvRows].join('\n')
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a'); a.href = url; a.download = 'contatos.csv'; a.click()
+        URL.revokeObjectURL(url)
+      }
       setShowExportModal(false)
     } catch (e) {
-      console.error('exportCSVWithFields exception:', e)
-      alert('Erro ao exportar.')
+      console.error('exportContacts exception:', e)
+      alert('Erro ao exportar. Tente novamente.')
     } finally {
       if (mountedRef.current) setExportLoading(false)
     }
@@ -728,6 +993,12 @@ export default function ContactsModule() {
   const grades     = [...new Set(contacts.map(c => c.grade).filter(Boolean))] as string[]
   const hasFilters = !!(search || filterOrigin !== 'all' || filterGrade !== 'all' || filterTag !== 'all' || filterStatus !== 'all')
   const openImport = () => { setShowImport(true); setImportRows([]); setImportErrors([]); setImportResult(null) }
+  const openNewContact = () => {
+    setNewContact({ name: '', phone: '', email: '', address: '', linked_student_name: '', student_grade: '', relationship: '' })
+    setNewContactTags([])
+    setNewContactError('')
+    setShowNewContact(true)
+  }
   const openExport = () => {
     setExportFilterOrigin('all'); setExportFilterStatus('all')
     setExportFilterGrade('all'); setExportSearch('')
@@ -821,7 +1092,7 @@ export default function ContactsModule() {
         </div>
         <button onClick={downloadTemplate}
           style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, border: '1.5px dashed #CBD5E1', background: '#F8FAFC', color: '#475569', fontSize: 13, cursor: 'pointer', marginBottom: 16, width: '100%', boxSizing: 'border-box' }}>
-          <FileText size={16} color="#3B82F6" /> Download template CSV (nome, telefone, email, endereco, aluno, turma, parentesco)
+          <FileText size={16} color="#3B82F6" /> Download template CSV (nome, telefone, email, endereco, aluno, turma, parentesco, tags)
         </button>
         <label style={{ display: 'block', marginBottom: 16, cursor: 'pointer' }}>
           <div style={{ border: '2px dashed #CBD5E1', borderRadius: 10, padding: '24px', textAlign: 'center', background: '#F8FAFC' }}>
@@ -843,7 +1114,7 @@ export default function ContactsModule() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ background: '#F8FAFC', position: 'sticky', top: 0 }}>
-                    {['Nome', 'Telefone', 'E-mail', 'Endereço', 'Aluno', 'Turma', 'Parentesco'].map(h => (
+                    {['Nome', 'Telefone', 'E-mail', 'Endereço', 'Aluno', 'Turma', 'Parentesco', 'Tags'].map(h => (
                       <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#94A3B8', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -858,10 +1129,11 @@ export default function ContactsModule() {
                       <td style={{ padding: '7px 12px', color: '#475569' }}>{r.aluno || <span style={{ color: '#CBD5E1' }}>—</span>}</td>
                       <td style={{ padding: '7px 12px', color: '#475569' }}>{r.turma || <span style={{ color: '#CBD5E1' }}>—</span>}</td>
                       <td style={{ padding: '7px 12px', color: '#475569' }}>{r.parentesco || <span style={{ color: '#CBD5E1' }}>—</span>}</td>
+                      <td style={{ padding: '7px 12px', color: '#475569' }}>{r.tags || <span style={{ color: '#CBD5E1' }}>—</span>}</td>
                     </tr>
                   ))}
                   {importRows.length > 10 && (
-                    <tr><td colSpan={7} style={{ padding: '8px 12px', color: '#94A3B8', fontSize: 12, textAlign: 'center' }}>...e mais {importRows.length - 10} linha(s)</td></tr>
+                    <tr><td colSpan={8} style={{ padding: '8px 12px', color: '#94A3B8', fontSize: 12, textAlign: 'center' }}>...e mais {importRows.length - 10} linha(s)</td></tr>
                   )}
                 </tbody>
               </table>
@@ -953,10 +1225,104 @@ export default function ContactsModule() {
             Cancelar
           </button>
           <button
-            onClick={() => exportCSVWithFields()}
+            onClick={() => exportContacts('csv')}
             disabled={exportLoading || exportFetching || !Object.values(exportFields).some(Boolean) || exportCount === 0}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700, opacity: (exportLoading || exportFetching || !Object.values(exportFields).some(Boolean) || exportCount === 0) ? 0.5 : 1 }}>
-            <Download size={14} /> {exportLoading ? (exportProgress > 0 ? `Exportando... ${exportProgress}/${exportCount}` : 'Exportando...') : `Exportar ${exportCount} contatos`}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700, opacity: (exportLoading || exportFetching || !Object.values(exportFields).some(Boolean) || exportCount === 0) ? 0.5 : 1 }}>
+            <Download size={14} /> {exportLoading ? (exportProgress > 0 ? `Exportando... ${exportProgress}/${exportCount}` : 'Exportando...') : `CSV (${exportCount})`}
+          </button>
+          <button
+            onClick={() => exportContacts('xlsx')}
+            disabled={exportLoading || exportFetching || !Object.values(exportFields).some(Boolean) || exportCount === 0}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', border: 'none', borderRadius: 9, background: '#16A34A', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700, opacity: (exportLoading || exportFetching || !Object.values(exportFields).some(Boolean) || exportCount === 0) ? 0.5 : 1 }}>
+            <Download size={14} /> {exportLoading ? (exportProgress > 0 ? `Exportando... ${exportProgress}/${exportCount}` : 'Exportando...') : `XLSX (${exportCount})`}
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null
+
+  // New contact modal (criação manual, 1-a-1) — mesmos campos do import CSV
+  // (nome, telefone, email, endereco, aluno, turma, parentesco) + etiquetas.
+  const newContactLbl: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 600, color: '#94A3B8', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.04em' }
+  const newContactInp: React.CSSProperties = { width: '100%', padding: '9px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A' }
+
+  const newContactModal = showNewContact ? (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      onClick={e => { if (e.target === e.currentTarget) setShowNewContact(false) }}>
+      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto', padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1A2B4A' }}>Novo Contato</h2>
+          <button onClick={() => setShowNewContact(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: 22, lineHeight: 1 }}>✕</button>
+        </div>
+
+        {newContactError && (
+          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#DC2626' }}>
+            {newContactError}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={newContactLbl}>Nome</label>
+            <input value={newContact.name} onChange={e => setNewContact(f => ({ ...f, name: e.target.value }))} style={newContactInp} placeholder="Nome do responsável" />
+          </div>
+          <div>
+            <label style={newContactLbl}>Telefone *</label>
+            <input value={newContact.phone} onChange={e => setNewContact(f => ({ ...f, phone: e.target.value }))} style={newContactInp} placeholder="(83) 99999-8888" type="tel" />
+          </div>
+          <div>
+            <label style={newContactLbl}>E-mail</label>
+            <input value={newContact.email} onChange={e => setNewContact(f => ({ ...f, email: e.target.value }))} style={newContactInp} placeholder="email@escola.com" type="email" />
+          </div>
+          <div>
+            <label style={newContactLbl}>Endereço</label>
+            <input value={newContact.address} onChange={e => setNewContact(f => ({ ...f, address: e.target.value }))} style={newContactInp} placeholder="Rua, número, bairro" />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={newContactLbl}>Aluno</label>
+              <input value={newContact.linked_student_name} onChange={e => setNewContact(f => ({ ...f, linked_student_name: e.target.value }))} style={newContactInp} placeholder="Nome do aluno" />
+            </div>
+            <div>
+              <label style={newContactLbl}>Turma</label>
+              <input value={newContact.student_grade} onChange={e => setNewContact(f => ({ ...f, student_grade: e.target.value }))} style={newContactInp} placeholder="6º Ano B" />
+            </div>
+          </div>
+          <div>
+            <label style={newContactLbl}>Parentesco</label>
+            <input value={newContact.relationship} onChange={e => setNewContact(f => ({ ...f, relationship: e.target.value }))} style={newContactInp} placeholder="Mãe, Pai, Responsável..." />
+          </div>
+
+          <div>
+            <label style={newContactLbl}>Etiquetas</label>
+            {availTagsFilter.length === 0 ? (
+              <p style={{ margin: 0, fontSize: 12, color: '#CBD5E1' }}>Nenhuma etiqueta cadastrada. Configure em Configurações → WhatsApp.</p>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {availTagsFilter.map(t => {
+                  const active = newContactTags.includes(t.name)
+                  return (
+                    <button key={t.id} type="button"
+                      onClick={() => setNewContactTags(prev => active ? prev.filter(x => x !== t.name) : [...prev, t.name])}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 9999, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: `1px solid ${active ? t.color : '#E2E8F0'}`, background: active ? t.color + '22' : '#fff', color: active ? t.color : '#64748B' }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: t.color, flexShrink: 0 }} />
+                      {t.name}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20, paddingTop: 16, borderTop: '1px solid #F1F5F9' }}>
+          <button onClick={() => setShowNewContact(false)}
+            style={{ padding: '9px 18px', border: '1px solid #E2E8F0', borderRadius: 9, background: '#fff', color: '#64748B', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
+            Cancelar
+          </button>
+          <button onClick={handleSaveNewContact} disabled={savingNewContact}
+            style={{ padding: '9px 18px', border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', fontSize: 13, cursor: savingNewContact ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: savingNewContact ? 0.7 : 1 }}>
+            {savingNewContact ? 'Criando...' : 'Criar contato'}
           </button>
         </div>
       </div>
@@ -1100,8 +1466,13 @@ export default function ContactsModule() {
             )}
           </div>
         </div>
+        <button onClick={openNewContact}
+          style={{ position: 'fixed', bottom: 80, right: 20, width: 56, height: 56, borderRadius: '50%', background: '#00A896', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0,168,150,0.4)', cursor: 'pointer', zIndex: 100 }}>
+          <Plus size={24} />
+        </button>
         {importModal}
         {exportModal}
+        {newContactModal}
         {zoomModal}
         {profileModal}
       </>
@@ -1128,6 +1499,10 @@ export default function ContactsModule() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={openNewContact}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: '#00A896', color: '#fff', padding: '9px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              <Plus size={14} /> Novo Contato
+            </button>
             <button onClick={openImport}
               style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>
               <Upload size={14} /> Importar CSV
@@ -1139,6 +1514,14 @@ export default function ContactsModule() {
             <button onClick={() => load()} disabled={loading}
               style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Atualizar
+            </button>
+            <button onClick={() => setShowDuplicates(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>
+              <GitMerge size={14} /> Duplicados
+            </button>
+            <button onClick={() => setShowCustomFields(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', padding: '9px 16px', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>
+              <Settings2 size={14} /> Campos Personalizados
             </button>
           </div>
         </div>
@@ -1203,11 +1586,46 @@ export default function ContactsModule() {
           )}
         </div>
 
+        {/* Barra de ação em massa (item 3) — só aparece com seleção ativa */}
+        {selectedIds.size > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, background: '#F0FDFA', border: '1.5px solid #99F6E4', borderRadius: 12, padding: '10px 16px' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#0F766E' }}>
+              {selectedIds.size} contato(s) selecionado(s){selectedAllFilter ? ' (todos do filtro)' : ''}
+            </span>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {!selectedAllFilter && total > contacts.length && (
+                <button onClick={selectAllMatchingFilter} disabled={selectingAllFilter}
+                  style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, border: '1px solid #5EEAD4', borderRadius: 9, background: '#fff', color: '#0F766E', cursor: 'pointer' }}>
+                  {selectingAllFilter ? 'Buscando...' : `Selecionar todos os ${total} deste filtro`}
+                </button>
+              )}
+              <button onClick={() => { setBulkTagNames([]); setShowBulkTagModal(true) }}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', cursor: 'pointer' }}>
+                <TagIcon size={12} /> Aplicar etiqueta
+              </button>
+              <button onClick={openBulkDeleteConfirm}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', fontSize: 12, fontWeight: 600, border: '1px solid #FCA5A5', borderRadius: 9, background: '#fff', color: '#DC2626', cursor: 'pointer' }}>
+                <Trash2 size={12} /> Excluir
+              </button>
+              <button onClick={clearSelection}
+                style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 9, background: 'transparent', color: '#64748B', cursor: 'pointer' }}>
+                Limpar seleção
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Table */}
         <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
+                <th style={{ background: '#f8fafc', padding: '10px 12px', borderBottom: '1px solid #e2e8f0', width: 36 }}>
+                  <input type="checkbox"
+                    checked={contacts.length > 0 && selectedIds.size === contacts.length}
+                    onChange={toggleSelectAllLoaded}
+                    style={{ cursor: 'pointer' }} />
+                </th>
                 <SortTh col="name"         label="Contato" />
                 <SortTh col="phone"        label="Telefone" />
                 <SortTh col="type"         label="Tipo" />
@@ -1222,7 +1640,7 @@ export default function ContactsModule() {
                 <SkeletonRows />
               ) : contacts.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <EmptyState />
                   </td>
                 </tr>
@@ -1234,6 +1652,9 @@ export default function ContactsModule() {
                       style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}
                       onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
                       onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                      <td style={{ padding: '12px 12px' }} onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedIds.has(c.id)} onChange={() => toggleSelect(c.id)} style={{ cursor: 'pointer' }} />
+                      </td>
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <ContactAvatar
@@ -1299,8 +1720,103 @@ export default function ContactsModule() {
 
       {importModal}
       {exportModal}
+      {newContactModal}
       {zoomModal}
       {profileModal}
+
+      {/* Aplicar etiqueta em massa */}
+      {showBulkTagModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1150, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 380, padding: 22 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1A2B4A' }}>Aplicar etiqueta</h3>
+              <button onClick={() => setShowBulkTagModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><X size={18} /></button>
+            </div>
+            <p style={{ margin: '0 0 12px', fontSize: 12, color: '#64748B' }}>{selectedIds.size} contato(s) selecionado(s)</p>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+              {availTagsFilter.length === 0 && <p style={{ fontSize: 12, color: '#CBD5E1', margin: 0 }}>Nenhuma etiqueta disponível.</p>}
+              {availTagsFilter.map(t => {
+                const active = bulkTagNames.includes(t.name)
+                return (
+                  <button key={t.id} type="button"
+                    onClick={() => setBulkTagNames(prev => active ? prev.filter(n => n !== t.name) : [...prev, t.name])}
+                    style={{ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: `1.5px solid ${active ? t.color : '#E2E8F0'}`, background: active ? t.color + '22' : '#fff', color: active ? t.color : '#64748B' }}>
+                    {t.name}
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShowBulkTagModal(false)}
+                style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', fontSize: 13, cursor: 'pointer' }}>
+                Cancelar
+              </button>
+              <button onClick={applyBulkTags} disabled={bulkTagNames.length === 0 || bulkTagSaving}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 0', borderRadius: 9, border: 'none', background: '#00A896', color: '#fff', fontSize: 13, fontWeight: 700, cursor: bulkTagSaving ? 'not-allowed' : 'pointer', opacity: bulkTagNames.length === 0 || bulkTagSaving ? 0.6 : 1 }}>
+                {bulkTagSaving && <Loader2 size={13} className="animate-spin" />}
+                {bulkTagSaving ? 'Aplicando...' : 'Aplicar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Excluir em massa — mesmo aviso de vínculos órfãos da exclusão individual, agregado */}
+      {showBulkDelete && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1150, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 420, padding: 22 }}>
+            <h3 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#DC2626' }}>Excluir {selectedIds.size} contato(s)?</h3>
+            <p style={{ margin: '0 0 12px', fontSize: 13, color: '#64748B' }}>Esta ação não pode ser desfeita.</p>
+            {checkingBulkDelete ? (
+              <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#94A3B8', margin: '0 0 14px' }}>
+                <Loader2 size={12} className="animate-spin" /> Verificando vínculos...
+              </p>
+            ) : bulkRelatedInfo && (bulkRelatedInfo.leadCount > 0 || bulkRelatedInfo.conversationCount > 0 || bulkRelatedInfo.noteCount > 0) && (
+              <p style={{ margin: '0 0 14px', fontSize: 12, color: '#7F1D1D', background: '#FEE2E2', padding: '10px 12px', borderRadius: 8, lineHeight: 1.5 }}>
+                {[
+                  bulkRelatedInfo.leadCount > 0 && `${bulkRelatedInfo.leadCount} lead(s)`,
+                  bulkRelatedInfo.conversationCount > 0 && `${bulkRelatedInfo.conversationCount} conversa(s) de WhatsApp`,
+                  bulkRelatedInfo.noteCount > 0 && `${bulkRelatedInfo.noteCount} anotaç${bulkRelatedInfo.noteCount > 1 ? 'ões' : 'ão'}`,
+                ].filter(Boolean).join(', ')} vinculados a esses contatos <strong>não serão excluídos</strong>, mas ficarão órfãos (sem vínculo) depois da exclusão.
+              </p>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => { setShowBulkDelete(false); setBulkRelatedInfo(null) }}
+                style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', fontSize: 13, cursor: 'pointer' }}>
+                Cancelar
+              </button>
+              <button onClick={handleBulkDelete} disabled={bulkDeleting || checkingBulkDelete}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 0', borderRadius: 9, border: 'none', background: '#DC2626', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: bulkDeleting || checkingBulkDelete ? 0.6 : 1 }}>
+                {bulkDeleting && <Loader2 size={13} className="animate-spin" />}
+                {bulkDeleting ? 'Excluindo...' : 'Confirmar exclusão'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDuplicates && (
+        <DuplicateContactsModal
+          institutionId={institutionId}
+          currentUserId={user?.id || null}
+          onClose={() => setShowDuplicates(false)}
+          onMerged={() => { load({ reset: true }); refreshKpiCounts() }}
+        />
+      )}
+
+      {showCustomFields && (
+        <CustomFieldsAdminModal
+          institutionId={institutionId}
+          onClose={() => setShowCustomFields(false)}
+        />
+      )}
+
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 1300, background: toast.ok ? '#1A2B4A' : '#DC2626', color: '#fff', padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.2)' }}>
+          {toast.ok ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+          {toast.msg}
+        </div>
+      )}
     </>
   )
 }

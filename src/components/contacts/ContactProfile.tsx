@@ -7,7 +7,7 @@ import { saveLead } from '../../lib/leadSave'
 import { normalizeBrazilianInput } from '../../lib/phone'
 import {
   X, ArrowRightLeft, FileText, Clock, User, Plus, Check, Loader2,
-  Tag as TagIcon, AlertTriangle,
+  Tag as TagIcon, AlertTriangle, History, Save,
 } from 'lucide-react'
 
 // Item 4c — série antes hardcoded aqui, agora vem de school_grade_levels
@@ -90,7 +90,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
   const contactRef = contact.lead_id || contact.remote_jid || contact.id
   const { names: GRADES } = useGradeLevels(institutionId)
 
-  type TabKey = 'dados' | 'historico' | 'notas' | 'transferencia'
+  type TabKey = 'dados' | 'historico' | 'notas' | 'transferencia' | 'alteracoes'
   const [tab, setTab] = useState<TabKey>('dados')
 
   // Form — dados
@@ -140,14 +140,32 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
   const [checkingRelated, setCheckingRelated] = useState(false)
   const [relatedInfo,     setRelatedInfo]     = useState<{ hasConversation: boolean; noteCount: number } | null>(null)
 
+  // Campos personalizados (item 2.2)
+  interface CustomFieldDef { id: string; label: string; type: 'text' | 'number' | 'date' | 'select'; options: string[] | null; required: boolean }
+  const [customFields,          setCustomFields]          = useState<CustomFieldDef[]>([])
+  const [customFieldValues,     setCustomFieldValues]      = useState<Record<string, string>>({})
+  const [customFieldOriginal,   setCustomFieldOriginal]    = useState<Record<string, string>>({})
+  const [customFieldsAvailable, setCustomFieldsAvailable]  = useState(true)
+  const [savingCustomFields,    setSavingCustomFields]     = useState(false)
+
+  // Histórico de alteração de campo (item 4)
+  const [changeLog,          setChangeLog]          = useState<{ id: string; field_name: string; old_value: string | null; new_value: string | null; changed_at: string; changer_name: string | null }[]>([])
+  const [loadingChangeLog,   setLoadingChangeLog]   = useState(false)
+  const [changeLogAvailable, setChangeLogAvailable] = useState(true)
+
   useEffect(() => {
     mountedRef.current = true
     loadAvailTags()
     loadNotes()
     loadTransfers()
     buildHistory()
+    loadCustomFields()
     return () => { mountedRef.current = false }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (tab === 'alteracoes' && changeLog.length === 0 && changeLogAvailable) loadChangeLog()
+  }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Loaders ───────────────────────────────────────────────
   async function loadAvailTags() {
@@ -245,6 +263,107 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
     } catch (e) { console.error('buildHistory error:', e) }
     items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     if (mountedRef.current) setHistory(items)
+  }
+
+  // Item 2.2 — definições de campo (por instituição) + valores já salvos pra
+  // este contato (contactRef, mesmo padrão de contact_notes). Mesmo par de
+  // tabelas já usado por ContactCard.tsx (drawer do WhatsApp) — aqui é o
+  // único lugar do módulo de Contatos dedicado que os consome.
+  async function loadCustomFields() {
+    try {
+      const { data: fields, error: fieldsErr } = await supabase
+        .from('contact_custom_fields')
+        .select('id, label, type, options, required')
+        .eq('institution_id', institutionId)
+        .order('created_at')
+      if (fieldsErr) { console.warn('loadCustomFields:', fieldsErr.message); setCustomFieldsAvailable(false); return }
+      if (!mountedRef.current) return
+      setCustomFields((fields || []) as CustomFieldDef[])
+      if (!fields?.length) return
+
+      const { data: vals } = await supabase
+        .from('contact_field_values')
+        .select('field_id, value')
+        .eq('contact_ref_id', contactRef)
+      const map: Record<string, string> = {}
+      for (const v of vals || []) map[v.field_id] = v.value || ''
+      if (mountedRef.current) { setCustomFieldValues(map); setCustomFieldOriginal(map) }
+    } catch (e) {
+      console.error('loadCustomFields error:', e)
+      if (mountedRef.current) setCustomFieldsAvailable(false)
+    }
+  }
+
+  async function handleSaveCustomFields() {
+    const missingRequired = customFields.find(f => f.required && !(customFieldValues[f.id] || '').trim())
+    if (missingRequired) { showToast(`Preencha o campo obrigatório "${missingRequired.label}"`, false); return }
+    setSavingCustomFields(true)
+    try {
+      for (const field of customFields) {
+        const value = customFieldValues[field.id] ?? ''
+        const original = customFieldOriginal[field.id] ?? ''
+        if (value === original) continue
+        const { error } = await supabase.from('contact_field_values').upsert(
+          { contact_ref_id: contactRef, field_id: field.id, value, institution_id: institutionId },
+          { onConflict: 'contact_ref_id,field_id' }
+        )
+        if (error) throw error
+        await logFieldChange(field.label, original || null, value || null)
+      }
+      setCustomFieldOriginal(customFieldValues)
+      showToast('Campos personalizados salvos!')
+    } catch (e: any) {
+      console.error('handleSaveCustomFields error:', e)
+      showToast('Erro ao salvar campos: ' + (e?.message || 'tente novamente'), false)
+    } finally {
+      if (mountedRef.current) setSavingCustomFields(false)
+    }
+  }
+
+  // Item 4 — histórico de alteração de campo (nome/telefone/tipo/tags/campos
+  // customizáveis, gravado a partir dos pontos de edição já existentes ao
+  // salvar, ver logFieldChange()). changer_name vem de um join com users —
+  // se falhar (RLS ou coluna renomeada), degrada mostrando "—" em vez de
+  // travar a aba inteira.
+  async function loadChangeLog() {
+    setLoadingChangeLog(true)
+    try {
+      const { data, error } = await supabase
+        .from('contact_field_change_log')
+        .select('id, field_name, old_value, new_value, changed_at, changer:changed_by(full_name)')
+        .eq('contact_id', contact.id)
+        .order('changed_at', { ascending: false })
+      if (error) { console.warn('loadChangeLog:', error.code, error.message); setChangeLogAvailable(false); return }
+      if (mountedRef.current) {
+        setChangeLog((data || []).map((r: any) => ({
+          id: r.id, field_name: r.field_name, old_value: r.old_value, new_value: r.new_value,
+          changed_at: r.changed_at, changer_name: r.changer?.full_name || null,
+        })))
+      }
+    } catch (e) {
+      console.error('loadChangeLog error:', e)
+      if (mountedRef.current) setChangeLogAvailable(false)
+    } finally {
+      if (mountedRef.current) setLoadingChangeLog(false)
+    }
+  }
+
+  // Item 4 — chamado pelos pontos de edição já existentes (handleSaveDados,
+  // handleAddTag/handleRemoveTag, handleSaveCustomFields) depois que a
+  // gravação real deu certo. Não loga quando o valor não mudou (evita ruído
+  // de "salvar sem editar nada").
+  async function logFieldChange(fieldName: string, oldValue: string | null, newValue: string | null) {
+    if ((oldValue || '') === (newValue || '')) return
+    try {
+      await supabase.from('contact_field_change_log').insert({
+        institution_id: institutionId,
+        contact_id: contact.id,
+        field_name: fieldName,
+        old_value: oldValue,
+        new_value: newValue,
+        changed_by: user?.id || null,
+      })
+    } catch (e) { console.error('logFieldChange error:', e) }
   }
 
   function showToast(msg: string, ok = true) {
@@ -374,7 +493,15 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
 
       if (errors.length) throw new Error(errors.join(' · '))
 
+      // Item 4 — histórico de alteração, só nos 4 campos pedidos (nome,
+      // telefone, tipo, tags — tags é logada separadamente em
+      // handleAddTag/handleRemoveTag, que gravam de forma incremental).
+      // logFieldChange() já ignora quando o valor não mudou.
       const newContactType = editType === 'unknown' ? null : editType
+      await logFieldChange('Nome', contact.name, editName)
+      await logFieldChange('Telefone', contact.phone, newPhone || contact.phone || null)
+      await logFieldChange('Tipo', contact.contact_type, newContactType)
+
       onUpdate(contact.id, {
         name: editName,
         phone: newPhone || contact.phone || null,
@@ -418,6 +545,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
         .update({ tags: newTags })
         .eq('id', contact.id)
       onUpdate(contact.id, { tags: newTags })
+      await logFieldChange('Etiquetas', tags.join(', ') || null, newTags.join(', ') || null)
     } catch (e) { console.error('handleAddTag error:', e) }
   }
 
@@ -443,6 +571,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
         .update({ tags: newTags })
         .eq('id', contact.id)
       onUpdate(contact.id, { tags: newTags })
+      await logFieldChange('Etiquetas', tags.join(', ') || null, newTags.join(', ') || null)
     } catch (e) { console.error('handleRemoveTag error:', e) }
   }
 
@@ -559,6 +688,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
     { key: 'historico',     label: 'Histórico',    icon: <Clock          size={13} /> },
     { key: 'notas',         label: 'Anotações',    icon: <FileText       size={13} /> },
     { key: 'transferencia', label: 'Transferência', icon: <ArrowRightLeft size={13} /> },
+    { key: 'alteracoes',    label: 'Alterações',   icon: <History        size={13} /> },
   ] as const
 
   // ── Render ────────────────────────────────────────────────
@@ -745,6 +875,40 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
                   <p style={{ margin: 0, fontSize: 12, color: '#CBD5E1' }}>Nenhuma etiqueta disponível. Configure em Configurações → WhatsApp.</p>
                 )}
               </div>
+
+              {/* Campos Personalizados (item 2.2) — definidos em Contatos → Campos Personalizados */}
+              {customFieldsAvailable && customFields.length > 0 && (
+                <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 12 }}>
+                  <label style={lbl}>Campos Personalizados</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {customFields.map(f => (
+                      <div key={f.id}>
+                        <label style={{ ...lbl, marginBottom: 3, textTransform: 'none', fontSize: 12, fontWeight: 500, color: '#475569' }}>
+                          {f.label}{f.required && <span style={{ color: '#DC2626' }}> *</span>}
+                        </label>
+                        {f.type === 'select' ? (
+                          <select value={customFieldValues[f.id] || ''} onChange={e => setCustomFieldValues(v => ({ ...v, [f.id]: e.target.value }))} style={inp}>
+                            <option value="">Selecione</option>
+                            {(f.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        ) : (
+                          <input
+                            type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
+                            value={customFieldValues[f.id] || ''}
+                            onChange={e => setCustomFieldValues(v => ({ ...v, [f.id]: e.target.value }))}
+                            style={inp}
+                          />
+                        )}
+                      </div>
+                    ))}
+                    <button onClick={handleSaveCustomFields} disabled={savingCustomFields}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 0', borderRadius: 9, border: '1.5px solid #00A896', background: '#F0FDFB', color: '#00A896', fontSize: 13, fontWeight: 700, cursor: savingCustomFields ? 'not-allowed' : 'pointer', opacity: savingCustomFields ? 0.7 : 1 }}>
+                      {savingCustomFields ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                      {savingCustomFields ? 'Salvando...' : 'Salvar campos personalizados'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {contact.contact_type !== 'lead' && contact.contact_type !== 'client' && (
                 <button
@@ -960,6 +1124,44 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
                       </button>
                     </div>
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── ALTERAÇÕES (item 4) ─────────────────── */}
+          {tab === 'alteracoes' && (
+            <div>
+              {!changeLogAvailable ? (
+                <div style={{ textAlign: 'center', padding: '32px 0', color: '#94A3B8' }}>
+                  <p style={{ margin: 0 }}>Histórico de alterações não disponível.</p>
+                </div>
+              ) : loadingChangeLog ? (
+                <div style={{ textAlign: 'center', padding: '32px 0', color: '#94A3B8' }}>
+                  <Loader2 size={22} className="animate-spin" style={{ margin: '0 auto 8px' }} />
+                  Carregando...
+                </div>
+              ) : changeLog.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: '#94A3B8' }}>
+                  <History size={36} color="#E2E8F0" style={{ margin: '0 auto 12px', display: 'block' }} />
+                  <p style={{ margin: 0, fontSize: 14 }}>Nenhuma alteração registrada</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {changeLog.map(item => (
+                    <div key={item.id} style={{ padding: '10px 14px', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{item.field_name}</span>
+                        <span style={{ fontSize: 11, color: '#94A3B8' }}>{new Date(item.changed_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                      <p style={{ margin: '0 0 2px', fontSize: 12, color: '#64748B' }}>
+                        <span style={{ textDecoration: 'line-through', color: '#CBD5E1' }}>{item.old_value || '(vazio)'}</span>
+                        {' → '}
+                        <span style={{ fontWeight: 600, color: '#1A2B4A' }}>{item.new_value || '(vazio)'}</span>
+                      </p>
+                      <p style={{ margin: 0, fontSize: 11, color: '#CBD5E1' }}>por {item.changer_name || 'Sistema'}</p>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
