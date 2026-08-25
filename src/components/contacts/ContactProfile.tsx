@@ -4,9 +4,10 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { saveLead } from '../../lib/leadSave'
+import { normalizeBrazilianInput } from '../../lib/phone'
 import {
   X, ArrowRightLeft, FileText, Clock, User, Plus, Check, Loader2,
-  Tag as TagIcon,
+  Tag as TagIcon, AlertTriangle,
 } from 'lucide-react'
 
 // Item 4c — série antes hardcoded aqui, agora vem de school_grade_levels
@@ -99,7 +100,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
   const [editGrade, setEditGrade] = useState(contact.grade || '')
   const [editType,  setEditType]  = useState(contact.contact_type || 'unknown')
   const [saving,    setSaving]    = useState(false)
-  const [toast,     setToast]     = useState<string | null>(null)
+  const [toast,     setToast]     = useState<{ msg: string; ok: boolean } | null>(null)
   const [creatingLead, setCreatingLead] = useState(false)
 
   // Tags
@@ -134,8 +135,10 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
   const [imgErr, setImgErr] = useState(false)
 
   // Delete
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  const [deleting,      setDeleting]      = useState(false)
+  const [confirmDelete,   setConfirmDelete]   = useState(false)
+  const [deleting,        setDeleting]        = useState(false)
+  const [checkingRelated, setCheckingRelated] = useState(false)
+  const [relatedInfo,     setRelatedInfo]     = useState<{ hasConversation: boolean; noteCount: number } | null>(null)
 
   useEffect(() => {
     mountedRef.current = true
@@ -244,7 +247,10 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
     if (mountedRef.current) setHistory(items)
   }
 
-  function showToast(msg: string) { setToast(msg); setTimeout(() => { if (mountedRef.current) setToast(null) }, 3000) }
+  function showToast(msg: string, ok = true) {
+    setToast({ msg, ok })
+    setTimeout(() => { if (mountedRef.current) setToast(null) }, ok ? 3000 : 4500)
+  }
 
   // ── Actions ───────────────────────────────────────────────
   async function handleCreateLead() {
@@ -296,7 +302,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
       showToast('Lead criado com sucesso!')
     } catch (e) {
       console.error('[CREATE LEAD]', e)
-      showToast('Erro ao criar lead')
+      showToast('Erro ao criar lead', false)
     } finally {
       setCreatingLead(false)
     }
@@ -306,54 +312,72 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
     setSaving(true)
     try {
       const synced: string[] = []
+      const errors: string[] = []
+
+      // Telefone ORIGINAL (antes desta edição) — usado só pra localizar a
+      // conversa/contato já existentes. Telefone NOVO — o que está no
+      // campo agora, possivelmente editado. Os dois passam pela mesma
+      // função de normalização usada no resto do sistema (src/lib/phone.ts),
+      // nunca mais reimplementada inline aqui.
+      const originalPhone = normalizeBrazilianInput(contact.phone || '')
+      const newPhone      = editPhone.trim() ? normalizeBrazilianInput(editPhone) : ''
+      const phoneChanged  = !!newPhone && newPhone !== originalPhone
+
       if (contact.lead_id) {
-        await supabase.from('leads').update({
-          responsible_name: editName  || undefined,
-          phone:            editPhone || undefined,
+        const { error } = await supabase.from('leads').update({
+          responsible_name: editName || undefined,
+          phone:            newPhone || originalPhone || undefined,
           email:            editEmail || undefined,
           grade_interest:   editGrade || undefined,
         }).eq('id', contact.lead_id)
-        synced.push('lead')
+        if (error) errors.push(`lead: ${error.message}`)
+        else synced.push('lead')
       }
-      const normP = (p: string) => {
-        let d = p.replace(/\D/g, '')
-        if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-        if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-        if (d.length === 11) d = '55' + d
-        return d
-      }
-      const normPhone = normP(contact.phone || '')
-      if ((contact.remote_jid || contact.phone) && normPhone) {
-        // remote_jid is stored WITHOUT @s.whatsapp.net in whatsapp_conversations
-        console.log('[SYNC] atualizando conversa:', normPhone, 'nome:', editName)
-        const { error: convErr, count } = await supabase.from('whatsapp_conversations')
+
+      if (originalPhone) {
+        // remote_jid é armazenado SEM @s.whatsapp.net em whatsapp_conversations.
+        // A identidade da conversa não muda aqui (trocar o remote_jid seria
+        // uma operação maior, fora de escopo) — só sincroniza nome/tipo.
+        const { error } = await supabase.from('whatsapp_conversations')
           .update({ contact_name: editName })
           .eq('institution_id', institutionId)
-          .eq('remote_jid', normPhone)
-        console.log('[SYNC] resultado conversa:', { convErr, count, normPhone })
-        synced.push('WhatsApp')
+          .eq('remote_jid', originalPhone)
+        if (error) errors.push(`conversa: ${error.message}`)
+        else synced.push('WhatsApp')
       }
-      // Update contact type and name in whatsapp_contacts
-      const rawPhone = normP(editPhone || contact.phone || '')
-      if (rawPhone) {
-        await supabase.from('whatsapp_contacts')
-          .update({ type: editType === 'unknown' ? null : editType, name: editName })
-          .eq('institution_id', institutionId)
-          .eq('phone', rawPhone)
-        console.log('[SYNC NAME] atualizado em whatsapp_contacts:', rawPhone)
+
+      // Identidade por contact.id (PK), NÃO por telefone: telefone é
+      // justamente o campo que pode ter acabado de mudar neste submit, então
+      // usá-lo como filtro WHERE fazia o UPDATE não encontrar a própria linha
+      // quando o usuário editava o telefone — 0 linhas afetadas, sem erro,
+      // sem aviso, e o campo phone nem estava no SET pra começo de conversa.
+      const contactsUpdate: Record<string, any> = {
+        type: editType === 'unknown' ? null : editType,
+        name: editName,
       }
+      if (phoneChanged) contactsUpdate.phone = newPhone
+      {
+        const { error } = await supabase.from('whatsapp_contacts')
+          .update(contactsUpdate)
+          .eq('id', contact.id)
+        if (error) errors.push(`contato: ${error.message}`)
+      }
+
       // Sync contact_type to whatsapp_conversations (remote_jid stored without @s.whatsapp.net)
-      if (editType !== contact.contact_type && normPhone) {
-        await supabase.from('whatsapp_conversations')
+      if (editType !== contact.contact_type && originalPhone) {
+        const { error } = await supabase.from('whatsapp_conversations')
           .update({ contact_type: editType === 'unknown' ? null : editType })
           .eq('institution_id', institutionId)
-          .eq('remote_jid', normPhone)
-        console.log('[SYNC TYPE] atualizado em whatsapp_conversations:', normPhone)
+          .eq('remote_jid', originalPhone)
+        if (error) errors.push(`tipo na conversa: ${error.message}`)
       }
+
+      if (errors.length) throw new Error(errors.join(' · '))
+
       const newContactType = editType === 'unknown' ? null : editType
       onUpdate(contact.id, {
         name: editName,
-        phone: editPhone || null,
+        phone: newPhone || contact.phone || null,
         email: editEmail || null,
         grade: editGrade || null,
         contact_type: newContactType,
@@ -362,7 +386,9 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
       showToast(synced.length ? `Salvo em: ${synced.join(' e ')}` : 'Salvo com sucesso')
     } catch (e: any) {
       console.error('handleSaveDados error:', e)
-      showToast('Erro ao salvar: ' + (e?.message || 'tente novamente'))
+      // Falha real — nem tudo foi gravado. Não fecha o modal (já não fechava
+      // antes) e mostra um erro explícito em vez de "Salvo com sucesso".
+      showToast('Erro ao salvar — nem tudo foi gravado: ' + (e?.message || 'tente novamente'), false)
     } finally {
       if (mountedRef.current) setSaving(false)
     }
@@ -377,26 +403,20 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
       if (contact.lead_id) {
         await supabase.from('leads').update({ tags: newTags }).eq('id', contact.lead_id)
       }
-      if (contact.remote_jid) {
+      // remote_jid é armazenado SEM @s.whatsapp.net em whatsapp_conversations —
+      // contact.remote_jid tem o sufixo (formato usado só na UI), então
+      // comparar direto nunca batia com nenhuma linha ali.
+      const phoneForConv = normalizeBrazilianInput(contact.phone || '')
+      if (phoneForConv) {
         await supabase.from('whatsapp_conversations')
           .update({ tags: newTags })
           .eq('institution_id', institutionId)
-          .eq('remote_jid', contact.remote_jid)
+          .eq('remote_jid', phoneForConv)
       }
-      const normP = (p: string) => {
-        let d = p.replace(/\D/g, '')
-        if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-        if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-        if (d.length === 11) d = '55' + d
-        return d
-      }
-      const normPhone = normP(contact.phone || '')
-      if (normPhone) {
-        await supabase.from('whatsapp_contacts')
-          .update({ tags: newTags })
-          .eq('institution_id', institutionId)
-          .eq('phone', normPhone)
-      }
+      // Identidade por contact.id (PK) em vez de telefone.
+      await supabase.from('whatsapp_contacts')
+        .update({ tags: newTags })
+        .eq('id', contact.id)
       onUpdate(contact.id, { tags: newTags })
     } catch (e) { console.error('handleAddTag error:', e) }
   }
@@ -408,26 +428,20 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
       if (contact.lead_id) {
         await supabase.from('leads').update({ tags: newTags }).eq('id', contact.lead_id)
       }
-      if (contact.remote_jid) {
+      // remote_jid é armazenado SEM @s.whatsapp.net em whatsapp_conversations —
+      // contact.remote_jid tem o sufixo (formato usado só na UI), então
+      // comparar direto nunca batia com nenhuma linha ali.
+      const phoneForConv = normalizeBrazilianInput(contact.phone || '')
+      if (phoneForConv) {
         await supabase.from('whatsapp_conversations')
           .update({ tags: newTags })
           .eq('institution_id', institutionId)
-          .eq('remote_jid', contact.remote_jid)
+          .eq('remote_jid', phoneForConv)
       }
-      const normP = (p: string) => {
-        let d = p.replace(/\D/g, '')
-        if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-        if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-        if (d.length === 11) d = '55' + d
-        return d
-      }
-      const normPhone = normP(contact.phone || '')
-      if (normPhone) {
-        await supabase.from('whatsapp_contacts')
-          .update({ tags: newTags })
-          .eq('institution_id', institutionId)
-          .eq('phone', normPhone)
-      }
+      // Identidade por contact.id (PK) em vez de telefone.
+      await supabase.from('whatsapp_contacts')
+        .update({ tags: newTags })
+        .eq('id', contact.id)
       onUpdate(contact.id, { tags: newTags })
     } catch (e) { console.error('handleRemoveTag error:', e) }
   }
@@ -477,6 +491,40 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
     } finally { if (mountedRef.current) setSavingT(false) }
   }
 
+  // Excluir NÃO faz cascata (arriscado demais decidir sozinho o que apagar
+  // junto) — só avisa antes, com transparência, o que fica órfão: o lead
+  // (se houver) some da tela de Contatos mas continua existindo no CRM; a
+  // conversa de WhatsApp e as anotações continuam existindo mas perdem o
+  // vínculo com este contato.
+  async function openDeleteConfirm() {
+    setConfirmDelete(true)
+    setCheckingRelated(true)
+    try {
+      const phone = normalizeBrazilianInput(contact.phone || '')
+      const [convRes, noteRes] = await Promise.all([
+        phone
+          ? supabase.from('whatsapp_conversations')
+              .select('id', { count: 'exact', head: true })
+              .eq('institution_id', institutionId)
+              .eq('remote_jid', phone)
+          : Promise.resolve({ count: 0 } as { count: number | null }),
+        supabase.from('contact_notes')
+          .select('id', { count: 'exact', head: true })
+          .eq('institution_id', institutionId)
+          .eq('contact_ref_id', contactRef),
+      ])
+      if (mountedRef.current) {
+        setRelatedInfo({ hasConversation: (convRes.count || 0) > 0, noteCount: noteRes.count || 0 })
+      }
+    } catch (e) {
+      console.error('openDeleteConfirm error:', e)
+      // Falha ao checar vínculos não deve travar a exclusão — só some com o aviso extra.
+      if (mountedRef.current) setRelatedInfo({ hasConversation: false, noteCount: 0 })
+    } finally {
+      if (mountedRef.current) setCheckingRelated(false)
+    }
+  }
+
   async function handleDelete() {
     setDeleting(true)
     try {
@@ -488,7 +536,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
       onClose()
     } catch (e: any) {
       console.error('handleDelete error:', e)
-      showToast('Erro ao excluir: ' + (e?.message || 'tente novamente'))
+      showToast('Erro ao excluir: ' + (e?.message || 'tente novamente'), false)
     } finally {
       if (mountedRef.current) setDeleting(false)
     }
@@ -500,6 +548,11 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
   const headerBg2   = lightenHex(color, 0.95)
   const unaddedTags = availTags.filter(t => !tags.includes(t.name))
   const getTagColor = (name: string) => availTags.find(t => t.name === name)?.color || '#94A3B8'
+  const relatedParts = relatedInfo ? [
+    contact.lead_id && 'um lead',
+    relatedInfo.hasConversation && 'uma conversa de WhatsApp',
+    relatedInfo.noteCount > 0 ? `${relatedInfo.noteCount} anotaç${relatedInfo.noteCount > 1 ? 'ões' : 'ão'}` : null,
+  ].filter(Boolean) as string[] : []
 
   const tabs = [
     { key: 'dados',         label: 'Dados',        icon: <User           size={13} /> },
@@ -727,15 +780,24 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
 
               {/* Delete contact */}
               {!confirmDelete ? (
-                <button onClick={() => setConfirmDelete(true)}
+                <button onClick={openDeleteConfirm}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 0', borderRadius: 10, border: '1.5px solid #FCA5A5', background: 'transparent', color: '#DC2626', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginTop: 2 }}>
                   Excluir contato
                 </button>
               ) : (
                 <div style={{ padding: '12px 14px', background: '#FFF5F5', borderRadius: 10, border: '1px solid #FECACA', marginTop: 2 }}>
-                  <p style={{ margin: '0 0 10px', fontSize: 13, color: '#DC2626', fontWeight: 600 }}>Tem certeza? Esta ação não pode ser desfeita.</p>
+                  <p style={{ margin: '0 0 8px', fontSize: 13, color: '#DC2626', fontWeight: 600 }}>Tem certeza? Esta ação não pode ser desfeita.</p>
+                  {checkingRelated ? (
+                    <p style={{ margin: '0 0 10px', fontSize: 12, color: '#94A3B8', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Loader2 size={12} className="animate-spin" /> Verificando vínculos...
+                    </p>
+                  ) : relatedParts.length > 0 && (
+                    <p style={{ margin: '0 0 10px', fontSize: 12, color: '#7F1D1D', background: '#FEE2E2', padding: '8px 10px', borderRadius: 8, lineHeight: 1.5 }}>
+                      Este contato tem {relatedParts.join(', ')} vinculado(s) — eles <strong>não serão excluídos</strong>, mas ficarão sem vínculo com este contato depois da exclusão.
+                    </p>
+                  )}
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => setConfirmDelete(false)}
+                    <button onClick={() => { setConfirmDelete(false); setRelatedInfo(null) }}
                       style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: '1px solid #E2E8F0', background: 'white', fontSize: 13, color: '#64748B', cursor: 'pointer' }}>
                       Cancelar
                     </button>
@@ -907,8 +969,8 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
 
       {/* Toast */}
       {toast && (
-        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, background: '#1A2B4A', color: 'white', fontSize: 13, fontWeight: 500, padding: '10px 16px', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Check size={14} /> {toast}
+        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, background: toast.ok ? '#1A2B4A' : '#DC2626', color: 'white', fontSize: 13, fontWeight: 500, padding: '10px 16px', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', gap: 8, maxWidth: 340 }}>
+          {toast.ok ? <Check size={14} style={{ flexShrink: 0 }} /> : <AlertTriangle size={14} style={{ flexShrink: 0 }} />} {toast.msg}
         </div>
       )}
     </div>

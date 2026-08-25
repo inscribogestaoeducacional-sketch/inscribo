@@ -9,10 +9,16 @@ import {
 } from 'lucide-react'
 import ContactProfile, { UnifiedContact } from './ContactProfile'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
+import { statusConfig } from '../leads/leadFormShared'
 
 // ─── Constants ───────────────────────────────────────────────
 const HEX_COLORS = ['#00A896','#3B82F6','#8B5CF6','#F97316','#EF4444','#10B981','#F59E0B','#EC4899']
 const PAGE_SIZE  = 50
+// PostgREST limita a resposta a um número fixo de linhas por requisição
+// (tipicamente 1000). Exportar sem paginar cortava o CSV em silêncio pra
+// escolas com mais contatos que isso — busca em lotes desse tamanho até
+// esgotar os resultados (ver exportCSVWithFields).
+const EXPORT_BATCH_SIZE = 1000
 // Item 4c — lista de séries antes hardcoded aqui (divergente do resto do
 // sistema); agora vem de school_grade_levels via useGradeLevels().
 
@@ -37,14 +43,6 @@ interface ImportRow {
   nome: string; telefone: string; email: string; endereco: string
   aluno: string; turma: string; parentesco: string
 }
-
-const LEAD_STATUSES = [
-  { value: 'novo',        label: 'Novo'        },
-  { value: 'contacted',   label: 'Contatado'   },
-  { value: 'negotiating', label: 'Negociando'  },
-  { value: 'enrolled',    label: 'Matriculado' },
-  { value: 'lost',        label: 'Perdido'     },
-]
 
 // ─── Helpers ─────────────────────────────────────────────────
 function nameHash(name: string) {
@@ -260,6 +258,7 @@ export default function ContactsModule() {
   const [exportCount,        setExportCount]        = useState(0)
   const [exportFetching,     setExportFetching]     = useState(false)
   const [exportLoading,      setExportLoading]      = useState(false)
+  const [exportProgress,     setExportProgress]     = useState(0)
   const [availTagsFilter,    setAvailTagsFilter]    = useState<{ id: string; name: string; color: string }[]>([])
 
   // ── Import state ─────────────────────────────────────────
@@ -653,6 +652,7 @@ export default function ContactsModule() {
     if (!active.length) { alert('Selecione ao menos um campo.'); return }
 
     setExportLoading(true)
+    setExportProgress(0)
     try {
       const useGrade   = exportFilterGrade  !== 'all'
       const useStatus  = exportFilterStatus !== 'all'
@@ -661,24 +661,39 @@ export default function ContactsModule() {
         ? 'id, phone, name, type, lead_id, last_seen_at, created_at, tags, leads!lead_id!inner(id, student_name, responsible_name, email, grade_interest, source, status)'
         : 'id, phone, name, type, lead_id, last_seen_at, created_at, tags, leads!lead_id(id, student_name, responsible_name, email, grade_interest, source, status)'
 
-      let q = supabase
-        .from('whatsapp_contacts')
-        .select(selectStr)
-        .eq('institution_id', institutionId)
-        .order(sortCol, { ascending: sortDir === 'asc', nullsFirst: false })
+      // Busca em lotes de EXPORT_BATCH_SIZE até esgotar os resultados — uma
+      // única query sem .range() ficava sujeita ao limite padrão de linhas
+      // do PostgREST (~1000) e cortava o CSV sem avisar em escolas com mais
+      // contatos que isso.
+      const allRows: any[] = []
+      let from = 0
+      while (true) {
+        let q = supabase
+          .from('whatsapp_contacts')
+          .select(selectStr)
+          .eq('institution_id', institutionId)
+          .order(sortCol, { ascending: sortDir === 'asc', nullsFirst: false })
+          .range(from, from + EXPORT_BATCH_SIZE - 1)
 
-      if (exportSearch.trim().length >= 2)
-        q = q.or(`name.ilike.%${exportSearch.trim()}%,phone.ilike.%${exportSearch.trim()}%`)
-      if (exportFilterOrigin === 'lead')    q = q.eq('type', 'lead')
-      if (exportFilterOrigin === 'client')  q = q.eq('type', 'client')
-      if (exportFilterOrigin === 'unknown') q = q.or('type.eq.unknown,type.is.null')
-      if (useGrade)  q = q.eq('leads.grade_interest', exportFilterGrade)
-      if (useStatus) q = q.eq('leads.status', exportFilterStatus)
+        if (exportSearch.trim().length >= 2)
+          q = q.or(`name.ilike.%${exportSearch.trim()}%,phone.ilike.%${exportSearch.trim()}%`)
+        if (exportFilterOrigin === 'lead')    q = q.eq('type', 'lead')
+        if (exportFilterOrigin === 'client')  q = q.eq('type', 'client')
+        if (exportFilterOrigin === 'unknown') q = q.or('type.eq.unknown,type.is.null')
+        if (useGrade)  q = q.eq('leads.grade_interest', exportFilterGrade)
+        if (useStatus) q = q.eq('leads.status', exportFilterStatus)
 
-      const { data, error } = await q
-      if (error) { console.error('Export query error:', error); alert('Erro ao exportar. Tente novamente.'); return }
+        const { data, error } = await q
+        if (error) { console.error('Export query error:', error); alert('Erro ao exportar. Tente novamente.'); return }
 
-      const allContacts = (data || []).map(mapContact)
+        allRows.push(...(data || []))
+        if (mountedRef.current) setExportProgress(allRows.length)
+
+        if (!data || data.length < EXPORT_BATCH_SIZE) break
+        from += EXPORT_BATCH_SIZE
+      }
+
+      const allContacts = allRows.map(mapContact)
       const fieldGetters: Record<ExportFieldKey, (c: UnifiedContact) => string> = {
         responsible_name: c => c.name,
         student_name:     c => c.student_name || '',
@@ -716,6 +731,7 @@ export default function ContactsModule() {
   const openExport = () => {
     setExportFilterOrigin('all'); setExportFilterStatus('all')
     setExportFilterGrade('all'); setExportSearch('')
+    setExportProgress(0)
     setShowExportModal(true)
   }
 
@@ -896,7 +912,7 @@ export default function ContactsModule() {
           <select value={exportFilterStatus} onChange={e => setExportFilterStatus(e.target.value)}
             style={{ flex: 1, border: '1.5px solid #E2E8F0', borderRadius: 9, fontSize: 13, padding: '8px 10px', outline: 'none', color: '#1A2B4A' }}>
             <option value="all">Todos os status</option>
-            {LEAD_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            {Object.entries(statusConfig).map(([value, cfg]) => <option key={value} value={value}>{cfg.label}</option>)}
           </select>
         </div>
         <select value={exportFilterGrade} onChange={e => setExportFilterGrade(e.target.value)}
@@ -940,7 +956,7 @@ export default function ContactsModule() {
             onClick={() => exportCSVWithFields()}
             disabled={exportLoading || exportFetching || !Object.values(exportFields).some(Boolean) || exportCount === 0}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', border: 'none', borderRadius: 9, background: '#00A896', color: '#fff', fontSize: 13, cursor: 'pointer', fontWeight: 700, opacity: (exportLoading || exportFetching || !Object.values(exportFields).some(Boolean) || exportCount === 0) ? 0.5 : 1 }}>
-            <Download size={14} /> {exportLoading ? 'Exportando...' : `Exportar ${exportCount} contatos`}
+            <Download size={14} /> {exportLoading ? (exportProgress > 0 ? `Exportando... ${exportProgress}/${exportCount}` : 'Exportando...') : `Exportar ${exportCount} contatos`}
           </button>
         </div>
       </div>
@@ -1004,12 +1020,12 @@ export default function ContactsModule() {
               </button>
             ))}
             {/* Status filter chip row */}
-            {LEAD_STATUSES.map(s => (
-              <button key={s.value} onClick={() => setFilterStatus(filterStatus === s.value ? 'all' : s.value)}
+            {Object.entries(statusConfig).map(([value, cfg]) => (
+              <button key={value} onClick={() => setFilterStatus(filterStatus === value ? 'all' : value)}
                 style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 9999, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
-                  background: filterStatus === s.value ? '#00A896' : '#F0FFF4',
-                  color:      filterStatus === s.value ? '#fff'    : '#64748B' }}>
-                {s.label}
+                  background: filterStatus === value ? '#00A896' : '#F0FFF4',
+                  color:      filterStatus === value ? '#fff'    : '#64748B' }}>
+                {cfg.label}
               </button>
             ))}
           </div>
@@ -1176,7 +1192,7 @@ export default function ContactsModule() {
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
             style={{ border: `1.5px solid ${filterStatus !== 'all' ? '#00A896' : '#E2E8F0'}`, borderRadius: 10, fontSize: 13, background: filterStatus !== 'all' ? '#F0FDFA' : '#fff', padding: '9px 12px', outline: 'none', color: filterStatus !== 'all' ? '#00A896' : '#1A2B4A', fontWeight: filterStatus !== 'all' ? 600 : 400 }}>
             <option value="all">Todos os status</option>
-            {LEAD_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            {Object.entries(statusConfig).map(([value, cfg]) => <option key={value} value={value}>{cfg.label}</option>)}
           </select>
           {availTagsFilter.length > 0 && (
             <select value={filterTag} onChange={e => setFilterTag(e.target.value)}
@@ -1262,11 +1278,7 @@ export default function ContactsModule() {
                           <button
                             onClick={e => {
                               e.stopPropagation()
-                              let d = (c.phone || '').replace(/\D/g, '')
-                              if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-                              if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-                              if (d.length === 11) d = '55' + d
-                              navigate('/whatsapp', { state: { phone: d } })
+                              navigate('/whatsapp', { state: { phone: normalizeBrazilianInput(c.phone || '') } })
                             }}
                             title="Abrir no WhatsApp"
                             style={{ padding: '5px 10px', fontSize: 12, fontWeight: 600, border: '1px solid #BBF7D0', borderRadius: 8, background: '#F0FDF4', color: '#16A34A', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>

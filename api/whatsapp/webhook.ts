@@ -710,55 +710,53 @@ async function upsertContact(
   console.log('[UPSERT] iniciando para:', remoteJid, institutionId)
   try {
     const rawPhone = remoteJid.replace(/@.*/, '')
-    const phone    = normalizePhone(rawPhone)
+    // normalizeBrazilianInput (não normalizePhone) — normalizePhone assume
+    // que o DDI já está presente e devolve os dígitos crus sem prefixar 55
+    // quando não está, o que geraria uma chave diferente da que
+    // normalize_phone_br() (função Postgres usada pelo trigger
+    // sync_contact_from_conversation) geraria pro mesmo número real, caso
+    // o wa_id chegue sem DDI por algum motivo — mesma classe de bug que já
+    // causou 425 grupos de contato duplicados (ver
+    // 20260821020000_fix_sync_contact_phone_normalization.sql).
+    const phone = normalizeBrazilianInput(rawPhone)
     console.log('[UPSERT] phone normalizado:', phone)
 
-    console.log('[UPSERT DETAIL] remoteJid:', remoteJid)
-    console.log('[UPSERT DETAIL] phone normalizado:', phone)
-    console.log('[UPSERT DETAIL] institutionId:', institutionId)
-
-    // Check if contact already exists to avoid overwriting a manually set type
-    const { data: existing } = await supabase
+    // Upsert real (ON CONFLICT institution_id+phone — mesma constraint usada
+    // pelo trigger SQL) em vez do SELECT-then-INSERT/UPDATE manual que havia
+    // aqui antes: esse check-then-write tinha uma janela de corrida — duas
+    // mensagens quase simultâneas do mesmo contato NOVO podiam ambas ler
+    // "não existe" e tentar INSERT; a segunda batia na constraint única e
+    // falhava silenciosamente (log apenas), perdendo nome/foto daquele
+    // evento.
+    //
+    // `type` fica de fora do payload de propósito: em INSERT, a coluna usa o
+    // DEFAULT 'unknown' (20260521000004_contact_types.sql); em UPDATE
+    // (conflito), como `type` não está no payload ele não entra no SET,
+    // então o type já setado manualmente por um agente nunca é sobrescrito —
+    // mesmo comportamento seletivo que o UPDATE manual tinha, e o mesmo que
+    // o ON CONFLICT DO UPDATE do trigger SQL já faz (também nunca toca type).
+    const { error } = await supabase
       .from('whatsapp_contacts')
-      .select('id')
-      .eq('institution_id', institutionId)
-      .eq('phone', phone)
-      .maybeSingle()
-    console.log('[UPSERT] existing:', existing?.id)
-    console.log('[UPSERT DETAIL] existing:', existing?.id || 'null')
-
-    if (existing) {
-      // Update only safe fields — preserve type set by agents
-      await supabase
-        .from('whatsapp_contacts')
-        .update({
-          name,
-          updated_at: new Date().toISOString(),
-          ...(profilePicUrl ? { profile_picture_url: profilePicUrl } : {}),
-        })
-        .eq('institution_id', institutionId)
-        .eq('phone', phone)
-    } else {
-      await supabase
-        .from('whatsapp_contacts')
-        .insert({
-          institution_id:    institutionId,
+      .upsert(
+        {
+          institution_id: institutionId,
           phone,
-          remote_jid:        remoteJid,
+          remote_jid:     remoteJid,
           name,
-          type:              'unknown',
-          updated_at:        new Date().toISOString(),
+          updated_at:     new Date().toISOString(),
           ...(profilePicUrl ? { profile_picture_url: profilePicUrl } : {}),
-        })
-    }
-    console.log('[UPSERT DETAIL] operação concluída:', existing ? 'UPDATE' : 'INSERT')
+        },
+        { onConflict: 'institution_id,phone' }
+      )
+    if (error) throw error
+    console.log('[UPSERT DETAIL] operação concluída via upsert')
   } catch (e: any) {
     console.error('❌ upsertContact error:', {
       message: e?.message,
       code: e?.code,
       details: e?.details,
       hint: e?.hint,
-      phone: normalizePhone(remoteJid.replace(/@.*/, '')),
+      phone: normalizeBrazilianInput(remoteJid.replace(/@.*/, '')),
       institutionId
     })
     console.log('[UPSERT DETAIL] ERRO:', JSON.stringify(e))
