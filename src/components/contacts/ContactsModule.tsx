@@ -1540,56 +1540,52 @@ export default function ContactsModule() {
           })}
         </div>
 
-        {/* Busca + filtros — duas linhas fixas por design (não depende de
-            flex-wrap arbitrário do navegador): linha 1 é busca (largura
-            travada, não cresce pra disputar espaço com os filtros) + tipo +
-            status + limpar; linha 2 é série + etiqueta, só renderiza se
-            houver dado pra filtrar por eles. */}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div style={{ position: 'relative', flex: '0 1 340px', minWidth: 200 }}>
+        {/* Busca + filtros — tudo numa linha só. Busca com largura travada
+            (não cresce, encolhe até um piso) + selects com largura fixa e
+            compacta (flexShrink:0 — não espremem, o texto corta com
+            reticências se precisar) + nowrap. overflow-x:auto é só rede de
+            segurança pra janelas de desktop bem estreitas — em 1366/1440/
+            1920px tudo cabe sem precisar de scroll. */}
+        <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 10, alignItems: 'center', overflowX: 'auto', paddingBottom: 2 }}>
+          <div style={{ position: 'relative', flex: '0 1 260px', minWidth: 160, flexShrink: 1 }}>
             <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Buscar por nome, telefone ou turma..."
               style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px 9px 36px', outline: 'none', width: '100%', color: '#1A2B4A', boxSizing: 'border-box' }} />
           </div>
           <select value={filterOrigin} onChange={e => setFilterOrigin(e.target.value)}
-            style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px', outline: 'none', color: '#1A2B4A', flexShrink: 0 }}>
+            style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px', outline: 'none', color: '#1A2B4A', flexShrink: 0, width: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             <option value="all">Todos os tipos</option>
             <option value="lead">Leads</option>
             <option value="client">Clientes</option>
             <option value="unknown">Desconhecidos</option>
           </select>
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-            style={{ border: `1.5px solid ${filterStatus !== 'all' ? '#00A896' : '#E2E8F0'}`, borderRadius: 10, fontSize: 13, background: filterStatus !== 'all' ? '#F0FDFA' : '#fff', padding: '9px 12px', outline: 'none', color: filterStatus !== 'all' ? '#00A896' : '#1A2B4A', fontWeight: filterStatus !== 'all' ? 600 : 400, flexShrink: 0 }}>
+            style={{ border: `1.5px solid ${filterStatus !== 'all' ? '#00A896' : '#E2E8F0'}`, borderRadius: 10, fontSize: 13, background: filterStatus !== 'all' ? '#F0FDFA' : '#fff', padding: '9px 12px', outline: 'none', color: filterStatus !== 'all' ? '#00A896' : '#1A2B4A', fontWeight: filterStatus !== 'all' ? 600 : 400, flexShrink: 0, width: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             <option value="all">Todos os status</option>
             {Object.entries(statusConfig).map(([value, cfg]) => <option key={value} value={value}>{cfg.label}</option>)}
           </select>
+          {grades.length > 0 && (
+            <select value={filterGrade} onChange={e => setFilterGrade(e.target.value)}
+              style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px', outline: 'none', color: '#1A2B4A', flexShrink: 0, width: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <option value="all">Todas as séries</option>
+              {grades.map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
+          )}
+          {availTagsFilter.length > 0 && (
+            <select value={filterTag} onChange={e => setFilterTag(e.target.value)}
+              style={{ border: `1.5px solid ${filterTag !== 'all' ? '#00A896' : '#E2E8F0'}`, borderRadius: 10, fontSize: 13, background: filterTag !== 'all' ? '#F0FDFA' : '#fff', padding: '9px 12px', outline: 'none', color: filterTag !== 'all' ? '#00A896' : '#1A2B4A', fontWeight: filterTag !== 'all' ? 600 : 400, flexShrink: 0, width: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <option value="all">Todas as etiquetas</option>
+              {availTagsFilter.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+            </select>
+          )}
           {hasFilters && (
             <button onClick={clearFilters}
-              style={{ border: '1.5px solid #FCA5A5', borderRadius: 10, fontSize: 13, background: '#FEF2F2', padding: '9px 14px', outline: 'none', color: '#DC2626', cursor: 'pointer', fontWeight: 600, flexShrink: 0, marginLeft: 'auto' }}>
+              style={{ border: '1.5px solid #FCA5A5', borderRadius: 10, fontSize: 13, background: '#FEF2F2', padding: '9px 14px', outline: 'none', color: '#DC2626', cursor: 'pointer', fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap', marginLeft: 'auto' }}>
               Limpar filtros
             </button>
           )}
         </div>
-
-        {(grades.length > 0 || availTagsFilter.length > 0) && (
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {grades.length > 0 && (
-              <select value={filterGrade} onChange={e => setFilterGrade(e.target.value)}
-                style={{ border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: 13, background: '#fff', padding: '9px 12px', outline: 'none', color: '#1A2B4A' }}>
-                <option value="all">Todas as séries</option>
-                {grades.map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
-            )}
-            {availTagsFilter.length > 0 && (
-              <select value={filterTag} onChange={e => setFilterTag(e.target.value)}
-                style={{ border: `1.5px solid ${filterTag !== 'all' ? '#00A896' : '#E2E8F0'}`, borderRadius: 10, fontSize: 13, background: filterTag !== 'all' ? '#F0FDFA' : '#fff', padding: '9px 12px', outline: 'none', color: filterTag !== 'all' ? '#00A896' : '#1A2B4A', fontWeight: filterTag !== 'all' ? 600 : 400 }}>
-                <option value="all">Todas as etiquetas</option>
-                {availTagsFilter.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
-              </select>
-            )}
-          </div>
-        )}
 
         {/* Barra de ação em massa (item 3) — só aparece com seleção ativa */}
         {selectedIds.size > 0 && (
