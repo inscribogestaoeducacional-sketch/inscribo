@@ -58,7 +58,7 @@ const ADMIN_GROUPS: MenuGroup[] = [
       { path: '/super-admin/settings',              label: 'Configurações',   icon: Settings      },
       { path: '/super-admin/consultants',            label: 'Consultores',    icon: Users         },
       { path: '/super-admin/market-intelligence',    label: 'Intel. Mercado', icon: BarChart3     },
-      { path: '/super-admin/updates',                label: 'Updates',        icon: BookOpen      },
+      { path: '/super-admin/updates',                label: 'Atualizações',   icon: BookOpen      },
       { path: '/super-admin/whatsapp',                label: 'WhatsApp',       icon: MessageCircle },
     ],
   },

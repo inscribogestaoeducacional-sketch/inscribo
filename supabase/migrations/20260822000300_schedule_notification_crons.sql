@@ -24,28 +24,12 @@
 -- fix acima), não current_setting('app.supabase_url') — dispensa depender de
 -- uma GUC de banco que pode não estar configurada.
 --
--- ⚠️ ACHADO IMPORTANTE (investigado antes de escrever este arquivo, ver
--- relatório da sessão): funnel-alert/index.ts consulta
--- funnel_metrics(goal, actual, stage, month) — nenhuma dessas 4 colunas
--- existe mais na tabela real (schema atual: registrations/schedules/visits/
--- enrollments + *_target, year INTEGER, month INTEGER, sem goal/actual/
--- stage). A query falha silenciosamente (erro do PostgREST nunca checado no
--- código), então a função SEMPRE retorna "processed: N, failed: 0" sem
--- nunca escrever uma notificação — é um no-op completo contra o schema
--- atual, não só "pode estar desatualizada". Agendar o cron não quebra nada
--- (só chama uma função que não faz nada), mas também não entrega o alerta
--- de funil que o produto espera. Recomendo NÃO aplicar o bloco 2 (funnel-
--- alert-notification) até a função ser reescrita pro schema atual — ver
--- relatório completo.
---
--- Achado secundário em daily-summary/index.ts: a contagem de "transferências
--- pendentes" consulta a tabela transfer_requests, que também não existe mais
--- (o projeto usa student_transfers desde a reforma de Transferências) — o
--- erro da query some no `?? 0`, então esse contador sempre mostra 0 mesmo
--- havendo pendências reais em student_transfers. Os outros dois contadores
--- (novos leads, matrículas) usam `leads` e continuam corretos. Agendar esse
--- cron já entrega valor parcial (2 de 3 contadores certos); o terceiro é bug
--- de código separado, não deste arquivo de migration.
+-- Achados da investigação inicial (funnel-alert/index.ts consultando colunas
+-- que não existem mais em funnel_metrics; daily-summary/index.ts consultando
+-- transfer_requests, tabela renomeada pra student_transfers) já foram
+-- corrigidos nas duas edge functions antes desta migration ser aplicada —
+-- ambas agora batem com o schema atual e foram validadas manualmente contra
+-- dados reais de produção. Nenhum dos dois crons abaixo é mais um no-op.
 --
 -- NÃO aplicado ainda — só criado pra revisão antes de rodar `supabase db push`.
 -- =============================================================================
@@ -73,7 +57,6 @@ SELECT cron.schedule(
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 2. funnel-alert-notification — toda segunda às 12:00 UTC (09:00 Brasília)
--- ⚠️ Ver achado acima: função é no-op contra o schema atual de funnel_metrics.
 -- ─────────────────────────────────────────────────────────────────────────────
 DO $$ BEGIN
   PERFORM cron.unschedule('funnel-alert-notification');
