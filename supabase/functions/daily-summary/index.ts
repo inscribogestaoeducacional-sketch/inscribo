@@ -28,14 +28,32 @@ serve(async () => {
           .eq('institution_id', inst.id)
           .eq('status', 'enrolled')
           .gte('updated_at', startOfDay),
-        supabase.from('transfer_requests').select('id', { count: 'exact', head: true })
+        // transfer_requests não existe mais — o projeto usa student_transfers
+        // desde a reforma de Transferências. "Pendente" replica o mesmo
+        // critério do KPI "Aguardando pesquisa" da tela de Transferências
+        // (GestorTransfers.tsx: !survey_token && !ai_diagnosis && status !==
+        // 'cancelled'): sem pesquisa de saída enviada, sem diagnóstico de IA
+        // pronto, não cancelada e não excluída. status pode ser NULL ou o
+        // literal 'pending' (DEFAULT da coluna) — os dois contam como
+        // pendente, só 'cancelled' é excluído (mesmo comportamento da tela).
+        supabase.from('student_transfers').select('id', { count: 'exact', head: true })
           .eq('institution_id', inst.id)
-          .eq('status', 'pending'),
+          .is('deleted_at', null)
+          .is('survey_token', null)
+          .is('ai_diagnosis', null)
+          .or('status.neq.cancelled,status.is.null'),
       ])
 
-      const newLeads = leadsRes.count ?? 0
-      const newEnrolled = enrolledRes.count ?? 0
-      const pendingTransfers = transfersRes.count ?? 0
+      // Erro real de qualquer uma das 3 queries não deve virar "0" silencioso
+      // — propaga pra fora do map() e o Promise.allSettled já conta isso em
+      // `failed` (ver retorno da function no fim do arquivo).
+      if (leadsRes.error)     throw leadsRes.error
+      if (enrolledRes.error)  throw enrolledRes.error
+      if (transfersRes.error) throw transfersRes.error
+
+      const newLeads = leadsRes.count
+      const newEnrolled = enrolledRes.count
+      const pendingTransfers = transfersRes.count
 
       const parts: string[] = []
       if (newLeads > 0) parts.push(`${newLeads} novo${newLeads > 1 ? 's' : ''} lead${newLeads > 1 ? 's' : ''}`)
