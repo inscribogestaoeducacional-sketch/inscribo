@@ -1670,20 +1670,24 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
 
   const loadMessages = async () => {
     if (!effectiveInstitutionId && !isAionInbox) return
-    let msgs: any[]
+    // Não busca mais whatsapp_messages inteira aqui (nem da instituição, nem
+    // da plataforma toda no modo is_aion_inbox) — era o maior consumidor de
+    // I/O do banco (SELECT * sem filtro de conversa, confirmado via
+    // pg_stat_statements: 87.817 chamadas, 400ms média, 9h46min de tempo
+    // total acumulado, na mesma query em WhatsAppHub.tsx — ver correção lá).
+    // whatsapp_conversations já tem last_message/last_message_at/unread_count/
+    // etc pra montar a lista; buildConversations usa esses campos quando não
+    // há mensagens carregadas. O thread de cada conversa é buscado sob
+    // demanda só quando ela é aberta (useEffect de lazy-load mais abaixo, via
+    // fetchConversationMessages — escopado por remote_jid, nunca a
+    // instituição/plataforma inteira).
+    const msgs: any[] = []
     let convs: any[]
     if (isAionInbox) {
-      const [{ data: msgData }, { data: convData }] = await Promise.all([
-        supabase.from('whatsapp_messages').select('*').eq('is_aion_inbox', true).order('timestamp', { ascending: false }),
-        supabase.from('whatsapp_conversations').select('*').eq('is_aion_inbox', true),
-      ])
-      msgs = msgData || []
+      const { data: convData } = await supabase.from('whatsapp_conversations').select('*').eq('is_aion_inbox', true)
       convs = convData || []
     } else {
-      ;[msgs, convs] = await Promise.all([
-        DatabaseService.getWhatsappMessages(effectiveInstitutionId),
-        DatabaseService.getWhatsappConversations(effectiveInstitutionId),
-      ])
+      convs = await DatabaseService.getWhatsappConversations(effectiveInstitutionId)
     }
     const convMap = new Map(convs.map((c: any) => [c.remote_jid, c]))
     const built = buildConversations(msgs, convMap)
@@ -1798,9 +1802,9 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
         filter: msgFilter
       }, (payload: any) => {
         const msgJid = payload.new?.remote_jid || ''
-        if (normalizeJid(msgJid) === activeIdRef.current) {
-          loadMessages()
-        }
+        // Não recarrega mais aqui — o canal irmão (listener de INSERT logo
+        // acima) já usa addMessageToConversations(msg) pra inserir a mensagem
+        // certa direto do payload do Realtime, sem round-trip ao banco.
         setConversations(prev => prev.map(c =>
           c.id === normalizeJid(msgJid)
             ? {
@@ -2056,60 +2060,108 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
 
   }, [activeId])
 
+  // Busca só as mensagens da conversa `jid` (nunca a instituição/plataforma
+  // inteira) — escopada por remote_jid, colunas explícitas sem raw_data,
+  // limite de 100. Reaproveitada pelo lazy-load abaixo e por
+  // reloadConversationMessages, em vez de cada ponto que precisa atualizar a
+  // conversa aberta chamar loadMessages() — que buscava até 10.000 linhas
+  // (ou a plataforma inteira, no modo is_aion_inbox) a cada chamada (mesmo
+  // achado de WhatsAppHub.tsx via pg_stat_statements: 87.817 chamadas, 400ms
+  // média, 9h46min de tempo total — maior consumidor de I/O do banco).
+  const fetchConversationMessages = async (jid: string): Promise<Message[]> => {
+    const institutionIdForLoad = isAionInbox ? null : effectiveInstitutionId
+    if (!institutionIdForLoad && !isAionInbox) return []
+
+    let rows: WhatsappMessage[]
+    if (isAionInbox) {
+      const { data } = await supabase
+        .from('whatsapp_messages')
+        .select('id, remote_jid, from_me, message_id, message_type, content, media_url, contact_name, lead_id, timestamp, status, quoted_message_id, quoted_content, quoted_from_me, reaction, reaction_attendant')
+        .eq('is_aion_inbox', true)
+        .or(`remote_jid.eq.${rawJid(jid)},remote_jid.eq.${jid}`)
+        .order('timestamp', { ascending: false })
+        .limit(100)
+      rows = (data || []) as unknown as WhatsappMessage[]
+    } else {
+      rows = await DatabaseService.getConversationMessages(institutionIdForLoad!, jid)
+    }
+
+    if (rows.length === 0) return []
+
+    const sorted = [...rows].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    return sorted
+      .filter((m, idx, self) => idx === self.findIndex(t => (t.message_id && t.message_id === m.message_id) || t.id === m.id))
+      .map(m => ({
+        id: m.id,
+        type: mapMsgType(m.message_type),
+        content: m.content,
+        from: (m.from_me ? 'me' : 'them') as 'me' | 'them',
+        ts: new Date(m.timestamp),
+        status: (m.status as Message['status']) || 'sent',
+        media_url: m.media_url,
+        message_id: m.message_id,
+        senderName: m.from_me ? (m.contact_name || undefined) : undefined,
+        quoted_message_id: m.quoted_message_id,
+        quoted_content:    m.quoted_content,
+        quoted_from_me:    m.quoted_from_me,
+        reaction:           (m as any).reaction || null,
+        reaction_attendant: (m as any).reaction_attendant || null,
+      }))
+  }
+
+  // Força um refresh das mensagens da conversa `jid` mesmo que ela já tenha
+  // mensagens carregadas — usada depois de enviar template, pra trocar o
+  // placeholder otimista pela mensagem real gravada no banco.
+  const reloadConversationMessages = async (jid: string) => {
+    const messages = await fetchConversationMessages(jid)
+    if (messages.length === 0) return
+    setConversations(prev => prev.map(c => c.id === jid ? { ...c, messages } : c))
+  }
+
+  // Re-sincroniza só a LINHA da conversa (status/atendente/bot) em
+  // whatsapp_conversations — nunca busca whatsapp_messages. Usada depois de
+  // conflito ao assumir/resgatar uma conversa e depois de transferência, pra
+  // garantir que o estado local reflita o banco sem esperar o Realtime (que
+  // também cobre isso via o listener de UPDATE em whatsapp_conversations,
+  // mas pode chegar com atraso). Cobre os dois modos (institution/aion-inbox),
+  // igual ao resto do componente.
+  const refreshConversationRow = async (convId: string) => {
+    const rJid = rawJid(convId)
+    let query = supabase.from('whatsapp_conversations').select('status, assigned_user_id, assigned_user_name, bot_active')
+    if (isAionInbox) {
+      query = query.eq('is_aion_inbox', true).or(`remote_jid.eq.${rJid},remote_jid.eq.${convId}`)
+    } else {
+      if (!effectiveInstitutionId) return
+      query = query.eq('institution_id', effectiveInstitutionId).eq('remote_jid', rJid)
+    }
+    const { data } = await query.maybeSingle()
+    if (!data) return
+    setConversations(prev => prev.map(c => c.id === convId
+      ? {
+          ...c,
+          status: (data.status ?? c.status) as ConvStatus,
+          assigned_user_id: data.assigned_user_id ?? c.assigned_user_id,
+          assigned_user_name: data.assigned_user_name ?? c.assigned_user_name,
+          bot_active: data.bot_active ?? (c as any).bot_active,
+        }
+      : c
+    ))
+  }
+
   // Lazy-load messages for conversations that had none after the initial bulk fetch
   useEffect(() => {
     if (!activeId) return
     const conv = conversations.find(c => c.id === activeId)
     if (!conv || conv.messages.length > 0) return
 
-    const institutionIdForLoad = isAionInbox ? null : effectiveInstitutionId
-    if (!institutionIdForLoad && !isAionInbox) return
-
-    const fetch = async () => {
-      let rows: WhatsappMessage[]
-      if (isAionInbox) {
-        const { data } = await supabase
-          .from('whatsapp_messages')
-          .select('*')
-          .eq('is_aion_inbox', true)
-          .or(`remote_jid.eq.${rawJid(activeId)},remote_jid.eq.${activeId}`)
-          .order('timestamp', { ascending: false })
-          .limit(200)
-        rows = data || []
-      } else {
-        rows = await DatabaseService.getConversationMessages(institutionIdForLoad!, activeId)
-      }
-
-      if (rows.length === 0) return
-
-      const sorted = [...rows].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-      const messages = sorted
-        .filter((m, idx, self) => idx === self.findIndex(t => (t.message_id && t.message_id === m.message_id) || t.id === m.id))
-        .map(m => ({
-          id: m.id,
-          type: mapMsgType(m.message_type),
-          content: m.content,
-          from: (m.from_me ? 'me' : 'them') as 'me' | 'them',
-          ts: new Date(m.timestamp),
-          status: (m.status as Message['status']) || 'sent',
-          media_url: m.media_url,
-          message_id: m.message_id,
-          senderName: m.from_me ? (m.contact_name || undefined) : undefined,
-          quoted_message_id: m.quoted_message_id,
-          quoted_content:    m.quoted_content,
-          quoted_from_me:    m.quoted_from_me,
-          reaction:           (m as any).reaction || null,
-          reaction_attendant: (m as any).reaction_attendant || null,
-        }))
-
+    fetchConversationMessages(activeId).then(messages => {
+      if (messages.length === 0) return
       setConversations(prev => prev.map(c =>
         c.id === activeId && c.messages.length === 0
           ? { ...c, messages }
           : c
       ))
-    }
-
-    fetch().catch(() => {})
+    }).catch(() => {})
   }, [activeId])
 
 
@@ -2566,7 +2618,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
         .select('id')
       if (!data || data.length === 0) {
         setSendError('Essa conversa já foi assumida por outro atendente.')
-        await loadMessages()
+        await refreshConversationRow(convId)
         return false
       }
       setConversations(prev => prev.map(c => c.id === convId
@@ -2582,7 +2634,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
 
     if (!claimed) {
       setSendError('Essa conversa já foi assumida por outro atendente.')
-      await loadMessages()
+      await refreshConversationRow(convId)
       return false
     }
 
@@ -2639,7 +2691,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
 
     if (error) {
       setSendError(error)
-      await loadMessages()
+      await refreshConversationRow(activeId)
       return
     }
 
@@ -2896,7 +2948,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       const jidSnapshot = activeId
       setTimeout(async () => {
         console.log('[RELOAD] recarregando para jid:', jidSnapshot)
-        await loadMessages()
+        if (jidSnapshot) await reloadConversationMessages(jidSnapshot)
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
         }, 500)
@@ -3021,7 +3073,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       await supabase.from('whatsapp_conversations')
         .update({ assigned_user_id: targetUser.id, assigned_user_name: targetUser.full_name, status: 'open' })
         .eq('is_aion_inbox', true).eq('remote_jid', rJid)
-      await loadMessages()
+      await refreshConversationRow(activeId)
       setConversations(prev => prev.map(c => c.id === activeId
         ? { ...c, assigned_user_id: targetUser.id, assigned_user_name: targetUser.full_name }
         : c
@@ -3060,7 +3112,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       user_name: user.full_name || user.email,
       metadata: { from_user_id: fromUserId || null, to_user_id: targetUser.id },
     })
-    await loadMessages()
+    await refreshConversationRow(activeId)
     setConversations(prev => prev.map(c => c.id === activeId
       ? { ...c, assigned_user_id: targetUser.id, assigned_user_name: targetUser.full_name }
       : c

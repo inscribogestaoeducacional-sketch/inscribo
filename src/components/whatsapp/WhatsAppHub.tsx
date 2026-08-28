@@ -15,6 +15,11 @@ import NewLeadModal from '../leads/NewLeadModal'
 import { saveLead } from '../../lib/leadSave'
 import { statusConfig } from '../leads/leadFormShared'
 
+// Tamanho de página pra mensagens de uma conversa — usado tanto no
+// carregamento inicial/lazy-load quanto em "carregar mensagens anteriores"
+// (scroll até o topo). Mesmo valor nos dois pra paginação consistente.
+const MESSAGE_PAGE_SIZE = 100
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MsgType = 'text' | 'audio' | 'image' | 'video' | 'document' | 'sticker' | 'deleted'
 type ConvStatus = 'waiting' | 'open' | 'closed'
@@ -1161,6 +1166,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const moreMenuRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  // "Carregar mensagens anteriores" (scroll até o topo) — ver loadOlderMessages.
+  const messagesScrollRef = useRef<HTMLDivElement>(null)
+  const [loadingOlderId, setLoadingOlderId] = useState<string | null>(null)
+  const [exhaustedOlder, setExhaustedOlder] = useState<Set<string>>(new Set())
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -1984,22 +1993,28 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // loadMessages() — que buscava até 10.000 linhas de TODA a instituição a
   // cada chamada (confirmado via pg_stat_statements como o maior consumidor
   // de I/O do banco: 87.817 chamadas, 400ms média, 9h46min de tempo total).
-  const fetchConversationMessages = async (jid: string): Promise<Message[]> => {
+  // `beforeTimestamp` (opcional): cursor de paginação pra "carregar mensagens
+  // anteriores" — busca só timestamp < beforeTimestamp (a mensagem mais
+  // antiga já carregada). Sem esse parâmetro, comportamento igual a antes
+  // (últimas MESSAGE_PAGE_SIZE mensagens).
+  const fetchConversationMessages = async (jid: string, beforeTimestamp?: string): Promise<Message[]> => {
     const institutionIdForLoad = isAionInbox ? null : effectiveInstitutionId
     if (!institutionIdForLoad && !isAionInbox) return []
 
     let rows: WhatsappMessage[]
     if (isAionInbox) {
-      const { data } = await supabase
+      let q = supabase
         .from('whatsapp_messages')
         .select('id, remote_jid, from_me, message_id, message_type, content, media_url, contact_name, lead_id, timestamp, status, quoted_message_id, quoted_content, quoted_from_me, reaction, reaction_attendant')
         .eq('is_aion_inbox', true)
         .or(`remote_jid.eq.${rawJid(jid)},remote_jid.eq.${jid}`)
+      if (beforeTimestamp) q = q.lt('timestamp', beforeTimestamp)
+      const { data } = await q
         .order('timestamp', { ascending: false })
-        .limit(100)
+        .limit(MESSAGE_PAGE_SIZE)
       rows = (data || []) as unknown as WhatsappMessage[]
     } else {
-      rows = await DatabaseService.getConversationMessages(institutionIdForLoad!, jid)
+      rows = await DatabaseService.getConversationMessages(institutionIdForLoad!, jid, MESSAGE_PAGE_SIZE, beforeTimestamp)
     }
 
     if (rows.length === 0) return []
@@ -2025,13 +2040,78 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       }))
   }
 
+  // Busca um lote de mensagens mais antigas que a mais antiga já carregada
+  // na conversa `jid` e insere no topo, preservando a posição de scroll do
+  // usuário (captura scrollHeight antes de inserir, ajusta scrollTop depois
+  // pela diferença — padrão comum de "load more" no topo de uma lista).
+  // Pára de tentar (exhaustedOlder) quando um lote vem menor que
+  // MESSAGE_PAGE_SIZE — sinal de que chegou no início da conversa.
+  const loadOlderMessages = async (jid: string) => {
+    if (loadingOlderId === jid || exhaustedOlder.has(jid)) return
+    const conv = conversations.find(c => c.id === jid)
+    if (!conv || conv.messages.length === 0) return
+    const oldest = conv.messages[0]
+
+    setLoadingOlderId(jid)
+    try {
+      const older = await fetchConversationMessages(jid, oldest.ts.toISOString())
+
+      const existingIds = new Set(conv.messages.flatMap(m => [m.id, m.message_id].filter(Boolean) as string[]))
+      const deduped = older.filter(m => !existingIds.has(m.id) && !(m.message_id && existingIds.has(m.message_id)))
+
+      if (deduped.length === 0) {
+        setExhaustedOlder(prev => new Set(prev).add(jid))
+        return
+      }
+
+      const el = messagesScrollRef.current
+      const prevScrollHeight = el?.scrollHeight ?? 0
+      const prevScrollTop = el?.scrollTop ?? 0
+
+      setConversations(prev => prev.map(c =>
+        c.id === jid ? { ...c, messages: [...deduped, ...c.messages] } : c
+      ))
+
+      // Espera o DOM refletir as mensagens novas antes de corrigir o scroll —
+      // sem isso, el.scrollHeight ainda seria o valor antigo.
+      requestAnimationFrame(() => {
+        if (el) el.scrollTop = el.scrollHeight - prevScrollHeight + prevScrollTop
+      })
+
+      if (deduped.length < MESSAGE_PAGE_SIZE) {
+        setExhaustedOlder(prev => new Set(prev).add(jid))
+      }
+    } catch (e) {
+      console.error('[loadOlderMessages] erro:', e)
+    } finally {
+      setLoadingOlderId(null)
+    }
+  }
+
+  // Dispara loadOlderMessages quando o usuário rola perto do topo da lista.
+  const handleMessagesScroll = () => {
+    const el = messagesScrollRef.current
+    if (!el || !activeId) return
+    if (el.scrollTop < 120) loadOlderMessages(activeId)
+  }
+
   // Força um refresh das mensagens da conversa `jid` mesmo que ela já tenha
   // mensagens carregadas — usada depois de enviar template, pra trocar o
-  // placeholder otimista pela mensagem real gravada no banco.
+  // placeholder otimista pela mensagem real gravada no banco. Faz merge em
+  // vez de substituir o array inteiro: se o usuário já tinha rolado pra cima
+  // e carregado mensagens mais antigas (loadOlderMessages), esse histórico
+  // não pode ser descartado só porque um template foi enviado.
   const reloadConversationMessages = async (jid: string) => {
-    const messages = await fetchConversationMessages(jid)
-    if (messages.length === 0) return
-    setConversations(prev => prev.map(c => c.id === jid ? { ...c, messages } : c))
+    const fresh = await fetchConversationMessages(jid)
+    if (fresh.length === 0) return
+    setConversations(prev => prev.map(c => {
+      if (c.id !== jid) return c
+      const freshIds = new Set(fresh.flatMap(m => [m.id, m.message_id].filter(Boolean) as string[]))
+      const keptOlder = c.messages.filter(m =>
+        !freshIds.has(m.id) && !(m.message_id && freshIds.has(m.message_id)) && m.ts < fresh[0].ts
+      )
+      return { ...c, messages: [...keptOlder, ...fresh] }
+    }))
   }
 
   // Re-sincroniza só a LINHA da conversa (status/atendente/bot) em
@@ -2074,6 +2154,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           ? { ...c, messages }
           : c
       ))
+      // Veio menos que uma página inteira — já é o início da conversa, evita
+      // um round-trip extra só pra descobrir isso no primeiro scroll ao topo.
+      if (messages.length < MESSAGE_PAGE_SIZE) {
+        setExhaustedOlder(prev => new Set(prev).add(activeId))
+      }
     }).catch(() => {})
   }, [activeId])
 
@@ -4060,7 +4145,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
           {/* Messages area + Composer */}
           <>
-          <div className="wa-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 2, backgroundImage: 'radial-gradient(circle at 1px 1px, #ccf0ec 1px, transparent 0)', backgroundSize: '24px 24px', backgroundColor: '#f7fefe' }}>
+          <div ref={messagesScrollRef} onScroll={handleMessagesScroll} className="wa-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 2, backgroundImage: 'radial-gradient(circle at 1px 1px, #ccf0ec 1px, transparent 0)', backgroundSize: '24px 24px', backgroundColor: '#f7fefe' }}>
+            {activeId && loadingOlderId === activeId && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '8px 0 14px', fontSize: 12, color: '#64748B' }}>
+                <div className="animate-spin" style={{ width: 13, height: 13, border: '2px solid #94A3B8', borderTopColor: 'transparent', borderRadius: '50%' }} />
+                Carregando mensagens anteriores...
+              </div>
+            )}
+            {activeId && loadingOlderId !== activeId && exhaustedOlder.has(activeId) && !!activeConv?.messages.length && (
+              <div style={{ textAlign: 'center', padding: '8px 0 14px', fontSize: 11, color: '#94A3B8', fontWeight: 500 }}>
+                Início da conversa
+              </div>
+            )}
             {!activeConv && conversations.length === 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
                 <div style={{ width: 72, height: 72, background: '#E6F7F5', border: '2px solid #B2E8E2', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>

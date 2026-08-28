@@ -811,15 +811,23 @@ export class DatabaseService {
     return (data || []) as unknown as WhatsappMessage[]
   }
 
-  static async getConversationMessages(institutionId: string, remoteJid: string, limit = 100): Promise<WhatsappMessage[]> {
+  // `before` (opcional): cursor de paginação pra "carregar mensagens
+  // anteriores" — busca só timestamp < before (a mensagem mais antiga já
+  // carregada na tela). Sem esse parâmetro, comportamento idêntico a antes
+  // (últimas `limit` mensagens). Usa `timestamp`, não `created_at` — é a
+  // coluna usada em toda ordenação/exibição de mensagem já no resto do
+  // sistema (ver .order('timestamp', ...) logo abaixo e em getWhatsappMessages).
+  static async getConversationMessages(institutionId: string, remoteJid: string, limit = 100, before?: string): Promise<WhatsappMessage[]> {
     // Match both raw phone ("551199...") and normalized ("551199...@s.whatsapp.net") formats
     const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     const normalized = remoteJid.includes('@') ? remoteJid : `${remoteJid}@s.whatsapp.net`
-    const { data, error } = await supabase
+    let query = supabase
       .from('whatsapp_messages')
       .select(this.WHATSAPP_MESSAGE_COLUMNS)
       .eq('institution_id', institutionId)
       .or(`remote_jid.eq.${raw},remote_jid.eq.${normalized}`)
+    if (before) query = query.lt('timestamp', before)
+    const { data, error } = await query
       .order('timestamp', { ascending: false })
       .limit(limit)
 
