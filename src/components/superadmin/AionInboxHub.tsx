@@ -1583,16 +1583,37 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       const normJid = normalizeJid(newMsg.remote_jid)
       const existing = prev.find(c => c.id === normJid)
       if (existing) {
-        if (existing.messages.some(m =>
+        // Dedup real: mesma linha do banco já representada (id bate, ou
+        // message_id/wamid bate dos dois lados — o bug original comparava
+        // m.id contra newMsg.message_id duas vezes seguidas e nunca checava
+        // m.message_id, então nunca pegava esse caso).
+        const alreadyHas = existing.messages.some(m =>
           m.id === newMsg.id ||
-          m.id === newMsg.message_id ||
-          (newMsg.message_id && m.id === newMsg.message_id)
-        )) return prev
+          (!!newMsg.message_id && (m.id === newMsg.message_id || m.message_id === newMsg.message_id))
+        )
+        if (alreadyHas) return prev
+
+        // Reconcilia com o placeholder otimista (id "temp-...") da mensagem
+        // que nós mesmos enviamos, se houver — troca em vez de anexar do
+        // lado. Sem isso, mensagem de template/reativação ficava visível
+        // duas vezes: o placeholder local (id temp-*, sem message_id) nunca
+        // bate com o id/message_id real vindo do Realtime, então a real só
+        // era anexada ao lado do placeholder, que nunca era removido. Antes
+        // da remoção do loadMessages() redundante, um reload subsequente
+        // acabava mascarando isso; agora addMessageToConversations é o único
+        // caminho, então precisa resolver isso sozinho.
+        const optimisticIdx = newMsg.from_me
+          ? existing.messages.findIndex(m => m.id.startsWith('temp-'))
+          : -1
+        const newMessages = optimisticIdx >= 0
+          ? existing.messages.map((m, i) => i === optimisticIdx ? msg : m)
+          : [...existing.messages, msg]
+
         return prev.map(c => c.id === normJid
           ? {
               ...c,
               name: (!c.name || c.name === formatPhone(normJid)) && newMsg.contact_name ? newMsg.contact_name : c.name,
-              messages: [...c.messages, msg],
+              messages: newMessages,
               lastMessage: newMsg.content,
               lastTime: new Date(newMsg.timestamp),
               unreadCount: c.unreadCount + (newMsg.from_me ? 0 : 1),
@@ -1695,6 +1716,49 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
     console.log(`[loadMessages] total=${msgs.length} oldest=${timestamps.length ? new Date(Math.min(...timestamps)).toISOString() : 'n/a'} newest=${timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : 'n/a'}`)
     setConversations(built)
     return built
+  }
+
+  // Sincroniza a lista de conversas com whatsapp_conversations periodicamente
+  // (rede de segurança pro caso do Realtime perder algum evento — mesmo
+  // propósito do setInterval que já chamava loadMessages() aqui). MESCLA em
+  // vez de substituir: loadMessages() faz um rebuild completo (correto só no
+  // mount, quando não há nada local pra perder) — chamá-la a cada 60s
+  // descartava mensagens e outro estado já carregado via Realtime pra CADA
+  // conversa, fazendo a lista "piscar" (sumir e voltar) e o thread da
+  // conversa ativa esvaziar momentaneamente até o lazy-load recarregar. Só
+  // atualiza conversas que já existem localmente — conversas novas continuam
+  // chegando via Realtime (addMessageToConversations), que já cobre esse caso.
+  const syncConversationsList = async () => {
+    if (!effectiveInstitutionId && !isAionInbox) return
+    let convs: any[]
+    if (isAionInbox) {
+      const { data } = await supabase.from('whatsapp_conversations').select('*').eq('is_aion_inbox', true)
+      convs = data || []
+    } else {
+      convs = await DatabaseService.getWhatsappConversations(effectiveInstitutionId)
+    }
+    const convByJid = new Map(convs.map((c: any) => [normalizeJid(c.remote_jid), c]))
+    setConversations(prev => prev.map(existing => {
+      const conv = convByJid.get(existing.id)
+      if (!conv) return existing
+      const hasLocalMessages = existing.messages.length > 0
+      return {
+        ...existing,
+        name: conv.contact_name || existing.name,
+        status: (conv.status ?? existing.status) as ConvStatus,
+        unreadCount: conv.unread_count ?? existing.unreadCount,
+        assigned_user_id: conv.assigned_user_id ?? existing.assigned_user_id,
+        assigned_user_name: conv.assigned_user_name ?? existing.assigned_user_name,
+        contact_type: conv.contact_type ?? existing.contact_type,
+        tags: conv.tags || existing.tags,
+        profile_picture_url: conv.profile_picture_url ?? existing.profile_picture_url,
+        bot_active: conv.bot_active ?? (existing as any).bot_active,
+        satisfaction_score: conv.satisfaction_score ?? (existing as any).satisfaction_score,
+        last_customer_message_at: conv.last_customer_message_at ?? existing.last_customer_message_at,
+        lastMessage: hasLocalMessages ? existing.lastMessage : (conv.last_message || existing.lastMessage),
+        lastTime: hasLocalMessages ? existing.lastTime : (conv.last_message_at ? new Date(conv.last_message_at) : existing.lastTime),
+      }
+    }))
   }
 
   // Load on mount + check connected + realtime
@@ -1893,7 +1957,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
         .subscribe()
     }
 
-    const interval = setInterval(loadMessages, 60000)
+    const interval = setInterval(syncConversationsList, 60000)
     return () => {
       supabase.removeChannel(msgChannel)
       supabase.removeChannel(convChannel)
