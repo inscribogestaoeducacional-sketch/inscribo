@@ -1125,6 +1125,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [sendingReactivate, setSendingReactivate] = useState(false)
   const [hubToast, setHubToast] = useState<string | null>(null)
 
+  // Mensagens agendadas (template) da conversa ativa — painel lateral,
+  // seção "Mensagens Agendadas" (ver whatsapp_scheduled_messages).
+  const [collapseScheduled, setCollapseScheduled] = useState(true)
+  const [scheduledMsgs, setScheduledMsgs] = useState<{ id: string; template_name: string; template_variables: Record<string, string> | null; scheduled_for: string; status: string }[]>([])
+  const [showScheduleModal, setShowScheduleModal] = useState(false)
+  const [scheduleTemplate, setScheduleTemplate] = useState('')
+  const [scheduleVars, setScheduleVars] = useState<Record<string, string>>({})
+  const [scheduleDateTime, setScheduleDateTime] = useState('')
+  const [savingSchedule, setSavingSchedule] = useState(false)
+  const [scheduleError, setScheduleError] = useState<string | null>(null)
+
   // Template panel for new outbound conversations
   const [showTemplatePanel, setShowTemplatePanel] = useState(false)
 
@@ -2239,6 +2250,21 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }
   }, [rightPanelTab, activeId])
 
+  // Load pending scheduled messages for the active conversation (right panel)
+  const refreshScheduledMsgs = useCallback(async () => {
+    if (!activeId || !effectiveInstitutionId) { setScheduledMsgs([]); return }
+    const { data } = await supabase
+      .from('whatsapp_scheduled_messages')
+      .select('id, template_name, template_variables, scheduled_for, status')
+      .eq('institution_id', effectiveInstitutionId)
+      .eq('remote_jid', rawJid(activeId))
+      .eq('status', 'pending')
+      .order('scheduled_for', { ascending: true })
+    setScheduledMsgs(data || [])
+  }, [activeId, effectiveInstitutionId])
+
+  useEffect(() => { refreshScheduledMsgs() }, [refreshScheduledMsgs])
+
   // Presence channel for typing indicator — subscribe per active conversation
   useEffect(() => {
     if (presenceChannelRef.current) {
@@ -2982,6 +3008,72 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     } finally {
       setSendingTemplate(false)
     }
+  }
+
+  const handleOpenScheduleModal = () => {
+    setScheduleTemplate('')
+    setScheduleVars({})
+    setScheduleDateTime('')
+    setScheduleError(null)
+    setShowScheduleModal(true)
+  }
+
+  // Confirma o agendamento — insere em whatsapp_scheduled_messages. O envio
+  // de fato é feito pela Edge Function whatsapp-scheduled-send (via cron),
+  // não daqui. conversation_id é o UUID real de whatsapp_conversations — o
+  // id que a UI usa pra Conversation (activeId) é o JID normalizado, não
+  // esse UUID, por isso busca ele agora em vez de guardá-lo no estado.
+  const handleConfirmSchedule = async () => {
+    if (!activeId || !effectiveInstitutionId || !scheduleTemplate || !scheduleDateTime || !user?.id) return
+    const when = new Date(scheduleDateTime)
+    if (isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+      setScheduleError('Escolha uma data e hora futuras')
+      return
+    }
+    const tmpl = templates.find(t => t.id === scheduleTemplate)
+    if (!tmpl) { setScheduleError('Selecione um template'); return }
+
+    setSavingSchedule(true)
+    setScheduleError(null)
+    try {
+      const { data: conv } = await supabase
+        .from('whatsapp_conversations')
+        .select('id')
+        .eq('institution_id', effectiveInstitutionId)
+        .eq('remote_jid', rawJid(activeId))
+        .maybeSingle()
+      if (!conv?.id) { setScheduleError('Conversa não encontrada'); return }
+
+      const { error } = await supabase.from('whatsapp_scheduled_messages').insert({
+        institution_id:     effectiveInstitutionId,
+        conversation_id:    conv.id,
+        remote_jid:         rawJid(activeId),
+        template_name:      tmpl.name,
+        template_variables: scheduleVars,
+        scheduled_for:      when.toISOString(),
+        created_by:         user.id,
+      })
+      if (error) { setScheduleError(error.message); return }
+
+      setShowScheduleModal(false)
+      setScheduleTemplate('')
+      setScheduleVars({})
+      setScheduleDateTime('')
+      await refreshScheduledMsgs()
+      setHubToast('✅ Mensagem agendada!')
+      setTimeout(() => setHubToast(null), 3000)
+    } catch (err: any) {
+      setScheduleError(err.message || 'Erro ao agendar mensagem')
+    } finally {
+      setSavingSchedule(false)
+    }
+  }
+
+  // Nunca deleta — só marca cancelled, mantém histórico (mesma regra
+  // reforçada na RLS da tabela, que não tem policy de DELETE).
+  const handleCancelScheduled = async (id: string) => {
+    await supabase.from('whatsapp_scheduled_messages').update({ status: 'cancelled' }).eq('id', id)
+    setScheduledMsgs(prev => prev.filter(m => m.id !== id))
   }
 
   const handleReactivate = async () => {
@@ -5275,6 +5367,47 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   )}
                 </div>
 
+                {/* ── SEÇÃO: MENSAGENS AGENDADAS ──────────────────────────────── */}
+                <div style={{ borderBottom: '1px solid #e2f5f3' }}>
+                  <button onClick={() => setCollapseScheduled(v => !v)}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fefd', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#edfaf8')}
+                    onMouseLeave={e => (e.currentTarget.style.background = '#f8fefd')}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      Mensagens Agendadas{scheduledMsgs.length > 0 ? ` (${scheduledMsgs.length})` : ''}
+                    </span>
+                    {collapseScheduled
+                      ? <ChevronRight style={{ width: 14, height: 14, color: '#0d9488' }} />
+                      : <ChevronDown style={{ width: 14, height: 14, color: '#0d9488' }} />}
+                  </button>
+                  {!collapseScheduled && (
+                    <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {scheduledMsgs.length === 0 ? (
+                        <p style={{ margin: 0, fontSize: 12, color: '#94A3B8', fontStyle: 'italic' }}>Nenhuma mensagem agendada</p>
+                      ) : scheduledMsgs.map(m => (
+                        <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 10px', background: '#f0fdfb', borderRadius: 8, border: '1px solid #d1fae5' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#1A2B4A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.template_name}</p>
+                            <p style={{ margin: 0, fontSize: 11, color: '#64748B' }}>
+                              {new Date(m.scheduled_for).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                          <button onClick={() => handleCancelScheduled(m.id)} title="Cancelar agendamento"
+                            style={{ flexShrink: 0, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: 'none', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer' }}>
+                            <X style={{ width: 12, height: 12 }} />
+                          </button>
+                        </div>
+                      ))}
+                      <button onClick={handleOpenScheduleModal}
+                        style={{ width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, color: '#0d9488', background: 'transparent', border: '1px dashed #d1fae5', borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#e6f7f5'; e.currentTarget.style.borderColor = '#0d9488' }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#d1fae5' }}>
+                        + Agendar mensagem
+                      </button>
+                    </div>
+                  )}
+                </div>
+
               </div>
             )}
 
@@ -5445,6 +5578,93 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               <button onClick={handleSendTemplate} disabled={sendingTemplate || (!selectedTemplate && templates.length > 0)}
                 className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
                 {sendingTemplate ? 'Enviando...' : 'Enviar Template'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showScheduleModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-96 shadow-2xl border border-[#E2E8F0] max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-[#1A2B4A]">Agendar Mensagem</h3>
+              <button onClick={() => { setShowScheduleModal(false); setScheduleTemplate(''); setScheduleVars({}); setScheduleError(null) }}
+                className="p-1 text-[#64748B] hover:text-[#1A2B4A]"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-[#64748B] mb-1">Template</label>
+                <select value={scheduleTemplate} onChange={e => {
+                  const id = e.target.value
+                  setScheduleTemplate(id)
+                  const tmpl = templates.find(t => t.id === id)
+                  const bodyComp = tmpl?.components?.find((c: any) => c.type === 'BODY')
+                  const matches = bodyComp?.text ? [...bodyComp.text.matchAll(/\{\{(\d+)\}\}/g)] : []
+                  const autoVars: Record<string, string> = {}
+                  matches.forEach(([, n]) => { autoVars[n] = getDefaultVarValue(parseInt(n)) })
+                  setScheduleVars(autoVars)
+                }}
+                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
+                  <option value="">Selecionar template aprovado...</option>
+                  {templates.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                {templates.length === 0 && (
+                  <p className="mt-1 text-xs text-[#94A3B8]">Nenhum template aprovado disponível para esta escola.</p>
+                )}
+              </div>
+              {scheduleTemplate && (() => {
+                const tmpl = templates.find(t => t.id === scheduleTemplate)
+                if (!tmpl) return null
+                const bodyComp = tmpl.components?.find((c: any) => c.type === 'BODY')
+                if (!bodyComp?.text) return null
+                const matches = [...bodyComp.text.matchAll(/\{\{(\d+)\}\}/g)]
+                if (matches.length === 0) return null
+                return (
+                  <div>
+                    <label className="block text-xs font-medium text-[#64748B] mb-2">Variáveis</label>
+                    <div className="space-y-2">
+                      {matches.map(([, n]) => (
+                        <div key={n}>
+                          <label className="block text-xs text-[#94A3B8] mb-0.5">{`{{${n}}}`}</label>
+                          <input
+                            value={scheduleVars[n] || ''}
+                            onChange={e => setScheduleVars(v => ({ ...v, [n]: e.target.value }))}
+                            placeholder={`Variável ${n}`}
+                            className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
+              <div>
+                <label className="block text-xs font-medium text-[#64748B] mb-1">Enviar em</label>
+                <input
+                  type="datetime-local"
+                  value={scheduleDateTime}
+                  min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
+                  onChange={e => setScheduleDateTime(e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none"
+                />
+              </div>
+            </div>
+            {scheduleError && (
+              <div className="mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                {scheduleError}
+              </div>
+            )}
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => { setShowScheduleModal(false); setScheduleTemplate(''); setScheduleVars({}); setScheduleError(null) }}
+                className="flex-1 py-2.5 text-xs font-medium text-[#64748B] border border-[#E2E8F0] rounded-lg hover:bg-[#F8FAFB]">
+                Cancelar
+              </button>
+              <button onClick={handleConfirmSchedule} disabled={savingSchedule || !scheduleTemplate || !scheduleDateTime}
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#00A896] rounded-lg hover:bg-[#008f81] disabled:opacity-40">
+                {savingSchedule ? 'Agendando...' : 'Agendar'}
               </button>
             </div>
           </div>
