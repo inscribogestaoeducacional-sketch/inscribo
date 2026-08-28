@@ -779,29 +779,45 @@ export class DatabaseService {
     if (error) throw error
   }
 
+  // Lista de colunas explícita, sem `raw_data` (payload bruto do webhook —
+  // nunca consumido pelo frontend, é a coluna mais pesada de whatsapp_messages)
+  // — confirmado via pg_stat_statements que SELECT * nesta tabela era o maior
+  // consumidor de I/O do banco (87.817 chamadas, 400ms média, 9h46min total).
+  private static readonly WHATSAPP_MESSAGE_COLUMNS =
+    'id, institution_id, remote_jid, from_me, message_id, message_type, content, media_url, contact_name, lead_id, timestamp, created_at, status, direction, quoted_message_id, quoted_content, quoted_from_me, reaction, reaction_attendant'
+
   // WhatsApp Messages
+  // ATENÇÃO: histórico institucional inteiro, não de uma conversa — só usada
+  // por AionWhatsAppHub.tsx/AionInboxHub.tsx (telas internas Áion, baixo
+  // volume de acesso). WhatsAppHub.tsx (usada por todo atendente de toda
+  // escola) parou de chamar esta função — carrega só whatsapp_conversations e
+  // busca mensagens por conversa sob demanda (getConversationMessages), que é
+  // quem respondia pela esmagadora maioria das 87.817 chamadas acima. Limit
+  // reduzido de 10.000 pra 1.000 como rede de segurança adicional pros 2 usos
+  // que restaram, não como correção completa — mesmo padrão de lazy-load por
+  // conversa ainda precisa ser aplicado lá.
   static async getWhatsappMessages(institutionId: string): Promise<WhatsappMessage[]> {
     const { data, error } = await supabase
       .from('whatsapp_messages')
-      .select('*')
+      .select(this.WHATSAPP_MESSAGE_COLUMNS)
       .eq('institution_id', institutionId)
       .order('timestamp', { ascending: false })
-      .limit(10000)
+      .limit(1000)
 
     if (error) {
       console.error('Error loading whatsapp messages:', error)
       return []
     }
-    return data || []
+    return (data || []) as unknown as WhatsappMessage[]
   }
 
-  static async getConversationMessages(institutionId: string, remoteJid: string, limit = 200): Promise<WhatsappMessage[]> {
+  static async getConversationMessages(institutionId: string, remoteJid: string, limit = 100): Promise<WhatsappMessage[]> {
     // Match both raw phone ("551199...") and normalized ("551199...@s.whatsapp.net") formats
     const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     const normalized = remoteJid.includes('@') ? remoteJid : `${remoteJid}@s.whatsapp.net`
     const { data, error } = await supabase
       .from('whatsapp_messages')
-      .select('*')
+      .select(this.WHATSAPP_MESSAGE_COLUMNS)
       .eq('institution_id', institutionId)
       .or(`remote_jid.eq.${raw},remote_jid.eq.${normalized}`)
       .order('timestamp', { ascending: false })
@@ -811,7 +827,7 @@ export class DatabaseService {
       console.error('Error loading conversation messages:', error)
       return []
     }
-    return data || []
+    return (data || []) as unknown as WhatsappMessage[]
   }
 
   static async getWhatsappConversations(institutionId: string): Promise<WhatsappConversation[]> {
