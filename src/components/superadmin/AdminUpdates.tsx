@@ -64,6 +64,9 @@ export default function AdminUpdates() {
       if (insertErr) throw insertErr
 
       // Broadcast notification to all institutions
+      // action_url usa o esquema "school_update:<id>" — o sino de notificações
+      // (NotificationBell.tsx) reconhece esse prefixo e abre o conteúdo
+      // completo da atualização num modal em vez de tentar navegar pra uma rota.
       const { data: institutions, error: instError } = await supabase
         .from('institutions')
         .select('id, name')
@@ -75,7 +78,7 @@ export default function AdminUpdates() {
             title: form.title.trim(),
             message: form.content.trim().slice(0, 200),
             severity: form.type === 'alert' ? 'warning' : form.type === 'maintenance' ? 'danger' : 'info',
-            action_url: null,
+            action_url: `school_update:${inserted.id}`,
           })
         ))
       }

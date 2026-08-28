@@ -1,6 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useNotifications } from '../../hooks/useNotifications'
+import { supabase } from '../../lib/supabase'
+import SchoolUpdateModal, { SchoolUpdateContent } from '../updates/SchoolUpdateModal'
+
+// Atualizações (school_updates) chegam no sino como system_notifications
+// broadcast com action_url = "school_update:<id>" (ver AdminUpdates.tsx) —
+// esse prefixo identifica que o clique deve abrir o conteúdo completo num
+// modal em vez de navegar pra uma rota.
+const SCHOOL_UPDATE_PREFIX = 'school_update:'
 
 interface Props {
   institutionId: string | null
@@ -25,13 +33,14 @@ const severityConfig: Record<string, { bg: string; color: string; icon: string; 
   info:    { bg: '#DBEAFE', color: '#1E40AF', icon: 'i', dot: '#3B82F6' },
 }
 
-function NotifDropdown({ notifications, unreadCount, markAsRead, markAllRead, navigate, onClose }: {
+function NotifDropdown({ notifications, unreadCount, markAsRead, markAllRead, navigate, onClose, onOpenUpdate }: {
   notifications: any[]
   unreadCount: number
   markAsRead: (id: string) => void
   markAllRead: () => void
   navigate: (path: string) => void
   onClose: () => void
+  onOpenUpdate: (updateId: string) => void
 }) {
   const isMobile = window.innerWidth < 768
   return (
@@ -79,7 +88,16 @@ function NotifDropdown({ notifications, unreadCount, markAsRead, markAllRead, na
           return (
             <div
               key={n.id}
-              onClick={() => { if (isUnread) markAsRead(n.id); if (n.action_url) { navigate(n.action_url); onClose() } }}
+              onClick={() => {
+                if (isUnread) markAsRead(n.id)
+                if (n.action_url?.startsWith(SCHOOL_UPDATE_PREFIX)) {
+                  onOpenUpdate(n.action_url.slice(SCHOOL_UPDATE_PREFIX.length))
+                  onClose()
+                } else if (n.action_url) {
+                  navigate(n.action_url)
+                  onClose()
+                }
+              }}
               style={{
                 padding: '12px 16px', borderBottom: '0.5px solid #F1F5F9',
                 background: isUnread ? '#FAFFFE' : '#fff',
@@ -118,6 +136,12 @@ export default function NotificationBell({ institutionId, isSuperAdmin = false }
   const ref = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const { notifications, unreadCount, markAsRead, markAllRead } = useNotifications(institutionId, isSuperAdmin)
+  const [viewUpdate, setViewUpdate] = useState<SchoolUpdateContent | null>(null)
+
+  const openUpdate = async (updateId: string) => {
+    const { data } = await supabase.from('school_updates').select('*').eq('id', updateId).maybeSingle()
+    if (data) setViewUpdate(data as SchoolUpdateContent)
+  }
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -158,7 +182,12 @@ export default function NotificationBell({ institutionId, isSuperAdmin = false }
           markAllRead={markAllRead}
           navigate={navigate}
           onClose={() => setOpen(false)}
+          onOpenUpdate={openUpdate}
         />
+      )}
+
+      {viewUpdate && (
+        <SchoolUpdateModal update={viewUpdate} onClose={() => setViewUpdate(null)} />
       )}
     </div>
   )

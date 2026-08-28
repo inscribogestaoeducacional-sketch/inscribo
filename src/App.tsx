@@ -43,6 +43,7 @@ import UserProfile       from './components/management/UserProfile'
 // ── Layout ────────────────────────────────────────────────────────────────
 import Sidebar from './components/layout/Sidebar'
 import TopBar  from './components/layout/TopBar'
+import GestorUpdatePopup from './components/updates/GestorUpdatePopup'
 
 // ── Super Admin ───────────────────────────────────────────────────────────
 import AdminHome        from './components/superadmin/AdminHome'
@@ -307,11 +308,17 @@ function AppContent() {
   const isAttendant   = user.role === 'user'
   const schoolDefault = isAttendant ? '/atendente' : '/home'
 
+  // Popup automático de novidade não lida — só pro gestor da escola (admin/
+  // manager), não pro atendente nem pro Áion/admin_geral (esses passam pela
+  // ÁREA DO ADMIN acima, que nem chega neste bloco).
+  const isGestor = user.role === 'admin' || user.role === 'manager'
+
   return (
     <div style={{ display: 'flex', width: '100vw', height: '100vh', overflow: 'hidden', background: 'var(--bg-page)' }}>
       <Sidebar />
       <div style={{ flex: 1, minWidth: 0, height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <TopBar />
+        {isGestor && user.institution_id && <GestorUpdatePopup institutionId={user.institution_id} />}
         <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--bg-page)' }}>
           <Routes>
             <Route path="/" element={<Navigate to={schoolDefault} replace />} />
