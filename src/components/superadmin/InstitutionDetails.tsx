@@ -515,10 +515,34 @@ export default function InstitutionDetails() {
     if (isImpl) {
       const { error: instErr } = await supabase.from('institutions').update({ plan_status: 'active' }).eq('id', id)
       if (instErr) { showToast(`Pagamento confirmado, mas erro ao ativar escola: ${instErr.message}`, false); loadAll(); return }
+      try { await generateMonthlyPayments(id!) } catch (e) { console.error('[handleMarkPaid] erro ao gerar mensalidades:', e) }
       try { await supabase.functions.invoke('send-email', { body: { type: 'new_institution', to: institution?.email, data: { institution_name: institution?.name, login_url: 'https://app.aionedu.com.br/login' } } }) } catch {}
     }
     showToast('Pagamento confirmado!')
     loadAll()
+  }
+
+  // Espelha generateMonthlyPayments do asaas-webhook — o fluxo manual (marcar
+  // implantação como paga na UI) também precisa gerar as 12 mensalidades,
+  // não só o webhook automático da Asaas.
+  async function generateMonthlyPayments(institutionId: string) {
+    const { data: inst } = await supabase.from('institutions').select('monthly_value, billing_due_day').eq('id', institutionId).single()
+    if (!inst?.monthly_value) return
+    const { data: existing } = await supabase.from('payments').select('id').eq('institution_id', institutionId).eq('payment_type', 'monthly').limit(1)
+    if (existing && existing.length > 0) return
+    const dueDay = inst.billing_due_day || 10
+    const monthlyValue = Number(inst.monthly_value)
+    const now = new Date()
+    const records = []
+    for (let i = 1; i <= 12; i++) {
+      const dueDate = new Date(now.getFullYear(), now.getMonth() + i, dueDay)
+      records.push({
+        institution_id: institutionId, payment_type: 'monthly', amount: monthlyValue, status: 'pending',
+        due_date: dueDate.toISOString().split('T')[0],
+        description: `Mensalidade ${dueDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'America/Fortaleza' })}`,
+      })
+    }
+    await supabase.from('payments').insert(records)
   }
 
   const handleCancelPayment = async (paymentId: string, asaasId?: string) => {
