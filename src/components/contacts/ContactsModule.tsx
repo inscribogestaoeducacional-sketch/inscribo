@@ -1014,10 +1014,10 @@ export default function ContactsModule() {
   ]
 
   // ── Sortable header ───────────────────────────────────────
-  const SortTh = ({ col, label }: { col: string; label: string }) => (
+  const SortTh = ({ col, label, width }: { col: string; label: string; width?: number | string }) => (
     <th
       onClick={() => handleSortClick(col)}
-      style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: sortCol === col ? '#3B82F6' : '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+      style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: sortCol === col ? '#3B82F6' : '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none', width }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         {label}
@@ -1617,8 +1617,17 @@ export default function ContactsModule() {
         )}
 
         {/* Table */}
-        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        {/* table-layout:fixed + largura explícita por coluna — sem isso, o
+            layout 'auto' padrão deixa a coluna "Contato" crescer com o
+            conteúdo (nome + subtítulo "Aluno: X", só presente em contatos
+            client importados via CSV) até a tabela ficar mais larga que o
+            container; como o container corta com overflow:hidden, a coluna
+            "Ações" (com o botão de WhatsApp) saía da área visível em zoom
+            100% — reduzir o zoom "encolhia" o conteúdo todo e o botão
+            reaparecia. Largura fixa pra Ações garante que ela nunca é
+            espremida, independente do tamanho do nome/subtítulo. */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'auto' }}>
+          <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <thead>
               <tr>
                 <th style={{ background: '#f8fafc', padding: '10px 12px', borderBottom: '1px solid #e2e8f0', width: 36 }}>
@@ -1628,12 +1637,12 @@ export default function ContactsModule() {
                     style={{ cursor: 'pointer' }} />
                 </th>
                 <SortTh col="name"         label="Contato" />
-                <SortTh col="phone"        label="Telefone" />
-                <SortTh col="type"         label="Tipo" />
-                <th style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>Série</th>
-                <SortTh col="last_seen_at" label="Último contato" />
-                <SortTh col="created_at"   label="Adicionado em" />
-                <th style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>Ações</th>
+                <SortTh col="phone"        label="Telefone"       width={130} />
+                <SortTh col="type"         label="Tipo"           width={100} />
+                <th style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap', width: 90 }}>Série</th>
+                <SortTh col="last_seen_at" label="Último contato" width={120} />
+                <SortTh col="created_at"   label="Adicionado em"  width={120} />
+                <th style={{ background: '#f8fafc', padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap', width: 150 }}>Ações</th>
               </tr>
             </thead>
             <tbody>
