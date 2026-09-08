@@ -26,7 +26,7 @@ import NewLeadModal from './NewLeadModal'
 import { saveLead } from '../../lib/leadSave'
 import {
   type SimpleUser, type AuditEntry, type StudentEntry,
-  statusConfig, sourceOptions, LEAD_TEMPERATURES,
+  statusConfig, sourceOptions, LEAD_TEMPERATURES, LEAD_STAGES,
 } from './leadFormShared'
 
 // ─── Motivos de recusa ────────────────────────────────────────────────────────
@@ -61,11 +61,14 @@ const timeSlots = [
 interface LostReasonModalProps {
   isOpen: boolean
   lead: Lead | null
+  // >1 quando o motivo se aplica a vários filhos de uma família de uma vez
+  // (drag do card consolidado pra coluna "Perdido") — mesmo motivo pra todos.
+  count?: number
   onConfirm: (reason: string, detail: string) => Promise<void>
   onCancel: () => void
 }
 
-function LostReasonModal({ isOpen, lead, onConfirm, onCancel }: LostReasonModalProps) {
+function LostReasonModal({ isOpen, lead, count, onConfirm, onCancel }: LostReasonModalProps) {
   const [selectedReason, setSelectedReason] = useState('')
   const [detail, setDetail] = useState('')
   const [saving, setSaving] = useState(false)
@@ -108,10 +111,10 @@ function LostReasonModal({ isOpen, lead, onConfirm, onCancel }: LostReasonModalP
           </div>
           <div>
             <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0 }}>
-              Por que este lead foi perdido?
+              {count && count > 1 ? 'Por que estes alunos foram perdidos?' : 'Por que este lead foi perdido?'}
             </h2>
             <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>
-              {lead.student_name} · {lead.responsible_name}
+              {count && count > 1 ? `${lead.responsible_name} — ${count} alunos` : `${lead.student_name} · ${lead.responsible_name}`}
             </p>
           </div>
           <button onClick={onCancel} style={{
@@ -396,16 +399,24 @@ interface CardContentProps {
   overlay?: boolean
   compact?: boolean
   assignedUser?: SimpleUser | null
-  siblings?: Lead[]
+  // Consolidação de família (item de leads-irmãos) — quando a família tem
+  // ≥2 filhos, este card representa a família inteira: `familyMembers` traz
+  // TODOS os filhos (incluindo `lead`, que é só o representante escolhido
+  // pra exibir no topo do card). Undefined/1 item = lead avulso, sem mudança
+  // nenhuma de comportamento.
+  familyMembers?: Lead[]
   onSchedule: (lead: Lead) => void
   onEdit: (lead: Lead) => void
   onDelete: (id: string) => void
   onStatusChange: (id: string, status: Lead['status']) => void
   onWhatsApp: (lead: Lead) => void
   onReminder: (lead: Lead) => void
+  onChildDecision: (child: Lead, decision: 'enrolled' | 'lost' | 'open') => void
+  onReopenAll: () => void
 }
 
-function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser, siblings, onSchedule, onEdit, onDelete, onStatusChange, onWhatsApp, onReminder }: CardContentProps) {
+function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser, familyMembers, onSchedule, onEdit, onDelete, onStatusChange, onWhatsApp, onReminder, onChildDecision, onReopenAll }: CardContentProps) {
+  const hasFamily = !!familyMembers && familyMembers.length > 1
   const lostReason = lead.lost_reason
   const lostLabel = lostReason ? LOST_REASONS.find(r => r.value === lostReason)?.label : null
   const temperature = lead.lead_temperature ? LEAD_TEMPERATURES.find(t => t.value === lead.lead_temperature) : null
@@ -433,9 +444,9 @@ function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser,
             <h4 className={`${compact ? 'text-sm' : 'text-[15px]'} font-bold text-gray-900 leading-tight truncate`}>{lead.responsible_name}</h4>
             <p className="text-xs text-gray-500 truncate">
               🎓 {lead.student_name}
-              {siblings && siblings.length > 0 && (
-                <span title={siblings.map(s => `${s.student_name} (${statusConfig[s.status]?.label})`).join(', ')} style={{ marginLeft: 5, fontWeight: 600, color: '#8B5CF6' }}>
-                  +{siblings.length} irmão{siblings.length === 1 ? '' : 's'}
+              {hasFamily && (
+                <span style={{ marginLeft: 5, fontWeight: 600, color: '#8B5CF6' }}>
+                  +{familyMembers!.length - 1} irmão{familyMembers!.length - 1 === 1 ? '' : 's'}
                 </span>
               )}
             </p>
@@ -514,6 +525,68 @@ function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser,
             <p style={{ fontSize: 11, color: '#DC2626', fontWeight: 500, margin: 0 }}>⚠ {lostLabel}</p>
           </div>
         )}
+
+        {/* Consolidação de família — lista de filhos com controle individual
+            de matrícula. O card só sai da etapa atual pras colunas finais
+            quando todos os filhos abaixo estiverem decididos (ver
+            familyInfoMap/effectiveStatus). */}
+        {!overlay && hasFamily && (
+          <div style={{ marginTop: 2, marginBottom: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {(() => {
+              const enrolledCount = familyMembers!.filter(m => m.status === 'enrolled').length
+              const lostCount = familyMembers!.filter(m => m.status === 'lost').length
+              if (enrolledCount === 0 && lostCount !== familyMembers!.length) return null
+              const summary = enrolledCount > 0
+                ? `${enrolledCount} de ${familyMembers!.length} matricularam`
+                : `Todos os ${familyMembers!.length} alunos perderam`
+              return (
+                <p style={{ fontSize: 11, fontWeight: 700, color: enrolledCount > 0 ? '#16A34A' : '#DC2626', margin: 0 }}>
+                  {summary}
+                </p>
+              )
+            })()}
+            {familyMembers!.map(child => {
+              const decision: 'enrolled' | 'lost' | 'open' = child.status === 'enrolled' ? 'enrolled' : child.status === 'lost' ? 'lost' : 'open'
+              return (
+                <div key={child.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, background: '#F8FAFC', borderRadius: 7, padding: '4px 6px' }}>
+                  <span
+                    onPointerDown={e => e.stopPropagation()}
+                    onClick={e => { e.stopPropagation(); onEdit(child) }}
+                    title="Editar aluno"
+                    style={{ fontSize: 11, color: '#334155', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0, cursor: 'pointer' }}
+                  >
+                    {child.student_name}
+                  </span>
+                  <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                    {([
+                      { key: 'enrolled' as const, label: 'Matric.', title: 'Matriculado', color: '#16A34A' },
+                      { key: 'lost' as const,     label: 'Não',     title: 'Não matriculado', color: '#DC2626' },
+                      { key: 'open' as const,     label: 'Aberto',  title: 'Em aberto', color: '#64748B' },
+                    ]).map(opt => {
+                      const active = decision === opt.key
+                      return (
+                        <button key={opt.key}
+                          onPointerDown={e => e.stopPropagation()}
+                          onClick={e => { e.stopPropagation(); onChildDecision(child, opt.key) }}
+                          disabled={active}
+                          title={opt.title}
+                          style={{
+                            fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 999,
+                            border: `1px solid ${active ? opt.color : '#E2E8F0'}`,
+                            background: active ? opt.color : '#fff',
+                            color: active ? '#fff' : '#94A3B8',
+                            cursor: active ? 'default' : 'pointer',
+                          }}>
+                          {opt.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Footer sempre visível */}
@@ -522,7 +595,7 @@ function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser,
           {lead.status === 'lost' ? (
             <button
               onPointerDown={e => e.stopPropagation()}
-              onClick={e => { e.stopPropagation(); onStatusChange(lead.id, 'contact') }}
+              onClick={e => { e.stopPropagation(); hasFamily ? onReopenAll() : onStatusChange(lead.id, 'contact') }}
               style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '5px 0', borderRadius: 7, background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#2563EB', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
             >
               🔄 Reabrir
@@ -776,8 +849,12 @@ export default function LeadKanban() {
   const [lostReasonModal, setLostReasonModal] = useState<{
     open: boolean
     lead: Lead | null
+    // Todos os leads que serão marcados 'lost' ao confirmar — 1 no fluxo
+    // normal, >1 quando é drag de um card de família consolidada (mesmo
+    // motivo aplicado a todos os filhos ainda em aberto de uma vez).
+    leadIds: string[]
     pendingLeads: Lead[] | null // snapshot para revert
-  }>({ open: false, lead: null, pendingLeads: null })
+  }>({ open: false, lead: null, leadIds: [], pendingLeads: null })
 
   useEffect(() => {
     const highlightId = searchParams.get('highlight')
@@ -884,7 +961,7 @@ export default function LeadKanban() {
       const snapshot = [...leads]
       // Optimistic update visual
       setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: 'lost' } : l))
-      setLostReasonModal({ open: true, lead: currentLead, pendingLeads: snapshot })
+      setLostReasonModal({ open: true, lead: currentLead, leadIds: [leadId], pendingLeads: snapshot })
       return
     }
 
@@ -934,48 +1011,53 @@ export default function LeadKanban() {
     }
   }
 
-  // ── Confirmar perda com motivo ─────────────────────────────────────────────
+  // ── Confirmar perda com motivo — aplica a todos os leadIds de uma vez
+  // (1 no caso normal, N quando é drag de card de família consolidada) ──────
   const handleConfirmLost = async (reason: string, detail: string) => {
     const lead = lostReasonModal.lead
-    if (!lead) return
+    const ids = lostReasonModal.leadIds.length > 0 ? lostReasonModal.leadIds : (lead ? [lead.id] : [])
+    if (!lead || ids.length === 0) return
     try {
       const { supabase: db } = await import('../../lib/supabase')
 
-      // Salva status + motivo
+      // Salva status + motivo (mesmo motivo pra todos, quando em lote)
       await db.from('leads').update({
         status: 'lost',
         lost_reason: reason,
         lost_reason_detail: detail || null,
-      }).eq('id', lead.id)
+      }).in('id', ids)
 
-      await db.from('audit_logs').insert({
-        institution_id: user!.institution_id, module: 'lead', record_id: lead.id,
-        action: 'Lead perdido',
-        field_changed: LOST_REASONS.find(r => r.value === reason)?.label || reason,
-        new_value: detail || '',
-        user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
-      })
+      for (const id of ids) {
+        const before = leads.find(l => l.id === id)
+        await db.from('audit_logs').insert({
+          institution_id: user!.institution_id, module: 'lead', record_id: id,
+          action: 'Lead perdido',
+          field_changed: LOST_REASONS.find(r => r.value === reason)?.label || reason,
+          new_value: detail || '',
+          user_id: user!.id, user_name: user!.full_name, user_role: user!.role,
+        })
 
-      await logAudit({
-        institution_id: user!.institution_id,
-        module: 'leads',
-        record_id: lead.id,
-        action: 'status_changed',
-        old_value: lead.status,
-        new_value: 'lost',
-        user_id: user!.id,
-        user_name: user!.full_name,
-        user_role: user!.role,
-      })
+        await logAudit({
+          institution_id: user!.institution_id,
+          module: 'leads',
+          record_id: id,
+          action: 'status_changed',
+          old_value: before?.status ?? lead.status,
+          new_value: 'lost',
+          user_id: user!.id,
+          user_name: user!.full_name,
+          user_role: user!.role,
+        })
+      }
 
-      setLostReasonModal({ open: false, lead: null, pendingLeads: null })
+      setLostReasonModal({ open: false, lead: null, leadIds: [], pendingLeads: null })
       await loadData()
-      showToast('Lead marcado como perdido.', 'success')
+      showToast(ids.length > 1 ? `${ids.length} alunos marcados como perdidos.` : 'Lead marcado como perdido.', 'success')
     } catch (err) {
       console.error('Erro ao salvar motivo de perda:', err)
       // Revert
       if (lostReasonModal.pendingLeads) setLeads(lostReasonModal.pendingLeads)
-      setLostReasonModal({ open: false, lead: null, pendingLeads: null })
+      setLostReasonModal({ open: false, lead: null, leadIds: [], pendingLeads: null })
       showToast('Erro ao salvar motivo. Tente novamente.', 'error')
     }
   }
@@ -983,7 +1065,7 @@ export default function LeadKanban() {
   // ── Cancelar modal de perda — revert ──────────────────────────────────────
   const handleCancelLost = () => {
     if (lostReasonModal.pendingLeads) setLeads(lostReasonModal.pendingLeads)
-    setLostReasonModal({ open: false, lead: null, pendingLeads: null })
+    setLostReasonModal({ open: false, lead: null, leadIds: [], pendingLeads: null })
   }
 
   const handleDelete = async (leadId: string) => {
@@ -1117,14 +1199,9 @@ export default function LeadKanban() {
     return true
   }
 
-  const getLeadsByStatus = (status: Lead['status']) => {
-    const { start, end } = getPeriodDates()
-    return leads.filter(lead => lead.status === status && matchesLeadFilters(lead, { start, end }))
-  }
-
-  // Item 3c — agrupamento de irmãos por família, pra mostrar o chip "+N
-  // irmãos" no card sem quebrar o drag-and-drop individual (cada lead
-  // continua sendo arrastado independentemente, isso é só informativo).
+  // Item 3c (mobile) — agrupamento de irmãos por família, só pra mostrar o
+  // chip "+N irmãos" na lista mobile, que continua 1 linha por lead (fora
+  // do escopo da consolidação — só o Kanban desktop consolida em 1 card).
   const familySiblingsMap = React.useMemo(() => {
     const byFamily = new Map<string, Lead[]>()
     leads.forEach(l => { if (l.family_id) { const arr = byFamily.get(l.family_id) ?? []; arr.push(l); byFamily.set(l.family_id, arr) } })
@@ -1132,6 +1209,79 @@ export default function LeadKanban() {
     byFamily.forEach(group => group.forEach(l => map.set(l.id, group.filter(s => s.id !== l.id))))
     return map
   }, [leads])
+
+  // ── Consolidação de leads-irmãos no Kanban desktop ────────────────────────
+  // Famílias com ≥2 filhos aparecem como 1 único card. `effectiveStatus`
+  // decide em qual coluna o card aparece:
+  //  - enquanto houver ≥1 filho "em aberto" (status fora de enrolled/lost),
+  //    o card fica na etapa inicial compartilhada (a mais avançada entre os
+  //    filhos abertos — na prática todos avançam juntos via drag, então
+  //    coincide; isso só é um fallback defensivo pra dado divergente);
+  //  - só quando TODOS os filhos foram decididos o card sai pra Matriculado
+  //    (≥1 matriculou) ou Perdido (todos perderam).
+  // `representative` é o lead usado pra exibir avatar/badges no topo do
+  // card — o filho aberto mais antigo enquanto a família está ativa, ou o
+  // mais antigo entre os decididos quando já fechou.
+  interface FamilyInfo {
+    members: Lead[]
+    openMembers: Lead[]
+    enrolledMembers: Lead[]
+    lostMembers: Lead[]
+    effectiveStatus: Lead['status']
+    representative: Lead
+  }
+
+  const familyInfoMap = React.useMemo(() => {
+    const byFamily = new Map<string, Lead[]>()
+    leads.forEach(l => { if (l.family_id) { const arr = byFamily.get(l.family_id) ?? []; arr.push(l); byFamily.set(l.family_id, arr) } })
+    const map = new Map<string, FamilyInfo>()
+    const stageOrder: string[] = LEAD_STAGES.map(s => s.key)
+    byFamily.forEach((group, familyId) => {
+      if (group.length < 2) return // família com 1 filho só = lead avulso, sem consolidar
+      const members = [...group].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      const openMembers = members.filter(l => l.status !== 'enrolled' && l.status !== 'lost')
+      const enrolledMembers = members.filter(l => l.status === 'enrolled')
+      const lostMembers = members.filter(l => l.status === 'lost')
+      let effectiveStatus: Lead['status']
+      let representative: Lead
+      if (openMembers.length > 0) {
+        effectiveStatus = openMembers.reduce((furthest, l) =>
+          stageOrder.indexOf(l.status) > stageOrder.indexOf(furthest) ? l.status : furthest, openMembers[0].status)
+        representative = openMembers[0]
+      } else if (enrolledMembers.length > 0) {
+        effectiveStatus = 'enrolled'
+        representative = enrolledMembers[0]
+      } else {
+        effectiveStatus = 'lost'
+        representative = lostMembers[0]
+      }
+      map.set(familyId, { members, openMembers, enrolledMembers, lostMembers, effectiveStatus, representative })
+    })
+    return map
+  }, [leads])
+
+  // Board (desktop) — 1 card por família consolidada, 1 card por lead
+  // avulso. `matchesLeadFilters` casa se QUALQUER filho da família passar
+  // no filtro (busca por nome de um filho específico, por exemplo, ainda
+  // encontra o card da família).
+  const getLeadsByStatus = (status: Lead['status']) => {
+    const { start, end } = getPeriodDates()
+    const items: Lead[] = []
+    const seenFamilies = new Set<string>()
+    for (const lead of leads) {
+      const family = lead.family_id ? familyInfoMap.get(lead.family_id) : undefined
+      if (family) {
+        if (family.effectiveStatus !== status || seenFamilies.has(lead.family_id!)) continue
+        if (!family.members.some(m => matchesLeadFilters(m, { start, end }))) continue
+        seenFamilies.add(lead.family_id!)
+        items.push(family.representative)
+      } else {
+        if (lead.status !== status || !matchesLeadFilters(lead, { start, end })) continue
+        items.push(lead)
+      }
+    }
+    return items
+  }
 
   const usersById = React.useMemo(() => new Map(users.map(u => [u.id, u])), [users])
 
@@ -1169,11 +1319,39 @@ export default function LeadKanban() {
     if (!draggedLead || draggedLead.status === targetStatus) return
 
     const previousLeads = [...leads]
+    const family = draggedLead.family_id ? familyInfoMap.get(draggedLead.family_id) : undefined
+
+    // Card de família consolidada (≥2 filhos) — arrastar move de uma vez
+    // todos os filhos ainda "em aberto" (irmãos já decididos não são
+    // afetados). Pra "Perdido", pede 1 motivo e aplica a todos. Lead
+    // avulso (sem família, ou família de 1 filho) segue o fluxo de sempre,
+    // sem nenhuma mudança — bloco abaixo.
+    if (family && family.openMembers.length > 0) {
+      const openIds = family.openMembers.map(m => m.id)
+
+      if (targetStatus === 'lost') {
+        setLostReasonModal({ open: true, lead: draggedLead, leadIds: openIds, pendingLeads: previousLeads })
+        setLeads(prev => prev.map(l => openIds.includes(l.id) ? { ...l, status: 'lost' } : l))
+        setFlashingLeadId(draggedLead.id)
+        setTimeout(() => setFlashingLeadId(null), 1000)
+        return
+      }
+
+      setLeads(prev => prev.map(l => openIds.includes(l.id) ? { ...l, status: targetStatus! } : l))
+      setFlashingLeadId(draggedLead.id)
+      setTimeout(() => setFlashingLeadId(null), 1000)
+
+      Promise.all(openIds.map(id => handleStatusChange(id, targetStatus!, true))).catch(() => {
+        setLeads(previousLeads)
+        showToast('Erro ao mover o card. Tente novamente.', 'error')
+      })
+      return
+    }
 
     // Se destino é "lost", o handleStatusChange vai abrir o modal
     // com snapshot para revert se cancelar
     if (targetStatus === 'lost') {
-      setLostReasonModal({ open: true, lead: draggedLead, pendingLeads: previousLeads })
+      setLostReasonModal({ open: true, lead: draggedLead, leadIds: [draggedLead.id], pendingLeads: previousLeads })
       setLeads(prev => prev.map(l => l.id === active.id ? { ...l, status: 'lost' } : l))
       setFlashingLeadId(active.id as string)
       setTimeout(() => setFlashingLeadId(null), 1000)
@@ -1212,6 +1390,20 @@ export default function LeadKanban() {
   const filteredTotal = visibleStatuses.reduce((sum, s) => sum + getLeadsByStatus(s as Lead['status']).length, 0)
   const hasActiveFilters = searchTerm !== '' || filterSource !== '' || filterStatus !== '' || periodFilter !== 'all' || gradeFilter !== 'all' || shiftFilter !== 'all' || temperatureFilter !== '' || ownerFilter !== 'all' || noContactFilter
 
+  // ── Consolidação de família — decisão individual por filho, dentro do
+  // card (item 2 do pedido). 'open' reverte pro mesmo estágio usado pelo
+  // botão "Reabrir" de sempre ('contact'); 'enrolled'/'lost' reaproveitam
+  // handleStatusChange (que já cuida do registro em `enrollments` e do
+  // modal de motivo de perda) ─────────────────────────────────────────────
+  const handleChildDecision = (child: Lead, decision: 'enrolled' | 'lost' | 'open') => {
+    if (decision === 'open') { handleStatusChange(child.id, 'contact'); return }
+    handleStatusChange(child.id, decision)
+  }
+
+  const handleReopenAllLost = (lostLeadIds: string[]) => {
+    lostLeadIds.forEach(id => handleStatusChange(id, 'contact'))
+  }
+
   const cardActions = {
     onSchedule: (lead: Lead) => { setLeadToSchedule(lead); setShowScheduleVisitModal(true) },
     onEdit: (lead: Lead) => { setEditingLead(lead); setShowNewLeadModal(true) },
@@ -1219,6 +1411,7 @@ export default function LeadKanban() {
     onStatusChange: handleStatusChange,
     onWhatsApp: handleWhatsApp,
     onReminder: (lead: Lead) => setReminderModal({ open: true, lead }),
+    onChildDecision: handleChildDecision,
   }
 
   if (loading) {
@@ -1368,7 +1561,7 @@ export default function LeadKanban() {
           <ScheduleVisitModal isOpen={showScheduleVisitModal} onClose={() => { setShowScheduleVisitModal(false); setLeadToSchedule(null) }} lead={leadToSchedule} onSchedule={handleScheduleVisit} />
         )}
         <ReminderModal isOpen={reminderModal.open} lead={reminderModal.lead} onClose={() => setReminderModal({ open: false, lead: null })} onSave={handleSaveReminder} />
-        <LostReasonModal isOpen={lostReasonModal.open} lead={lostReasonModal.lead} onConfirm={handleConfirmLost} onCancel={handleCancelLost} />
+        <LostReasonModal isOpen={lostReasonModal.open} lead={lostReasonModal.lead} count={lostReasonModal.leadIds.length} onConfirm={handleConfirmLost} onCancel={handleCancelLost} />
         {auditLeadId && <AuditModal recordId={auditLeadId} moduleName="leads" isOpen={!!auditLeadId} onClose={() => setAuditLeadId(null)} />}
         {toast && (
           <div className={`fixed bottom-6 right-6 z-[100] flex items-center gap-3 px-5 py-3 rounded-xl shadow-xl text-sm font-semibold transition-all ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
@@ -1474,15 +1667,19 @@ export default function LeadKanban() {
                   {!collapsedColumns.has(status) && (
                     <DroppableColumn id={status} isOver={overColumnId === status && activeId !== null}>
                       <SortableContext items={colLeads.map(l => l.id)} strategy={verticalListSortingStrategy}>
-                        {colLeads.map((lead) => (
-                          <SortableCard
-                            key={lead.id} lead={lead} config={config} isFlashing={flashingLeadId === lead.id}
-                            compact={compactView}
-                            assignedUser={lead.assigned_to ? usersById.get(lead.assigned_to) ?? null : null}
-                            siblings={familySiblingsMap.get(lead.id)}
-                            {...cardActions}
-                          />
-                        ))}
+                        {colLeads.map((lead) => {
+                          const family = lead.family_id ? familyInfoMap.get(lead.family_id) : undefined
+                          return (
+                            <SortableCard
+                              key={lead.id} lead={lead} config={config} isFlashing={flashingLeadId === lead.id}
+                              compact={compactView}
+                              assignedUser={lead.assigned_to ? usersById.get(lead.assigned_to) ?? null : null}
+                              familyMembers={family?.members}
+                              onReopenAll={() => handleReopenAllLost(family ? family.lostMembers.map(m => m.id) : [lead.id])}
+                              {...cardActions}
+                            />
+                          )
+                        })}
                       </SortableContext>
                       {colLeads.length === 0 && (
                         <div className="text-center py-12">
@@ -1507,8 +1704,9 @@ export default function LeadKanban() {
                 lead={activeLead} config={statusConfig[activeLead.status]} isFlashing={false} overlay
                 compact={compactView}
                 assignedUser={activeLead.assigned_to ? usersById.get(activeLead.assigned_to) ?? null : null}
-                siblings={familySiblingsMap.get(activeLead.id)}
+                familyMembers={activeLead.family_id ? familyInfoMap.get(activeLead.family_id)?.members : undefined}
                 onSchedule={() => {}} onEdit={() => {}} onDelete={() => {}} onStatusChange={() => {}} onWhatsApp={() => {}} onReminder={() => {}}
+                onChildDecision={() => {}} onReopenAll={() => {}}
               />
             </div>
           ) : null}
@@ -1530,6 +1728,7 @@ export default function LeadKanban() {
       <LostReasonModal
         isOpen={lostReasonModal.open}
         lead={lostReasonModal.lead}
+        count={lostReasonModal.leadIds.length}
         onConfirm={handleConfirmLost}
         onCancel={handleCancelLost}
       />
