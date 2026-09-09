@@ -850,10 +850,19 @@ export class DatabaseService {
     return data || []
   }
 
-  static async upsertConversationStatus(institutionId: string, remoteJid: string, status: string, leadId?: string): Promise<void> {
+  // assignedUserId é opcional e só deve ser passado ao CRIAR uma conversa nova
+  // (ex.: "Iniciar Conversa") — sem ele, a conversa nasce sem dono. Isso por
+  // si só já é um problema (fica invisível pra quem não tem
+  // can_see_all_conversations — RLS só libera SELECT/UPDATE se a linha for
+  // sua, estiver sem dono, ou estiver "stale"), mas piora quando o status
+  // passado é diferente de 'waiting': nenhuma das exceções da policy libera
+  // uma linha sem dono e sem status='waiting', nem pro próprio criador —
+  // ver comentário na policy (migration whatsapp_conversations_ownership_gap).
+  static async upsertConversationStatus(institutionId: string, remoteJid: string, status: string, leadId?: string, assignedUserId?: string, assignedUserName?: string | null): Promise<void> {
     const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
     const updates: any = { status }
     if (leadId) updates.lead_id = leadId
+    if (assignedUserId) { updates.assigned_user_id = assignedUserId; updates.assigned_user_name = assignedUserName ?? null }
     const { error } = await supabase
       .from('whatsapp_conversations')
       .upsert({ institution_id: institutionId, remote_jid: raw, ...updates }, { onConflict: 'institution_id,remote_jid' })
@@ -862,15 +871,22 @@ export class DatabaseService {
 
   static async linkConversationLead(institutionId: string, remoteJid: string, leadId: string): Promise<void> {
     const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
-    await supabase
+    const { data, error } = await supabase
       .from('whatsapp_conversations')
       .update({ lead_id: leadId })
       .eq('institution_id', institutionId)
       .eq('remote_jid', raw)
+      .select('id')
+    if (error) throw error
+    if (!data || data.length === 0) throw new Error('Não foi possível vincular o lead — a conversa não está atribuída a você.')
   }
 
   static async resetConversationUnread(institutionId: string, remoteJid: string): Promise<void> {
     const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
+    // Best-effort: sem checagem de erro/linhas de propósito — chamado
+    // automaticamente ao abrir qualquer conversa visível (inclusive as que
+    // ainda não são do usuário), e o único efeito de falhar é o badge de não
+    // lidas não zerar, sem perda de dado. Ver auditoria RLS do WhatsApp Hub.
     await supabase
       .from('whatsapp_conversations')
       .update({ unread_count: 0 })
@@ -983,8 +999,9 @@ export class DatabaseService {
 
   static async assignConversation(institutionId: string, remoteJid: string, userId: string, userName: string): Promise<void> {
     const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
-    await supabase.from('whatsapp_conversations')
+    const { error } = await supabase.from('whatsapp_conversations')
       .upsert({ institution_id: institutionId, remote_jid: raw, assigned_user_id: userId, assigned_user_name: userName }, { onConflict: 'institution_id,remote_jid' })
+    if (error) throw error
   }
 
   // Tenta atribuir a conversa ao usuário atual se ainda não tiver dono.
@@ -1090,16 +1107,20 @@ export class DatabaseService {
 
   static async setConversationContactType(institutionId: string, remoteJid: string, contactType: string): Promise<void> {
     const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
-    await supabase.from('whatsapp_conversations')
+    const { error } = await supabase.from('whatsapp_conversations')
       .upsert({ institution_id: institutionId, remote_jid: raw, contact_type: contactType }, { onConflict: 'institution_id,remote_jid' })
+    if (error) throw error
   }
 
   static async updateConversationTags(institutionId: string, remoteJid: string, tags: string[]): Promise<void> {
     const raw = remoteJid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
-    await supabase.from('whatsapp_conversations')
+    const { data, error } = await supabase.from('whatsapp_conversations')
       .update({ tags })
       .eq('institution_id', institutionId)
       .eq('remote_jid', raw)
+      .select('id')
+    if (error) throw error
+    if (!data || data.length === 0) throw new Error('Não foi possível salvar a tag — a conversa não está atribuída a você.')
   }
 
   static async closeConversation(institutionId: string, remoteJid: string): Promise<{ count: number; error: any }> {

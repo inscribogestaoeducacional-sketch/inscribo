@@ -1458,8 +1458,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const handleLinkLead = async (leadId: string) => {
     if (!activeId || !effectiveInstitutionId) return
     const rJid = rawJid(activeId)
-    await DatabaseService.updateWhatsappMessageLead(rJid, effectiveInstitutionId, leadId)
-    await DatabaseService.linkConversationLead(effectiveInstitutionId, rJid, leadId)
+    try {
+      await DatabaseService.updateWhatsappMessageLead(rJid, effectiveInstitutionId, leadId)
+      await DatabaseService.linkConversationLead(effectiveInstitutionId, rJid, leadId)
+    } catch (err: any) {
+      setSendError(err.message || 'Não foi possível vincular o lead a esta conversa.')
+      return
+    }
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, lead_id: leadId } : c))
     const found = leadResults.find(l => l.id === leadId)
     if (found) setConversations(prev => prev.map(c =>
@@ -2052,8 +2057,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         .then(leads => {
           if (leads.length > 0) {
             const lead = leads[0]
-            DatabaseService.updateWhatsappMessageLead(rJid, effectiveInstitutionId, lead.id)
-            DatabaseService.linkConversationLead(effectiveInstitutionId, rJid, lead.id)
+            // Best-effort, como resetConversationUnread acima: auto-link em
+            // background ao abrir a conversa, não uma ação deliberada do
+            // usuário — se RLS bloquear (conversa ainda não é dele), só não
+            // vincula agora, sem toast (evita ruído toda vez que um atendente
+            // restrito abre uma conversa da fila que ainda não assumiu).
+            DatabaseService.updateWhatsappMessageLead(rJid, effectiveInstitutionId, lead.id).catch(() => {})
+            DatabaseService.linkConversationLead(effectiveInstitutionId, rJid, lead.id).catch(() => {})
             setConversations(prev => prev.map(c => c.id === activeId
               ? { ...c, lead_id: lead.id, name: c.name === formatPhone(activeId) ? (lead.responsible_name || lead.student_name || c.name) : c.name }
               : c
@@ -2378,9 +2388,16 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           unreadCount: 0, status: 'open', online: false,
           labels: [], isGroup: false, tags: [],
           messages: [],
+          assigned_user_id: user?.id,
+          assigned_user_name: user?.full_name || user?.email,
         }
-        if (effectiveInstitutionId) {
-          DatabaseService.upsertConversationStatus(effectiveInstitutionId, jid, 'open').catch(() => {})
+        if (effectiveInstitutionId && user?.id) {
+          // Atribui ao criador já na criação — sem isso a conversa nasce sem
+          // dono e com status='open' (não 'waiting'), e nenhuma exceção da
+          // policy de RLS libera SELECT/UPDATE pra ela depois, nem pro
+          // próprio criador (ver auditoria RLS do WhatsApp Hub).
+          DatabaseService.upsertConversationStatus(effectiveInstitutionId, jid, 'open', undefined, user.id, user.full_name || user.email)
+            .catch(err => { console.error('[PHONE PARAM] falha ao criar conversa', err); setSendError('Erro ao criar a conversa. Tente novamente.') })
         }
         setConversations(prev => [newConv, ...prev])
         setActiveId(jid)
@@ -2973,7 +2990,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       // resposta do cliente, aparecendo pra outros atendentes na fila de "Paradas".
       if (effectiveInstitutionId && user?.id && activeId) {
         const rJid = rawJid(activeId)
-        await supabase.from('whatsapp_conversations')
+        // RLS de whatsapp_conversations só libera este UPDATE se quem envia já
+        // for o dono, a conversa estiver sem dono, ou estiver "stale" — pra um
+        // atendente restrito enviando num caso fora disso, o UPDATE afeta 0
+        // linhas sem erro (RLS silenciosa). O template já foi entregue (rota
+        // /api/whatsapp/send-template roda com service role), então isso não
+        // desfaz o envio — só avisa que a conversa não mudou de dono.
+        const { data: reassignData, error: reassignErr } = await supabase.from('whatsapp_conversations')
           .update({
             assigned_user_id:   user.id,
             assigned_user_name: user.full_name || user.email,
@@ -2982,11 +3005,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           })
           .eq('institution_id', effectiveInstitutionId)
           .eq('remote_jid', rJid)
-        setConversations(prev => prev.map(c =>
-          c.id === activeId
-            ? { ...c, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email, bot_active: false, status: 'open' as ConvStatus }
-            : c
-        ))
+          .select('id')
+        if (reassignErr || !reassignData || reassignData.length === 0) {
+          console.warn('[handleSendTemplate] não foi possível assumir a conversa ao enviar template', reassignErr)
+          setSendError('Template enviado, mas a conversa não pôde ser atribuída a você — ela já pertence a outro atendente.')
+        } else {
+          setConversations(prev => prev.map(c =>
+            c.id === activeId
+              ? { ...c, assigned_user_id: user.id, assigned_user_name: user.full_name || user.email, bot_active: false, status: 'open' as ConvStatus }
+              : c
+          ))
+        }
       }
 
       setShowTemplateModal(false)
@@ -3161,9 +3190,19 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   const handleStatusChange = async (status: ConvStatus) => {
     if (!activeId || !effectiveInstitutionId) return
+    const previousStatus = conversationsRef.current.find(c => c.id === activeId)?.status
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, status } : c))
     const rJid = rawJid(activeId)
-    await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, status)
+    try {
+      await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, status)
+    } catch (err: any) {
+      // Desfaz o otimismo — sem isso a UI mostra o novo status mesmo se o
+      // RLS de whatsapp_conversations tiver bloqueado o UPDATE (conversa não
+      // é do atendente restrito, não está sem dono, nem stale).
+      setConversations(prev => prev.map(c => c.id === activeId && previousStatus ? { ...c, status: previousStatus } : c))
+      setSendError(err.message || 'Não foi possível alterar o status desta conversa.')
+      return
+    }
     DatabaseService.logConversationEvent({
       institution_id: effectiveInstitutionId,
       remote_jid: rJid,
@@ -3199,7 +3238,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       console.log('[TRANSFER] busca ampla:', convData2)
     }
     const fromUserId = activeConv?.assigned_user_id
-    await DatabaseService.transferConversation(effectiveInstitutionId, rJid, targetUser.id, targetUser.full_name, fromName, fromUserId)
+    try {
+      await DatabaseService.transferConversation(effectiveInstitutionId, rJid, targetUser.id, targetUser.full_name, fromName, fromUserId)
+    } catch (err: any) {
+      // transferConversation roda via Edge Function (service role) porque o
+      // UPDATE direto de assigned_user_id nesta tabela já se mostrou
+      // bloqueado mesmo com policy correta (ver comentário em
+      // DatabaseService.transferConversation) — a function valida a
+      // permissão em código e retorna erro explícito, que precisa chegar até
+      // aqui em vez de virar uma promise rejeitada sem handler.
+      setSendError(err.message || 'Erro ao transferir a conversa.')
+      return
+    }
     await DatabaseService.logConversationEvent({
       institution_id: effectiveInstitutionId,
       remote_jid: rJid,
@@ -3231,7 +3281,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       return
     }
     const rJid = rawJid(activeId)
-    await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, type)
+    try {
+      await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, type)
+    } catch (err: any) {
+      setSendError(err.message || 'Não foi possível identificar o contato nesta conversa.')
+      return
+    }
     // Sync whatsapp_contacts.type — normalize to canonical 13-digit format
     const normContactPhone = normalizeBrazilianInput(rJid.replace(/@.*/, ''))
     console.log('[SYNC] normPhone:', normContactPhone)
@@ -3443,9 +3498,15 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         unreadCount: 0, status: 'open', online: false,
         labels: [], isGroup: false, tags: [],
         messages: [],
+        assigned_user_id: user?.id,
+        assigned_user_name: user?.full_name || user?.email,
       }
-      if (effectiveInstitutionId) {
-        DatabaseService.upsertConversationStatus(effectiveInstitutionId, jid, 'open').catch(() => {})
+      if (effectiveInstitutionId && user?.id) {
+        // Atribui ao criador já na criação — ver comentário equivalente no
+        // fluxo de "PHONE PARAM" acima (mesma raiz de bug, dois pontos de
+        // criação de conversa nova).
+        DatabaseService.upsertConversationStatus(effectiveInstitutionId, jid, 'open', undefined, user.id, user.full_name || user.email)
+          .catch(err => { console.error('[handleNewConv] falha ao criar conversa', err); setSendError('Erro ao criar a conversa. Tente novamente.') })
       }
       setConversations(prev => [newConv, ...prev])
       setActiveId(jid)
@@ -3552,8 +3613,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           : c
       ))
 
-      // Update conversation in DB
-      await supabase.from('whatsapp_conversations')
+      // Update conversation in DB — normalmente já é um no-op de propriedade
+      // (handleNewConv agora atribui a conversa ao criador já na criação),
+      // mas fica como reforço defensivo; checa o resultado pelo mesmo motivo
+      // de handleSendTemplate (RLS silenciosa se, por algum motivo, a
+      // conversa não pertencer a quem está enviando).
+      const { data: reassignData, error: reassignErr } = await supabase.from('whatsapp_conversations')
         .update({
           status: 'open',
           assigned_user_id: user?.id,
@@ -3562,6 +3627,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         })
         .eq('institution_id', effectiveInstitutionId)
         .eq('remote_jid', rawJid(activeId))
+        .select('id')
+      if (reassignErr || !reassignData || reassignData.length === 0) {
+        console.warn('[handleSendNewConvTemplate] não foi possível atribuir a conversa', reassignErr)
+      }
 
       // Increment outbound initiated count
       const monthYear = new Date().toISOString().slice(0, 7)
@@ -3590,7 +3659,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (currentTags.includes(tag.trim())) return
     const newTags = [...currentTags, tag.trim()]
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, tags: newTags } : c))
-    await DatabaseService.updateConversationTags(effectiveInstitutionId, rawJid(activeId), newTags)
+    try {
+      await DatabaseService.updateConversationTags(effectiveInstitutionId, rawJid(activeId), newTags)
+    } catch (err: any) {
+      setConversations(prev => prev.map(c => c.id === activeId ? { ...c, tags: currentTags } : c))
+      setSendError(err.message || 'Não foi possível adicionar a tag.')
+      return
+    }
     // Sync tags to whatsapp_contacts — phone stored = digits of the wa_id (exact match)
     const normPhone = rawJid(activeId).replace(/\D/g, '')
     await supabase.from('whatsapp_contacts')
@@ -3603,9 +3678,16 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   const handleRemoveTag = async (tag: string) => {
     if (!activeId || !effectiveInstitutionId) return
-    const newTags = (activeConv?.tags || []).filter(t => t !== tag)
+    const currentTags = activeConv?.tags || []
+    const newTags = currentTags.filter(t => t !== tag)
     setConversations(prev => prev.map(c => c.id === activeId ? { ...c, tags: newTags } : c))
-    await DatabaseService.updateConversationTags(effectiveInstitutionId, rawJid(activeId), newTags)
+    try {
+      await DatabaseService.updateConversationTags(effectiveInstitutionId, rawJid(activeId), newTags)
+    } catch (err: any) {
+      setConversations(prev => prev.map(c => c.id === activeId ? { ...c, tags: currentTags } : c))
+      setSendError(err.message || 'Não foi possível remover a tag.')
+      return
+    }
     // Sync tags to whatsapp_contacts — phone stored = digits of the wa_id (exact match)
     const normPhone = rawJid(activeId).replace(/\D/g, '')
     await supabase.from('whatsapp_contacts')
@@ -3618,6 +3700,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     if (!activeId || !effectiveInstitutionId) return
     const convId = activeId
     const rJid   = rawJid(convId)
+    const previousStatus = conversationsRef.current.find(c => c.id === convId)?.status
 
     console.log('[CLOSE 1] iniciando fechamento', rJid, '| convId:', convId)
 
@@ -3644,8 +3727,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     console.log('[CLOSE 5] salvando no banco | institutionId:', effectiveInstitutionId, '| rJid:', rJid)
     const closeResult = await DatabaseService.closeConversation(effectiveInstitutionId, rJid)
     console.log('[CLOSE 5] resultado banco:', JSON.stringify(closeResult))
-    if (closeResult.count === 0) {
+    if (closeResult.error || closeResult.count === 0) {
       console.warn('[CLOSE 5] AVISO: 0 linhas atualizadas — possível problema de RLS ou formato do JID')
+      // Desfaz o "fechado" otimista — sem isso o atendente vê a conversa como
+      // concluída e sai da tela, mas ela continua aberta no banco (RLS
+      // bloqueou por não ser o dono/não estar sem dono/stale).
+      CLOSING_IDS.delete(rJid); CLOSING_IDS.delete(convId)
+      setConversations(prev => prev.map(c =>
+        c.id === convId && previousStatus ? { ...c, status: previousStatus } : c
+      ))
+      setSendError('Não foi possível concluir esta conversa — ela não está atribuída a você.')
+      return
     }
     DatabaseService.logConversationEvent({
       institution_id: effectiveInstitutionId,
@@ -3752,8 +3844,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const targetUser = users.find(u => u.id === transferTarget)
     if (!targetUser) return
     const rJid = rawJid(activeId)
-    await DatabaseService.assignConversation(effectiveInstitutionId, rJid, targetUser.id, targetUser.full_name)
-    await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, 'open')
+    try {
+      await DatabaseService.assignConversation(effectiveInstitutionId, rJid, targetUser.id, targetUser.full_name)
+      await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rJid, 'open')
+    } catch (err: any) {
+      setSendError(err.message || 'Não foi possível atribuir esta conversa.')
+      return
+    }
     await DatabaseService.logConversationEvent({
       institution_id: effectiveInstitutionId,
       remote_jid: rJid,
@@ -3776,9 +3873,14 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       ? { ...c, status: 'waiting' as ConvStatus, assigned_user_id: undefined, assigned_user_name: undefined }
       : c
     ))
-    await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rawJid(activeId), 'waiting')
-    await supabase.from('whatsapp_conversations').update({ assigned_user_id: null, assigned_user_name: null })
-      .eq('institution_id', effectiveInstitutionId).eq('remote_jid', rawJid(activeId))
+    try {
+      await DatabaseService.upsertConversationStatus(effectiveInstitutionId, rawJid(activeId), 'waiting')
+      await supabase.from('whatsapp_conversations').update({ assigned_user_id: null, assigned_user_name: null })
+        .eq('institution_id', effectiveInstitutionId).eq('remote_jid', rawJid(activeId))
+    } catch (err: any) {
+      setSendError(err.message || 'Não foi possível sair deste atendimento.')
+      return
+    }
     DatabaseService.logConversationEvent({
       institution_id: effectiveInstitutionId,
       remote_jid: rawJid(activeId),
@@ -3970,7 +4072,12 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               <button onClick={async () => {
                 if (!activeId || !effectiveInstitutionId) return
                 const rJid = rawJid(activeId)
-                await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, 'client')
+                try {
+                  await DatabaseService.setConversationContactType(effectiveInstitutionId, rJid, 'client')
+                } catch (err: any) {
+                  setSendError(err.message || 'Não foi possível marcar este contato como cliente.')
+                  return
+                }
                 setConversations(prev => prev.map(c => c.id === activeId ? { ...c, contact_type: 'client' } : c))
                 await DatabaseService.logConversationEvent({
                   institution_id: effectiveInstitutionId,
@@ -4934,33 +5041,43 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                             <div style={{ display: 'flex', gap: 6 }}>
                               <button onClick={async () => {
                                 if (!activeId || !effectiveInstitutionId) return
-                                if (editForm.name && editForm.name !== activeConv.name) {
-                                  skipNextNameUpdateRef.current = activeId
-                                  setConversations(prev => prev.map(c => c.id === activeId ? {...c, name: editForm.name} : c))
-                                  await supabase.from('whatsapp_conversations').update({ contact_name: editForm.name })
-                                    .eq('institution_id', effectiveInstitutionId).eq('remote_jid', rawJid(activeId))
-                                  const normPhone = (() => {
-                                    let d = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
-                                    if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
-                                    if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
-                                    if (d.length === 11) d = '55' + d
-                                    return d
-                                  })()
-                                  await supabase.from('whatsapp_contacts')
-                                    .update({ name: editForm.name })
-                                    .eq('institution_id', effectiveInstitutionId)
-                                    .eq('phone', normPhone)
-                                  console.log('[SYNC NAME] atualizado em whatsapp_contacts:', normPhone)
-                                }
-                                if (editForm.contact_type && editForm.contact_type !== (activeConv.contact_type || '')) {
-                                  await DatabaseService.setConversationContactType(effectiveInstitutionId, rawJid(activeId), editForm.contact_type)
-                                  setConversations(prev => prev.map(c => c.id === activeId ? {...c, contact_type: editForm.contact_type} : c))
-                                }
-                                if (editForm.notes !== undefined) {
-                                  await supabase.from('whatsapp_conversations')
-                                    .update({ notes: editForm.notes })
-                                    .eq('institution_id', effectiveInstitutionId)
-                                    .eq('remote_jid', rawJid(activeId))
+                                try {
+                                  if (editForm.name && editForm.name !== activeConv.name) {
+                                    skipNextNameUpdateRef.current = activeId
+                                    const { data: nameData, error: nameErr } = await supabase.from('whatsapp_conversations').update({ contact_name: editForm.name })
+                                      .eq('institution_id', effectiveInstitutionId).eq('remote_jid', rawJid(activeId)).select('id')
+                                    if (nameErr) throw nameErr
+                                    if (!nameData || nameData.length === 0) throw new Error('Não foi possível salvar o nome — esta conversa não está atribuída a você.')
+                                    setConversations(prev => prev.map(c => c.id === activeId ? {...c, name: editForm.name} : c))
+                                    const normPhone = (() => {
+                                      let d = rawJid(activeId).replace(/@.*/, '').replace(/\D/g, '')
+                                      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2)
+                                      if (d.length === 10) d = d.slice(0, 2) + '9' + d.slice(2)
+                                      if (d.length === 11) d = '55' + d
+                                      return d
+                                    })()
+                                    await supabase.from('whatsapp_contacts')
+                                      .update({ name: editForm.name })
+                                      .eq('institution_id', effectiveInstitutionId)
+                                      .eq('phone', normPhone)
+                                    console.log('[SYNC NAME] atualizado em whatsapp_contacts:', normPhone)
+                                  }
+                                  if (editForm.contact_type && editForm.contact_type !== (activeConv.contact_type || '')) {
+                                    await DatabaseService.setConversationContactType(effectiveInstitutionId, rawJid(activeId), editForm.contact_type)
+                                    setConversations(prev => prev.map(c => c.id === activeId ? {...c, contact_type: editForm.contact_type} : c))
+                                  }
+                                  if (editForm.notes !== undefined) {
+                                    const { data: notesData, error: notesErr } = await supabase.from('whatsapp_conversations')
+                                      .update({ notes: editForm.notes })
+                                      .eq('institution_id', effectiveInstitutionId)
+                                      .eq('remote_jid', rawJid(activeId))
+                                      .select('id')
+                                    if (notesErr) throw notesErr
+                                    if (!notesData || notesData.length === 0) throw new Error('Não foi possível salvar as anotações — esta conversa não está atribuída a você.')
+                                  }
+                                } catch (err: any) {
+                                  setSendError(err.message || 'Não foi possível salvar as alterações deste contato.')
+                                  return
                                 }
                                 setEditingContact(false)
                               }}
@@ -5121,13 +5238,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                           onClick={async () => {
                             if (!activeId || !effectiveInstitutionId) return
                             const newBotActive = !activeConv.bot_active
-                            await supabase.from('whatsapp_conversations')
+                            const { data: botToggleData, error: botToggleErr } = await supabase.from('whatsapp_conversations')
                               .update(newBotActive
                                 ? { bot_active: true, assigned_user_id: null, assigned_user_name: null }
                                 : { bot_active: false, assigned_user_id: user?.id, assigned_user_name: user?.full_name || user?.email, status: 'open' }
                               )
                               .eq('institution_id', effectiveInstitutionId)
                               .eq('remote_jid', rawJid(activeId))
+                              .select('id')
+                            if (botToggleErr || !botToggleData || botToggleData.length === 0) {
+                              setSendError('Não foi possível alterar o robô — esta conversa não está atribuída a você.')
+                              return
+                            }
                             setConversations(prev => prev.map(c =>
                               c.id === activeId
                                 ? { ...c, bot_active: newBotActive, ...(newBotActive
