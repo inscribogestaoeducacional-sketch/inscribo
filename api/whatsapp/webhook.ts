@@ -763,6 +763,158 @@ async function upsertContact(
   }
 }
 
+// ── Eventos de coexistência (Cadastro Incorporado com QR code) ──────────────
+// Tratamento isolado do fluxo messages/statuses acima — nunca chama
+// upsertContact/increment_conversation_unread/processFlow/processCustomFlow,
+// pra nunca disparar bot, fila de atendimento ou contagem de não lida por
+// causa de um evento de sincronização, só de tráfego real de conversa.
+
+// Extração de conteúdo por tipo de mensagem, versão independente da usada
+// no fluxo messages (linha ~2806) — deliberadamente não compartilhada, pra
+// não correr nenhum risco de alterar o caminho ao vivo ao generalizá-la.
+// Cobre só os tipos mais comuns; menu/bot-flow não se aplicam aqui.
+function extractMessageContent(msg: any): string {
+  return (
+    msg.text?.body ||
+    msg.image?.caption ||
+    msg.video?.caption ||
+    msg.document?.caption ||
+    msg.button?.text ||
+    msg.interactive?.button_reply?.title ||
+    msg.interactive?.list_reply?.title ||
+    `[${msg.type || 'mensagem'}]`
+  )
+}
+
+// Garante que existe uma conversa pra remoteJid, sem nunca atualizar uma já
+// existente — histórico antigo não pode sobrescrever o preview "última
+// mensagem" de uma conversa com atividade real mais recente, e nenhuma
+// conversa deve voltar a 'waiting' por causa de um evento de sincronização.
+// Só cria (com o status que o chamador decidir) quando ainda não existe.
+async function ensureConversation(
+  institutionId: string, remoteJid: string, contactName: string, defaultStatus: string
+): Promise<string | null> {
+  const { data: existing } = await supabase
+    .from('whatsapp_conversations')
+    .select('id')
+    .eq('institution_id', institutionId)
+    .eq('remote_jid', remoteJid)
+    .maybeSingle()
+  if (existing) return existing.id
+
+  const { data: created, error } = await supabase
+    .from('whatsapp_conversations')
+    .insert({ institution_id: institutionId, remote_jid: remoteJid, contact_name: contactName, status: defaultStatus })
+    .select('id')
+    .single()
+  if (error) {
+    console.error('❌ ensureConversation error:', error.message)
+    return null
+  }
+  return created?.id ?? null
+}
+
+// field: 'history' — backfill de mensagens antigas que a escola aceitou
+// compartilhar ao ativar a coexistência (até 180 dias). Conversas novas
+// nascem 'closed' — nunca aparecem na fila "Aguardando" (reservada pra
+// status 'waiting') só por causa de histórico.
+async function handleHistorySync(institutionId: string, value: any): Promise<void> {
+  for (const item of value.history || []) {
+    if (item.errors) {
+      // Ex: código 2593109 = cliente recusou compartilhar histórico — não é
+      // erro real, só não há nada pra sincronizar.
+      console.log('[HISTORY] sem histórico (recusado ou indisponível):', JSON.stringify(item.errors))
+      continue
+    }
+
+    for (const thread of item.threads || []) {
+      const remoteJid = normalizePhone(String(thread.id || ''))
+      if (!remoteJid) continue
+
+      const conversationId = await ensureConversation(institutionId, remoteJid, remoteJid, 'closed')
+
+      for (const message of thread.messages || []) {
+        const { error } = await supabase.from('whatsapp_messages').upsert(
+          {
+            institution_id:  institutionId,
+            conversation_id: conversationId,
+            remote_jid:      remoteJid,
+            message_id:      message.id,
+            instance_name:   'cloud-api',
+            from_me:         message.from === value.metadata?.display_phone_number,
+            message_type:    message.type || 'text',
+            content:         extractMessageContent(message),
+            timestamp:       new Date(parseInt(message.timestamp, 10) * 1000).toISOString(),
+            status:          message.history_context?.status || 'received',
+            is_history_sync: true,
+            raw_data:        message,
+          },
+          { onConflict: 'message_id' }
+        )
+        if (error) console.error('❌ handleHistorySync upsert error:', error.message)
+      }
+    }
+  }
+}
+
+// field: 'smb_app_state_sync' — contatos da agenda do WhatsApp Business App.
+// Reaproveita upsertContact() já existente; 'remove' só loga por ora.
+async function handleSmbAppStateSync(institutionId: string, value: any): Promise<void> {
+  for (const entry of value.state_sync || []) {
+    if (entry.type !== 'contact') {
+      console.log('[SMB_STATE_SYNC] tipo não tratado:', entry.type)
+      continue
+    }
+    if (entry.action === 'remove') {
+      console.log('[SMB_STATE_SYNC] remove (não implementado ainda):', entry.contact?.phone_number)
+      continue
+    }
+
+    const rawPhone = entry.contact?.phone_number
+    if (!rawPhone) continue
+    const remoteJid = normalizePhone(String(rawPhone))
+    const name = entry.contact?.full_name || entry.contact?.first_name || remoteJid
+    await upsertContact(institutionId, remoteJid, name)
+  }
+}
+
+// field: 'smb_message_echoes' — mensagens mandadas pelo dono direto no app
+// WhatsApp Business (fora da Áion Edu), depois de conectado via coexistência.
+async function handleSmbMessageEchoes(institutionId: string, value: any): Promise<void> {
+  for (const echo of value.message_echoes || []) {
+    if (echo.type === 'revoke' || echo.type === 'edit') {
+      // Nome exato do campo que referencia a mensagem original ainda não
+      // confirmado contra um payload real — logado cru aqui de propósito
+      // pra confirmar antes de finalizar esse mapeamento (combinado).
+      console.log('[SMB_MESSAGE_ECHOES] evento de edição/revogação, payload cru:', JSON.stringify(echo))
+      continue
+    }
+
+    const remoteJid = normalizePhone(String(echo.to || ''))
+    if (!remoteJid) continue
+
+    const conversationId = await ensureConversation(institutionId, remoteJid, remoteJid, 'open')
+
+    const { error } = await supabase.from('whatsapp_messages').upsert(
+      {
+        institution_id:  institutionId,
+        conversation_id: conversationId,
+        remote_jid:      remoteJid,
+        message_id:      echo.id,
+        instance_name:   'cloud-api',
+        from_me:         true,
+        message_type:    echo.type || 'text',
+        content:         extractMessageContent(echo),
+        timestamp:       new Date(parseInt(echo.timestamp, 10) * 1000).toISOString(),
+        status:          'sent',
+        raw_data:        echo,
+      },
+      { onConflict: 'message_id' }
+    )
+    if (error) console.error('❌ handleSmbMessageEchoes upsert error:', error.message)
+  }
+}
+
 // ── Custom flow state-machine processor ─────────────────────────────────────
 async function processCustomFlow(
   institutionId:      string,
@@ -2550,6 +2702,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).end()
       }
 
+      // account_update não carrega phone_number_id da mesma forma que os
+      // demais campos — intercepta antes de qualquer resolução de
+      // institutionId, só registra que chegou (reconexão automática fica
+      // pra depois, fora de escopo por ora).
+      const field = body?.entry?.[0]?.changes?.[0]?.field
+      if (field === 'account_update') {
+        console.log('[WEBHOOK] account_update recebido:', JSON.stringify(value))
+        return res.status(200).json({ status: 'ok' })
+      }
+
       console.log('[WEBHOOK] value field:',
         body?.entry?.[0]?.changes?.[0]?.field)
       console.log('[WEBHOOK] messages count:',
@@ -2616,6 +2778,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!institutionId) {
         console.log('⚠️ Phone ID não cadastrado:', phoneNumberId)
         return res.status(200).json({ status: 'ignored', reason: 'phone_number_id not registered' })
+      }
+
+      // ── Eventos de coexistência (Cadastro Incorporado com QR code) ──────────
+      // Formato de `value` totalmente diferente do fluxo messages/statuses
+      // abaixo — cada um tratado numa função isolada, que nunca chama
+      // upsertContact/increment_conversation_unread/processFlow, pra nunca
+      // disparar bot, fila de atendimento ou contagem de não lida por causa
+      // de um evento de sincronização. O bloco messages logo abaixo continua
+      // 100% inalterado — só é alcançado quando field === 'messages'.
+      if (field === 'history') {
+        await handleHistorySync(institutionId, value)
+        return res.status(200).json({ status: 'ok' })
+      }
+      if (field === 'smb_app_state_sync') {
+        await handleSmbAppStateSync(institutionId, value)
+        return res.status(200).json({ status: 'ok' })
+      }
+      if (field === 'smb_message_echoes') {
+        await handleSmbMessageEchoes(institutionId, value)
+        return res.status(200).json({ status: 'ok' })
       }
 
       console.log('[WEBHOOK] payload entries:', Object.keys(body?.entry?.[0] || {}))
