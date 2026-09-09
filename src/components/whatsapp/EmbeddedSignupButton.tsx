@@ -135,6 +135,59 @@ export default function EmbeddedSignupButton({ institutionId, onConnected }: Emb
     return () => clearLoginTimeout()
   }, [])
 
+  // Lógica assíncrona de pós-login, isolada do callback passado ao
+  // FB.login(). O SDK do Facebook valida o tipo do callback em runtime
+  // (Closure Compiler) e rejeita uma função async diretamente — o
+  // constructor dela é AsyncFunction, não Function — com o erro síncrono
+  // "Expression is of type asyncfunction, not function", travando antes
+  // de abrir o popup. Por isso o callback em si precisa ser uma função
+  // comum, que só dispara esta função async sem esperar por ela (fire
+  // and forget) — ver handleConnectClick abaixo.
+  const handleFbLoginResponse = async (response: { authResponse?: { code?: string } }) => {
+    console.log(LOG_PREFIX, 'callback do FB.login() recebido:', response)
+    clearLoginTimeout()
+
+    const code = response.authResponse?.code
+    if (!code) {
+      setStatus('error')
+      setErrorMessage('Não foi concedida autorização. Tente novamente.')
+      return
+    }
+
+    const { phoneNumberId, wabaId } = signupDataRef.current
+    if (!phoneNumberId || !wabaId) {
+      setStatus('error')
+      setErrorMessage('Não foi possível identificar o número conectado. Tente novamente.')
+      return
+    }
+
+    setStatus('submitting')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        throw new Error('Sessão expirada — faça login novamente e tente reconectar.')
+      }
+
+      const res = await fetch('/api/whatsapp/embedded-signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ code, phone_number_id: phoneNumberId, waba_id: wabaId }),
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result?.error || 'Falha ao concluir a conexão com o WhatsApp')
+
+      setStatus('success')
+      onConnected()
+    } catch (e) {
+      console.error(LOG_PREFIX, 'erro ao chamar /api/whatsapp/embedded-signup:', e)
+      setStatus('error')
+      setErrorMessage(e instanceof Error ? e.message : 'Erro inesperado ao conectar o WhatsApp')
+    }
+  }
+
   const handleConnectClick = () => {
     if (!window.FB) return
     setStatus('connecting')
@@ -153,49 +206,10 @@ export default function EmbeddedSignupButton({ institutionId, onConnected }: Emb
     try {
       console.log(LOG_PREFIX, 'chamando FB.login() com config_id:', WA_CONFIG_ID)
       window.FB.login(
-        async (response) => {
-          console.log(LOG_PREFIX, 'callback do FB.login() recebido:', response)
-          clearLoginTimeout()
-
-          const code = response.authResponse?.code
-          if (!code) {
-            setStatus('error')
-            setErrorMessage('Não foi concedida autorização. Tente novamente.')
-            return
-          }
-
-          const { phoneNumberId, wabaId } = signupDataRef.current
-          if (!phoneNumberId || !wabaId) {
-            setStatus('error')
-            setErrorMessage('Não foi possível identificar o número conectado. Tente novamente.')
-            return
-          }
-
-          setStatus('submitting')
-          try {
-            const { data: { session } } = await supabase.auth.getSession()
-            if (!session?.access_token) {
-              throw new Error('Sessão expirada — faça login novamente e tente reconectar.')
-            }
-
-            const res = await fetch('/api/whatsapp/embedded-signup', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${session.access_token}`,
-              },
-              body: JSON.stringify({ code, phone_number_id: phoneNumberId, waba_id: wabaId }),
-            })
-            const result = await res.json()
-            if (!res.ok) throw new Error(result?.error || 'Falha ao concluir a conexão com o WhatsApp')
-
-            setStatus('success')
-            onConnected()
-          } catch (e) {
-            console.error(LOG_PREFIX, 'erro ao chamar /api/whatsapp/embedded-signup:', e)
-            setStatus('error')
-            setErrorMessage(e instanceof Error ? e.message : 'Erro inesperado ao conectar o WhatsApp')
-          }
+        // Função síncrona comum — nunca passar `async (response) => {...}`
+        // diretamente aqui (ver comentário em handleFbLoginResponse acima).
+        (response) => {
+          void handleFbLoginResponse(response)
         },
         {
           config_id: WA_CONFIG_ID,
