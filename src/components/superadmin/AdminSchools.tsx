@@ -888,14 +888,14 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
     for (const tpl of templates || []) {
       try {
         const checkRes = await fetch(
-          `https://graph.facebook.com/v18.0/${wabaId}/message_templates?name=${tpl.name}`,
+          `https://graph.facebook.com/v25.0/${wabaId}/message_templates?name=${tpl.name}`,
           { headers: { Authorization: `Bearer ${token}` } }
         )
         const checkData = await checkRes.json()
         if (checkData.data?.length > 0) continue
 
         await fetch(
-          `https://graph.facebook.com/v18.0/${wabaId}/message_templates`,
+          `https://graph.facebook.com/v25.0/${wabaId}/message_templates`,
           {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -934,7 +934,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
       const token = tokenRow?.value || ''
       if (!token) return
       const res = await fetch(
-        `https://graph.facebook.com/v18.0/${wabaId}/message_templates?limit=50`,
+        `https://graph.facebook.com/v25.0/${wabaId}/message_templates?limit=50`,
         { headers: { Authorization: `Bearer ${token}` } }
       )
       const data = await res.json()
@@ -958,7 +958,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
         .from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
       const token = tokenRow?.value || ''
       if (!token) throw new Error('Token de acesso não encontrado')
-      const res = await fetch(`https://graph.facebook.com/v18.0/${wabaId}/message_templates`, {
+      const res = await fetch(`https://graph.facebook.com/v25.0/${wabaId}/message_templates`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -994,7 +994,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
       const globalToken = settingsMap['wa_access_token'] || ''
       if (!globalToken) throw new Error('Token de acesso não encontrado. Vá em Admin → Configurações → WhatsApp e salve o Access Token.')
 
-      const testRes = await fetch(`https://graph.facebook.com/v19.0/${waForm.phone_id}?fields=display_phone_number,verified_name`, {
+      const testRes = await fetch(`https://graph.facebook.com/v25.0/${waForm.phone_id}?fields=display_phone_number,verified_name`, {
         headers: { Authorization: `Bearer ${globalToken}` },
       })
       if (!testRes.ok) { const err = await testRes.json(); throw new Error((err as any)?.error?.message || 'Phone ID inválido ou token sem permissão') }
@@ -1024,7 +1024,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
       if (wabaToSubscribe && wabaToSubscribe !== AION_WABA_ID) {
         try {
           const subscribeRes = await fetch(
-            `https://graph.facebook.com/v18.0/${wabaToSubscribe}/subscribed_apps`,
+            `https://graph.facebook.com/v25.0/${wabaToSubscribe}/subscribed_apps`,
             { method: 'POST', headers: { Authorization: `Bearer ${globalToken}` } }
           )
           const subscribeData = await subscribeRes.json()

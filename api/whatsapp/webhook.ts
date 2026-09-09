@@ -30,7 +30,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const GRAPH_URL = 'https://graph.facebook.com/v19.0'
+const GRAPH_URL = 'https://graph.facebook.com/v25.0'
 
 // Item A — janela de "reabertura silenciosa": se o cliente manda mensagem
 // nova dentro desse intervalo após a conversa ter sido fechada (encerrada

@@ -6,7 +6,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const GRAPH_URL = 'https://graph.facebook.com/v19.0'
+const GRAPH_URL = 'https://graph.facebook.com/v25.0'
 
 /**
  * POST /api/whatsapp/send-template

@@ -15,7 +15,7 @@ const corsHeaders = {
 // - reabertura de conversa fechada igual ao bloco de re-open de
 //   api/whatsapp/webhook.ts (valida se o atendente que agendou ainda está
 //   ativo antes de reatribuir; senão cai pra fila sem dono).
-const GRAPH_URL = 'https://graph.facebook.com/v19.0'
+const GRAPH_URL = 'https://graph.facebook.com/v25.0'
 const BATCH_LIMIT = 50
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!

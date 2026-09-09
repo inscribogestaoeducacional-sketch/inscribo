@@ -230,7 +230,7 @@ function SchoolGroupDetail({ id }: { id: string }) {
       settingsRows?.forEach((r: any) => { settingsMap[r.key] = r.value })
       const globalToken = settingsMap['wa_access_token'] || ''
       if (!globalToken) throw new Error('Token de acesso não encontrado. Vá em Admin → Configurações → WhatsApp e salve o Access Token.')
-      const testRes = await fetch(`https://graph.facebook.com/v19.0/${waForm.phone_id}?fields=display_phone_number,verified_name`, { headers: { Authorization: `Bearer ${globalToken}` } })
+      const testRes = await fetch(`https://graph.facebook.com/v25.0/${waForm.phone_id}?fields=display_phone_number,verified_name`, { headers: { Authorization: `Bearer ${globalToken}` } })
       if (!testRes.ok) { const err = await testRes.json(); throw new Error((err as any)?.error?.message || 'Phone ID inválido ou token sem permissão') }
       const testData = await testRes.json()
       const AION_WABA_ID = settingsMap['wa_waba_id'] || ''

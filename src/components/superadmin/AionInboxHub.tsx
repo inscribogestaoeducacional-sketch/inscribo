@@ -2008,7 +2008,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
           const { data: tokenRow } = await supabase.from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
           const token = (tokenRow as any)?.value || ''
           if (!token) { setTemplates([]); return }
-          const res = await fetch(`https://graph.facebook.com/v19.0/${wabaId}/message_templates?limit=50`, {
+          const res = await fetch(`https://graph.facebook.com/v25.0/${wabaId}/message_templates?limit=50`, {
             headers: { Authorization: `Bearer ${token}` },
           })
           const data = await res.json()
@@ -3054,7 +3054,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
 
       // Verify template exists and is approved
       const checkRes = await fetch(
-        `https://graph.facebook.com/v18.0/${wabaId}/message_templates?name=reativar_atendimento&status=APPROVED`,
+        `https://graph.facebook.com/v25.0/${wabaId}/message_templates?name=reativar_atendimento&status=APPROVED`,
         { headers: { Authorization: `Bearer ${token}` } }
       )
       const checkData = await checkRes.json()
@@ -3063,7 +3063,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       }
 
       const sendRes = await fetch(
-        `https://graph.facebook.com/v18.0/${phoneData.phone_number_id}/messages`,
+        `https://graph.facebook.com/v25.0/${phoneData.phone_number_id}/messages`,
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -3643,7 +3643,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       const { data: tokenRow } = await supabase.from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
       const token = (tokenRow as any)?.value || ''
       if (!token) { setAionTemplates([]); return }
-      const res = await fetch(`https://graph.facebook.com/v19.0/${wabaId}/message_templates?limit=50`, {
+      const res = await fetch(`https://graph.facebook.com/v25.0/${wabaId}/message_templates?limit=50`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()
@@ -3846,7 +3846,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
         const token = settings?.find((s: any) => s.key === 'wa_access_token')?.value
 
         if (phoneData?.phone_number_id && token) {
-          await fetch(`https://graph.facebook.com/v19.0/${phoneData.phone_number_id}/messages`, {
+          await fetch(`https://graph.facebook.com/v25.0/${phoneData.phone_number_id}/messages`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({

@@ -363,7 +363,7 @@ export default function AdminSettings() {
     try {
       // 1. Validar credenciais
       const res = await fetch(
-        `https://graph.facebook.com/v19.0/${aionWA.phone_number_id}?fields=display_phone_number,verified_name`,
+        `https://graph.facebook.com/v25.0/${aionWA.phone_number_id}?fields=display_phone_number,verified_name`,
         { headers: { Authorization: `Bearer ${aionWA.access_token}` } }
       )
       const data = await res.json()
@@ -373,7 +373,7 @@ export default function AdminSettings() {
       let webhookVerified = false
       if (aionWA.waba_id) {
         const subRes = await fetch(
-          `https://graph.facebook.com/v19.0/${aionWA.waba_id}/subscribed_apps`,
+          `https://graph.facebook.com/v25.0/${aionWA.waba_id}/subscribed_apps`,
           { method: 'POST', headers: { Authorization: `Bearer ${aionWA.access_token}` } }
         )
         const subData = await subRes.json()
@@ -382,7 +382,7 @@ export default function AdminSettings() {
 
       // 3. Registrar número no Cloud API (ignorar se já registrado)
       await fetch(
-        `https://graph.facebook.com/v19.0/${aionWA.phone_number_id}/register`,
+        `https://graph.facebook.com/v25.0/${aionWA.phone_number_id}/register`,
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${aionWA.access_token}`, 'Content-Type': 'application/json' },

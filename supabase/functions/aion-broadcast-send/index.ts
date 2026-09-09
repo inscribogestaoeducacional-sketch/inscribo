@@ -17,7 +17,7 @@ const corsHeaders = {
 //      Inbox mesmo que o contato nunca responda, e se responder o webhook
 //      (que sempre reabre uma conversa existente pra 'waiting') encontra essa
 //      conversa e trata a resposta normalmente, sem lógica especial.
-const GRAPH_URL = 'https://graph.facebook.com/v19.0'
+const GRAPH_URL = 'https://graph.facebook.com/v25.0'
 const BATCH_LIMIT = 50
 
 // Margem de segurança sobre o limite real de mensageria confirmado na conta

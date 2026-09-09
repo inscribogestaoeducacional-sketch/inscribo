@@ -659,7 +659,7 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
     if (!phoneId || !token) { setTestResult({ ok: false, msg: 'Phone ID ou token não configurado.' }); return }
     setTesting(true); setTestResult(null)
     try {
-      const res  = await fetch(`https://graph.facebook.com/v19.0/${phoneId}?fields=display_phone_number,verified_name`, { headers: { Authorization: `Bearer ${token}` } })
+      const res  = await fetch(`https://graph.facebook.com/v25.0/${phoneId}?fields=display_phone_number,verified_name`, { headers: { Authorization: `Bearer ${token}` } })
       const data = await res.json()
       if (res.ok) {
         setTestResult({ ok: true, msg: `✅ Conectado: ${data.verified_name} (${data.display_phone_number})` })

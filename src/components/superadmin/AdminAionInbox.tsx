@@ -2279,7 +2279,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
       const { data: tokenRow } = await supabase.from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
       const token = (tokenRow as any)?.value || ''
       if (!token) { setTemplates([]); return [] }
-      const res = await fetch(`https://graph.facebook.com/v19.0/${wabaId}/message_templates?limit=50`, {
+      const res = await fetch(`https://graph.facebook.com/v25.0/${wabaId}/message_templates?limit=50`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json()

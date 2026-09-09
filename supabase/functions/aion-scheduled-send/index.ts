@@ -12,7 +12,7 @@ const corsHeaders = {
 // reativar contato fora da janela de 24h, onde a Meta exige template
 // aprovado; o path de texto livre abaixo fica só como fallback legado, pra
 // qualquer linha 'pending' antiga que ainda não tenha template_name.
-const GRAPH_URL = 'https://graph.facebook.com/v19.0'
+const GRAPH_URL = 'https://graph.facebook.com/v25.0'
 const BATCH_LIMIT = 50
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!

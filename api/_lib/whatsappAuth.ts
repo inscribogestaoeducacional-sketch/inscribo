@@ -39,7 +39,7 @@ export function errorResponse(res: VercelResponse, status: number, message: stri
   return res.status(status).json({ error: message })
 }
 
-export const GRAPH_URL = 'https://graph.facebook.com/v19.0'
+export const GRAPH_URL = 'https://graph.facebook.com/v25.0'
 export const WA_APP_ID = process.env.WA_APP_ID || ''
 export const WA_APP_SECRET = process.env.WA_APP_SECRET || ''
 

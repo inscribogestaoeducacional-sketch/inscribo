@@ -30,7 +30,7 @@ const CORS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-const GRAPH_URL = 'https://graph.facebook.com/v19.0'
+const GRAPH_URL = 'https://graph.facebook.com/v25.0'
 
 // Texto de referência do template a ser criado/aprovado manualmente na Meta
 // Business Manager com o nome abaixo (categoria UTILITY, pt_BR). Só o nome do

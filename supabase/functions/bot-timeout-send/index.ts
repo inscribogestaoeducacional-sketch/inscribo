@@ -64,7 +64,7 @@ serve(async () => {
 
       // 5. Enviar mensagem via Meta Cloud API
       const apiRes = await fetch(
-        `https://graph.facebook.com/v18.0/${phoneData.phone_number_id}/messages`,
+        `https://graph.facebook.com/v25.0/${phoneData.phone_number_id}/messages`,
         {
           method: 'POST',
           headers: {

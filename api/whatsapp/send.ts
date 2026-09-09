@@ -20,7 +20,7 @@ async function getWAConfig() {
   }
 }
 
-const GRAPH_URL = 'https://graph.facebook.com/v19.0'
+const GRAPH_URL = 'https://graph.facebook.com/v25.0'
 const META_FETCH_TIMEOUT_MS = 30000
 
 type MsgType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'template'

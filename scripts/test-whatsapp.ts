@@ -11,7 +11,7 @@
 
 const TOKEN   = process.env.WA_ACCESS_TOKEN
 const WABA_ID = process.env.WABA_ID || '2812701862456294'
-const BASE    = 'https://graph.facebook.com/v19.0'
+const BASE    = 'https://graph.facebook.com/v25.0'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 

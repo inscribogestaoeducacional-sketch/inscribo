@@ -455,7 +455,7 @@ function SendCollectionWhatsAppModal({ payment, institution, currentUserId, curr
         // mesmo padrão de AionInboxHub.tsx (reativar_atendimento), pra dar um
         // erro claro em vez do genérico da Meta.
         const checkRes = await fetch(
-          `https://graph.facebook.com/v19.0/${wabaId}/message_templates?name=${template}&status=APPROVED`,
+          `https://graph.facebook.com/v25.0/${wabaId}/message_templates?name=${template}&status=APPROVED`,
           { headers: { Authorization: `Bearer ${token}` } }
         )
         const checkData = await checkRes.json().catch(() => null)
