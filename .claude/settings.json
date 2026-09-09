@@ -131,7 +131,8 @@
       "PowerShell(cd \"C:\\\\Users\\\\Victor Almeida\\\\AIONEDU\"; npx tsc -p tsconfig.app.json --noEmit > tsc_out.txt 2>&1; Write-Output \"EXIT: $LASTEXITCODE\"; \\(Get-Content tsc_out.txt | Measure-Object -Line\\).Lines; Select-String -Path tsc_out.txt -Pattern \"EmbeddedSignupButton|management.SystemSettings\")",
       "WebFetch(domain:docs.360dialog.com)",
       "PowerShell(cd \"C:\\\\Users\\\\Victor Almeida\\\\AIONEDU\"; npx tsc -p tsconfig.app.json --noEmit > tsc_frontend.txt 2>&1; Write-Output \"EXIT: $LASTEXITCODE\"; \\(Get-Content tsc_frontend.txt | Measure-Object -Line\\).Lines)",
-      "PowerShell(cd \"C:\\\\Users\\\\Victor Almeida\\\\AIONEDU\\\\api\"; npx tsc --noEmit -p tsconfig.json > \"..\\\\tsc_api.txt\" 2>&1; Write-Output \"EXIT: $LASTEXITCODE\"; \\(Get-Content \"..\\\\tsc_api.txt\" | Measure-Object -Line\\).Lines)"
+      "PowerShell(cd \"C:\\\\Users\\\\Victor Almeida\\\\AIONEDU\\\\api\"; npx tsc --noEmit -p tsconfig.json > \"..\\\\tsc_api.txt\" 2>&1; Write-Output \"EXIT: $LASTEXITCODE\"; \\(Get-Content \"..\\\\tsc_api.txt\" | Measure-Object -Line\\).Lines)",
+      "PowerShell(cd \"C:\\\\Users\\\\Victor Almeida\\\\AIONEDU\\\\api\"; npx tsc --noEmit -p tsconfig.json > \"..\\\\tsc_check.txt\" 2>&1; Write-Output \"EXIT: $LASTEXITCODE\"; Select-String -Path \"..\\\\tsc_check.txt\" -Pattern \"webhook.ts\")"
     ],
     "additionalDirectories": [
       "\\tmp",
