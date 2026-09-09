@@ -4,7 +4,7 @@ import {
   RefreshCw, AlertTriangle, CheckCircle, ChevronRight,
   Sparkles, ArrowUp, ArrowDown, Minus, Save, Loader2,
   FileText, Clock, Activity, PieChart, ArrowUpRight,
-  ArrowDownRight, Info, X, Edit3, Settings, Rocket
+  ArrowDownRight, Info, X, Edit3, Settings, Rocket, Link2
 } from 'lucide-react'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
@@ -15,6 +15,7 @@ import {
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import CampaignGeneratorModal from './CampaignGeneratorModal'
+import LinkLeadsToCampaignModal from './LinkLeadsToCampaignModal'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface CampaignCycle {
@@ -1649,6 +1650,7 @@ export default function GestorReports({ institutionId, institutionName }: Props)
   const [reenrollments, setReenrollments] = useState<MonthlyReenrollment[]>([])
   const [loading, setLoading] = useState(true)
   const [showCampaignModal, setShowCampaignModal] = useState(false)
+  const [showLinkLeadsModal, setShowLinkLeadsModal] = useState(false)
   const [isAdjustMode, setIsAdjustMode] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
 
@@ -1929,6 +1931,20 @@ export default function GestorReports({ institutionId, institutionName }: Props)
 
         {/* Botões do header */}
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {/* Botão Vincular leads — aparece quando há uma campanha ativa pra receber o vínculo */}
+          {cycle && (
+            <button
+              onClick={() => setShowLinkLeadsModal(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '8px 16px', borderRadius: 10,
+                border: '1px solid #E2E8F0', background: '#fff',
+                fontSize: 12, color: '#475569', cursor: 'pointer', fontWeight: 600
+              }}
+            >
+              <Link2 size={13} /> Vincular leads a esta campanha
+            </button>
+          )}
           {/* Botão Ajustar — aparece quando campanha já está configurada */}
           {cycleIsConfigured && (
             <button
@@ -2036,6 +2052,17 @@ export default function GestorReports({ institutionId, institutionName }: Props)
           isAdjustMode={isAdjustMode}
           currentUserId={user?.id}
           currentUserName={user?.full_name}
+        />
+      )}
+
+      {/* Modal de vinculação manual/por período de leads à campanha */}
+      {showLinkLeadsModal && cycle && (
+        <LinkLeadsToCampaignModal
+          isOpen={showLinkLeadsModal}
+          onClose={() => setShowLinkLeadsModal(false)}
+          institutionId={institutionId}
+          cycleId={cycle.id}
+          cycleLabel={cycle.label}
         />
       )}
     </div>
