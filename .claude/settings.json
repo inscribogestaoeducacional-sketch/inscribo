@@ -125,7 +125,11 @@
       "Bash(cygpath -w /tmp/mapa.html)",
       "Bash(mkdir -p \"/c/Users/VICTOR~1/AppData/Local/Temp/claude/c--Users-Victor-Almeida-AIONEDU/798e1a75-ed7e-40f5-9949-17adf8811eef/scratchpad\" && cp /tmp/mapa.html \"/c/Users/VICTOR~1/AppData/Local/Temp/claude/c--Users-Victor-Almeida-AIONEDU/798e1a75-ed7e-40f5-9949-17adf8811eef/scratchpad/mapa-brasil.html\" && ls -la \"/c/Users/VICTOR~1/AppData/Local/Temp/claude/c--Users-Victor-Almeida-AIONEDU/798e1a75-ed7e-40f5-9949-17adf8811eef/scratchpad/\")",
       "Bash(date -u -d '-7 days' +\"%Y-%m-%dT%H:%M:%SZ\")",
-      "Bash(date -u -v-7d +\"%Y-%m-%dT%H:%M:%SZ\")"
+      "Bash(date -u -v-7d +\"%Y-%m-%dT%H:%M:%SZ\")",
+      "PowerShell(supabase db query --help 2>&1)",
+      "PowerShell(git -C \"C:\\\\Users\\\\Victor Almeida\\\\AIONEDU\" status --short)",
+      "PowerShell(cd \"C:\\\\Users\\\\Victor Almeida\\\\AIONEDU\"; npx tsc -p tsconfig.app.json --noEmit > tsc_out.txt 2>&1; Write-Output \"EXIT: $LASTEXITCODE\"; \\(Get-Content tsc_out.txt | Measure-Object -Line\\).Lines; Select-String -Path tsc_out.txt -Pattern \"EmbeddedSignupButton|management.SystemSettings\")",
+      "WebFetch(domain:docs.360dialog.com)"
     ],
     "additionalDirectories": [
       "\\tmp",
