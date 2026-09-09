@@ -6,7 +6,7 @@ WhatsApp de outra escola através deste endpoint — nem passando o
 admin de uma escola.
 
 O endpoint resolve `institution_id` **somente** a partir do token de sessão
-(`authenticateSchoolAdmin`, em `api/whatsapp/config.ts`), nunca do corpo da
+(`authenticateSchoolAdmin`, em `api/_lib/whatsappAuth.ts`), nunca do corpo da
 requisição. Este roteiro comprova isso na prática.
 
 ## Pré-requisitos

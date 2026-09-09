@@ -6,7 +6,7 @@ import {
   GRAPH_URL,
   WA_APP_ID,
   WA_APP_SECRET,
-} from './config.js'
+} from '../_lib/whatsappAuth.js'
 
 const META_FETCH_TIMEOUT_MS = 30000
 // Fallback caso a resposta da Meta não traga expires_in (não deveria acontecer

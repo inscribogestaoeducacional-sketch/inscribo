@@ -4,6 +4,12 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 // ── Supabase / app config (mesmo papel de api/google/config.ts — client de
 // service role compartilhado pelos endpoints de api/whatsapp/*.ts que
 // precisam autenticar o usuário chamador, não só o service role) ──
+//
+// Este arquivo vive em api/_lib/ (não em api/whatsapp/) de propósito: a
+// Vercel trata todo arquivo dentro de /api como uma Serverless Function —
+// o plano Hobby tem limite de 12. Um diretório/arquivo prefixado com "_"
+// é ignorado por essa contagem, então funções auxiliares sem handler
+// próprio (como esta) ficam aqui, nunca soltas em api/<produto>/.
 export const SUPABASE_URL =
   process.env.SUPABASE_URL ||
   process.env.VITE_SUPABASE_URL ||
