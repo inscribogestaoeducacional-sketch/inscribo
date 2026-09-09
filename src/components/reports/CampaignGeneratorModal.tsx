@@ -26,8 +26,20 @@ interface CycleData {
   institution_id: string; year: number; label: string; start_date: string; end_date: string
   target_new_students: number; target_reenrollment_rate: number; base_students: number
   projected_cpa: number; monthly_targets: MonthlyTarget[]
-  market_data: Record<string, unknown>; historical_input: HistoricalYear[]
+  market_data: Record<string, unknown>; historical_data: HistoricalDataEntry[]
   generation_mode: string; ai_reasoning: string; realism_score: string; applied_at: string
+}
+// Formato gravado na coluna real `campaign_cycles.historical_data` (mesmo
+// nome/formato que SchoolSetupModal.tsx já usa) — não confundir com o estado
+// interno `historicalData`/`HistoricalYear`, que é só o formato de edição do
+// wizard. `historical_input` era uma coluna real e separada no banco, mas sem
+// nenhum leitor de verdade fora do próprio prefill de "Ajustar campanha"
+// deste componente — GestorHome.tsx (Total Alunos/Novatos/Market Share/score)
+// sempre leu `historical_data`, então salvar em `historical_input` fazia esse
+// dado nunca aparecer na home.
+interface HistoricalDataEntry {
+  detected_year: number; total_students: number; new_students: number; returning_students: number
+  avg_monthly_fee: number | null; returning_students_by_month?: Record<string, number> | null
 }
 interface SchoolData {
   name: string; city: string; state: string; grades: string[]
@@ -232,10 +244,21 @@ export default function CampaignGeneratorModal({
       ...(sd?.avg_monthly_fee ? { avg_monthly_fee: sd.avg_monthly_fee } : {}),
       ...(sd?.exits ? { exits: sd.exits } : {}),
     }))
-    if (existingCycle.historical_input?.length) {
-      setHistoricalData(existingCycle.historical_input)
+    if (existingCycle.historical_data?.length) {
+      // Volta do formato gravado no banco (HistoricalDataEntry) pro formato
+      // de edição interno do wizard (HistoricalYear) — ver comentário na
+      // definição de HistoricalDataEntry sobre por que a coluna é essa e não
+      // `historical_input`.
+      setHistoricalData(existingCycle.historical_data.map(e => ({
+        year: e.detected_year,
+        total_students: e.total_students ?? 0,
+        new_enrollments: e.new_students ?? 0,
+        reenrollments: e.returning_students ?? 0,
+        transfers: 0,
+        returning_students_by_month: e.returning_students_by_month ?? null,
+      })))
     }
-    if (isAdjustMode && existingCycle.historical_input?.length) {
+    if (isAdjustMode && existingCycle.historical_data?.length) {
       setAiAnalysis({
         summary: "Ajuste de campanha — dados históricos carregados do ciclo anterior.",
         retention_rate: existingCycle.target_reenrollment_rate || 0.85,
@@ -436,7 +459,17 @@ const handleManualTargets = (newS: number, reen: number) => {
     try {
       const sd = schoolData.start_date||`${executionYear}-09-01`
       const ed = schoolData.end_date||`${executionYear+1}-02-28`
-      const cycleData: CycleData = { institution_id:institutionId, year:executionYear, label:`Campanha ${executionYear}`, start_date:sd, end_date:ed, target_new_students:adjustedPlan.summary.total_new_students_target, target_reenrollment_rate:adjustedPlan.summary.reenrollment_rate_target, base_students:schoolData.current_students, projected_cpa:adjustedPlan.average_cpa, monthly_targets:adjustedPlan.monthly_targets, market_data:{}, historical_input:historicalData, generation_mode:generationMode, ai_reasoning:adjustedPlan.summary.reasoning, realism_score:adjustedPlan.summary.realism_score, applied_at:new Date().toISOString() }
+      // Formato salvo em campaign_cycles.historical_data — precisa mapear os
+      // nomes de campo (ver comentário na definição de HistoricalDataEntry).
+      const historicalDataPayload: HistoricalDataEntry[] = historicalData.map(h => ({
+        detected_year: h.year,
+        total_students: h.total_students ?? 0,
+        new_students: h.new_enrollments ?? 0,
+        returning_students: h.reenrollments ?? 0,
+        avg_monthly_fee: erpFiles.find(f => f.year === h.year)?.fee ?? null,
+        returning_students_by_month: h.returning_students_by_month ?? null,
+      }))
+      const cycleData: CycleData = { institution_id:institutionId, year:executionYear, label:`Campanha ${executionYear}`, start_date:sd, end_date:ed, target_new_students:adjustedPlan.summary.total_new_students_target, target_reenrollment_rate:adjustedPlan.summary.reenrollment_rate_target, base_students:schoolData.current_students, projected_cpa:adjustedPlan.average_cpa, monthly_targets:adjustedPlan.monthly_targets, market_data:{}, historical_data:historicalDataPayload, generation_mode:generationMode, ai_reasoning:adjustedPlan.summary.reasoning, realism_score:adjustedPlan.summary.realism_score, applied_at:new Date().toISOString() }
       if (isAdjustMode) {
         const { data: ac } = await supabase.from('campaign_cycles').select('id').eq('institution_id',institutionId).eq('status','active').maybeSingle()
         await supabase.from('campaign_change_requests').insert({ institution_id:institutionId, cycle_id:ac?.id??null, requested_by:currentUserId??null, requested_by_name:currentUserName??null, changes:cycleData, status:'pending', created_at:new Date().toISOString() })
@@ -464,9 +497,18 @@ if (existingCycle) {
       for (let mi=0;mi<adjustedPlan.monthly_targets.length;mi++) {
         const month=adjustedPlan.monthly_targets[mi]; const cm=campaignMonths[mi]
         const period=cm?cm.period:`${month.year}-${String(month.month).padStart(2,'0')}`
-        await supabase.from('funnel_metrics').upsert({ institution_id:institutionId,period,registrations_target:month.registrations,schedules_target:month.schedules,visits_target:month.visits,enrollments_target:month.enrollments_new??0,registrations:0,schedules:0,visits:0,enrollments:0 },{onConflict:'period,institution_id',ignoreDuplicates:false})
-        if ((month.enrollments_returning??0)>0) await supabase.from('monthly_reenrollments').upsert({institution_id:institutionId,period,target:month.enrollments_returning??0,confirmed:0,base_total:schoolData.current_students},{onConflict:'institution_id,period',ignoreDuplicates:false})
-        await supabase.from('marketing_campaigns').upsert({institution_id:institutionId,month_year:cm?`${cm.month}-${cm.year}`:`${month.month}-${month.year}`,cpa_target:month.cpa_target,investment:0,leads_generated:0},{onConflict:'month_year,institution_id',ignoreDuplicates:false})
+        // Só as colunas de META entram no payload — nunca os contadores reais
+        // (registrations/schedules/visits/enrollments sem sufixo _target,
+        // confirmed, investment, leads_generated), que representam fatos já
+        // ocorridos (matrículas/visitas/rematrículas/investimento reais).
+        // Upsert do Supabase (Prefer: resolution=merge-duplicates) só inclui
+        // no ON CONFLICT DO UPDATE as colunas presentes no payload — omitir
+        // essas chaves faz o upsert preservá-las quando a linha já existe; e
+        // numa linha nova elas caem no DEFAULT 0 da coluna, que é o valor
+        // certo mesmo (verificado direto no banco antes de aplicar o fix).
+        await supabase.from('funnel_metrics').upsert({ institution_id:institutionId,period,registrations_target:month.registrations,schedules_target:month.schedules,visits_target:month.visits,enrollments_target:month.enrollments_new??0 },{onConflict:'period,institution_id',ignoreDuplicates:false})
+        if ((month.enrollments_returning??0)>0) await supabase.from('monthly_reenrollments').upsert({institution_id:institutionId,period,target:month.enrollments_returning??0,base_total:schoolData.current_students},{onConflict:'institution_id,period',ignoreDuplicates:false})
+        await supabase.from('marketing_campaigns').upsert({institution_id:institutionId,month_year:cm?`${cm.month}-${cm.year}`:`${month.month}-${month.year}`,cpa_target:month.cpa_target},{onConflict:'month_year,institution_id',ignoreDuplicates:false})
       }
       await supabase.from('system_notifications').insert({institution_id:institutionId,type:'milestone',severity:'success',title:`Campanha ${executionYear} configurada!`,message:`Metas ativas: ${adjustedPlan.summary.total_new_students_target} novatos e ${adjustedPlan.summary.reenrollment_target} rematrículas.`})
       onApply(cycleData)
