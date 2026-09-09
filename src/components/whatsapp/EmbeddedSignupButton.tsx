@@ -78,7 +78,7 @@ export default function EmbeddedSignupButton({ institutionId, onConnected }: Emb
     script.onload = () => {
       console.log(LOG_PREFIX, 'SDK carregado (script onload)')
       try {
-        window.FB?.init({ appId: WA_APP_ID!, version: 'v19.0' })
+        window.FB?.init({ appId: WA_APP_ID!, version: 'v25.0' })
         console.log(LOG_PREFIX, 'FB.init() concluído com sucesso')
         setStatus('idle')
       } catch (e) {
