@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import SchoolSetupModal from '../onboarding/SchoolSetupModal'
 import FlowEditor from '../whatsapp/FlowEditor'
+import EmbeddedSignupButton from '../whatsapp/EmbeddedSignupButton'
 import { useGradeLevels, type GradeLevel } from '../../hooks/useGradeLevels'
 
 const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#00A896] focus:border-[#00A896] outline-none transition-all'
@@ -784,9 +785,12 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
           <WifiOff size={26} color="#94A3B8" />
         </div>
         <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: '0 0 8px' }}>WhatsApp não configurado</h2>
-        <p style={{ fontSize: 13, color: '#64748B', margin: 0, lineHeight: 1.6 }}>
-          O número de WhatsApp desta escola ainda não foi configurado.<br />
-          Entre em contato com o administrador da plataforma para ativar o WhatsApp.
+        <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 20px', lineHeight: 1.6 }}>
+          Conecte agora mesmo usando sua conta do Meta Business — sem precisar de ajuda da nossa equipe.
+        </p>
+        <EmbeddedSignupButton institutionId={institutionId} onConnected={loadConfig} />
+        <p style={{ fontSize: 12, color: '#94A3B8', margin: '20px 0 0', lineHeight: 1.6 }}>
+          Prefere que a gente configure pra você? Entre em contato com o administrador da plataforma.
         </p>
       </div>
     </div>
