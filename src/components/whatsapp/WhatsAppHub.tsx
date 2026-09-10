@@ -4586,22 +4586,20 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     </span>
                   </p>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, maxHeight: 320, overflowY: 'auto' }}>
+                  <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
                     {quickReplies.map(qr => (
                       <button
                         key={qr.id}
+                        title={qr.text}
                         onClick={() => { setInputText(qr.text); setShowQuickReplies(false) }}
-                        style={{ textAlign: 'left', padding: '8px 12px', background: '#FFFFFF', border: '1px solid #D1FAE5', borderRadius: 8, cursor: 'pointer' }}
+                        style={{ flexShrink: 0, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5, padding: '8px 12px', background: '#FFFFFF', border: '1px solid #D1FAE5', borderRadius: 999, cursor: 'pointer' }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#E6F7F5' }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#FFFFFF' }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                          <p style={{ fontSize: 12, fontWeight: 600, color: '#1A2B4A', margin: 0 }}>{qr.label}</p>
-                          <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 999, background: qr.user_id ? '#EFF6FF' : '#ECFDF5', color: qr.user_id ? '#1D4ED8' : '#059669' }}>
-                            {qr.user_id ? 'Pessoal' : 'Global'}
-                          </span>
-                        </div>
-                        <p style={{ fontSize: 11, color: '#64748B', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{qr.text}</p>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: '#1A2B4A' }}>{qr.label}</span>
+                        <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 999, background: qr.user_id ? '#EFF6FF' : '#ECFDF5', color: qr.user_id ? '#1D4ED8' : '#059669' }}>
+                          {qr.user_id ? 'Pessoal' : 'Global'}
+                        </span>
                       </button>
                     ))}
                   </div>
