@@ -4586,7 +4586,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     </span>
                   </p>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, maxHeight: 320, overflowY: 'auto' }}>
                     {quickReplies.map(qr => (
                       <button
                         key={qr.id}
