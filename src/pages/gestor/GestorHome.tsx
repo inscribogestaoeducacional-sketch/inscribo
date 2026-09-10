@@ -48,7 +48,7 @@ interface CampaignCycle {
   historical_data?: HistoricalEntry[] | null
   school_data?: { city?: string; state?: string; name?: string; avg_monthly_fee?: number; current_students?: number; grades?: string[]; [key: string]: unknown } | null
   status?: string | null; applied_at?: string | null
-  market_data?: MarketData | null; market_data_fetched_at?: string | null
+  market_data?: MarketData | null
   score?: number | null; score_calculated_at?: string | null
 }
 
@@ -681,12 +681,24 @@ export default function GestorHome() {
 
       const cycleWithLocation = loadedCycles.find(c => c.school_data?.city && c.school_data?.state)
       if (cycleWithLocation) {
+        const cityLoc = cycleWithLocation.school_data!.city as string
+        const stateLoc = cycleWithLocation.school_data!.state as string
+        // Cache real por cidade+estado (market_data_cache) — substitui a
+        // tentativa antiga de gravar market_data_fetched_at em
+        // campaign_cycles, coluna que nunca existiu (o UPDATE falhava
+        // sempre, então essa checagem de 30 dias nunca funcionou de fato).
+        const { data: cached } = await supabase
+          .from('market_data_cache')
+          .select('data, fetched_at')
+          .eq('city', cityLoc)
+          .eq('state', stateLoc)
+          .maybeSingle()
         const thirtyDaysAgoMs = Date.now() - 30 * 24 * 60 * 60 * 1000
-        const fetchedAt = cycleWithLocation.market_data_fetched_at ? new Date(cycleWithLocation.market_data_fetched_at).getTime() : 0
-        if (cycleWithLocation.market_data && fetchedAt > thirtyDaysAgoMs) {
-          setMarketData(cycleWithLocation.market_data)
+        const fetchedAt = cached?.fetched_at ? new Date(cached.fetched_at).getTime() : 0
+        if (cached?.data && fetchedAt > thirtyDaysAgoMs) {
+          setMarketData(cached.data)
         } else {
-          fetchMarketData(cycleWithLocation.school_data!.city as string, cycleWithLocation.school_data!.state as string, cycleWithLocation.id)
+          fetchMarketData(cityLoc, stateLoc)
         }
       }
 
@@ -741,7 +753,7 @@ export default function GestorHome() {
     }
   }
 
-  async function fetchMarketData(city: string, state: string, cycleId?: string) {
+  async function fetchMarketData(city: string, state: string) {
     if (!city || !state) return
     setMarketLoading(true)
     try {
@@ -749,9 +761,12 @@ export default function GestorHome() {
       const json = await res.json()
       const result = json.result ?? null
       setMarketData(result)
-      if (result && cycleId) {
-        const { error } = await supabase.from('campaign_cycles').update({ market_data: result, market_data_fetched_at: new Date().toISOString() }).eq('id', cycleId)
-        if (error) console.error('[GestorHome] erro ao salvar market_data:', error)
+      if (result) {
+        const { error } = await supabase.from('market_data_cache').upsert(
+          { city, state, data: result, fetched_at: new Date().toISOString() },
+          { onConflict: 'city,state' }
+        )
+        if (error) console.error('[GestorHome] erro ao salvar market_data_cache:', error)
       }
     } catch (e) { console.error('[GestorHome] erro ao buscar market_data:', e) } finally { setMarketLoading(false) }
   }

@@ -189,7 +189,13 @@ export default function CampaignGeneratorModal({
     start_date: `${new Date().getFullYear()}-09-01`,
     end_date: `${new Date().getFullYear() + 1}-02-28`
   })
-  const [growthTarget, setGrowthTarget] = useState<GrowthTarget>({ type: 'percentage', value: 10 })
+  // Valor guardado por tipo (não um único `value` compartilhado) — trocar de
+  // card em Step3Config não apaga mais o que já foi digitado nos outros dois.
+  // `growthTarget` abaixo é só a leitura combinada (tipo ativo + seu valor),
+  // no mesmo formato que generateCampaign/API sempre esperaram.
+  const [growthType, setGrowthType] = useState<GrowthTarget['type']>('percentage')
+  const [growthValues, setGrowthValues] = useState<Record<GrowthTarget['type'], number>>({ percentage: 10, absolute: 0, students: 0 })
+  const growthTarget: GrowthTarget = { type: growthType, value: growthValues[growthType] }
   const [reenrollDistribution, setReenrollDistribution] = useState<Record<number,number> | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -373,7 +379,12 @@ export default function CampaignGeneratorModal({
   const generateCampaign = useCallback(async () => {
     setLoadingGenerate(true); setGenMsgIdx(0); setGenProgress(5); setError(null)
     try {
-      const res = await fetch('/api/ai', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'generate_campaign', payload:{ schoolData:{...schoolData,name:institutionName}, historicalData, marketData:{}, growthTarget, executionYear, campaignYear, start_date:schoolData.start_date, end_date:schoolData.end_date, current_date:new Date().toLocaleDateString('pt-BR'), campaign_start_month:campaignStartMonth, months_until_campaign:monthsUntil, total_exits:totalExits } }) })
+      // marketData não é mais mandado do client — o servidor busca sempre
+      // (fetch_ibge com cache real por cidade+estado, ver api/ai.ts) em vez
+      // de depender de um objeto que aqui sempre chegava vazio. institutionId
+      // habilita o motor a usar funil de conversão real (Nível 1) e o
+      // pipeline de leads já existente pro ano da campanha (Nível 3).
+      const res = await fetch('/api/ai', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'generate_campaign', payload:{ institutionId, schoolData:{...schoolData,name:institutionName}, historicalData, growthTarget, executionYear, campaignYear, start_date:schoolData.start_date, end_date:schoolData.end_date, current_date:new Date().toLocaleDateString('pt-BR'), campaign_start_month:campaignStartMonth, months_until_campaign:monthsUntil, total_exits:totalExits } }) })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error||'Erro ao gerar campanha')
       setGenerationMode(data.mode||'benchmark')
@@ -383,7 +394,7 @@ export default function CampaignGeneratorModal({
       setAmbitiousLevel(1); setGenProgress(100)
       setTimeout(() => setStep(5), 400)
     } catch (e) { setError((e as Error).message) } finally { setLoadingGenerate(false) }
-  }, [schoolData, historicalData, growthTarget, institutionName])
+  }, [schoolData, historicalData, growthType, growthValues, institutionName])
 
   const handleAmbitiousChange = (level: number) => {
     if (!generatedPlan) return
@@ -536,7 +547,7 @@ const handleManualTargets = (newS: number, reen: number) => {
           {draftToast&&<div style={{background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:10,padding:'10px 16px',marginBottom:12,fontSize:13,color:'#166534',display:'flex',alignItems:'center',gap:8}}><Check size={14} color="#16a34a"/>{draftToast}</div>}
           {step===1&&<Step1Upload erpFiles={erpFiles} setErpFiles={setErpFiles} loadingFile={loadingFile} multiFileProgress={multiFileProgress} fileInputRef={fileInputRef} onFileChange={handleFileChange} historicalData={historicalData} setHistoricalData={setHistoricalData}/>}
           {step===2&&<Step2Analysis erpFiles={erpFiles} aiAnalysis={aiAnalysis} loading={loadingAnalysis} error={error} onRetry={analyzeWithAI}/>}
-          {step===3&&<Step3Config schoolData={schoolData} setSchoolData={setSchoolData} growthTarget={growthTarget} setGrowthTarget={setGrowthTarget} aiAnalysis={aiAnalysis} totalExits={totalExits} institutionId={institutionId}/>}
+          {step===3&&<Step3Config schoolData={schoolData} setSchoolData={setSchoolData} growthType={growthType} setGrowthType={setGrowthType} growthValues={growthValues} setGrowthValues={setGrowthValues} aiAnalysis={aiAnalysis} totalExits={totalExits} institutionId={institutionId}/>}
           {step===4&&<Step4Generating loading={loadingGenerate} progress={genProgress} msgIdx={genMsgIdx} msgs={GEN_MSGS} error={error} onRetry={generateCampaign}/>}
           {step===5&&adjustedPlan&&<Step5Review plan={adjustedPlan} basePlan={generatedPlan!} ambitiousLevel={ambitiousLevel} campaignYear={campaignYear} startDate={schoolData.start_date||`${executionYear}-09-01`} endDate={schoolData.end_date||`${executionYear+1}-02-28`} erpFiles={erpFiles} totalExits={totalExits} currentStudents={schoolData.current_students} monthsUntilCampaign={monthsUntil} campaignStartMonth={campaignStartMonth} onAmbitiousChange={handleAmbitiousChange} onManualTargets={handleManualTargets} onUpdateCell={updateMonthlyCell} onRegenerate={()=>{setStep(4);generateCampaign()}}/>}
         </div>
@@ -660,7 +671,7 @@ function Step2Analysis({ erpFiles, aiAnalysis, loading, error, onRetry }: { erpF
 }
 
 // ─── Passo 3 — Configurar ────────────────────────────────────────
-function Step3Config({ schoolData, setSchoolData, growthTarget, setGrowthTarget, aiAnalysis, totalExits, institutionId }: { schoolData:SchoolData; setSchoolData:React.Dispatch<React.SetStateAction<SchoolData>>; growthTarget:GrowthTarget; setGrowthTarget:React.Dispatch<React.SetStateAction<GrowthTarget>>; aiAnalysis:AIAnalysis|null; totalExits:number; institutionId:string }) {
+function Step3Config({ schoolData, setSchoolData, growthType, setGrowthType, growthValues, setGrowthValues, aiAnalysis, totalExits, institutionId }: { schoolData:SchoolData; setSchoolData:React.Dispatch<React.SetStateAction<SchoolData>>; growthType:GrowthTarget['type']; setGrowthType:React.Dispatch<React.SetStateAction<GrowthTarget['type']>>; growthValues:Record<GrowthTarget['type'], number>; setGrowthValues:React.Dispatch<React.SetStateAction<Record<GrowthTarget['type'], number>>>; aiAnalysis:AIAnalysis|null; totalExits:number; institutionId:string }) {
   const { names: GRADE_OPTIONS } = useGradeLevels(institutionId)
   return (
     <div style={{paddingBottom:24}}>
@@ -676,7 +687,7 @@ function Step3Config({ schoolData, setSchoolData, growthTarget, setGrowthTarget,
       </div>
       <div style={{marginBottom:16}}><label style={S.label}>Séries</label><div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginTop:6}}>{GRADE_OPTIONS.map(g=>{const active=schoolData.grades.includes(g);return<button key={g} onClick={()=>setSchoolData(s=>({...s,grades:active?s.grades.filter(x=>x!==g):[...s.grades,g]}))} style={{padding:'7px 8px',borderRadius:8,fontSize:12,cursor:'pointer',border:active?'1.5px solid #00A896':'1px solid #E2E8F0',background:active?'#E6F7F5':'#F8FAFC',color:active?'#00A896':'#64748B',fontWeight:active?600:400}}>{g}</button>})}</div></div>
       {schoolData.grades.length>0&&<div style={{marginBottom:16,padding:16,background:'#F8FAFC',borderRadius:12,border:'1px solid #E2E8F0'}}><label style={{...S.label,marginBottom:10}}>Formandos por série</label><div style={{display:'flex',flexDirection:'column',gap:8}}>{schoolData.grades.map(grade=>(<div key={grade} style={{display:'flex',alignItems:'center',gap:12}}><span style={{fontSize:13,color:'#475569',width:130,flexShrink:0}}>{grade}</span><input type="number" min={0} placeholder="0" value={schoolData.exits?.[grade]??''} onChange={e=>setSchoolData(prev=>({...prev,exits:{...prev.exits,[grade]:parseInt(e.target.value)||0}}))} style={{width:70,height:32,padding:'0 8px',borderRadius:7,border:'1px solid #E2E8F0',fontSize:12,background:'#fff',outline:'none'}}/><span style={{fontSize:11,color:'#94A3B8'}}>alunos</span></div>))}</div>{totalExits>0&&<p style={{fontSize:12,color:'#64748B',marginTop:10,marginBottom:0}}>Total saídas: <strong>{totalExits}</strong></p>}</div>}
-      <div><label style={S.label}>Objetivo<span style={{marginLeft:8,fontSize:11,color:'#94A3B8',fontWeight:400}}>— a IA analisa criticamente</span></label>{aiAnalysis&&<div style={{marginBottom:10,padding:'10px 14px',background:'#E6F7F5',borderRadius:9,display:'flex',alignItems:'center',gap:8}}><Sparkles size={12} color="#00A896"/><span style={{fontSize:12,color:'#065F46'}}>IA sugere: <strong>{aiAnalysis.suggested_new_students} novatos</strong> + <strong>{aiAnalysis.suggested_reenrollment} rematrículas</strong></span></div>}<div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10}}>{(['percentage','absolute','students'] as const).map(type=>{const labels={percentage:'Crescer X%',absolute:'Adicionar X novatos',students:'Atingir X alunos total'};const placeholders={percentage:'10',absolute:'50',students:'1000'};const active=growthTarget.type===type;return(<div key={type} onClick={()=>setGrowthTarget(t=>({...t,type}))} style={{padding:14,borderRadius:12,cursor:'pointer',border:active?'2px solid #00A896':'1.5px solid #E2E8F0',background:active?'#E6F7F5':'#F8FAFC'}}><div style={{fontSize:12,fontWeight:600,color:active?'#00A896':'#475569',marginBottom:8}}>{labels[type]}</div><input type="number" style={{width:'100%',padding:'6px 10px',borderRadius:7,border:'1px solid #E2E8F0',fontSize:14,background:'#fff',outline:'none'}} placeholder={placeholders[type]} value={growthTarget.type===type?growthTarget.value||'':''} onClick={e=>e.stopPropagation()} onChange={e=>setGrowthTarget({type,value:parseFloat(e.target.value)||0})}/></div>)})}</div></div>
+      <div><label style={S.label}>Objetivo<span style={{marginLeft:8,fontSize:11,color:'#94A3B8',fontWeight:400}}>— a IA analisa criticamente</span></label>{aiAnalysis&&<div style={{marginBottom:10,padding:'10px 14px',background:'#E6F7F5',borderRadius:9,display:'flex',alignItems:'center',gap:8}}><Sparkles size={12} color="#00A896"/><span style={{fontSize:12,color:'#065F46'}}>IA sugere: <strong>{aiAnalysis.suggested_new_students} novatos</strong> + <strong>{aiAnalysis.suggested_reenrollment} rematrículas</strong></span></div>}<div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10}}>{(['percentage','absolute','students'] as const).map(type=>{const labels={percentage:'Crescer X%',absolute:'Adicionar X novatos',students:'Atingir X alunos total'};const placeholders={percentage:'10',absolute:'50',students:'1000'};const active=growthType===type;return(<div key={type} onClick={()=>setGrowthType(type)} style={{padding:14,borderRadius:12,cursor:'pointer',border:active?'2px solid #00A896':'1.5px solid #E2E8F0',background:active?'#E6F7F5':'#F8FAFC'}}><div style={{fontSize:12,fontWeight:600,color:active?'#00A896':'#475569',marginBottom:8}}>{labels[type]}</div><input type="number" style={{width:'100%',padding:'6px 10px',borderRadius:7,border:'1px solid #E2E8F0',fontSize:14,background:'#fff',outline:'none'}} placeholder={placeholders[type]} value={growthValues[type]||''} onClick={e=>e.stopPropagation()} onChange={e=>setGrowthValues(v=>({...v,[type]:parseFloat(e.target.value)||0}))}/></div>)})}</div></div>
     </div>
   )
 }

@@ -1,6 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { createClient } from '@supabase/supabase-js'
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
+
+function getSupabaseAdmin() {
+  return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+}
 // ─── Distribuição mensal real de rematrículas (returning_students_by_month) ──
 function calcRealReenrollDistribution(
   historicalData: { returning_students_by_month?: Record<string, number> | null }[]
@@ -171,6 +176,165 @@ function getCampaignMonths(startDate: string, endDate: string) {
     cur.setMonth(cur.getMonth() + 1)
   }
   return months
+}
+
+// ─── Nível 2 do motor de metas: dados de mercado (IBGE/Censo Escolar) com
+// cache real por cidade+estado ────────────────────────────────────────────
+// market_data_cache (TTL 30 dias) substitui a tentativa antiga de cachear
+// isso em campaign_cycles.market_data_fetched_at — coluna que nunca existiu
+// no banco, então aquele "cache" nunca funcionou (toda carga do dashboard
+// chamava a Anthropic de novo). Compartilhada entre a action fetch_ibge
+// (chamada pelo GestorHome.tsx) e generate_campaign (que agora chama isso
+// sempre, não só quando falta histórico).
+const MARKET_DATA_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+async function fetchIbgeData(city: string, state: string): Promise<{ data: Record<string, any>; isFallback: boolean }> {
+  const fallback = {
+    city, state, school_age_population: 15000, private_school_rate: 18,
+    sector_growth: 3, avg_students_per_school: 500, confidence: 'estimado',
+    notes: `Dados estimados para ${city}`,
+    inep_data: {
+      school_classification: 'médio',
+      main_competitors: ['Escolas públicas municipais', 'Redes privadas regionais', 'Escolas confessionais'],
+      market_opportunity: 'Crescimento da classe média local com demanda por ensino privado de qualidade.',
+      risk_factors: 'Expansão de redes nacionais com mensalidades competitivas na região.',
+    }
+  }
+  if (!city || !state) return { data: fallback, isFallback: true }
+
+  const supabase = getSupabaseAdmin()
+  try {
+    const { data: cached } = await supabase
+      .from('market_data_cache').select('data, fetched_at')
+      .eq('city', city).eq('state', state).maybeSingle()
+    if (cached?.data && cached.fetched_at && Date.now() - new Date(cached.fetched_at).getTime() < MARKET_DATA_TTL_MS) {
+      return { data: cached.data, isFallback: false }
+    }
+  } catch (e) { console.error('[fetchIbgeData] erro ao ler cache:', e) }
+
+  const prompt = `Você é especialista em dados educacionais brasileiros (IBGE, Censo Escolar MEC).
+Para ${city}, ${state}, retorne SOMENTE JSON válido. Se não tiver dados precisos, estime com base no porte do município.
+{
+  "city": "${city}", "state": "${state}",
+  "school_age_population": <estimativa população 4-17 anos>,
+  "total_population": <estimativa total>,
+  "private_school_students": <estimativa alunos rede privada>,
+  "private_school_rate": <% alunos em escola privada>,
+  "sector_growth_rate": <% crescimento anual setor privado>,
+  "total_private_schools": <número de escolas privadas>,
+  "average_students_per_school": <média de alunos por escola privada>,
+  "ibge_year": 2022,
+  "data_source": "IBGE Censo 2022 / Censo Escolar MEC 2023",
+  "confidence": "high|medium|estimado",
+  "notes": "<observação breve>",
+  "inep_data": {
+    "school_classification": "<pequeno|médio|grande>",
+    "main_competitors": ["<tipo 1>", "<tipo 2>", "<tipo 3>"],
+    "market_opportunity": "<oportunidade em 1 frase>",
+    "risk_factors": "<risco em 1 frase>"
+  }
+}`
+  let result: Record<string, any> = fallback
+  let isFallback = true
+  try {
+    const raw = await callClaude(prompt, 700)
+    result = JSON.parse(extractJsonObject(raw))
+    isFallback = false
+  } catch { /* mantém fallback */ }
+
+  try {
+    await supabase.from('market_data_cache').upsert(
+      { city, state, data: result, fetched_at: new Date().toISOString() },
+      { onConflict: 'city,state' }
+    )
+  } catch (e) { console.error('[fetchIbgeData] erro ao salvar cache:', e) }
+
+  return { data: result, isFallback }
+}
+
+// ─── Nível 1 do motor de metas: funil de conversão real da própria escola ──
+// (registrations→schedules→visits→enrollments) a partir de funnel_metrics
+// REAL (não _target) — só usado quando há sinal mínimo de confiança.
+async function fetchRealFunnelConversion(institutionId: string): Promise<{ regToSch: number; schToVis: number; visToEnr: number } | null> {
+  const supabase = getSupabaseAdmin()
+  // funnel_metrics não tem campaign_cycle_id (achado confirmado: a chave é
+  // só institution_id+period, sem FK pra campaign_cycles) — não dá pra
+  // filtrar o funil por um ciclo específico. A checagem por ciclos
+  // finished/active serve só de sinal "esta escola já rodou campanha na
+  // Áion Edu antes" antes de agregar todo o funnel_metrics real dela.
+  const { data: pastCycles } = await supabase
+    .from('campaign_cycles').select('id')
+    .eq('institution_id', institutionId).in('status', ['finished', 'active'])
+  if (!pastCycles || pastCycles.length === 0) return null
+
+  const { data: fm } = await supabase
+    .from('funnel_metrics').select('registrations, schedules, visits, enrollments')
+    .eq('institution_id', institutionId)
+  if (!fm || fm.length === 0) return null
+
+  const totalReg = fm.reduce((s, r) => s + (r.registrations || 0), 0)
+  const totalSch = fm.reduce((s, r) => s + (r.schedules || 0), 0)
+  const totalVis = fm.reduce((s, r) => s + (r.visits || 0), 0)
+  const totalEnr = fm.reduce((s, r) => s + (r.enrollments || 0), 0)
+
+  // Critério mínimo de confiança — abaixo disso a taxa é estatisticamente
+  // instável (poucos cadastros geram % artificialmente alto ou baixo).
+  if (totalReg <= 30) return null
+
+  const clamp = (v: number) => Math.min(1, Math.max(0.05, v))
+  return {
+    regToSch: totalSch > 0 ? clamp(totalSch / totalReg) : 0.76,
+    schToVis: totalSch > 0 && totalVis > 0 ? clamp(totalVis / totalSch) : 0.63,
+    visToEnr: totalVis > 0 && totalEnr > 0 ? clamp(totalEnr / totalVis) : 0.40,
+  }
+}
+
+// ─── Nível 3 do motor de metas: pipeline real de leads já sinalizando
+// interesse no ano da campanha (leads.year_interest) ────────────────────────
+// 'enrolled' é fato consumado (não projeção) — vira "piso" que reduz a meta
+// de captação nova diretamente. Os demais estágios abertos (new/contact/
+// scheduled/visit/proposal) entram numa projeção ponderada pela taxa de
+// conversão do Nível 1 (ou benchmark, se não houver dado próprio). 'proposal'
+// não mapeia pra nenhuma taxa medida hoje (não existe uma taxa
+// proposta→matrícula calculada em lugar nenhum do sistema) — usa peso fixo
+// alto (0.75) em vez de derivar do funil de 3 estágios. 'lost' fica de fora.
+const PROPOSAL_FIXED_WEIGHT = 0.75
+
+async function fetchLeadsPipeline(
+  institutionId: string, campaignYear: number,
+  conv: { regToSch: number; schToVis: number; visToEnr: number }
+): Promise<{ totalLeads: number; counts: Record<string, number>; enrolledFloor: number; projectedFromPipeline: number }> {
+  const supabase = getSupabaseAdmin()
+  const { data: leadsData } = await supabase
+    .from('leads').select('status')
+    .eq('institution_id', institutionId).eq('year_interest', campaignYear)
+
+  const counts: Record<string, number> = {}
+  for (const l of (leadsData || [])) counts[l.status] = (counts[l.status] || 0) + 1
+
+  const fullChain = conv.regToSch * conv.schToVis * conv.visToEnr
+  const schToEnr = conv.schToVis * conv.visToEnr
+  const weightByStatus: Record<string, number> = {
+    new: fullChain, contact: fullChain,
+    scheduled: schToEnr, visit: conv.visToEnr,
+    proposal: PROPOSAL_FIXED_WEIGHT,
+    // enrolled: tratado à parte como piso, não entra na projeção ponderada.
+    // lost: fora, sem chance de conversão.
+  }
+
+  let weightedProjection = 0
+  for (const [status, count] of Object.entries(counts)) {
+    const weight = weightByStatus[status]
+    if (!weight) continue
+    weightedProjection += count * weight
+  }
+
+  return {
+    totalLeads: (leadsData || []).length,
+    counts,
+    enrolledFloor: counts['enrolled'] || 0,
+    projectedFromPipeline: Math.round(weightedProjection),
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -349,54 +513,18 @@ Respostas: ${JSON.stringify(responses)}
     // ── DADOS DE MERCADO ──────────────────────────────────────────────────────
     if (action === 'fetch_ibge') {
       const { city, state } = payload as { city: string; state: string }
-      const fallback = {
-        city, state, school_age_population: 15000, private_school_rate: 18,
-        sector_growth: 3, avg_students_per_school: 500, confidence: 'estimado',
-        notes: `Dados estimados para ${city}`,
-        inep_data: {
-          school_classification: 'médio',
-          main_competitors: ['Escolas públicas municipais', 'Redes privadas regionais', 'Escolas confessionais'],
-          market_opportunity: 'Crescimento da classe média local com demanda por ensino privado de qualidade.',
-          risk_factors: 'Expansão de redes nacionais com mensalidades competitivas na região.',
-        }
-      }
-      const prompt = `Você é especialista em dados educacionais brasileiros (IBGE, Censo Escolar MEC).
-Para ${city}, ${state}, retorne SOMENTE JSON válido. Se não tiver dados precisos, estime com base no porte do município.
-{
-  "city": "${city}", "state": "${state}",
-  "school_age_population": <estimativa população 4-17 anos>,
-  "total_population": <estimativa total>,
-  "private_school_students": <estimativa alunos rede privada>,
-  "private_school_rate": <% alunos em escola privada>,
-  "sector_growth_rate": <% crescimento anual setor privado>,
-  "total_private_schools": <número de escolas privadas>,
-  "average_students_per_school": <média de alunos por escola privada>,
-  "ibge_year": 2022,
-  "data_source": "IBGE Censo 2022 / Censo Escolar MEC 2023",
-  "confidence": "high|medium|estimado",
-  "notes": "<observação breve>",
-  "inep_data": {
-    "school_classification": "<pequeno|médio|grande>",
-    "main_competitors": ["<tipo 1>", "<tipo 2>", "<tipo 3>"],
-    "market_opportunity": "<oportunidade em 1 frase>",
-    "risk_factors": "<risco em 1 frase>"
-  }
-}`
-      let parsed = fallback
-      try {
-        const result = await callClaude(prompt, 700)
-        parsed = JSON.parse(extractJsonObject(result))
-      } catch { }
-      return res.json({ result: parsed })
+      const { data: result } = await fetchIbgeData(city, state)
+      return res.json({ result })
     }
 
     // ── GERADOR DE CAMPANHA ───────────────────────────────────────────────────
     if (action === 'generate_campaign') {
       const {
-        schoolData, historicalData, marketData, growthTarget,
+        institutionId, schoolData, historicalData, growthTarget,
         campaignYear, executionYear, start_date, end_date,
         current_date, campaign_start_month, months_until_campaign, total_exits
       } = payload as {
+        institutionId?: string
         schoolData: { name: string; city: string; state: string; grades: string[]; avg_monthly_fee: number; current_students: number }
         historicalData: {
           year: number; total_students: number; new_enrollments: number
@@ -405,7 +533,6 @@ Para ${city}, ${state}, retorne SOMENTE JSON válido. Se não tiver dados precis
           returning_students?: number
           returning_students_by_month?: Record<string, number> | null
         }[]
-        marketData: { school_age_population?: number; private_school_rate?: number; sector_growth_rate?: number }
         growthTarget: { type: 'percentage' | 'absolute' | 'students'; value: number }
         campaignYear: number; executionYear?: number
         start_date?: string; end_date?: string; current_date?: string
@@ -468,14 +595,37 @@ Para ${city}, ${state}, retorne SOMENTE JSON válido. Se não tiver dados precis
       } else {
         targetNewStudents = Math.max(0, growthTarget.value - reenrollTarget)
       }
+      const targetNewStudentsBeforePipeline = targetNewStudents
+
+      // ── Nível 1: funil de conversão real da própria escola (se houver
+      // sinal mínimo de confiança), senão benchmark genérico — precisa vir
+      // antes do Nível 3, que usa essas taxas pra projetar o pipeline ──
+      const realConv = institutionId ? await fetchRealFunnelConversion(institutionId) : null
+      const conv = realConv ?? { regToSch: 0.76, schToVis: 0.63, visToEnr: 0.40 }
+
+      // ── Nível 2: dado de mercado real (IBGE/Censo Escolar), sempre
+      // buscado agora (com cache de 30 dias por cidade+estado) ──
+      const { data: marketData, isFallback: marketIsFallback } = await fetchIbgeData(schoolData.city, schoolData.state)
+
+      // ── Nível 3: pipeline real de leads já sinalizando interesse no ano
+      // desta campanha (leads.year_interest) — reduz a meta de captação NOVA
+      // pelo que esse pipeline já em andamento tende a entregar sozinho.
+      // Calculado com a taxa de conversão do Nível 1 (real) ou benchmark
+      // (conv, resolvido acima) — 'proposal' usa peso fixo (ver comentário
+      // em fetchLeadsPipeline). Só roda se institutionId veio no payload.
+      const leadsPipeline = institutionId
+        ? await fetchLeadsPipeline(institutionId, campaignYear, conv)
+        : { totalLeads: 0, counts: {}, enrolledFloor: 0, projectedFromPipeline: 0 }
+      const pipelineCovers = leadsPipeline.enrolledFloor + leadsPipeline.projectedFromPipeline
+      if (pipelineCovers > 0) {
+        targetNewStudents = Math.max(0, targetNewStudents - pipelineCovers)
+      }
 
       // Distribuição mensal rematrícula (acumulada progressiva)
       const realReenrollDist = calcRealReenrollDistribution(historicalData || [])
 const reenrollMonthlyDist: Record<number, number> = realReenrollDist
   ?? { 8: 0, 9: 0.05, 10: 0.25, 11: 0.30, 12: 0.20, 1: 0.15, 2: 0.05 }
 console.log('[generate_campaign] distribuição:', realReenrollDist ? 'REAL da escola' : 'padrão Brasil')
-
-      const conv = { regToSch: 0.76, schToVis: 0.63, visToEnr: 0.40 }
 
       const monthlyContext = normalizedSeas.map(m => {
         const newEnr = Math.round(targetNewStudents * (m.pct / 100))
@@ -516,19 +666,35 @@ Sazonalidade: ${realSeasonality ? 'REAL da escola (histórico mensal SIGA)' : 'B
 Distribuição mensal estimada:
 ${monthlyContext}
 
-━━━ MERCADO ━━━
+━━━ FUNIL DE CONVERSÃO ━━━
+${realConv ? 'REAL desta escola (histórico de funnel_metrics na Áion Edu)' : 'Benchmark genérico do setor (esta escola ainda não tem dado próprio suficiente — mínimo 30 cadastros registrados)'}
+Cadastro→Agendamento: ${(conv.regToSch * 100).toFixed(0)}% | Agendamento→Visita: ${(conv.schToVis * 100).toFixed(0)}% | Visita→Matrícula: ${(conv.visToEnr * 100).toFixed(0)}%
+
+━━━ MERCADO (${marketIsFallback ? 'estimativa genérica — sem dado preciso disponível' : 'IBGE/Censo Escolar real'}) ━━━
 Pop. escolar: ${marketData.school_age_population?.toLocaleString('pt-BR') ?? 'N/D'}
-Rede privada: ${marketData.private_school_rate ?? 18}% | Crescimento: ${marketData.sector_growth_rate ?? 3}%/ano
+Rede privada: ${marketData.private_school_rate ?? 18}% | Crescimento: ${marketData.sector_growth_rate ?? marketData.sector_growth ?? 3}%/ano
+Porte da escola no mercado local: ${marketData.inep_data?.school_classification ?? 'N/D'}
+Principais concorrentes: ${(marketData.inep_data?.main_competitors || []).join(', ') || 'N/D'}
+Oportunidade de mercado: ${marketData.inep_data?.market_opportunity ?? 'N/D'}
+Risco de mercado: ${marketData.inep_data?.risk_factors ?? 'N/D'}
+
+━━━ PIPELINE DE LEADS JÁ EXISTENTE PARA ${campaignYear} ━━━
+${leadsPipeline.totalLeads > 0
+  ? `${leadsPipeline.totalLeads} leads já sinalizaram interesse em ${campaignYear} (campo year_interest), antes mesmo desta campanha existir: ${Object.entries(leadsPipeline.counts).map(([s, c]) => `${s}=${c}`).join(', ')}.
+${leadsPipeline.enrolledFloor > 0 ? `${leadsPipeline.enrolledFloor} já matriculados (contam como piso garantido).` : ''}
+Projeção de conversão do restante do pipeline (pelas taxas acima): ${leadsPipeline.projectedFromPipeline} matrículas.
+A meta de captação NOVA já foi reduzida de ${targetNewStudentsBeforePipeline} para ${targetNewStudents} pra não contar esse pipeline duas vezes — no reasoning, explique isso pro gestor.`
+  : 'Nenhum lead sinalizou interesse neste ano ainda (year_interest) — meta de captação calculada do zero, sem ajuste de pipeline.'}
 
 ━━━ REGRAS OBRIGATÓRIAS ━━━
 1. enrollments_returning em Set/Out/Nov/Dez/Jan DEVE ser > 0
    Distribua ${reenrollTarget} rematrículas conforme distribuição ${realReenrollDist ? 'REAL da escola' : 'padrão Brasil'}: ${Object.entries(reenrollMonthlyDist).map(([m,p]) => `Mês ${m}: ${(Number(p)*100).toFixed(1)}%`).join(' | ')}
 2. enrollments_new = novatos do mês pela sazonalidade calculada
 3. enrollments = enrollments_new + enrollments_returning
-4. registrations = ceil(schedules/0.76) | schedules = ceil(visits/0.63) | visits = ceil(enrollments_new/0.40)
+4. registrations = ceil(schedules/${conv.regToSch.toFixed(2)}) | schedules = ceil(visits/${conv.schToVis.toFixed(2)}) | visits = ceil(enrollments_new/${conv.visToEnr.toFixed(2)})
 5. investment_suggested: CPA R$100-250 × enrollments_new
 6. Gere EXATAMENTE ${totalMonths} meses em ordem: ${monthsStr}
-7. No reasoning: analise CRITICAMENTE a tendência histórica (escola perdeu alunos de 2023→2026?) e comente se o objetivo é realista
+7. No reasoning: analise CRITICAMENTE a tendência histórica (escola perdeu alunos de 2023→2026?), comente se o objetivo é realista, e se houver pipeline de leads (ver seção acima), explique como ele reduziu a meta de captação nova
 
 Retorne SOMENTE JSON válido:
 {
@@ -556,7 +722,7 @@ Retorne SOMENTE JSON válido:
       "investment_suggested": 0, "leads_target": 0, "cpa_target": 0
     }
   ],
-  "funnel_rates": { "registration_to_schedule": 0.76, "schedule_to_visit": 0.63, "visit_to_enrollment": 0.40 },
+  "funnel_rates": { "registration_to_schedule": ${conv.regToSch.toFixed(2)}, "schedule_to_visit": ${conv.schToVis.toFixed(2)}, "visit_to_enrollment": ${conv.visToEnr.toFixed(2)} },
   "total_investment_suggested": 0,
   "total_leads_needed": 0,
   "average_cpa": 0,
@@ -609,8 +775,27 @@ Retorne SOMENTE JSON válido:
         }
       }
 
+      // ✅ Não confiar na IA pra números que já calculamos com certeza em JS
+      // (mesmo padrão do bloco de rematrícula acima) — e garantir que a
+      // explicação do pipeline de leads aparece pro gestor mesmo se o
+      // reasoning gerado pela IA não tocar no assunto.
+      const summaryObj = parsed.summary as Record<string, unknown>
+      if (summaryObj) {
+        summaryObj.total_new_students_target = targetNewStudents
+        if (pipelineCovers > 0) {
+          const pipelineNote = `Pipeline já existente: ${leadsPipeline.totalLeads} leads sinalizaram interesse em ${campaignYear} antes desta campanha (year_interest)${leadsPipeline.enrolledFloor > 0 ? `, ${leadsPipeline.enrolledFloor} já matriculados` : ''}, projetando ${leadsPipeline.projectedFromPipeline} matrículas adicionais pelo funil de conversão ${realConv ? 'real desta escola' : 'benchmark'}. Por isso a meta de captação NOVA caiu de ${targetNewStudentsBeforePipeline} para ${targetNewStudents}. `
+          summaryObj.reasoning = pipelineNote + String(summaryObj.reasoning ?? '')
+        }
+      }
+
       const mode = hasHistory ? (historicalData.length >= 2 ? 'historical' : 'hybrid') : 'benchmark'
-      return res.json({ result: parsed, mode, reenroll_distribution: realReenrollDist })
+      const confidence = {
+        funnel_rates: realConv ? 'own_data' : 'market_generic',
+        market_data: marketIsFallback ? 'generic_fallback' : 'real_ibge',
+        reenrollment: hasHistory ? 'own_data' : 'generic_default',
+        pipeline_leads: leadsPipeline.totalLeads,
+      }
+      return res.json({ result: parsed, mode, reenroll_distribution: realReenrollDist, confidence })
     }
 
     // ── RELATÓRIO MENSAL IA ───────────────────────────────────────────────────
