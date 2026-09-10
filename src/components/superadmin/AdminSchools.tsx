@@ -1278,6 +1278,7 @@ export default function AdminSchools() {
   const [institutions, setInstitutions] = useState<any[]>([])
   const [consultants, setConsultants] = useState<any[]>([])
   const [cycles, setCycles] = useState<any[]>([])
+  const [pendingChangeCounts, setPendingChangeCounts] = useState<Record<string, number>>({})
   const [waNumbers, setWaNumbers]   = useState<Record<string, any>>({})
   const [waUsageMap, setWaUsageMap] = useState<Record<string, { initiated: number; limit: number }>>({})
 
@@ -1323,7 +1324,7 @@ export default function AdminSchools() {
   const loadData = async () => {
     setLoading(true)
     const monthYear = new Date().toISOString().slice(0, 7)
-    const [instRes, consultRes, cycleRes, waRes, usageRes] = await Promise.all([
+    const [instRes, consultRes, cycleRes, waRes, usageRes, changeReqRes] = await Promise.all([
       supabase.from('institutions').select('id, name, city, state, email, phone, plan, plan_status, monthly_value, consultant_id, created_at, address, cnpj').order('name'),
       supabase.from('users').select('id, full_name, email').eq('user_type', 'consultant'),
       supabase.from('campaign_cycles')
@@ -1333,6 +1334,7 @@ export default function AdminSchools() {
       supabase.from('whatsapp_conversation_usage')
         .select('institution_id, initiated_count, limit_count')
         .eq('month_year', monthYear),
+      supabase.from('campaign_change_requests').select('institution_id').eq('status', 'pending'),
     ])
     if (cancelledRef.current) return
     if (instRes.error) console.error('institutions error:', instRes.error)
@@ -1348,6 +1350,9 @@ export default function AdminSchools() {
       usageMap[r.institution_id] = { initiated: r.initiated_count || 0, limit: r.limit_count || 1000 }
     }
     setWaUsageMap(usageMap)
+    const pendingMap: Record<string, number> = {}
+    for (const r of (changeReqRes.data || [])) pendingMap[r.institution_id] = (pendingMap[r.institution_id] || 0) + 1
+    setPendingChangeCounts(pendingMap)
     setLoading(false)
   }
 
@@ -1655,6 +1660,11 @@ export default function AdminSchools() {
                         <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: cycleBadge.color, background: cycleBadge.bg }}>
                           {cycleBadge.label}
                         </span>
+                        {!!pendingChangeCounts[inst.id] && (
+                          <span title="Ajuste de campanha pendente de aprovação" className="ml-1.5 text-xs font-semibold px-2 py-1 rounded-full text-amber-700 bg-amber-50 border border-amber-200">
+                            ⏳ {pendingChangeCounts[inst.id]}
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-3.5">
                         {waNumbers[inst.id]?.is_active

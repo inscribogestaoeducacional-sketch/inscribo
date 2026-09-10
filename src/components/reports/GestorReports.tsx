@@ -1653,6 +1653,7 @@ export default function GestorReports({ institutionId, institutionName }: Props)
   const [showLinkLeadsModal, setShowLinkLeadsModal] = useState(false)
   const [isAdjustMode, setIsAdjustMode] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  const [latestChangeRequest, setLatestChangeRequest] = useState<{ status: string; rejection_reason: string | null; created_at: string } | null>(null)
 
   useEffect(() => {
     const h = () => setIsMobile(window.innerWidth < 768)
@@ -1677,6 +1678,15 @@ export default function GestorReports({ institutionId, institutionName }: Props)
       setCycle(cycleData)
 
       if (cycleData) {
+        const { data: changeReqData } = await supabase
+          .from('campaign_change_requests')
+          .select('status, rejection_reason, created_at')
+          .eq('campaign_cycle_id', cycleData.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        setLatestChangeRequest(changeReqData ?? null)
+
         const { data: metricsData } = await supabase
           .from('funnel_metrics')
           .select('*')
@@ -1880,6 +1890,19 @@ export default function GestorReports({ institutionId, institutionName }: Props)
           </div>
         )}
 
+        {/* Status da última solicitação de ajuste — some quando aprovada ou
+            quando não há nenhuma solicitação registrada. */}
+        {latestChangeRequest?.status === 'pending' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, fontSize: 13, color: '#92400E' }}>
+            ⏳ Ajuste enviado em {new Date(latestChangeRequest.created_at).toLocaleDateString('pt-BR')}, aguardando aprovação do administrador.
+          </div>
+        )}
+        {latestChangeRequest?.status === 'rejected' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, fontSize: 13, color: '#B91C1C' }}>
+            ❌ Seu último pedido de ajuste foi rejeitado{latestChangeRequest.rejection_reason ? `: ${latestChangeRequest.rejection_reason}` : '.'} Você pode enviar um novo ajuste abaixo.
+          </div>
+        )}
+
         {/* Botão gerar plano */}
         <button
           onClick={() => { setIsAdjustMode(!!cycleIsConfigured); setShowCampaignModal(true) }}
@@ -1891,7 +1914,7 @@ export default function GestorReports({ institutionId, institutionName }: Props)
         {showCampaignModal && (
           <CampaignGeneratorModal
             isOpen={showCampaignModal}
-            onClose={() => { setShowCampaignModal(false); setIsAdjustMode(false) }}
+            onClose={() => { setShowCampaignModal(false); setIsAdjustMode(false); loadData() }}
             onApply={() => { loadData(); setShowCampaignModal(false); setIsAdjustMode(false) }}
             existingCycle={cycle as any}
             institutionId={institutionId}

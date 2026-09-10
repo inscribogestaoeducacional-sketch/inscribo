@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { applyCampaignCycle } from '../../lib/campaignApply'
 import { useAuth } from '../../contexts/AuthContext'
 import SuperAdminLayout from './SuperAdminLayout'
 import { createGoogleMeet, buildEndDatetime } from '../../lib/googleMeet'
@@ -306,6 +307,10 @@ export default function InstitutionDetails() {
   const [onboardingTasks,   setOnboardingTasks]   = useState<any[]>([])
   const [meetings,          setMeetings]          = useState<any[]>([])
   const [cycles,            setCycles]            = useState<any[]>([])
+  const [changeRequests,    setChangeRequests]    = useState<any[]>([])
+  const [reviewingRequestId, setReviewingRequestId] = useState<string | null>(null)
+  const [rejectingRequest,  setRejectingRequest]  = useState<any>(null)
+  const [rejectReason,      setRejectReason]      = useState('')
   const [consultants,       setConsultants]       = useState<any[]>([])
   const [waUsage,           setWaUsage]           = useState({ count: 0, limit: 1000, initiated: 0, received: 0 })
   const [updatingLimit,    setUpdatingLimit]     = useState(false)
@@ -416,7 +421,7 @@ export default function InstitutionDetails() {
     if (!id) return
     if (!quiet) setLoading(true)
     try {
-      const [instRes, usersRes, paymentsRes, contractRes, processRes, cycleRes, consultantsRes, waPhoneRes] = await Promise.all([
+      const [instRes, usersRes, paymentsRes, contractRes, processRes, cycleRes, consultantsRes, waPhoneRes, changeRequestsRes] = await Promise.all([
         supabase.from('institutions').select('*').eq('id', id).single(),
         supabase.from('users').select('*').eq('institution_id', id).order('created_at', { ascending: false }),
         supabase.from('payments').select('*').eq('institution_id', id).order('created_at', { ascending: false }),
@@ -425,6 +430,7 @@ export default function InstitutionDetails() {
         supabase.from('campaign_cycles').select('*').eq('institution_id', id).order('created_at', { ascending: false }),
         supabase.from('users').select('id, full_name, email').eq('user_type', 'consultant').order('full_name'),
         supabase.from('whatsapp_phone_numbers').select('waba_id').eq('institution_id', id).maybeSingle(),
+        supabase.from('campaign_change_requests').select('*').eq('institution_id', id).eq('status', 'pending').order('created_at', { ascending: false }),
       ])
 
       if (cancelledRef.current) return
@@ -437,6 +443,7 @@ export default function InstitutionDetails() {
       setPayments(paymentsRes.data || [])
       setContract(contractRes.data ?? null)
       setCycles(cycleRes.data || [])
+      setChangeRequests(changeRequestsRes.data || [])
       setConsultants(consultantsRes.data || [])
 
       if (inst) {
@@ -1122,6 +1129,71 @@ export default function InstitutionDetails() {
       showToast(e?.message || 'Erro ao liberar campanha.', false)
     } finally {
       setReleasingCycleId(null)
+    }
+  }
+
+  // Aprova um pedido de ajuste pendente — aplica requested_changes
+  // reaproveitando exatamente a mesma lógica de gravação que o gestor usa ao
+  // aplicar um plano (applyCampaignCycle, src/lib/campaignApply.ts), sem
+  // duplicar nada aqui.
+  const handleApproveChangeRequest = async (req: any) => {
+    setReviewingRequestId(req.id)
+    try {
+      const changes = req.requested_changes || {}
+      await applyCampaignCycle({
+        institutionId: id!,
+        cycleData: changes,
+        campaignStartMonthNum: changes.campaign_start_month || 1,
+        schoolDataSnapshot: changes.school_data ?? {},
+        erpFiles: changes.erp_files ?? [],
+        currentStudents: changes.base_students ?? 0,
+        cycleId: req.campaign_cycle_id,
+      })
+      const { error } = await supabase.from('campaign_change_requests').update({
+        status: 'approved', reviewed_by: user?.id || null, reviewed_at: new Date().toISOString(),
+      }).eq('id', req.id)
+      if (error) throw error
+
+      await supabase.from('system_notifications').insert({
+        institution_id: id, type: 'milestone', severity: 'success',
+        title: 'Ajuste de campanha aprovado!',
+        message: 'O ajuste que você solicitou foi aprovado pelo administrador e já está em vigor.',
+      })
+
+      showToast('Ajuste aprovado e aplicado!')
+      loadAll()
+    } catch (e: any) {
+      showToast(e?.message || 'Erro ao aprovar o ajuste.', false)
+    } finally {
+      setReviewingRequestId(null)
+    }
+  }
+
+  // Rejeita um pedido pendente — só marca status/motivo, nada é aplicado em
+  // campaign_cycles nem nas tabelas de métrica.
+  const handleRejectChangeRequest = async () => {
+    if (!rejectingRequest) return
+    setReviewingRequestId(rejectingRequest.id)
+    try {
+      const { error } = await supabase.from('campaign_change_requests').update({
+        status: 'rejected', reviewed_by: user?.id || null, reviewed_at: new Date().toISOString(),
+        rejection_reason: rejectReason.trim() || null,
+      }).eq('id', rejectingRequest.id)
+      if (error) throw error
+
+      await supabase.from('system_notifications').insert({
+        institution_id: id, type: 'alert', severity: 'warning',
+        title: 'Ajuste de campanha rejeitado',
+        message: rejectReason.trim() || 'O ajuste solicitado foi rejeitado pelo administrador.',
+      })
+
+      showToast('Solicitação rejeitada.')
+      setRejectingRequest(null); setRejectReason('')
+      loadAll()
+    } catch (e: any) {
+      showToast(e?.message || 'Erro ao rejeitar a solicitação.', false)
+    } finally {
+      setReviewingRequestId(null)
     }
   }
 
@@ -2507,6 +2579,46 @@ export default function InstitutionDetails() {
                             ) : (
                               <p className="text-xs text-gray-400 italic mt-3 pt-3 border-t border-gray-100">Métricas ainda não preenchidas pela escola.</p>
                             )}
+
+                            {/* Ajuste pendente de aprovação — só aparece quando existe uma
+                                campaign_change_requests com status='pending' pra este ciclo. */}
+                            {changeRequests.filter(r => r.campaign_cycle_id === c.id).map(req => {
+                              const rc = req.requested_changes || {}
+                              const requester = users.find(u => u.id === req.requested_by)
+                              return (
+                                <div key={req.id} className="mt-3 pt-3 border-t border-amber-200 bg-amber-50 -mx-4 -mb-4 px-4 pb-4 rounded-b-xl">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Bell className="w-3.5 h-3.5 text-amber-600" />
+                                    <p className="text-xs font-bold text-amber-800">Ajuste pendente de aprovação</p>
+                                  </div>
+                                  <p className="text-xs text-amber-700 mb-2">
+                                    Solicitado por {requester?.full_name || 'gestor'} em {fmtDateTime(req.created_at)}
+                                  </p>
+                                  <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                                    <div><span className="text-gray-500">Novatos: </span><span className="font-semibold text-gray-900">{c.target_new_students || 0} → {rc.target_new_students ?? 0}</span></div>
+                                    <div><span className="text-gray-500">Rematrícula: </span><span className="font-semibold text-gray-900">{Math.round((c.target_reenrollment_rate || 0) * 100)}% → {Math.round((rc.target_reenrollment_rate ?? 0) * 100)}%</span></div>
+                                    <div className="col-span-2"><span className="text-gray-500">Período: </span><span className="font-semibold text-gray-900">{fmtDate(c.start_date)}–{fmtDate(c.end_date)} → {fmtDate(rc.start_date)}–{fmtDate(rc.end_date)}</span></div>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => handleApproveChangeRequest(req)}
+                                      disabled={reviewingRequestId === req.id}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-semibold disabled:opacity-60"
+                                    >
+                                      {reviewingRequestId === req.id ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                                      Aprovar
+                                    </button>
+                                    <button
+                                      onClick={() => { setRejectingRequest(req); setRejectReason('') }}
+                                      disabled={reviewingRequestId === req.id}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 rounded-lg text-xs font-semibold disabled:opacity-60"
+                                    >
+                                      <X className="w-3.5 h-3.5" /> Rejeitar
+                                    </button>
+                                  </div>
+                                </div>
+                              )
+                            })}
                           </div>
                         )
                       })}
@@ -2515,6 +2627,37 @@ export default function InstitutionDetails() {
                 </div>
               )}
 
+            </div>
+          </div>
+        )}
+
+        {/* ── Modal: Rejeitar ajuste de campanha ── */}
+        {rejectingRequest && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-gray-900">Rejeitar ajuste</h2>
+                <button onClick={() => { setRejectingRequest(null); setRejectReason('') }}><X className="w-5 h-5 text-gray-400" /></button>
+              </div>
+              <label className={lbl}>Motivo (opcional — visível para o gestor)</label>
+              <textarea
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+                rows={3}
+                placeholder="Ex: meta de novatos muito alta pro período, revise e reenvie."
+                className={inp}
+              />
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => { setRejectingRequest(null); setRejectReason('') }} className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
+                <button
+                  onClick={handleRejectChangeRequest}
+                  disabled={reviewingRequestId === rejectingRequest.id}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold disabled:opacity-60"
+                >
+                  {reviewingRequestId === rejectingRequest.id ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                  Rejeitar solicitação
+                </button>
+              </div>
             </div>
           </div>
         )}

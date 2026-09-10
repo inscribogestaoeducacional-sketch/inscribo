@@ -5,6 +5,7 @@ import {
   Edit3, FileText, Calendar, Users, DollarSign, TrendingUp
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { applyCampaignCycle, getCampaignMonths } from '../../lib/campaignApply'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
@@ -23,6 +24,7 @@ interface Props {
   openAtStep?: number; isAdjustMode?: boolean; currentUserId?: string; currentUserName?: string
 }
 interface CycleData {
+  id?: string
   institution_id: string; year: number; label: string; start_date: string; end_date: string
   target_new_students: number; target_reenrollment_rate: number; base_students: number
   projected_cpa: number; monthly_targets: MonthlyTarget[]
@@ -85,19 +87,6 @@ const S = {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
-function getCampaignMonths(startDate: string, endDate: string) {
-  const names = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
-  const months: { label: string; month: number; year: number; period: string }[] = []
-  const start = new Date(startDate + 'T12:00:00')
-  const end = new Date(endDate + 'T12:00:00')
-  const cur = new Date(start)
-  while (cur <= end && months.length < 24) {
-    months.push({ label: `${names[cur.getMonth()]}/${cur.getFullYear()}`, month: cur.getMonth() + 1, year: cur.getFullYear(), period: `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}` })
-    cur.setMonth(cur.getMonth() + 1)
-  }
-  return months
-}
-
 function scalePlan(plan: GeneratedPlan, factor: number): GeneratedPlan {
   const s = JSON.parse(JSON.stringify(plan)) as GeneratedPlan
   s.monthly_targets = s.monthly_targets.map(m => {
@@ -471,45 +460,36 @@ const handleManualTargets = (newS: number, reen: number) => {
       }))
       const cycleData: CycleData = { institution_id:institutionId, year:executionYear, label:`Campanha ${executionYear}`, start_date:sd, end_date:ed, target_new_students:adjustedPlan.summary.total_new_students_target, target_reenrollment_rate:adjustedPlan.summary.reenrollment_rate_target, base_students:schoolData.current_students, projected_cpa:adjustedPlan.average_cpa, monthly_targets:adjustedPlan.monthly_targets, market_data:{}, historical_data:historicalDataPayload, generation_mode:generationMode, ai_reasoning:adjustedPlan.summary.reasoning, realism_score:adjustedPlan.summary.realism_score, applied_at:new Date().toISOString() }
       if (isAdjustMode) {
-        const { data: ac } = await supabase.from('campaign_cycles').select('id').eq('institution_id',institutionId).eq('status','active').maybeSingle()
-        await supabase.from('campaign_change_requests').insert({ institution_id:institutionId, cycle_id:ac?.id??null, requested_by:currentUserId??null, requested_by_name:currentUserName??null, changes:cycleData, status:'pending', created_at:new Date().toISOString() })
+        const cycleId = existingCycle?.id
+        if (!cycleId) throw new Error('Não foi possível identificar o ciclo a ajustar.')
+        // requested_changes precisa ser autossuficiente pro Admin aprovar
+        // depois (às vezes dias depois) — inclui school_data/erp_files/
+        // campaign_start_month, que normalmente só entram no payload na hora
+        // de aplicar (ver applyCampaignCycle), não fazem parte de CycleData.
+        const requestedChangesPayload = {
+          ...cycleData,
+          campaign_start_month: campaignStartMonthNum,
+          school_data: { ...schoolData, exits: schoolData.exits ?? {}, total_exits: totalExits },
+          erp_files: erpFiles,
+        }
+        const { error: reqErr } = await supabase.from('campaign_change_requests').insert({
+          campaign_cycle_id: cycleId, institution_id: institutionId,
+          requested_by: currentUserId ?? null, requested_changes: requestedChangesPayload, status: 'pending',
+        })
+        if (reqErr) throw reqErr
+        await supabase.from('system_notifications').insert({
+          institution_id: institutionId, type: 'campaign_change_request', severity: 'info',
+          title: 'Ajuste de campanha pendente de aprovação',
+          message: `${currentUserName ?? 'O gestor'} solicitou um ajuste na campanha ${cycleData.label}.`,
+        })
         if (isMounted.current) { setDraftToast('📋 Solicitação enviada. Aguardando aprovação.'); setTimeout(()=>{if(isMounted.current){setDraftToast(null);onClose()}},2500) } else onClose()
         return
       }
-      const { data: existingCycle } = await supabase
-  .from('campaign_cycles')
-  .select('id')
-  .eq('institution_id', institutionId)
-  .in('status', ['released'])
-  .order('created_at', { ascending: false })
-  .maybeSingle()
-
-if (existingCycle) {
-  await supabase.from('campaign_cycles')
-    .update({ ...cycleData, status:'active', campaign_start_month:campaignStartMonthNum, school_data:{...schoolData,exits:schoolData.exits??{},total_exits:totalExits}, erp_files:erpFiles })
-    .eq('id', existingCycle.id)
-} else {
-  await supabase.from('campaign_cycles').insert(
-    { ...cycleData, status:'active', campaign_start_month:campaignStartMonthNum, school_data:{...schoolData,exits:schoolData.exits??{},total_exits:totalExits}, erp_files:erpFiles }
-  )
-}
-      const campaignMonths = getCampaignMonths(sd,ed)
-      for (let mi=0;mi<adjustedPlan.monthly_targets.length;mi++) {
-        const month=adjustedPlan.monthly_targets[mi]; const cm=campaignMonths[mi]
-        const period=cm?cm.period:`${month.year}-${String(month.month).padStart(2,'0')}`
-        // Só as colunas de META entram no payload — nunca os contadores reais
-        // (registrations/schedules/visits/enrollments sem sufixo _target,
-        // confirmed, investment, leads_generated), que representam fatos já
-        // ocorridos (matrículas/visitas/rematrículas/investimento reais).
-        // Upsert do Supabase (Prefer: resolution=merge-duplicates) só inclui
-        // no ON CONFLICT DO UPDATE as colunas presentes no payload — omitir
-        // essas chaves faz o upsert preservá-las quando a linha já existe; e
-        // numa linha nova elas caem no DEFAULT 0 da coluna, que é o valor
-        // certo mesmo (verificado direto no banco antes de aplicar o fix).
-        await supabase.from('funnel_metrics').upsert({ institution_id:institutionId,period,registrations_target:month.registrations,schedules_target:month.schedules,visits_target:month.visits,enrollments_target:month.enrollments_new??0 },{onConflict:'period,institution_id',ignoreDuplicates:false})
-        if ((month.enrollments_returning??0)>0) await supabase.from('monthly_reenrollments').upsert({institution_id:institutionId,period,target:month.enrollments_returning??0,base_total:schoolData.current_students},{onConflict:'institution_id,period',ignoreDuplicates:false})
-        await supabase.from('marketing_campaigns').upsert({institution_id:institutionId,month_year:cm?`${cm.month}-${cm.year}`:`${month.month}-${month.year}`,cpa_target:month.cpa_target},{onConflict:'month_year,institution_id',ignoreDuplicates:false})
-      }
+      await applyCampaignCycle({
+        institutionId, cycleData, campaignStartMonthNum,
+        schoolDataSnapshot: { ...schoolData, exits: schoolData.exits ?? {}, total_exits: totalExits },
+        erpFiles, currentStudents: schoolData.current_students,
+      })
       await supabase.from('system_notifications').insert({institution_id:institutionId,type:'milestone',severity:'success',title:`Campanha ${executionYear} configurada!`,message:`Metas ativas: ${adjustedPlan.summary.total_new_students_target} novatos e ${adjustedPlan.summary.reenrollment_target} rematrículas.`})
       onApply(cycleData)
       if (isMounted.current){setDraftToast('✅ Campanha aplicada!');setTimeout(()=>{if(isMounted.current){setDraftToast(null);onClose()}},1500)} else onClose()
@@ -581,6 +561,7 @@ if (existingCycle) {
           <div style={{background:'#fff',borderRadius:16,padding:28,maxWidth:420,width:'100%',boxShadow:'0 20px 60px rgba(0,0,0,0.2)'}}>
             <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}><div style={{width:36,height:36,borderRadius:10,background:'#D1FAE5',display:'flex',alignItems:'center',justifyContent:'center'}}><Shield size={16} color="#00A896"/></div><span style={{fontSize:16,fontWeight:700,color:'#1A2B4A'}}>Confirmar aplicação</span></div>
             <p style={{fontSize:13,color:'#475569',lineHeight:1.6,marginBottom:20}}>{isAdjustMode?<>Solicitação enviada ao administrador.<br/><br/><strong>Você será notificado quando aprovado.</strong></>:<>Todo o sistema usará estas metas como referência.<br/><br/><strong>Você pode regerar a qualquer momento.</strong></>}</p>
+            {error&&<div style={{padding:12,background:'#FFF1F2',borderRadius:10,border:'1px solid #FECDD3',marginBottom:16}}><p style={{fontSize:12,color:'#BE123C',margin:0}}>{error}</p></div>}
             <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
               <button onClick={()=>setShowConfirm(false)} style={{padding:'9px 18px',borderRadius:9,border:'1px solid #E2E8F0',background:'#fff',fontSize:13,cursor:'pointer',color:'#64748B'}}>Cancelar</button>
               <button onClick={applyCampaign} disabled={applying} style={{display:'flex',alignItems:'center',gap:6,padding:'9px 18px',borderRadius:9,background:'#00A896',color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:'pointer'}}>{applying?<Loader2 size={13} className="animate-spin"/>:<Check size={13}/>}Confirmar e aplicar</button>
