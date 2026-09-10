@@ -35,6 +35,69 @@ function daysLate(due: string) {
   return Math.max(0, Math.floor((Date.now() - new Date(due + 'T12:00:00').getTime()) / 86400000))
 }
 
+// Parser best-effort pra period (funnel_metrics) / month_year (marketing_campaigns) —
+// SÓ usado pra pré-marcar sugestões no modal de exclusão de campanha (ver
+// handleConfirmDeleteCampaign): nunca decide sozinho o que apaga, o admin
+// confere e pode marcar/desmarcar qualquer linha antes de confirmar. Cobre os
+// formatos reais encontrados em produção (checados via SQL direto no banco):
+// "2026-08" (canônico), "Novembro 2025" (nome completo), "Ago/2027", "Set-2027",
+// "SET / 25" (abreviação PT + separador, ano com 2 ou 4 dígitos), "8-2026"
+// (mês numérico sem zero à esquerda + separador). Retorna null quando não
+// reconhece o formato — a linha aparece no modal como "não reconhecido" em
+// vez de ser silenciosamente ignorada ou silenciosamente incluída.
+const MONTH_NAME_MAP: Record<string, number> = {
+  jan: 1, janeiro: 1,
+  fev: 2, fevereiro: 2,
+  mar: 3, marco: 3,
+  abr: 4, abril: 4,
+  mai: 5, maio: 5,
+  jun: 6, junho: 6,
+  jul: 7, julho: 7,
+  ago: 8, agosto: 8,
+  set: 9, setembro: 9,
+  out: 10, outubro: 10,
+  nov: 11, novembro: 11,
+  dez: 12, dezembro: 12,
+}
+function parsePeriodToMonth(raw?: string | null): { year: number; month: number } | null {
+  if (!raw) return null
+  const s = raw.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+  // "2026-08" — canônico
+  let m = s.match(/^(\d{4})-(\d{1,2})$/)
+  if (m) {
+    const month = Number(m[2])
+    if (month >= 1 && month <= 12) return { year: Number(m[1]), month }
+  }
+
+  // "ago/2027", "set-2027", "set / 25" — nome (completo ou abreviado) + separador + ano
+  m = s.match(/^([a-z]+)\s*[/-]\s*(\d{2,4})$/)
+  if (m && MONTH_NAME_MAP[m[1]]) {
+    let year = Number(m[2])
+    if (year < 100) year += 2000
+    return { year, month: MONTH_NAME_MAP[m[1]] }
+  }
+
+  // "novembro 2025" — nome completo + espaço, sem separador
+  m = s.match(/^([a-z]+)\s+(\d{4})$/)
+  if (m && MONTH_NAME_MAP[m[1]]) {
+    return { year: Number(m[2]), month: MONTH_NAME_MAP[m[1]] }
+  }
+
+  // "8-2026", "9/2026" — mês numérico sem zero à esquerda + separador + ano
+  m = s.match(/^(\d{1,2})\s*[/-]\s*(\d{2,4})$/)
+  if (m) {
+    const month = Number(m[1])
+    if (month >= 1 && month <= 12) {
+      let year = Number(m[2])
+      if (year < 100) year += 2000
+      return { year, month }
+    }
+  }
+
+  return null
+}
+
 const STATUS_MAP: Record<string, { l: string; c: string; bg: string }> = {
   active:           { l: 'Ativo',             c: '#16a34a', bg: '#f0fdf4' },
   pending_contract: { l: 'Aguard. contrato',  c: '#6366f1', bg: '#eef2ff' },
@@ -230,6 +293,10 @@ export default function InstitutionDetails() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const cancelledRef = useRef(false)
+  // Mesmo campo usado em TopBar.tsx pra "isSuperAdmin" — estritamente
+  // admin_geral, exclui consultor (que também acessa esta tela via
+  // /super-admin/schools/:id, mas não pode ver o botão de exclusão real).
+  const isSuperAdmin = user?.user_type === 'admin_geral'
 
   const [institution,       setInstitution]       = useState<any>(null)
   const [users,             setUsers]             = useState<any[]>([])
@@ -296,6 +363,22 @@ export default function InstitutionDetails() {
   const [limitedEditCampaign, setLimitedEditCampaign] = useState<any | null>(null)
   const [limitedEditForm, setLimitedEditForm] = useState({ endDate: '', targetNewStudents: '' })
   const [savingLimitedEdit, setSavingLimitedEdit] = useState(false)
+
+  // Exclusão real de campanha (released/active/completed) — só admin_geral.
+  // Modal de revisão manual: lista funnel_metrics/marketing_campaigns da
+  // instituição, pré-marca por sugestão do parser de período, mas quem decide
+  // o que é apagado/limpo é sempre o admin (ver handleConfirmDeleteCampaign).
+  type DeleteReviewRow = Record<string, any> & { _parsed: { year: number; month: number } | null; _suggested: boolean; _selected: boolean }
+  const [deleteReview, setDeleteReview] = useState<{
+    cycle: any
+    funnelRows: DeleteReviewRow[]
+    campaignRows: DeleteReviewRow[]
+    showAllFunnel: boolean
+    showAllCampaign: boolean
+  } | null>(null)
+  const [reviewLoadingCycleId, setReviewLoadingCycleId] = useState<string | null>(null)
+  const [confirmUnderstood, setConfirmUnderstood] = useState(false)
+  const [executingCampaignDelete, setExecutingCampaignDelete] = useState(false)
 
   // Meeting modal
   const [meetingModal, setMeetingModal] = useState<{ phase: string; title: string } | null>(null)
@@ -1039,6 +1122,109 @@ export default function InstitutionDetails() {
       showToast(e?.message || 'Erro ao liberar campanha.', false)
     } finally {
       setReleasingCycleId(null)
+    }
+  }
+
+  // Abre o modal de revisão pra exclusão REAL de uma campanha já liberada
+  // (released/active/completed) — só chamado a partir do botão que só
+  // isSuperAdmin vê. Busca TODAS as linhas de funnel_metrics/marketing_campaigns
+  // da instituição (tabelas pequenas, sem vínculo direto por campaign_cycle_id
+  // — ver investigação) e pré-marca como sugeridas as que o parser de período
+  // (parsePeriodToMonth) reconhece como caindo dentro de [start_date, end_date]
+  // do ciclo. Quem decide de fato o que é apagado é o admin, no modal.
+  const openDeleteCampaignReview = async (cycle: any) => {
+    if (!id) return
+    setReviewLoadingCycleId(cycle.id)
+    setConfirmUnderstood(false)
+    try {
+      const [funnelRes, campaignRes] = await Promise.all([
+        supabase.from('funnel_metrics').select('*').eq('institution_id', id).order('created_at'),
+        supabase.from('marketing_campaigns').select('*').eq('institution_id', id).order('created_at'),
+      ])
+      if (funnelRes.error) throw funnelRes.error
+      if (campaignRes.error) throw campaignRes.error
+
+      const cycleStart = new Date(cycle.start_date + 'T12:00:00')
+      const cycleEnd   = new Date(cycle.end_date + 'T12:00:00')
+      const inCycle = (p: { year: number; month: number } | null) => {
+        if (!p) return false
+        const d = new Date(p.year, p.month - 1, 15)
+        return d >= cycleStart && d <= cycleEnd
+      }
+
+      const funnelRows: DeleteReviewRow[] = (funnelRes.data || []).map((r: any) => {
+        const parsed = parsePeriodToMonth(r.period)
+        const suggested = inCycle(parsed)
+        return { ...r, _parsed: parsed, _suggested: suggested, _selected: suggested }
+      })
+      const campaignRows: DeleteReviewRow[] = (campaignRes.data || []).map((r: any) => {
+        const parsed = parsePeriodToMonth(r.month_year)
+        const suggested = inCycle(parsed)
+        return { ...r, _parsed: parsed, _suggested: suggested, _selected: suggested }
+      })
+
+      setDeleteReview({ cycle, funnelRows, campaignRows, showAllFunnel: false, showAllCampaign: false })
+    } catch (e: any) {
+      showToast(e?.message || 'Erro ao carregar dados da campanha.', false)
+    } finally {
+      setReviewLoadingCycleId(null)
+    }
+  }
+
+  const toggleReviewRow = (table: 'funnelRows' | 'campaignRows', rowId: string) => {
+    setDeleteReview(prev => prev && {
+      ...prev,
+      [table]: prev[table].map(r => r.id === rowId ? { ...r, _selected: !r._selected } : r),
+    })
+  }
+
+  const closeDeleteReview = () => {
+    setDeleteReview(null)
+    setConfirmUnderstood(false)
+  }
+
+  // Executa a exclusão — replica manualmente o que foi feito via SQL hoje
+  // pro Ágape: linha sem NENHUM dado real (registrations/schedules/visits/
+  // enrollments todos zero, ou investment/leads_generated zero) é apagada
+  // inteira; linha com dado real só tem as colunas de META zeradas,
+  // preservando o real. Por fim apaga o ciclo — leads.campaign_cycle_id vira
+  // NULL sozinho via ON DELETE SET NULL (única FK que referencia
+  // campaign_cycles, confirmado no banco), nenhum lead é tocado.
+  const handleConfirmDeleteCampaign = async () => {
+    if (!deleteReview) return
+    const { cycle, funnelRows, campaignRows } = deleteReview
+    setExecutingCampaignDelete(true)
+    try {
+      for (const r of funnelRows.filter(r => r._selected)) {
+        const hasReal = (r.registrations || 0) > 0 || (r.schedules || 0) > 0 || (r.visits || 0) > 0 || (r.enrollments || 0) > 0
+        const { error } = hasReal
+          ? await supabase.from('funnel_metrics').update({
+              registrations_target: null, schedules_target: null, visits_target: null, enrollments_target: null,
+              annual_registrations_target: null, annual_schedules_target: null, annual_visits_target: null, annual_enrollments_target: null,
+              new_students_target: null, returning_students_target: null,
+            }).eq('id', r.id)
+          : await supabase.from('funnel_metrics').delete().eq('id', r.id)
+        if (error) throw error
+      }
+
+      for (const r of campaignRows.filter(r => r._selected)) {
+        const hasReal = (r.investment || 0) > 0 || (r.leads_generated || 0) > 0
+        const { error } = hasReal
+          ? await supabase.from('marketing_campaigns').update({ cpa_target: null }).eq('id', r.id)
+          : await supabase.from('marketing_campaigns').delete().eq('id', r.id)
+        if (error) throw error
+      }
+
+      const { error: cycleErr } = await supabase.from('campaign_cycles').delete().eq('id', cycle.id)
+      if (cycleErr) throw cycleErr
+
+      showToast(`Campanha ${cycle.label || cycle.year} excluída definitivamente.`)
+      closeDeleteReview()
+      loadAll()
+    } catch (e: any) {
+      showToast(e?.message || 'Erro ao excluir campanha.', false)
+    } finally {
+      setExecutingCampaignDelete(false)
     }
   }
 
@@ -2274,6 +2460,19 @@ export default function InstitutionDetails() {
                                       {archivingCampaignId === c.id ? <div className="w-3.5 h-3.5 border-2 border-gray-600 border-t-transparent rounded-full animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
                                       Arquivar
                                     </button>
+                                    {/* Exclusão real (apaga campaign_cycle + limpa funnel_metrics/marketing_campaigns
+                                        do período) — estritamente admin_geral, nunca visível pro gestor de escola nem
+                                        pro consultor (que também acessa esta tela via /super-admin/schools/:id). */}
+                                    {isSuperAdmin && (
+                                      <button
+                                        onClick={() => openDeleteCampaignReview(c)}
+                                        disabled={reviewLoadingCycleId === c.id}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 rounded-xl text-xs font-semibold hover:bg-red-50 disabled:opacity-60"
+                                      >
+                                        {reviewLoadingCycleId === c.id ? <div className="w-3.5 h-3.5 border-2 border-red-600 border-t-transparent rounded-full animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                        Excluir campanha
+                                      </button>
+                                    )}
                                   </>
                                 )}
                                 {canRelease && (
@@ -2527,6 +2726,173 @@ export default function InstitutionDetails() {
             </div>
           </div>
         )}
+
+        {/* ── Modal: Excluir campanha definitivamente (revisão manual, só admin_geral) ── */}
+        {deleteReview && (() => {
+          const { cycle, funnelRows, campaignRows, showAllFunnel, showAllCampaign } = deleteReview
+          const visibleFunnel   = showAllFunnel   ? funnelRows   : funnelRows.filter(r => r._suggested || !r._parsed)
+          const visibleCampaign = showAllCampaign ? campaignRows : campaignRows.filter(r => r._suggested || !r._parsed)
+          const hiddenFunnelCount   = funnelRows.length - visibleFunnel.length
+          const hiddenCampaignCount = campaignRows.length - visibleCampaign.length
+
+          const selectedFunnel   = funnelRows.filter(r => r._selected)
+          const selectedCampaign = campaignRows.filter(r => r._selected)
+          const funnelHasReal   = (r: any) => (r.registrations || 0) > 0 || (r.schedules || 0) > 0 || (r.visits || 0) > 0 || (r.enrollments || 0) > 0
+          const campaignHasReal = (r: any) => (r.investment || 0) > 0 || (r.leads_generated || 0) > 0
+          const toDeleteCount = selectedFunnel.filter(r => !funnelHasReal(r)).length + selectedCampaign.filter(r => !campaignHasReal(r)).length
+          const toClearCount  = selectedFunnel.length + selectedCampaign.length - toDeleteCount
+
+          return (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-4">
+              <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between mb-1">
+                  <h2 className="text-lg font-bold text-gray-900">Excluir campanha "{cycle.label || cycle.year}"</h2>
+                  <button onClick={closeDeleteReview}><X className="w-5 h-5 text-gray-400" /></button>
+                </div>
+                <p className="text-xs text-gray-500 mb-4">Período: {fmtDate(cycle.start_date)} — {fmtDate(cycle.end_date)}</p>
+
+                <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-xl mb-4">
+                  <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-green-800">
+                    <strong>Os leads já captados continuam no CRM, qualificados como estão.</strong> Nenhum lead é apagado ou alterado — só perde o vínculo com esta campanha específica (o vínculo fica nulo automaticamente).
+                  </p>
+                </div>
+
+                <p className="text-xs text-gray-500 mb-3">
+                  Revise as linhas abaixo antes de confirmar. Pré-marcadas = período reconhecido dentro da campanha (sugestão automática, não decide sozinha). Desmarque o que não deve ser tocado, ou marque manualmente uma linha com período não reconhecido.
+                </p>
+
+                {/* funnel_metrics */}
+                <div className="mb-4">
+                  <p className="text-xs font-bold text-gray-700 mb-2">Metas de funil — funnel_metrics ({funnelRows.length} no total)</p>
+                  {funnelRows.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic">Nenhum registro de funil para esta instituição.</p>
+                  ) : (
+                    <>
+                      <div className="border border-gray-200 rounded-xl overflow-hidden overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="p-2 text-left w-8"></th>
+                              <th className="p-2 text-left">Período</th>
+                              <th className="p-2 text-right">Cadastros</th>
+                              <th className="p-2 text-right">Agend.</th>
+                              <th className="p-2 text-right">Visitas</th>
+                              <th className="p-2 text-right">Matríc.</th>
+                              <th className="p-2 text-left">Ação</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {visibleFunnel.map(r => {
+                              const real = funnelHasReal(r)
+                              return (
+                                <tr key={r.id} className="border-t border-gray-100">
+                                  <td className="p-2">
+                                    <input type="checkbox" checked={r._selected} onChange={() => toggleReviewRow('funnelRows', r.id)} />
+                                  </td>
+                                  <td className="p-2 whitespace-nowrap">
+                                    {r.period || '—'}
+                                    {!r._parsed && <span className="ml-1.5 text-[10px] font-semibold text-amber-600">⚠ não reconhecido</span>}
+                                  </td>
+                                  <td className="p-2 text-right">{r.registrations}</td>
+                                  <td className="p-2 text-right">{r.schedules}</td>
+                                  <td className="p-2 text-right">{r.visits}</td>
+                                  <td className="p-2 text-right">{r.enrollments}</td>
+                                  <td className="p-2 whitespace-nowrap">
+                                    {!r._selected
+                                      ? <span className="text-gray-400">Não alterar</span>
+                                      : real ? <span className="text-amber-600 font-medium">Limpar meta (mantém real)</span> : <span className="text-red-600 font-medium">Excluir linha</span>}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      {hiddenFunnelCount > 0 && (
+                        <button onClick={() => setDeleteReview(d => d && ({ ...d, showAllFunnel: true }))} className="text-xs text-cyan-600 font-semibold mt-1.5">
+                          Mostrar mais {hiddenFunnelCount} linha{hiddenFunnelCount !== 1 ? 's' : ''} fora do período sugerido
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* marketing_campaigns */}
+                <div className="mb-4">
+                  <p className="text-xs font-bold text-gray-700 mb-2">Investimento/leads — marketing_campaigns ({campaignRows.length} no total)</p>
+                  {campaignRows.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic">Nenhum registro de investimento para esta instituição.</p>
+                  ) : (
+                    <>
+                      <div className="border border-gray-200 rounded-xl overflow-hidden overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="p-2 text-left w-8"></th>
+                              <th className="p-2 text-left">Período</th>
+                              <th className="p-2 text-right">Investimento</th>
+                              <th className="p-2 text-right">Leads</th>
+                              <th className="p-2 text-left">Ação</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {visibleCampaign.map(r => {
+                              const real = campaignHasReal(r)
+                              return (
+                                <tr key={r.id} className="border-t border-gray-100">
+                                  <td className="p-2">
+                                    <input type="checkbox" checked={r._selected} onChange={() => toggleReviewRow('campaignRows', r.id)} />
+                                  </td>
+                                  <td className="p-2 whitespace-nowrap">
+                                    {r.month_year || '—'}
+                                    {!r._parsed && <span className="ml-1.5 text-[10px] font-semibold text-amber-600">⚠ não reconhecido</span>}
+                                  </td>
+                                  <td className="p-2 text-right">{fmtBRL(r.investment)}</td>
+                                  <td className="p-2 text-right">{r.leads_generated}</td>
+                                  <td className="p-2 whitespace-nowrap">
+                                    {!r._selected
+                                      ? <span className="text-gray-400">Não alterar</span>
+                                      : real ? <span className="text-amber-600 font-medium">Limpar meta (mantém real)</span> : <span className="text-red-600 font-medium">Excluir linha</span>}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      {hiddenCampaignCount > 0 && (
+                        <button onClick={() => setDeleteReview(d => d && ({ ...d, showAllCampaign: true }))} className="text-xs text-cyan-600 font-semibold mt-1.5">
+                          Mostrar mais {hiddenCampaignCount} linha{hiddenCampaignCount !== 1 ? 's' : ''} fora do período sugerido
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                <div className="p-3 bg-gray-50 rounded-xl text-xs text-gray-700 mb-4">
+                  <strong>{toDeleteCount}</strong> linha{toDeleteCount !== 1 ? 's' : ''} será{toDeleteCount !== 1 ? 'ão' : ''} excluída{toDeleteCount !== 1 ? 's' : ''} · <strong>{toClearCount}</strong> terá{toClearCount !== 1 ? 'ão' : ''} só a meta zerada (dado real preservado) · a campanha em si será excluída definitivamente.
+                </div>
+
+                <label className="flex items-start gap-2 mb-4 cursor-pointer">
+                  <input type="checkbox" checked={confirmUnderstood} onChange={e => setConfirmUnderstood(e.target.checked)} className="mt-0.5" />
+                  <span className="text-xs text-gray-700">Entendi que isso não pode ser desfeito.</span>
+                </label>
+
+                <div className="flex gap-3">
+                  <button onClick={closeDeleteReview} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">Cancelar</button>
+                  <button
+                    onClick={handleConfirmDeleteCampaign}
+                    disabled={!confirmUnderstood || executingCampaignDelete}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-600 text-white rounded-xl font-semibold text-sm disabled:opacity-50"
+                  >
+                    {executingCampaignDelete ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Confirmar exclusão definitiva'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
 
       </div>
     </SuperAdminLayout>

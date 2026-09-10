@@ -1040,6 +1040,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [inputText, setInputText] = useState('')
   const [showAttach, setShowAttach] = useState(false)
   const [showQuickReplies, setShowQuickReplies] = useState(false)
+  const [quickRepliesSearch, setQuickRepliesSearch] = useState('')
   const [showContactInfo, setShowContactInfo] = useState(true)
   const [collapseHistory, setCollapseHistory] = useState(true)
   const [collapseContact, setCollapseContact] = useState(false)
@@ -2842,6 +2843,15 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     inputRef.current?.focus()
   }
 
+  // Drawer de respostas rápidas (botão ⚡) — busca por título ou conteúdo,
+  // separado do menu "/" acima (que é por atalho/título só).
+  const quickRepliesQuery = quickRepliesSearch.trim().toLowerCase()
+  const quickRepliesFiltered = quickRepliesQuery
+    ? quickReplies.filter(qr => qr.label.toLowerCase().includes(quickRepliesQuery) || qr.text.toLowerCase().includes(quickRepliesQuery))
+    : quickReplies
+
+  const closeQuickReplies = () => { setShowQuickReplies(false); setQuickRepliesSearch('') }
+
   const handleSend = async () => {
     if (!inputText.trim() || !activeId) return
 
@@ -4564,40 +4574,76 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               </div>
             )}
 
-            {/* Quick replies panel */}
-            {showQuickReplies && (
-              <div style={{ marginBottom: 8, background: '#F0FDFB', borderRadius: 12, border: '1px solid #D1FAE5', padding: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#64748B' }}>Respostas rápidas</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <button onClick={() => { setShowQuickReplies(false); setShowQRManager(true) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#00A896', fontSize: 11, fontWeight: 600 }}>
-                      Gerenciar minhas
-                    </button>
-                    <button onClick={() => setShowQuickReplies(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: 2 }}>
-                      <X style={{ width: 14, height: 14 }} />
-                    </button>
-                  </div>
+            {/* Drawer de respostas rápidas — desliza da direita por cima da
+                conversa (overlay, não empurra layout). Fica sempre montado
+                (transform/opacity controlam visibilidade) pra animar
+                entrada/saída; mesmo padrão de overlay+painel fixo já usado
+                em ContactCard.tsx (mode="drawer"), só que animado. */}
+            <div
+              onClick={closeQuickReplies}
+              style={{
+                position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(15,23,42,0.4)',
+                opacity: showQuickReplies ? 1 : 0, pointerEvents: showQuickReplies ? 'auto' : 'none',
+                transition: 'opacity 0.25s ease',
+              }}
+            />
+            <div
+              style={{
+                position: 'fixed', top: 0, right: 0, height: '100%', width: 360, maxWidth: '100%',
+                background: '#fff', zIndex: 61, boxShadow: '-8px 0 32px rgba(0,0,0,0.18)',
+                display: 'flex', flexDirection: 'column',
+                transform: showQuickReplies ? 'translateX(0)' : 'translateX(100%)',
+                transition: 'transform 0.25s ease',
+                pointerEvents: showQuickReplies ? 'auto' : 'none',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 16px 12px', borderBottom: '1px solid #F1F5F9', flexShrink: 0 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>⚡ Respostas rápidas</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button onClick={() => { closeQuickReplies(); setShowQRManager(true) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#00A896', fontSize: 11, fontWeight: 600 }}>
+                    Gerenciar minhas
+                  </button>
+                  <button onClick={closeQuickReplies} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: 2 }}>
+                    <X style={{ width: 16, height: 16 }} />
+                  </button>
                 </div>
+              </div>
+
+              <div style={{ padding: 12, borderBottom: '1px solid #F1F5F9', flexShrink: 0 }}>
+                <div style={{ position: 'relative' }}>
+                  <Search style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, color: '#94A3B8' }} />
+                  <input
+                    value={quickRepliesSearch}
+                    onChange={e => setQuickRepliesSearch(e.target.value)}
+                    placeholder="Buscar por título ou conteúdo..."
+                    style={{ width: '100%', padding: '9px 12px 9px 32px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#F8FAFC' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
                 {quickReplies.length === 0 ? (
-                  <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '12px 0' }}>
+                  <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '24px 0' }}>
                     Nenhuma resposta rápida cadastrada.<br />
-                    <span style={{ color: '#00A896', cursor: 'pointer' }} onClick={() => navigate('/settings?tab=whatsapp')}>
+                    <span style={{ color: '#00A896', cursor: 'pointer' }} onClick={() => { closeQuickReplies(); navigate('/settings?tab=whatsapp') }}>
                       Configure em Configurações → WhatsApp
                     </span>
                   </p>
+                ) : quickRepliesFiltered.length === 0 ? (
+                  <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', padding: '24px 0' }}>Nenhum resultado pra "{quickRepliesSearch}".</p>
                 ) : (
-                  <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
-                    {quickReplies.map(qr => (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {quickRepliesFiltered.map(qr => (
                       <button
                         key={qr.id}
                         title={qr.text}
-                        onClick={() => { setInputText(qr.text); setShowQuickReplies(false) }}
-                        style={{ flexShrink: 0, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5, padding: '8px 12px', background: '#FFFFFF', border: '1px solid #D1FAE5', borderRadius: 999, cursor: 'pointer' }}
+                        onClick={() => { setInputText(qr.text); closeQuickReplies() }}
+                        style={{ textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', background: '#FFFFFF', border: '1px solid #D1FAE5', borderRadius: 9, cursor: 'pointer' }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = '#00A896'; e.currentTarget.style.background = '#E6F7F5' }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = '#D1FAE5'; e.currentTarget.style.background = '#FFFFFF' }}
                       >
-                        <span style={{ fontSize: 12, fontWeight: 600, color: '#1A2B4A' }}>{qr.label}</span>
-                        <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 999, background: qr.user_id ? '#EFF6FF' : '#ECFDF5', color: qr.user_id ? '#1D4ED8' : '#059669' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{qr.label}</span>
+                        <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 999, flexShrink: 0, background: qr.user_id ? '#EFF6FF' : '#ECFDF5', color: qr.user_id ? '#1D4ED8' : '#059669' }}>
                           {qr.user_id ? 'Pessoal' : 'Global'}
                         </span>
                       </button>
@@ -4605,7 +4651,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   </div>
                 )}
               </div>
-            )}
+            </div>
 
             {/* Attachment menu */}
             {showAttach && (
