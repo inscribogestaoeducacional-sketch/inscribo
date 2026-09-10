@@ -39,6 +39,7 @@ export default function LinkLeadsToCampaignModal({ isOpen, onClose, institutionI
   // ── Aba período ──────────────────────────────────────────────────────────
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [yearInterest, setYearInterest] = useState('')
   const [previewCount, setPreviewCount] = useState<number | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [applying, setApplying] = useState(false)
@@ -51,26 +52,33 @@ export default function LinkLeadsToCampaignModal({ isOpen, onClose, institutionI
     setPeriodDone(null)
   }
 
+  // Monta a query base compartilhada por preview e confirmação — período e
+  // ano de interesse são combináveis (AND) quando os dois são informados,
+  // mas pelo menos um dos dois precisa estar preenchido (ver handlePreview).
+  const applyPeriodFilters = (query: any) => {
+    let q = query.eq('institution_id', institutionId).is('campaign_cycle_id', null)
+    if (startDate) q = q.gte('created_at', startDate)
+    if (endDate) q = q.lte('created_at', `${endDate}T23:59:59.999`)
+    if (yearInterest) q = q.eq('year_interest', parseInt(yearInterest, 10))
+    return q
+  }
+
   const handlePreview = async () => {
     setPeriodError('')
     setPeriodDone(null)
-    if (!startDate || !endDate) {
-      setPeriodError('Selecione a data inicial e a data final.')
+    if (startDate && endDate && startDate > endDate) {
+      setPeriodError('A data inicial não pode ser depois da data final.')
       return
     }
-    if (startDate > endDate) {
-      setPeriodError('A data inicial não pode ser depois da data final.')
+    if (!startDate && !endDate && !yearInterest) {
+      setPeriodError('Preencha o período, o ano de interesse, ou os dois.')
       return
     }
     setPreviewLoading(true)
     try {
-      const { count, error } = await supabase
-        .from('leads')
-        .select('id', { count: 'exact', head: true })
-        .eq('institution_id', institutionId)
-        .is('campaign_cycle_id', null)
-        .gte('created_at', startDate)
-        .lte('created_at', `${endDate}T23:59:59.999`)
+      const { count, error } = await applyPeriodFilters(
+        supabase.from('leads').select('id', { count: 'exact', head: true })
+      )
       if (error) throw error
       setPreviewCount(count ?? 0)
     } catch (e) {
@@ -85,14 +93,9 @@ export default function LinkLeadsToCampaignModal({ isOpen, onClose, institutionI
     setApplying(true)
     setPeriodError('')
     try {
-      const { data, error } = await supabase
-        .from('leads')
-        .update({ campaign_cycle_id: cycleId })
-        .eq('institution_id', institutionId)
-        .is('campaign_cycle_id', null)
-        .gte('created_at', startDate)
-        .lte('created_at', `${endDate}T23:59:59.999`)
-        .select('id')
+      const { data, error } = await applyPeriodFilters(
+        supabase.from('leads').update({ campaign_cycle_id: cycleId })
+      ).select('id')
       if (error) throw error
       setPeriodDone(data?.length ?? 0)
       setPreviewCount(null)
@@ -220,7 +223,7 @@ export default function LinkLeadsToCampaignModal({ isOpen, onClose, institutionI
           {activeTab === 'periodo' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <p style={{ fontSize: 13, color: '#64748B', margin: 0 }}>
-                Vincula a esta campanha todos os leads da instituição cadastrados no período abaixo que <strong>ainda não pertencem a nenhuma campanha</strong>. Leads já vinculados a outra campanha não são afetados.
+                Vincula a esta campanha os leads da instituição que <strong>ainda não pertencem a nenhuma campanha</strong>, filtrando por período de cadastro e/ou ano de interesse (pelo menos um dos dois). Leads já vinculados a outra campanha não são afetados.
               </p>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -231,6 +234,16 @@ export default function LinkLeadsToCampaignModal({ isOpen, onClose, institutionI
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Data final</label>
                   <input type="date" value={endDate} onChange={e => { setEndDate(e.target.value); resetPeriodTab() }} style={inputStyle} />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Ano de interesse</label>
+                  <select value={yearInterest} onChange={e => { setYearInterest(e.target.value); resetPeriodTab() }} style={{ ...inputStyle, background: '#fff', cursor: 'pointer' }}>
+                    <option value="">Qualquer ano</option>
+                    {[0, 1, 2].map(offset => {
+                      const y = new Date().getFullYear() + offset
+                      return <option key={y} value={y}>{y}</option>
+                    })}
+                  </select>
                 </div>
               </div>
 

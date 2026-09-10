@@ -463,10 +463,15 @@ function CardContent({ lead, config, isFlashing, overlay, compact, assignedUser,
           )}
         </div>
 
-        {/* Item 9b — badges: série, origem, temperatura, campanha */}
-        {(lead.grade_interest || lead.source || temperature || lead.campaign_cycle_id) && (
+        {/* Item 9b — badges: série, origem, temperatura, campanha, ano de interesse */}
+        {(lead.grade_interest || lead.source || temperature || lead.campaign_cycle_id || lead.year_interest) && (
           <div className="flex flex-wrap gap-1 mb-1.5">
             {lead.grade_interest && <span className="inline-flex items-center bg-[#14b8a6]/10 text-[#0d9488] text-xs font-medium px-2 py-0.5 rounded-full border border-[#14b8a6]/20">{lead.grade_interest}</span>}
+            {lead.year_interest && !compact && (
+              <span title="Ano de interesse" className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 text-xs font-medium px-2 py-0.5 rounded-full border border-amber-200">
+                📅 {lead.year_interest}
+              </span>
+            )}
             {lead.source && (
               lead.source === 'embed'
                 ? <span className="inline-flex items-center gap-1 bg-sky-100 text-sky-700 text-xs font-semibold px-2 py-0.5 rounded-full border border-sky-200">Via site</span>

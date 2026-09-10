@@ -39,6 +39,7 @@ export interface Lead {
   next_followup?: string | null
   lead_temperature?: 'frio' | 'morno' | 'quente' | null
   campaign_cycle_id?: string | null
+  year_interest?: number | null
   city?: string | null
   origin_school?: string | null
   referral_source?: string | null

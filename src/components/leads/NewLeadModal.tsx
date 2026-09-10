@@ -43,8 +43,13 @@ export interface NewLeadModalProps {
     status: Lead['status']; assigned_to: string; next_followup: string
     lead_temperature: '' | 'frio' | 'morno' | 'quente'
     origin_school: string; referral_source: string; contest_name: string
+    year_interest: number | ''
   }>
 }
+
+// Ano atual + os 2 seguintes — calculado, não hardcoded, pra não precisar
+// editar o código todo ano (ex: gerado em 2026 → 2026, 2027, 2028).
+const YEAR_INTEREST_OPTIONS = [0, 1, 2].map(offset => new Date().getFullYear() + offset)
 
 export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onDelete, institutionId, users, activeCampaignLabel, institutionCity, createDefaults }: NewLeadModalProps) {
   const { user: modalUser } = useAuth()
@@ -77,6 +82,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
     next_followup: '' as string,
     lead_temperature: '' as '' | 'frio' | 'morno' | 'quente',
     origin_school: '', referral_source: '', contest_name: '',
+    year_interest: '' as number | '',
   })
 
   useEffect(() => {
@@ -101,6 +107,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
         origin_school: editingLead.origin_school ?? '',
         referral_source: editingLead.referral_source ?? '',
         contest_name: editingLead.contest_name ?? '',
+        year_interest: editingLead.year_interest ?? '',
       })
     } else {
       setFormData({
@@ -111,6 +118,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
         assigned_to: modalUser?.id ?? '',
         next_followup: '', lead_temperature: '',
         origin_school: '', referral_source: '', contest_name: '',
+        year_interest: '',
         ...createDefaults,
       })
     }
@@ -247,7 +255,7 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
       // Filhos extras com nome em branco são descartados silenciosamente —
       // é um bloco que o usuário abriu e não chegou a preencher, não um erro.
       const additionalStudents = extraStudents.filter(s => s.student_name.trim()).map(s => ({ ...s, student_name: s.student_name.trim() }))
-      await onSave({ ...formData, lead_temperature: formData.lead_temperature || null, familyMatchId, additionalStudents })
+      await onSave({ ...formData, lead_temperature: formData.lead_temperature || null, year_interest: formData.year_interest || null, familyMatchId, additionalStudents })
       onClose()
     } finally { setSaving(false) }
   }
@@ -539,6 +547,14 @@ export default function NewLeadModal({ isOpen, onClose, onSave, editingLead, onD
                       style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
                       <option value="">Sem responsável</option>
                       {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Ano de interesse</label>
+                    <select value={formData.year_interest} onChange={e => setFormData(f => ({ ...f, year_interest: e.target.value ? parseInt(e.target.value, 10) : '' }))}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1A2B4A', background: '#fff' }}>
+                      <option value="">Selecione</option>
+                      {YEAR_INTEREST_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
                     </select>
                   </div>
                   {/* Item 11b — campos condicionais conforme a origem selecionada */}
