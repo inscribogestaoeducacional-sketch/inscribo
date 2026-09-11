@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { toReenrollFraction } from '../../lib/campaignApply'
 import SuperAdminLayout from './SuperAdminLayout'
 import {
   Building2, Search, Megaphone, Edit2, AlertTriangle,
@@ -1293,7 +1294,6 @@ export default function AdminSchools() {
   const [releaseModal, setReleaseModal] = useState<any | null>(null)
   const [detailModal, setDetailModal] = useState<any | null>(null)
 
-  const [startMonth, setStartMonth] = useState(8)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [releasing, setReleasing] = useState(false)
@@ -1473,21 +1473,27 @@ export default function AdminSchools() {
     setReleasing(true)
     try {
       const campaignYear = new Date().getFullYear() + 1
-      const sd = startDate || `${new Date().getFullYear()}-${String(startMonth).padStart(2,'0')}-01`
+      const sd = startDate || `${new Date().getFullYear()}-08-01`
       const ed = endDate || `${campaignYear}-02-28`
+      // Sempre derivado de `sd` no momento do submit — mesmo padrão já usado
+      // em InstitutionDetails.tsx e no wizard (CampaignGeneratorModal.tsx).
+      // Antes existia um estado `startMonth` separado, só sincronizado com
+      // `startDate` quando o admin clicava no botão de mês — editar a data
+      // manualmente sem clicar num botão deixava `startMonth` desatualizado.
+      const startMonthNum = new Date(sd + 'T12:00:00').getMonth() + 1
       const existing = getBestCycle(releaseModal.id)
 
       if (existing) {
         const { error } = await supabase.from('campaign_cycles').update({
-          status: 'released', campaign_start_month: startMonth, start_date: sd, end_date: ed,
+          status: 'released', campaign_start_month: startMonthNum, start_date: sd, end_date: ed,
         }).eq('id', existing.id)
         if (error) throw error
       } else {
         const { error } = await supabase.from('campaign_cycles').insert({
           institution_id: releaseModal.id, status: 'released',
-          campaign_start_month: startMonth, year: campaignYear,
+          campaign_start_month: startMonthNum, year: campaignYear,
           label: `Campanha ${campaignYear}`, start_date: sd, end_date: ed,
-          target_new_students: 0, target_reenrollment_rate: 85,
+          target_new_students: 0, target_reenrollment_rate: toReenrollFraction(85),
           base_students: 0, monthly_targets: [], market_data: {},
           historical_input: [], generation_mode: 'benchmark',
           ai_reasoning: '', realism_score: 'realistic',
@@ -1708,7 +1714,6 @@ export default function AdminSchools() {
                           <button onClick={() => {
                             const bestCycle = getBestCycle(inst.id)
                             setReleaseModal(inst)
-                            setStartMonth(bestCycle?.campaign_start_month || 8)
                             setStartDate(bestCycle?.start_date || `${new Date().getFullYear()}-08-01`)
                             setEndDate(bestCycle?.end_date || `${new Date().getFullYear() + 1}-02-28`)
                           }} className="flex items-center gap-1 text-xs px-2 py-1.5 bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100 font-medium">
@@ -1885,8 +1890,8 @@ export default function AdminSchools() {
                 <label className={lbl}>Mês de início das matrículas</label>
                 <div className="grid grid-cols-4 gap-2 mt-1">
                   {months.map(m => (
-                    <button key={m.v} onClick={() => { setStartMonth(m.v); setStartDate(`${new Date().getFullYear()}-${String(m.v).padStart(2,'0')}-01`) }}
-                      className={`py-2 rounded-lg text-sm font-medium transition-colors ${startMonth === m.v ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                    <button key={m.v} onClick={() => setStartDate(`${new Date().getFullYear()}-${String(m.v).padStart(2,'0')}-01`)}
+                      className={`py-2 rounded-lg text-sm font-medium transition-colors ${(startDate ? new Date(startDate + 'T12:00:00').getMonth() + 1 : null) === m.v ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                       {m.l}
                     </button>
                   ))}

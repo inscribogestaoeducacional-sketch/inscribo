@@ -225,7 +225,10 @@ export default function SchoolSetupModal({ institutionId, initialStep, editMode,
 
       const executionYear = new Date().getFullYear()
       const campaignYear = executionYear + 1
-      const startMonth = 8
+      // Setembro — mesmo default usado no resto do sistema (InstitutionDetails.tsx,
+      // AdminSchools.tsx, CampaignGeneratorModal.tsx). Antes era agosto aqui,
+      // um quarto default divergente sem nenhum motivo funcional.
+      const startMonth = 9
       const startDate = `${executionYear}-0${startMonth}-01`
       const endDate = `${campaignYear}-02-28`
 

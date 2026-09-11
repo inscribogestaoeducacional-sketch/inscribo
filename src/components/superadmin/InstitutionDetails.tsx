@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { applyCampaignCycle } from '../../lib/campaignApply'
+import { applyCampaignCycle, toReenrollFraction } from '../../lib/campaignApply'
 import { useAuth } from '../../contexts/AuthContext'
 import SuperAdminLayout from './SuperAdminLayout'
 import { createGoogleMeet, buildEndDatetime } from '../../lib/googleMeet'
@@ -972,7 +972,7 @@ export default function InstitutionDetails() {
         year, label: `Campanha ${year}`,
         start_date: startDate, end_date: endDate,
         campaign_start_month: new Date(startDate + 'T12:00:00').getMonth() + 1,
-        target_new_students: Number(targetNewStudents) || 0, target_reenrollment_rate: 85,
+        target_new_students: Number(targetNewStudents) || 0, target_reenrollment_rate: toReenrollFraction(85),
         base_students: 0, monthly_targets: [], market_data: {},
         historical_input: [], generation_mode: 'benchmark', ai_reasoning: '', realism_score: 'realistic',
       })

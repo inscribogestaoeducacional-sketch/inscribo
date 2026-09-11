@@ -7,6 +7,21 @@
 // extração pura, sem mudança de comportamento pro fluxo já em produção.
 import { supabase } from './supabase'
 
+// campaign_cycles.target_reenrollment_rate é sempre fração 0-1 (é o que
+// GestorReports.tsx:887 — `cycle.target_reenrollment_rate * 100` — e o
+// prompt da IA em api/ai.ts:538 — `avgReenrollRate.toFixed(3)` — já esperam).
+// Bug real encontrado: InstitutionDetails.tsx e AdminSchools.tsx gravavam
+// 85 (escala 0-100) direto nos ciclos criados manualmente pelo admin, antes
+// do gestor rodar o wizard — isso aparecia como "8500%" de meta de
+// rematrícula na tela do gestor. Centraliza a normalização aqui pra um
+// futuro escritor não repetir o erro: aceita tanto uma fração já correta
+// (0.85) quanto um valor escrito por engano em escala 0-100 (85) e sempre
+// devolve fração.
+export function toReenrollFraction(value: number): number {
+  if (value == null || isNaN(value)) return value
+  return value > 1 ? value / 100 : value
+}
+
 export interface MonthlyTargetInput {
   month: string | number
   year: number
