@@ -1721,6 +1721,18 @@ async function processFlow(
       return
     }
 
+    // Bot desligado (toggle "Bot Habilitado" na UI, campo bot_enabled) — até
+    // aqui só flow.is_active era checado (linha acima, no topo da função), e
+    // nenhuma tela nunca seta is_active=false; bot_enabled é o campo real que
+    // o toggle mexe. Sem essa checagem, desligar o bot só parava o fluxo
+    // customizado (bloco `if (flow.bot_enabled && flow.bot_flow?...)` acima)
+    // — o fluxo padrão legado (boas-vindas + menu + transferência automática,
+    // abaixo) continuava rodando de qualquer jeito.
+    if (!flow.bot_enabled) {
+      console.log('[flow] bot_enabled=false — fluxo padrão legado não roda, conversa segue pra fila humana')
+      return
+    }
+
     // d) Standard flow: working hours check (only reached when no custom bot_flow)
     const tz             = flow.timezone || 'America/Fortaleza'
     const now            = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
@@ -3319,9 +3331,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } else if (isRecentReopen) {
           // Item A: reabertura silenciosa — não roda processFlow (nem custom
           // bot_flow nem fluxo padrão de menu), só confirma o recebimento.
-          // Texto fixo por enquanto, sem configuração por escola.
-          console.log('[flow] reabertura recente pós-encerramento — pulando boas-vindas/menu, só confirmando recebimento')
-          await sendAutoMessage(institutionId, remoteJid, 'Recebemos sua mensagem! Já estamos verificando, um instante 🙂')
+          // Texto fixo por enquanto, sem configuração por escola. Esse envio
+          // roda fora de processFlow (que já checa is_active/bot_enabled),
+          // então nunca tinha checagem nenhuma — desligar "Bot Habilitado"
+          // não impedia essa mensagem automática de sair. A reabertura da
+          // conversa em si (upsert/reassign acima) não muda — só a mensagem.
+          const { data: reopenFlowCfg } = await supabase
+            .from('whatsapp_flows')
+            .select('bot_enabled')
+            .eq('institution_id', institutionId)
+            .maybeSingle()
+          if (reopenFlowCfg?.bot_enabled) {
+            console.log('[flow] reabertura recente pós-encerramento — pulando boas-vindas/menu, só confirmando recebimento')
+            await sendAutoMessage(institutionId, remoteJid, 'Recebemos sua mensagem! Já estamos verificando, um instante 🙂')
+          } else {
+            console.log('[flow] reabertura recente pós-encerramento — bot_enabled=false, nenhuma mensagem automática enviada')
+          }
         } else {
           await processFlow(institutionId, remoteJid, effectiveText, isNewConversation, interactiveChoiceId)
         }
