@@ -5,7 +5,7 @@ import {
   Edit3, FileText, Calendar, Users, DollarSign, TrendingUp
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { applyCampaignCycle, getCampaignMonths } from '../../lib/campaignApply'
+import { applyCampaignCycle, getCampaignMonths, toReenrollFraction } from '../../lib/campaignApply'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
@@ -253,15 +253,26 @@ export default function CampaignGeneratorModal({
         returning_students_by_month: e.returning_students_by_month ?? null,
       })))
     }
+    // erp_files nunca era pré-preenchido aqui — Step2Analysis conta "X anos
+    // de histórico" e monta "Alunos atuais"/"Novatos" a partir de `erpFiles`,
+    // não de `historicalData`. Sem isso, todo "Ajustar campanha" mostrava "0
+    // anos de histórico" mesmo com histórico real salvo (raiz confirmada na
+    // investigação: não era dado contaminado, era esse prefill faltando).
+    const existingErpFiles = (existingCycle as any).erp_files
+    if (existingErpFiles?.length) setErpFiles(existingErpFiles)
     if (isAdjustMode && existingCycle.historical_data?.length) {
+      // target_reenrollment_rate pode vir contaminado em escala 0-100 (bug já
+      // corrigido em quem grava, mas linhas antigas do banco ainda podem ter
+      // o valor errado) — normaliza na leitura também, defesa em profundidade.
+      const retentionRate = toReenrollFraction(existingCycle.target_reenrollment_rate) || 0.85
       setAiAnalysis({
         summary: "Ajuste de campanha — dados históricos carregados do ciclo anterior.",
-        retention_rate: existingCycle.target_reenrollment_rate || 0.85,
+        retention_rate: retentionRate,
         retention_trend: 'stable', novatos_trend: 'stable',
         suggested_start_date: existingCycle.start_date || new Date().getFullYear() + '-09-01',
         suggested_end_date: existingCycle.end_date || (new Date().getFullYear()+1) + '-02-28',
         suggested_new_students: existingCycle.target_new_students || 50,
-        suggested_reenrollment: Math.round((existingCycle.base_students || 0) * (existingCycle.target_reenrollment_rate || 0.85)),
+        suggested_reenrollment: Math.round((existingCycle.base_students || 0) * retentionRate),
         key_insight: 'Campanha em andamento — ajuste as metas conforme o andamento real.',
         risk: 'Verifique se as metas estão alinhadas com o resultado atual da campanha.'
       })

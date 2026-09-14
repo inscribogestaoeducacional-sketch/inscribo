@@ -129,7 +129,7 @@ function nodeH(node: { type: NodeType; data: Record<string, any> }): number {
       h += Math.max(0, conds.length - 1) * 28  // E/OU badges
       return h
     }
-    case 'transfer':   return node.data.transferType === 'group' ? 220 : 180
+    case 'transfer':   return node.data.transferType === 'group' ? 220 : node.data.transferType === 'general' ? 140 : 180
     case 'wait':       return 82
     case 'media':      return 160
     case 'distribute': return 82
@@ -557,15 +557,15 @@ function NodeBody({
       return (
         <div style={{ padding: 12 }}>
           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-            {(['attendant', 'group'] as const).map(opt => (
+            {(['attendant', 'group', 'general'] as const).map(opt => (
               <button key={opt} onMouseDown={e => e.stopPropagation()}
                 onClick={() => onChange({ ...d, transferType: opt, assignee_id: '', assignee_name: '', group_id: '', group_name: '' })}
                 style={{ flex: 1, padding: '4px 0', fontSize: 11, fontWeight: 600, borderRadius: 6, cursor: 'pointer', border: '1px solid', background: tType === opt ? '#0d9488' : 'white', color: tType === opt ? 'white' : '#64748b', borderColor: tType === opt ? '#0d9488' : '#e2e8f0' }}>
-                {opt === 'attendant' ? '👤 Atendente' : '👥 Grupo'}
+                {opt === 'attendant' ? '👤 Atendente' : opt === 'group' ? '👥 Grupo' : '🌐 Geral'}
               </button>
             ))}
           </div>
-          {tType !== 'group' ? (
+          {tType === 'attendant' ? (
             <select style={inputSt} value={d.assignee_id || ''}
               onChange={e => {
                 const selected = users.find(u => u.id === e.target.value)
@@ -575,7 +575,7 @@ function NodeBody({
               <option value="">Selecionar atendente...</option>
               {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
             </select>
-          ) : (
+          ) : tType === 'group' ? (
             <select style={inputSt} value={d.group_id || ''}
               onChange={e => {
                 const g = groups.find(g => g.id === e.target.value)
@@ -585,7 +585,7 @@ function NodeBody({
               <option value="">Selecionar grupo...</option>
               {groups.map(g => <option key={g.id} value={g.id}>{g.emoji} {g.name}</option>)}
             </select>
-          )}
+          ) : null}
           <input style={{ ...inputSt, marginTop: 6 }}
             value={d.message || ''} placeholder="Mensagem antes de transferir (opcional)"
             onChange={e => onChange({ ...d, message: e.target.value })}

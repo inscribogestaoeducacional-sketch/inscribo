@@ -5270,7 +5270,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                             style={{ width: '100%', padding: '7px 0', fontSize: 12, color: '#64748B', background: 'transparent', border: '1px dashed #d1fae5', borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s' }}
                             onMouseEnter={e => { e.currentTarget.style.borderColor = '#0d9488'; e.currentTarget.style.color = '#0d9488'; e.currentTarget.style.background = '#e6f7f5' }}
                             onMouseLeave={e => { e.currentTarget.style.borderColor = '#d1fae5'; e.currentTarget.style.color = '#64748B'; e.currentTarget.style.background = 'transparent' }}>
-                            + Atribuir atendente
+                            + Transferir para atendente
                           </button>
                         )}
                       </div>

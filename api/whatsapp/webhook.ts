@@ -1271,6 +1271,15 @@ async function processCustomFlow(
             .update({ bot_active: false })
             .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
         }
+      } else if (transferType === 'general') {
+        // Fila geral: nenhuma tentativa de atribuição — mesmo estado seguro já
+        // usado quando ninguém está disponível (bot desligado, sem dono, visível
+        // na fila "Aguardando atendimento" pra qualquer atendente da escola).
+        if (transferMsg) await sendAutoMessage(institutionId, remoteJid, interp(transferMsg))
+        await supabase.from('whatsapp_conversations').update({
+          assigned_user_id: null, assigned_user_name: null,
+          bot_active: false, status: 'waiting',
+        }).eq('institution_id', institutionId).eq('remote_jid', remoteJid)
       } else {
         // Specific attendant
         const assigneeId = node.data?.assignee_id || node.data?.assigneeId
