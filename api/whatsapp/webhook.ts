@@ -3336,11 +3336,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .eq('institution_id', institutionId)
           continue
         }
+        // status.errors só vem preenchido quando a Meta reporta motivo real
+        // de falha de entrega (ex: status.status === 'failed') — antes era
+        // descartado aqui, então uma mensagem com ⚠️ não tinha como saber
+        // POR QUE falhou, só que falhou. error_details fica de fora do
+        // payload (em vez de gravar null) quando não vem nada, pra nunca
+        // apagar um erro já registrado numa atualização de status posterior
+        // sem errors (ex: 'failed' seguido de um novo evento sem detalhe).
+        if (status.errors?.length) console.error('❌ [status webhook] falha reportada pela Meta:', status.id, JSON.stringify(status.errors))
         const { error: statusErr } = await supabase
           .from('whatsapp_messages')
           .update({
             status:            status.status,
             status_updated_at: new Date().toISOString(),
+            ...(status.errors?.length ? { error_details: status.errors } : {}),
           })
           .eq('message_id', status.id)
 
