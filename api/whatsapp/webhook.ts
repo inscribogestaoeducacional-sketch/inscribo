@@ -741,7 +741,6 @@ async function upsertContact(
         {
           institution_id: institutionId,
           phone,
-          remote_jid:     remoteJid,
           name,
           updated_at:     new Date().toISOString(),
           ...(profilePicUrl ? { profile_picture_url: profilePicUrl } : {}),
