@@ -5,7 +5,7 @@ import {
   oauthRedirectUri,
   authenticateAdminGeral,
   errorResponse,
-} from './config.js'
+} from '../_lib/googleConfig.js'
 
 // Inicia o fluxo OAuth: redireciona para a tela de consentimento do Google.
 // Chamado via navegação de página inteira (não fetch), por isso o token de

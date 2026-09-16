@@ -6,7 +6,7 @@ import {
   oauthRedirectUri,
   authenticateAdminGeral,
   getSupabaseAdmin,
-} from './config.js'
+} from '../_lib/googleConfig.js'
 
 const SETTINGS_URL = `${APP_URL}/super-admin/settings`
 

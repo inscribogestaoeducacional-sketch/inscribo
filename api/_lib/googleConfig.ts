@@ -1,6 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
+// Este arquivo vive em api/_lib/ (não em api/google/) de propósito — mesmo
+// motivo de api/_lib/whatsappAuth.ts: a Vercel trata todo arquivo dentro de
+// /api como uma Serverless Function e o plano Hobby tem limite de 12. Um
+// diretório/arquivo prefixado com "_" é ignorado por essa contagem. Este
+// módulo não tem handler próprio (só exporta helpers pra oauth-authorize.ts/
+// oauth-callback.ts) — fora de api/_lib/ ele ainda contava pra esse limite
+// mesmo sem nunca poder ser chamado como rota.
+//
 // ── Supabase / app config (duplicado de api/evolution/config.ts antes da
 // remoção da integração Evolution — ver commit que apagou api/evolution/) ──
 export const SUPABASE_URL =
