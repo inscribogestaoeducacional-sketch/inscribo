@@ -385,6 +385,8 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [globalToken, setGlobalToken]     = useState('')
   const [testing, setTesting]             = useState(false)
   const [testResult, setTestResult]       = useState<{ ok: boolean; msg: string } | null>(null)
+  const [showAgentName, setShowAgentName] = useState(false)
+  const [savingAgentName, setSavingAgentName] = useState(false)
 
   // ── Flow config ──
   const [flow, setFlow] = useState({
@@ -481,8 +483,9 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
     } catch (e) { console.error('[SystemSettings] token fetch error:', e) }
     try {
       const { data } = await supabase.from('institutions')
-        .select('whatsapp_phone_id,whatsapp_phone_number,whatsapp_display_name,whatsapp_connected')
+        .select('whatsapp_phone_id,whatsapp_phone_number,whatsapp_display_name,whatsapp_connected,show_agent_name_in_messages')
         .eq('id', institutionId).single()
+      if (waMountedRef.current) setShowAgentName(!!data?.show_agent_name_in_messages)
       if (waMountedRef.current && data?.whatsapp_phone_id) {
         setMetaConfig(data)
         const monthYear = new Date().toISOString().slice(0, 7)
@@ -651,6 +654,16 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
     } finally {
       setSavingFlow(false)
     }
+  }
+
+  const handleToggleAgentName = async (value: boolean) => {
+    setSavingAgentName(true)
+    setShowAgentName(value)
+    const { error } = await supabase.from('institutions')
+      .update({ show_agent_name_in_messages: value })
+      .eq('id', institutionId)
+    if (error) { alert('Erro ao salvar: ' + error.message); setShowAgentName(!value) }
+    setSavingAgentName(false)
   }
 
   const handleTestConnection = async () => {
@@ -870,6 +883,21 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
                   <button onClick={handleTestConnection} disabled={testing}
                     style={{ flex: 1, minWidth: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#64748B', cursor: 'pointer', opacity: testing ? 0.6 : 1 }}>
                     {testing ? <><Loader2 size={13} className="animate-spin" />Testando...</> : <><RefreshCw size={13} />Testar conexão</>}
+                  </button>
+                </div>
+              </div>
+
+              <div style={dCard}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1A2B4A' }}>Mostrar nome do atendente nas mensagens</div>
+                    <div style={{ fontSize: 12, color: '#64748B', marginTop: 2, lineHeight: 1.5 }}>
+                      Quando ativado, as mensagens enviadas pelos atendentes mostram o nome de quem está respondendo, numa linha antes do texto (ex: <strong>*Maria*:</strong><br />Olá!). Não afeta templates nem mensagens automáticas do bot.
+                    </div>
+                  </div>
+                  <button onClick={() => handleToggleAgentName(!showAgentName)} disabled={savingAgentName}
+                    style={{ width: 44, height: 24, borderRadius: 999, background: showAgentName ? '#00A896' : '#CBD5E1', border: 'none', cursor: savingAgentName ? 'default' : 'pointer', position: 'relative', transition: 'background 0.2s', flexShrink: 0, opacity: savingAgentName ? 0.6 : 1 }}>
+                    <span style={{ position: 'absolute', top: 3, left: showAgentName ? 22 : 3, width: 18, height: 18, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
                   </button>
                 </div>
               </div>

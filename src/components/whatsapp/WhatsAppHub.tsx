@@ -1123,6 +1123,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [sendingTemplate, setSendingTemplate] = useState(false)
   const [templateError, setTemplateError] = useState<string | null>(null)
   const [institutionName, setInstitutionName] = useState('')
+  const [showAgentNameInMessages, setShowAgentNameInMessages] = useState(false)
   const [sendingReactivate, setSendingReactivate] = useState(false)
   const [hubToast, setHubToast] = useState<string | null>(null)
 
@@ -1833,10 +1834,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           try {
             const { data: instData } = await supabase
               .from('institutions')
-              .select('name')
+              .select('name, show_agent_name_in_messages')
               .eq('id', effectiveInstitutionId)
               .single()
             if (instData?.name) setInstitutionName(instData.name)
+            setShowAgentNameInMessages(!!instData?.show_agent_name_in_messages)
           } catch {}
         })()
 
@@ -2864,12 +2866,15 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     }
 
     const text = inputText.trim()
+    const outgoingText = (showAgentNameInMessages && user?.full_name)
+      ? `*${user.full_name}*:\n${text}`
+      : text
     const quotedMsg = replyTo
     const tempId = `temp-${Date.now()}`
     const tempMsg: Message = {
       id: tempId,
       type: 'text',
-      content: text,
+      content: outgoingText,
       from: 'me',
       ts: new Date(),
       status: 'sent',
@@ -2883,7 +2888,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
     setConversations(prev => prev.map(c =>
       c.id === activeId
-        ? { ...c, messages: [...c.messages, tempMsg], lastMessage: text, lastTime: tempMsg.ts }
+        ? { ...c, messages: [...c.messages, tempMsg], lastMessage: outgoingText, lastTime: tempMsg.ts }
         : c
     ))
     setInputText('')
@@ -2904,7 +2909,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           isAionSend: isAionInbox,
           to,
           type: 'text',
-          message: text,
+          message: outgoingText,
           sender_name: user?.full_name,
           sender_user_id: user?.id,
           ...(quotedMsg?.message_id ? {
