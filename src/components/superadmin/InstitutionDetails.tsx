@@ -876,6 +876,45 @@ export default function InstitutionDetails() {
     }
   }
 
+  // ── "Templates Automáticos" (Super Admin → WhatsApp → Templates
+  // Automáticos): submete TODOS os template_definitions já cadastrados pra
+  // ESTA instituição de uma vez — útil pra escola nova que entrou depois dos
+  // templates já existirem, sem precisar recriar um por um manualmente aqui.
+  // Roda no servidor (api/whatsapp/template-definitions.ts), nunca client-side
+  // direto pra Meta como handleAddTemplate acima — motivo em detalhe no
+  // endpoint. ──
+  const [syncingDefs, setSyncingDefs] = useState(false)
+  const handleSyncTemplateDefinitions = async () => {
+    setSyncingDefs(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Sessão expirada — faça login novamente.')
+
+      const res = await fetch('/api/whatsapp/template-definitions', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body:    JSON.stringify({ action: 'submit', institution_ids: [id] }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Erro ao sincronizar templates')
+
+      const results: any[] = data.results || []
+      if (!results.length) {
+        showToast('Nenhum template cadastrado em Templates Automáticos ainda, ou esta escola não tem WABA configurado.', false)
+      } else {
+        const failed = results.filter(r => r.status === 'rejected').length
+        showToast(failed > 0
+          ? `${results.length - failed} template(s) submetido(s), ${failed} com erro.`
+          : `${results.length} template(s) submetido(s) com sucesso!`, failed === 0)
+      }
+      loadWaTemplates()
+    } catch (e: any) {
+      showToast(e.message || 'Erro ao sincronizar templates automáticos.', false)
+    } finally {
+      setSyncingDefs(false)
+    }
+  }
+
   const handleUpdateLimit = async () => {
     const lim = parseInt(newLimit, 10)
     if (isNaN(lim) || lim < 0) { showToast('Limite inválido.', false); return }
@@ -2265,6 +2304,15 @@ export default function InstitutionDetails() {
                         className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-xl text-xs font-semibold hover:bg-gray-50"
                       >
                         <RefreshCw className="w-3 h-3" /> Sincronizar com Meta
+                      </button>
+                      <button
+                        onClick={handleSyncTemplateDefinitions}
+                        disabled={syncingDefs}
+                        title="Submete todos os templates cadastrados em Super Admin → WhatsApp → Templates Automáticos pra esta escola"
+                        className="flex items-center gap-1.5 px-3 py-1.5 border border-purple-200 text-purple-700 bg-purple-50 rounded-xl text-xs font-semibold hover:bg-purple-100 disabled:opacity-60"
+                      >
+                        {syncingDefs ? <div className="w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" /> : <Zap className="w-3 h-3" />}
+                        Sincronizar templates
                       </button>
                       <button
                         onClick={() => setShowAddTemplate(true)}

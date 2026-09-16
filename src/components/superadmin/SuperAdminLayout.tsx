@@ -8,7 +8,7 @@ import {
   Bell, LogOut, UserCog, ChevronDown, X, Menu,
   TrendingUp, AlertCircle, CheckCircle2,
   AlertTriangle, Info, BookOpen, Users, MessageCircle, Inbox, BarChart3, Network,
-  MapPinned,
+  MapPinned, MessageSquare,
 } from 'lucide-react'
 
 // ─── tipos ────────────────────────────────────────────────────────────────
@@ -60,6 +60,7 @@ const ADMIN_GROUPS: MenuGroup[] = [
       { path: '/super-admin/market-intelligence',    label: 'Intel. Mercado', icon: BarChart3     },
       { path: '/super-admin/updates',                label: 'Atualizações',   icon: BookOpen      },
       { path: '/super-admin/whatsapp',                label: 'WhatsApp',       icon: MessageCircle },
+      { path: '/super-admin/whatsapp-templates',      label: 'Templates Automáticos', icon: MessageSquare },
     ],
   },
   {

@@ -87,3 +87,36 @@ export async function authenticateSchoolAdmin(req: VercelRequest): Promise<Schoo
 
   return { userId: data.user.id, institutionId }
 }
+
+// ── authenticateSuperAdmin ───────────────────────────────────────────────
+// Mesmo formato de authenticateSchoolAdmin, mas pro papel de Super Admin —
+// usado por endpoints que agem sobre TODAS as instituições (ex.: submissão
+// em massa de templates de WhatsApp pra Meta). Critério idêntico ao de
+// is_super_admin_user() (RLS, SQL): user_type IN ('admin_geral', 'consultant')
+// — ver 20260720000000_document_is_super_admin_user_function.sql. Não usar
+// 'super_admin' como valor de user_type — esse valor não existe neste
+// projeto (confirmado em AuthContext.tsx/App.tsx), só 'admin_geral'.
+export interface SuperAdminAuthContext {
+  userId: string
+}
+
+export async function authenticateSuperAdmin(req: VercelRequest): Promise<SuperAdminAuthContext | null> {
+  const authHeader = (req.headers.authorization || '') as string
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
+  if (!token) return null
+
+  const supabase = getSupabaseAdmin()
+  const { data, error } = await supabase.auth.getUser(token)
+  if (error || !data?.user) return null
+
+  const { data: row } = await supabase
+    .from('users')
+    .select('user_type, active')
+    .eq('id', data.user.id)
+    .maybeSingle()
+
+  if (!row || row.active === false) return null
+  if (!['admin_geral', 'consultant'].includes(row.user_type)) return null
+
+  return { userId: data.user.id }
+}

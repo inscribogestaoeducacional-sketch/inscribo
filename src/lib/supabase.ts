@@ -427,6 +427,20 @@ export class DatabaseService {
       .eq('id', id)
 
     if (error) throw error
+
+    // Reagendar (mudar scheduled_date) ou cancelar a visita invalida
+    // qualquer lembrete automático já agendado pra ela (whatsapp_scheduled_
+    // messages.visit_id, ver WhatsAppHub.tsx "Agendar Visita") que ainda não
+    // foi enviado — sem isso, o contato recebia um lembrete de uma visita
+    // que já mudou de horário ou nem existe mais. Só cancela o que ainda
+    // está 'pending'; um lembrete já 'sent' não é desfeito.
+    if (updates.scheduled_date || updates.status === 'cancelled') {
+      await supabase
+        .from('whatsapp_scheduled_messages')
+        .update({ status: 'cancelled' })
+        .eq('visit_id', id)
+        .eq('status', 'pending')
+    }
   }
 
   // Enrollments

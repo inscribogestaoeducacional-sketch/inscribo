@@ -4,7 +4,7 @@ import emojiData from '@emoji-mart/data'
 import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight, ChevronLeft,
-  CheckCheck, Check, Zap, Settings, User, Users, Download,
+  CheckCheck, Check, Zap, Settings, User, Users, Download, Calendar,
   X, MoreVertical, CornerUpLeft, SmilePlus, Edit, Trash2
 } from 'lucide-react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
@@ -12,6 +12,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConversationEvent, User as UserType, Lead, supabase } from '../../lib/supabase'
 import { normalizeBrazilianInput } from '../../lib/phone'
 import NewLeadModal from '../leads/NewLeadModal'
+import ScheduleVisitModal from '../leads/ScheduleVisitModal'
 import { saveLead } from '../../lib/leadSave'
 import { statusConfig } from '../leads/leadFormShared'
 
@@ -1121,6 +1122,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [showLeadModal, setShowLeadModal] = useState(false)
   const [leadModalTarget, setLeadModalTarget] = useState<Lead | null>(null)
   const [showClientModal, setShowClientModal] = useState(false)
+  // "Agendar Visita" na aba Lead — reaproveita o mesmo ScheduleVisitModal do
+  // Kanban (src/components/leads/ScheduleVisitModal.tsx).
+  const [showScheduleVisitModal, setShowScheduleVisitModal] = useState(false)
+  const [savingVisit, setSavingVisit] = useState(false)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [pendingFilePreview, setPendingFilePreview] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -3153,6 +3158,124 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     setScheduledMsgs(prev => prev.filter(m => m.id !== id))
   }
 
+  // "Agendar Visita" — aba Lead do painel lateral. Mesmo comportamento de
+  // hoje (LeadKanban.tsx handleScheduleVisit: cria em `visits`, marca o lead
+  // como 'scheduled'), + duas ações novas:
+  //   1. Confirmação imediata via template 'confirmacao_visita'
+  //      ({{1}} escola, {{2}} data dd/mm/aaaa, {{3}} horário HH:mm).
+  //   2. Lembrete automático em whatsapp_scheduled_messages (template
+  //      'lembrete_visita', {{1}} escola, {{2}} horário) — 08:00 do dia da
+  //      visita, ou visita-3h se a visita for antes das 09:00. O cron
+  //      whatsapp-scheduled-send processa o envio, não precisa lógica aqui.
+  //      visit_id vincula o lembrete à visita pro cancelamento em cascata
+  //      (ver DatabaseService.updateVisit em lib/supabase.ts).
+  const handleScheduleVisitFromLead = async (data: { scheduled_date: string; scheduled_time: string; notes: string }) => {
+    if (!leadData?.id || !activeId || !effectiveInstitutionId || !user?.id || savingVisit) return
+    setSavingVisit(true)
+    try {
+      const [hours, minutes] = data.scheduled_time.split(':')
+      const [year, month, day] = data.scheduled_date.split('-')
+      const visitDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hours), parseInt(minutes), 0, 0)
+
+      const newVisit = await DatabaseService.createVisit({
+        institution_id: effectiveInstitutionId,
+        lead_id:        leadData.id,
+        student_name:   leadData.student_name,
+        scheduled_date: visitDate.toISOString(),
+        notes:          data.notes,
+        status:         'scheduled',
+      })
+      await DatabaseService.updateLead(leadData.id, { status: 'scheduled' })
+      setLeadData((prev: any) => prev ? { ...prev, status: 'scheduled' } : prev)
+      await supabase.from('audit_logs').insert({
+        institution_id: effectiveInstitutionId, module: 'lead', record_id: leadData.id,
+        action: 'Visita agendada',
+        field_changed: `${data.scheduled_date} às ${data.scheduled_time}`,
+        new_value: data.notes || '',
+        user_id: user.id, user_name: user.full_name, user_role: user.role,
+      })
+
+      const rJid = rawJid(activeId)
+      const to = rJid.replace(/@.*/, '').replace(/\D/g, '')
+      const dateLabel = `${day}/${month}/${year}`
+      const timeLabel = data.scheduled_time
+
+      // conversation_id (UUID real) — necessário pro lembrete agendado e
+      // útil pro template de confirmação atualizar a conversa certa.
+      const { data: conv } = await supabase
+        .from('whatsapp_conversations')
+        .select('id')
+        .eq('institution_id', effectiveInstitutionId)
+        .eq('remote_jid', rJid)
+        .maybeSingle()
+
+      // 1) Confirmação imediata
+      try {
+        const res = await fetch('/api/whatsapp/send-template', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            institution_id: effectiveInstitutionId,
+            to,
+            template_name: 'confirmacao_visita',
+            language: 'pt_BR',
+            components: [{
+              type: 'body',
+              parameters: [
+                { type: 'text', text: institutionName || '' },
+                { type: 'text', text: dateLabel },
+                { type: 'text', text: timeLabel },
+              ],
+            }],
+            conversation_id: conv?.id,
+            sender_user_id: user.id,
+          }),
+        })
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}))
+          console.error('[handleScheduleVisitFromLead] erro ao enviar confirmacao_visita:', errBody)
+          setSendError('Visita agendada, mas não foi possível enviar a confirmação por WhatsApp.')
+        } else {
+          const jidSnapshot = activeId
+          setTimeout(() => { if (jidSnapshot) reloadConversationMessages(jidSnapshot) }, 2000)
+        }
+      } catch (tmplErr) {
+        console.error('[handleScheduleVisitFromLead] erro ao enviar confirmacao_visita:', tmplErr)
+        setSendError('Visita agendada, mas não foi possível enviar a confirmação por WhatsApp.')
+      }
+
+      // 2) Lembrete automático
+      if (conv?.id && newVisit?.id) {
+        const visitHour = parseInt(hours)
+        const reminderDate = visitHour < 9
+          ? new Date(visitDate.getTime() - 3 * 60 * 60 * 1000)
+          : new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 8, 0, 0, 0)
+
+        const { error: schedErr } = await supabase.from('whatsapp_scheduled_messages').insert({
+          institution_id:     effectiveInstitutionId,
+          conversation_id:    conv.id,
+          remote_jid:         rJid,
+          visit_id:           newVisit.id,
+          template_name:      'lembrete_visita',
+          template_variables: { '1': institutionName || '', '2': timeLabel },
+          scheduled_for:      reminderDate.toISOString(),
+          created_by:         user.id,
+        })
+        if (schedErr) console.error('[handleScheduleVisitFromLead] erro ao agendar lembrete:', schedErr.message)
+        else await refreshScheduledMsgs()
+      }
+
+      setShowScheduleVisitModal(false)
+      setHubToast('✅ Visita agendada!')
+      setTimeout(() => setHubToast(null), 3000)
+    } catch (err: any) {
+      console.error('[handleScheduleVisitFromLead]', err)
+      setSendError(err.message || 'Erro ao agendar visita.')
+    } finally {
+      setSavingVisit(false)
+    }
+  }
+
   const handleReactivate = async () => {
     if (!activeId || !effectiveInstitutionId || sendingReactivate) return
     setSendingReactivate(true)
@@ -4101,6 +4224,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           assigned_to: activeConv?.assigned_user_id || user?.id || '',
         } : undefined}
       />
+
+      {/* Agendar Visita — aba Lead do painel lateral, mesmo modal do Kanban
+          (ScheduleVisitModal.tsx). Ao salvar: envia confirmacao_visita na
+          hora e agenda lembrete_visita (ver handleScheduleVisitFromLead). */}
+      {leadData && (
+        <ScheduleVisitModal
+          isOpen={showScheduleVisitModal}
+          onClose={() => setShowScheduleVisitModal(false)}
+          lead={leadData}
+          onSchedule={handleScheduleVisitFromLead}
+        />
+      )}
 
       {/* Client Modal (placeholder) */}
       {showClientModal && (
@@ -5496,6 +5631,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#d1fae5' }}>
                                 <User style={{ width: 12, height: 12 }} />
                                 Ver no CRM
+                              </button>
+                              <button onClick={() => setShowScheduleVisitModal(true)}
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 0', background: '#2563EB', border: '1px solid #2563EB', borderRadius: 9, cursor: 'pointer', fontSize: 12, color: '#fff', fontWeight: 600, transition: 'all 0.15s' }}
+                                onMouseEnter={e => (e.currentTarget.style.background = '#1D4ED8')}
+                                onMouseLeave={e => (e.currentTarget.style.background = '#2563EB')}>
+                                <Calendar style={{ width: 12, height: 12 }} />
+                                Agendar Visita
                               </button>
                             </div>
                           ) : (
