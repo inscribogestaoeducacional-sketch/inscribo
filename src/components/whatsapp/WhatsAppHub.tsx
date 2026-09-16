@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect, useCallback } from 'react'
+﻿import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import EmojiPicker from '@emoji-mart/react'
 import emojiData from '@emoji-mart/data'
 import {
@@ -15,7 +15,10 @@ import NewLeadModal from '../leads/NewLeadModal'
 import ScheduleVisitModal from '../leads/ScheduleVisitModal'
 import { saveLead } from '../../lib/leadSave'
 import { statusConfig } from '../leads/leadFormShared'
-import { fetchTemplateVariableLabels, variableLabel, type VariableLabels } from '../../lib/templateVariableLabels'
+import {
+  fetchTemplateMeta, fetchHiddenTemplateNames, variableLabel, templateDisplayName, filterTemplatesForContext,
+  type TemplateMeta,
+} from '../../lib/templateVariableLabels'
 
 // Tamanho de página pra mensagens de uma conversa — usado tanto no
 // carregamento inicial/lazy-load quanto em "carregar mensagens anteriores"
@@ -1152,10 +1155,19 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [templateError, setTemplateError] = useState<string | null>(null)
   const [institutionName, setInstitutionName] = useState('')
   const [showAgentNameInMessages, setShowAgentNameInMessages] = useState(false)
-  // Rótulos legíveis por variável de template (ex: "Nome do responsável" em
-  // vez de "Variável 1"), cadastrados em template_definitions ("Templates
-  // Automáticos") e casados por nome de template — ver lib/templateVariableLabels.ts.
-  const [templateVarLabels, setTemplateVarLabels] = useState<Record<string, VariableLabels>>({})
+  // Metadados de template (nome de exibição, rótulos de variável, em quais
+  // pickers ele pode aparecer), cadastrados em template_definitions
+  // ("Templates Automáticos") e casados por nome de template — ver
+  // lib/templateVariableLabels.ts. hiddenTemplateNames = templates escondidos
+  // dessa escola especificamente (visible_to_school=false).
+  const [templateMeta, setTemplateMeta] = useState<Record<string, TemplateMeta>>({})
+  const [hiddenTemplateNames, setHiddenTemplateNames] = useState<Set<string>>(new Set())
+  // Listas de templates filtradas por picker — só os aprovados que marcam
+  // aquele contexto em available_contexts (ou fora do catálogo, passthrough)
+  // e que não estão escondidos pra essa escola (visible_to_school).
+  const templatesForManualSend      = useMemo(() => filterTemplatesForContext(templates, templateMeta, 'manual_send', hiddenTemplateNames), [templates, templateMeta, hiddenTemplateNames])
+  const templatesForNewConversation = useMemo(() => filterTemplatesForContext(templates, templateMeta, 'new_conversation', hiddenTemplateNames), [templates, templateMeta, hiddenTemplateNames])
+  const templatesForScheduled       = useMemo(() => filterTemplatesForContext(templates, templateMeta, 'scheduled_message', hiddenTemplateNames), [templates, templateMeta, hiddenTemplateNames])
   const [sendingReactivate, setSendingReactivate] = useState(false)
   const [hubToast, setHubToast] = useState<string | null>(null)
 
@@ -1895,8 +1907,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               .eq('status', 'approved')
             if (data) {
               setTemplates(data)
-              fetchTemplateVariableLabels(data.map((t: any) => t.name)).then(setTemplateVarLabels)
+              fetchTemplateMeta(data.map((t: any) => t.name)).then(setTemplateMeta)
             }
+            fetchHiddenTemplateNames(effectiveInstitutionId).then(setHiddenTemplateNames)
           } catch {}
         })()
 
@@ -4700,22 +4713,22 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     <X style={{ width: 14, height: 14 }} />
                   </button>
                 </div>
-                {templates.length === 0 ? (
+                {templatesForNewConversation.length === 0 ? (
                   <p style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic', margin: '0 0 10px' }}>
-                    Nenhum template aprovado cadastrado.
+                    Nenhum template aprovado disponível pra nova conversa.
                     <span style={{ color: '#00A896', cursor: 'pointer', marginLeft: 4 }} onClick={() => navigate('/settings?tab=whatsapp')}>
                       Configurar templates
                     </span>
                   </p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10, maxHeight: 160, overflowY: 'auto' }}>
-                    {templates.map(tpl => {
+                    {templatesForNewConversation.map(tpl => {
                       const bodyText = tpl.components?.find((c: any) => c.type === 'BODY')?.text || tpl.name
                       const isSelected = selectedTemplate === tpl.id
                       return (
                         <button key={tpl.id} onClick={() => { setSelectedTemplate(tpl.id); setTemplateVars({}) }}
                           style={{ textAlign: 'left', padding: '8px 10px', background: isSelected ? '#CCFBF1' : '#FFFFFF', border: `1.5px solid ${isSelected ? '#0d9488' : '#D1FAE5'}`, borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s' }}>
-                          <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{tpl.name}</p>
+                          <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{templateDisplayName(templateMeta, tpl.name)}</p>
                           <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bodyText}</p>
                         </button>
                       )
@@ -4733,7 +4746,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
                       <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#64748B' }}>Variáveis do template:</p>
                       {matches.map(([, n]) => {
-                        const label = variableLabel(templateVarLabels, tmpl.name, n)
+                        const label = variableLabel(templateMeta, tmpl.name, n)
                         return (
                           <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <span style={{ fontSize: 11, color: '#94A3B8', whiteSpace: 'nowrap' }}>{label}</span>
@@ -5885,11 +5898,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 }}
                   className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
                   <option value="">Selecionar template...</option>
-                  {templates.length === 0 && (
+                  {templatesForManualSend.length === 0 && (
                     <option value="hello_world">hello_world (padrão Meta)</option>
                   )}
-                  {templates.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+                  {templatesForManualSend.map(t => (
+                    <option key={t.id} value={t.id}>{templateDisplayName(templateMeta, t.name)}</option>
                   ))}
                 </select>
               </div>
@@ -5906,11 +5919,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     <div className="space-y-2">
                       {matches.map(([, n]) => (
                         <div key={n}>
-                          <label className="block text-xs text-[#94A3B8] mb-0.5">{variableLabel(templateVarLabels, tmpl.name, n)}</label>
+                          <label className="block text-xs text-[#94A3B8] mb-0.5">{variableLabel(templateMeta, tmpl.name, n)}</label>
                           <input
                             value={templateVars[n] || ''}
                             onChange={e => setTemplateVars(v => ({ ...v, [n]: e.target.value }))}
-                            placeholder={variableLabel(templateVarLabels, tmpl.name, n)}
+                            placeholder={variableLabel(templateMeta, tmpl.name, n)}
                             className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none"
                           />
                         </div>
@@ -5967,11 +5980,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 }}
                   className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
                   <option value="">Selecionar template aprovado...</option>
-                  {templates.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+                  {templatesForScheduled.map(t => (
+                    <option key={t.id} value={t.id}>{templateDisplayName(templateMeta, t.name)}</option>
                   ))}
                 </select>
-                {templates.length === 0 && (
+                {templatesForScheduled.length === 0 && (
                   <p className="mt-1 text-xs text-[#94A3B8]">Nenhum template aprovado disponível para esta escola.</p>
                 )}
               </div>
@@ -5988,11 +6001,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     <div className="space-y-2">
                       {matches.map(([, n]) => (
                         <div key={n}>
-                          <label className="block text-xs text-[#94A3B8] mb-0.5">{variableLabel(templateVarLabels, tmpl.name, n)}</label>
+                          <label className="block text-xs text-[#94A3B8] mb-0.5">{variableLabel(templateMeta, tmpl.name, n)}</label>
                           <input
                             value={scheduleVars[n] || ''}
                             onChange={e => setScheduleVars(v => ({ ...v, [n]: e.target.value }))}
-                            placeholder={variableLabel(templateVarLabels, tmpl.name, n)}
+                            placeholder={variableLabel(templateMeta, tmpl.name, n)}
                             className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none"
                           />
                         </div>

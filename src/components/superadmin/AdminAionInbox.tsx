@@ -13,7 +13,10 @@ import {
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { buildSendComponents, getTemplateHeaderMediaFormat, uploadTemplateHeaderMedia, type MediaHeaderFormat } from '../../lib/whatsappTemplate'
-import { fetchTemplateVariableLabels, variableLabel, type VariableLabels } from '../../lib/templateVariableLabels'
+import {
+  fetchTemplateMeta, variableLabel, templateDisplayName, filterTemplatesForContext,
+  type TemplateMeta,
+} from '../../lib/templateVariableLabels'
 import { STAGES } from '../shared/LeadModal'
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
@@ -2108,7 +2111,11 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
 
   const [showCreateModal, setShowCreateModal]   = useState(false)
   const [templates, setTemplates]               = useState<GraphTemplate[]>([])
-  const [templateVarLabels, setTemplateVarLabels] = useState<Record<string, VariableLabels>>({})
+  // Metadados de template — ver lib/templateVariableLabels.ts. Transmissão em
+  // massa é platform-wide (sem institution_id), então nunca filtra por
+  // visible_to_school, só por available_contexts ('broadcast').
+  const [templateMeta, setTemplateMeta]         = useState<Record<string, TemplateMeta>>({})
+  const templatesForBroadcast = useMemo(() => filterTemplatesForContext(templates, templateMeta, 'broadcast'), [templates, templateMeta])
   const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [campaignName, setCampaignName]         = useState('')
   const [templateName, setTemplateName]         = useState('')
@@ -2287,7 +2294,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
       const data = await res.json()
       const approved = ((data.data || []) as any[]).filter(t => t.status?.toUpperCase() === 'APPROVED')
       setTemplates(approved)
-      fetchTemplateVariableLabels(approved.map(t => t.name)).then(setTemplateVarLabels)
+      fetchTemplateMeta(approved.map(t => t.name)).then(setTemplateMeta)
       return approved
     } catch (e) {
       console.error('[broadcast] erro ao carregar templates:', e)
@@ -3007,11 +3014,11 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                 <>
                   <select value={templateName} onChange={e => { setTemplateName(e.target.value); setTemplateVars({}); setHeaderMediaUrl(null) }} style={inputStyle}>
                     <option value="">Selecionar template...</option>
-                    {templates.map(t => <option key={t.id || t.name} value={t.name}>{t.name}</option>)}
+                    {templatesForBroadcast.map(t => <option key={t.id || t.name} value={t.name}>{templateDisplayName(templateMeta, t.name)}</option>)}
                   </select>
-                  {templates.length === 0 && (
+                  {templatesForBroadcast.length === 0 && (
                     <p style={{ fontSize: 12, color: '#92400E', background: '#FEF3C7', padding: '9px 12px', borderRadius: 8, marginTop: 8 }}>
-                      Nenhum template aprovado encontrado no WhatsApp da Áion.
+                      Nenhum template aprovado disponível pra transmissão em massa.
                     </p>
                   )}
                 </>
@@ -3053,7 +3060,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {templateVarNumbers.filter(n => n !== '1').map(n => (
                       <input key={n} value={templateVars[n] || ''} onChange={e => setTemplateVars(v => ({ ...v, [n]: e.target.value }))}
-                        placeholder={variableLabel(templateVarLabels, selectedTemplate?.name, n)} style={inputStyle} />
+                        placeholder={variableLabel(templateMeta, selectedTemplate?.name, n)} style={inputStyle} />
                     ))}
                   </div>
                 )}

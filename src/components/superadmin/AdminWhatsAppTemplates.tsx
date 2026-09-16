@@ -10,22 +10,35 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import SuperAdminLayout from './SuperAdminLayout'
+import { type TemplateContext } from '../../lib/templateVariableLabels'
 import {
   MessageSquare, Plus, X, Search, RefreshCw, Send,
-  CheckCircle2, Clock, XCircle, MinusCircle, Link as LinkIcon,
+  CheckCircle2, Clock, XCircle, MinusCircle, Link as LinkIcon, Eye, EyeOff, Building2,
 } from 'lucide-react'
 
 interface TemplateDefinition {
   id: string
   name: string
+  display_name: string | null
   category: 'UTILITY' | 'MARKETING'
   language: string
   body_text: string
   variable_examples: Record<string, string> | null
   variable_labels: Record<string, string> | null
+  available_contexts: TemplateContext[] | null
   button_config: { type?: string; text?: string; url_base?: string } | null
   created_at: string
 }
+
+// Rótulos amigáveis dos 4 contextos onde um template pode ser escolhido
+// manualmente (available_contexts) — mesmos valores usados pra filtrar os
+// pickers em WhatsAppHub.tsx, AionInboxHub.tsx e AdminAionInbox.tsx.
+const CONTEXT_OPTIONS: { value: TemplateContext; label: string; hint: string }[] = [
+  { value: 'manual_send',       label: 'Enviar numa conversa',    hint: 'Botão de enviar template dentro de uma conversa existente' },
+  { value: 'new_conversation',  label: 'Iniciar nova conversa',   hint: 'Template ao começar uma conversa nova com um contato' },
+  { value: 'scheduled_message', label: 'Agendar mensagem',        hint: 'Modal "Agendar mensagem" de uma conversa' },
+  { value: 'broadcast',         label: 'Transmissão em massa',    hint: 'Campanha de broadcast do Inbox Áion' },
+]
 
 // Rótulos padrão pra templates conhecidos — pré-preenche o campo de rótulo
 // quando o nome técnico digitado bate com um desses, sem travar o super
@@ -48,6 +61,7 @@ interface StatusRow {
   institution_id: string
   status: StatusValue
   error_message: string | null
+  visible_to_school: boolean
 }
 
 const STATUS_META: Record<StatusValue, { label: string; cls: string; icon: any }> = {
@@ -87,10 +101,16 @@ export default function AdminWhatsAppTemplates() {
 
   const [showNew, setShowNew]             = useState(false)
   const [saving, setSaving]               = useState(false)
+  // '' = visão agregada "Todas as escolas" (padrão/inicial); com um
+  // institution_id selecionado, a tabela de status filtra pra só essa escola
+  // e ganha o toggle "Visível pra esta escola".
+  const [filterInstitutionId, setFilterInstitutionId] = useState('')
+  const [togglingVisibility, setTogglingVisibility]   = useState<string | null>(null) // `${tplId}:${instId}`
   const [form, setForm] = useState({
-    name: '', category: 'UTILITY' as 'UTILITY' | 'MARKETING', bodyText: '',
+    name: '', displayName: '', category: 'UTILITY' as 'UTILITY' | 'MARKETING', bodyText: '',
     examples: {} as Record<string, string>,
     labels: {} as Record<string, string>,
+    contexts: [] as TemplateContext[],
     hasButton: false, buttonText: '', buttonUrlBase: '', buttonExample: '',
   })
 
@@ -110,7 +130,7 @@ export default function AdminWhatsAppTemplates() {
           .select('institution_id, institutions(id, name)')
           .eq('is_active', true).not('waba_id', 'is', null),
         supabase.from('template_institution_status')
-          .select('template_definition_id, institution_id, status, error_message'),
+          .select('template_definition_id, institution_id, status, error_message, visible_to_school'),
       ])
       if (defsRes.error) throw defsRes.error
       setTemplates((defsRes.data || []) as TemplateDefinition[])
@@ -148,13 +168,18 @@ export default function AdminWhatsAppTemplates() {
   const bodyVarNumbers = extractVarNumbers(form.bodyText)
 
   const resetForm = () => setForm({
-    name: '', category: 'UTILITY', bodyText: '', examples: {}, labels: {},
+    name: '', displayName: '', category: 'UTILITY', bodyText: '', examples: {}, labels: {}, contexts: [],
     hasButton: false, buttonText: '', buttonUrlBase: '', buttonExample: '',
   })
+
+  const toggleContext = (ctx: TemplateContext) => setForm(f => ({
+    ...f, contexts: f.contexts.includes(ctx) ? f.contexts.filter(c => c !== ctx) : [...f.contexts, ctx],
+  }))
 
   const handleCreate = async () => {
     const name = slugify(form.name)
     if (!name) { showToast('Informe um nome válido.', false); return }
+    if (!form.displayName.trim()) { showToast('Informe o nome de exibição.', false); return }
     if (!form.bodyText.trim()) { showToast('Informe o texto do corpo.', false); return }
     if (bodyVarNumbers.some(n => !form.examples[n]?.trim())) {
       showToast('Preencha o exemplo de todas as variáveis do corpo.', false); return
@@ -181,11 +206,13 @@ export default function AdminWhatsAppTemplates() {
         .from('template_definitions')
         .insert({
           name,
+          display_name:      form.displayName.trim(),
           category:          form.category,
           language:          'pt_BR',
           body_text:         form.bodyText.trim(),
           variable_examples,
           variable_labels,
+          available_contexts: form.contexts,
           button_config:     form.hasButton
             ? { type: 'URL', text: form.buttonText.trim(), url_base: form.buttonUrlBase.trim() }
             : null,
@@ -264,6 +291,36 @@ export default function AdminWhatsAppTemplates() {
     }
   }
 
+  // Esconde/mostra um template aprovado de UMA escola específica sem tocar
+  // no status de aprovação da Meta (visible_to_school, item 2 do pedido).
+  // Pode não existir linha ainda (template nunca chegou a ser submetido pra
+  // essa escola) — upsert cobre os dois casos.
+  const handleToggleVisibility = async (templateId: string, institutionId: string, currentValue: boolean) => {
+    const key = `${templateId}:${institutionId}`
+    setTogglingVisibility(key)
+    try {
+      const nextValue = !currentValue
+      const { error } = await supabase.from('template_institution_status')
+        .upsert(
+          { template_definition_id: templateId, institution_id: institutionId, visible_to_school: nextValue },
+          { onConflict: 'template_definition_id,institution_id' }
+        )
+      if (error) throw error
+      setStatusRows(prev => {
+        const exists = prev.some(r => r.template_definition_id === templateId && r.institution_id === institutionId)
+        if (exists) {
+          return prev.map(r => r.template_definition_id === templateId && r.institution_id === institutionId
+            ? { ...r, visible_to_school: nextValue } : r)
+        }
+        return [...prev, { template_definition_id: templateId, institution_id: institutionId, status: 'not_submitted', error_message: null, visible_to_school: nextValue }]
+      })
+    } catch (e: any) {
+      showToast(e.message || 'Erro ao atualizar visibilidade.', false)
+    } finally {
+      setTogglingVisibility(null)
+    }
+  }
+
   return (
     <SuperAdminLayout>
       <div className="p-8 space-y-6">
@@ -307,7 +364,8 @@ export default function AdminWhatsAppTemplates() {
                 <div key={t.id} className="border border-gray-100 rounded-xl p-3.5 bg-gray-50 flex items-start gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <span className="font-mono text-xs font-bold text-gray-800">{t.name}</span>
+                      <span className="text-sm font-bold text-gray-900">{t.display_name || t.name}</span>
+                      <span className="font-mono text-[11px] text-gray-400">{t.name}</span>
                       <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-semibold">{t.category}</span>
                       {t.button_config && (
                         <span className="text-[11px] px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 font-semibold flex items-center gap-1">
@@ -321,6 +379,17 @@ export default function AdminWhatsAppTemplates() {
                         Rótulos: {Object.entries(t.variable_labels).map(([n, l]) => `{{${n}}} = ${l}`).join(' · ')}
                       </p>
                     )}
+                    {t.available_contexts && t.available_contexts.length > 0 ? (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {t.available_contexts.map(ctx => (
+                          <span key={ctx} className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-50 text-cyan-700 font-medium">
+                            {CONTEXT_OPTIONS.find(c => c.value === ctx)?.label || ctx}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-gray-400 mt-1.5 italic">Sem contexto marcado — só disparado por automação, não aparece em nenhum picker manual.</p>
+                    )}
                   </div>
                 </div>
               ))}
@@ -328,72 +397,145 @@ export default function AdminWhatsAppTemplates() {
           )}
         </div>
 
-        {/* Grid de status por escola */}
+        {/* Status de aprovação — "Todas as escolas" é a visão padrão/inicial
+            (grid completo, igual sempre foi); escolher uma escola no filtro
+            troca pra uma lista dessa escola só, com o toggle de visibilidade. */}
         {templates.length > 0 && (
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="p-5 pb-3 flex items-center justify-between flex-wrap gap-3">
-              <p className="text-sm font-semibold text-gray-700">Status de aprovação por escola</p>
-              <div className="relative max-w-xs w-full">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-cyan-500 outline-none"
-                  placeholder="Buscar escola..." value={search} onChange={e => setSearch(e.target.value)} />
+              <p className="text-sm font-semibold text-gray-700">
+                {filterInstitutionId
+                  ? `Status de aprovação — ${institutions.find(i => i.institution_id === filterInstitutionId)?.institution_name || ''}`
+                  : 'Status de aprovação por escola'}
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <select
+                    className="pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-cyan-500 outline-none bg-white min-w-[220px]"
+                    value={filterInstitutionId}
+                    onChange={e => setFilterInstitutionId(e.target.value)}
+                  >
+                    <option value="">Todas as escolas</option>
+                    {institutions.map(i => (
+                      <option key={i.institution_id} value={i.institution_id}>{i.institution_name}</option>
+                    ))}
+                  </select>
+                </div>
+                {!filterInstitutionId && (
+                  <div className="relative max-w-xs w-full">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-cyan-500 outline-none"
+                      placeholder="Buscar escola..." value={search} onChange={e => setSearch(e.target.value)} />
+                  </div>
+                )}
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-gray-50 border-y border-gray-100">
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide sticky left-0 bg-gray-50">Escola</th>
-                    {templates.map(t => (
-                      <th key={t.id} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                        {t.name}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {institutions.length === 0 ? (
-                    <tr><td colSpan={templates.length + 1} className="px-5 py-10 text-center text-sm text-gray-400">
-                      Nenhuma escola com WhatsApp conectado (WABA) encontrada.
-                    </td></tr>
-                  ) : filteredInstitutions.length === 0 ? (
-                    <tr><td colSpan={templates.length + 1} className="px-5 py-10 text-center text-sm text-gray-400">Nenhuma escola encontrada.</td></tr>
-                  ) : filteredInstitutions.map(inst => (
-                    <tr key={inst.institution_id} className="hover:bg-gray-50">
-                      <td className="px-5 py-3 text-sm font-semibold text-gray-800 whitespace-nowrap sticky left-0 bg-white">
-                        {inst.institution_name}
-                      </td>
-                      {templates.map(t => {
-                        const row = statusMap.get(`${t.id}:${inst.institution_id}`)
-                        const status = row?.status || 'not_submitted'
-                        const meta = STATUS_META[status]
-                        const Icon = meta.icon
-                        const key = `${t.id}:${inst.institution_id}`
-                        const canRetry = status === 'rejected' || status === 'not_submitted'
-                        return (
-                          <td key={t.id} className="px-5 py-3">
-                            <div className="flex items-center gap-2">
-                              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${meta.cls}`}
-                                title={row?.error_message || ''}>
-                                <Icon className="w-3 h-3" /> {meta.label}
-                              </span>
-                              {canRetry && (
-                                <button onClick={() => handleRetry(t.id, inst.institution_id)} disabled={retrying === key}
-                                  title="Reenviar" className="p-1 text-gray-400 hover:text-cyan-600 disabled:opacity-50">
-                                  {retrying === key
-                                    ? <div className="w-3.5 h-3.5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-                                    : <Send className="w-3.5 h-3.5" />}
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        )
-                      })}
+
+            {filterInstitutionId ? (
+              <div className="divide-y divide-gray-50">
+                {templates.map(t => {
+                  const row = statusMap.get(`${t.id}:${filterInstitutionId}`)
+                  const status = row?.status || 'not_submitted'
+                  const meta = STATUS_META[status]
+                  const Icon = meta.icon
+                  const key = `${t.id}:${filterInstitutionId}`
+                  const canRetry = status === 'rejected' || status === 'not_submitted'
+                  // Sem linha em template_institution_status = nunca escondido
+                  // explicitamente pra essa escola (DEFAULT true no banco).
+                  const visible = row?.visible_to_school !== false
+                  return (
+                    <div key={t.id} className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{t.display_name || t.name}</p>
+                        <p className="font-mono text-[11px] text-gray-400 truncate">{t.name}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${meta.cls}`}
+                          title={row?.error_message || ''}>
+                          <Icon className="w-3 h-3" /> {meta.label}
+                        </span>
+                        {canRetry && (
+                          <button onClick={() => handleRetry(t.id, filterInstitutionId)} disabled={retrying === key}
+                            title="Reenviar" className="p-1 text-gray-400 hover:text-cyan-600 disabled:opacity-50">
+                            {retrying === key
+                              ? <div className="w-3.5 h-3.5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                              : <Send className="w-3.5 h-3.5" />}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleToggleVisibility(t.id, filterInstitutionId, visible)}
+                          disabled={togglingVisibility === key}
+                          title={visible ? 'Visível pra esta escola — clique pra esconder' : 'Escondido dessa escola — clique pra mostrar'}
+                          className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border disabled:opacity-50 ${visible ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}
+                        >
+                          {togglingVisibility === key
+                            ? <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            : visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                          {visible ? 'Visível' : 'Escondido'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-gray-50 border-y border-gray-100">
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide sticky left-0 bg-gray-50">Escola</th>
+                      {templates.map(t => (
+                        <th key={t.id} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
+                          {t.display_name || t.name}
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {institutions.length === 0 ? (
+                      <tr><td colSpan={templates.length + 1} className="px-5 py-10 text-center text-sm text-gray-400">
+                        Nenhuma escola com WhatsApp conectado (WABA) encontrada.
+                      </td></tr>
+                    ) : filteredInstitutions.length === 0 ? (
+                      <tr><td colSpan={templates.length + 1} className="px-5 py-10 text-center text-sm text-gray-400">Nenhuma escola encontrada.</td></tr>
+                    ) : filteredInstitutions.map(inst => (
+                      <tr key={inst.institution_id} className="hover:bg-gray-50">
+                        <td className="px-5 py-3 text-sm font-semibold text-gray-800 whitespace-nowrap sticky left-0 bg-white">
+                          {inst.institution_name}
+                        </td>
+                        {templates.map(t => {
+                          const row = statusMap.get(`${t.id}:${inst.institution_id}`)
+                          const status = row?.status || 'not_submitted'
+                          const meta = STATUS_META[status]
+                          const Icon = meta.icon
+                          const key = `${t.id}:${inst.institution_id}`
+                          const canRetry = status === 'rejected' || status === 'not_submitted'
+                          return (
+                            <td key={t.id} className="px-5 py-3">
+                              <div className="flex items-center gap-2">
+                                <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${meta.cls}`}
+                                  title={row?.error_message || ''}>
+                                  <Icon className="w-3 h-3" /> {meta.label}
+                                </span>
+                                {canRetry && (
+                                  <button onClick={() => handleRetry(t.id, inst.institution_id)} disabled={retrying === key}
+                                    title="Reenviar" className="p-1 text-gray-400 hover:text-cyan-600 disabled:opacity-50">
+                                    {retrying === key
+                                      ? <div className="w-3.5 h-3.5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                                      : <Send className="w-3.5 h-3.5" />}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
@@ -407,6 +549,13 @@ export default function AdminWhatsAppTemplates() {
               </div>
 
               <div className="space-y-4">
+                <div>
+                  <label className={lbl}>Nome de exibição *</label>
+                  <input className={inp} placeholder="ex: Falar sobre assunto específico" value={form.displayName}
+                    onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))} />
+                  <p className="text-[11px] text-gray-400 mt-1">O que o atendente/gestor vê em vez do nome técnico, em toda tela que lista templates.</p>
+                </div>
+
                 <div>
                   <label className={lbl}>Nome técnico (usado na Meta)</label>
                   <input className={`${inp} font-mono`} placeholder="ex: boas_vindas_2026" value={form.name}
@@ -493,6 +642,25 @@ export default function AdminWhatsAppTemplates() {
                       </p>
                     </div>
                   )}
+                </div>
+
+                <div className="border border-gray-100 rounded-xl p-3">
+                  <p className={lbl}>Onde esse template pode ser escolhido manualmente</p>
+                  <p className="text-[11px] text-gray-400 mb-2">
+                    Deixe tudo desmarcado pra um template disparado só por automação (ex: confirmação/lembrete de visita) — sem nenhum contexto marcado, ele não aparece em nenhum picker.
+                  </p>
+                  <div className="space-y-2">
+                    {CONTEXT_OPTIONS.map(opt => (
+                      <label key={opt.value} className="flex items-start gap-2 cursor-pointer">
+                        <input type="checkbox" className="mt-0.5" checked={form.contexts.includes(opt.value)}
+                          onChange={() => toggleContext(opt.value)} />
+                        <span>
+                          <span className="block text-sm font-medium text-gray-700">{opt.label}</span>
+                          <span className="block text-[11px] text-gray-400">{opt.hint}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
 
                 {form.bodyText && (

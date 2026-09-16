@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect, useCallback } from 'react'
+﻿import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import EmojiPicker from '@emoji-mart/react'
 import emojiData from '@emoji-mart/data'
 import {
@@ -14,7 +14,10 @@ import { normalizeBrazilianInput } from '../../lib/phone'
 import LeadModal, { STAGES as CRM_STAGES } from '../shared/LeadModal'
 import ProposalGenerator from './ProposalGenerator'
 import { buildSendComponents, getTemplateHeaderMediaFormat, uploadTemplateHeaderMedia } from '../../lib/whatsappTemplate'
-import { fetchTemplateVariableLabels, variableLabel, type VariableLabels } from '../../lib/templateVariableLabels'
+import {
+  fetchTemplateMeta, fetchHiddenTemplateNames, variableLabel, templateDisplayName, filterTemplatesForContext,
+  type TemplateMeta,
+} from '../../lib/templateVariableLabels'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MsgType = 'text' | 'audio' | 'image' | 'video' | 'document' | 'sticker' | 'deleted'
@@ -1137,7 +1140,12 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   const [templateVars, setTemplateVars] = useState<Record<string, string>>({})
   const [sendingTemplate, setSendingTemplate] = useState(false)
   const [templateError, setTemplateError] = useState<string | null>(null)
-  const [templateVarLabels, setTemplateVarLabels] = useState<Record<string, VariableLabels>>({})
+  // Metadados de template (nome de exibição, rótulos de variável, em quais
+  // pickers ele pode aparecer) — ver lib/templateVariableLabels.ts.
+  // hiddenTemplateNames = escondidos pra essa escola (visible_to_school),
+  // só populado quando !isAionInbox (Inbox Áion não tem institution_id).
+  const [templateMeta, setTemplateMeta] = useState<Record<string, TemplateMeta>>({})
+  const [hiddenTemplateNames, setHiddenTemplateNames] = useState<Set<string>>(new Set())
   // Mídia de header (IMAGE/VIDEO/DOCUMENT) — compartilhado entre showTemplateModal
   // (handleSendTemplate) e showTemplatePanel (handleSendNewConvTemplate), já que
   // os dois reaproveitam o mesmo selectedTemplate/templateVars.
@@ -1157,6 +1165,13 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   const [showScheduleModal, setShowScheduleModal] = useState(false)
   const [aionTemplates, setAionTemplates] = useState<{ id?: string; name: string; language: string; status?: string; components?: any[] }[]>([])
   const [loadingAionTemplates, setLoadingAionTemplates] = useState(false)
+  // Listas filtradas por picker (available_contexts + visible_to_school) —
+  // ver lib/templateVariableLabels.ts. aionTemplates (modal de agendamento) é
+  // sempre Aion-only aqui (ver uso de openScheduleModal), sem institution_id,
+  // então nunca aplica hiddenTemplateNames.
+  const templatesForNewConversation = useMemo(() => filterTemplatesForContext(templates, templateMeta, 'new_conversation', hiddenTemplateNames), [templates, templateMeta, hiddenTemplateNames])
+  const templatesForManualSend      = useMemo(() => filterTemplatesForContext(templates, templateMeta, 'manual_send', hiddenTemplateNames), [templates, templateMeta, hiddenTemplateNames])
+  const aionTemplatesForScheduled   = useMemo(() => filterTemplatesForContext(aionTemplates, templateMeta, 'scheduled_message'), [aionTemplates, templateMeta])
   const [scheduleTemplateName, setScheduleTemplateName] = useState('')
   const [scheduleTemplateVars, setScheduleTemplateVars] = useState<Record<string, string>>({})
   const [scheduleHeaderMediaUrl, setScheduleHeaderMediaUrl] = useState<string | null>(null)
@@ -2018,7 +2033,9 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
             .filter(t => t.status?.toUpperCase() === 'APPROVED')
             .map(t => ({ id: t.id || t.name, name: t.name, language: t.language, components: t.components || [] }))
           setTemplates(approved)
-          fetchTemplateVariableLabels(approved.map(t => t.name)).then(setTemplateVarLabels)
+          fetchTemplateMeta(approved.map(t => t.name)).then(setTemplateMeta)
+          // Inbox Áion é platform-wide (sem institution_id) — visible_to_school
+          // nunca se aplica aqui, hiddenTemplateNames fica vazio de propósito.
         } catch {
           setTemplates([])
         }
@@ -2032,8 +2049,9 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
           .eq('status', 'approved')
         if (data) {
           setTemplates(data)
-          fetchTemplateVariableLabels(data.map((t: any) => t.name)).then(setTemplateVarLabels)
+          fetchTemplateMeta(data.map((t: any) => t.name)).then(setTemplateMeta)
         }
+        fetchHiddenTemplateNames(scopeId).then(setHiddenTemplateNames)
       } catch {}
     })()
 
@@ -3655,7 +3673,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       const data = await res.json()
       const approved = ((data.data || []) as any[]).filter(t => t.status?.toUpperCase() === 'APPROVED')
       setAionTemplates(approved)
-      fetchTemplateVariableLabels(approved.map(t => t.name)).then(labels => setTemplateVarLabels(prev => ({ ...prev, ...labels })))
+      fetchTemplateMeta(approved.map(t => t.name)).then(meta => setTemplateMeta(prev => ({ ...prev, ...meta })))
     } catch (e) {
       console.error('[schedule] erro ao carregar templates:', e)
       setAionTemplates([])
@@ -4584,22 +4602,22 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                     <X style={{ width: 14, height: 14 }} />
                   </button>
                 </div>
-                {templates.length === 0 ? (
+                {templatesForNewConversation.length === 0 ? (
                   <p style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic', margin: '0 0 10px' }}>
-                    Nenhum template aprovado cadastrado.
+                    Nenhum template aprovado disponível pra nova conversa.
                     <span style={{ color: '#00A896', cursor: 'pointer', marginLeft: 4 }} onClick={() => navigate(isAionInbox ? '/super-admin/aion-inbox?tab=settings' : '/settings?tab=whatsapp')}>
                       Configurar templates
                     </span>
                   </p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10, maxHeight: 160, overflowY: 'auto' }}>
-                    {templates.map(tpl => {
+                    {templatesForNewConversation.map(tpl => {
                       const bodyText = tpl.components?.find((c: any) => c.type === 'BODY')?.text || tpl.name
                       const isSelected = selectedTemplate === tpl.id
                       return (
                         <button key={tpl.id} onClick={() => { setSelectedTemplate(tpl.id); setTemplateVars({}); setTemplateHeaderMediaUrl(null) }}
                           style={{ textAlign: 'left', padding: '8px 10px', background: isSelected ? '#CCFBF1' : '#FFFFFF', border: `1.5px solid ${isSelected ? '#0d9488' : '#D1FAE5'}`, borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s' }}>
-                          <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{tpl.name}</p>
+                          <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1A2B4A' }}>{templateDisplayName(templateMeta, tpl.name)}</p>
                           <p style={{ margin: '2px 0 0', fontSize: 11, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bodyText}</p>
                         </button>
                       )
@@ -4640,7 +4658,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
                       <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#64748B' }}>Variáveis do template:</p>
                       {matches.map(([, n]) => {
-                        const label = variableLabel(templateVarLabels, tmpl.name, n)
+                        const label = variableLabel(templateMeta, tmpl.name, n)
                         return (
                           <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <span style={{ fontSize: 11, color: '#94A3B8', whiteSpace: 'nowrap' }}>{label}</span>
@@ -5730,11 +5748,11 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                 }}
                   className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
                   <option value="">Selecionar template...</option>
-                  {templates.length === 0 && (
+                  {templatesForManualSend.length === 0 && (
                     <option value="hello_world">hello_world (padrão Meta)</option>
                   )}
-                  {templates.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+                  {templatesForManualSend.map(t => (
+                    <option key={t.id} value={t.id}>{templateDisplayName(templateMeta, t.name)}</option>
                   ))}
                 </select>
               </div>
@@ -5774,11 +5792,11 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                     <div className="space-y-2">
                       {matches.map(([, n]) => (
                         <div key={n}>
-                          <label className="block text-xs text-[#94A3B8] mb-0.5">{variableLabel(templateVarLabels, tmpl.name, n)}</label>
+                          <label className="block text-xs text-[#94A3B8] mb-0.5">{variableLabel(templateMeta, tmpl.name, n)}</label>
                           <input
                             value={templateVars[n] || ''}
                             onChange={e => setTemplateVars(v => ({ ...v, [n]: e.target.value }))}
-                            placeholder={variableLabel(templateVarLabels, tmpl.name, n)}
+                            placeholder={variableLabel(templateMeta, tmpl.name, n)}
                             className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none"
                           />
                         </div>
@@ -5787,9 +5805,9 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                   </div>
                 )
               })()}
-              {templates.length === 0 && (
+              {templatesForManualSend.length === 0 && (
                 <p className="text-xs text-[#64748B] bg-[#FEF3C7] p-3 rounded-lg">
-                  Nenhum template aprovado cadastrado. Será enviado o template "hello_world" padrão da Meta.
+                  Nenhum template aprovado disponível. Será enviado o template "hello_world" padrão da Meta.
                 </p>
               )}
             </div>
@@ -5842,13 +5860,13 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                   }}
                     className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none">
                     <option value="">Selecionar template...</option>
-                    {aionTemplates.map(t => (
-                      <option key={t.id || t.name} value={t.name}>{t.name}</option>
+                    {aionTemplatesForScheduled.map(t => (
+                      <option key={t.id || t.name} value={t.name}>{templateDisplayName(templateMeta, t.name)}</option>
                     ))}
                   </select>
-                  {aionTemplates.length === 0 && (
+                  {aionTemplatesForScheduled.length === 0 && (
                     <p className="text-xs text-[#64748B] bg-[#FEF3C7] p-3 rounded-lg mt-2">
-                      Nenhum template aprovado encontrado no WhatsApp da Áion.
+                      Nenhum template aprovado disponível pra agendamento no WhatsApp da Áion.
                     </p>
                   )}
                 </div>
@@ -5889,7 +5907,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                           <input key={n}
                             value={scheduleTemplateVars[n] || ''}
                             onChange={e => setScheduleTemplateVars(v => ({ ...v, [n]: e.target.value }))}
-                            placeholder={variableLabel(templateVarLabels, tmpl?.name, n)}
+                            placeholder={variableLabel(templateMeta, tmpl?.name, n)}
                             className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none" />
                         ))}
                       </div>
