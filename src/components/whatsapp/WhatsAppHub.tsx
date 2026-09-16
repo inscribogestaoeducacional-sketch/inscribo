@@ -352,6 +352,28 @@ async function compressImage(file: File, maxMB = 4): Promise<File> {
   })
 }
 
+// Tetos reais da Meta Cloud API por tipo de mídia — não dá pra passar disso,
+// a Meta rejeita o envio (https://developers.facebook.com/docs/whatsapp/cloud-api/reference/media)
+const MEDIA_SIZE_LIMITS: Record<'image' | 'video' | 'audio' | 'document', number> = {
+  image:    5   * 1024 * 1024,
+  video:    16  * 1024 * 1024,
+  audio:    16  * 1024 * 1024,
+  document: 100 * 1024 * 1024,
+}
+const MEDIA_TYPE_LABELS: Record<keyof typeof MEDIA_SIZE_LIMITS, string> = {
+  image: 'Imagens', video: 'Vídeos', audio: 'Áudios', document: 'Documentos',
+}
+const formatMB = (bytes: number) => {
+  const mb = bytes / (1024 * 1024)
+  return (Math.round(mb * 10) / 10).toString().replace(/\.0$/, '')
+}
+function mediaTypeFromMime(mime: string): keyof typeof MEDIA_SIZE_LIMITS {
+  if (mime.startsWith('image/')) return 'image'
+  if (mime.startsWith('video/')) return 'video'
+  if (mime.startsWith('audio/')) return 'audio'
+  return 'document'
+}
+
 // ─── AudioPlayer ──────────────────────────────────────────────────────────────
 function AudioPlayer({ duration = 15, mediaUrl, isDark = true }: { duration?: number; from?: 'me' | 'them'; mediaUrl?: string; isDark?: boolean }) {
   const [playing, setPlaying] = useState(false)
@@ -1405,24 +1427,35 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     const mimeType = recordingMimeTypeRef.current || blob.type
     console.log('[AUDIO] sendAudio blob.size:', blob.size, 'mimeType:', mimeType)
     const filename = `audio-${Date.now()}.${mimeType.includes('webm') ? 'webm' : 'mp4'}`
-    try {
-      const uploadForm = new FormData()
-      uploadForm.append('file', blob, filename)
-      if (effectiveInstitutionId) uploadForm.append('institution_id', effectiveInstitutionId)
-      uploadForm.append('filename', filename)
 
-      const uploadRes = await fetch('/api/whatsapp/media', {
+    if (blob.size > MEDIA_SIZE_LIMITS.audio) {
+      setSendError(`${MEDIA_TYPE_LABELS.audio} podem ter até ${formatMB(MEDIA_SIZE_LIMITS.audio)}MB — esse áudio tem ${formatMB(blob.size)}MB.`)
+      discardAudio()
+      return
+    }
+
+    try {
+      // Signed upload URL direto pro Supabase Storage — mesmo motivo do
+      // upload de arquivo em sendPendingFile: nunca passar os bytes pelo
+      // teto de ~4.5MB de requisição da Vercel.
+      const urlRes = await fetch('/api/whatsapp/media-upload-url', {
         method: 'POST',
-        body: uploadForm,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          institution_id: effectiveInstitutionId || undefined,
+          filename,
+        }),
       })
-      if (!uploadRes.ok) {
-        if (uploadRes.status === 413) {
-          const errBody = await uploadRes.json().catch(() => ({}))
-          throw new Error(errBody.error || 'Áudio excede o limite permitido pelo servidor.')
-        }
-        throw new Error(`Upload HTTP ${uploadRes.status}`)
+      if (!urlRes.ok) {
+        const errBody = await urlRes.json().catch(() => ({}))
+        throw new Error(errBody.error || 'Erro ao preparar upload do áudio.')
       }
-      const { url: mediaUrl } = await uploadRes.json()
+      const { path: storagePath, token: uploadToken, publicUrl: mediaUrl } = await urlRes.json()
+
+      const { error: uploadErr } = await supabase.storage
+        .from('whatsapp-media')
+        .uploadToSignedUrl(storagePath, uploadToken, blob, { contentType: mimeType })
+      if (uploadErr) throw new Error(uploadErr.message || 'Erro ao subir áudio para o Storage.')
       console.log('[AUDIO] upload ok, mediaUrl:', mediaUrl)
       discardAudio()
       const to = activeId
@@ -3349,18 +3382,16 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   const sendPendingFile = async () => {
     if (!pendingFile || !activeId || (!effectiveInstitutionId && !isAionInbox)) return
-    if (pendingFile.size > 20 * 1024 * 1024) {
-      setSendError('Arquivo excede o limite de 20MB.')
+
+    const mediatype = mediaTypeFromMime(pendingFile.type)
+    const sizeLimit = MEDIA_SIZE_LIMITS[mediatype]
+    if (pendingFile.size > sizeLimit) {
+      setSendError(`${MEDIA_TYPE_LABELS[mediatype]} podem ter até ${formatMB(sizeLimit)}MB — esse arquivo tem ${formatMB(pendingFile.size)}MB.`)
       setPendingFile(null)
       setPendingFilePreview(null)
       return
     }
     setUploadProgress(10)
-
-    const mediatype = pendingFile.type.startsWith('image/') ? 'image'
-      : pendingFile.type.startsWith('video/') ? 'video'
-      : pendingFile.type.startsWith('audio/') ? 'audio'
-      : 'document'
 
     const fileToSend = mediatype === 'image' ? await compressImage(pendingFile) : pendingFile
     setUploadProgress(30)
@@ -3384,25 +3415,30 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     ))
 
     try {
-      // Step 1: upload direto (multipart/form-data) pro Supabase Storage via /api/whatsapp/media
-      const uploadForm = new FormData()
-      uploadForm.append('file', fileToSend, fileToSend.name)
-      if (effectiveInstitutionId) uploadForm.append('institution_id', effectiveInstitutionId)
-      uploadForm.append('filename', pendingFile.name)
-
-      const uploadRes = await fetch('/api/whatsapp/media', {
+      // Step 1: pega uma signed upload URL (payload minúsculo — só nome do
+      // arquivo, nunca esbarra no teto de ~4.5MB de requisição da Vercel) e
+      // sobe o arquivo DIRETO pro Supabase Storage a partir do navegador. O
+      // servidor Vercel nunca vê os bytes do arquivo nesse fluxo.
+      const urlRes = await fetch('/api/whatsapp/media-upload-url', {
         method: 'POST',
-        body: uploadForm,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          institution_id: effectiveInstitutionId || undefined,
+          filename: pendingFile.name,
+        }),
       })
-      setUploadProgress(65)
-      if (!uploadRes.ok) {
-        if (uploadRes.status === 413) {
-          const errBody = await uploadRes.json().catch(() => ({}))
-          throw new Error(errBody.error || 'Arquivo excede o limite permitido pelo servidor.')
-        }
-        throw new Error(`Upload HTTP ${uploadRes.status}`)
+      if (!urlRes.ok) {
+        const errBody = await urlRes.json().catch(() => ({}))
+        throw new Error(errBody.error || 'Erro ao preparar upload do arquivo.')
       }
-      const { url: mediaUrl } = await uploadRes.json()
+      const { path: storagePath, token: uploadToken, publicUrl: mediaUrl } = await urlRes.json()
+      setUploadProgress(40)
+
+      const { error: uploadErr } = await supabase.storage
+        .from('whatsapp-media')
+        .uploadToSignedUrl(storagePath, uploadToken, fileToSend, { contentType: fileToSend.type || undefined })
+      if (uploadErr) throw new Error(uploadErr.message || 'Erro ao subir arquivo para o Storage.')
+      setUploadProgress(65)
 
       // Step 2: send via Meta Cloud API with the permanent URL
       const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')

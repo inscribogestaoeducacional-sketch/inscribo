@@ -1,14 +1,39 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
 import formidable from 'formidable'
-import { readFile } from 'fs/promises'
+import { readFile, unlink } from 'fs/promises'
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB — sem base64, sem inflação de 33%
+// Tetos reais da Meta Cloud API por tipo de mídia — não dá pra passar disso,
+// a Meta rejeita o envio (https://developers.facebook.com/docs/whatsapp/cloud-api/reference/media)
+const MEDIA_SIZE_LIMITS: Record<'image' | 'video' | 'audio' | 'document', number> = {
+  image:    5   * 1024 * 1024,
+  video:    16  * 1024 * 1024,
+  audio:    16  * 1024 * 1024,
+  document: 100 * 1024 * 1024,
+}
+const MEDIA_TYPE_LABELS: Record<keyof typeof MEDIA_SIZE_LIMITS, string> = {
+  image: 'Imagens', video: 'Vídeos', audio: 'Áudios', document: 'Documentos',
+}
+const formatMB = (bytes: number) => {
+  const mb = bytes / (1024 * 1024)
+  return (Math.round(mb * 10) / 10).toString().replace(/\.0$/, '')
+}
+function mediaTypeFromMime(mime: string): keyof typeof MEDIA_SIZE_LIMITS {
+  if (mime.startsWith('image/')) return 'image'
+  if (mime.startsWith('video/')) return 'video'
+  if (mime.startsWith('audio/')) return 'audio'
+  return 'document'
+}
+
+// Teto absoluto pro parser (o maior dos quatro, documento) — formidable só
+// sabe o mimetype da parte durante o streaming, então o corte por tipo real
+// é feito abaixo, depois do parse, já com file.mimetype em mãos.
+const MAX_FILE_SIZE = MEDIA_SIZE_LIMITS.document
 const UPLOAD_TIMEOUT_MS = 30000
 
 function withTimeout<T>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> {
@@ -71,6 +96,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const mimetype = file.mimetype || 'application/octet-stream'
+
+    const mediaType = mediaTypeFromMime(mimetype)
+    const typeLimit = MEDIA_SIZE_LIMITS[mediaType]
+    if (file.size > typeLimit) {
+      await unlink(file.filepath).catch(() => {})
+      return res.status(413).json({
+        error: `${MEDIA_TYPE_LABELS[mediaType]} podem ter até ${formatMB(typeLimit)}MB — esse arquivo tem ${formatMB(file.size)}MB.`,
+      })
+    }
+
     const pathPrefix = institution_id || 'aion'
     const ext = mimetype.split('/')[1]?.split(';')[0]?.replace('jpeg', 'jpg') || 'bin'
     const safeName = (filenameField || file.originalFilename || `upload.${ext}`)
@@ -99,7 +134,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (err: any) {
     if (err?.code === 1016 || err?.httpCode === 413) {
-      return res.status(413).json({ error: `Arquivo excede o limite de ${MAX_FILE_SIZE / (1024 * 1024)}MB` })
+      // Formidable abortou o streaming antes do parse terminar — o arquivo já
+      // passou do teto absoluto (documento, o maior dos quatro tipos). O corte
+      // por tipo específico (imagem/vídeo/áudio) acontece depois do parse, ver acima.
+      return res.status(413).json({ error: `Arquivo excede o limite máximo de ${formatMB(MAX_FILE_SIZE)}MB.` })
     }
     console.error('❌ Media upload error:', err)
     return res.status(500).json({ error: err.message || 'Erro interno' })
