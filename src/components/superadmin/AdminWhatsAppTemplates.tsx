@@ -112,6 +112,11 @@ export default function AdminWhatsAppTemplates() {
     labels: {} as Record<string, string>,
     contexts: [] as TemplateContext[],
     hasButton: false, buttonText: '', buttonUrlBase: '', buttonExample: '',
+    // Template criado na mão no WhatsApp Manager antes dessa tela existir
+    // (ex: confirmacao_visita, lembrete_visita) — em vez de tentar recriar
+    // na Meta em toda escola, registra 'approved' direto pra quem já tem
+    // (via whatsapp_templates) e só submete de verdade pra quem não tem.
+    alreadyExists: false,
   })
 
   const showToast = (msg: string, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 3500) }
@@ -170,6 +175,7 @@ export default function AdminWhatsAppTemplates() {
   const resetForm = () => setForm({
     name: '', displayName: '', category: 'UTILITY', bodyText: '', examples: {}, labels: {}, contexts: [],
     hasButton: false, buttonText: '', buttonUrlBase: '', buttonExample: '',
+    alreadyExists: false,
   })
 
   const toggleContext = (ctx: TemplateContext) => setForm(f => ({
@@ -221,7 +227,12 @@ export default function AdminWhatsAppTemplates() {
         .select('id').single()
       if (insErr) throw insErr
 
-      showToast('Template cadastrado! Submetendo para todas as escolas...', true)
+      showToast(
+        form.alreadyExists
+          ? 'Template cadastrado! Registrando o que já está aprovado...'
+          : 'Template cadastrado! Submetendo para todas as escolas...',
+        true
+      )
       setShowNew(false)
       resetForm()
       await loadAll()
@@ -229,21 +240,35 @@ export default function AdminWhatsAppTemplates() {
       const headers = await authHeaders()
       const res = await fetch('/api/whatsapp/template-definitions', {
         method: 'POST', headers,
-        body: JSON.stringify({ action: 'submit', template_definition_ids: [inserted.id] }),
+        body: JSON.stringify(
+          form.alreadyExists
+            ? { action: 'register_existing', template_definition_id: inserted.id }
+            : { action: 'submit', template_definition_ids: [inserted.id] }
+        ),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || 'Erro ao submeter template')
+      if (!res.ok) throw new Error(data?.error || 'Erro ao registrar/submeter template')
 
       const results: any[] = data.results || []
       const failed = results.filter(r => r.status === 'rejected').length
-      showToast(
-        results.length === 0
-          ? 'Template cadastrado, mas nenhuma escola com WhatsApp conectado foi encontrada.'
-          : failed > 0
-            ? `Submetido pra ${results.length} escola(s), ${failed} com erro.`
-            : `Submetido com sucesso pra ${results.length} escola(s)!`,
-        failed === 0
-      )
+      if (form.alreadyExists) {
+        const alreadyApproved = results.filter(r => r.status === 'approved').length
+        showToast(
+          results.length === 0
+            ? 'Template cadastrado, mas nenhuma escola com WhatsApp conectado foi encontrada.'
+            : `Registrado: ${alreadyApproved} escola(s) já aprovada(s) direto${results.length > alreadyApproved ? `, ${results.length - alreadyApproved} submetida(s) pra Meta` : ''}${failed > 0 ? ` (${failed} com erro)` : ''}.`,
+          failed === 0
+        )
+      } else {
+        showToast(
+          results.length === 0
+            ? 'Template cadastrado, mas nenhuma escola com WhatsApp conectado foi encontrada.'
+            : failed > 0
+              ? `Submetido pra ${results.length} escola(s), ${failed} com erro.`
+              : `Submetido com sucesso pra ${results.length} escola(s)!`,
+          failed === 0
+        )
+      }
       loadAll()
     } catch (e: any) {
       showToast(e.message || 'Erro ao cadastrar template.', false)
@@ -573,6 +598,23 @@ export default function AdminWhatsAppTemplates() {
                   {form.name && <p className="text-[11px] text-gray-400 mt-1">Será salvo como: <span className="font-mono">{slugify(form.name)}</span></p>}
                 </div>
 
+                <div className="border border-gray-100 rounded-xl p-3 bg-gray-50">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" className="mt-0.5" checked={form.alreadyExists}
+                      onChange={e => setForm(f => ({ ...f, alreadyExists: e.target.checked }))} />
+                    <span>
+                      <span className="block text-sm font-semibold text-gray-700">
+                        Este template já existe em algumas escolas — apenas registrar, não reenviar
+                      </span>
+                      <span className="block text-[11px] text-gray-400 mt-0.5">
+                        Pra template criado na mão no WhatsApp Manager antes dessa tela existir (ex: confirmacao_visita, lembrete_visita).
+                        Escola que já tem esse nome+idioma aprovado (conferido pelo cache de templates da própria escola) é registrada direto,
+                        sem chamar a Meta de novo. Escola que ainda não tem é submetida normalmente.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+
                 <div>
                   <label className={lbl}>Categoria</label>
                   <div className="flex gap-2">
@@ -684,7 +726,7 @@ export default function AdminWhatsAppTemplates() {
                 <button onClick={handleCreate} disabled={saving}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
                   {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Send className="w-4 h-4" />}
-                  Salvar e submeter pra todas as escolas
+                  {form.alreadyExists ? 'Salvar e registrar já-aprovados' : 'Salvar e submeter pra todas as escolas'}
                 </button>
               </div>
             </div>

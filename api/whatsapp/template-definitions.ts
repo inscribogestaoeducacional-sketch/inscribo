@@ -31,6 +31,14 @@ import {
 //     — reconsulta a Meta e atualiza o status de todas as combinações já
 //       existentes em template_institution_status pras instituições
 //       indicadas (ou TODAS, se omitido).
+//   { action: 'register_existing', template_definition_id: string, institution_ids?: string[] }
+//     — pra template que já existe/está aprovado na Meta de ANTES dessa
+//       ferramenta (ex: confirmacao_visita, lembrete_visita, criados na mão
+//       no WhatsApp Manager). Institution por institution: se whatsapp_templates
+//       (cache já sincronizado por InstitutionDetails.tsx) mostra esse nome+
+//       idioma como 'approved' pra ela, só grava template_institution_status
+//       direto, SEM chamar a Meta de novo; senão, cai no fluxo normal de
+//       submissão (submitDefinitionToInstitutions) só pra essa instituição.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return errorResponse(res, 405, 'Method not allowed')
 
@@ -43,7 +51,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (action === 'submit') return await handleSubmit(req, res, supabase)
     if (action === 'check-status') return await handleCheckStatus(req, res, supabase)
-    return errorResponse(res, 400, 'action deve ser "submit" ou "check-status"')
+    if (action === 'register_existing') return await handleRegisterExisting(req, res, supabase)
+    return errorResponse(res, 400, 'action deve ser "submit", "check-status" ou "register_existing"')
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[template-definitions] erro:', message)
@@ -210,6 +219,55 @@ async function submitToWaba(
   }
 }
 
+// ── Submete UM def a um conjunto de instituições já elegíveis, agrupando por
+// WABA (ver comentário de submitToWaba() sobre por que isso evita chamadas
+// redundantes/erros de "já existe") — usado tanto por handleSubmit() (todas
+// as instituições elegíveis) quanto por handleRegisterExisting() (só o
+// subconjunto que ainda não tinha o template aprovado no cache da escola). ──
+async function submitDefinitionToInstitutions(
+  supabase: Supa, def: TemplateDefinition, institutions: EligibleInstitution[], token: string
+): Promise<SubmitResult[]> {
+  const byWaba = new Map<string, EligibleInstitution[]>()
+  for (const inst of institutions) {
+    if (!byWaba.has(inst.waba_id)) byWaba.set(inst.waba_id, [])
+    byWaba.get(inst.waba_id)!.push(inst)
+  }
+
+  const results: SubmitResult[] = []
+  const now = new Date().toISOString()
+
+  for (const [wabaId, insts] of byWaba) {
+    const outcome = await submitToWaba(def, wabaId, token)
+
+    const rows = insts.map(inst => ({
+      template_definition_id: def.id,
+      institution_id:          inst.institution_id,
+      status:                  outcome.status,
+      meta_template_id:        outcome.metaTemplateId,
+      last_synced_at:          now,
+      error_message:           outcome.errorMessage,
+    }))
+    const { error: upsertErr } = await supabase
+      .from('template_institution_status')
+      .upsert(rows, { onConflict: 'template_definition_id,institution_id' })
+    if (upsertErr) console.error('[template-definitions] erro ao gravar status:', upsertErr.message)
+
+    for (const inst of insts) {
+      results.push({
+        institution_id:          inst.institution_id,
+        institution_name:        inst.institution_name,
+        template_definition_id: def.id,
+        template_name:           def.name,
+        status:                  outcome.status,
+        meta_template_id:        outcome.metaTemplateId,
+        error_message:           outcome.errorMessage,
+      })
+    }
+  }
+
+  return results
+}
+
 async function handleSubmit(req: VercelRequest, res: VercelResponse, supabase: Supa) {
   const { template_definition_ids, institution_ids } = req.body || {}
 
@@ -228,46 +286,94 @@ async function handleSubmit(req: VercelRequest, res: VercelResponse, supabase: S
 
   const token = await getGlobalToken(supabase)
 
-  // Agrupa instituições por WABA — ver comentário de submitToWaba() sobre
-  // por que isso evita chamadas redundantes/erros de "já existe".
-  const byWaba = new Map<string, EligibleInstitution[]>()
-  for (const inst of institutions) {
-    if (!byWaba.has(inst.waba_id)) byWaba.set(inst.waba_id, [])
-    byWaba.get(inst.waba_id)!.push(inst)
+  const results: SubmitResult[] = []
+  for (const def of defs as TemplateDefinition[]) {
+    results.push(...await submitDefinitionToInstitutions(supabase, def, institutions, token))
   }
+
+  return res.status(200).json({ results })
+}
+
+// ── Registra um template que já existia/estava aprovado na Meta ANTES dessa
+// ferramenta (ex: confirmacao_visita, lembrete_visita — criados na mão no
+// WhatsApp Manager). Por instituição elegível:
+//   - se whatsapp_templates (cache por escola, sincronizado da Meta por
+//     InstitutionDetails.tsx → loadWaTemplates) já mostra esse nome+idioma
+//     como 'approved', grava template_institution_status direto como
+//     'approved' — NUNCA chama a Meta de novo pra essas.
+//   - senão, cai no fluxo normal de submissão (submitDefinitionToInstitutions),
+//     só pra esse subconjunto.
+// Comparação "é o mesmo template" = name + language: é a própria chave de
+// unicidade que a Meta usa por WABA (não dá pra ter dois templates com nome
+// e idioma iguais no mesmo WABA), mesmo par já usado em submitToWaba() pra
+// checar duplicata antes de criar.
+async function handleRegisterExisting(req: VercelRequest, res: VercelResponse, supabase: Supa) {
+  const { template_definition_id, institution_ids } = req.body || {}
+  if (!template_definition_id) return errorResponse(res, 400, 'template_definition_id é obrigatório')
+
+  const { data: def, error: defErr } = await supabase
+    .from('template_definitions')
+    .select('*')
+    .eq('id', template_definition_id)
+    .single()
+  if (defErr || !def) return errorResponse(res, 404, 'Template não encontrado')
+
+  const institutions = await getEligibleInstitutions(
+    supabase, Array.isArray(institution_ids) && institution_ids.length ? institution_ids : undefined
+  )
+  if (!institutions.length) return res.status(200).json({ results: [] })
+
+  const instIds = institutions.map(i => i.institution_id)
+  const { data: existingRows, error: existingErr } = await supabase
+    .from('whatsapp_templates')
+    .select('institution_id, template_id')
+    .in('institution_id', instIds)
+    .eq('name', (def as TemplateDefinition).name)
+    .eq('language', (def as TemplateDefinition).language || 'pt_BR')
+    .eq('status', 'approved')
+  if (existingErr) return errorResponse(res, 500, `Erro ao consultar templates já aprovados: ${existingErr.message}`)
+
+  const approvedTemplateIdByInst = new Map<string, string | null>()
+  for (const row of (existingRows || []) as { institution_id: string; template_id: string | null }[]) {
+    approvedTemplateIdByInst.set(row.institution_id, row.template_id)
+  }
+
+  const alreadyApprovedInsts = institutions.filter(i => approvedTemplateIdByInst.has(i.institution_id))
+  const needSubmitInsts     = institutions.filter(i => !approvedTemplateIdByInst.has(i.institution_id))
 
   const results: SubmitResult[] = []
   const now = new Date().toISOString()
 
-  for (const def of defs as TemplateDefinition[]) {
-    for (const [wabaId, insts] of byWaba) {
-      const outcome = await submitToWaba(def, wabaId, token)
+  if (alreadyApprovedInsts.length > 0) {
+    const rows = alreadyApprovedInsts.map(inst => ({
+      template_definition_id: (def as TemplateDefinition).id,
+      institution_id:          inst.institution_id,
+      status:                  'approved' as const,
+      meta_template_id:        approvedTemplateIdByInst.get(inst.institution_id) || null,
+      last_synced_at:          now,
+      error_message:           null,
+    }))
+    const { error: upsertErr } = await supabase
+      .from('template_institution_status')
+      .upsert(rows, { onConflict: 'template_definition_id,institution_id' })
+    if (upsertErr) console.error('[template-definitions] erro ao registrar já-aprovados:', upsertErr.message)
 
-      const rows = insts.map(inst => ({
-        template_definition_id: def.id,
+    for (const inst of alreadyApprovedInsts) {
+      results.push({
         institution_id:          inst.institution_id,
-        status:                  outcome.status,
-        meta_template_id:        outcome.metaTemplateId,
-        last_synced_at:          now,
-        error_message:           outcome.errorMessage,
-      }))
-      const { error: upsertErr } = await supabase
-        .from('template_institution_status')
-        .upsert(rows, { onConflict: 'template_definition_id,institution_id' })
-      if (upsertErr) console.error('[template-definitions] erro ao gravar status:', upsertErr.message)
-
-      for (const inst of insts) {
-        results.push({
-          institution_id:          inst.institution_id,
-          institution_name:        inst.institution_name,
-          template_definition_id: def.id,
-          template_name:           def.name,
-          status:                  outcome.status,
-          meta_template_id:        outcome.metaTemplateId,
-          error_message:           outcome.errorMessage,
-        })
-      }
+        institution_name:        inst.institution_name,
+        template_definition_id: (def as TemplateDefinition).id,
+        template_name:           (def as TemplateDefinition).name,
+        status:                  'approved',
+        meta_template_id:        approvedTemplateIdByInst.get(inst.institution_id) || null,
+        error_message:           null,
+      })
     }
+  }
+
+  if (needSubmitInsts.length > 0) {
+    const token = await getGlobalToken(supabase)
+    results.push(...await submitDefinitionToInstitutions(supabase, def as TemplateDefinition, needSubmitInsts, token))
   }
 
   return res.status(200).json({ results })
