@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { buildSendComponents, getTemplateHeaderMediaFormat, uploadTemplateHeaderMedia, type MediaHeaderFormat } from '../../lib/whatsappTemplate'
+import { fetchTemplateVariableLabels, variableLabel, type VariableLabels } from '../../lib/templateVariableLabels'
 import { STAGES } from '../shared/LeadModal'
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
@@ -2107,6 +2108,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
 
   const [showCreateModal, setShowCreateModal]   = useState(false)
   const [templates, setTemplates]               = useState<GraphTemplate[]>([])
+  const [templateVarLabels, setTemplateVarLabels] = useState<Record<string, VariableLabels>>({})
   const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [campaignName, setCampaignName]         = useState('')
   const [templateName, setTemplateName]         = useState('')
@@ -2285,6 +2287,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
       const data = await res.json()
       const approved = ((data.data || []) as any[]).filter(t => t.status?.toUpperCase() === 'APPROVED')
       setTemplates(approved)
+      fetchTemplateVariableLabels(approved.map(t => t.name)).then(setTemplateVarLabels)
       return approved
     } catch (e) {
       console.error('[broadcast] erro ao carregar templates:', e)
@@ -3050,7 +3053,7 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {templateVarNumbers.filter(n => n !== '1').map(n => (
                       <input key={n} value={templateVars[n] || ''} onChange={e => setTemplateVars(v => ({ ...v, [n]: e.target.value }))}
-                        placeholder={`Variável ${n}`} style={inputStyle} />
+                        placeholder={variableLabel(templateVarLabels, selectedTemplate?.name, n)} style={inputStyle} />
                     ))}
                   </div>
                 )}

@@ -15,6 +15,7 @@ import NewLeadModal from '../leads/NewLeadModal'
 import ScheduleVisitModal from '../leads/ScheduleVisitModal'
 import { saveLead } from '../../lib/leadSave'
 import { statusConfig } from '../leads/leadFormShared'
+import { fetchTemplateVariableLabels, variableLabel, type VariableLabels } from '../../lib/templateVariableLabels'
 
 // Tamanho de página pra mensagens de uma conversa — usado tanto no
 // carregamento inicial/lazy-load quanto em "carregar mensagens anteriores"
@@ -1151,6 +1152,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [templateError, setTemplateError] = useState<string | null>(null)
   const [institutionName, setInstitutionName] = useState('')
   const [showAgentNameInMessages, setShowAgentNameInMessages] = useState(false)
+  // Rótulos legíveis por variável de template (ex: "Nome do responsável" em
+  // vez de "Variável 1"), cadastrados em template_definitions ("Templates
+  // Automáticos") e casados por nome de template — ver lib/templateVariableLabels.ts.
+  const [templateVarLabels, setTemplateVarLabels] = useState<Record<string, VariableLabels>>({})
   const [sendingReactivate, setSendingReactivate] = useState(false)
   const [hubToast, setHubToast] = useState<string | null>(null)
 
@@ -1888,7 +1893,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               .select('id, name, language, components')
               .eq('institution_id', effectiveInstitutionId)
               .eq('status', 'approved')
-            if (data) setTemplates(data)
+            if (data) {
+              setTemplates(data)
+              fetchTemplateVariableLabels(data.map((t: any) => t.name)).then(setTemplateVarLabels)
+            }
           } catch {}
         })()
 
@@ -4724,15 +4732,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
                       <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#64748B' }}>Variáveis do template:</p>
-                      {matches.map(([, n]) => (
-                        <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 11, color: '#94A3B8', whiteSpace: 'nowrap' }}>{`{{${n}}}`}</span>
-                          <input value={templateVars[n] || ''}
-                            onChange={e => setTemplateVars(v => ({ ...v, [n]: e.target.value }))}
-                            placeholder={`Variável ${n}`}
-                            style={{ flex: 1, padding: '5px 8px', fontSize: 12, background: '#fff', border: '1px solid #D1FAE5', borderRadius: 7, color: '#1A2B4A', outline: 'none' }} />
-                        </div>
-                      ))}
+                      {matches.map(([, n]) => {
+                        const label = variableLabel(templateVarLabels, tmpl.name, n)
+                        return (
+                          <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 11, color: '#94A3B8', whiteSpace: 'nowrap' }}>{label}</span>
+                            <input value={templateVars[n] || ''}
+                              onChange={e => setTemplateVars(v => ({ ...v, [n]: e.target.value }))}
+                              placeholder={label}
+                              style={{ flex: 1, padding: '5px 8px', fontSize: 12, background: '#fff', border: '1px solid #D1FAE5', borderRadius: 7, color: '#1A2B4A', outline: 'none' }} />
+                          </div>
+                        )
+                      })}
                     </div>
                   )
                 })()}
@@ -5895,11 +5906,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     <div className="space-y-2">
                       {matches.map(([, n]) => (
                         <div key={n}>
-                          <label className="block text-xs text-[#94A3B8] mb-0.5">{`{{${n}}}`}</label>
+                          <label className="block text-xs text-[#94A3B8] mb-0.5">{variableLabel(templateVarLabels, tmpl.name, n)}</label>
                           <input
                             value={templateVars[n] || ''}
                             onChange={e => setTemplateVars(v => ({ ...v, [n]: e.target.value }))}
-                            placeholder={`Variável ${n}`}
+                            placeholder={variableLabel(templateVarLabels, tmpl.name, n)}
                             className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none"
                           />
                         </div>
@@ -5977,11 +5988,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     <div className="space-y-2">
                       {matches.map(([, n]) => (
                         <div key={n}>
-                          <label className="block text-xs text-[#94A3B8] mb-0.5">{`{{${n}}}`}</label>
+                          <label className="block text-xs text-[#94A3B8] mb-0.5">{variableLabel(templateVarLabels, tmpl.name, n)}</label>
                           <input
                             value={scheduleVars[n] || ''}
                             onChange={e => setScheduleVars(v => ({ ...v, [n]: e.target.value }))}
-                            placeholder={`Variável ${n}`}
+                            placeholder={variableLabel(templateVarLabels, tmpl.name, n)}
                             className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none"
                           />
                         </div>

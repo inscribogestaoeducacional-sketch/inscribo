@@ -14,6 +14,7 @@ import { normalizeBrazilianInput } from '../../lib/phone'
 import LeadModal, { STAGES as CRM_STAGES } from '../shared/LeadModal'
 import ProposalGenerator from './ProposalGenerator'
 import { buildSendComponents, getTemplateHeaderMediaFormat, uploadTemplateHeaderMedia } from '../../lib/whatsappTemplate'
+import { fetchTemplateVariableLabels, variableLabel, type VariableLabels } from '../../lib/templateVariableLabels'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MsgType = 'text' | 'audio' | 'image' | 'video' | 'document' | 'sticker' | 'deleted'
@@ -1136,6 +1137,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
   const [templateVars, setTemplateVars] = useState<Record<string, string>>({})
   const [sendingTemplate, setSendingTemplate] = useState(false)
   const [templateError, setTemplateError] = useState<string | null>(null)
+  const [templateVarLabels, setTemplateVarLabels] = useState<Record<string, VariableLabels>>({})
   // Mídia de header (IMAGE/VIDEO/DOCUMENT) — compartilhado entre showTemplateModal
   // (handleSendTemplate) e showTemplatePanel (handleSendNewConvTemplate), já que
   // os dois reaproveitam o mesmo selectedTemplate/templateVars.
@@ -2016,6 +2018,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
             .filter(t => t.status?.toUpperCase() === 'APPROVED')
             .map(t => ({ id: t.id || t.name, name: t.name, language: t.language, components: t.components || [] }))
           setTemplates(approved)
+          fetchTemplateVariableLabels(approved.map(t => t.name)).then(setTemplateVarLabels)
         } catch {
           setTemplates([])
         }
@@ -2027,7 +2030,10 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
           .select('id, name, language, components')
           .eq('institution_id', scopeId)
           .eq('status', 'approved')
-        if (data) setTemplates(data)
+        if (data) {
+          setTemplates(data)
+          fetchTemplateVariableLabels(data.map((t: any) => t.name)).then(setTemplateVarLabels)
+        }
       } catch {}
     })()
 
@@ -3649,6 +3655,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       const data = await res.json()
       const approved = ((data.data || []) as any[]).filter(t => t.status?.toUpperCase() === 'APPROVED')
       setAionTemplates(approved)
+      fetchTemplateVariableLabels(approved.map(t => t.name)).then(labels => setTemplateVarLabels(prev => ({ ...prev, ...labels })))
     } catch (e) {
       console.error('[schedule] erro ao carregar templates:', e)
       setAionTemplates([])
@@ -4632,15 +4639,18 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
                       <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#64748B' }}>Variáveis do template:</p>
-                      {matches.map(([, n]) => (
-                        <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 11, color: '#94A3B8', whiteSpace: 'nowrap' }}>{`{{${n}}}`}</span>
-                          <input value={templateVars[n] || ''}
-                            onChange={e => setTemplateVars(v => ({ ...v, [n]: e.target.value }))}
-                            placeholder={`Variável ${n}`}
-                            style={{ flex: 1, padding: '5px 8px', fontSize: 12, background: '#fff', border: '1px solid #D1FAE5', borderRadius: 7, color: '#1A2B4A', outline: 'none' }} />
-                        </div>
-                      ))}
+                      {matches.map(([, n]) => {
+                        const label = variableLabel(templateVarLabels, tmpl.name, n)
+                        return (
+                          <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 11, color: '#94A3B8', whiteSpace: 'nowrap' }}>{label}</span>
+                            <input value={templateVars[n] || ''}
+                              onChange={e => setTemplateVars(v => ({ ...v, [n]: e.target.value }))}
+                              placeholder={label}
+                              style={{ flex: 1, padding: '5px 8px', fontSize: 12, background: '#fff', border: '1px solid #D1FAE5', borderRadius: 7, color: '#1A2B4A', outline: 'none' }} />
+                          </div>
+                        )
+                      })}
                     </div>
                   )
                 })()}
@@ -5764,11 +5774,11 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                     <div className="space-y-2">
                       {matches.map(([, n]) => (
                         <div key={n}>
-                          <label className="block text-xs text-[#94A3B8] mb-0.5">{`{{${n}}}`}</label>
+                          <label className="block text-xs text-[#94A3B8] mb-0.5">{variableLabel(templateVarLabels, tmpl.name, n)}</label>
                           <input
                             value={templateVars[n] || ''}
                             onChange={e => setTemplateVars(v => ({ ...v, [n]: e.target.value }))}
-                            placeholder={`Variável ${n}`}
+                            placeholder={variableLabel(templateVarLabels, tmpl.name, n)}
                             className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none"
                           />
                         </div>
@@ -5879,7 +5889,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
                           <input key={n}
                             value={scheduleTemplateVars[n] || ''}
                             onChange={e => setScheduleTemplateVars(v => ({ ...v, [n]: e.target.value }))}
-                            placeholder={`Variável ${n}`}
+                            placeholder={variableLabel(templateVarLabels, tmpl?.name, n)}
                             className="w-full px-3 py-2 text-sm bg-[#F1F5F9] border-0 rounded-lg text-[#1A2B4A] focus:ring-1 focus:ring-[#00A896] outline-none" />
                         ))}
                       </div>

@@ -22,8 +22,18 @@ interface TemplateDefinition {
   language: string
   body_text: string
   variable_examples: Record<string, string> | null
+  variable_labels: Record<string, string> | null
   button_config: { type?: string; text?: string; url_base?: string } | null
   created_at: string
+}
+
+// Rótulos padrão pra templates conhecidos — pré-preenche o campo de rótulo
+// quando o nome técnico digitado bate com um desses, sem travar o super
+// admin de ajustar antes de salvar. contato_assunto_escola: template do
+// formulário de contato do site da escola (nome do responsável, assunto e
+// mensagem livre) — item 4 do pedido de rótulos legíveis.
+const KNOWN_TEMPLATE_LABEL_PRESETS: Record<string, Record<string, string>> = {
+  contato_assunto_escola: { '1': 'Nome do responsável', '2': 'Assunto', '3': 'Mensagem' },
 }
 
 interface EligibleInstitution {
@@ -80,6 +90,7 @@ export default function AdminWhatsAppTemplates() {
   const [form, setForm] = useState({
     name: '', category: 'UTILITY' as 'UTILITY' | 'MARKETING', bodyText: '',
     examples: {} as Record<string, string>,
+    labels: {} as Record<string, string>,
     hasButton: false, buttonText: '', buttonUrlBase: '', buttonExample: '',
   })
 
@@ -137,7 +148,7 @@ export default function AdminWhatsAppTemplates() {
   const bodyVarNumbers = extractVarNumbers(form.bodyText)
 
   const resetForm = () => setForm({
-    name: '', category: 'UTILITY', bodyText: '', examples: {},
+    name: '', category: 'UTILITY', bodyText: '', examples: {}, labels: {},
     hasButton: false, buttonText: '', buttonUrlBase: '', buttonExample: '',
   })
 
@@ -157,6 +168,15 @@ export default function AdminWhatsAppTemplates() {
       const variable_examples: Record<string, string> = { ...form.examples }
       if (form.hasButton) variable_examples.button = form.buttonExample.trim()
 
+      // Só grava rótulos das variáveis que existem no corpo e foram
+      // preenchidas — sem lixo de rótulo órfão se o admin editar o corpo
+      // depois de já ter digitado algo no campo de rótulo de uma variável
+      // que não existe mais.
+      const variable_labels: Record<string, string> = {}
+      for (const n of bodyVarNumbers) {
+        if (form.labels[n]?.trim()) variable_labels[n] = form.labels[n].trim()
+      }
+
       const { data: inserted, error: insErr } = await supabase
         .from('template_definitions')
         .insert({
@@ -165,6 +185,7 @@ export default function AdminWhatsAppTemplates() {
           language:          'pt_BR',
           body_text:         form.bodyText.trim(),
           variable_examples,
+          variable_labels,
           button_config:     form.hasButton
             ? { type: 'URL', text: form.buttonText.trim(), url_base: form.buttonUrlBase.trim() }
             : null,
@@ -295,6 +316,11 @@ export default function AdminWhatsAppTemplates() {
                       )}
                     </div>
                     <p className="text-xs text-gray-600 truncate">{t.body_text}</p>
+                    {t.variable_labels && Object.keys(t.variable_labels).length > 0 && (
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        Rótulos: {Object.entries(t.variable_labels).map(([n, l]) => `{{${n}}} = ${l}`).join(' · ')}
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
@@ -385,7 +411,16 @@ export default function AdminWhatsAppTemplates() {
                   <label className={lbl}>Nome técnico (usado na Meta)</label>
                   <input className={`${inp} font-mono`} placeholder="ex: boas_vindas_2026" value={form.name}
                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    onBlur={e => setForm(f => ({ ...f, name: slugify(e.target.value) }))} />
+                    onBlur={e => {
+                      const slug = slugify(e.target.value)
+                      const preset = KNOWN_TEMPLATE_LABEL_PRESETS[slug]
+                      setForm(f => ({
+                        ...f, name: slug,
+                        // Só aplica o preset se o admin ainda não tiver digitado
+                        // nenhum rótulo — nunca sobrescreve o que já foi editado.
+                        labels: preset && Object.keys(f.labels).length === 0 ? preset : f.labels,
+                      }))
+                    }} />
                   {form.name && <p className="text-[11px] text-gray-400 mt-1">Será salvo como: <span className="font-mono">{slugify(form.name)}</span></p>}
                 </div>
 
@@ -411,15 +446,31 @@ export default function AdminWhatsAppTemplates() {
                 </div>
 
                 {bodyVarNumbers.length > 0 && (
-                  <div className="space-y-2 bg-gray-50 border border-gray-100 rounded-xl p-3">
-                    <p className={lbl}>Exemplo de cada variável (a Meta exige pra aprovar)</p>
-                    {bodyVarNumbers.map(n => (
-                      <div key={n} className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-gray-500 w-10">{`{{${n}}}`}</span>
-                        <input className={inp} placeholder={`Exemplo pra {{${n}}}`} value={form.examples[n] || ''}
-                          onChange={e => setForm(f => ({ ...f, examples: { ...f.examples, [n]: e.target.value } }))} />
+                  <div className="space-y-3 bg-gray-50 border border-gray-100 rounded-xl p-3">
+                    <div>
+                      <p className={lbl}>Exemplo de cada variável (a Meta exige pra aprovar)</p>
+                      <div className="space-y-2">
+                        {bodyVarNumbers.map(n => (
+                          <div key={n} className="flex items-center gap-2">
+                            <span className="font-mono text-xs text-gray-500 w-10">{`{{${n}}}`}</span>
+                            <input className={inp} placeholder={`Exemplo pra {{${n}}}`} value={form.examples[n] || ''}
+                              onChange={e => setForm(f => ({ ...f, examples: { ...f.examples, [n]: e.target.value } }))} />
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
+                    <div>
+                      <p className={lbl}>Rótulo de cada variável (opcional — mostrado no lugar de "Variável N" em toda tela que preenche esse template pra enviar)</p>
+                      <div className="space-y-2">
+                        {bodyVarNumbers.map(n => (
+                          <div key={n} className="flex items-center gap-2">
+                            <span className="font-mono text-xs text-gray-500 w-10">{`{{${n}}}`}</span>
+                            <input className={inp} placeholder={`Ex: Nome do responsável`} value={form.labels[n] || ''}
+                              onChange={e => setForm(f => ({ ...f, labels: { ...f.labels, [n]: e.target.value } }))} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 )}
 
