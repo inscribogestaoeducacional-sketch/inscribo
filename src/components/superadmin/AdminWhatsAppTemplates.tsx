@@ -14,6 +14,7 @@ import { type TemplateContext } from '../../lib/templateVariableLabels'
 import {
   MessageSquare, Plus, X, Search, RefreshCw, Send,
   CheckCircle2, Clock, XCircle, MinusCircle, Link as LinkIcon, Eye, EyeOff, Building2,
+  Download, Users,
 } from 'lucide-react'
 
 interface TemplateDefinition {
@@ -27,7 +28,16 @@ interface TemplateDefinition {
   variable_labels: Record<string, string> | null
   available_contexts: TemplateContext[] | null
   button_config: { type?: string; text?: string; url_base?: string } | null
+  scope: 'all' | 'specific'
   created_at: string
+}
+
+interface ImportableTemplate {
+  name: string
+  language: string
+  category: 'UTILITY' | 'MARKETING'
+  body_text: string
+  approved_count: number
 }
 
 // Rótulos amigáveis dos 4 contextos onde um template pode ser escolhido
@@ -52,6 +62,7 @@ const KNOWN_TEMPLATE_LABEL_PRESETS: Record<string, Record<string, string>> = {
 interface EligibleInstitution {
   institution_id: string
   institution_name: string
+  institution_city: string | null
 }
 
 type StatusValue = 'not_submitted' | 'pending' | 'approved' | 'rejected'
@@ -106,6 +117,11 @@ export default function AdminWhatsAppTemplates() {
   // e ganha o toggle "Visível pra esta escola".
   const [filterInstitutionId, setFilterInstitutionId] = useState('')
   const [togglingVisibility, setTogglingVisibility]   = useState<string | null>(null) // `${tplId}:${instId}`
+  // "Importar templates existentes" — lista candidatos de whatsapp_templates
+  // (aprovados em pelo menos uma escola) que ainda não viraram template_definitions.
+  const [showImport, setShowImport]       = useState(false)
+  const [loadingImport, setLoadingImport] = useState(false)
+  const [importList, setImportList]       = useState<ImportableTemplate[]>([])
   const [form, setForm] = useState({
     name: '', displayName: '', category: 'UTILITY' as 'UTILITY' | 'MARKETING', bodyText: '',
     examples: {} as Record<string, string>,
@@ -116,7 +132,14 @@ export default function AdminWhatsAppTemplates() {
     // (ex: confirmacao_visita, lembrete_visita) — em vez de tentar recriar
     // na Meta em toda escola, registra 'approved' direto pra quem já tem
     // (via whatsapp_templates) e só submete de verdade pra quem não tem.
+    // Marcado automaticamente ao vir da importação (item 1.4 do pedido).
     alreadyExists: false,
+    // Escopo de escolas: 'all' (padrão, comportamento de sempre) ou
+    // 'specific' — só as instituições marcadas em scopeInstitutionIds
+    // recebem submissão/registro; as demais nem tentativa nem linha em
+    // template_institution_status.
+    scope: 'all' as 'all' | 'specific',
+    scopeInstitutionIds: [] as string[],
   })
 
   const showToast = (msg: string, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 3500) }
@@ -132,7 +155,7 @@ export default function AdminWhatsAppTemplates() {
         // AdminSchools.tsx/InstitutionDetails.tsx — institutions.
         // whatsapp_business_id nunca é lido em nenhum outro lugar do projeto.
         supabase.from('whatsapp_phone_numbers')
-          .select('institution_id, institutions(id, name)')
+          .select('institution_id, institutions(id, name, city)')
           .eq('is_active', true).not('waba_id', 'is', null),
         supabase.from('template_institution_status')
           .select('template_definition_id, institution_id, status, error_message, visible_to_school'),
@@ -141,7 +164,11 @@ export default function AdminWhatsAppTemplates() {
       setTemplates((defsRes.data || []) as TemplateDefinition[])
 
       const insts: EligibleInstitution[] = (phonesRes.data || [])
-        .map((r: any) => ({ institution_id: r.institution_id, institution_name: r.institutions?.name || r.institution_id }))
+        .map((r: any) => ({
+          institution_id:   r.institution_id,
+          institution_name: r.institutions?.name || r.institution_id,
+          institution_city: r.institutions?.city || null,
+        }))
         .sort((a, b) => a.institution_name.localeCompare(b.institution_name))
       setInstitutions(insts)
 
@@ -175,8 +202,14 @@ export default function AdminWhatsAppTemplates() {
   const resetForm = () => setForm({
     name: '', displayName: '', category: 'UTILITY', bodyText: '', examples: {}, labels: {}, contexts: [],
     hasButton: false, buttonText: '', buttonUrlBase: '', buttonExample: '',
-    alreadyExists: false,
+    alreadyExists: false, scope: 'all', scopeInstitutionIds: [],
   })
+
+  const toggleScopeInstitution = (institutionId: string) => setForm(f => ({
+    ...f, scopeInstitutionIds: f.scopeInstitutionIds.includes(institutionId)
+      ? f.scopeInstitutionIds.filter(id => id !== institutionId)
+      : [...f.scopeInstitutionIds, institutionId],
+  }))
 
   const toggleContext = (ctx: TemplateContext) => setForm(f => ({
     ...f, contexts: f.contexts.includes(ctx) ? f.contexts.filter(c => c !== ctx) : [...f.contexts, ctx],
@@ -192,6 +225,9 @@ export default function AdminWhatsAppTemplates() {
     }
     if (form.hasButton && (!form.buttonUrlBase.trim() || !form.buttonText.trim() || !form.buttonExample.trim())) {
       showToast('Preencha texto, URL base e exemplo do botão.', false); return
+    }
+    if (form.scope === 'specific' && form.scopeInstitutionIds.length === 0) {
+      showToast('Selecione pelo menos uma escola pro escopo específico.', false); return
     }
 
     setSaving(true)
@@ -222,6 +258,7 @@ export default function AdminWhatsAppTemplates() {
           button_config:     form.hasButton
             ? { type: 'URL', text: form.buttonText.trim(), url_base: form.buttonUrlBase.trim() }
             : null,
+          scope:      form.scope,
           created_by: user?.id || null,
         })
         .select('id').single()
@@ -234,6 +271,7 @@ export default function AdminWhatsAppTemplates() {
         true
       )
       setShowNew(false)
+      const scopeInstitutionIds = form.scope === 'specific' ? form.scopeInstitutionIds : undefined
       resetForm()
       await loadAll()
 
@@ -242,8 +280,8 @@ export default function AdminWhatsAppTemplates() {
         method: 'POST', headers,
         body: JSON.stringify(
           form.alreadyExists
-            ? { action: 'register_existing', template_definition_id: inserted.id }
-            : { action: 'submit', template_definition_ids: [inserted.id] }
+            ? { action: 'register_existing', template_definition_id: inserted.id, institution_ids: scopeInstitutionIds }
+            : { action: 'submit', template_definition_ids: [inserted.id], institution_ids: scopeInstitutionIds }
         ),
       })
       const data = await res.json()
@@ -275,6 +313,47 @@ export default function AdminWhatsAppTemplates() {
     } finally {
       setSaving(false)
     }
+  }
+
+  // "Importar templates existentes" — lista via server (whatsapp_templates
+  // tem RLS por instituição, o Super Admin não enxergaria isso client-side)
+  // os grupos (nome+idioma+corpo exato) aprovados em pelo menos uma escola
+  // que ainda não têm template_definitions correspondente.
+  const handleOpenImport = async () => {
+    setShowImport(true)
+    setLoadingImport(true)
+    try {
+      const headers = await authHeaders()
+      const res = await fetch('/api/whatsapp/template-definitions', {
+        method: 'POST', headers, body: JSON.stringify({ action: 'list_importable' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Erro ao listar templates importáveis')
+      setImportList(data.importable || [])
+    } catch (e: any) {
+      showToast(e.message || 'Erro ao listar templates importáveis.', false)
+      setImportList([])
+    } finally {
+      setLoadingImport(false)
+    }
+  }
+
+  // Pré-preenche o formulário de "Novo Template" com o que já veio aprovado
+  // na Meta — o admin só completa rótulo/nome de exibição/contextos antes de
+  // salvar. alreadyExists já marcado: a origem (import) já deixa implícito
+  // que isso é "registrar o que já existe", não recriar do zero (item 1.4).
+  const handleSelectImportable = (item: ImportableTemplate) => {
+    const preset = KNOWN_TEMPLATE_LABEL_PRESETS[item.name]
+    setForm(f => ({
+      ...f,
+      name:         item.name,
+      category:     item.category,
+      bodyText:     item.body_text,
+      labels:       preset || f.labels,
+      alreadyExists: true,
+    }))
+    setShowImport(false)
+    setShowNew(true)
   }
 
   const handleRefreshStatus = async () => {
@@ -360,6 +439,10 @@ export default function AdminWhatsAppTemplates() {
               className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-60">
               <RefreshCw className={`w-4 h-4 ${refreshingStatus ? 'animate-spin' : ''}`} /> Atualizar status
             </button>
+            <button onClick={handleOpenImport}
+              className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
+              <Download className="w-4 h-4" /> Importar templates existentes
+            </button>
             <button onClick={() => setShowNew(true)}
               className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl text-sm font-semibold shadow-sm">
               <Plus className="w-4 h-4" /> Novo Template
@@ -395,6 +478,12 @@ export default function AdminWhatsAppTemplates() {
                       {t.button_config && (
                         <span className="text-[11px] px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 font-semibold flex items-center gap-1">
                           <LinkIcon className="w-3 h-3" /> botão URL
+                        </span>
+                      )}
+                      {t.scope === 'specific' && (
+                        <span title="Só foi submetido/registrado pras escolas marcadas na criação, não pra todas"
+                          className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-semibold flex items-center gap-1">
+                          <Users className="w-3 h-3" /> Escolas selecionadas ({statusRows.filter(r => r.template_definition_id === t.id).length})
                         </span>
                       )}
                     </div>
@@ -512,7 +601,12 @@ export default function AdminWhatsAppTemplates() {
                       <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide sticky left-0 bg-gray-50">Escola</th>
                       {templates.map(t => (
                         <th key={t.id} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                          {t.display_name || t.name}
+                          <span className="inline-flex items-center gap-1">
+                            {t.display_name || t.name}
+                            {t.scope === 'specific' && (
+                              <span title="Escopo: escolas selecionadas, não todas"><Users className="w-3 h-3 text-amber-500" /></span>
+                            )}
+                          </span>
                         </th>
                       ))}
                     </tr>
@@ -705,6 +799,34 @@ export default function AdminWhatsAppTemplates() {
                   </div>
                 </div>
 
+                <div className="border border-gray-100 rounded-xl p-3">
+                  <p className={lbl}>Pra quais escolas</p>
+                  <div className="flex gap-2 mb-2">
+                    {(['all', 'specific'] as const).map(s => (
+                      <button key={s} type="button" onClick={() => setForm(f => ({ ...f, scope: s }))}
+                        className={`flex-1 py-2 rounded-xl text-sm font-semibold border-2 ${form.scope === s ? 'border-cyan-500 bg-cyan-50 text-cyan-700' : 'border-gray-200 text-gray-500'}`}>
+                        {s === 'all' ? 'Todas as escolas' : 'Escolas específicas'}
+                      </button>
+                    ))}
+                  </div>
+                  {form.scope === 'specific' && (
+                    <div className="max-h-48 overflow-y-auto space-y-1 border border-gray-100 rounded-lg p-2">
+                      {institutions.length === 0 ? (
+                        <p className="text-xs text-gray-400 text-center py-2">Nenhuma escola com WhatsApp conectado.</p>
+                      ) : institutions.map(i => (
+                        <label key={i.institution_id} className="flex items-center gap-2 px-1.5 py-1 rounded-lg hover:bg-gray-50 cursor-pointer">
+                          <input type="checkbox" checked={form.scopeInstitutionIds.includes(i.institution_id)}
+                            onChange={() => toggleScopeInstitution(i.institution_id)} />
+                          <span className="text-sm text-gray-700">{i.institution_name}{i.institution_city ? ` — ${i.institution_city}` : ''}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {form.scope === 'specific' && (
+                    <p className="text-[11px] text-gray-400 mt-1.5">{form.scopeInstitutionIds.length} escola(s) selecionada(s) — só elas recebem submissão/registro.</p>
+                  )}
+                </div>
+
                 {form.bodyText && (
                   <div>
                     <label className={lbl}>Preview</label>
@@ -729,6 +851,46 @@ export default function AdminWhatsAppTemplates() {
                   {form.alreadyExists ? 'Salvar e registrar já-aprovados' : 'Salvar e submeter pra todas as escolas'}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: importar templates existentes */}
+        {showImport && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[200] p-4">
+            <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Importar templates existentes</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Templates já aprovados na Meta em alguma escola, criados antes dessa tela existir</p>
+                </div>
+                <button onClick={() => setShowImport(false)}><X className="w-5 h-5 text-gray-400" /></button>
+              </div>
+
+              {loadingImport ? (
+                <div className="flex justify-center py-10"><div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" /></div>
+              ) : importList.length === 0 ? (
+                <div className="text-center py-10">
+                  <Download className="w-10 h-10 mx-auto mb-2 text-gray-200" />
+                  <p className="text-sm text-gray-400">Nenhum template pra importar — tudo que está aprovado já foi cadastrado aqui.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {importList.map((item, idx) => (
+                    <button key={`${item.name}:${idx}`} onClick={() => handleSelectImportable(item)}
+                      className="w-full text-left border border-gray-100 rounded-xl p-3.5 bg-gray-50 hover:border-cyan-400 hover:bg-cyan-50/40 transition-colors">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="font-mono text-xs font-bold text-gray-800">{item.name}</span>
+                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-semibold">{item.category}</span>
+                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-semibold flex items-center gap-1">
+                          <Building2 className="w-3 h-3" /> {item.approved_count} escola{item.approved_count === 1 ? '' : 's'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600 truncate">{item.body_text}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

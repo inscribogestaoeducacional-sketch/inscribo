@@ -36,9 +36,16 @@ import {
 //       ferramenta (ex: confirmacao_visita, lembrete_visita, criados na mão
 //       no WhatsApp Manager). Institution por institution: se whatsapp_templates
 //       (cache já sincronizado por InstitutionDetails.tsx) mostra esse nome+
-//       idioma como 'approved' pra ela, só grava template_institution_status
+//       idioma+CORPO EXATO como 'approved' pra ela, só grava template_institution_status
 //       direto, SEM chamar a Meta de novo; senão, cai no fluxo normal de
 //       submissão (submitDefinitionToInstitutions) só pra essa instituição.
+//   { action: 'list_importable' }
+//     — lista grupos distintos de (nome, idioma, corpo exato) aprovados em
+//       whatsapp_templates que ainda não têm template_definitions
+//       correspondente. Base do botão "Importar templates existentes" —
+//       nome+idioma sozinhos NÃO bastam pra agrupar porque cada escola pode
+//       ter WABA própria e ter editado o corpo manualmente; corpo exato
+//       diferente vira item separado na lista, nunca mistura conteúdo.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return errorResponse(res, 405, 'Method not allowed')
 
@@ -52,7 +59,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (action === 'submit') return await handleSubmit(req, res, supabase)
     if (action === 'check-status') return await handleCheckStatus(req, res, supabase)
     if (action === 'register_existing') return await handleRegisterExisting(req, res, supabase)
-    return errorResponse(res, 400, 'action deve ser "submit", "check-status" ou "register_existing"')
+    if (action === 'list_importable') return await handleListImportable(req, res, supabase)
+    return errorResponse(res, 400, 'action deve ser "submit", "check-status", "register_existing" ou "list_importable"')
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[template-definitions] erro:', message)
@@ -129,6 +137,15 @@ function mapMetaStatus(raw?: string): 'pending' | 'approved' | 'rejected' {
   if (s === 'APPROVED') return 'approved'
   if (s === 'REJECTED' || s === 'DISABLED') return 'rejected'
   return 'pending' // PENDING, IN_APPEAL, PAUSED etc. — tratado como "em análise"
+}
+
+// ── Extrai o texto do componente BODY de uma lista de components no formato
+// Graph API (mesmo shape gravado em whatsapp_templates.components — cache
+// por escola, sincronizado direto da resposta da Meta por InstitutionDetails.tsx). ──
+function extractBodyText(components: unknown): string {
+  if (!Array.isArray(components)) return ''
+  const body = components.find((c: any) => (c?.type || '').toUpperCase() === 'BODY')
+  return body?.text || ''
 }
 
 // ── Monta o payload de CRIAÇÃO (POST .../message_templates) — formato de
@@ -298,15 +315,17 @@ async function handleSubmit(req: VercelRequest, res: VercelResponse, supabase: S
 // ferramenta (ex: confirmacao_visita, lembrete_visita — criados na mão no
 // WhatsApp Manager). Por instituição elegível:
 //   - se whatsapp_templates (cache por escola, sincronizado da Meta por
-//     InstitutionDetails.tsx → loadWaTemplates) já mostra esse nome+idioma
-//     como 'approved', grava template_institution_status direto como
-//     'approved' — NUNCA chama a Meta de novo pra essas.
+//     InstitutionDetails.tsx → loadWaTemplates) já mostra esse nome+idioma+
+//     CORPO EXATO como 'approved', grava template_institution_status direto
+//     como 'approved' — NUNCA chama a Meta de novo pra essas.
 //   - senão, cai no fluxo normal de submissão (submitDefinitionToInstitutions),
 //     só pra esse subconjunto.
-// Comparação "é o mesmo template" = name + language: é a própria chave de
-// unicidade que a Meta usa por WABA (não dá pra ter dois templates com nome
-// e idioma iguais no mesmo WABA), mesmo par já usado em submitToWaba() pra
-// checar duplicata antes de criar.
+// Comparação "é o mesmo template" = name + language + corpo exato: nome+
+// idioma sozinhos são a chave de unicidade da Meta DENTRO de um WABA, mas
+// escolas com WABA própria podem ter templates de mesmo nome com corpo
+// editado manualmente — só nome+idioma bateria errado nesse caso. Exigir o
+// corpo idêntico evita registrar como "aprovado" uma instituição cujo
+// template de verdade é outro texto (decisão confirmada com o usuário).
 async function handleRegisterExisting(req: VercelRequest, res: VercelResponse, supabase: Supa) {
   const { template_definition_id, institution_ids } = req.body || {}
   if (!template_definition_id) return errorResponse(res, 400, 'template_definition_id é obrigatório')
@@ -326,7 +345,7 @@ async function handleRegisterExisting(req: VercelRequest, res: VercelResponse, s
   const instIds = institutions.map(i => i.institution_id)
   const { data: existingRows, error: existingErr } = await supabase
     .from('whatsapp_templates')
-    .select('institution_id, template_id')
+    .select('institution_id, template_id, components')
     .in('institution_id', instIds)
     .eq('name', (def as TemplateDefinition).name)
     .eq('language', (def as TemplateDefinition).language || 'pt_BR')
@@ -334,8 +353,10 @@ async function handleRegisterExisting(req: VercelRequest, res: VercelResponse, s
   if (existingErr) return errorResponse(res, 500, `Erro ao consultar templates já aprovados: ${existingErr.message}`)
 
   const approvedTemplateIdByInst = new Map<string, string | null>()
-  for (const row of (existingRows || []) as { institution_id: string; template_id: string | null }[]) {
-    approvedTemplateIdByInst.set(row.institution_id, row.template_id)
+  for (const row of (existingRows || []) as { institution_id: string; template_id: string | null; components: unknown }[]) {
+    if (extractBodyText(row.components) === (def as TemplateDefinition).body_text) {
+      approvedTemplateIdByInst.set(row.institution_id, row.template_id)
+    }
   }
 
   const alreadyApprovedInsts = institutions.filter(i => approvedTemplateIdByInst.has(i.institution_id))
@@ -377,6 +398,72 @@ async function handleRegisterExisting(req: VercelRequest, res: VercelResponse, s
   }
 
   return res.status(200).json({ results })
+}
+
+interface ImportableTemplate {
+  name: string
+  language: string
+  category: 'UTILITY' | 'MARKETING'
+  body_text: string
+  approved_count: number
+}
+
+// ── Lista candidatos a "Importar templates existentes": grupos distintos de
+// (nome, idioma, corpo exato) já aprovados em whatsapp_templates (cache de
+// QUALQUER escola) que ainda não têm template_definitions correspondente.
+// Roda com service role de propósito — whatsapp_templates tem RLS restrita
+// à própria instituição (institution_isolation), então o Super Admin nunca
+// enxergaria o cache de outra escola numa query direto do navegador.
+//
+// Agrupamento por corpo exato (não só nome+idioma): escola com WABA própria
+// pode ter editado o texto manualmente, então o mesmo nome técnico pode
+// esconder corpos diferentes entre escolas — cada corpo distinto vira um
+// item separado na lista, nunca mistura conteúdo sob um único cadastro
+// (decisão confirmada com o usuário; ver mesmo critério em handleRegisterExisting). ──
+async function handleListImportable(req: VercelRequest, res: VercelResponse, supabase: Supa) {
+  const { data: allTemplates, error: wtErr } = await supabase
+    .from('whatsapp_templates')
+    .select('institution_id, name, language, category, components')
+    .eq('status', 'approved')
+  if (wtErr) return errorResponse(res, 500, `Erro ao consultar templates aprovados: ${wtErr.message}`)
+
+  const { data: existingDefs, error: defsErr } = await supabase
+    .from('template_definitions')
+    .select('name, language, body_text')
+  if (defsErr) return errorResponse(res, 500, `Erro ao consultar templates já cadastrados: ${defsErr.message}`)
+
+  const existingKeys = new Set(
+    (existingDefs || []).map((d: any) => `${d.name} ${d.language || 'pt_BR'} ${d.body_text}`)
+  )
+
+  const groups = new Map<string, ImportableTemplate & { approvedIds: Set<string> }>()
+
+  for (const row of (allTemplates || []) as any[]) {
+    const bodyText = extractBodyText(row.components)
+    if (!bodyText) continue // sem componente BODY — não dá pra importar (formulário exige corpo)
+
+    const language = row.language || 'pt_BR'
+    const key = `${row.name} ${language} ${bodyText}`
+    if (existingKeys.has(key)) continue // já cadastrado — não aparece de novo
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        name: row.name,
+        language,
+        category: row.category === 'MARKETING' ? 'MARKETING' : 'UTILITY',
+        body_text: bodyText,
+        approved_count: 0,
+        approvedIds: new Set(),
+      })
+    }
+    groups.get(key)!.approvedIds.add(row.institution_id)
+  }
+
+  const importable: ImportableTemplate[] = [...groups.values()]
+    .map(g => ({ name: g.name, language: g.language, category: g.category, body_text: g.body_text, approved_count: g.approvedIds.size }))
+    .sort((a, b) => b.approved_count - a.approved_count || a.name.localeCompare(b.name))
+
+  return res.status(200).json({ importable })
 }
 
 async function handleCheckStatus(req: VercelRequest, res: VercelResponse, supabase: Supa) {
