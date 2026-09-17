@@ -14,7 +14,7 @@ import { type TemplateContext } from '../../lib/templateVariableLabels'
 import {
   MessageSquare, Plus, X, Search, RefreshCw, Send,
   CheckCircle2, Clock, XCircle, MinusCircle, Link as LinkIcon, Eye, EyeOff, Building2,
-  Download, Users,
+  Users, ChevronUp, ChevronDown,
 } from 'lucide-react'
 
 interface TemplateDefinition {
@@ -32,12 +32,19 @@ interface TemplateDefinition {
   created_at: string
 }
 
-interface ImportableTemplate {
+interface TemplateVariant {
+  body_text: string
+  category: 'UTILITY' | 'MARKETING'
+  approved_institution_ids: string[]
+  approved_institution_names: string[]
+  template_definition_id: string | null
+  display_name: string | null
+}
+
+interface TemplateGroup {
   name: string
   language: string
-  category: 'UTILITY' | 'MARKETING'
-  body_text: string
-  approved_count: number
+  variants: TemplateVariant[]
 }
 
 // Rótulos amigáveis dos 4 contextos onde um template pode ser escolhido
@@ -117,11 +124,24 @@ export default function AdminWhatsAppTemplates() {
   // e ganha o toggle "Visível pra esta escola".
   const [filterInstitutionId, setFilterInstitutionId] = useState('')
   const [togglingVisibility, setTogglingVisibility]   = useState<string | null>(null) // `${tplId}:${instId}`
-  // "Importar templates existentes" — lista candidatos de whatsapp_templates
-  // (aprovados em pelo menos uma escola) que ainda não viraram template_definitions.
-  const [showImport, setShowImport]       = useState(false)
-  const [loadingImport, setLoadingImport] = useState(false)
-  const [importList, setImportList]       = useState<ImportableTemplate[]>([])
+
+  // Aba "Todos os Templates" (padrão/inicial) — visão permanente de TODO
+  // template aprovado em QUALQUER escola via whatsapp_templates, cadastrado
+  // em template_definitions ou não. Substitui o antigo modal de importação
+  // única. "Cadastrados" é a aba com o que já existia (lista + grid de
+  // status por escola).
+  const [activeTab, setActiveTab]         = useState<'all' | 'registered'>('all')
+  const [templateGroups, setTemplateGroups] = useState<TemplateGroup[]>([])
+  const [loadingGroups, setLoadingGroups]   = useState(true)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  // Edição inline (rótulos/display_name/contextos/escopo) de um template já
+  // cadastrado, direto na linha — sem reabrir o formulário de "Novo Template".
+  const [editForm, setEditForm] = useState<{
+    defId: string; displayName: string; labels: Record<string, string>
+    contexts: TemplateContext[]; scope: 'all' | 'specific'; bodyText: string
+  } | null>(null)
+  const [savingEdit, setSavingEdit] = useState(false)
+
   const [form, setForm] = useState({
     name: '', displayName: '', category: 'UTILITY' as 'UTILITY' | 'MARKETING', bodyText: '',
     examples: {} as Record<string, string>,
@@ -129,10 +149,10 @@ export default function AdminWhatsAppTemplates() {
     contexts: [] as TemplateContext[],
     hasButton: false, buttonText: '', buttonUrlBase: '', buttonExample: '',
     // Template criado na mão no WhatsApp Manager antes dessa tela existir
-    // (ex: confirmacao_visita, lembrete_visita) — em vez de tentar recriar
-    // na Meta em toda escola, registra 'approved' direto pra quem já tem
-    // (via whatsapp_templates) e só submete de verdade pra quem não tem.
-    // Marcado automaticamente ao vir da importação (item 1.4 do pedido).
+    // (ex reais em produção: iniciar_contato, reativar_atendimento) — em vez
+    // de tentar recriar na Meta em toda escola, registra 'approved' direto
+    // pra quem já tem (via whatsapp_templates) e só submete de verdade pra
+    // quem não tem. Marcado automaticamente ao vir da aba "Todos os Templates".
     alreadyExists: false,
     // Escopo de escolas: 'all' (padrão, comportamento de sempre) ou
     // 'specific' — só as instituições marcadas em scopeInstitutionIds
@@ -144,7 +164,7 @@ export default function AdminWhatsAppTemplates() {
 
   const showToast = (msg: string, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 3500) }
 
-  useEffect(() => { loadAll() }, [])
+  useEffect(() => { loadAll(); loadAllTemplateGroups() }, [])
 
   const loadAll = async () => {
     setLoading(true)
@@ -315,45 +335,95 @@ export default function AdminWhatsAppTemplates() {
     }
   }
 
-  // "Importar templates existentes" — lista via server (whatsapp_templates
-  // tem RLS por instituição, o Super Admin não enxergaria isso client-side)
-  // os grupos (nome+idioma+corpo exato) aprovados em pelo menos uma escola
-  // que ainda não têm template_definitions correspondente.
-  const handleOpenImport = async () => {
-    setShowImport(true)
-    setLoadingImport(true)
+  // Aba "Todos os Templates" — lista via server (whatsapp_templates tem RLS
+  // por instituição, o Super Admin não enxergaria isso client-side) TODO
+  // template aprovado em qualquer escola, agrupado por (nome, idioma) com as
+  // variantes de corpo detectadas — cadastrado em template_definitions ou não.
+  const loadAllTemplateGroups = async () => {
+    setLoadingGroups(true)
     try {
       const headers = await authHeaders()
       const res = await fetch('/api/whatsapp/template-definitions', {
-        method: 'POST', headers, body: JSON.stringify({ action: 'list_importable' }),
+        method: 'POST', headers, body: JSON.stringify({ action: 'list_all_templates' }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || 'Erro ao listar templates importáveis')
-      setImportList(data.importable || [])
+      if (!res.ok) throw new Error(data?.error || 'Erro ao listar templates')
+      setTemplateGroups(data.groups || [])
     } catch (e: any) {
-      showToast(e.message || 'Erro ao listar templates importáveis.', false)
-      setImportList([])
+      showToast(e.message || 'Erro ao listar templates.', false)
+      setTemplateGroups([])
     } finally {
-      setLoadingImport(false)
+      setLoadingGroups(false)
     }
   }
 
-  // Pré-preenche o formulário de "Novo Template" com o que já veio aprovado
-  // na Meta — o admin só completa rótulo/nome de exibição/contextos antes de
-  // salvar. alreadyExists já marcado: a origem (import) já deixa implícito
-  // que isso é "registrar o que já existe", não recriar do zero (item 1.4).
-  const handleSelectImportable = (item: ImportableTemplate) => {
-    const preset = KNOWN_TEMPLATE_LABEL_PRESETS[item.name]
+  const toggleGroupExpanded = (groupKey: string) => setExpandedGroups(prev => {
+    const next = new Set(prev)
+    if (next.has(groupKey)) next.delete(groupKey); else next.add(groupKey)
+    return next
+  })
+
+  // Pré-preenche o formulário de "Novo Template" com uma variante ainda não
+  // cadastrada — o admin só completa rótulo/nome de exibição/contextos antes
+  // de salvar. alreadyExists já marcado: vir de uma variante já aprovada em
+  // alguma escola já deixa implícito que isso é "registrar o que já existe",
+  // não recriar do zero.
+  const handleConfigure = (group: TemplateGroup, variant: TemplateVariant) => {
+    const preset = KNOWN_TEMPLATE_LABEL_PRESETS[group.name]
     setForm(f => ({
       ...f,
-      name:         item.name,
-      category:     item.category,
-      bodyText:     item.body_text,
+      name:         group.name,
+      category:     variant.category,
+      bodyText:     variant.body_text,
       labels:       preset || f.labels,
       alreadyExists: true,
     }))
-    setShowImport(false)
     setShowNew(true)
+  }
+
+  // Edição inline — só os 4 campos que o pedido lista (display_name, rótulos,
+  // contextos, escopo). Nunca mexe em nome técnico/corpo/categoria (isso
+  // definiria um template diferente) nem em quais escolas já foram
+  // processadas (isso é ação de envio, não de metadado — ver aba "Cadastrados"
+  // pra reenviar/retry por escola).
+  const handleStartEdit = (defId: string) => {
+    const def = templates.find(t => t.id === defId)
+    if (!def) return
+    setEditForm({
+      defId,
+      displayName: def.display_name || '',
+      labels: { ...(def.variable_labels || {}) },
+      contexts: [...(def.available_contexts || [])],
+      scope: def.scope || 'all',
+      bodyText: def.body_text,
+    })
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editForm) return
+    if (!editForm.displayName.trim()) { showToast('Informe o nome de exibição.', false); return }
+    setSavingEdit(true)
+    try {
+      const bodyVarNums = extractVarNumbers(editForm.bodyText)
+      const variable_labels: Record<string, string> = {}
+      for (const n of bodyVarNums) {
+        if (editForm.labels[n]?.trim()) variable_labels[n] = editForm.labels[n].trim()
+      }
+      const { error } = await supabase.from('template_definitions').update({
+        display_name:       editForm.displayName.trim(),
+        variable_labels,
+        available_contexts: editForm.contexts,
+        scope:               editForm.scope,
+      }).eq('id', editForm.defId)
+      if (error) throw error
+      showToast('Template atualizado!')
+      setEditForm(null)
+      await Promise.all([loadAll(), loadAllTemplateGroups()])
+    } catch (e: any) {
+      showToast(e.message || 'Erro ao salvar alterações.', false)
+    } finally {
+      setSavingEdit(false)
+    }
   }
 
   const handleRefreshStatus = async () => {
@@ -439,10 +509,6 @@ export default function AdminWhatsAppTemplates() {
               className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-60">
               <RefreshCw className={`w-4 h-4 ${refreshingStatus ? 'animate-spin' : ''}`} /> Atualizar status
             </button>
-            <button onClick={handleOpenImport}
-              className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
-              <Download className="w-4 h-4" /> Importar templates existentes
-            </button>
             <button onClick={() => setShowNew(true)}
               className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl text-sm font-semibold shadow-sm">
               <Plus className="w-4 h-4" /> Novo Template
@@ -456,6 +522,23 @@ export default function AdminWhatsAppTemplates() {
           </div>
         )}
 
+        {/* Abas — "Todos os Templates" é a visão principal/padrão (todo
+            template aprovado em qualquer escola, cadastrado ou não);
+            "Cadastrados" é a visão anterior (grid de status por escola). */}
+        <div className="flex gap-1 border-b border-gray-200">
+          {([
+            { key: 'all' as const,        label: 'Todos os Templates' },
+            { key: 'registered' as const, label: 'Cadastrados' },
+          ]).map(t => (
+            <button key={t.key} onClick={() => setActiveTab(t.key)}
+              className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${activeTab === t.key ? 'border-cyan-500 text-cyan-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'registered' && (
+        <>
         {/* Lista de templates cadastrados */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
           <p className="text-sm font-semibold text-gray-700 mb-3">Templates cadastrados ({templates.length})</p>
@@ -657,6 +740,149 @@ export default function AdminWhatsAppTemplates() {
             )}
           </div>
         )}
+        </>
+        )}
+
+        {activeTab === 'all' && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+            <p className="text-sm font-semibold text-gray-700 mb-1">Todos os templates aprovados em pelo menos uma escola ({templateGroups.length})</p>
+            <p className="text-xs text-gray-400 mb-3">Cadastrado ou não em "Templates Automáticos" — inclui o que foi criado direto no WhatsApp Manager antes dessa tela existir.</p>
+            {loadingGroups ? (
+              <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" /></div>
+            ) : templateGroups.length === 0 ? (
+              <div className="text-center py-10">
+                <MessageSquare className="w-10 h-10 mx-auto mb-2 text-gray-200" />
+                <p className="text-sm text-gray-400">Nenhum template aprovado em nenhuma escola ainda.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {templateGroups.map(group => {
+                  const groupKey = `${group.name} ${group.language}`
+                  const hasVariation = group.variants.length > 1
+                  const expanded = expandedGroups.has(groupKey) || !hasVariation
+                  const totalApproved = new Set(group.variants.flatMap(v => v.approved_institution_ids)).size
+
+                  return (
+                    <div key={groupKey} className="border border-gray-100 rounded-xl bg-gray-50 overflow-hidden">
+                      <div className={`flex items-center gap-3 p-3.5 ${hasVariation ? 'cursor-pointer' : ''}`}
+                        onClick={hasVariation ? () => toggleGroupExpanded(groupKey) : undefined}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-sm font-bold text-gray-800">{group.name}</span>
+                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-semibold flex items-center gap-1">
+                              <Building2 className="w-3 h-3" /> {totalApproved} escola{totalApproved === 1 ? '' : 's'}
+                            </span>
+                            {hasVariation && (
+                              <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-semibold">
+                                ⚠️ Texto varia entre escolas ({group.variants.length} versões)
+                              </span>
+                            )}
+                          </div>
+                          {!hasVariation && <p className="text-xs text-gray-600 truncate mt-1">{group.variants[0].body_text}</p>}
+                        </div>
+                        {hasVariation && (expanded ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />)}
+                      </div>
+
+                      {expanded && (
+                        <div className={hasVariation ? 'border-t border-gray-100 divide-y divide-gray-100' : ''}>
+                          {group.variants.map((variant, vIdx) => (
+                            <div key={vIdx} className="p-3.5 bg-white">
+                              {hasVariation && (
+                                <p className="text-xs text-gray-600 mb-2">{variant.body_text}</p>
+                              )}
+                              <div className="flex items-center justify-between gap-3 flex-wrap">
+                                <p className="text-[11px] text-gray-400">
+                                  Aprovado em: {variant.approved_institution_names.join(', ')}
+                                </p>
+                                {variant.template_definition_id ? (
+                                  <button onClick={() => handleStartEdit(variant.template_definition_id!)}
+                                    className="text-xs font-semibold text-cyan-700 bg-cyan-50 px-3 py-1.5 rounded-lg hover:bg-cyan-100 flex-shrink-0">
+                                    {variant.display_name || 'Editar'}
+                                  </button>
+                                ) : (
+                                  <button onClick={() => handleConfigure(group, variant)}
+                                    className="text-xs font-semibold text-white bg-gradient-to-r from-cyan-500 to-blue-600 px-3 py-1.5 rounded-lg flex-shrink-0">
+                                    Configurar
+                                  </button>
+                                )}
+                              </div>
+
+                              {editForm?.defId === variant.template_definition_id && (
+                                <div className="mt-3 pt-3 border-t border-gray-100 space-y-3">
+                                  <div>
+                                    <label className={lbl}>Nome de exibição *</label>
+                                    <input className={inp} value={editForm.displayName}
+                                      onChange={e => setEditForm(f => f && ({ ...f, displayName: e.target.value }))} />
+                                  </div>
+
+                                  {extractVarNumbers(editForm.bodyText).length > 0 && (
+                                    <div>
+                                      <p className={lbl}>Rótulo de cada variável</p>
+                                      <div className="space-y-2">
+                                        {extractVarNumbers(editForm.bodyText).map(n => (
+                                          <div key={n} className="flex items-center gap-2">
+                                            <span className="font-mono text-xs text-gray-500 w-10">{`{{${n}}}`}</span>
+                                            <input className={inp} placeholder="Ex: Nome do responsável" value={editForm.labels[n] || ''}
+                                              onChange={e => setEditForm(f => f && ({ ...f, labels: { ...f.labels, [n]: e.target.value } }))} />
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  <div>
+                                    <p className={lbl}>Onde pode ser escolhido manualmente</p>
+                                    <div className="space-y-1.5">
+                                      {CONTEXT_OPTIONS.map(opt => (
+                                        <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
+                                          <input type="checkbox" checked={editForm.contexts.includes(opt.value)}
+                                            onChange={() => setEditForm(f => f && ({
+                                              ...f, contexts: f.contexts.includes(opt.value) ? f.contexts.filter(c => c !== opt.value) : [...f.contexts, opt.value],
+                                            }))} />
+                                          <span className="text-sm text-gray-700">{opt.label}</span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    <p className={lbl}>Pra quais escolas</p>
+                                    <div className="flex gap-2">
+                                      {(['all', 'specific'] as const).map(s => (
+                                        <button key={s} type="button" onClick={() => setEditForm(f => f && ({ ...f, scope: s }))}
+                                          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border-2 ${editForm.scope === s ? 'border-cyan-500 bg-cyan-50 text-cyan-700' : 'border-gray-200 text-gray-500'}`}>
+                                          {s === 'all' ? 'Todas' : 'Específicas'}
+                                        </button>
+                                      ))}
+                                    </div>
+                                    <p className="text-[11px] text-gray-400 mt-1">
+                                      Só muda o rótulo guardado — pra reenviar/retry por escola, use a aba "Cadastrados".
+                                    </p>
+                                  </div>
+
+                                  <div className="flex gap-2 justify-end pt-1">
+                                    <button onClick={() => setEditForm(null)}
+                                      className="px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+                                      Cancelar
+                                    </button>
+                                    <button onClick={handleSaveEdit} disabled={savingEdit}
+                                      className="px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-cyan-500 to-blue-600 rounded-lg disabled:opacity-60">
+                                      {savingEdit ? 'Salvando...' : 'Salvar alterações'}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Modal: novo template */}
         {showNew && (
@@ -701,8 +927,8 @@ export default function AdminWhatsAppTemplates() {
                         Este template já existe em algumas escolas — apenas registrar, não reenviar
                       </span>
                       <span className="block text-[11px] text-gray-400 mt-0.5">
-                        Pra template criado na mão no WhatsApp Manager antes dessa tela existir (ex: confirmacao_visita, lembrete_visita).
-                        Escola que já tem esse nome+idioma aprovado (conferido pelo cache de templates da própria escola) é registrada direto,
+                        Pra template criado na mão no WhatsApp Manager antes dessa tela existir.
+                        Escola que já tem esse nome+idioma+corpo aprovado (conferido pelo cache de templates da própria escola) é registrada direto,
                         sem chamar a Meta de novo. Escola que ainda não tem é submetida normalmente.
                       </span>
                     </span>
@@ -851,46 +1077,6 @@ export default function AdminWhatsAppTemplates() {
                   {form.alreadyExists ? 'Salvar e registrar já-aprovados' : 'Salvar e submeter pra todas as escolas'}
                 </button>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Modal: importar templates existentes */}
-        {showImport && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[200] p-4">
-            <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-5">
-                <div>
-                  <h2 className="text-lg font-bold text-gray-900">Importar templates existentes</h2>
-                  <p className="text-xs text-gray-500 mt-0.5">Templates já aprovados na Meta em alguma escola, criados antes dessa tela existir</p>
-                </div>
-                <button onClick={() => setShowImport(false)}><X className="w-5 h-5 text-gray-400" /></button>
-              </div>
-
-              {loadingImport ? (
-                <div className="flex justify-center py-10"><div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" /></div>
-              ) : importList.length === 0 ? (
-                <div className="text-center py-10">
-                  <Download className="w-10 h-10 mx-auto mb-2 text-gray-200" />
-                  <p className="text-sm text-gray-400">Nenhum template pra importar — tudo que está aprovado já foi cadastrado aqui.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {importList.map((item, idx) => (
-                    <button key={`${item.name}:${idx}`} onClick={() => handleSelectImportable(item)}
-                      className="w-full text-left border border-gray-100 rounded-xl p-3.5 bg-gray-50 hover:border-cyan-400 hover:bg-cyan-50/40 transition-colors">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="font-mono text-xs font-bold text-gray-800">{item.name}</span>
-                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-semibold">{item.category}</span>
-                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-semibold flex items-center gap-1">
-                          <Building2 className="w-3 h-3" /> {item.approved_count} escola{item.approved_count === 1 ? '' : 's'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-600 truncate">{item.body_text}</p>
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         )}

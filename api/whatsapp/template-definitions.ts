@@ -33,19 +33,22 @@ import {
 //       indicadas (ou TODAS, se omitido).
 //   { action: 'register_existing', template_definition_id: string, institution_ids?: string[] }
 //     — pra template que já existe/está aprovado na Meta de ANTES dessa
-//       ferramenta (ex: confirmacao_visita, lembrete_visita, criados na mão
-//       no WhatsApp Manager). Institution por institution: se whatsapp_templates
-//       (cache já sincronizado por InstitutionDetails.tsx) mostra esse nome+
-//       idioma+CORPO EXATO como 'approved' pra ela, só grava template_institution_status
-//       direto, SEM chamar a Meta de novo; senão, cai no fluxo normal de
-//       submissão (submitDefinitionToInstitutions) só pra essa instituição.
-//   { action: 'list_importable' }
-//     — lista grupos distintos de (nome, idioma, corpo exato) aprovados em
-//       whatsapp_templates que ainda não têm template_definitions
-//       correspondente. Base do botão "Importar templates existentes" —
-//       nome+idioma sozinhos NÃO bastam pra agrupar porque cada escola pode
-//       ter WABA própria e ter editado o corpo manualmente; corpo exato
-//       diferente vira item separado na lista, nunca mistura conteúdo.
+//       ferramenta, criado na mão no WhatsApp Manager (ex reais confirmados em
+//       produção: iniciar_contato, reativar_atendimento — 4 escolas cada,
+//       com corpo divergindo levemente numa delas). Institution por
+//       instituição: se whatsapp_templates (cache já sincronizado por
+//       InstitutionDetails.tsx) mostra esse nome+idioma+CORPO EXATO como
+//       'approved' pra ela, só grava template_institution_status direto,
+//       SEM chamar a Meta de novo; senão, cai no fluxo normal de submissão
+//       (submitDefinitionToInstitutions) só pra essa instituição.
+//   { action: 'list_all_templates' }
+//     — lista TODOS os grupos (nome, idioma) aprovados em whatsapp_templates
+//       de qualquer escola, cadastrados em template_definitions ou não, com
+//       as variantes de corpo detectadas dentro de cada grupo (uma escola
+//       com WABA própria pode ter editado o corpo manualmente — nome+idioma
+//       sozinhos não garantem texto igual). Base da aba "Todos os
+//       Templates" — visão permanente, substitui o antigo modal de
+//       importação única.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return errorResponse(res, 405, 'Method not allowed')
 
@@ -59,8 +62,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (action === 'submit') return await handleSubmit(req, res, supabase)
     if (action === 'check-status') return await handleCheckStatus(req, res, supabase)
     if (action === 'register_existing') return await handleRegisterExisting(req, res, supabase)
-    if (action === 'list_importable') return await handleListImportable(req, res, supabase)
-    return errorResponse(res, 400, 'action deve ser "submit", "check-status", "register_existing" ou "list_importable"')
+    if (action === 'list_all_templates') return await handleListAllTemplates(req, res, supabase)
+    return errorResponse(res, 400, 'action deve ser "submit", "check-status", "register_existing" ou "list_all_templates"')
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[template-definitions] erro:', message)
@@ -400,70 +403,104 @@ async function handleRegisterExisting(req: VercelRequest, res: VercelResponse, s
   return res.status(200).json({ results })
 }
 
-interface ImportableTemplate {
-  name: string
-  language: string
-  category: 'UTILITY' | 'MARKETING'
+interface TemplateVariant {
   body_text: string
-  approved_count: number
+  category: 'UTILITY' | 'MARKETING'
+  approved_institution_ids: string[]
+  approved_institution_names: string[]
+  // Presente quando essa variante EXATA (nome+idioma+corpo) já tem uma linha
+  // em template_definitions — é o que a tela usa pra decidir entre mostrar
+  // "Configurar" (cria) ou os controles de edição inline (atualiza).
+  template_definition_id: string | null
+  display_name: string | null
 }
 
-// ── Lista candidatos a "Importar templates existentes": grupos distintos de
-// (nome, idioma, corpo exato) já aprovados em whatsapp_templates (cache de
-// QUALQUER escola) que ainda não têm template_definitions correspondente.
+interface TemplateGroup {
+  name: string
+  language: string
+  variants: TemplateVariant[]
+}
+
+// ── Lista TODOS os templates aprovados em whatsapp_templates de QUALQUER
+// escola — cadastrados em template_definitions ou não — agrupados por
+// (nome, idioma), com as variantes de corpo detectadas dentro de cada
+// grupo. Base da aba "Todos os Templates" (visão permanente, substitui o
+// antigo modal de importação única).
+//
 // Roda com service role de propósito — whatsapp_templates tem RLS restrita
 // à própria instituição (institution_isolation), então o Super Admin nunca
 // enxergaria o cache de outra escola numa query direto do navegador.
 //
-// Agrupamento por corpo exato (não só nome+idioma): escola com WABA própria
-// pode ter editado o texto manualmente, então o mesmo nome técnico pode
-// esconder corpos diferentes entre escolas — cada corpo distinto vira um
-// item separado na lista, nunca mistura conteúdo sob um único cadastro
-// (decisão confirmada com o usuário; ver mesmo critério em handleRegisterExisting). ──
-async function handleListImportable(req: VercelRequest, res: VercelResponse, supabase: Supa) {
+// Variantes por corpo exato (não só nome+idioma): escola com WABA própria
+// pode ter editado o texto manualmente — confirmado em produção com
+// iniciar_contato e reativar_atendimento, cada um com 1 das 4 escolas
+// aprovadas usando um corpo levemente diferente (emoji/typo). Cada corpo
+// distinto vira uma variante própria, com seu próprio template_definition_id
+// (se já configurada) — nunca mistura conteúdo sob um único cadastro, e
+// nunca força escolher "qual versão é a certa" (decisão confirmada com o
+// usuário; mesmo critério em handleRegisterExisting).
+async function handleListAllTemplates(req: VercelRequest, res: VercelResponse, supabase: Supa) {
   const { data: allTemplates, error: wtErr } = await supabase
     .from('whatsapp_templates')
-    .select('institution_id, name, language, category, components')
+    .select('institution_id, name, language, category, components, institutions(name)')
     .eq('status', 'approved')
   if (wtErr) return errorResponse(res, 500, `Erro ao consultar templates aprovados: ${wtErr.message}`)
 
-  const { data: existingDefs, error: defsErr } = await supabase
+  const { data: defs, error: defsErr } = await supabase
     .from('template_definitions')
-    .select('name, language, body_text')
+    .select('id, name, language, body_text, display_name')
   if (defsErr) return errorResponse(res, 500, `Erro ao consultar templates já cadastrados: ${defsErr.message}`)
 
-  const existingKeys = new Set(
-    (existingDefs || []).map((d: any) => `${d.name} ${d.language || 'pt_BR'} ${d.body_text}`)
-  )
+  const defByKey = new Map<string, { id: string; display_name: string | null }>()
+  for (const d of (defs || []) as any[]) {
+    defByKey.set(`${d.name} ${d.language || 'pt_BR'} ${d.body_text}`, { id: d.id, display_name: d.display_name })
+  }
 
-  const groups = new Map<string, ImportableTemplate & { approvedIds: Set<string> }>()
+  // groupKey (nome idioma) -> variantKey (corpo) -> dados acumulados
+  const groups = new Map<string, Map<string, {
+    category: 'UTILITY' | 'MARKETING'; institutionIds: Set<string>; institutionNames: Set<string>
+  }>>()
 
   for (const row of (allTemplates || []) as any[]) {
     const bodyText = extractBodyText(row.components)
-    if (!bodyText) continue // sem componente BODY — não dá pra importar (formulário exige corpo)
+    if (!bodyText) continue // sem componente BODY — não tem o que listar/importar
 
     const language = row.language || 'pt_BR'
-    const key = `${row.name} ${language} ${bodyText}`
-    if (existingKeys.has(key)) continue // já cadastrado — não aparece de novo
+    const groupKey = `${row.name} ${language}`
+    if (!groups.has(groupKey)) groups.set(groupKey, new Map())
+    const variants = groups.get(groupKey)!
 
-    if (!groups.has(key)) {
-      groups.set(key, {
-        name: row.name,
-        language,
+    if (!variants.has(bodyText)) {
+      variants.set(bodyText, {
         category: row.category === 'MARKETING' ? 'MARKETING' : 'UTILITY',
-        body_text: bodyText,
-        approved_count: 0,
-        approvedIds: new Set(),
+        institutionIds: new Set(),
+        institutionNames: new Set(),
       })
     }
-    groups.get(key)!.approvedIds.add(row.institution_id)
+    const v = variants.get(bodyText)!
+    v.institutionIds.add(row.institution_id)
+    v.institutionNames.add(row.institutions?.name || row.institution_id)
   }
 
-  const importable: ImportableTemplate[] = [...groups.values()]
-    .map(g => ({ name: g.name, language: g.language, category: g.category, body_text: g.body_text, approved_count: g.approvedIds.size }))
-    .sort((a, b) => b.approved_count - a.approved_count || a.name.localeCompare(b.name))
+  const result: TemplateGroup[] = [...groups.entries()].map(([groupKey, variantsMap]) => {
+    const [name, language] = groupKey.split(' ')
+    const variants: TemplateVariant[] = [...variantsMap.entries()]
+      .map(([bodyText, v]) => {
+        const defMatch = defByKey.get(`${name} ${language} ${bodyText}`)
+        return {
+          body_text:                   bodyText,
+          category:                    v.category,
+          approved_institution_ids:    [...v.institutionIds],
+          approved_institution_names:  [...v.institutionNames],
+          template_definition_id:      defMatch?.id || null,
+          display_name:                defMatch?.display_name || null,
+        }
+      })
+      .sort((a, b) => b.approved_institution_ids.length - a.approved_institution_ids.length)
+    return { name, language, variants }
+  }).sort((a, b) => a.name.localeCompare(b.name))
 
-  return res.status(200).json({ importable })
+  return res.status(200).json({ groups: result })
 }
 
 async function handleCheckStatus(req: VercelRequest, res: VercelResponse, supabase: Supa) {
