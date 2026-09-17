@@ -3265,25 +3265,33 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         setSendError('Visita agendada, mas não foi possível enviar a confirmação por WhatsApp.')
       }
 
-      // 2) Lembrete automático
+      // 2) Lembrete automático — pulado se o horário calculado (08:00 do dia
+      // da visita, ou visita-3h se for antes das 9h) já está no passado no
+      // momento do agendamento (ex: visita marcada pro mesmo dia, já depois
+      // de 08:00). Sem essa checagem, o cron pega esse lembrete atrasado e
+      // dispara ele quase junto com a confirmação imediata (item 1 do pedido).
       if (conv?.id && newVisit?.id) {
         const visitHour = parseInt(hours)
         const reminderDate = visitHour < 9
           ? new Date(visitDate.getTime() - 3 * 60 * 60 * 1000)
           : new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 8, 0, 0, 0)
 
-        const { error: schedErr } = await supabase.from('whatsapp_scheduled_messages').insert({
-          institution_id:     effectiveInstitutionId,
-          conversation_id:    conv.id,
-          remote_jid:         rJid,
-          visit_id:           newVisit.id,
-          template_name:      'lembrete_visita',
-          template_variables: { '1': institutionName || '', '2': timeLabel },
-          scheduled_for:      reminderDate.toISOString(),
-          created_by:         user.id,
-        })
-        if (schedErr) console.error('[handleScheduleVisitFromLead] erro ao agendar lembrete:', schedErr.message)
-        else await refreshScheduledMsgs()
+        if (reminderDate.getTime() <= Date.now()) {
+          console.log('[handleScheduleVisitFromLead] lembrete calculado no passado, pulando (só confirmação imediata):', reminderDate.toISOString())
+        } else {
+          const { error: schedErr } = await supabase.from('whatsapp_scheduled_messages').insert({
+            institution_id:     effectiveInstitutionId,
+            conversation_id:    conv.id,
+            remote_jid:         rJid,
+            visit_id:           newVisit.id,
+            template_name:      'lembrete_visita',
+            template_variables: { '1': institutionName || '', '2': timeLabel },
+            scheduled_for:      reminderDate.toISOString(),
+            created_by:         user.id,
+          })
+          if (schedErr) console.error('[handleScheduleVisitFromLead] erro ao agendar lembrete:', schedErr.message)
+          else await refreshScheduledMsgs()
+        }
       }
 
       setShowScheduleVisitModal(false)

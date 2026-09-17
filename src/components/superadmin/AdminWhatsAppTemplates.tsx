@@ -426,6 +426,83 @@ export default function AdminWhatsAppTemplates() {
     }
   }
 
+  // Painel de edição inline (display_name/rótulos/contextos/escopo) —
+  // reaproveitado em QUALQUER lugar que liste um template já cadastrado
+  // (aba "Cadastrados" e aba "Todos os Templates"), pra garantir que todo
+  // template em template_definitions tenha caminho de edição, independente
+  // de já ter sido aprovado pela Meta em alguma escola ou não (root cause
+  // do item 2: antes só existia dentro de "Todos os Templates", que só
+  // mostra template com >=1 aprovação em whatsapp_templates — um template
+  // recém-criado, ainda 'pending', nunca aparecia lá).
+  const renderEditPanel = (defId: string) => {
+    if (editForm?.defId !== defId) return null
+    return (
+      <div className="mt-3 pt-3 border-t border-gray-100 space-y-3">
+        <div>
+          <label className={lbl}>Nome de exibição *</label>
+          <input className={inp} value={editForm.displayName}
+            onChange={e => setEditForm(f => f && ({ ...f, displayName: e.target.value }))} />
+        </div>
+
+        {extractVarNumbers(editForm.bodyText).length > 0 && (
+          <div>
+            <p className={lbl}>Rótulo de cada variável</p>
+            <div className="space-y-2">
+              {extractVarNumbers(editForm.bodyText).map(n => (
+                <div key={n} className="flex items-center gap-2">
+                  <span className="font-mono text-xs text-gray-500 w-10">{`{{${n}}}`}</span>
+                  <input className={inp} placeholder="Ex: Nome do responsável" value={editForm.labels[n] || ''}
+                    onChange={e => setEditForm(f => f && ({ ...f, labels: { ...f.labels, [n]: e.target.value } }))} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <p className={lbl}>Onde pode ser escolhido manualmente</p>
+          <div className="space-y-1.5">
+            {CONTEXT_OPTIONS.map(opt => (
+              <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={editForm.contexts.includes(opt.value)}
+                  onChange={() => setEditForm(f => f && ({
+                    ...f, contexts: f.contexts.includes(opt.value) ? f.contexts.filter(c => c !== opt.value) : [...f.contexts, opt.value],
+                  }))} />
+                <span className="text-sm text-gray-700">{opt.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className={lbl}>Pra quais escolas</p>
+          <div className="flex gap-2">
+            {(['all', 'specific'] as const).map(s => (
+              <button key={s} type="button" onClick={() => setEditForm(f => f && ({ ...f, scope: s }))}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border-2 ${editForm.scope === s ? 'border-cyan-500 bg-cyan-50 text-cyan-700' : 'border-gray-200 text-gray-500'}`}>
+                {s === 'all' ? 'Todas' : 'Específicas'}
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-gray-400 mt-1">
+            Só muda o rótulo guardado — pra reenviar/retry por escola, use a aba "Cadastrados".
+          </p>
+        </div>
+
+        <div className="flex gap-2 justify-end pt-1">
+          <button onClick={() => setEditForm(null)}
+            className="px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button onClick={handleSaveEdit} disabled={savingEdit}
+            className="px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-cyan-500 to-blue-600 rounded-lg disabled:opacity-60">
+            {savingEdit ? 'Salvando...' : 'Salvar alterações'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   const handleRefreshStatus = async () => {
     setRefreshingStatus(true)
     try {
@@ -569,6 +646,10 @@ export default function AdminWhatsAppTemplates() {
                           <Users className="w-3 h-3" /> Escolas selecionadas ({statusRows.filter(r => r.template_definition_id === t.id).length})
                         </span>
                       )}
+                      <button onClick={() => editForm?.defId === t.id ? setEditForm(null) : handleStartEdit(t.id)}
+                        className="ml-auto text-[11px] font-semibold text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded-full hover:bg-cyan-100 flex-shrink-0">
+                        {editForm?.defId === t.id ? 'Fechar' : 'Editar'}
+                      </button>
                     </div>
                     <p className="text-xs text-gray-600 truncate">{t.body_text}</p>
                     {t.variable_labels && Object.keys(t.variable_labels).length > 0 && (
@@ -587,6 +668,7 @@ export default function AdminWhatsAppTemplates() {
                     ) : (
                       <p className="text-[11px] text-gray-400 mt-1.5 italic">Sem contexto marcado — só disparado por automação, não aparece em nenhum picker manual.</p>
                     )}
+                    {renderEditPanel(t.id)}
                   </div>
                 </div>
               ))}
@@ -642,36 +724,41 @@ export default function AdminWhatsAppTemplates() {
                   // explicitamente pra essa escola (DEFAULT true no banco).
                   const visible = row?.visible_to_school !== false
                   return (
-                    <div key={t.id} className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-800 truncate">{t.display_name || t.name}</p>
-                        <p className="font-mono text-[11px] text-gray-400 truncate">{t.name}</p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${meta.cls}`}
-                          title={row?.error_message || ''}>
-                          <Icon className="w-3 h-3" /> {meta.label}
-                        </span>
-                        {canRetry && (
-                          <button onClick={() => handleRetry(t.id, filterInstitutionId)} disabled={retrying === key}
-                            title="Reenviar" className="p-1 text-gray-400 hover:text-cyan-600 disabled:opacity-50">
-                            {retrying === key
-                              ? <div className="w-3.5 h-3.5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-                              : <Send className="w-3.5 h-3.5" />}
+                    <div key={t.id} className="px-5 py-3 flex flex-col gap-1">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-800 truncate">{t.display_name || t.name}</p>
+                          <p className="font-mono text-[11px] text-gray-400 truncate">{t.name}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${meta.cls}`}
+                            title={row?.error_message || ''}>
+                            <Icon className="w-3 h-3" /> {meta.label}
+                          </span>
+                          {canRetry && (
+                            <button onClick={() => handleRetry(t.id, filterInstitutionId)} disabled={retrying === key}
+                              title="Reenviar" className="p-1 text-gray-400 hover:text-cyan-600 disabled:opacity-50">
+                              {retrying === key
+                                ? <div className="w-3.5 h-3.5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                                : <Send className="w-3.5 h-3.5" />}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleToggleVisibility(t.id, filterInstitutionId, visible)}
+                            disabled={togglingVisibility === key}
+                            title={visible ? 'Visível pra esta escola — clique pra esconder' : 'Escondido dessa escola — clique pra mostrar'}
+                            className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border disabled:opacity-50 ${visible ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}
+                          >
+                            {togglingVisibility === key
+                              ? <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                              : visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                            {visible ? 'Visível' : 'Escondido'}
                           </button>
-                        )}
-                        <button
-                          onClick={() => handleToggleVisibility(t.id, filterInstitutionId, visible)}
-                          disabled={togglingVisibility === key}
-                          title={visible ? 'Visível pra esta escola — clique pra esconder' : 'Escondido dessa escola — clique pra mostrar'}
-                          className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border disabled:opacity-50 ${visible ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}
-                        >
-                          {togglingVisibility === key
-                            ? <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                            : visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                          {visible ? 'Visível' : 'Escondido'}
-                        </button>
+                        </div>
                       </div>
+                      {status === 'rejected' && row?.error_message && (
+                        <p className="text-[11px] text-red-600">Motivo: {row.error_message}</p>
+                      )}
                     </div>
                   )
                 })}
@@ -807,71 +894,7 @@ export default function AdminWhatsAppTemplates() {
                                 )}
                               </div>
 
-                              {editForm?.defId === variant.template_definition_id && (
-                                <div className="mt-3 pt-3 border-t border-gray-100 space-y-3">
-                                  <div>
-                                    <label className={lbl}>Nome de exibição *</label>
-                                    <input className={inp} value={editForm.displayName}
-                                      onChange={e => setEditForm(f => f && ({ ...f, displayName: e.target.value }))} />
-                                  </div>
-
-                                  {extractVarNumbers(editForm.bodyText).length > 0 && (
-                                    <div>
-                                      <p className={lbl}>Rótulo de cada variável</p>
-                                      <div className="space-y-2">
-                                        {extractVarNumbers(editForm.bodyText).map(n => (
-                                          <div key={n} className="flex items-center gap-2">
-                                            <span className="font-mono text-xs text-gray-500 w-10">{`{{${n}}}`}</span>
-                                            <input className={inp} placeholder="Ex: Nome do responsável" value={editForm.labels[n] || ''}
-                                              onChange={e => setEditForm(f => f && ({ ...f, labels: { ...f.labels, [n]: e.target.value } }))} />
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  <div>
-                                    <p className={lbl}>Onde pode ser escolhido manualmente</p>
-                                    <div className="space-y-1.5">
-                                      {CONTEXT_OPTIONS.map(opt => (
-                                        <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
-                                          <input type="checkbox" checked={editForm.contexts.includes(opt.value)}
-                                            onChange={() => setEditForm(f => f && ({
-                                              ...f, contexts: f.contexts.includes(opt.value) ? f.contexts.filter(c => c !== opt.value) : [...f.contexts, opt.value],
-                                            }))} />
-                                          <span className="text-sm text-gray-700">{opt.label}</span>
-                                        </label>
-                                      ))}
-                                    </div>
-                                  </div>
-
-                                  <div>
-                                    <p className={lbl}>Pra quais escolas</p>
-                                    <div className="flex gap-2">
-                                      {(['all', 'specific'] as const).map(s => (
-                                        <button key={s} type="button" onClick={() => setEditForm(f => f && ({ ...f, scope: s }))}
-                                          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border-2 ${editForm.scope === s ? 'border-cyan-500 bg-cyan-50 text-cyan-700' : 'border-gray-200 text-gray-500'}`}>
-                                          {s === 'all' ? 'Todas' : 'Específicas'}
-                                        </button>
-                                      ))}
-                                    </div>
-                                    <p className="text-[11px] text-gray-400 mt-1">
-                                      Só muda o rótulo guardado — pra reenviar/retry por escola, use a aba "Cadastrados".
-                                    </p>
-                                  </div>
-
-                                  <div className="flex gap-2 justify-end pt-1">
-                                    <button onClick={() => setEditForm(null)}
-                                      className="px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
-                                      Cancelar
-                                    </button>
-                                    <button onClick={handleSaveEdit} disabled={savingEdit}
-                                      className="px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-cyan-500 to-blue-600 rounded-lg disabled:opacity-60">
-                                      {savingEdit ? 'Salvando...' : 'Salvar alterações'}
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
+                              {variant.template_definition_id && renderEditPanel(variant.template_definition_id)}
                             </div>
                           ))}
                         </div>

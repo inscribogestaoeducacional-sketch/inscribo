@@ -211,14 +211,24 @@ async function submitToWaba(
   def: TemplateDefinition, wabaId: string, token: string
 ): Promise<{ status: 'pending' | 'approved' | 'rejected'; metaTemplateId: string | null; errorMessage: string | null }> {
   try {
+    // fields= explícito: sem isso a Graph API não garante devolver
+    // rejected_reason (só vem quando status=REJECTED) — sem esse campo o
+    // motivo real de rejeição era descartado, mesmo bug do error_details de
+    // whatsapp_messages corrigido antes: a Meta manda o motivo, o código
+    // não pedia/lia o campo.
     const checkRes = await fetch(
-      `${GRAPH_URL}/${wabaId}/message_templates?name=${encodeURIComponent(def.name)}`,
+      `${GRAPH_URL}/${wabaId}/message_templates?name=${encodeURIComponent(def.name)}&fields=id,name,status,rejected_reason`,
       { headers: { Authorization: `Bearer ${token}` } }
     )
     const checkData = await checkRes.json().catch(() => null)
     const existing = checkData?.data?.[0]
     if (existing) {
-      return { status: mapMetaStatus(existing.status), metaTemplateId: existing.id || null, errorMessage: null }
+      const status = mapMetaStatus(existing.status)
+      return {
+        status,
+        metaTemplateId: existing.id || null,
+        errorMessage: status === 'rejected' ? (existing.rejected_reason || 'Motivo não informado pela Meta') : null,
+      }
     }
 
     const createRes = await fetch(`${GRAPH_URL}/${wabaId}/message_templates`, {
@@ -229,7 +239,14 @@ async function submitToWaba(
     const createData = await createRes.json().catch(() => null)
 
     if (!createRes.ok) {
-      return { status: 'rejected', metaTemplateId: null, errorMessage: createData?.error?.message || 'Erro ao criar template na Meta' }
+      // error_user_msg (quando presente) é o texto que a própria Meta
+      // recomenda mostrar pro usuário final — mais claro que error.message
+      // (que costuma ser genérico tipo "(#100) Invalid parameter").
+      // error_data.details complementa com o campo/motivo técnico específico.
+      const err = createData?.error
+      const errorMessage = [err?.error_user_msg || err?.message, err?.error_data?.details]
+        .filter(Boolean).join(' — ') || 'Erro ao criar template na Meta'
+      return { status: 'rejected', metaTemplateId: null, errorMessage }
     }
 
     return { status: 'pending', metaTemplateId: createData?.id || null, errorMessage: null }
@@ -531,8 +548,11 @@ async function handleCheckStatus(req: VercelRequest, res: VercelResponse, supaba
   let updated = 0
 
   for (const [wabaId, insts] of byWaba) {
+    // rejected_reason explícito no fields= — mesmo motivo de submitToWaba():
+    // sem pedir o campo, a Graph API não garante devolvê-lo, e o motivo real
+    // de rejeição era descartado (ficava sempre null).
     const listRes = await fetch(
-      `${GRAPH_URL}/${wabaId}/message_templates?fields=name,status,id&limit=250`,
+      `${GRAPH_URL}/${wabaId}/message_templates?fields=name,status,id,rejected_reason&limit=250`,
       { headers: { Authorization: `Bearer ${token}` } }
     )
     const listData = await listRes.json().catch(() => null)
@@ -540,8 +560,8 @@ async function handleCheckStatus(req: VercelRequest, res: VercelResponse, supaba
       console.error('[template-definitions] erro ao listar templates do WABA', wabaId, listData?.error?.message)
       continue
     }
-    const byName = new Map<string, { status: string; id: string }>()
-    for (const t of listData?.data || []) byName.set(t.name, { status: t.status, id: t.id })
+    const byName = new Map<string, { status: string; id: string; rejectedReason?: string }>()
+    for (const t of listData?.data || []) byName.set(t.name, { status: t.status, id: t.id, rejectedReason: t.rejected_reason })
 
     const instIdSet = new Set(insts.map(i => i.institution_id))
     const relevantRows = rows.filter((r: any) => instIdSet.has(r.institution_id))
@@ -549,8 +569,12 @@ async function handleCheckStatus(req: VercelRequest, res: VercelResponse, supaba
     for (const row of relevantRows) {
       const name = (row as any).template_definitions?.name
       const found = name ? byName.get(name) : undefined
+      const status = found ? mapMetaStatus(found.status) : 'not_submitted'
       const update = found
-        ? { status: mapMetaStatus(found.status), meta_template_id: found.id, last_synced_at: now, error_message: null }
+        ? {
+            status, meta_template_id: found.id, last_synced_at: now,
+            error_message: status === 'rejected' ? (found.rejectedReason || 'Motivo não informado pela Meta') : null,
+          }
         : { status: 'not_submitted' as const, meta_template_id: null, last_synced_at: now, error_message: null }
 
       const { error: updErr } = await supabase
