@@ -49,6 +49,13 @@ import {
 //       sozinhos não garantem texto igual). Base da aba "Todos os
 //       Templates" — visão permanente, substitui o antigo modal de
 //       importação única.
+//   { action: 'delete', template_definition_id: string, delete_from_meta: boolean }
+//     — exclui o template. Sempre limpa template_institution_status +
+//       template_definitions daqui; se delete_from_meta=true, ANTES disso
+//       tenta um DELETE .../message_templates?name=X em cada WABA distinto
+//       das instituições que tinham status gravado pra esse template —
+//       falha individual (já removido manualmente, nunca existiu lá de
+//       verdade, etc.) nunca bloqueia o resto (nem a limpeza local).
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return errorResponse(res, 405, 'Method not allowed')
 
@@ -63,7 +70,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (action === 'check-status') return await handleCheckStatus(req, res, supabase)
     if (action === 'register_existing') return await handleRegisterExisting(req, res, supabase)
     if (action === 'list_all_templates') return await handleListAllTemplates(req, res, supabase)
-    return errorResponse(res, 400, 'action deve ser "submit", "check-status", "register_existing" ou "list_all_templates"')
+    if (action === 'delete') return await handleDeleteTemplate(req, res, supabase)
+    return errorResponse(res, 400, 'action deve ser "submit", "check-status", "register_existing", "list_all_templates" ou "delete"')
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[template-definitions] erro:', message)
@@ -603,4 +611,106 @@ async function handleCheckStatus(req: VercelRequest, res: VercelResponse, supaba
   }
 
   return res.status(200).json({ updated })
+}
+
+interface DeleteMetaResult {
+  institution_name: string
+  waba_id: string
+  outcome: 'deleted' | 'not_found' | 'error'
+  message: string | null
+}
+
+// ── Exclui um template. Sempre limpa a nossa base (template_institution_
+// status + template_definitions); se delete_from_meta=true, antes tenta
+// remover da Meta em cada WABA distinto das instituições que tinham status
+// gravado pra esse template (uma tentativa por WABA, não por escola —
+// mesmo dedup de submitDefinitionToInstitutions, já que várias escolas
+// podem compartilhar o WABA padrão da Áion).
+//
+// Erro individual (template já removido manualmente, nunca existiu de
+// verdade nesse WABA, WABA sem token válido etc.) nunca bloqueia as outras
+// tentativas nem a limpeza local — só entra no resumo devolvido pro
+// cliente. A Meta não documenta um código de erro estável e específico pra
+// "não existe" nesse endpoint DELETE, então a classificação 'not_found' é
+// heurística (por texto da mensagem); na prática não muda o comportamento,
+// só o rótulo mostrado — o item 4b do pedido já pede que nada bloqueie de
+// qualquer forma. ──
+async function handleDeleteTemplate(req: VercelRequest, res: VercelResponse, supabase: Supa) {
+  const { template_definition_id, delete_from_meta } = req.body || {}
+  if (!template_definition_id) return errorResponse(res, 400, 'template_definition_id é obrigatório')
+
+  const { data: def, error: defErr } = await supabase
+    .from('template_definitions')
+    .select('id, name, language')
+    .eq('id', template_definition_id)
+    .single()
+  if (defErr || !def) return errorResponse(res, 404, 'Template não encontrado')
+
+  const metaResults: DeleteMetaResult[] = []
+
+  if (delete_from_meta) {
+    const { data: statusRows, error: statusErr } = await supabase
+      .from('template_institution_status')
+      .select('institution_id')
+      .eq('template_definition_id', template_definition_id)
+    if (statusErr) return errorResponse(res, 500, `Erro ao buscar instituições vinculadas: ${statusErr.message}`)
+
+    const institutionIds = [...new Set((statusRows || []).map((r: any) => r.institution_id as string))]
+
+    if (institutionIds.length > 0) {
+      const institutions = await getEligibleInstitutions(supabase, institutionIds)
+
+      if (institutions.length > 0) {
+        const token = await getGlobalToken(supabase)
+
+        const byWaba = new Map<string, EligibleInstitution[]>()
+        for (const inst of institutions) {
+          if (!byWaba.has(inst.waba_id)) byWaba.set(inst.waba_id, [])
+          byWaba.get(inst.waba_id)!.push(inst)
+        }
+
+        for (const [wabaId, insts] of byWaba) {
+          const institutionNames = insts.map(i => i.institution_name).join(', ')
+          try {
+            const delRes = await fetch(
+              `${GRAPH_URL}/${wabaId}/message_templates?name=${encodeURIComponent((def as { name: string }).name)}`,
+              { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+            )
+            const delData = await delRes.json().catch(() => null)
+
+            if (delRes.ok) {
+              metaResults.push({ institution_name: institutionNames, waba_id: wabaId, outcome: 'deleted', message: null })
+            } else {
+              const msg = (delData?.error?.message || '') as string
+              const looksNotFound = /does not exist|not found|no template/i.test(msg)
+              metaResults.push({
+                institution_name: institutionNames, waba_id: wabaId,
+                outcome: looksNotFound ? 'not_found' : 'error',
+                message: msg || 'Erro desconhecido ao remover da Meta',
+              })
+            }
+          } catch (e) {
+            const message = e instanceof Error ? e.message : String(e)
+            metaResults.push({ institution_name: institutionNames, waba_id: wabaId, outcome: 'error', message })
+          }
+        }
+      }
+    }
+  }
+
+  // Limpeza local — roda sempre, independente do resultado na Meta acima
+  // (nunca deixa o template "preso" aqui por causa de um erro remoto).
+  const { error: statusDelErr } = await supabase
+    .from('template_institution_status')
+    .delete()
+    .eq('template_definition_id', template_definition_id)
+  if (statusDelErr) console.error('[template-definitions] erro ao excluir template_institution_status:', statusDelErr.message)
+
+  const { error: defDelErr } = await supabase
+    .from('template_definitions')
+    .delete()
+    .eq('id', template_definition_id)
+  if (defDelErr) return errorResponse(res, 500, `Erro ao excluir template: ${defDelErr.message}`)
+
+  return res.status(200).json({ deleted: true, deleted_from_meta: !!delete_from_meta, meta_results: metaResults })
 }

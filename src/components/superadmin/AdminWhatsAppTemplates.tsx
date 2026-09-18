@@ -142,6 +142,13 @@ export default function AdminWhatsAppTemplates() {
   } | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
 
+  // Exclusão — modal de confirmação com duas ações separadas ("remover só
+  // daqui" vs "remover também da Meta"), já que nem sempre excluir da Meta é
+  // desejado (o gestor pode querer manter o template aprovado lá pra uso
+  // manual direto no WhatsApp Manager, só tirando ele da nossa lista).
+  const [deletingTemplate, setDeletingTemplate] = useState<{ defId: string; name: string; displayName: string } | null>(null)
+  const [deletingInProgress, setDeletingInProgress] = useState(false)
+
   const [form, setForm] = useState({
     name: '', displayName: '', category: 'UTILITY' as 'UTILITY' | 'MARKETING', bodyText: '',
     examples: {} as Record<string, string>,
@@ -426,6 +433,47 @@ export default function AdminWhatsAppTemplates() {
     }
   }
 
+  // deleteFromMeta=true: tenta remover da Meta em cada WABA onde o template
+  // tem status gravado (falha individual nunca bloqueia — ver comentário no
+  // server) antes de limpar template_institution_status + template_definitions.
+  // deleteFromMeta=false: só limpa a nossa base, mantém aprovado na Meta pra
+  // uso manual direto no WhatsApp Manager depois.
+  const handleDeleteConfirmed = async (deleteFromMeta: boolean) => {
+    if (!deletingTemplate) return
+    setDeletingInProgress(true)
+    try {
+      const headers = await authHeaders()
+      const res = await fetch('/api/whatsapp/template-definitions', {
+        method: 'POST', headers,
+        body: JSON.stringify({ action: 'delete', template_definition_id: deletingTemplate.defId, delete_from_meta: deleteFromMeta }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Erro ao excluir template')
+
+      if (deleteFromMeta) {
+        const results: { outcome: 'deleted' | 'not_found' | 'error' }[] = data.meta_results || []
+        const deletedCount  = results.filter(r => r.outcome === 'deleted').length
+        const notFoundCount = results.filter(r => r.outcome === 'not_found').length
+        const errorCount    = results.filter(r => r.outcome === 'error').length
+        const parts: string[] = []
+        if (deletedCount)  parts.push(`removido de ${deletedCount} WABA${deletedCount === 1 ? '' : 's'}`)
+        if (notFoundCount) parts.push(`${notFoundCount} já não existia${notFoundCount === 1 ? '' : 'm'} na Meta`)
+        if (errorCount)    parts.push(`${errorCount} com erro`)
+        showToast(`Excluído da nossa base. ${parts.length ? parts.join(', ') + '.' : 'Nenhuma escola tinha esse template na Meta.'}`, errorCount === 0)
+      } else {
+        showToast('Template removido da nossa base — continua aprovado na Meta pra uso manual.')
+      }
+
+      if (editForm?.defId === deletingTemplate.defId) setEditForm(null)
+      setDeletingTemplate(null)
+      await Promise.all([loadAll(), loadAllTemplateGroups()])
+    } catch (e: any) {
+      showToast(e.message || 'Erro ao excluir template.', false)
+    } finally {
+      setDeletingInProgress(false)
+    }
+  }
+
   // Painel de edição inline (display_name/rótulos/contextos/escopo) —
   // reaproveitado em QUALQUER lugar que liste um template já cadastrado
   // (aba "Cadastrados" e aba "Todos os Templates"), pra garantir que todo
@@ -649,6 +697,10 @@ export default function AdminWhatsAppTemplates() {
                       <button onClick={() => editForm?.defId === t.id ? setEditForm(null) : handleStartEdit(t.id)}
                         className="ml-auto text-[11px] font-semibold text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded-full hover:bg-cyan-100 flex-shrink-0">
                         {editForm?.defId === t.id ? 'Fechar' : 'Editar'}
+                      </button>
+                      <button onClick={() => setDeletingTemplate({ defId: t.id, name: t.name, displayName: t.display_name || t.name })}
+                        className="text-[11px] font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-full hover:bg-red-100 flex-shrink-0">
+                        Excluir
                       </button>
                     </div>
                     <p className="text-xs text-gray-600 truncate">{t.body_text}</p>
@@ -882,10 +934,16 @@ export default function AdminWhatsAppTemplates() {
                                   Aprovado em: {variant.approved_institution_names.join(', ')}
                                 </p>
                                 {variant.template_definition_id ? (
-                                  <button onClick={() => handleStartEdit(variant.template_definition_id!)}
-                                    className="text-xs font-semibold text-cyan-700 bg-cyan-50 px-3 py-1.5 rounded-lg hover:bg-cyan-100 flex-shrink-0">
-                                    {variant.display_name || 'Editar'}
-                                  </button>
+                                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                                    <button onClick={() => handleStartEdit(variant.template_definition_id!)}
+                                      className="text-xs font-semibold text-cyan-700 bg-cyan-50 px-3 py-1.5 rounded-lg hover:bg-cyan-100">
+                                      {variant.display_name || 'Editar'}
+                                    </button>
+                                    <button onClick={() => setDeletingTemplate({ defId: variant.template_definition_id!, name: group.name, displayName: variant.display_name || group.name })}
+                                      className="text-xs font-semibold text-red-600 bg-red-50 px-3 py-1.5 rounded-lg hover:bg-red-100">
+                                      Excluir
+                                    </button>
+                                  </div>
                                 ) : (
                                   <button onClick={() => handleConfigure(group, variant)}
                                     className="text-xs font-semibold text-white bg-gradient-to-r from-cyan-500 to-blue-600 px-3 py-1.5 rounded-lg flex-shrink-0">
@@ -1098,6 +1156,37 @@ export default function AdminWhatsAppTemplates() {
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
                   {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Send className="w-4 h-4" />}
                   {form.alreadyExists ? 'Salvar e registrar já-aprovados' : 'Salvar e submeter pra todas as escolas'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: excluir template — duas ações separadas porque excluir da
+            Meta nem sempre é desejado (o gestor pode preferir manter o
+            template aprovado lá pra uso manual direto no WhatsApp Manager,
+            só tirando ele da nossa lista). */}
+        {deletingTemplate && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[210] p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-3">Excluir template</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Isso vai excluir o template <strong>"{deletingTemplate.displayName}"</strong> (<span className="font-mono text-xs">{deletingTemplate.name}</span>) da nossa base.
+                Você escolhe abaixo se ele também é removido da Meta em todas as escolas onde foi submetido — isso libera o nome técnico pra reuso, mas impede o uso manual desse template direto no WhatsApp Manager depois.
+              </p>
+              <p className="text-xs font-semibold text-red-600 mb-5">Essa ação não pode ser desfeita.</p>
+              <div className="flex flex-col gap-2">
+                <button onClick={() => handleDeleteConfirmed(true)} disabled={deletingInProgress}
+                  className="w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60">
+                  {deletingInProgress ? 'Excluindo...' : 'Excluir também da Meta'}
+                </button>
+                <button onClick={() => handleDeleteConfirmed(false)} disabled={deletingInProgress}
+                  className="w-full py-2.5 rounded-xl text-sm font-semibold text-gray-700 border border-gray-200 hover:bg-gray-50 disabled:opacity-60">
+                  Remover só daqui (mantém aprovado na Meta)
+                </button>
+                <button onClick={() => setDeletingTemplate(null)} disabled={deletingInProgress}
+                  className="w-full py-2 text-xs font-semibold text-gray-400 hover:text-gray-600">
+                  Cancelar
                 </button>
               </div>
             </div>
