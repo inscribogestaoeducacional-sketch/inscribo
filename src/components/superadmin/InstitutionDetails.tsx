@@ -602,6 +602,18 @@ export default function InstitutionDetails() {
     if (!confirm('Marcar como pago manualmente?')) return
     const { error } = await supabase.from('payments').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', paymentId)
     if (error) { showToast(`Erro ao marcar pagamento: ${error.message}`, false); return }
+    // Limpeza do sino de notificações: os alertas "Mensalidade em atraso"
+    // (system_notifications, type='overdue_reminder') são gravados pelo cron
+    // overdue-payment-reminders e nunca são resolvidos sozinhos — sem isso
+    // ficavam acumulando no sino do gestor mesmo com o pagamento já
+    // confirmado. O banner do dashboard (GestorHome.tsx) já não depende mais
+    // dessas linhas (calcula direto de payments.status='overdue'); isto aqui
+    // é só higiene do histórico de notificações.
+    try {
+      await supabase.from('system_notifications')
+        .update({ read_at: new Date().toISOString() })
+        .eq('institution_id', id).eq('type', 'overdue_reminder').is('read_at', null)
+    } catch (e) { console.error('[handleMarkPaid] erro ao limpar notificações de atraso:', e) }
     if (isImpl) {
       const { error: instErr } = await supabase.from('institutions').update({ plan_status: 'active' }).eq('id', id)
       if (instErr) { showToast(`Pagamento confirmado, mas erro ao ativar escola: ${instErr.message}`, false); loadAll(); return }

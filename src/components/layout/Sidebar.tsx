@@ -3,9 +3,10 @@ import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useNotifications } from '../../hooks/useNotifications'
+import { useInternalChatUnread } from '../../hooks/useInternalChatUnread'
 import {
   LayoutDashboard, Users, BookUser, Calendar,
-  MessageCircle, BarChart3, UserCog, Settings, ArrowRightLeft, ClipboardList, X
+  MessageCircle, MessageSquare, BarChart3, UserCog, Settings, ArrowRightLeft, ClipboardList, X
 } from 'lucide-react'
 
 const NAV_CFG = [
@@ -15,6 +16,7 @@ const NAV_CFG = [
   { path: '/contacts',        label: 'Contatos',        iconBg: '#EFF6FF', iconColor: '#3B82F6', Icon: BookUser,        roles: ['admin','manager','user'], module: 'contatos' },
   { path: '/visits',          label: 'Visitas',         iconBg: '#FEF3C7', iconColor: '#F59E0B', Icon: Calendar,        roles: ['admin','manager','user'], module: 'visitas' },
   { path: '/whatsapp',        label: 'WhatsApp',        iconBg: '#D1FAE5', iconColor: '#10B981', Icon: MessageCircle,   roles: ['admin','manager','user'], module: 'whatsapp' },
+  { path: '/chat-interno',    label: 'Chat Interno',    iconBg: '#FCE7F3', iconColor: '#DB2777', Icon: MessageSquare,   roles: ['admin','manager','user'], module: 'chat_interno' },
   { path: '/reports',         label: 'Relatórios',      iconBg: '#DBEAFE', iconColor: '#3B82F6', Icon: BarChart3,       roles: ['admin','manager'], module: 'relatorios' },
   { path: '/transferencias',  label: 'Transferências',  iconBg: '#FEE2E2', iconColor: '#DC2626', Icon: ArrowRightLeft,  roles: ['admin','manager','user'], module: 'transferencias' },
   { path: '/pesquisas',       label: 'Pesquisas',       iconBg: '#FFF7ED', iconColor: '#F97316', Icon: ClipboardList,   roles: ['admin','manager'], module: 'pesquisas' },
@@ -54,6 +56,8 @@ export default function Sidebar() {
   const { user } = useAuth()
   const { isModuleEnabled } = usePermissions()
   const { unreadCount } = useNotifications(user?.institution_id || null)
+  const chatUnreadCount = useInternalChatUnread(user?.institution_id || null, user?.id || null)
+  const badgeCountByPath: Record<string, number> = { '/reports': unreadCount, '/chat-interno': chatUnreadCount }
 
   const [expanded, setExpanded] = useState(() => {
     return localStorage.getItem('sidebar-expanded') === 'true'
@@ -124,7 +128,8 @@ export default function Sidebar() {
           {navItems.map(item => {
             const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/')
             const Icon = item.Icon
-            const showBadge = item.path === '/reports' && unreadCount > 0
+            const badgeCount = badgeCountByPath[item.path] || 0
+            const showBadge = badgeCount > 0
             return (
               <Link key={item.path} to={item.path} onClick={() => setMobileOpen(false)} style={{
                 display: 'flex', alignItems: 'center', gap: 10,
@@ -141,7 +146,7 @@ export default function Sidebar() {
                 </span>
                 {showBadge && (
                   <div style={{ minWidth: 16, height: 16, borderRadius: 999, background: '#F43F5E', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: 'white', padding: '0 4px' }}>
-                    {unreadCount > 9 ? '9+' : unreadCount}
+                    {badgeCount > 9 ? '9+' : badgeCount}
                   </div>
                 )}
               </Link>
@@ -224,8 +229,8 @@ export default function Sidebar() {
         const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/')
         const Icon = item.Icon
 
-        const isReports = item.path === '/reports'
-        const showBadge = isReports && unreadCount > 0
+        const badgeCount = badgeCountByPath[item.path] || 0
+        const showBadge = badgeCount > 0
 
         if (!expanded) {
           return (
@@ -254,7 +259,7 @@ export default function Sidebar() {
                 <Icon size={18} color={active ? item.iconColor : '#94A3B8'} strokeWidth={active ? 2.2 : 1.8} />
                 {showBadge && (
                   <div style={{ position: 'absolute', top: 6, right: 6, minWidth: 14, height: 14, borderRadius: 999, background: '#F43F5E', border: '1.5px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: 'white', padding: '0 2px' }}>
-                    {unreadCount > 9 ? '9+' : unreadCount}
+                    {badgeCount > 9 ? '9+' : badgeCount}
                   </div>
                 )}
               </Link>
@@ -315,7 +320,7 @@ export default function Sidebar() {
             </span>
             {showBadge && (
               <div style={{ minWidth: 16, height: 16, borderRadius: 999, background: '#F43F5E', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: 'white', padding: '0 4px' }}>
-                {unreadCount > 9 ? '9+' : unreadCount}
+                {badgeCount > 9 ? '9+' : badgeCount}
               </div>
             )}
           </Link>

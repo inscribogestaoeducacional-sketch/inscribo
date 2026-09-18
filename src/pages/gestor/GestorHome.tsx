@@ -400,7 +400,7 @@ export default function GestorHome() {
 
       const [
         cyclesRes, funnelRes, transferRes, leadsRes, visitsRes, waRes, enrollRes, usersRes,
-        waPhoneRes, waConvsRes, overdueNotifRes,
+        waPhoneRes, waConvsRes, overduePaymentsRes,
         { data: leadsForEnrollData }, { data: openConvs },
         { data: prevLeadsData }, { data: prevEnrollData },
         { data: npsRes, error: npsErr }, { data: instData },
@@ -416,10 +416,14 @@ export default function GestorHome() {
         supabase.from('users').select('id,full_name,role').eq('institution_id', institutionId),
         supabase.from('whatsapp_phone_numbers').select('phone_number,display_name').eq('institution_id', institutionId).limit(1).maybeSingle(),
         supabase.from('whatsapp_conversations').select('id,created_at,status,assigned_user_name,assigned_user_id,bot_active,satisfaction_score,first_human_response_at,remote_jid,contact_name,last_message').eq('institution_id', institutionId).gte('created_at', start).lte('created_at', end).not('remote_jid', 'ilike', '%@g.us'),
-        // Alertas de inadimplência gravados por overdue-payment-reminders — não
+        // Alertas de inadimplência — calculados ao vivo direto de `payments`
+        // (não a partir de system_notifications: aquelas são notificações
+        // históricas de uma tacada só, gravadas pelo cron overdue-payment-
+        // reminders, e nunca são resolvidas quando o pagamento é confirmado —
+        // ficavam aparecendo indefinidamente mesmo depois de pago). Não
         // filtrados pelo period do dashboard, são "pendências atuais", igual
         // Inadimplência já não é period-filtrada em AdminFinancial.tsx.
-        supabase.from('system_notifications').select('id,message,action_url').eq('institution_id', institutionId).eq('type', 'overdue_reminder').is('read_at', null).order('created_at', { ascending: false }),
+        supabase.from('payments').select('id,amount,due_date').eq('institution_id', institutionId).eq('status', 'overdue').order('due_date', { ascending: true }),
         // Coluna correta é `assigned_to` — a tabela `leads` não tem
         // `responsible_id` (esse nome é da interface CrmLead, do CRM comercial
         // interno da Áion, um schema diferente). A query antiga voltava 400 Bad
@@ -485,7 +489,18 @@ export default function GestorHome() {
       }
 
       setFunnelData(funnelRes.data ?? [])
-      setOverdueNotifs((overdueNotifRes.data ?? []) as { id: string; message: string; action_url: string | null }[])
+      const overduePayments = (overduePaymentsRes.data ?? []) as { id: string; amount: number; due_date: string }[]
+      const todayForOverdue = new Date()
+      setOverdueNotifs(overduePayments.map(p => {
+        const due = new Date(p.due_date + 'T00:00:00')
+        const daysLate = Math.max(0, Math.floor((todayForOverdue.getTime() - due.getTime()) / 86400000))
+        const amountFmt = Number(p.amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+        return {
+          id: p.id,
+          message: `Mensalidade com ${daysLate} dias de atraso — R$ ${amountFmt}. Regularize para evitar a suspensão do acesso.`,
+          action_url: '/settings',
+        }
+      }))
       setTransfers((transferRes.data ?? []) as StudentTransfer[])
       setLeads((leadsRes.data ?? []) as { id: string; status: string; created_at: string }[])
       setVisits((visitsRes.data ?? []) as { id: string; status: string; created_at: string }[])
@@ -1122,8 +1137,8 @@ export default function GestorHome() {
 
   // ── Alertas inteligentes ──────────────────────────────────────────────────
   const alerts: { msg: string; type: 'warning' | 'info' | 'success'; action?: string; path?: string }[] = []
-  // Alertas de inadimplência (system_notifications, gravados por
-  // overdue-payment-reminders) entram primeiro — são os mais urgentes.
+  // Alertas de inadimplência (calculados ao vivo de payments.status='overdue',
+  // ver query overduePaymentsRes acima) entram primeiro — são os mais urgentes.
   for (const n of overdueNotifs) {
     alerts.push({ msg: n.message, type: 'warning', action: n.action_url ? 'Ver financeiro' : undefined, path: n.action_url || undefined })
   }

@@ -93,6 +93,19 @@ serve(async (req) => {
           .eq('asaas_payment_id', payment.id)
       }
 
+      // 1b. Limpeza do sino de notificações do gestor: os alertas "Mensalidade
+      // em atraso" (system_notifications, type='overdue_reminder') gravados
+      // pelo cron overdue-payment-reminders nunca se resolvem sozinhos —
+      // ficavam acumulando mesmo com o pagamento já confirmado via link.
+      // Best-effort: não deve derrubar a confirmação do pagamento.
+      try {
+        await sb.from('system_notifications')
+          .update({ read_at: new Date().toISOString() })
+          .eq('institution_id', institutionId).eq('type', 'overdue_reminder').is('read_at', null)
+      } catch (e) {
+        console.error('[asaas-webhook] erro ao limpar notificações de atraso:', String(e))
+      }
+
       // 2. Busca o pagamento para saber o tipo
       const { data: pmt } = paymentId
         ? await sb.from('payments').select('*').eq('id', paymentId).single()
