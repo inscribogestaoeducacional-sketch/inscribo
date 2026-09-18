@@ -2,10 +2,10 @@
 import EmojiPicker from '@emoji-mart/react'
 import emojiData from '@emoji-mart/data'
 import {
-  MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
+  MessageCircle, MessageSquare, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight, ChevronLeft,
   CheckCheck, Check, Zap, Settings, User, Users, Download, Calendar,
-  X, MoreVertical, CornerUpLeft, SmilePlus, Edit, Trash2
+  X, MoreVertical, CornerUpLeft, SmilePlus, Edit, Trash2, UserCog
 } from 'lucide-react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -13,6 +13,8 @@ import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConvers
 import { normalizeBrazilianInput } from '../../lib/phone'
 import NewLeadModal from '../leads/NewLeadModal'
 import ScheduleVisitModal from '../leads/ScheduleVisitModal'
+import InternalChat from '../chat/InternalChat'
+import { useInternalChatUnread } from '../../hooks/useInternalChatUnread'
 import { saveLead } from '../../lib/leadSave'
 import { statusConfig } from '../leads/leadFormShared'
 import {
@@ -77,6 +79,7 @@ interface Conversation {
   bot_active?: boolean
   satisfaction_score?: number | null
   last_customer_message_at?: string
+  notes?: string | null
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -214,6 +217,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
       profile_picture_url: convData?.profile_picture_url,
       bot_active: (convData as any)?.bot_active ?? false,
       satisfaction_score: (convData as any)?.satisfaction_score ?? null,
+      notes: (convData as any)?.notes ?? null,
       last_customer_message_at: convData?.last_customer_message_at,
       messages: sorted
         .filter((m, idx, self) => idx === self.findIndex(t => (t.message_id && t.message_id === m.message_id) || t.id === m.id))
@@ -266,6 +270,7 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
         tags: conv.tags || [],
         profile_picture_url: conv.profile_picture_url,
         satisfaction_score: (conv as any).satisfaction_score ?? null,
+        notes: (conv as any).notes ?? null,
         last_customer_message_at: conv.last_customer_message_at,
         messages: [],
       })
@@ -1057,6 +1062,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [readFilter, setReadFilter] = useState<'all' | 'read' | 'unread'>('all')
   const [assignFilter, setAssignFilter] = useState<'all' | 'mine' | 'none'>('all')
   const [canSeeAllConversations, setCanSeeAllConversations] = useState(false)
+  // Visão inicial pré-selecionada em "Minhas conversas" pra quem tem
+  // permissão de ver todas — mesmo padrão já usado no Kanban de Leads
+  // (ownerFilter). Só entra em jogo pra quem canSeeAll=true: quem já é
+  // restrito por RLS nunca recebe conversa de outro atendente do backend,
+  // então este toggle não existe/não muda nada pra esse caso (ver render
+  // condicional em canSeeAll mais abaixo).
+  const [showAllConvs, setShowAllConvs] = useState(false)
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('details')
   const [convHistory, setConvHistory] = useState<WhatsappConversationEvent[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -1068,12 +1080,16 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [showAttach, setShowAttach] = useState(false)
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [quickRepliesSearch, setQuickRepliesSearch] = useState('')
+  const [showInternalChat, setShowInternalChat] = useState(false)
+  const internalChatUnread = useInternalChatUnread(!isAionInbox ? (user?.institution_id || null) : null, user?.id || null)
   const [showContactInfo, setShowContactInfo] = useState(true)
   const [collapseHistory, setCollapseHistory] = useState(true)
-  const [collapseContact, setCollapseContact] = useState(false)
   const [collapseAtendimento, setCollapseAtendimento] = useState(false)
-  const [collapseLead, setCollapseLead] = useState(false)
-  const [collapseAvaliacao, setCollapseAvaliacao] = useState(true)
+  // Fechadas por padrão — contextuais, não precisam de atenção a cada
+  // troca de conversa (redesenho da sidebar direita: só "Atendimento" abre
+  // sozinho, o resto o atendente expande quando precisar).
+  const [collapseLead, setCollapseLead] = useState(true)
+  const [collapseNotes, setCollapseNotes] = useState(true)
   const [sendError, setSendError] = useState<string | null>(null)
   const [recorderState, setRecorderState] = useState<'idle' | 'recording' | 'preview'>('idle')
   const [recordingSeconds, setRecordingSeconds] = useState(0)
@@ -1144,7 +1160,14 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   // Edit contact inline form
   const [editingContact, setEditingContact] = useState(false)
-  const [editForm, setEditForm] = useState({ name: '', contact_type: '', notes: '' })
+  const [editForm, setEditForm] = useState({ name: '', contact_type: '' })
+  // Notas Internas — lista de contact_notes do contato vinculado à conversa
+  // (mesma tabela/contact_ref_id de ContactCard.tsx e ContactProfile.tsx,
+  // ver efeito de carregamento perto de leadData acima).
+  const [contactNotes, setContactNotes] = useState<{ id: string; content: string; author_name: string; created_at: string }[]>([])
+  const [loadingContactNotes, setLoadingContactNotes] = useState(false)
+  const [newContactNote, setNewContactNote] = useState('')
+  const [savingContactNote, setSavingContactNote] = useState(false)
   const [leadCrmEvents, setLeadCrmEvents] = useState<{ label: string; time: string; color: string }[]>([])
   const [leadCrmLoading, setLeadCrmLoading] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
@@ -1833,6 +1856,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         profile_picture_url: conv.profile_picture_url ?? existing.profile_picture_url,
         bot_active: conv.bot_active ?? (existing as any).bot_active,
         satisfaction_score: conv.satisfaction_score ?? (existing as any).satisfaction_score,
+        notes: conv.notes ?? existing.notes,
         last_customer_message_at: conv.last_customer_message_at ?? existing.last_customer_message_at,
         // lastMessage/lastTime só vêm do banco se a conversa ainda não tem
         // mensagens carregadas localmente — com mensagens carregadas, o
@@ -2064,6 +2088,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             // aparentando ter "voltado ao estado inicial".
             bot_active:                'bot_active'                in payload.new ? payload.new.bot_active                : c.bot_active,
             last_customer_message_at:  'last_customer_message_at'  in payload.new ? payload.new.last_customer_message_at  : c.last_customer_message_at,
+            notes:                     'notes'                     in payload.new ? payload.new.notes                     : c.notes,
           }
         }))
       })
@@ -2557,6 +2582,50 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       })
   }, [activeId, activeConv?.lead_id])
 
+  // Notas internas (contact_notes) — mesma tabela e mesmo contact_ref_id de
+  // ContactCard.tsx/ContactProfile.tsx: lead_id quando a conversa tem lead
+  // vinculado, senão "<telefone>@s.whatsapp.net" (formato usado nesses dois
+  // componentes pra contato sem lead — whatsapp_conversations.remote_jid é
+  // gravado SEM esse sufixo, então ele é sempre reanexado aqui pra bater
+  // com o mesmo contact_ref_id, garantindo que as notas apareçam nos dois
+  // lugares). Grupos não têm contato/nota associada.
+  const contactRefId = !activeConv || activeConv.isGroup || !activeId
+    ? null
+    : (activeConv.lead_id || `${rawJid(activeId)}@s.whatsapp.net`)
+
+  useEffect(() => {
+    if (!contactRefId || !effectiveInstitutionId) { setContactNotes([]); return }
+    setLoadingContactNotes(true)
+    supabase
+      .from('contact_notes')
+      .select('id, content, author_name, created_at')
+      .eq('institution_id', effectiveInstitutionId)
+      .eq('contact_ref_id', contactRefId)
+      .order('created_at', { ascending: true })
+      .then(({ data }) => { setContactNotes(data || []); setLoadingContactNotes(false) })
+  }, [contactRefId, effectiveInstitutionId])
+
+  const handleAddContactNote = async () => {
+    const content = newContactNote.trim()
+    if (!content || !contactRefId || !effectiveInstitutionId || savingContactNote) return
+    setSavingContactNote(true)
+    try {
+      const { data, error } = await supabase.from('contact_notes').insert({
+        institution_id: effectiveInstitutionId,
+        contact_ref_id: contactRefId,
+        content,
+        author_name: user?.full_name || user?.email || 'Usuário',
+      }).select('id, content, author_name, created_at').single()
+      if (error) throw error
+      setContactNotes(prev => [...prev, data])
+      setNewContactNote('')
+    } catch (err: any) {
+      setSendError(err.message || 'Não foi possível salvar a nota.')
+    } finally {
+      setSavingContactNote(false)
+    }
+  }
+
   // Reactive 24h window check — recalculates every minute.
   // Usa last_customer_message_at (coluna na própria conversa) em vez de
   // escanear activeConv.messages: essa lista é filtrada pela RLS de
@@ -2611,10 +2680,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // em filteredConvs). RLS já garante que um atendente comum nunca recebe do
   // backend conversas de outro atendente — "outras conversas" só é populado
   // de fato para quem tem user_can_see_all_conversations() = true (admin etc).
-  // "Paradas" é visível pra todo mundo (RLS libera isso à parte do canSeeAll).
+  // "Aguardando" é visível pra todo mundo (RLS libera isso à parte do canSeeAll).
   const filteredWaitingConvs = filteredConvs.filter(c => !c.assigned_user_id && c.status === 'waiting')
   const filteredMyConvs      = filteredConvs.filter(c => c.assigned_user_id === user?.id)
-  const filteredStaleConvs   = filteredConvs.filter(c => isConvStale(c))
+  // "Conversas paradas" não filtrava por dono — pra quem pode ver tudo, isso
+  // já misturava paradas de outros atendentes na visão padrão. Com
+  // showAllConvs=false (padrão pra quem canSeeAll), restringe a paradas
+  // próprias, igual "Minhas conversas"; liga com o toggle "Todas".
+  const filteredStaleConvsAll = filteredConvs.filter(c => isConvStale(c))
+  const filteredStaleConvs    = (canSeeAll && !showAllConvs)
+    ? filteredStaleConvsAll.filter(c => c.assigned_user_id === user?.id)
+    : filteredStaleConvsAll
   const filteredOtherConvs   = filteredConvs.filter(c =>
     !(!c.assigned_user_id && c.status === 'waiting') &&
     c.assigned_user_id !== user?.id &&
@@ -4312,6 +4388,33 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         </div>
       )}
 
+      {/* Drawer de chat interno — mesmo padrão de overlay+painel deslizante do
+          drawer de respostas rápidas (ver abaixo), só mais largo pra caber as
+          duas colunas do InternalChat.tsx (lista de colegas + conversa). */}
+      {!isAionInbox && user?.institution_id && (
+        <>
+          <div
+            onClick={() => setShowInternalChat(false)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(15,23,42,0.4)',
+              opacity: showInternalChat ? 1 : 0, pointerEvents: showInternalChat ? 'auto' : 'none',
+              transition: 'opacity 0.25s ease',
+            }}
+          />
+          <div
+            style={{
+              position: 'fixed', top: 0, right: 0, height: '100%', width: 760, maxWidth: '100%',
+              background: '#fff', zIndex: 61, boxShadow: '-8px 0 32px rgba(0,0,0,0.18)',
+              transform: showInternalChat ? 'translateX(0)' : 'translateX(100%)',
+              transition: 'transform 0.25s ease',
+              pointerEvents: showInternalChat ? 'auto' : 'none',
+            }}
+          >
+            {showInternalChat && <InternalChat onClose={() => setShowInternalChat(false)} />}
+          </div>
+        </>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#F0FDFB', height: '100%' }}>
 
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -4346,15 +4449,44 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                 </span>
               )}
             </div>
-            <button
-              style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00A896', border: 'none', cursor: 'pointer', color: '#fff', transition: 'background 0.15s' }}
-              title="Nova conversa"
-              onClick={() => setShowNewConvModal(true)}
-              onMouseEnter={e => (e.currentTarget.style.background = '#007A6E')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#00A896')}
-            >
-              <Plus style={{ width: 16, height: 16 }} />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {!isAionInbox && user?.institution_id && (
+                <button
+                  style={{ position: 'relative', width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: showInternalChat ? '#FCE7F3' : 'none', border: 'none', cursor: 'pointer', color: '#DB2777', transition: 'background 0.15s' }}
+                  title="Chat interno com a equipe"
+                  onClick={() => { setShowInternalChat(v => !v); closeQuickReplies() }}
+                  onMouseEnter={e => { if (!showInternalChat) e.currentTarget.style.background = '#FDF2F8' }}
+                  onMouseLeave={e => { if (!showInternalChat) e.currentTarget.style.background = 'none' }}
+                >
+                  <MessageSquare style={{ width: 17, height: 17 }} />
+                  {internalChatUnread > 0 && (
+                    <span style={{ position: 'absolute', top: -3, right: -3, background: '#F43F5E', color: '#fff', fontSize: 9, fontWeight: 700, minWidth: 15, height: 15, padding: '0 3px', borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #fff' }}>
+                      {internalChatUnread > 9 ? '9+' : internalChatUnread}
+                    </span>
+                  )}
+                </button>
+              )}
+              {canSeeAll && (
+                <button
+                  style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: !showAllConvs ? '#00A896' : 'none', border: 'none', cursor: 'pointer', color: !showAllConvs ? '#fff' : '#64748B', transition: 'background 0.15s' }}
+                  title={showAllConvs ? 'Mostrando todas as conversas — clique pra ver só as suas' : 'Mostrando só as suas conversas — clique pra ver todas'}
+                  onClick={() => setShowAllConvs(v => !v)}
+                  onMouseEnter={e => { if (showAllConvs) e.currentTarget.style.background = '#F0FDFB' }}
+                  onMouseLeave={e => { if (showAllConvs) e.currentTarget.style.background = 'none' }}
+                >
+                  <UserCog style={{ width: 16, height: 16 }} />
+                </button>
+              )}
+              <button
+                style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00A896', border: 'none', cursor: 'pointer', color: '#fff', transition: 'background 0.15s' }}
+                title="Nova conversa"
+                onClick={() => setShowNewConvModal(true)}
+                onMouseEnter={e => (e.currentTarget.style.background = '#007A6E')}
+                onMouseLeave={e => (e.currentTarget.style.background = '#00A896')}
+              >
+                <Plus style={{ width: 16, height: 16 }} />
+              </button>
+            </div>
           </div>
 
           {/* Search */}
@@ -4461,7 +4593,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     {filteredStaleConvs.map(conv => renderConvItem(conv))}
                   </>
                 )}
-                {canSeeAll && filteredOtherConvs.length > 0 && (
+                {canSeeAll && showAllConvs && filteredOtherConvs.length > 0 && (
                   <>
                     <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Outras conversas
@@ -5209,18 +5341,14 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   </div>
                 )}
 
-                {/* ── SEÇÃO: CONTATO ─────────────────────────────────────────── */}
+                {/* ── IDENTIDADE DO CONTATO — cabeçalho sempre visível, não é
+                    mais uma seção colapsável. É a âncora de "com quem estou
+                    falando", não "conteúdo extra" — não faz sentido escondê-la
+                    atrás de um clique (mesmo padrão de ferramentas de
+                    atendimento como Botconversa/Intercom, cujo header de
+                    contato nunca colapsa). Redução de volume também vem daqui:
+                    uma seção colapsável a menos. */}
                 <div style={{ borderBottom: '1px solid #e2f5f3' }}>
-                  <button onClick={() => setCollapseContact(v => !v)}
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fefd', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#edfaf8')}
-                    onMouseLeave={e => (e.currentTarget.style.background = '#f8fefd')}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Contato</span>
-                    {collapseContact
-                      ? <ChevronRight style={{ width: 14, height: 14, color: '#0d9488' }} />
-                      : <ChevronDown style={{ width: 14, height: 14, color: '#0d9488' }} />}
-                  </button>
-                  {!collapseContact && (
                     <div style={{ padding: '0 0 12px' }}>
                       {/* Avatar + name + phone */}
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 16px 12px', background: 'linear-gradient(180deg, #f0fdfb 0%, #ffffff 100%)' }}>
@@ -5253,7 +5381,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                           ))}
                         </div>
                         {!activeConv.isGroup && (
-                          <button onClick={() => { setEditingContact(v => !v); if (!editingContact) setEditForm({ name: activeConv.name, contact_type: activeConv.contact_type || '', notes: '' }) }}
+                          <button onClick={() => { setEditingContact(v => !v); if (!editingContact) setEditForm({ name: activeConv.name, contact_type: activeConv.contact_type || '' }) }}
                             style={{ marginTop: 8, fontSize: 11, border: '1px solid #d1fae5', color: '#0d9488', background: 'transparent', padding: '4px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s' }}
                             onMouseEnter={e => (e.currentTarget.style.background = '#e6f7f5')}
                             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
@@ -5282,14 +5410,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                                 <option value="other">Outro</option>
                               </select>
                             </div>
-                            <div>
-                              <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#64748B', marginBottom: 3 }}>Nota interna</label>
-                              <textarea value={editForm.notes || ''}
-                                onChange={e => setEditForm(f => ({...f, notes: e.target.value}))}
-                                placeholder="Anotações sobre este contato..."
-                                rows={3}
-                                style={{ width: '100%', padding: '7px 9px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
-                            </div>
                             <div style={{ display: 'flex', gap: 6 }}>
                               <button onClick={async () => {
                                 if (!activeId || !effectiveInstitutionId) return
@@ -5317,15 +5437,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                                   if (editForm.contact_type && editForm.contact_type !== (activeConv.contact_type || '')) {
                                     await DatabaseService.setConversationContactType(effectiveInstitutionId, rawJid(activeId), editForm.contact_type)
                                     setConversations(prev => prev.map(c => c.id === activeId ? {...c, contact_type: editForm.contact_type} : c))
-                                  }
-                                  if (editForm.notes !== undefined) {
-                                    const { data: notesData, error: notesErr } = await supabase.from('whatsapp_conversations')
-                                      .update({ notes: editForm.notes })
-                                      .eq('institution_id', effectiveInstitutionId)
-                                      .eq('remote_jid', rawJid(activeId))
-                                      .select('id')
-                                    if (notesErr) throw notesErr
-                                    if (!notesData || notesData.length === 0) throw new Error('Não foi possível salvar as anotações — esta conversa não está atribuída a você.')
                                   }
                                 } catch (err: any) {
                                   setSendError(err.message || 'Não foi possível salvar as alterações deste contato.')
@@ -5367,7 +5478,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                         </div>
                       )}
                     </div>
-                  )}
                 </div>
 
                 {/* ── SEÇÃO: ATENDIMENTO ─────────────────────────────────────── */}
@@ -5723,26 +5833,45 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   </div>
                 )}
 
-                {/* ── SEÇÃO: AVALIAÇÃO ────────────────────────────────────────── */}
+                {/* ── SEÇÃO: NOTAS INTERNAS ───────────────────────────────────── */}
                 <div style={{ borderBottom: '1px solid #e2f5f3' }}>
-                  <button onClick={() => setCollapseAvaliacao(v => !v)}
+                  <button onClick={() => setCollapseNotes(v => !v)}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fefd', border: 'none', cursor: 'pointer', transition: 'background 0.15s' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#edfaf8')}
                     onMouseLeave={e => (e.currentTarget.style.background = '#f8fefd')}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Avaliação</span>
-                    {collapseAvaliacao
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      Notas Internas{contactNotes.length > 0 ? ` (${contactNotes.length})` : ''}
+                    </span>
+                    {collapseNotes
                       ? <ChevronRight style={{ width: 14, height: 14, color: '#0d9488' }} />
                       : <ChevronDown style={{ width: 14, height: 14, color: '#0d9488' }} />}
                   </button>
-                  {!collapseAvaliacao && (
-                    <div style={{ padding: '0 12px 12px' }}>
-                      {activeConv.satisfaction_score ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#fffbeb', borderRadius: 8, border: '1px solid #fde68a' }}>
-                          <span style={{ fontSize: 16 }}>{'⭐'.repeat(activeConv.satisfaction_score)}</span>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: '#92400E' }}>{activeConv.satisfaction_score}/5</span>
+                  {!collapseNotes && (
+                    <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {loadingContactNotes ? (
+                        <p style={{ margin: 0, fontSize: 12, color: '#94A3B8', fontStyle: 'italic' }}>Carregando...</p>
+                      ) : contactNotes.length === 0 ? (
+                        <p style={{ margin: 0, fontSize: 12, color: '#94A3B8', fontStyle: 'italic' }}>Nenhuma nota registrada</p>
+                      ) : contactNotes.map(n => (
+                        <div key={n.id} style={{ padding: '8px 10px', background: '#f0fdfb', borderRadius: 8, border: '1px solid #d1fae5' }}>
+                          <p style={{ margin: 0, fontSize: 12, color: '#1A2B4A', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{n.content}</p>
+                          <p style={{ margin: '4px 0 0', fontSize: 10, color: '#94A3B8' }}>
+                            {n.author_name} · {new Date(n.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </p>
                         </div>
-                      ) : (
-                        <p style={{ margin: 0, fontSize: 12, color: '#94A3B8', fontStyle: 'italic' }}>Sem avaliação registrada</p>
+                      ))}
+                      {contactRefId && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <textarea value={newContactNote}
+                            onChange={e => setNewContactNote(e.target.value)}
+                            placeholder="Adicionar nota interna sobre este contato — só a equipe vê..."
+                            rows={3}
+                            style={{ width: '100%', padding: '7px 9px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                          <button onClick={handleAddContactNote} disabled={!newContactNote.trim() || savingContactNote}
+                            style={{ alignSelf: 'flex-start', fontSize: 11, border: 'none', color: '#fff', background: '#0d9488', padding: '5px 14px', borderRadius: 8, fontWeight: 600, cursor: 'pointer', opacity: !newContactNote.trim() || savingContactNote ? 0.5 : 1 }}>
+                            {savingContactNote ? 'Salvando...' : 'Salvar nota'}
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}

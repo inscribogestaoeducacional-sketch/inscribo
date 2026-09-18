@@ -8,7 +8,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
-import { Send, Search, MessageSquare } from 'lucide-react'
+import { Send, Search, MessageSquare, X } from 'lucide-react'
 
 interface Colleague {
   id: string
@@ -48,7 +48,11 @@ function formatTime(iso: string): string {
     : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 }
 
-export default function InternalChat() {
+// onClose: quando informado, o componente é renderizado dentro do drawer do
+// WhatsAppHub.tsx (que fornece o overlay + painel deslizante) em vez de tela
+// cheia — mostra o botão de fechar no lugar do título sozinho. O conteúdo
+// (colunas de colegas/conversa) não muda, só esse detalhe do cabeçalho.
+export default function InternalChat({ onClose }: { onClose?: () => void } = {}) {
   const { user } = useAuth()
   const institutionId = user?.institution_id || null
   const myId = user?.id || null
@@ -235,7 +239,14 @@ export default function InternalChat() {
       {/* Coluna esquerda — lista de colegas */}
       <div className="w-[320px] flex-shrink-0 border-r border-gray-100 flex flex-col">
         <div className="p-4 border-b border-gray-100">
-          <h1 className="text-lg font-bold text-[#1A2B4A] mb-3">Chat Interno</h1>
+          <div className="flex items-center justify-between mb-3">
+            <h1 className="text-lg font-bold text-[#1A2B4A]">Chat Interno</h1>
+            {onClose && (
+              <button onClick={onClose} className="p-1 text-gray-400 hover:text-[#1A2B4A] rounded-lg">
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
