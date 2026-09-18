@@ -158,13 +158,32 @@ function extractBodyText(components: unknown): string {
 // COLLECTION_PAY_BASE_URL) — só 1 variável dinâmica no fim da URL, que é o
 // máximo que a Meta permite num botão URL. ──
 function buildCreateTemplatePayload(def: TemplateDefinition) {
-  const bodyVarNumbers = [...def.body_text.matchAll(/\{\{(\d+)\}\}/g)].map(m => m[1])
+  // Deduplica + ordena numericamente — a Meta espera exatamente 1 valor de
+  // exemplo por variável DISTINTA, não por ocorrência no texto. Sem isso, um
+  // corpo que reusa {{1}} mais de uma vez (uso válido — mesma variável
+  // referenciada duas vezes) gerava um array de example maior que o
+  // esperado, e a Meta rejeitava o componente BODY inteiro ("não contém o
+  // campo esperado (example)") mesmo com todo exemplo preenchido no
+  // formulário. Mesmo critério de extração já usado no formulário
+  // (AdminWhatsAppTemplates.tsx → extractVarNumbers).
+  const bodyVarNumbers = [...new Set(
+    [...def.body_text.matchAll(/\{\{(\d+)\}\}/g)].map(m => m[1])
+  )].sort((a, b) => Number(a) - Number(b))
   const examples = def.variable_examples || {}
 
   const bodyComponent: Record<string, unknown> = { type: 'BODY', text: def.body_text }
   if (bodyVarNumbers.length > 0) {
+    // Nunca substitui por um placeholder genérico ("exemplo") quando falta
+    // valor real no cadastro — isso mascarava dado incompleto e só aparecia
+    // como erro opaco da Meta depois. Falha aqui, com mensagem clara de qual
+    // variável falta — cobre tanto criação quanto reenvio (retry/register_
+    // existing) de um template cujo cadastro ficou incompleto.
+    const missing = bodyVarNumbers.filter(n => !examples[n]?.trim())
+    if (missing.length > 0) {
+      throw new Error(`Faltam exemplos de variável no cadastro do template: ${missing.map(n => `{{${n}}}`).join(', ')}. Edite o template e preencha antes de reenviar.`)
+    }
     bodyComponent.example = {
-      body_text: [bodyVarNumbers.map(n => examples[n] || 'exemplo')],
+      body_text: [bodyVarNumbers.map(n => examples[n])],
     }
   }
 
