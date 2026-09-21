@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
+import { authenticateInstitutionUser, authenticateSuperAdmin } from '../_lib/whatsappAuth'
 
 const GRAPH_URL = 'https://graph.facebook.com/v25.0'
 
@@ -28,6 +29,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!message_id) return res.status(400).json({ error: 'message_id é obrigatório' })
   if (!remote_jid)  return res.status(400).json({ error: 'remote_jid é obrigatório' })
+
+  // ── Auth — mesmo padrão de api/whatsapp/send.ts. institution_id ausente
+  // já é, neste endpoint, o mesmo sinal que o resto do handler usa pra
+  // decidir o caminho do Inbox Áion (ver resolução de phoneNumberId abaixo),
+  // então reaproveita esse mesmo sinal pra escolher o papel exigido.
+  try {
+    if (!institution_id) {
+      const auth = await authenticateSuperAdmin(req)
+      if (!auth) return res.status(403).json({ error: 'Não autenticado ou sem permissão para reagir pelo Inbox Áion.' })
+    } else {
+      const auth = await authenticateInstitutionUser(req)
+      if (!auth) return res.status(403).json({ error: 'Não autenticado.' })
+      if (auth.institutionId !== institution_id) {
+        return res.status(403).json({ error: 'institution_id não corresponde ao usuário autenticado.' })
+      }
+    }
+  } catch (authErr: any) {
+    console.error('❌ Reaction auth error:', authErr)
+    return res.status(500).json({ error: 'Erro ao autenticar requisição' })
+  }
 
   try {
     // ── Resolve phone_number_id ──

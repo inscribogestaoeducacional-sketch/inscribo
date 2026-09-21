@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
+import { authenticateInstitutionUser } from '../_lib/whatsappAuth'
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -43,6 +44,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!institution_id || !to || !template_name) {
     return res.status(400).json({ error: 'institution_id, to e template_name são obrigatórios' })
+  }
+
+  // ── Auth — mesmo padrão de api/whatsapp/send.ts (achado na mesma
+  // investigação): endpoint roda com service role, então RLS não participa;
+  // sem checar a sessão aqui, institution_id/sender_user_id do corpo eram
+  // confiados cegamente, permitindo enviar template se passando por
+  // qualquer escola/atendente numa chamada direta ao endpoint. Este endpoint
+  // só atende o WhatsApp Hub de escola (não o Inbox Áion, que usa
+  // /api/whatsapp/send pra template), então não precisa do branch
+  // isAionSend/authenticateSuperAdmin.
+  try {
+    const auth = await authenticateInstitutionUser(req)
+    if (!auth) return res.status(403).json({ error: 'Não autenticado.' })
+    if (auth.institutionId !== institution_id) {
+      return res.status(403).json({ error: 'institution_id não corresponde ao usuário autenticado.' })
+    }
+    if (sender_user_id && sender_user_id !== auth.userId) {
+      return res.status(403).json({ error: 'sender_user_id não corresponde ao usuário autenticado.' })
+    }
+  } catch (authErr: any) {
+    console.error('❌ Template auth error:', authErr)
+    return res.status(500).json({ error: 'Erro ao autenticar requisição' })
   }
 
   try {

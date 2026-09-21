@@ -14,6 +14,7 @@ import { normalizeBrazilianInput } from '../../lib/phone'
 import NewLeadModal from '../leads/NewLeadModal'
 import ScheduleVisitModal from '../leads/ScheduleVisitModal'
 import { saveLead, formatSaveLeadError } from '../../lib/leadSave'
+import { getAuthHeaders } from '../../lib/authHeaders'
 import { statusConfig } from '../leads/leadFormShared'
 import {
   fetchTemplateMeta, fetchHiddenTemplateNames, variableLabel, templateDisplayName, filterTemplatesForContext,
@@ -1485,7 +1486,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       // teto de ~4.5MB de requisição da Vercel.
       const urlRes = await fetch('/api/whatsapp/media-upload-url', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           institution_id: effectiveInstitutionId || undefined,
           filename,
@@ -1510,7 +1511,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       console.log('[AUDIO] enviando para /api/whatsapp/send, to:', to)
       const sendRes = await fetch('/api/whatsapp/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           institution_id: effectiveInstitutionId || undefined,
           isAionSend: isAionInbox,
@@ -1578,7 +1579,35 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     setLeadResults(combined)
   }
 
-  const addMessageToConversations = (newMsg: WhatsappMessage) => {
+  const addMessageToConversations = async (newMsg: WhatsappMessage) => {
+    // whatsapp_messages é lido pela instituição inteira por regra de negócio
+    // (não é escopado por dono — ver comentário em buildConversations), então
+    // o Realtime de mensagem nova chega pra todo mundo, mesmo de conversas
+    // ativamente atribuídas a outro atendente. Se o JID ainda não está
+    // carregado localmente, NÃO dá pra confiar só no payload da mensagem pra
+    // montar um card — precisa confirmar via o client autenticado normal
+    // (RLS aplica sozinho) se whatsapp_conversations realmente libera essa
+    // linha pro usuário atual. Sem essa checagem, qualquer mensagem de
+    // qualquer conversa da instituição virava um card "fantasma" na fila de
+    // Aguardando de todo mundo — bug real de vazamento, corrigido aqui.
+    const normJidCheck = normalizeJid(newMsg.remote_jid)
+    let visibleConvRow: any = null
+    if (!conversationsRef.current.some(c => c.id === normJidCheck)) {
+      if (!effectiveInstitutionId && !isAionInbox) return
+      const raw = newMsg.remote_jid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '')
+      const norm = `${raw}@s.whatsapp.net`
+      let convQuery = supabase.from('whatsapp_conversations').select('*').in('remote_jid', [raw, norm])
+      convQuery = isAionInbox
+        ? convQuery.eq('is_aion_inbox', true)
+        : convQuery.eq('institution_id', effectiveInstitutionId)
+      const { data } = await convQuery.maybeSingle()
+      // RLS não devolveu a linha — não é visível pro usuário atual (conversa
+      // ativa de outro atendente, não-stale). Ignora o evento por completo,
+      // sem adicionar nada na lista local nem disparar som/notificação.
+      if (!data) return
+      visibleConvRow = data
+    }
+
     // Briefly show typing indicator for incoming messages
     if (!newMsg.from_me) {
       const typingJid = normalizeJid(newMsg.remote_jid)
@@ -1677,17 +1706,31 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           : c
         ).sort((a, b) => b.lastTime.getTime() - a.lastTime.getTime())
       }
+      // Card construído a partir da linha REAL de whatsapp_conversations
+      // (já validada por RLS acima, quando a conversa não estava carregada
+      // localmente) — nunca só do payload da mensagem, mesmo formato usado
+      // em buildConversations pra conversas sem mensagens carregadas ainda.
       const conv: Conversation = {
         id: normJid,
-        name: newMsg.contact_name || (isGroup ? normJid.replace(/@g\.us$/, '') : formatPhone(normJid)),
+        name: visibleConvRow?.contact_name || newMsg.contact_name || (isGroup ? normJid.replace(/@g\.us$/, '') : formatPhone(normJid)),
         phone: isGroup ? normJid.replace(/@g\.us$/, '') : formatPhone(normJid),
         avatarColor: jidToColor(normJid),
         lastMessage: newMsg.content,
         lastTime: new Date(newMsg.timestamp),
-        unreadCount: newMsg.from_me ? 0 : 1,
-        status: 'waiting', online: false, labels: [],
+        unreadCount: visibleConvRow?.unread_count ?? (newMsg.from_me ? 0 : 1),
+        status: (visibleConvRow?.status ?? 'waiting') as ConvStatus,
+        online: false, labels: [],
         isGroup,
-        tags: [],
+        lead_id: visibleConvRow?.lead_id,
+        assigned_user_id: visibleConvRow?.assigned_user_id,
+        assigned_user_name: visibleConvRow?.assigned_user_name,
+        contact_type: visibleConvRow?.contact_type,
+        tags: visibleConvRow?.tags || [],
+        profile_picture_url: visibleConvRow?.profile_picture_url,
+        bot_active: visibleConvRow?.bot_active ?? false,
+        satisfaction_score: visibleConvRow?.satisfaction_score ?? null,
+        notes: visibleConvRow?.notes ?? null,
+        last_customer_message_at: visibleConvRow?.last_customer_message_at,
         messages: [msg],
       }
       return [conv, ...prev]
@@ -3080,7 +3123,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           institution_id: effectiveInstitutionId || undefined,
           isAionSend: isAionInbox,
@@ -3143,7 +3186,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       console.log('[SEND-TEMPLATE] to:', to, 'template:', tmpl.name, 'components:', JSON.stringify(components))
       const res = await fetch('/api/whatsapp/send-template', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           institution_id: effectiveInstitutionId,
           to,
@@ -3352,7 +3395,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       try {
         const res = await fetch('/api/whatsapp/send-template', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await getAuthHeaders(),
           body: JSON.stringify({
             institution_id: effectiveInstitutionId,
             to,
@@ -3691,7 +3734,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       // servidor Vercel nunca vê os bytes do arquivo nesse fluxo.
       const urlRes = await fetch('/api/whatsapp/media-upload-url', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           institution_id: effectiveInstitutionId || undefined,
           filename: pendingFile.name,
@@ -3714,7 +3757,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
       const sendRes = await fetch('/api/whatsapp/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           institution_id: effectiveInstitutionId || undefined,
           isAionSend: isAionInbox,
@@ -3899,7 +3942,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     try {
       const res = await fetch('/api/whatsapp/send-template', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           institution_id: effectiveInstitutionId,
           to,
@@ -4120,7 +4163,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         } else {
           await fetch('/api/whatsapp/send', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: await getAuthHeaders(),
             body: JSON.stringify({
               institution_id: effectiveInstitutionId || undefined,
               isAionSend: isAionInbox,
@@ -4228,7 +4271,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     try {
       await fetch('/api/whatsapp/send-reaction', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           institution_id: effectiveInstitutionId || null,
           message_id:     msg.message_id,

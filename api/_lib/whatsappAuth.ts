@@ -59,7 +59,20 @@ export interface SchoolAdminAuthContext {
   institutionId: string
 }
 
-export async function authenticateSchoolAdmin(req: VercelRequest): Promise<SchoolAdminAuthContext | null> {
+// ── authenticateInstitutionUser ──────────────────────────────────────────
+// Mesmo núcleo de verificação de authenticateSchoolAdmin (token → getUser →
+// linha em `users`), mas sem exigir role==='admin' — usado por endpoints que
+// qualquer atendente ativo da escola pode chamar (ex.: enviar mensagem de
+// WhatsApp), não só admin. authenticateSchoolAdmin é a versão mais restrita
+// disso, então reaproveita esta função por baixo em vez de duplicar a
+// consulta ao banco.
+export interface InstitutionUserAuthContext {
+  userId: string
+  institutionId: string
+  role: string | null
+}
+
+export async function authenticateInstitutionUser(req: VercelRequest): Promise<InstitutionUserAuthContext | null> {
   const authHeader = (req.headers.authorization || '') as string
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
   if (!token) return null
@@ -74,7 +87,7 @@ export async function authenticateSchoolAdmin(req: VercelRequest): Promise<Schoo
     .eq('id', data.user.id)
     .maybeSingle()
 
-  if (!row || !row.active || row.role !== 'admin') return null
+  if (!row || !row.active) return null
 
   // Gestor de rede: institution_id é NULL no banco — a unidade "efetiva" é
   // a que está selecionada no momento (active_institution_id). Mesma regra
@@ -85,7 +98,13 @@ export async function authenticateSchoolAdmin(req: VercelRequest): Promise<Schoo
     : row.institution_id
   if (!institutionId) return null
 
-  return { userId: data.user.id, institutionId }
+  return { userId: data.user.id, institutionId, role: row.role ?? null }
+}
+
+export async function authenticateSchoolAdmin(req: VercelRequest): Promise<SchoolAdminAuthContext | null> {
+  const auth = await authenticateInstitutionUser(req)
+  if (!auth || auth.role !== 'admin') return null
+  return { userId: auth.userId, institutionId: auth.institutionId }
 }
 
 // ── authenticateSuperAdmin ───────────────────────────────────────────────

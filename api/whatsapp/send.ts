@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
+import { authenticateInstitutionUser, authenticateSuperAdmin } from '../_lib/whatsappAuth'
 
 async function getWAConfig() {
   const supabase = createClient(
@@ -180,6 +181,34 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'templateName é obrigatório para type=template' })
   if (type !== 'text' && type !== 'template' && !mediaUrl && !base64)
     return res.status(400).json({ error: `mediaUrl ou base64 é obrigatório para type=${type}` })
+
+  // ── Auth — este endpoint roda com service role logo abaixo (precisa pra
+  // gravar em whatsapp_messages/conversations normalmente), então RLS não
+  // participa da decisão de quem pode mandar o quê. Sem checar a sessão
+  // aqui, qualquer chamada direta ao endpoint (fora do app) conseguia mandar
+  // mensagem se passando por qualquer escola/atendente, só informando
+  // institution_id/sender_user_id no corpo — achado durante investigação de
+  // vazamento de conversa no WhatsApp Hub. isAionSend usa o mesmo papel de
+  // Super Admin exigido pra abrir a tela do Inbox Áion (AdminAionInbox.tsx,
+  // rota /super-admin/aion-inbox); envio de escola usa qualquer usuário
+  // ativo da própria instituição — não só admin, atendente comum também
+  // manda mensagem por este endpoint.
+  if (isAionSend) {
+    const auth = await authenticateSuperAdmin(req)
+    if (!auth) return res.status(403).json({ error: 'Não autenticado ou sem permissão para enviar pelo Inbox Áion.' })
+    if (sender_user_id && sender_user_id !== auth.userId) {
+      return res.status(403).json({ error: 'sender_user_id não corresponde ao usuário autenticado.' })
+    }
+  } else {
+    const auth = await authenticateInstitutionUser(req)
+    if (!auth) return res.status(403).json({ error: 'Não autenticado.' })
+    if (auth.institutionId !== institution_id) {
+      return res.status(403).json({ error: 'institution_id não corresponde ao usuário autenticado.' })
+    }
+    if (sender_user_id && sender_user_id !== auth.userId) {
+      return res.status(403).json({ error: 'sender_user_id não corresponde ao usuário autenticado.' })
+    }
+  }
 
   try {
     let phoneNumberId: string

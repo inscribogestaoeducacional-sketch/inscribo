@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
 import formidable from 'formidable'
 import { readFile, unlink } from 'fs/promises'
+import { authenticateInstitutionUser, authenticateSuperAdmin } from '../_lib/whatsappAuth'
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -75,6 +76,28 @@ export const config = {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end()
 
+  // ── Auth — mesmo padrão de api/whatsapp/send.ts. Feita antes do parse do
+  // multipart (form.parse abaixo), pra não gastar tempo/banda processando
+  // upload de quem não está autenticado. Tenta primeiro como usuário de
+  // escola (institution_id efetivo vem da própria sessão, nunca do campo
+  // institution_id do form — que existia antes só de nome, sem checagem
+  // nenhuma); se não resolver institutionId (ex.: admin_geral/consultant,
+  // que não têm institution_id na tabela users), cai pro papel de Super
+  // Admin, mesmo exigido pra abrir o Inbox Áion.
+  let sessionInstitutionId: string | null = null
+  try {
+    const instAuth = await authenticateInstitutionUser(req)
+    if (instAuth) {
+      sessionInstitutionId = instAuth.institutionId
+    } else {
+      const superAuth = await authenticateSuperAdmin(req)
+      if (!superAuth) return res.status(403).json({ error: 'Não autenticado.' })
+    }
+  } catch (authErr: any) {
+    console.error('❌ Media auth error:', authErr)
+    return res.status(500).json({ error: 'Erro ao autenticar requisição' })
+  }
+
   try {
     const form = formidable({ maxFileSize: MAX_FILE_SIZE, maxFiles: 1 })
     const { fields, files } = await new Promise<{ fields: formidable.Fields; files: formidable.Files }>((resolve, reject) => {
@@ -85,7 +108,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
 
     const field = (v: string | string[] | undefined) => Array.isArray(v) ? v[0] : v
-    const institution_id = field(fields.institution_id as any)
+    // institution_id do form field é ignorado pra montar o path (aceito só
+    // por compatibilidade, caso algum chamador ainda o envie) — o valor real
+    // é sempre sessionInstitutionId, resolvido acima a partir da sessão.
     const filenameField  = field(fields.filename as any)
 
     const fileField = files.file
@@ -106,7 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
 
-    const pathPrefix = institution_id || 'aion'
+    const pathPrefix = sessionInstitutionId || 'aion'
     const ext = mimetype.split('/')[1]?.split(';')[0]?.replace('jpeg', 'jpg') || 'bin'
     const safeName = (filenameField || file.originalFilename || `upload.${ext}`)
       .replace(/[^a-zA-Z0-9._-]/g, '_')

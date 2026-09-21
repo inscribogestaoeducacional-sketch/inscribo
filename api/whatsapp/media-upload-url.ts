@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
+import { authenticateInstitutionUser, authenticateSuperAdmin } from '../_lib/whatsappAuth'
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -35,12 +36,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end()
 
   try {
-    const { institution_id, filename } = req.body ?? {}
+    const { filename } = req.body ?? {}
     if (!filename || typeof filename !== 'string') {
       return res.status(400).json({ error: 'filename é obrigatório' })
     }
 
-    const pathPrefix = institution_id || 'aion'
+    // ── Auth — mesmo padrão de api/whatsapp/send.ts. institution_id do
+    // corpo é ignorado pra montar o path (aceito só por compatibilidade,
+    // caso algum chamador ainda o envie) — o path é sempre resolvido a
+    // partir da sessão, nunca de um campo confiado cegamente do body. Tenta
+    // primeiro como usuário de escola; se não resolver institutionId (ex.:
+    // admin_geral/consultant, sem institution_id na tabela users), cai pro
+    // papel de Super Admin, mesmo exigido pra abrir o Inbox Áion.
+    let sessionInstitutionId: string | null = null
+    const instAuth = await authenticateInstitutionUser(req)
+    if (instAuth) {
+      sessionInstitutionId = instAuth.institutionId
+    } else {
+      const superAuth = await authenticateSuperAdmin(req)
+      if (!superAuth) return res.status(403).json({ error: 'Não autenticado.' })
+    }
+
+    const pathPrefix = sessionInstitutionId || 'aion'
     const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100)
     const storagePath = `${pathPrefix}/${Date.now()}_${safeName}`
 

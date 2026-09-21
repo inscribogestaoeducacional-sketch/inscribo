@@ -11,6 +11,7 @@ import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { DatabaseService, WhatsappMessage, WhatsappConversation, User as UserType, supabase } from '../../lib/supabase'
 import { normalizeBrazilianInput } from '../../lib/phone'
+import { getAuthHeaders, getBearerHeader } from '../../lib/authHeaders'
 import LeadModal, { STAGES as CRM_STAGES } from '../shared/LeadModal'
 import ProposalGenerator from './ProposalGenerator'
 import { buildSendComponents, getTemplateHeaderMediaFormat, uploadTemplateHeaderMedia } from '../../lib/whatsappTemplate'
@@ -1452,6 +1453,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
 
       const uploadRes = await fetch('/api/whatsapp/media', {
         method: 'POST',
+        headers: await getBearerHeader(),
         body: uploadForm,
       })
       if (!uploadRes.ok) {
@@ -1471,7 +1473,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       console.log('[AUDIO] enviando para /api/whatsapp/send, to:', to)
       const sendRes = await fetch('/api/whatsapp/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           institution_id: effectiveInstitutionId || undefined,
           isAionSend: isAionInbox,
@@ -2893,7 +2895,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
 
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           institution_id: effectiveInstitutionId || undefined,
           isAionSend: isAionInbox,
@@ -2965,7 +2967,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       // o mesmo endpoint/padrão já usado por texto/mídia/áudio.
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           institution_id: isAionInbox ? undefined : effectiveInstitutionId,
           isAionSend: isAionInbox,
@@ -3335,6 +3337,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
 
       const uploadRes = await fetch('/api/whatsapp/media', {
         method: 'POST',
+        headers: await getBearerHeader(),
         body: uploadForm,
       })
       setUploadProgress(65)
@@ -3351,7 +3354,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
       const sendRes = await fetch('/api/whatsapp/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           institution_id: effectiveInstitutionId || undefined,
           isAionSend: isAionInbox,
@@ -3413,7 +3416,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           institution_id: isAionInbox ? undefined : effectiveInstitutionId,
           isAionSend: isAionInbox,
@@ -3574,7 +3577,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
       // suporta o Inbox Áion (exige institution_id real).
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           institution_id: isAionInbox ? undefined : effectiveInstitutionId,
           isAionSend: isAionInbox,
@@ -3894,7 +3897,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
         } else {
           await fetch('/api/whatsapp/send', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: await getAuthHeaders(),
             body: JSON.stringify({
               institution_id: effectiveInstitutionId || undefined,
               isAionSend: isAionInbox,
@@ -4004,7 +4007,7 @@ export default function AionInboxHub({ institutionId: propInstitutionId, isAionI
     try {
       await fetch('/api/whatsapp/send-reaction', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           institution_id: effectiveInstitutionId || null,
           message_id:     msg.message_id,

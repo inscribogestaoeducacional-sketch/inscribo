@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { normalizeBrazilianInput } from '../../lib/phone'
+import { getAuthHeaders } from '../../lib/authHeaders'
 import { buildSendComponents } from '../../lib/whatsappTemplate'
 import { COLLECTION_TEMPLATES, collectionTemplateAsGraphLike, type CollectionTemplateKey } from '../../lib/collectionTemplates'
 import SuperAdminLayout from './SuperAdminLayout'
@@ -490,7 +491,7 @@ function SendCollectionWhatsAppModal({ payment, institution, currentUserId, curr
 
         const sendRes = await fetch('/api/whatsapp/send', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await getAuthHeaders(),
           body: JSON.stringify({
             isAionSend: true,
             to: normalizedPhone,
