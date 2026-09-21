@@ -24,7 +24,7 @@ import { useGradeLevels } from '../../hooks/useGradeLevels'
 import { getLeadReminderInfo, REMINDER_COLORS, NO_CONTACT_DAYS } from '../../lib/leadReminders'
 import NewLeadModal from './NewLeadModal'
 import ScheduleVisitModal from './ScheduleVisitModal'
-import { saveLead } from '../../lib/leadSave'
+import { saveLead, formatSaveLeadError } from '../../lib/leadSave'
 import {
   type SimpleUser, type AuditEntry, type StudentEntry,
   statusConfig, sourceOptions, LEAD_TEMPERATURES, LEAD_STAGES,
@@ -848,7 +848,7 @@ export default function LeadKanban() {
       })
     } catch (err) {
       console.error('[LEAD SAVE] erro:', err)
-      showToast('Erro ao salvar lead. Tente novamente.', 'error')
+      showToast(formatSaveLeadError(err), 'error')
       throw err
     }
 

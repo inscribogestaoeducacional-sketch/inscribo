@@ -30,6 +30,18 @@ export interface SaveLeadParams {
   campaignCycleId?: string | null
 }
 
+// Erro genérico ("Erro ao salvar lead") não dizia qual campo/constraint
+// falhou — quem chamou saveLead() tinha que adivinhar (foi assim que o bug
+// do grade_interest NOT NULL ficou invisível). Repassa o código/mensagem
+// reais do Postgres quando disponíveis, pra proteger contra o próximo campo
+// NOT NULL que alguém adicionar no schema sem atualizar o formulário.
+export function formatSaveLeadError(err: unknown): string {
+  const e = err as { code?: string; message?: string } | null
+  if (e?.code && e?.message) return `Erro ao salvar lead (${e.code}): ${e.message}`
+  if (e?.message) return `Erro ao salvar lead: ${e.message}`
+  return 'Erro ao salvar lead. Tente novamente.'
+}
+
 export async function saveLead({ institutionId, currentUser, users, editingLead, data, campaignCycleId = null }: SaveLeadParams): Promise<string> {
   const instId = institutionId
   let savedLeadId: string = editingLead?.id ?? ''
@@ -57,7 +69,12 @@ export async function saveLead({ institutionId, currentUser, users, editingLead,
       email:             shared.email,
       address:           shared.address,
       city:              shared.city || null,
-      grade_interest:    student.grade_interest || null,
+      // grade_interest é NOT NULL no banco, mas o campo é opcional no
+      // formulário (sem asterisco) — sem esse fallback, deixar em branco
+      // rejeita o insert inteiro com "null value ... violates not-null
+      // constraint" (23502), confirmado ao vivo. Mesmo padrão já usado no
+      // "Converter para Lead" do ContactProfile.tsx.
+      grade_interest:    student.grade_interest || 'Não informado',
       shift_interest:    student.shift_interest || null,
       source:            shared.source,
       budget_range:      shared.budget_range,

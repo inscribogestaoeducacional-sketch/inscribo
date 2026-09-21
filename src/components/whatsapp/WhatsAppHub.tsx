@@ -13,7 +13,7 @@ import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConvers
 import { normalizeBrazilianInput } from '../../lib/phone'
 import NewLeadModal from '../leads/NewLeadModal'
 import ScheduleVisitModal from '../leads/ScheduleVisitModal'
-import { saveLead } from '../../lib/leadSave'
+import { saveLead, formatSaveLeadError } from '../../lib/leadSave'
 import { statusConfig } from '../leads/leadFormShared'
 import {
   fetchTemplateMeta, fetchHiddenTemplateNames, variableLabel, templateDisplayName, filterTemplatesForContext,
@@ -1764,8 +1764,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
       setHubToast(leadModalTarget ? 'Lead atualizado!' : 'Lead criado!')
       setTimeout(() => setHubToast(null), 3000)
-    } catch {
-      setSendError('Erro ao salvar lead.')
+    } catch (err) {
+      setSendError(formatSaveLeadError(err))
     }
   }
 
@@ -5806,14 +5806,18 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                               </div>
                               <ChevronRight style={{ width: 13, height: 13, color: '#94A3B8' }} />
                             </button>
-                            {(!activeConv.contact_type || activeConv.contact_type === 'unknown') && (
-                              <button onClick={() => { setLeadModalTarget(null); setShowLeadModal(true) }}
-                                style={{ width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, color: '#0d9488', background: 'transparent', border: '1px dashed #d1fae5', borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s' }}
-                                onMouseEnter={e => { e.currentTarget.style.background = '#e6f7f5'; e.currentTarget.style.borderColor = '#0d9488' }}
-                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#d1fae5' }}>
-                                + Criar Lead
-                              </button>
-                            )}
+                            {/* Ter lead ou não é independente de já ter classificado o
+                                contato (Cliente/Fornecedor/Outro) — antes esse botão
+                                dependia de contact_type e sumia assim que o contato era
+                                classificado como algo != 'lead'/'unknown', mesmo sem
+                                nenhum lead existir ainda. Critério único agora: não tem
+                                lead_id, igual ao "Vincular a um Lead" acima. */}
+                            <button onClick={() => { setLeadModalTarget(null); setShowLeadModal(true) }}
+                              style={{ width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, color: '#0d9488', background: 'transparent', border: '1px dashed #d1fae5', borderRadius: 9, cursor: 'pointer', transition: 'all 0.15s' }}
+                              onMouseEnter={e => { e.currentTarget.style.background = '#e6f7f5'; e.currentTarget.style.borderColor = '#0d9488' }}
+                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#d1fae5' }}>
+                              + Criar Lead
+                            </button>
                           </div>
                         )}
                       </div>
