@@ -7,7 +7,7 @@ import { saveLead } from '../../lib/leadSave'
 import { normalizeBrazilianInput } from '../../lib/phone'
 import {
   X, ArrowRightLeft, FileText, Clock, User, Plus, Check, Loader2,
-  Tag as TagIcon, AlertTriangle, History, Save,
+  Tag as TagIcon, AlertTriangle, History, Save, Pencil, Trash2,
 } from 'lucide-react'
 
 // Item 4c — série antes hardcoded aqui, agora vem de school_grade_levels
@@ -113,6 +113,9 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
   const [noteText,      setNoteText]      = useState('')
   const [savingNote,    setSavingNote]    = useState(false)
   const [notesAvailable,setNotesAvailable]= useState(true)
+  const [editingNoteId,   setEditingNoteId]   = useState<string | null>(null)
+  const [editingNoteText, setEditingNoteText] = useState('')
+  const [savingNoteEdit,  setSavingNoteEdit]  = useState(false)
 
   // History
   const [history, setHistory] = useState<{ icon: string; title: string; description: string; date: string }[]>([])
@@ -183,7 +186,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
     try {
       const { data, error } = await supabase
         .from('contact_notes')
-        .select('id, content, author_name, created_at')
+        .select('id, content, author_name, author_id, created_at')
         .eq('institution_id', institutionId)
         .eq('contact_ref_id', contactRef)
         .order('created_at', { ascending: false })
@@ -576,7 +579,7 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
   }
 
   async function handleAddNote() {
-    if (!noteText.trim()) return
+    if (!noteText.trim() || !user?.id) return
     setSavingNote(true)
     try {
       const { data, error } = await supabase.from('contact_notes').insert({
@@ -585,7 +588,8 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
         contact_ref_type: contact.lead_id ? 'lead' : 'whatsapp',
         content:          noteText.trim(),
         author_name:      user?.full_name || 'Usuário',
-      }).select('id, content, author_name, created_at').maybeSingle()
+        author_id:        user.id,
+      }).select('id, content, author_name, author_id, created_at').maybeSingle()
       if (error) {
         console.warn('handleAddNote:', error.code, error.message)
         if (mountedRef.current) setNotesAvailable(false)
@@ -597,6 +601,36 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
       }
     } catch (e) { console.error('handleAddNote error:', e) }
     finally { if (mountedRef.current) setSavingNote(false) }
+  }
+
+  // RLS (contact_notes_delete_own) já barra apagar nota de outra pessoa —
+  // a confirmação aqui é só pra não perder uma nota sua sem querer.
+  async function handleDeleteNote(id: string) {
+    if (!window.confirm('Excluir esta anotação? Essa ação não pode ser desfeita.')) return
+    const { error } = await supabase.from('contact_notes').delete().eq('id', id)
+    if (error) { showToast('Não foi possível excluir a anotação.', false); return }
+    setNotes(prev => prev.filter(n => n.id !== id))
+  }
+
+  function startEditNote(note: { id: string; content: string }) {
+    setEditingNoteId(note.id)
+    setEditingNoteText(note.content)
+  }
+
+  async function handleSaveNoteEdit() {
+    if (!editingNoteId || !editingNoteText.trim()) return
+    setSavingNoteEdit(true)
+    const { error } = await supabase.from('contact_notes')
+      .update({ content: editingNoteText.trim() })
+      .eq('id', editingNoteId)
+    if (!error) {
+      setNotes(prev => prev.map(n => n.id === editingNoteId ? { ...n, content: editingNoteText.trim() } : n))
+      setEditingNoteId(null)
+      setEditingNoteText('')
+    } else {
+      showToast('Não foi possível salvar a alteração.', false)
+    }
+    setSavingNoteEdit(false)
   }
 
   async function handleSaveTransfer() {
@@ -1022,12 +1056,51 @@ export default function ContactProfile({ contact, institutionId, onClose, onUpda
                   {notes.length === 0 ? (
                     <p style={{ textAlign: 'center', color: '#94A3B8', fontSize: 13, padding: '24px 0' }}>Nenhuma anotação ainda.</p>
                   ) : (
-                    notes.map(n => (
-                      <div key={n.id} style={{ padding: '12px 14px', background: '#FAFAFA', borderRadius: 10, border: '1px solid #F1F5F9' }}>
-                        <p style={{ margin: '0 0 6px', fontSize: 13, color: '#334155', lineHeight: 1.5 }}>{n.content}</p>
-                        <p style={{ margin: 0, fontSize: 11, color: '#94A3B8' }}>{n.author_name} · {new Date(n.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-                      </div>
-                    ))
+                    notes.map(n => {
+                      const isOwn = !!user?.id && n.author_id === user.id
+                      const isEditing = editingNoteId === n.id
+                      return (
+                        <div key={n.id} style={{ padding: '12px 14px', background: '#FAFAFA', borderRadius: 10, border: '1px solid #F1F5F9' }}>
+                          {isEditing ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <textarea value={editingNoteText} onChange={e => setEditingNoteText(e.target.value)} rows={3}
+                                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1.5px solid #E2E8F0', fontSize: 13, resize: 'vertical', outline: 'none', fontFamily: 'inherit', color: '#1A2B4A', boxSizing: 'border-box' }} />
+                              <div style={{ display: 'flex', gap: 8 }}>
+                                <button onClick={handleSaveNoteEdit} disabled={savingNoteEdit || !editingNoteText.trim()}
+                                  style={{ fontSize: 12, fontWeight: 600, color: '#fff', background: '#00A896', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', opacity: savingNoteEdit || !editingNoteText.trim() ? 0.5 : 1 }}>
+                                  {savingNoteEdit ? 'Salvando...' : 'Salvar'}
+                                </button>
+                                <button onClick={() => { setEditingNoteId(null); setEditingNoteText('') }}
+                                  style={{ fontSize: 12, fontWeight: 600, color: '#64748B', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '6px 14px', cursor: 'pointer' }}>
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                                <p style={{ margin: 0, fontSize: 13, color: '#334155', lineHeight: 1.5 }}>{n.content}</p>
+                                {/* Editar/apagar só aparece pra quem escreveu —
+                                    RLS (contact_notes_update_own/delete_own)
+                                    também barra, isso aqui só evita mostrar o
+                                    botão pra quem não pode usar. */}
+                                {isOwn && (
+                                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                                    <button onClick={() => startEditNote(n)} style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}>
+                                      <Pencil size={12} />
+                                    </button>
+                                    <button onClick={() => handleDeleteNote(n.id)} style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}>
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                              <p style={{ margin: 0, fontSize: 11, color: '#94A3B8' }}>{n.author_name} · {new Date(n.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                            </>
+                          )}
+                        </div>
+                      )
+                    })
                   )}
                 </>
               )}

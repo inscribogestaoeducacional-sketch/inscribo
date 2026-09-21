@@ -44,6 +44,7 @@ import UserProfile       from './components/management/UserProfile'
 import Sidebar from './components/layout/Sidebar'
 import TopBar  from './components/layout/TopBar'
 import GestorUpdatePopup from './components/updates/GestorUpdatePopup'
+import InternalChatWidget from './components/chat/InternalChatWidget'
 
 // ── Super Admin ───────────────────────────────────────────────────────────
 import AdminHome        from './components/superadmin/AdminHome'
@@ -321,6 +322,7 @@ function AppContent() {
       <div style={{ flex: 1, minWidth: 0, height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <TopBar />
         {isGestor && user.institution_id && <GestorUpdatePopup institutionId={user.institution_id} />}
+        <InternalChatWidget />
         <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--bg-page)' }}>
           <Routes>
             <Route path="/" element={<Navigate to={schoolDefault} replace />} />

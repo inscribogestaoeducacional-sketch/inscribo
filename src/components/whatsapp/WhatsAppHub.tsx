@@ -2,10 +2,10 @@
 import EmojiPicker from '@emoji-mart/react'
 import emojiData from '@emoji-mart/data'
 import {
-  MessageCircle, MessageSquare, Search, Plus, Info, Paperclip, Mic, Smile, Send,
+  MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight, ChevronLeft,
   CheckCheck, Check, Zap, Settings, User, Users, Download, Calendar,
-  X, MoreVertical, CornerUpLeft, SmilePlus, Edit, Trash2, UserCog
+  X, MoreVertical, CornerUpLeft, SmilePlus, Edit, Trash2
 } from 'lucide-react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -13,8 +13,6 @@ import { DatabaseService, WhatsappMessage, WhatsappConversation, WhatsappConvers
 import { normalizeBrazilianInput } from '../../lib/phone'
 import NewLeadModal from '../leads/NewLeadModal'
 import ScheduleVisitModal from '../leads/ScheduleVisitModal'
-import InternalChat from '../chat/InternalChat'
-import { useInternalChatUnread } from '../../hooks/useInternalChatUnread'
 import { saveLead } from '../../lib/leadSave'
 import { statusConfig } from '../leads/leadFormShared'
 import {
@@ -1060,15 +1058,16 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [activeId, setActiveId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<'abertos' | 'concluido' | 'ambos'>('abertos')
   const [readFilter, setReadFilter] = useState<'all' | 'read' | 'unread'>('all')
-  const [assignFilter, setAssignFilter] = useState<'all' | 'mine' | 'none'>('all')
+  // Padrão em "Meus chats" pra quem tem permissão de ver todas — mesmo
+  // padrão já usado no Kanban de Leads (ownerFilter). É o único controle de
+  // "meus vs todos" (antes havia um botão showAllConvs redundante, removido
+  // — ver filteredWaitingConvs/filteredStaleConvs/filteredOtherConvs abaixo,
+  // que agora usam só este filtro). Só entra em jogo pra quem canSeeAll=true:
+  // quem já é restrito por RLS nunca recebe conversa de outro atendente do
+  // backend, então este filtro não muda nada pra esse caso (dropdown de
+  // Atribuição só aparece condicionado a canSeeAll mais abaixo).
+  const [assignFilter, setAssignFilter] = useState<'all' | 'mine' | 'none'>('mine')
   const [canSeeAllConversations, setCanSeeAllConversations] = useState(false)
-  // Visão inicial pré-selecionada em "Minhas conversas" pra quem tem
-  // permissão de ver todas — mesmo padrão já usado no Kanban de Leads
-  // (ownerFilter). Só entra em jogo pra quem canSeeAll=true: quem já é
-  // restrito por RLS nunca recebe conversa de outro atendente do backend,
-  // então este toggle não existe/não muda nada pra esse caso (ver render
-  // condicional em canSeeAll mais abaixo).
-  const [showAllConvs, setShowAllConvs] = useState(false)
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('details')
   const [convHistory, setConvHistory] = useState<WhatsappConversationEvent[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -1080,8 +1079,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [showAttach, setShowAttach] = useState(false)
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [quickRepliesSearch, setQuickRepliesSearch] = useState('')
-  const [showInternalChat, setShowInternalChat] = useState(false)
-  const internalChatUnread = useInternalChatUnread(!isAionInbox ? (user?.institution_id || null) : null, user?.id || null)
   const [showContactInfo, setShowContactInfo] = useState(true)
   const [collapseHistory, setCollapseHistory] = useState(true)
   const [collapseAtendimento, setCollapseAtendimento] = useState(false)
@@ -1164,10 +1161,13 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // Notas Internas — lista de contact_notes do contato vinculado à conversa
   // (mesma tabela/contact_ref_id de ContactCard.tsx e ContactProfile.tsx,
   // ver efeito de carregamento perto de leadData acima).
-  const [contactNotes, setContactNotes] = useState<{ id: string; content: string; author_name: string; created_at: string }[]>([])
+  const [contactNotes, setContactNotes] = useState<{ id: string; content: string; author_name: string; author_id: string | null; created_at: string }[]>([])
   const [loadingContactNotes, setLoadingContactNotes] = useState(false)
   const [newContactNote, setNewContactNote] = useState('')
   const [savingContactNote, setSavingContactNote] = useState(false)
+  const [editingContactNoteId, setEditingContactNoteId] = useState<string | null>(null)
+  const [editingContactNoteText, setEditingContactNoteText] = useState('')
+  const [savingContactNoteEdit, setSavingContactNoteEdit] = useState(false)
   const [leadCrmEvents, setLeadCrmEvents] = useState<{ label: string; time: string; color: string }[]>([])
   const [leadCrmLoading, setLeadCrmLoading] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
@@ -2598,7 +2598,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
     setLoadingContactNotes(true)
     supabase
       .from('contact_notes')
-      .select('id, content, author_name, created_at')
+      .select('id, content, author_name, author_id, created_at')
       .eq('institution_id', effectiveInstitutionId)
       .eq('contact_ref_id', contactRefId)
       .order('created_at', { ascending: true })
@@ -2607,7 +2607,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
 
   const handleAddContactNote = async () => {
     const content = newContactNote.trim()
-    if (!content || !contactRefId || !effectiveInstitutionId || savingContactNote) return
+    if (!content || !contactRefId || !effectiveInstitutionId || savingContactNote || !user?.id) return
     setSavingContactNote(true)
     try {
       const { data, error } = await supabase.from('contact_notes').insert({
@@ -2615,7 +2615,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         contact_ref_id: contactRefId,
         content,
         author_name: user?.full_name || user?.email || 'Usuário',
-      }).select('id, content, author_name, created_at').single()
+        author_id: user.id,
+      }).select('id, content, author_name, author_id, created_at').single()
       if (error) throw error
       setContactNotes(prev => [...prev, data])
       setNewContactNote('')
@@ -2623,6 +2624,42 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       setSendError(err.message || 'Não foi possível salvar a nota.')
     } finally {
       setSavingContactNote(false)
+    }
+  }
+
+  // RLS (contact_notes_delete_own) já barra apagar nota de outra pessoa —
+  // a confirmação aqui é só pra não perder uma nota sua sem querer.
+  const handleDeleteContactNote = async (id: string) => {
+    if (!window.confirm('Excluir esta nota? Essa ação não pode ser desfeita.')) return
+    try {
+      const { error } = await supabase.from('contact_notes').delete().eq('id', id)
+      if (error) throw error
+      setContactNotes(prev => prev.filter(n => n.id !== id))
+    } catch (err: any) {
+      setSendError(err.message || 'Não foi possível excluir a nota.')
+    }
+  }
+
+  const startEditContactNote = (note: { id: string; content: string }) => {
+    setEditingContactNoteId(note.id)
+    setEditingContactNoteText(note.content)
+  }
+
+  const handleSaveContactNoteEdit = async () => {
+    if (!editingContactNoteId || !editingContactNoteText.trim()) return
+    setSavingContactNoteEdit(true)
+    try {
+      const { error } = await supabase.from('contact_notes')
+        .update({ content: editingContactNoteText.trim() })
+        .eq('id', editingContactNoteId)
+      if (error) throw error
+      setContactNotes(prev => prev.map(n => n.id === editingContactNoteId ? { ...n, content: editingContactNoteText.trim() } : n))
+      setEditingContactNoteId(null)
+      setEditingContactNoteText('')
+    } catch (err: any) {
+      setSendError(err.message || 'Não foi possível salvar a alteração.')
+    } finally {
+      setSavingContactNoteEdit(false)
     }
   }
 
@@ -2654,7 +2691,11 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // atendentes da instituição (RLS já garante isso; aqui é só organização visual).
   const waitingQueueConvs = conversations.filter(c => !c.isGroup && !c.assigned_user_id && c.status === 'waiting')
 
-  const filteredConvs = conversations.filter(c => {
+  // Base: busca + status + lida/não-lida, SEM o filtro de dono (assignFilter)
+  // — "Aguardando" precisa continuar visível a todo mundo independente da
+  // Atribuição selecionada (RLS já libera isso à parte do canSeeAll), então
+  // é derivada desta lista, não de filteredConvs.
+  const filteredConvsBase = conversations.filter(c => {
     if (c.isGroup) return false
     if (!search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search)) {
       // status filter
@@ -2668,30 +2709,31 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
           if (c.assigned_user_id !== user?.id) return false
         }
       }
-      // assign filter
-      if (assignFilter === 'mine' && c.assigned_user_id !== user?.id) return false
-      if (assignFilter === 'none' && c.assigned_user_id != null) return false
       return true
     }
     return false
   })
 
-  // Agrupamento visual da lista (respeita os filtros de busca/status já aplicados
-  // em filteredConvs). RLS já garante que um atendente comum nunca recebe do
-  // backend conversas de outro atendente — "outras conversas" só é populado
-  // de fato para quem tem user_can_see_all_conversations() = true (admin etc).
-  // "Aguardando" é visível pra todo mundo (RLS libera isso à parte do canSeeAll).
-  const filteredWaitingConvs = filteredConvs.filter(c => !c.assigned_user_id && c.status === 'waiting')
+  // + filtro de dono (assignFilter) — único controle de "meus vs todos".
+  const filteredConvs = filteredConvsBase.filter(c => {
+    if (assignFilter === 'mine' && c.assigned_user_id !== user?.id) return false
+    if (assignFilter === 'none' && c.assigned_user_id != null) return false
+    return true
+  })
+
+  // Agrupamento visual da lista. RLS já garante que um atendente comum nunca
+  // recebe do backend conversas de outro atendente — "outras conversas" só é
+  // populado de fato para quem tem user_can_see_all_conversations() = true
+  // (admin etc). "Aguardando" é visível pra todo mundo (RLS libera isso à
+  // parte do canSeeAll) — por isso vem de filteredConvsBase, não filteredConvs.
+  const filteredWaitingConvs = filteredConvsBase.filter(c => !c.assigned_user_id && c.status === 'waiting')
   const filteredMyConvs      = filteredConvs.filter(c => c.assigned_user_id === user?.id)
-  // "Conversas paradas" não filtrava por dono — pra quem pode ver tudo, isso
-  // já misturava paradas de outros atendentes na visão padrão. Com
-  // showAllConvs=false (padrão pra quem canSeeAll), restringe a paradas
-  // próprias, igual "Minhas conversas"; liga com o toggle "Todas".
-  const filteredStaleConvsAll = filteredConvs.filter(c => isConvStale(c))
-  const filteredStaleConvs    = (canSeeAll && !showAllConvs)
-    ? filteredStaleConvsAll.filter(c => c.assigned_user_id === user?.id)
-    : filteredStaleConvsAll
-  const filteredOtherConvs   = filteredConvs.filter(c =>
+  // "Conversas paradas" respeita o filtro de dono (assignFilter) — antes um
+  // botão separado (showAllConvs) restringia isso a "só minhas" por padrão
+  // mesmo com Atribuição="Todos"; consolidado num único controle, isso já
+  // vem de graça de filteredConvs (que já aplica assignFilter).
+  const filteredStaleConvs  = filteredConvs.filter(c => isConvStale(c))
+  const filteredOtherConvs  = filteredConvs.filter(c =>
     !(!c.assigned_user_id && c.status === 'waiting') &&
     c.assigned_user_id !== user?.id &&
     !isConvStale(c)
@@ -4388,33 +4430,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         </div>
       )}
 
-      {/* Drawer de chat interno — mesmo padrão de overlay+painel deslizante do
-          drawer de respostas rápidas (ver abaixo), só mais largo pra caber as
-          duas colunas do InternalChat.tsx (lista de colegas + conversa). */}
-      {!isAionInbox && user?.institution_id && (
-        <>
-          <div
-            onClick={() => setShowInternalChat(false)}
-            style={{
-              position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(15,23,42,0.4)',
-              opacity: showInternalChat ? 1 : 0, pointerEvents: showInternalChat ? 'auto' : 'none',
-              transition: 'opacity 0.25s ease',
-            }}
-          />
-          <div
-            style={{
-              position: 'fixed', top: 0, right: 0, height: '100%', width: 760, maxWidth: '100%',
-              background: '#fff', zIndex: 61, boxShadow: '-8px 0 32px rgba(0,0,0,0.18)',
-              transform: showInternalChat ? 'translateX(0)' : 'translateX(100%)',
-              transition: 'transform 0.25s ease',
-              pointerEvents: showInternalChat ? 'auto' : 'none',
-            }}
-          >
-            {showInternalChat && <InternalChat onClose={() => setShowInternalChat(false)} />}
-          </div>
-        </>
-      )}
-
       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#F0FDFB', height: '100%' }}>
 
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -4450,33 +4465,6 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              {!isAionInbox && user?.institution_id && (
-                <button
-                  style={{ position: 'relative', width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: showInternalChat ? '#FCE7F3' : 'none', border: 'none', cursor: 'pointer', color: '#DB2777', transition: 'background 0.15s' }}
-                  title="Chat interno com a equipe"
-                  onClick={() => { setShowInternalChat(v => !v); closeQuickReplies() }}
-                  onMouseEnter={e => { if (!showInternalChat) e.currentTarget.style.background = '#FDF2F8' }}
-                  onMouseLeave={e => { if (!showInternalChat) e.currentTarget.style.background = 'none' }}
-                >
-                  <MessageSquare style={{ width: 17, height: 17 }} />
-                  {internalChatUnread > 0 && (
-                    <span style={{ position: 'absolute', top: -3, right: -3, background: '#F43F5E', color: '#fff', fontSize: 9, fontWeight: 700, minWidth: 15, height: 15, padding: '0 3px', borderRadius: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #fff' }}>
-                      {internalChatUnread > 9 ? '9+' : internalChatUnread}
-                    </span>
-                  )}
-                </button>
-              )}
-              {canSeeAll && (
-                <button
-                  style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: !showAllConvs ? '#00A896' : 'none', border: 'none', cursor: 'pointer', color: !showAllConvs ? '#fff' : '#64748B', transition: 'background 0.15s' }}
-                  title={showAllConvs ? 'Mostrando todas as conversas — clique pra ver só as suas' : 'Mostrando só as suas conversas — clique pra ver todas'}
-                  onClick={() => setShowAllConvs(v => !v)}
-                  onMouseEnter={e => { if (showAllConvs) e.currentTarget.style.background = '#F0FDFB' }}
-                  onMouseLeave={e => { if (showAllConvs) e.currentTarget.style.background = 'none' }}
-                >
-                  <UserCog style={{ width: 16, height: 16 }} />
-                </button>
-              )}
               <button
                 style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00A896', border: 'none', cursor: 'pointer', color: '#fff', transition: 'background 0.15s' }}
                 title="Nova conversa"
@@ -4593,7 +4581,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                     {filteredStaleConvs.map(conv => renderConvItem(conv))}
                   </>
                 )}
-                {canSeeAll && showAllConvs && filteredOtherConvs.length > 0 && (
+                {canSeeAll && assignFilter === 'all' && filteredOtherConvs.length > 0 && (
                   <>
                     <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Outras conversas
@@ -5852,14 +5840,53 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                         <p style={{ margin: 0, fontSize: 12, color: '#94A3B8', fontStyle: 'italic' }}>Carregando...</p>
                       ) : contactNotes.length === 0 ? (
                         <p style={{ margin: 0, fontSize: 12, color: '#94A3B8', fontStyle: 'italic' }}>Nenhuma nota registrada</p>
-                      ) : contactNotes.map(n => (
-                        <div key={n.id} style={{ padding: '8px 10px', background: '#f0fdfb', borderRadius: 8, border: '1px solid #d1fae5' }}>
-                          <p style={{ margin: 0, fontSize: 12, color: '#1A2B4A', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{n.content}</p>
-                          <p style={{ margin: '4px 0 0', fontSize: 10, color: '#94A3B8' }}>
-                            {n.author_name} · {new Date(n.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
-                      ))}
+                      ) : contactNotes.map(n => {
+                        const isOwn = !!user?.id && n.author_id === user.id
+                        const isEditing = editingContactNoteId === n.id
+                        return (
+                          <div key={n.id} style={{ padding: '8px 10px', background: '#f0fdfb', borderRadius: 8, border: '1px solid #d1fae5' }}>
+                            {isEditing ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                <textarea value={editingContactNoteText} onChange={e => setEditingContactNoteText(e.target.value)} rows={3}
+                                  style={{ width: '100%', padding: '6px 8px', fontSize: 12, background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, color: '#1A2B4A', outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                  <button onClick={handleSaveContactNoteEdit} disabled={savingContactNoteEdit || !editingContactNoteText.trim()}
+                                    style={{ fontSize: 11, fontWeight: 600, color: '#fff', background: '#0d9488', border: 'none', borderRadius: 7, padding: '4px 10px', cursor: 'pointer', opacity: savingContactNoteEdit || !editingContactNoteText.trim() ? 0.5 : 1 }}>
+                                    {savingContactNoteEdit ? 'Salvando...' : 'Salvar'}
+                                  </button>
+                                  <button onClick={() => { setEditingContactNoteId(null); setEditingContactNoteText('') }}
+                                    style={{ fontSize: 11, fontWeight: 600, color: '#64748B', background: '#fff', border: '1px solid #d1fae5', borderRadius: 7, padding: '4px 10px', cursor: 'pointer' }}>
+                                    Cancelar
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6 }}>
+                                  <p style={{ margin: 0, fontSize: 12, color: '#1A2B4A', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{n.content}</p>
+                                  {/* Editar/apagar só aparece pra quem escreveu —
+                                      RLS (contact_notes_update_own/delete_own)
+                                      também barra, isso aqui só evita mostrar o
+                                      botão pra quem não pode usar. */}
+                                  {isOwn && (
+                                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                                      <button onClick={() => startEditContactNote(n)} style={{ padding: 2, background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}>
+                                        <Edit style={{ width: 11, height: 11 }} />
+                                      </button>
+                                      <button onClick={() => handleDeleteContactNote(n.id)} style={{ padding: 2, background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}>
+                                        <Trash2 style={{ width: 11, height: 11 }} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                                <p style={{ margin: '4px 0 0', fontSize: 10, color: '#94A3B8' }}>
+                                  {n.author_name} · {new Date(n.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </>
+                            )}
+                          </div>
+                        )
+                      })}
                       {contactRefId && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                           <textarea value={newContactNote}

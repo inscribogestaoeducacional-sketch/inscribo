@@ -1,14 +1,22 @@
 // src/components/chat/InternalChat.tsx
 //
 // Chat Interno — conversa 1 a 1 entre membros da MESMA escola (atendentes +
-// gestor). Sem grupos, sem conversa entre escolas diferentes. Layout de duas
-// colunas e realtime seguem o mesmo padrão do WhatsAppHub.tsx (subscription
-// via supabase.channel().on('postgres_changes', ...)), adaptado pra
+// gestor). Sem grupos, sem conversa entre escolas diferentes. Realtime segue
+// o mesmo padrão do WhatsAppHub.tsx (subscription via
+// supabase.channel().on('postgres_changes', ...)), adaptado pra
 // internal_messages.
+//
+// Dois modos de layout:
+// - compact (usado pelo InternalChatWidget.tsx, balão flutuante global):
+//   painel único mais estreito — mostra a lista de colegas OU a conversa
+//   aberta, nunca as duas ao mesmo tempo (com seta de voltar).
+// - padrão (duas colunas lado a lado): mantido pra eventual reaproveitamento
+//   em tela cheia; não tem consumidor no app hoje (o drawer dentro do
+//   WhatsAppHub.tsx foi substituído pelo widget global).
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
-import { Send, Search, MessageSquare, X } from 'lucide-react'
+import { Send, Search, MessageSquare, X, ArrowLeft } from 'lucide-react'
 
 interface Colleague {
   id: string
@@ -48,11 +56,12 @@ function formatTime(iso: string): string {
     : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 }
 
-// onClose: quando informado, o componente é renderizado dentro do drawer do
-// WhatsAppHub.tsx (que fornece o overlay + painel deslizante) em vez de tela
-// cheia — mostra o botão de fechar no lugar do título sozinho. O conteúdo
-// (colunas de colegas/conversa) não muda, só esse detalhe do cabeçalho.
-export default function InternalChat({ onClose }: { onClose?: () => void } = {}) {
+interface InternalChatProps {
+  onClose?: () => void
+  compact?: boolean
+}
+
+export default function InternalChat({ onClose, compact = false }: InternalChatProps = {}) {
   const { user } = useAuth()
   const institutionId = user?.institution_id || null
   const myId = user?.id || null
@@ -233,74 +242,157 @@ export default function InternalChat({ onClose }: { onClose?: () => void } = {})
 
   const activeColleague = colleagues.find(c => c.id === activeId) || null
 
-  return (
-    <div className="flex h-full bg-white">
+  // ── Lista de colegas (conteúdo — cabeçalho + busca + itens) ────────────────
+  const listContent = (
+    <>
+      <div className="p-3 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-sm font-bold text-[#1A2B4A]">Chat Interno</h1>
+          {onClose && (
+            <button onClick={onClose} className="p-1 text-gray-400 hover:text-[#1A2B4A] rounded-lg">
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#00A896] outline-none"
+            placeholder="Buscar colega..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
 
-      {/* Coluna esquerda — lista de colegas */}
-      <div className="w-[320px] flex-shrink-0 border-r border-gray-100 flex flex-col">
-        <div className="p-4 border-b border-gray-100">
-          <div className="flex items-center justify-between mb-3">
-            <h1 className="text-lg font-bold text-[#1A2B4A]">Chat Interno</h1>
-            {onClose && (
-              <button onClick={onClose} className="p-1 text-gray-400 hover:text-[#1A2B4A] rounded-lg">
-                <X className="w-4 h-4" />
-              </button>
-            )}
+      <div className="flex-1 overflow-y-auto">
+        {loading ? (
+          <div className="flex justify-center py-10">
+            <div className="w-6 h-6 border-2 border-[#00A896] border-t-transparent rounded-full animate-spin" />
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#00A896] outline-none"
-              placeholder="Buscar colega..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
+        ) : filteredColleagues.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-10 px-4">
+            {search ? 'Nenhum colega encontrado.' : 'Nenhum outro membro da equipe cadastrado ainda.'}
+          </p>
+        ) : filteredColleagues.map(c => {
+          const preview = previews[c.id]
+          const active = activeId === c.id
+          return (
+            <button key={c.id} onClick={() => openConversation(c.id)}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b border-gray-50 transition-colors ${active ? 'bg-[#E6F7F5]' : 'hover:bg-gray-50'}`}>
+              <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-sm font-bold text-white"
+                style={{ background: 'linear-gradient(135deg, #00A896, #0DD3BF)' }}>
+                {initialsOf(c.full_name)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`text-sm truncate ${preview?.unreadCount ? 'font-bold text-[#1A2B4A]' : 'font-semibold text-[#1A2B4A]'}`}>
+                    {c.full_name}
+                  </span>
+                  {preview?.lastMessageAt && (
+                    <span className="text-[11px] text-gray-400 flex-shrink-0">{formatTime(preview.lastMessageAt)}</span>
+                  )}
+                </div>
+                <div className="flex items-center justify-between gap-2 mt-0.5">
+                  <span className={`text-xs truncate ${preview?.unreadCount ? 'text-[#1A2B4A] font-medium' : 'text-gray-400'}`}>
+                    {preview?.lastMessage || ROLE_LABEL[c.role] || 'Sem mensagens ainda'}
+                  </span>
+                  {!!preview?.unreadCount && (
+                    <span className="flex-shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-[#F43F5E] text-white text-[10px] font-bold flex items-center justify-center">
+                      {preview.unreadCount > 9 ? '9+' : preview.unreadCount}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    </>
+  )
+
+  // ── Conversa aberta (conteúdo — cabeçalho + mensagens + input) ─────────────
+  // withBack: mostra seta de voltar pra lista (só faz sentido no modo compacto,
+  // onde lista e conversa nunca aparecem juntas).
+  function conversationContent(withBack: boolean) {
+    if (!activeColleague) return null
+    return (
+      <>
+        <div className="px-4 py-3 border-b border-gray-100 bg-white flex items-center gap-2.5 flex-shrink-0">
+          {withBack && (
+            <button onClick={() => setActiveId(null)} className="p-1 -ml-1 text-gray-400 hover:text-[#1A2B4A] rounded-lg flex-shrink-0">
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          )}
+          <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg, #00A896, #0DD3BF)' }}>
+            {initialsOf(activeColleague.full_name)}
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-[#1A2B4A] truncate">{activeColleague.full_name}</p>
+            <p className="text-xs text-gray-400">{ROLE_LABEL[activeColleague.role] || activeColleague.role}</p>
+          </div>
+          {onClose && (
+            <button onClick={onClose} className="p-1 text-gray-400 hover:text-[#1A2B4A] rounded-lg flex-shrink-0">
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {loading ? (
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+          {loadingThread ? (
             <div className="flex justify-center py-10">
               <div className="w-6 h-6 border-2 border-[#00A896] border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : filteredColleagues.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-10 px-4">
-              {search ? 'Nenhum colega encontrado.' : 'Nenhum outro membro da equipe cadastrado ainda.'}
-            </p>
-          ) : filteredColleagues.map(c => {
-            const preview = previews[c.id]
-            const active = activeId === c.id
+          ) : messages.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-10">Nenhuma mensagem ainda — diga oi 👋</p>
+          ) : messages.map(m => {
+            const mine = m.sender_id === myId
             return (
-              <button key={c.id} onClick={() => openConversation(c.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b border-gray-50 transition-colors ${active ? 'bg-[#E6F7F5]' : 'hover:bg-gray-50'}`}>
-                <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-sm font-bold text-white"
-                  style={{ background: 'linear-gradient(135deg, #00A896, #0DD3BF)' }}>
-                  {initialsOf(c.full_name)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={`text-sm truncate ${preview?.unreadCount ? 'font-bold text-[#1A2B4A]' : 'font-semibold text-[#1A2B4A]'}`}>
-                      {c.full_name}
-                    </span>
-                    {preview?.lastMessageAt && (
-                      <span className="text-[11px] text-gray-400 flex-shrink-0">{formatTime(preview.lastMessageAt)}</span>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between gap-2 mt-0.5">
-                    <span className={`text-xs truncate ${preview?.unreadCount ? 'text-[#1A2B4A] font-medium' : 'text-gray-400'}`}>
-                      {preview?.lastMessage || ROLE_LABEL[c.role] || 'Sem mensagens ainda'}
-                    </span>
-                    {!!preview?.unreadCount && (
-                      <span className="flex-shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-[#F43F5E] text-white text-[10px] font-bold flex items-center justify-center">
-                        {preview.unreadCount > 9 ? '9+' : preview.unreadCount}
-                      </span>
-                    )}
+              <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[75%] px-3.5 py-2 rounded-2xl text-sm whitespace-pre-wrap break-words ${
+                  mine ? 'bg-[#00A896] text-white rounded-br-sm' : 'bg-white border border-gray-200 text-[#1A2B4A] rounded-bl-sm'
+                }`}>
+                  {m.content}
+                  <div className={`text-[10px] mt-1 text-right ${mine ? 'text-white/70' : 'text-gray-400'}`}>
+                    {formatTime(m.created_at)}
                   </div>
                 </div>
-              </button>
+              </div>
             )
           })}
         </div>
+
+        <div className="p-2.5 border-t border-gray-100 bg-white flex items-center gap-2 flex-shrink-0">
+          <input
+            className="flex-1 px-3.5 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#00A896] outline-none min-w-0"
+            placeholder="Escreva uma mensagem..."
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+          />
+          <button onClick={handleSend} disabled={!draft.trim() || sending}
+            className="w-9 h-9 rounded-xl bg-[#00A896] text-white flex items-center justify-center disabled:opacity-40 flex-shrink-0">
+            <Send size={15} />
+          </button>
+        </div>
+      </>
+    )
+  }
+
+  if (compact) {
+    return (
+      <div className="flex flex-col h-full bg-white">
+        {!activeColleague ? listContent : conversationContent(true)}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-full bg-white">
+      {/* Coluna esquerda — lista de colegas */}
+      <div className="w-[320px] flex-shrink-0 border-r border-gray-100 flex flex-col">
+        {listContent}
       </div>
 
       {/* Coluna direita — conversa */}
@@ -310,58 +402,7 @@ export default function InternalChat({ onClose }: { onClose?: () => void } = {})
             <MessageSquare size={48} strokeWidth={1.5} />
             <p className="mt-3 text-sm text-gray-400">Selecione um colega pra começar a conversar</p>
           </div>
-        ) : (
-          <>
-            <div className="px-5 py-3.5 border-b border-gray-100 bg-white flex items-center gap-3 flex-shrink-0">
-              <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                style={{ background: 'linear-gradient(135deg, #00A896, #0DD3BF)' }}>
-                {initialsOf(activeColleague.full_name)}
-              </div>
-              <div>
-                <p className="text-sm font-bold text-[#1A2B4A]">{activeColleague.full_name}</p>
-                <p className="text-xs text-gray-400">{ROLE_LABEL[activeColleague.role] || activeColleague.role}</p>
-              </div>
-            </div>
-
-            <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-              {loadingThread ? (
-                <div className="flex justify-center py-10">
-                  <div className="w-6 h-6 border-2 border-[#00A896] border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : messages.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-10">Nenhuma mensagem ainda — diga oi 👋</p>
-              ) : messages.map(m => {
-                const mine = m.sender_id === myId
-                return (
-                  <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[70%] px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap break-words ${
-                      mine ? 'bg-[#00A896] text-white rounded-br-sm' : 'bg-white border border-gray-200 text-[#1A2B4A] rounded-bl-sm'
-                    }`}>
-                      {m.content}
-                      <div className={`text-[10px] mt-1 text-right ${mine ? 'text-white/70' : 'text-gray-400'}`}>
-                        {formatTime(m.created_at)}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            <div className="p-3 border-t border-gray-100 bg-white flex items-center gap-2 flex-shrink-0">
-              <input
-                className="flex-1 px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#00A896] outline-none"
-                placeholder="Escreva uma mensagem..."
-                value={draft}
-                onChange={e => setDraft(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-              />
-              <button onClick={handleSend} disabled={!draft.trim() || sending}
-                className="w-10 h-10 rounded-xl bg-[#00A896] text-white flex items-center justify-center disabled:opacity-40 flex-shrink-0">
-                <Send size={16} />
-              </button>
-            </div>
-          </>
-        )}
+        ) : conversationContent(false)}
       </div>
     </div>
   )

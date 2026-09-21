@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useGradeLevels } from '../../hooks/useGradeLevels'
 import {
   X, ArrowLeft, ArrowRightLeft, Clock, Check, Loader2,
-  MessageCircle, Plus, Eye, Trash2,
+  MessageCircle, Plus, Eye, Trash2, Pencil,
 } from 'lucide-react'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -136,6 +136,9 @@ export default function ContactCard({
   const [noteText, setNoteText]         = useState('')
   const [newNote, setNewNote]           = useState('')
   const [savingNote, setSavingNote]     = useState(false)
+  const [editingNoteId, setEditingNoteId]     = useState<string | null>(null)
+  const [editingNoteText, setEditingNoteText] = useState('')
+  const [savingNoteEdit, setSavingNoteEdit]   = useState(false)
   const [history, setHistory]           = useState<{ icon: string; title: string; description: string | null; date: string; color?: string }[]>([])
   const [surveys, setSurveys]           = useState<{ id: string; title: string; created_at: string; survey_token: string }[]>([])
   const [respondedSurveyIds, setRespondedSurveyIds] = useState<Set<string>>(new Set())
@@ -552,13 +555,14 @@ export default function ContactCard({
 
   async function handleAddNote() {
     const contactRefId = initialData.lead_id || initialData.remote_jid || ''
-    if (!contactRefId || !newNote.trim()) return
+    if (!contactRefId || !newNote.trim() || !user?.id) return
     setSavingNote(true)
     const { error } = await supabase.from('contact_notes').insert({
       institution_id: institutionId,
       contact_ref_id: contactRefId,
       content:        newNote.trim(),
       author_name:    user?.full_name || 'Usuário',
+      author_id:      user.id,
     })
     if (!error) {
       setNewNote('')
@@ -567,9 +571,34 @@ export default function ContactCard({
     if (mountedRef.current) setSavingNote(false)
   }
 
+  // RLS (contact_notes_delete_own) já barra apagar nota de outra pessoa —
+  // a confirmação aqui é só pra não perder uma nota sua sem querer.
   async function handleDeleteNote(id: string) {
-    await supabase.from('contact_notes').delete().eq('id', id)
+    if (!window.confirm('Excluir esta anotação? Essa ação não pode ser desfeita.')) return
+    const { error } = await supabase.from('contact_notes').delete().eq('id', id)
+    if (error) { showToast('Não foi possível excluir a anotação.'); return }
     if (mountedRef.current) setNotes(prev => prev.filter(n => n.id !== id))
+  }
+
+  function startEditNote(note: { id: string; content: string }) {
+    setEditingNoteId(note.id)
+    setEditingNoteText(note.content)
+  }
+
+  async function handleSaveNoteEdit() {
+    if (!editingNoteId || !editingNoteText.trim()) return
+    setSavingNoteEdit(true)
+    const { error } = await supabase.from('contact_notes')
+      .update({ content: editingNoteText.trim() })
+      .eq('id', editingNoteId)
+    if (!error) {
+      setNotes(prev => prev.map(n => n.id === editingNoteId ? { ...n, content: editingNoteText.trim() } : n))
+      setEditingNoteId(null)
+      setEditingNoteText('')
+    } else {
+      showToast('Não foi possível salvar a alteração.')
+    }
+    if (mountedRef.current) setSavingNoteEdit(false)
   }
 
   async function handleSaveTransfer() {
@@ -963,23 +992,54 @@ export default function ContactCard({
           </div>
           {notes.length === 0 ? (
             <p className="text-center text-sm text-[#94A3B8] py-8">Nenhuma anotação ainda.</p>
-          ) : notes.map(n => (
-            <div key={n.id} className="p-3 bg-[#F8FAFB] rounded-xl border border-[#E2E8F0]">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-[#E6F7F5] flex items-center justify-center text-[10px] font-bold text-[#00A896] flex-shrink-0">
-                    {initials(n.author_name || 'U')}
+          ) : notes.map(n => {
+            const isOwn = !!user?.id && n.author_id === user.id
+            const isEditing = editingNoteId === n.id
+            return (
+              <div key={n.id} className="p-3 bg-[#F8FAFB] rounded-xl border border-[#E2E8F0]">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-[#E6F7F5] flex items-center justify-center text-[10px] font-bold text-[#00A896] flex-shrink-0">
+                      {initials(n.author_name || 'U')}
+                    </div>
+                    <span className="text-xs font-semibold text-[#1A2B4A]">{n.author_name}</span>
+                    <span className="text-[11px] text-[#94A3B8]">{fmtDate(n.created_at)}</span>
                   </div>
-                  <span className="text-xs font-semibold text-[#1A2B4A]">{n.author_name}</span>
-                  <span className="text-[11px] text-[#94A3B8]">{fmtDate(n.created_at)}</span>
+                  {/* Editar/apagar só aparece pra quem escreveu a nota — RLS
+                      (contact_notes_update_own/delete_own) também barra, isso
+                      aqui é só pra nem mostrar o botão de quem não pode usar. */}
+                  {isOwn && !isEditing && (
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button onClick={() => startEditNote(n)} className="p-1 text-[#94A3B8] hover:text-[#00A896] transition-colors">
+                        <Pencil size={12} />
+                      </button>
+                      <button onClick={() => handleDeleteNote(n.id)} className="p-1 text-[#94A3B8] hover:text-[#dc2626] transition-colors">
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <button onClick={() => handleDeleteNote(n.id)} className="p-1 text-[#94A3B8] hover:text-[#dc2626] transition-colors">
-                  <Trash2 size={12} />
-                </button>
+                {isEditing ? (
+                  <div className="space-y-2">
+                    <textarea value={editingNoteText} onChange={e => setEditingNoteText(e.target.value)} rows={3}
+                      className="w-full px-3 py-2 text-sm bg-white border border-[#E2E8F0] rounded-lg text-[#1A2B4A] focus:ring-2 focus:ring-[#00A896] outline-none resize-none" />
+                    <div className="flex gap-2">
+                      <button onClick={handleSaveNoteEdit} disabled={savingNoteEdit || !editingNoteText.trim()}
+                        className="text-xs font-semibold text-white bg-[#00A896] px-3 py-1.5 rounded-lg hover:bg-[#008f81] disabled:opacity-50">
+                        {savingNoteEdit ? 'Salvando...' : 'Salvar'}
+                      </button>
+                      <button onClick={() => { setEditingNoteId(null); setEditingNoteText('') }}
+                        className="text-xs font-semibold text-[#64748B] border border-[#E2E8F0] px-3 py-1.5 rounded-lg hover:bg-white">
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-[#334155] leading-relaxed">{n.content}</p>
+                )}
               </div>
-              <p className="text-sm text-[#334155] leading-relaxed">{n.content}</p>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
