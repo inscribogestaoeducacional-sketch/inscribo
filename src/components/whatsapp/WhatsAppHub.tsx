@@ -1273,11 +1273,17 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   // Permissão de visibilidade ampla do usuário logado — controla o dropdown
   // de atribuição e o grupo "Outras conversas" (o RLS no banco já bloqueia
   // os dados; isso é só para não exibir um filtro/grupo que não teria efeito).
+  // can_see_all_conversations é por VÍNCULO (user_institutions), espelhado
+  // em users.can_see_all_conversations pelo trigger de sync — ou seja, o
+  // valor lido aqui já reflete a instituição ATIVA. user.id sozinho nas deps
+  // não muda ao trocar de instituição (mesma pessoa), então sem
+  // user?.institution_id aqui a flag ficava presa no valor da escola
+  // anterior até um remount.
   useEffect(() => {
     if (!user?.id) return
     supabase.from('users').select('can_see_all_conversations').eq('id', user.id).maybeSingle()
       .then(({ data }) => setCanSeeAllConversations(!!data?.can_see_all_conversations))
-  }, [user?.id])
+  }, [user?.id, user?.institution_id])
 
   const isPrivilegedRole = user?.role === 'admin' || user?.role === 'manager' || user?.user_type === 'admin_geral'
   const canSeeAll = isPrivilegedRole || canSeeAllConversations

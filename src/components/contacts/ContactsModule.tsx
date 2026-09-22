@@ -598,15 +598,22 @@ export default function ContactsModule() {
     }
   }
 
-  // ── Mount: initial load + real-time subscription ─────────
+  // ── Mount + institution switch: initial load + real-time subscription ────
+  // Deps antes eram [] (só mount) — trocar de instituição (TopBar seletor,
+  // Fase 2 de "múltiplas instituições") não desmontava este componente, só
+  // mudava institutionId, e a tela continuava presa nos contatos/KPIs/
+  // subscription da escola antiga até F5. Nome do canal agora também leva
+  // institutionId, pra nunca reaproveitar (nem por engano) a inscrição da
+  // instituição anterior.
   useEffect(() => {
+    if (!institutionId) return
     mountedRef.current = true
     load()
     refreshKpiCounts()
     loadFilterTags()
 
     const channel = supabase
-      .channel('wc_module_rt')
+      .channel(`wc_module_rt_${institutionId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'whatsapp_contacts', filter: `institution_id=eq.${institutionId}` },
@@ -636,7 +643,7 @@ export default function ContactsModule() {
       supabase.removeChannel(channel)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [institutionId])
 
   // ── Filter/sort change → immediate reload ─────────────────
   useEffect(() => {

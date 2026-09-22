@@ -2057,8 +2057,15 @@ export default function GestorReports({ institutionId, institutionName }: Props)
             {activeTab === 1 && <TabFunil metrics={metrics} loading={loading} institutionId={institutionId} cycle={cycle} />}
             {activeTab === 2 && <TabMarketing institutionId={institutionId} cycle={cycle} metrics={metrics} />}
             {activeTab === 3 && <TabRematriculas institutionId={institutionId} cycle={cycle} />}
-            {activeTab === 4 && <TabTransferencias institutionId={institutionId} />}
-            {activeTab === 5 && <TabDiagnosticoIA institutionId={institutionId} cycle={cycle} metrics={metrics} reenrollments={reenrollments} />}
+            {/* key={institutionId}: TabTransferencias/TabDiagnosticoIA (e o
+                FinalReportCard dentro dela) carregam dado no mount com
+                useEffect(..., []) — sem a key, trocar de instituição
+                (TopBar seletor) com a aba já aberta deixava o conteúdo preso
+                na escola anterior. A key força o React a desmontar/remontar
+                o componente inteiro quando institutionId muda, resetando
+                todo o estado interno sem precisar caçar cada useEffect. */}
+            {activeTab === 4 && <TabTransferencias key={institutionId} institutionId={institutionId} />}
+            {activeTab === 5 && <TabDiagnosticoIA key={institutionId} institutionId={institutionId} cycle={cycle} metrics={metrics} reenrollments={reenrollments} />}
           </>
         )}
       </div>

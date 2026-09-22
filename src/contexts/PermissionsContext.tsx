@@ -28,17 +28,24 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   const [loading, setLoading] = useState(true)
 
   const loadPermissions = useCallback(async () => {
-    if (!user?.id || isPrivilegedRole(user.role)) {
+    if (!user?.id || isPrivilegedRole(user.role) || !user.institution_id) {
       setPermissions({})
       setLoading(false)
       return
     }
     setLoading(true)
     try {
+      // Escopado pela instituição ATIVA (user.institution_id) — sem isso, um
+      // usuário com vínculo em 2+ escolas (Fase 2) carregava os módulos
+      // configurados pra QUALQUER uma das escolas dele, misturados/
+      // sobrescritos entre si (user_permissions só tinha UNIQUE(user_id,
+      // module), sem institution_id na chave — ver migration
+      // 20260922010000_user_permissions_institution_scope).
       const { data } = await supabase
         .from('user_permissions')
         .select('module, enabled')
         .eq('user_id', user.id)
+        .eq('institution_id', user.institution_id)
       const map: Record<string, boolean> = {}
       if (data) {
         for (const row of data) {
@@ -51,7 +58,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     } finally {
       setLoading(false)
     }
-  }, [user?.id, user?.role])
+  }, [user?.id, user?.role, user?.institution_id])
 
   useEffect(() => {
     loadPermissions()

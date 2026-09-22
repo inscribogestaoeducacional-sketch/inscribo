@@ -37,8 +37,8 @@ interface AppUser {
 }
 
 // ─── Modal Novo/Editar Usuário ────────────────────────────────────────────────
-function UserModal({ isOpen, onClose, onSave, editingUser }: {
-  isOpen: boolean; onClose: () => void; onSave: (data: any) => Promise<void>; editingUser?: AppUser | null
+function UserModal({ isOpen, onClose, onSave, editingUser, institutionId }: {
+  isOpen: boolean; onClose: () => void; onSave: (data: any) => Promise<void>; editingUser?: AppUser | null; institutionId?: string
 }) {
   const [formData, setFormData] = useState({ full_name: '', email: '', role: 'user' as any, password: '', confirmPassword: '', active: true, can_see_all_conversations: false, can_see_full_history: false })
   const [showPwd, setShowPwd] = useState(false)
@@ -54,7 +54,11 @@ function UserModal({ isOpen, onClose, onSave, editingUser }: {
       setFormData({ full_name: editingUser.full_name, email: editingUser.email, role: editingUser.role, password: '', confirmPassword: '', active: editingUser.active, can_see_all_conversations: editingUser.can_see_all_conversations ?? false, can_see_full_history: editingUser.can_see_full_history ?? false })
       if (isConsultor(editingUser.role)) {
         setLoadingPerms(true)
-        supabase.from('user_permissions').select('module, enabled').eq('user_id', editingUser.id)
+        // Escopado pela instituição ATIVA do admin que está editando — sem
+        // isso, um usuário com vínculo em 2+ escolas mostraria os módulos
+        // configurados pra outra escola (ou nenhum, se a linha pertencer a
+        // ela). Ver migration 20260922010000_user_permissions_institution_scope.
+        supabase.from('user_permissions').select('module, enabled').eq('user_id', editingUser.id).eq('institution_id', institutionId ?? '')
           .then(({ data }) => {
             const map: Record<string, boolean> = {}
             PERM_MODULES.forEach(m => { map[m.id] = true })
@@ -72,7 +76,7 @@ function UserModal({ isOpen, onClose, onSave, editingUser }: {
       setPermMap(map)
     }
     setError('')
-  }, [editingUser, isOpen])
+  }, [editingUser, isOpen, institutionId])
 
   useEffect(() => {
     if (!editingUser && isConsultor(formData.role)) {
@@ -473,7 +477,7 @@ export default function UserManagement() {
         }))
         const { error: permErr } = await supabase
           .from('user_permissions')
-          .upsert(rows, { onConflict: 'user_id,module' })
+          .upsert(rows, { onConflict: 'user_id,institution_id,module' })
         if (permErr) throw permErr
         if (editingUser.id === user?.id) await refreshPermissions()
       }
@@ -525,7 +529,7 @@ export default function UserManagement() {
           module: m.id,
           enabled: permissions[m.id] ?? true,
         }))
-        await supabase.from('user_permissions').upsert(rows, { onConflict: 'user_id,module' })
+        await supabase.from('user_permissions').upsert(rows, { onConflict: 'user_id,institution_id,module' })
       }
 
       if (wasCreated) {
@@ -756,7 +760,7 @@ export default function UserManagement() {
           <Plus size={24} />
         </button>
 
-        <UserModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingUser(null) }} onSave={handleSave} editingUser={editingUser} />
+        <UserModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingUser(null) }} onSave={handleSave} editingUser={editingUser} institutionId={user?.institution_id} />
         <PasswordModal isOpen={showPwdModal} onClose={() => { setShowPwdModal(false); setPwdUser(null) }} targetUser={pwdUser} />
         <BlockedRemovalModal
           info={blockedRemoval}
@@ -907,7 +911,7 @@ export default function UserManagement() {
 
       <RemovedUsersSection removedLinks={removedLinks} show={showRemoved} onToggle={() => setShowRemoved(v => !v)} onReactivate={handleReactivateLink} />
 
-      <UserModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingUser(null) }} onSave={handleSave} editingUser={editingUser} />
+      <UserModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingUser(null) }} onSave={handleSave} editingUser={editingUser} institutionId={user?.institution_id} />
       <PasswordModal isOpen={showPwdModal} onClose={() => { setShowPwdModal(false); setPwdUser(null) }} targetUser={pwdUser} />
       <BlockedRemovalModal
         info={blockedRemoval}
