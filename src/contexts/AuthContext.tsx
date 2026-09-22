@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Session } from '@supabase/supabase-js'
 
@@ -67,6 +67,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading,      setLoading]      = useState(false)
   const [initializing, setInitializing] = useState(true)
 
+  // Corrige race condition confirmada: init()/signIn()/switchInstitution()/
+  // refreshSession() todos disparam loadUserProfile, e nada garantia que a
+  // resposta mais LENTA não chegasse depois e sobrescrevesse um estado mais
+  // novo com dado obsoleto (ex: reabrir a tela de seleção de instituição
+  // depois que o usuário já tinha trocado com sucesso). "Última chamada
+  // vence": cada loadUserProfile/refreshSession gera um id incremental; se
+  // outra chamada mais nova já assumiu antes desta terminar, o resultado
+  // desta é descartado silenciosamente (nenhum setState).
+  const requestIdRef = useRef(0)
+
   // ── init ─────────────────────────────────────────────
   useEffect(() => {
     const init = async () => {
@@ -92,12 +102,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Se user_type = 'admin_geral' ou 'consultant' → é área admin.
   // Não depende mais de tabela super_admins nem de e-mail hardcoded.
   const loadUserProfile = async (userId: string) => {
+    const myRequestId = ++requestIdRef.current
+    const isStale = () => requestIdRef.current !== myRequestId
+
     try {
       const { data, error } = await supabase
         .from('users')
         .select('*, institutions!users_institution_id_fkey(name)')
         .eq('id', userId)
         .single()
+
+      if (isStale()) return // uma chamada mais nova já assumiu — descarta
 
       if (error) {
         if (error.code === 'PGRST116') {
@@ -193,13 +208,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           available_institutions:   availableInstitutions,
           needsInstitutionSelection: needsInstitutionSelection,
         }
+        // Recheca: os awaits acima (user_institutions, e no caminho legado
+        // de gestor de rede também institutions/switch_active_institution)
+        // deram tempo de sobra pra uma chamada mais nova assumir.
+        if (isStale()) return
         setUser(appUser)
       }
     } catch (e) {
       console.error('loadUserProfile error:', e)
     } finally {
-      setLoading(false)
-      setInitializing(false)
+      if (!isStale()) {
+        setLoading(false)
+        setInitializing(false)
+      }
     }
   }
 
@@ -264,8 +285,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ── refreshSession ────────────────────────────────────
   const refreshSession = async () => {
+    // Marca esta como a chamada mais nova antes de mais nada — se der erro
+    // (token inválido), o "usuário deslogado" que ela decide também precisa
+    // valer mais que qualquer loadUserProfile antigo ainda em voo.
+    const myRequestId = ++requestIdRef.current
     try {
       const { data: { session: refreshed }, error } = await supabase.auth.refreshSession()
+      if (requestIdRef.current !== myRequestId) return // superada nesse meio tempo
+
       if (error) { setUser(null); setSession(null); return }
       if (refreshed) {
         setSession(refreshed)

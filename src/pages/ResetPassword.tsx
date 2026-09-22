@@ -14,12 +14,65 @@ export default function ResetPassword() {
   const [sessionReady, setSessionReady] = useState(false)
 
   useEffect(() => {
-    // Supabase redireciona com tokens no hash da URL — deixamos o SDK processar
+    // supabase client roda com detectSessionInUrl: false (ver src/lib/supabase.ts —
+    // desligado pra evitar reload ao trocar de aba), então o SDK NUNCA processa
+    // sozinho o token do link de recuperação: precisamos ler e trocar a sessão
+    // manualmente aqui, senão PASSWORD_RECOVERY nunca dispara e a tela trava
+    // "esperando" pra sempre, mesmo com o link válido.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         setSessionReady(true)
       }
     })
+
+    const processRecoveryLink = async () => {
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      const queryParams = new URLSearchParams(window.location.search)
+
+      const errorDescription = hashParams.get('error_description') || queryParams.get('error_description')
+      if (errorDescription) {
+        setError(decodeURIComponent(errorDescription.replace(/\+/g, ' ')))
+        return
+      }
+
+      const accessToken = hashParams.get('access_token')
+      const refreshToken = hashParams.get('refresh_token')
+      const code = queryParams.get('code')
+
+      try {
+        if (accessToken && refreshToken) {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          })
+          if (sessionError) throw sessionError
+          window.history.replaceState(null, '', window.location.pathname)
+          setSessionReady(true)
+          return
+        }
+
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+          if (exchangeError) throw exchangeError
+          window.history.replaceState(null, '', window.location.pathname)
+          setSessionReady(true)
+          return
+        }
+
+        // Sem token no link e nenhuma sessão de recovery já ativa: link
+        // inválido/expirado — não faz sentido ficar "aguardando" pra sempre.
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
+          setError('Link inválido ou expirado. Solicite um novo link de recuperação.')
+        }
+      } catch (err: any) {
+        console.error('Erro ao validar link de recuperação:', err)
+        setError(err?.message || 'Link inválido ou expirado. Solicite um novo link de recuperação.')
+      }
+    }
+
+    processRecoveryLink()
+
     return () => subscription.unsubscribe()
   }, [])
 
@@ -86,7 +139,7 @@ export default function ResetPassword() {
                 <p className="text-gray-500 text-sm">Crie uma senha segura para sua conta.</p>
               </div>
 
-              {!sessionReady && (
+              {!sessionReady && !error && (
                 <div className="mb-6 bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-xl text-sm flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
                   <span>Aguardando validação do link... Se esta mensagem persistir, solicite um novo link de recuperação.</span>
