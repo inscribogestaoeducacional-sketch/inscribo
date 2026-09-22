@@ -14,8 +14,8 @@ import {
   ArrowLeft, Megaphone, Bell, Wifi, WifiOff,
   Edit2, Save, Phone, Mail, MapPin, Calendar,
   Zap, BookOpen, TrendingUp, Star, Ban, Video,
-  CheckSquare, ChevronDown, ChevronRight, Link as LinkIcon,
-  AlertCircle, Archive, Rocket, Target, ArrowRight
+  CheckSquare, ChevronDown, ChevronUp, ChevronRight, Link as LinkIcon,
+  AlertCircle, Archive, Rocket, Target, ArrowRight, UserX, RotateCcw
 } from 'lucide-react'
 
 const inp = 'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none bg-white transition-all'
@@ -317,6 +317,12 @@ export default function InstitutionDetails() {
   const [newLimit,         setNewLimit]          = useState('')
   const [loading,           setLoading]           = useState(true)
   const [toast,             setToast]             = useState<{ msg: string; ok: boolean } | null>(null)
+  // Vínculos desativados (user_institutions.active=false) desta instituição —
+  // "excluir usuário" virou "remover da escola" (reversível). Ver diagnóstico
+  // e migration 20260922000000_deactivate_user_institution_link.
+  const [removedLinks,      setRemovedLinks]      = useState<{ user_id: string; full_name: string; email: string }[]>([])
+  const [showRemoved,       setShowRemoved]       = useState(false)
+  const [blockedRemoval,    setBlockedRemoval]    = useState<{ user: any; pendingLeads: number; pendingConversations: number } | null>(null)
   const [copied,            setCopied]            = useState<string | null>(null)
 
   // Edit info
@@ -421,7 +427,7 @@ export default function InstitutionDetails() {
     if (!id) return
     if (!quiet) setLoading(true)
     try {
-      const [instRes, usersRes, paymentsRes, contractRes, processRes, cycleRes, consultantsRes, waPhoneRes, changeRequestsRes] = await Promise.all([
+      const [instRes, usersRes, paymentsRes, contractRes, processRes, cycleRes, consultantsRes, waPhoneRes, changeRequestsRes, removedLinksRes] = await Promise.all([
         supabase.from('institutions').select('*').eq('id', id).single(),
         supabase.from('users').select('*').eq('institution_id', id).order('created_at', { ascending: false }),
         supabase.from('payments').select('*').eq('institution_id', id).order('created_at', { ascending: false }),
@@ -431,6 +437,12 @@ export default function InstitutionDetails() {
         supabase.from('users').select('id, full_name, email').eq('user_type', 'consultant').order('full_name'),
         supabase.from('whatsapp_phone_numbers').select('waba_id').eq('institution_id', id).maybeSingle(),
         supabase.from('campaign_change_requests').select('*').eq('institution_id', id).eq('status', 'pending').order('created_at', { ascending: false }),
+        // RPC (não select+join direto): a RLS de `users` só libera a linha se
+        // users.institution_id (cache da instituição ATIVA) bater com a desta
+        // tela — um removido com outro vínculo ativo em outra escola já não
+        // bate mais, e o join voltaria nome/e-mail nulos. Ver migration
+        // 20260922000000_deactivate_user_institution_link.
+        supabase.rpc('list_institution_removed_users', { p_institution_id: id }),
       ])
 
       if (cancelledRef.current) return
@@ -445,6 +457,11 @@ export default function InstitutionDetails() {
       setCycles(cycleRes.data || [])
       setChangeRequests(changeRequestsRes.data || [])
       setConsultants(consultantsRes.data || [])
+      setRemovedLinks(((removedLinksRes as any)?.data || []).map((r: any) => ({
+        user_id: r.user_id,
+        full_name: r.full_name || '—',
+        email: r.email || '',
+      })))
 
       if (inst) {
         setEditForm({
@@ -732,10 +749,39 @@ export default function InstitutionDetails() {
     loadAll()
   }
 
-  const handleDeleteUser = async (user: any) => {
-    if (!confirm(`Excluir "${user.full_name}"?`)) return
-    await supabase.from('users').delete().eq('id', user.id)
-    showToast('Usuário excluído.')
+  // "Excluir" virou "remover desta escola": desativa o vínculo em
+  // user_institutions (reversível) em vez de DELETE FROM users — que além de
+  // sempre falhar por FK (leads/comissões/mensagens/etc referenciam
+  // users(id) sem ON DELETE) apagaria o acesso do usuário a QUALQUER outra
+  // instituição onde ele também tenha vínculo. A checagem de lead/conversa
+  // em aberto e a própria desativação acontecem atomicamente no servidor —
+  // ver deactivate_user_institution_link (migration 20260922000000). Também
+  // corrige o bug anterior: o `error` do delete nunca era checado, então
+  // "Usuário excluído." aparecia mesmo quando a exclusão falhava.
+  const handleDeleteUser = async (targetUser: any) => {
+    if (!confirm(`Remover "${targetUser.full_name}" desta escola?\n\nO acesso a esta instituição é desativado (reversível a qualquer momento). A conta e o acesso a outras escolas, se houver, não são afetados.`)) return
+    const { data, error } = await supabase.rpc('deactivate_user_institution_link', {
+      p_user_id: targetUser.id,
+      p_institution_id: id,
+    })
+    if (error) { showToast(error.message || 'Erro ao remover usuário.', false); return }
+    const result = Array.isArray(data) ? data[0] : data
+    if (!result?.success) {
+      setBlockedRemoval({ user: targetUser, pendingLeads: result?.pending_leads || 0, pendingConversations: result?.pending_conversations || 0 })
+      return
+    }
+    showToast('Usuário removido desta escola.')
+    loadAll()
+  }
+
+  const handleReactivateLink = async (userId: string) => {
+    const { error } = await supabase
+      .from('user_institutions')
+      .update({ active: true })
+      .eq('user_id', userId)
+      .eq('institution_id', id)
+    if (error) { showToast('Erro ao reativar usuário.', false); return }
+    showToast('Usuário reativado nesta escola.')
     loadAll()
   }
 
@@ -2096,7 +2142,7 @@ export default function InstitutionDetails() {
                                     <button onClick={() => handleToggleUser(u)} className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-semibold border ${u.active ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-green-50 text-green-600 border-green-200'}`}>
                                       {u.active ? <ToggleRight className="w-3 h-3" /> : <ToggleLeft className="w-3 h-3" />}{u.active ? 'Desativar' : 'Ativar'}
                                     </button>
-                                    <button onClick={() => handleDeleteUser(u)} className="p-1.5 bg-red-50 text-red-500 border border-red-200 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => handleDeleteUser(u)} title="Remover desta escola" className="p-1.5 bg-red-50 text-red-500 border border-red-200 rounded-lg"><UserX className="w-3.5 h-3.5" /></button>
                                   </div>
                                 </div>
                               ))}
@@ -2200,9 +2246,10 @@ export default function InstitutionDetails() {
                                   </button>
                                   <button
                                     onClick={() => handleDeleteUser(u)}
+                                    title="Remover desta escola"
                                     className="p-1.5 bg-red-50 text-red-500 border border-red-200 rounded-lg hover:bg-red-100"
                                   >
-                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <UserX className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
                               </td>
@@ -2210,6 +2257,36 @@ export default function InstitutionDetails() {
                           ))}
                         </tbody>
                       </table>
+                    </div>
+                  )}
+
+                  {removedLinks.length > 0 && (
+                    <div className="mt-4 border border-gray-200 rounded-xl overflow-hidden">
+                      <button
+                        onClick={() => setShowRemoved(v => !v)}
+                        className="w-full flex items-center justify-between px-4 py-3 text-xs font-bold text-gray-500 uppercase hover:bg-gray-50"
+                      >
+                        Removidos desta escola ({removedLinks.length})
+                        {showRemoved ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                      {showRemoved && (
+                        <div className="divide-y divide-gray-50 border-t border-gray-100">
+                          {removedLinks.map(r => (
+                            <div key={r.user_id} className="flex items-center justify-between px-4 py-2.5">
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">{r.full_name}</p>
+                                <p className="text-xs text-gray-400">{r.email}</p>
+                              </div>
+                              <button
+                                onClick={() => handleReactivateLink(r.user_id)}
+                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-green-50 text-green-700 border border-green-200 hover:bg-green-100"
+                              >
+                                <RotateCcw className="w-3 h-3" /> Reativar
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2804,6 +2881,29 @@ export default function InstitutionDetails() {
                 <button onClick={handleCreateUser} disabled={savingUser} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-60">
                   {savingUser ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Criar usuário'}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Modal: remoção de usuário bloqueada por lead/conversa em aberto ── */}
+        {blockedRemoval && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-4">
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-red-600" />Não é possível remover</h2>
+                <button onClick={() => setBlockedRemoval(null)}><X className="w-5 h-5 text-gray-400" /></button>
+              </div>
+              <p className="text-sm text-gray-600 leading-relaxed mb-5">
+                <strong>{blockedRemoval.user.full_name}</strong> tem{' '}
+                {[
+                  blockedRemoval.pendingLeads > 0 ? `${blockedRemoval.pendingLeads} lead${blockedRemoval.pendingLeads > 1 ? 's' : ''} em aberto` : null,
+                  blockedRemoval.pendingConversations > 0 ? `${blockedRemoval.pendingConversations} conversa${blockedRemoval.pendingConversations > 1 ? 's' : ''} de WhatsApp em andamento` : null,
+                ].filter(Boolean).join(' e ')}{' '}
+                atribuído(s) a ele nesta escola. Um admin da escola precisa transferir esses leads/conversas para outro atendente (telas de Leads/WhatsApp) antes de remover este usuário.
+              </p>
+              <div className="flex flex-col gap-2">
+                <button onClick={() => setBlockedRemoval(null)} className="py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm">Entendi</button>
               </div>
             </div>
           </div>

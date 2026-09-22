@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { supabase } from '../../lib/supabase'
 import { sendEmail } from '../../lib/email'
 import {
-  Users, Plus, Edit, Trash2, Shield, UserCheck, Search,
+  Users, Plus, Edit, Shield, UserCheck, Search,
   Eye, EyeOff, Mail, Calendar, CheckCircle, XCircle, Key, X,
-  Building2, AlertTriangle, Loader2, RefreshCw
+  Building2, AlertTriangle, Loader2, RefreshCw, UserX, RotateCcw, ChevronDown, ChevronUp
 } from 'lucide-react'
 
 const PERM_MODULES = [
@@ -304,9 +305,83 @@ function PasswordModal({ isOpen, onClose, targetUser }: { isOpen: boolean; onClo
   )
 }
 
+// ─── Modal: remoção bloqueada por lead/conversa em aberto ─────────────────────
+function BlockedRemovalModal({ info, onClose, onGoToLeads, onGoToWhatsApp }: {
+  info: { user: AppUser; pendingLeads: number; pendingConversations: number } | null
+  onClose: () => void
+  onGoToLeads: () => void
+  onGoToWhatsApp: () => void
+}) {
+  if (!info) return null
+  const parts: string[] = []
+  if (info.pendingLeads > 0) parts.push(`${info.pendingLeads} lead${info.pendingLeads > 1 ? 's' : ''} em aberto`)
+  if (info.pendingConversations > 0) parts.push(`${info.pendingConversations} conversa${info.pendingConversations > 1 ? 's' : ''} de WhatsApp em andamento`)
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: '#fff', borderRadius: 20, padding: 28, width: '100%', maxWidth: 440, boxShadow: '0 24px 80px rgba(0,0,0,0.25)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1A2B4A', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}><AlertTriangle size={16} color="#DC2626" />Não é possível remover</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><X size={20} /></button>
+        </div>
+        <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, margin: '0 0 20px' }}>
+          <strong>{info.user.full_name}</strong> tem {parts.join(' e ')} atribuído{(info.pendingLeads + info.pendingConversations) > 1 ? 's' : ''} a ele nesta escola. Transfira para outro atendente antes de remover, para não deixar ninguém sem responsável.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {info.pendingLeads > 0 && (
+            <button onClick={onGoToLeads} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 16px', borderRadius: 10, background: '#00A896', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            Ver leads deste usuário
+            </button>
+          )}
+          {info.pendingConversations > 0 && (
+            <button onClick={onGoToWhatsApp} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 16px', borderRadius: 10, background: '#EFF6FF', color: '#3B82F6', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            Abrir WhatsApp
+            </button>
+          )}
+          <button onClick={onClose} style={{ padding: '9px 16px', borderRadius: 10, border: '1.5px solid #E2E8F0', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#64748B' }}>Fechar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Seção: usuários removidos (vínculo desativado) ──────────────────────────
+function RemovedUsersSection({ removedLinks, show, onToggle, onReactivate }: {
+  removedLinks: { user_id: string; full_name: string; email: string }[]
+  show: boolean
+  onToggle: () => void
+  onReactivate: (userId: string) => void
+}) {
+  if (removedLinks.length === 0) return null
+  return (
+    <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+      <button onClick={onToggle} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'none', border: 'none', cursor: 'pointer' }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#64748B' }}>Removidos desta escola ({removedLinks.length})</span>
+        {show ? <ChevronUp size={16} color="#94A3B8" /> : <ChevronDown size={16} color="#94A3B8" />}
+      </button>
+      {show && (
+        <div style={{ borderTop: '1px solid #F1F5F9' }}>
+          {removedLinks.map(r => (
+            <div key={r.user_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px', borderBottom: '1px solid #F8FAFC' }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#1A2B4A' }}>{r.full_name}</div>
+                <div style={{ fontSize: 11, color: '#94A3B8' }}>{r.email}</div>
+              </div>
+              <button onClick={() => onReactivate(r.user_id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: 'none', background: '#F0FDF4', color: '#16a34a', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                <RotateCcw size={12} /> Reativar
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Componente Principal ─────────────────────────────────────────────────────
 export default function UserManagement() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const { refreshPermissions } = usePermissions()
   const [users, setUsers] = useState<AppUser[]>([])
   const [loading, setLoading] = useState(true)
@@ -320,7 +395,16 @@ export default function UserManagement() {
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
 
-  useEffect(() => { loadUsers() }, [user])
+  // Vínculos desativados (user_institutions.active=false) desta instituição —
+  // "removido da escola" agora é reversível, então precisa de um jeito de
+  // achar e reativar quem foi removido por engano ou voltou a trabalhar aqui.
+  const [removedLinks, setRemovedLinks] = useState<{ user_id: string; full_name: string; email: string }[]>([])
+  const [showRemoved, setShowRemoved] = useState(false)
+  // Bloqueio de remoção por lead/conversa em aberto — ver
+  // deactivate_user_institution_link (migration 20260922000000).
+  const [blockedRemoval, setBlockedRemoval] = useState<{ user: AppUser; pendingLeads: number; pendingConversations: number } | null>(null)
+
+  useEffect(() => { loadUsers(); loadRemovedLinks() }, [user])
 
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768)
@@ -474,12 +558,55 @@ export default function UserManagement() {
     await loadUsers()
   }
 
-  const handleDelete = async (u: AppUser) => {
-    if (!confirm(`Excluir "${u.full_name}" permanentemente?`)) return
-    const { error } = await supabase.from('users').delete().eq('id', u.id)
-    if (error) return showToast('Erro ao excluir', false)
-    showToast('Usuário excluído')
+  const loadRemovedLinks = async () => {
+    if (!user?.institution_id) return
+    // RPC (não select direto): a RLS de `users` só libera a linha se
+    // users.institution_id (cache da instituição ATIVA) bater com a do admin
+    // — um removido com outro vínculo ativo em outra escola já não bate mais,
+    // e um join direto voltaria nome/e-mail nulos. Ver migration 20260922000000.
+    const { data } = await supabase.rpc('list_institution_removed_users', { p_institution_id: user.institution_id })
+    setRemovedLinks((data || []).map((r: any) => ({
+      user_id: r.user_id,
+      full_name: r.full_name || '—',
+      email: r.email || '',
+    })))
+  }
+
+  // "Excluir" virou "remover desta escola": desativa o vínculo em
+  // user_institutions (reversível) em vez de apagar a linha de users — que
+  // além de quebrar por causa das várias FKs sem ON DELETE apontando pra
+  // users(id) (leads, comissões, mensagens...), apagaria o acesso do usuário
+  // a QUALQUER outra instituição onde ele também tem vínculo. A checagem de
+  // lead/conversa em aberto e a própria desativação acontecem atomicamente
+  // no servidor (deactivate_user_institution_link) — ver migration
+  // 20260922000000.
+  const handleRemoveFromInstitution = async (u: AppUser) => {
+    if (!confirm(`Remover "${u.full_name}" desta escola?\n\nO acesso a esta instituição é desativado (reversível a qualquer momento). A conta e o acesso a outras escolas, se houver, não são afetados.`)) return
+    const { data, error } = await supabase.rpc('deactivate_user_institution_link', {
+      p_user_id: u.id,
+      p_institution_id: user!.institution_id,
+    })
+    if (error) return showToast(error.message || 'Erro ao remover usuário', false)
+    const result = Array.isArray(data) ? data[0] : data
+    if (!result?.success) {
+      setBlockedRemoval({ user: u, pendingLeads: result?.pending_leads || 0, pendingConversations: result?.pending_conversations || 0 })
+      return
+    }
+    showToast('Usuário removido desta escola')
     await loadUsers()
+    await loadRemovedLinks()
+  }
+
+  const handleReactivateLink = async (userId: string) => {
+    const { error } = await supabase
+      .from('user_institutions')
+      .update({ active: true })
+      .eq('user_id', userId)
+      .eq('institution_id', user!.institution_id)
+    if (error) return showToast('Erro ao reativar usuário', false)
+    showToast('Usuário reativado nesta escola')
+    await loadUsers()
+    await loadRemovedLinks()
   }
 
   const filtered = users.filter(u => {
@@ -606,14 +733,19 @@ export default function UserManagement() {
                   <Key size={16} />
                 </button>
                 <button
-                  onClick={() => handleDelete(u)}
+                  onClick={() => handleRemoveFromInstitution(u)}
+                  title="Remover desta escola"
                   style={{ width: 44, height: 44, borderRadius: 10, border: 'none', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  <Trash2 size={16} />
+                  <UserX size={16} />
                 </button>
               </div>
             </div>
           ))}
+        </div>
+
+        <div style={{ margin: '0 16px 16px' }}>
+          <RemovedUsersSection removedLinks={removedLinks} show={showRemoved} onToggle={() => setShowRemoved(v => !v)} onReactivate={handleReactivateLink} />
         </div>
 
         {/* FAB */}
@@ -626,6 +758,12 @@ export default function UserManagement() {
 
         <UserModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingUser(null) }} onSave={handleSave} editingUser={editingUser} />
         <PasswordModal isOpen={showPwdModal} onClose={() => { setShowPwdModal(false); setPwdUser(null) }} targetUser={pwdUser} />
+        <BlockedRemovalModal
+          info={blockedRemoval}
+          onClose={() => setBlockedRemoval(null)}
+          onGoToLeads={() => { const id = blockedRemoval?.user.id; setBlockedRemoval(null); if (id) navigate(`/leads?owner=${id}`) }}
+          onGoToWhatsApp={() => { setBlockedRemoval(null); navigate('/whatsapp') }}
+        />
       </div>
     )
   }
@@ -757,7 +895,7 @@ export default function UserManagement() {
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button onClick={() => { setEditingUser(u); setShowModal(true) }} title="Editar" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: '#EFF6FF', color: '#3B82F6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Edit size={13} /></button>
                       <button onClick={() => { setPwdUser(u); setShowPwdModal(true) }} title="Redefinir senha" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: '#F5F3FF', color: '#8B5CF6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Key size={13} /></button>
-                      <button onClick={() => handleDelete(u)} title="Excluir" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Trash2 size={13} /></button>
+                      <button onClick={() => handleRemoveFromInstitution(u)} title="Remover desta escola" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><UserX size={13} /></button>
                     </div>
                   </td>
                 </tr>
@@ -767,8 +905,16 @@ export default function UserManagement() {
         )}
       </div>
 
+      <RemovedUsersSection removedLinks={removedLinks} show={showRemoved} onToggle={() => setShowRemoved(v => !v)} onReactivate={handleReactivateLink} />
+
       <UserModal isOpen={showModal} onClose={() => { setShowModal(false); setEditingUser(null) }} onSave={handleSave} editingUser={editingUser} />
       <PasswordModal isOpen={showPwdModal} onClose={() => { setShowPwdModal(false); setPwdUser(null) }} targetUser={pwdUser} />
+      <BlockedRemovalModal
+        info={blockedRemoval}
+        onClose={() => setBlockedRemoval(null)}
+        onGoToLeads={() => { const id = blockedRemoval?.user.id; setBlockedRemoval(null); if (id) navigate(`/leads?owner=${id}`) }}
+        onGoToWhatsApp={() => { setBlockedRemoval(null); navigate('/whatsapp') }}
+      />
     </div>
   )
 }

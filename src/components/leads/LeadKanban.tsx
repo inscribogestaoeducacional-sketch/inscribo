@@ -720,7 +720,10 @@ export default function LeadKanban() {
 
   // ── Item 2: propriedade do lead / lembretes ───────────────────────────────
   const [users, setUsers] = useState<SimpleUser[]>([])
-  const [ownerFilter, setOwnerFilter] = useState<string>('all') // 'mine' | 'all' | 'unassigned' | <user id>
+  // Deep-link ?owner=<userId> — usado pelo atalho "Ver leads deste usuário"
+  // em UserManagement.tsx/InstitutionDetails.tsx quando a remoção de alguém
+  // da instituição é bloqueada por ter leads em aberto atribuídos a ele.
+  const [ownerFilter, setOwnerFilter] = useState<string>(() => searchParams.get('owner') || 'all') // 'mine' | 'all' | 'unassigned' | <user id>
   const [reminderModal, setReminderModal] = useState<{ open: boolean; lead: Lead | null }>({ open: false, lead: null })
 
   // ── Item 7 — temperatura ───────────────────────────────────────────────────
