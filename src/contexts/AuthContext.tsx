@@ -22,10 +22,19 @@ interface AppUser {
   user_type?: 'school_user' | 'consultant' | 'admin_geral' | 'gestor_rede'
   // mantido por compatibilidade com código legado
   is_super_admin?: boolean
-  // Só preenchido pra gestor_rede: id do grupo e unidades disponíveis pro
-  // seletor (TopBar).
+  // Só preenchido pra gestor_rede sem vínculo em user_institutions (grupo
+  // escolar legado — ver loadUserProfile): id do grupo e unidades do grupo.
   school_group_id?: string
   group_institutions?: { id: string; name: string }[]
+  // Fase 2 de "usuário em múltiplas instituições": todas as instituições que
+  // o usuário tem vínculo em user_institutions (1 ou mais). O seletor do
+  // TopBar usa este campo (com fallback pra group_institutions, pro caso
+  // legado de gestor de rede sem vínculo em user_institutions).
+  available_institutions?: { id: string; name: string; logo_url?: string }[]
+  // true quando o usuário tem 2+ vínculos e nenhum deles é a instituição
+  // ativa atual (active_institution_id nulo ou apontando pra um vínculo que
+  // não existe mais) — App.tsx mostra a tela de seleção antes do dashboard.
+  needsInstitutionSelection?: boolean
 }
 
 interface AuthContextType {
@@ -104,46 +113,85 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         let effectiveInstitutionId = data.institution_id || ''
         let institutionName = (data as any).institutions?.name as string | undefined
         let groupInstitutions: { id: string; name: string }[] | undefined
+        let availableInstitutions: { id: string; name: string; logo_url?: string }[] | undefined
+        let needsInstitutionSelection = false
 
-        // Gestor de rede: institution_id é NULL no banco — a unidade
-        // "efetiva" vem de active_institution_id (ver switch_active_institution
-        // / migration school_groups). Sem seleção prévia válida, cai na
-        // primeira unidade do grupo por padrão.
-        if (data.user_type === 'gestor_rede' && data.school_group_id) {
-          const { data: groupInsts } = await supabase
-            .from('institutions')
-            .select('id, name')
-            .eq('school_group_id', data.school_group_id)
-            .order('name')
-          groupInstitutions = (groupInsts as { id: string; name: string }[]) || []
+        // Fase 2 de "usuário em múltiplas instituições": fonte da verdade de
+        // quais instituições o usuário pode acessar. Só consultado pra quem
+        // pode ter vínculo (school_user/gestor_rede) — admin_geral/consultant
+        // não são institution-bound e nunca chegam aqui.
+        if (data.user_type === 'school_user' || data.user_type === 'gestor_rede') {
+          const { data: linkRows } = await supabase
+            .from('user_institutions')
+            .select('institution_id, institutions(name, logo_url)')
+            .eq('user_id', data.id)
+            .eq('active', true)
 
-          let activeId = data.active_institution_id as string | null
-          const stillInGroup = !!activeId && groupInstitutions.some(i => i.id === activeId)
-          if (!stillInGroup) {
-            activeId = groupInstitutions[0]?.id || null
-            if (activeId) {
-              const { error: switchErr } = await supabase.rpc('switch_active_institution', { target_institution_id: activeId })
-              if (switchErr) console.error('switch_active_institution error:', switchErr)
+          const links = (linkRows || []).map((r: any) => ({
+            id: r.institution_id as string,
+            name: r.institutions?.name as string || '',
+            logo_url: r.institutions?.logo_url as string | undefined,
+          }))
+
+          if (links.length >= 1) {
+            availableInstitutions = links
+            if (links.length === 1) {
+              effectiveInstitutionId = links[0].id
+              institutionName = links[0].name
+            } else {
+              const activeId = data.active_institution_id as string | null
+              const stillLinked = !!activeId && links.some(l => l.id === activeId)
+              if (stillLinked) {
+                effectiveInstitutionId = activeId!
+                institutionName = links.find(l => l.id === activeId)?.name
+              } else {
+                needsInstitutionSelection = true
+                effectiveInstitutionId = ''
+                institutionName = undefined
+              }
             }
+          } else if (data.user_type === 'gestor_rede' && data.school_group_id) {
+            // Mecanismo legado (gestor de rede sem vínculo em
+            // user_institutions ainda — grupo escolar): institution_id é
+            // NULL no banco, a unidade "efetiva" vem de active_institution_id.
+            // Sem seleção prévia válida, cai na primeira unidade do grupo.
+            const { data: groupInsts } = await supabase
+              .from('institutions')
+              .select('id, name')
+              .eq('school_group_id', data.school_group_id)
+              .order('name')
+            groupInstitutions = (groupInsts as { id: string; name: string }[]) || []
+
+            let activeId = data.active_institution_id as string | null
+            const stillInGroup = !!activeId && groupInstitutions.some(i => i.id === activeId)
+            if (!stillInGroup) {
+              activeId = groupInstitutions[0]?.id || null
+              if (activeId) {
+                const { error: switchErr } = await supabase.rpc('switch_active_institution', { target_institution_id: activeId })
+                if (switchErr) console.error('switch_active_institution error:', switchErr)
+              }
+            }
+            effectiveInstitutionId = activeId || ''
+            institutionName = groupInstitutions.find(i => i.id === activeId)?.name
           }
-          effectiveInstitutionId = activeId || ''
-          institutionName = groupInstitutions.find(i => i.id === activeId)?.name
         }
 
         const appUser: AppUser = {
-          id:                 data.id,
-          full_name:          data.full_name        || '',
-          email:              data.email            || '',
-          role:               data.role             || 'user',
-          institution_id:     effectiveInstitutionId,
-          active:             data.active           ?? true,
-          is_available:       data.is_available     ?? true,
-          user_type:          data.user_type,
-          institution_name:   institutionName,
+          id:                       data.id,
+          full_name:                data.full_name        || '',
+          email:                    data.email            || '',
+          role:                     data.role             || 'user',
+          institution_id:           effectiveInstitutionId,
+          active:                   data.active           ?? true,
+          is_available:             data.is_available     ?? true,
+          user_type:                data.user_type,
+          institution_name:         institutionName,
           // is_super_admin: mantido por compatibilidade
-          is_super_admin:     data.user_type === 'admin_geral',
-          school_group_id:    data.school_group_id || undefined,
-          group_institutions: groupInstitutions,
+          is_super_admin:           data.user_type === 'admin_geral',
+          school_group_id:          data.school_group_id || undefined,
+          group_institutions:       groupInstitutions,
+          available_institutions:   availableInstitutions,
+          needsInstitutionSelection: needsInstitutionSelection,
         }
         setUser(appUser)
       }
@@ -182,12 +230,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // ── switchInstitution (gestor de rede) ─────────────────
-  // Único jeito permitido de trocar a unidade ativa: o RPC valida
-  // server-side que institutionId pertence ao mesmo school_group_id do
-  // usuário antes de gravar, então não dá pra "escolher" uma instituição de
-  // outro grupo por aqui. Recarrega o profile pra refletir a nova unidade em
-  // todo o painel (Kanban, financeiro, WhatsApp etc.) sem logout/login.
+  // ── switchInstitution ───────────────────────────────────
+  // Único jeito permitido de trocar a unidade ativa (usado tanto pelo
+  // seletor do TopBar quanto pela tela de seleção pós-login, quando
+  // needsInstitutionSelection é true): o RPC valida server-side que o
+  // usuário tem vínculo com institutionId — via user_institutions (Fase 2)
+  // OU via mesmo school_group_id (gestor de rede legado) — antes de gravar.
+  // Recarrega o profile pra refletir a nova unidade em todo o painel
+  // (Kanban, financeiro, WhatsApp etc.) sem logout/login.
   const switchInstitution = async (institutionId: string) => {
     const { error } = await supabase.rpc('switch_active_institution', { target_institution_id: institutionId })
     if (error) {

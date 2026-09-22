@@ -39,6 +39,16 @@
 //    chamador pra proteger nesse fluxo (visitante anônimo virando o
 //    próprio admin), então o create-user (que exige Bearer token de um
 //    chamador já autorizado) não se aplica.
+// 4) [Fase 2 — "usuário em múltiplas instituições"] cadastro inteligente:
+//    antes de criar conta, verifica via get_auth_user_id_by_email (migration
+//    20260921020000_user_institutions_phase2.sql) se o e-mail já tem conta.
+//    Se tiver, NÃO tenta criar de novo (evita erro de duplicado) — só insere
+//    um vínculo em user_institutions pra essa pessoa + institution_id +
+//    role, e responde `created: false` (o caller decide, com base nisso,
+//    mandar o e-mail de "conta nova" ou o de "adicionado à equipe"). Erro
+//    dedicado quando o vínculo com essa instituição já existe. password
+//    deixou de ser obrigatório no body — só é exigido quando de fato vai
+//    criar conta nova.
 //
 // NÃO FAÇA DEPLOY AUTOMÁTICO A PARTIR DESTE COMMIT. Depois de revisar,
 // rode manualmente: supabase functions deploy create-user
@@ -113,14 +123,23 @@ serve(async (req) => {
 
     // ── 2. Criação em auth.users + public.users (idêntico à produção) ─────
     const body = await req.json()
-    const { email, password, full_name, role, user_type, institution_id, consultant_type } = body
+    const {
+      email: rawEmail, password, full_name, role, user_type, institution_id, consultant_type,
+      can_see_all_conversations, can_see_full_history, active,
+    } = body
 
-    if (!email || !password) {
-      return new Response(JSON.stringify({ error: 'email e password são obrigatórios' }), {
+    if (!rawEmail) {
+      return new Response(JSON.stringify({ error: 'email é obrigatório' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
+
+    // Normaliza aqui pra proteger TODOS os chamadores de uma vez — nem todo
+    // caller do create-user faz .trim().toLowerCase() no e-mail antes de
+    // enviar (ex: UserManagement.tsx), e o cadastro inteligente (2a abaixo)
+    // depende de comparação exata pra achar conta existente.
+    const email = String(rawEmail).trim().toLowerCase()
 
     // consultant_type só faz sentido para user_type='consultant' — mesma regra
     // da CHECK constraint de users.consultant_type (20260720000100_add_consultant_type.sql).
@@ -156,6 +175,78 @@ serve(async (req) => {
       resolvedInstitutionId = callerProfile.institution_id
     }
 
+    // ── 2a. Cadastro inteligente: e-mail já tem conta? ────────────────────
+    // auth.users não é exposto via PostgREST — get_auth_user_id_by_email é
+    // SECURITY DEFINER e só service_role pode chamar (ver migration
+    // 20260921020000_user_institutions_phase2.sql).
+    const { data: existingUserId, error: lookupErr } = await supabaseAdmin.rpc(
+      'get_auth_user_id_by_email',
+      { target_email: email }
+    )
+    if (lookupErr) {
+      return new Response(JSON.stringify({ error: lookupErr.message }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const roleToUse = role || 'admin'
+    const canSeeAllConversations = !!can_see_all_conversations
+    const canSeeFullHistory = !!can_see_full_history
+
+    if (existingUserId) {
+      // Sem institution_id não há vínculo pra adicionar (ex: tentativa de
+      // reaproveitar e-mail existente pra criar admin_geral/consultant global)
+      // — isso continua sendo um conflito de e-mail duplicado de verdade.
+      if (!resolvedInstitutionId) {
+        return new Response(JSON.stringify({ error: 'Já existe uma conta com este e-mail.' }), {
+          status: 409,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      const { data: existingLink } = await supabaseAdmin
+        .from('user_institutions')
+        .select('id')
+        .eq('user_id', existingUserId)
+        .eq('institution_id', resolvedInstitutionId)
+        .maybeSingle()
+
+      if (existingLink) {
+        return new Response(JSON.stringify({ error: 'Esse usuário já faz parte desta escola.' }), {
+          status: 409,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      const { error: linkErr } = await supabaseAdmin.from('user_institutions').insert({
+        user_id: existingUserId,
+        institution_id: resolvedInstitutionId,
+        role: roleToUse,
+        can_see_all_conversations: canSeeAllConversations,
+        can_see_full_history: canSeeFullHistory,
+      })
+      if (linkErr) {
+        return new Response(JSON.stringify({ error: linkErr.message }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      return new Response(
+        JSON.stringify({ user_id: existingUserId, email, created: false }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // ── 2b. Conta nova (fluxo já existente) ───────────────────────────────
+    if (!password) {
+      return new Response(JSON.stringify({ error: 'password é obrigatório para criar uma conta nova' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -174,11 +265,13 @@ serve(async (req) => {
       id: authData.user.id,
       email,
       full_name: full_name || email,
-      role: role || 'admin',
+      role: roleToUse,
       user_type: user_type || 'school_user',
       institution_id: resolvedInstitutionId,
       consultant_type: user_type === 'consultant' ? (consultant_type || null) : null,
-      active: true,
+      can_see_all_conversations: canSeeAllConversations,
+      can_see_full_history: canSeeFullHistory,
+      active: active === undefined ? true : !!active,
     })
 
     if (profileErr) {
@@ -189,8 +282,29 @@ serve(async (req) => {
       })
     }
 
+    // Vínculo espelhando a linha de users recém-criada — mantém users como
+    // cache correto do vínculo ativo desde o primeiro login (trigger de sync
+    // da Fase 1 não teria o que sincronizar se essa linha não existisse).
+    if (resolvedInstitutionId) {
+      const { error: linkErr } = await supabaseAdmin.from('user_institutions').insert({
+        user_id: authData.user.id,
+        institution_id: resolvedInstitutionId,
+        role: roleToUse,
+        can_see_all_conversations: canSeeAllConversations,
+        can_see_full_history: canSeeFullHistory,
+      })
+      if (linkErr) {
+        await supabaseAdmin.from('users').delete().eq('id', authData.user.id)
+        await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+        return new Response(JSON.stringify({ error: linkErr.message }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
     return new Response(
-      JSON.stringify({ user_id: authData.user.id, email }),
+      JSON.stringify({ user_id: authData.user.id, email, created: true }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 

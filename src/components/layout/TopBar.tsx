@@ -5,16 +5,21 @@ import { supabase } from '../../lib/supabase'
 import { LogOut, Settings, User, Menu, Network, ChevronDown } from 'lucide-react'
 import NotificationBell from './NotificationBell'
 
-// Seletor de unidade pro "gestor de rede" — troca a instituição ativa (ver
-// AuthContext.switchInstitution) sem precisar logout/login. Só aparece pra
-// quem tem group_institutions (institution_id fixo continua igual pra todo
-// mundo, sem seletor nenhum).
+// Seletor de instituição — troca a instituição ativa (ver
+// AuthContext.switchInstitution) sem precisar logout/login. Aparece pra
+// qualquer usuário com 2+ vínculos em user_institutions (Fase 2 de "usuário
+// em múltiplas instituições"), com fallback pra group_institutions (gestor
+// de rede legado, sem vínculo em user_institutions ainda). Quem tem só 1
+// instituição não vê nada, igual sempre foi.
 function InstitutionSwitcher() {
   const { user, switchInstitution } = useAuth()
   const [open, setOpen] = useState(false)
   const [switching, setSwitching] = useState(false)
 
-  if (!user?.group_institutions || user.group_institutions.length < 2) return null
+  if (!user) return null
+  const institutions = user.available_institutions?.length ? user.available_institutions : user.group_institutions
+
+  if (!institutions || institutions.length < 2) return null
 
   const handleSwitch = async (id: string) => {
     if (id === user.institution_id) { setOpen(false); return }
@@ -41,9 +46,9 @@ function InstitutionSwitcher() {
           <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setOpen(false)} />
           <div style={{ position: 'absolute', left: 0, top: 'calc(100% + 8px)', background: '#fff', borderRadius: 12, border: '0.5px solid #D1FAE5', boxShadow: '0 8px 32px rgba(0,168,150,0.12)', zIndex: 50, minWidth: 220, overflow: 'hidden' }}>
             <div style={{ padding: '10px 14px', borderBottom: '0.5px solid #E2E8F0', background: '#F0FDFB', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.3 }}>
-              Unidades da rede
+              Suas instituições
             </div>
-            {user.group_institutions.map(inst => (
+            {institutions.map(inst => (
               <button key={inst.id} onClick={() => handleSwitch(inst.id)}
                 style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px', fontSize: 13, border: 'none', background: inst.id === user.institution_id ? '#F0FDFB' : 'transparent', color: inst.id === user.institution_id ? '#00A896' : '#1A2B4A', fontWeight: inst.id === user.institution_id ? 700 : 500, cursor: 'pointer' }}
                 onMouseEnter={e => { if (inst.id !== user.institution_id) (e.currentTarget as HTMLElement).style.background = '#F8FAFC' }}

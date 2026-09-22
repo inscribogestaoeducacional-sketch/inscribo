@@ -4,6 +4,7 @@ export type EmailType =
   | 'new_institution'
   | 'gestor_welcome'
   | 'atendente_welcome'
+  | 'added_to_institution'
   | 'payment_link'
   | 'monthly_payment'
   | 'contract_sign'

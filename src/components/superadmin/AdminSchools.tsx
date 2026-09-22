@@ -283,11 +283,29 @@ function NewSchoolWizard({
       const fnData = await fnRes.json()
       if (!fnRes.ok || fnData?.error) {
         await supabase.from('institutions').delete().eq('id', institution.id)
-        const errMsg = fnData?.error || 'Erro ao criar usuário'
-        if (errMsg.includes('already been registered') || errMsg.includes('already registered')) {
-          throw new Error('Este e-mail já está cadastrado no sistema. Use um e-mail diferente para o gestor.')
-        }
-        throw new Error(errMsg)
+        throw new Error(fnData?.error || 'Erro ao criar usuário')
+      }
+      // create-user faz cadastro inteligente: se o e-mail já tinha conta em
+      // outra escola/vínculo, não cria de novo — só adiciona o vínculo com
+      // esta instituição nova (created: false). Manda um aviso extra sem
+      // senha nenhuma (os e-mails de payment_link/new_institution abaixo já
+      // não expõem senha, mas nenhum deles avisa que a conta é reaproveitada).
+      const wasCreated = fnData.created !== false
+      if (!wasCreated) {
+        try {
+          await supabase.functions.invoke('send-email', {
+            body: {
+              type: 'added_to_institution',
+              to: form.email.trim().toLowerCase(),
+              data: {
+                user_name: form.managerName.trim(),
+                email: form.email.trim().toLowerCase(),
+                school_name: form.name.trim(),
+                login_url: `${window.location.origin}/login`,
+              },
+            },
+          })
+        } catch {}
       }
 
       let paymentLink: string | undefined

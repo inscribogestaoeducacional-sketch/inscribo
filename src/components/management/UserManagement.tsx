@@ -359,9 +359,26 @@ export default function UserManagement() {
     if (editingUser) {
       const { error } = await supabase
         .from('users')
-        .update({ full_name: userData.full_name, role: userData.role, active: userData.active, can_see_all_conversations: !!userData.can_see_all_conversations, can_see_full_history: !!userData.can_see_full_history })
+        .update({ full_name: userData.full_name, active: userData.active })
         .eq('id', editingUser.id)
       if (error) throw error
+
+      // role/can_see_all_conversations/can_see_full_history agora vivem no
+      // vínculo (user_institutions), não em users direto — users.role e os
+      // demais são só um CACHE do vínculo ativo, mantido pelo trigger de
+      // sync da Fase 1. Todo usuário listado aqui está, por definição, com
+      // esta instituição como ativa agora (loadUsers filtra por
+      // users.institution_id), então este é sempre o vínculo certo.
+      const { error: linkError } = await supabase
+        .from('user_institutions')
+        .update({
+          role: userData.role,
+          can_see_all_conversations: !!userData.can_see_all_conversations,
+          can_see_full_history: !!userData.can_see_full_history,
+        })
+        .eq('user_id', editingUser.id)
+        .eq('institution_id', user!.institution_id)
+      if (linkError) throw linkError
 
       if (isConsultor(userData.role) && permissions) {
         const rows = PERM_MODULES.map(m => ({
@@ -401,29 +418,21 @@ export default function UserManagement() {
             role: userData.role,
             user_type: 'school_user',
             institution_id: user!.institution_id,
+            active: userData.active,
+            can_see_all_conversations: !!userData.can_see_all_conversations,
+            can_see_full_history: !!userData.can_see_full_history,
           }),
         }
       )
       const fnData = await res.json()
       if (!res.ok || fnData?.error) {
-        const errMsg = fnData?.error || 'Erro ao criar usuário'
-        throw new Error(errMsg.includes('already been registered') || errMsg.includes('already registered')
-          ? 'Este e-mail já está cadastrado no sistema.'
-          : errMsg)
+        throw new Error(fnData?.error || 'Erro ao criar usuário')
       }
       const newUserId = fnData.user_id
-
-      // create-user sempre grava active:true e não conhece os campos de
-      // visibilidade de conversas — completa aqui com o que veio do form.
-      const { error: profileError } = await supabase
-        .from('users')
-        .update({
-          active: userData.active,
-          can_see_all_conversations: !!userData.can_see_all_conversations,
-          can_see_full_history: !!userData.can_see_full_history
-        })
-        .eq('id', newUserId)
-      if (profileError) throw profileError
+      // create-user faz cadastro inteligente: se o e-mail já tinha conta,
+      // não cria de novo — só adiciona o vínculo com esta instituição
+      // (created: false). Muda qual e-mail é disparado a seguir.
+      const wasCreated = fnData.created !== false
 
       if (isConsultor(userData.role) && permissions) {
         const rows = PERM_MODULES.map(m => ({
@@ -435,15 +444,24 @@ export default function UserManagement() {
         await supabase.from('user_permissions').upsert(rows, { onConflict: 'user_id,module' })
       }
 
-      await sendEmail('atendente_welcome', userData.email, {
-        user_name: userData.full_name,
-        email: userData.email,
-        temp_password: userData.password,
-        school_name: user?.institution_name || '',
-        login_url: `${window.location.origin}/login`,
-      })
-
-      showToast('Usuário criado! Um e-mail com os dados de acesso foi enviado.')
+      if (wasCreated) {
+        await sendEmail('atendente_welcome', userData.email, {
+          user_name: userData.full_name,
+          email: userData.email,
+          temp_password: userData.password,
+          school_name: user?.institution_name || '',
+          login_url: `${window.location.origin}/login`,
+        })
+        showToast('Usuário criado! Um e-mail com os dados de acesso foi enviado.')
+      } else {
+        await sendEmail('added_to_institution', userData.email, {
+          user_name: userData.full_name,
+          email: userData.email,
+          school_name: user?.institution_name || '',
+          login_url: `${window.location.origin}/login`,
+        })
+        showToast('Esse e-mail já tinha conta — vínculo com a equipe adicionado! E-mail de aviso enviado.')
+      }
     }
     setEditingUser(null)
     await loadUsers()

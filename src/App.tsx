@@ -66,6 +66,7 @@ import AdminShowcaseSchools    from './components/superadmin/AdminShowcaseSchool
 
 // ── Pending screen ────────────────────────────────────────────────────────
 import PendingScreen from './components/PendingScreen'
+import InstitutionSelectionScreen from './components/auth/InstitutionSelectionScreen'
 
 // ── Legado ────────────────────────────────────────────────────────────────
 import InstitutionDetails     from './components/superadmin/InstitutionDetails'
@@ -254,6 +255,16 @@ function AppContent() {
         <Route path="*"               element={<Navigate to="/" replace />} />
       </Routes>
     )
+  }
+
+  // ── SELEÇÃO DE INSTITUIÇÃO (Fase 2 de "usuário em múltiplas instituições") ─
+  // Usuário tem 2+ vínculos em user_institutions e nenhum deles é a
+  // instituição ativa atual — precisa escolher antes de ver qualquer coisa.
+  // Sempre false pra admin_geral/consultant e pra quem tem só 1 vínculo (a
+  // grande maioria hoje), então não muda o comportamento de ninguém além de
+  // quem realmente está em mais de uma instituição.
+  if (user.needsInstitutionSelection) {
+    return <InstitutionSelectionScreen />
   }
 
   // ── ÁREA DO ADMIN ─────────────────────────────────────────────────────

@@ -223,6 +223,26 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     `)
   }),
 
+  // Fase 2 de "usuário em múltiplas instituições" — pessoa já tem conta
+  // (outra escola, outro cargo) e ganhou um vínculo novo. NUNCA leva senha:
+  // acesso já vale na hora, com o e-mail e senha que a pessoa já usa.
+  added_to_institution: (data) => ({
+    subject: `Você foi adicionado(a) à equipe da ${data.school_name || 'escola'}`,
+    html: wrap(`
+      <p style="margin:0 0 4px;">${badge('Novo acesso', '#16A34A', '#166534')}</p>
+      ${h1(`Bem-vindo(a) à equipe, ${data.user_name || ''}!`, '#166534')}
+      ${p(`Você foi adicionado(a) à equipe da <strong>${data.school_name || 'sua escola'}</strong> na Aion Edu. Seu acesso já está liberado — use o mesmo e-mail e senha de sempre.`)}
+      ${box(`
+        <table cellpadding="0" cellspacing="0" width="100%">
+          <tr><td style="padding:4px 0;font-size:14px;">E-mail</td><td style="padding:4px 0;font-size:14px;font-weight:700;text-align:right;">${data.email || ''}</td></tr>
+        </table>
+      `)}
+      ${btn('Acessar o sistema', data.login_url || 'https://app.aionedu.com.br/login')}
+      ${divider()}
+      ${supportLine()}
+    `)
+  }),
+
   payment_link: (data) => ({
     subject: `Link de pagamento - ${data.institution_name}`,
     html: wrap(`
