@@ -28,6 +28,7 @@ const IcGlobe = (p: any) => <Ic {...p}><circle cx="12" cy="12" r="10" /><line x1
 const IcSettings = (p: any) => <Ic {...p}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></Ic>
 const IcActivity = (p: any) => <Ic {...p}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></Ic>
 const IcAlert = (p: any) => <Ic {...p}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></Ic>
+const IcContact = (p: any) => <Ic {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2" /><path d="M15 8h4M15 12h4M6 17c.7-1.6 2-2.4 3-2.4s2.3.8 3 2.4" /></Ic>
 
 // ── Reveal hook ────────────────────────────────────────────────────────────
 function useReveal(delay = '') {
@@ -167,7 +168,7 @@ function Hero() {
 
 // ── TICKER ────────────────────────────────────────────────────────────────
 function Ticker() {
-  const items = ['CRM de Leads','Contatos','Visitas','WhatsApp Oficial Meta','Relatórios','Transferências','Pesquisas NPS','Usuários','Diagnóstico com IA','Configurações','Score da Escola','Market Share Local','Relatórios Mensais','Alertas Inteligentes']
+  const items = ['CRM de Leads','Contatos','Consolidação de Família','WhatsApp Oficial Meta','Bot Visual sem Código','Chat Interno da Equipe','Relatórios','Transferências','Pesquisas NPS','Diagnóstico com IA','Google Meet Automático','Score de Mercado INEP','Relatórios Mensais','Alertas Inteligentes','Captação no Site']
   const doubled = [...items, ...items]
   return (
     <div style={{ background: '#E6F7F5', borderTop: '1px solid #A7F3D0', borderBottom: '1px solid #A7F3D0', padding: '14px 0', overflow: 'hidden' }}>
@@ -301,14 +302,15 @@ function Dores() {
 
 // ── SOLUÇÕES ──────────────────────────────────────────────────────────────
 const SOLUCOES = [
-  { icon: IcUsers, title: 'CRM de Leads', bg: '#E6F7F5', ic: '#00523C', desc: 'Centralize todos os contatos, acompanhe o histórico completo e nunca perca um lead por falta de follow-up.', bullets: ['Funil visual com kanban drag-and-drop','Score automático de priorização','Classificação Frio / Morno / Quente','Dashboard de motivos de perda'], meta: false },
-  { icon: IcMsg, title: 'WhatsApp Oficial Meta', bg: '#E8F5E9', ic: '#25D366', desc: 'Toda a equipe atende pelo número oficial da escola. Bot inteligente, fila de atendimento e histórico completo.', bullets: ['API Oficial Meta — sem risco de bloqueio','Bot de qualificação fora do horário','Acompanhamento em tempo real','Avaliação do atendimento pelas famílias'], meta: true },
-  { icon: IcColumns, title: 'Pipeline de Matrículas', bg: '#EDE9FE', ic: '#7C3AED', desc: 'Visualize todo o processo com kanban drag-and-drop. Do primeiro contato até a matrícula assinada.', bullets: ['Kanban Novo → Contato → Visita → Proposta → Matriculado','Alertas de leads parados','Filtros por atendente e série','Histórico auditável'], meta: false },
-  { icon: IcCpu, title: 'Diagnóstico com IA', bg: '#FFF7ED', ic: '#EA580C', desc: 'O sistema lê os dados da sua escola e cria automaticamente um plano de campanha com metas, ações e calendário.', bullets: ['Lê relatórios do ERP automaticamente','Gera plano de campanha em minutos','Metas mensais por série e canal','Benchmark com INEP e Censo Escolar'], meta: false },
-  { icon: IcBarChart, title: 'Relatórios Mensais', bg: '#EFF6FF', ic: '#2563EB', desc: 'Relatórios automáticos mensais da campanha para que o gestor entenda exatamente o que está acontecendo.', bullets: ['Dashboard com desvios coloridos','Índice de saúde 0–100','Velocidade atual vs meta','Exportável para diretores'], meta: false },
-  { icon: IcCalCheck, title: 'Gestão de Visitas', bg: '#F0FDF4', ic: '#16A34A', desc: 'Gerencie toda a agenda de visitas com confirmação automática e registro do resultado de cada conversa.', bullets: ['Confirmação automática via WhatsApp','Lembrete para a família','Observações pós-visita','Taxa de conversão por visita'], meta: false },
-  { icon: IcStar, title: 'Pesquisas e NPS', bg: '#FFF1F2', ic: '#E11D48', desc: 'Meça a satisfação das famílias em tempo real e identifique insatisfação antes que vire cancelamento.', bullets: ['NPS em tempo real por série','Pesquisa automática pós-visita','Alertas para avaliações negativas','Relatório por atendente'], meta: false },
-  { icon: IcRefreshCw, title: 'Transferências', bg: '#FFFBEB', ic: '#D97706', desc: 'Descubra o motivo real da saída e identifique quais alunos ainda podem ser recuperados antes de ir embora.', bullets: ['Link de pesquisa via WhatsApp','Família responde em 3 minutos','IA identifica motivo real','Chance de retenção calculada'], meta: false },
+  { icon: IcUsers, title: 'CRM de Leads', bg: '#E6F7F5', ic: '#00523C', desc: 'Centralize todos os contatos, acompanhe o histórico completo e nunca perca um lead por falta de follow-up.', bullets: ['Funil visual com kanban drag-and-drop, em tempo real pra equipe toda','Família com mais de um filho? Um card só, com decisão por aluno','Lembrete automático quando o lead fica 5 dias sem contato','Motivo de perda classificado: o que dá pra melhorar x o que não depende da escola'], meta: false },
+  { icon: IcMsg, title: 'WhatsApp Oficial Meta', bg: '#E8F5E9', ic: '#25D366', desc: 'Toda a equipe atende pelo número oficial da escola, com fila organizada e bot que atende sozinho fora do horário.', bullets: ['Fila sem dono: nunca dois atendentes respondem a mesma família','Construtor visual de fluxo de bot — arrasta blocos, sem programar','Conecta seu número comercial direto pelo painel, sem enviar token','Chat interno da equipe, separado da conversa com a família'], meta: true },
+  { icon: IcColumns, title: 'Pipeline de Matrículas', bg: '#EDE9FE', ic: '#7C3AED', desc: 'Visualize todo o processo com kanban drag-and-drop, do primeiro contato até a matrícula assinada.', bullets: ['Todo lead novo já entra vinculado à campanha ativa, sem passo manual','Marque interesse pra anos futuros antes mesmo de abrir a campanha','Alerta automático quando qualquer etapa cai abaixo da meta','Histórico auditável de cada mudança de etapa'], meta: false },
+  { icon: IcCpu, title: 'Diagnóstico com IA', bg: '#FFF7ED', ic: '#EA580C', desc: 'O sistema lê os dados da sua escola, cruza com dado real de mercado e com os leads que você já tem, e cria um plano de campanha com metas por mês.', bullets: ['Motor de metas com 3 níveis: seu histórico, dado real do Censo Escolar/IBGE e seu funil atual','Lê relatórios do ERP automaticamente (SIGA, Totvs, PDF, Excel)','Nível de ambição ajustável — conservador, realista ou agressivo — na hora','Score de mercado com base em dado oficial do INEP'], meta: false },
+  { icon: IcBarChart, title: 'Relatórios Mensais', bg: '#EFF6FF', ic: '#2563EB', desc: 'Relatórios automáticos com Health Score, desvio de meta e diagnóstico em texto pronto pra reunião com a diretoria.', bullets: ['Health Score de 0 a 100 resume a saúde da campanha do mês','Diagnóstico mensal com resumo executivo gerado por IA','Velocidade necessária: quantas matrículas faltam por semana','Conversão medida por família, não só por aluno'], meta: false },
+  { icon: IcCalCheck, title: 'Gestão de Visitas', bg: '#F0FDF4', ic: '#16A34A', desc: 'Gerencie toda a agenda de visitas com confirmação e lembrete automático, e reunião com link de Google Meet gerado sozinho.', bullets: ['Confirmação e lembrete de visita automáticos via WhatsApp','Reunião com link do Google Meet criado e enviado sozinho','Marca visita realizada, não compareceu ou cancelada','Observações e resultado registrados por visita'], meta: false },
+  { icon: IcStar, title: 'Pesquisas e NPS', bg: '#FFF1F2', ic: '#E11D48', desc: 'Pesquisa por link, sem app nem login: nota geral e NPS calculados automaticamente, com análise de IA sobre os resultados.', bullets: ['Perguntas padrão ou 100% customizadas pela escola','Nota geral e NPS calculados sem tabular nada na mão','Análise de IA aponta pontos fortes, fracos e risco de não-rematrícula','Alertas para avaliações negativas'], meta: false },
+  { icon: IcRefreshCw, title: 'Transferências', bg: '#FFFBEB', ic: '#D97706', desc: 'Descubra o motivo real da saída com pesquisa que se adapta à resposta da família, e diagnóstico automático de risco por IA.', bullets: ['Perguntas que mudam conforme o motivo declarado','Diagnóstico de risco gerado automaticamente por IA','Status completo: aguardando, respondido, confirmado, retido','Histórico com possibilidade de restaurar registro'], meta: false },
+  { icon: IcContact, title: 'Contatos', bg: '#ECFEFF', ic: '#0E7490', desc: 'Base única de contatos da escola, com detecção automática de duplicados e histórico completo de cada família.', bullets: ['Mesclagem inteligente de duplicados, sem perder histórico','Campos personalizados criados pela própria escola','Importação e exportação em massa, sem limite de linhas','Timeline com tudo: lead, conversas, visitas e pesquisas'], meta: false },
 ]
 
 function Solucoes() {
@@ -378,10 +380,10 @@ function MetaPartner() {
           Somos Parceiros Oficiais de<br /><span style={{ color: '#0DD3BF' }}>Integração WhatsApp Meta</span>
         </h2>
         <p style={{ fontSize: 16, color: 'rgba(255,255,255,.72)', maxWidth: 600, margin: '0 auto 40px', lineHeight: 1.8 }}>
-          Isso significa número oficial homologado, atendimento centralizado de toda a equipe, bot inteligente, histórico preservado e zero risco de bloqueio — tudo dentro das normas oficiais do Meta.
+          Isso significa número oficial homologado, atendimento centralizado de toda a equipe, bot inteligente, histórico preservado e zero risco de bloqueio. A conexão do seu número comercial acontece direto pelo painel, pelo fluxo oficial da Meta — sem enviar token nem depender de TI.
         </p>
         <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
-          {[{ Icon: IcShield, label: 'Conta verificada Meta' }, { Icon: IcCheck, label: 'API Oficial WhatsApp Business' }, { Icon: IcUsers, label: 'Multi-atendente centralizado' }].map((b, i) => (
+          {[{ Icon: IcShield, label: 'Conta verificada Meta' }, { Icon: IcCheck, label: 'API Oficial WhatsApp Business' }, { Icon: IcUsers, label: 'Multi-atendente centralizado' }, { Icon: IcSettings, label: 'Conexão em 1 clique, sem token manual' }].map((b, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.15)', padding: '10px 20px', borderRadius: 999 }}>
               <b.Icon size={15} color="#0DD3BF" />
               <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{b.label}</span>
@@ -412,7 +414,7 @@ function ComoFunciona() {
           <div style={{ position: 'absolute', top: 50, left: '18%', right: '18%', height: 2, background: 'linear-gradient(90deg,#00A896,#0DD3BF,#00A896)', opacity: .3, pointerEvents: 'none' }} />
           {[
             { num: '01', Icon: IcSettings, title: 'Configure sua escola em 5 dias', desc: 'Nossa equipe configura tudo: integração com o ERP, WhatsApp oficial homologado, equipe treinada e plano de campanha gerado pela IA.' },
-            { num: '02', Icon: IcCpu, title: 'IA lê seus dados e cria o plano', desc: 'O sistema lê automaticamente o histórico do ERP, compara com benchmarks do mercado e gera metas mensais, ações e calendário de captação.' },
+            { num: '02', Icon: IcCpu, title: 'IA lê seus dados e cria o plano', desc: 'O sistema lê automaticamente o histórico do ERP, cruza com dado real de mercado da sua cidade e com os leads que você já tem no funil, e gera metas mensais, ações e calendário de captação.' },
             { num: '03', Icon: IcTrendUp, title: 'Acompanhe, reaja e converta', desc: 'Dashboard semanal com alertas, desvios e análise automática. Relatório mensal completo. Sua equipe sabe o que fazer a cada semana.' },
           ].map((s, i) => (
             <RevealCard key={i} delay={`${i + 1}`}>
@@ -508,11 +510,11 @@ function Diferenciais() {
         <div className="grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 22 }}>
           {[
             { Icon: IcMapPin, title: '100% feito para o Brasil', desc: 'LGPD, INEP, Censo Escolar e ERPs nacionais integrados nativamente. Desenvolvido para a realidade das escolas privadas brasileiras.' },
-            { Icon: IcCpu, title: 'IA que cria sua campanha', desc: 'O sistema lê os dados do ERP, compara com o mercado local e gera automaticamente um plano com metas, ações e calendário de captação.' },
-            { Icon: IcShield, title: 'Parceiro Oficial Meta', desc: 'API Oficial WhatsApp Business. Número oficial da escola, sem risco de bloqueio, atendimento centralizado para toda a equipe.' },
-            { Icon: IcBarChart, title: 'Relatórios mensais automáticos', desc: 'Todo mês, um relatório completo da campanha é gerado automaticamente. O gestor entende o que aconteceu e o que precisa mudar.' },
-            { Icon: IcActivity, title: 'Atendimento em tempo real', desc: 'Acompanhe todos os atendimentos via WhatsApp: tempo de espera, avaliação das famílias, produtividade por atendente.' },
-            { Icon: IcRefreshCw, title: 'Ciclo completo de matrícula', desc: 'Da captação de novos alunos à rematrícula dos atuais. Com inteligência preditiva em cada etapa do ciclo escolar.' },
+            { Icon: IcCpu, title: 'IA que cria sua campanha', desc: 'O sistema lê os dados do ERP, cruza com dado real de mercado (Censo Escolar/INEP) e com os leads que você já tem no funil, e gera automaticamente um plano com metas, ações e calendário.' },
+            { Icon: IcShield, title: 'Parceiro Oficial Meta', desc: 'API Oficial WhatsApp Business. Conecta o número oficial da escola direto pelo painel, sem risco de bloqueio, atendimento centralizado para toda a equipe.' },
+            { Icon: IcBarChart, title: 'Relatórios mensais automáticos', desc: 'Todo mês, um diagnóstico completo com Health Score e resumo executivo é gerado automaticamente. O gestor entende o que aconteceu e o que precisa mudar.' },
+            { Icon: IcActivity, title: 'Nada se perde entre atendentes', desc: 'Fila organizada sem dono duplicado, transferência de conversa com histórico e chat interno da equipe — separado da conversa com a família.' },
+            { Icon: IcRefreshCw, title: 'Ciclo completo de matrícula', desc: 'Da consolidação de família num card só à rematrícula dos atuais, passando por transferência e pesquisa de satisfação — com IA em cada etapa.' },
           ].map((d, i) => (
             <RevealCard key={i} delay={`${(i % 3) + 1}`}>
               <div className="card" style={{ padding: 32, height: '100%' }}>
@@ -577,11 +579,12 @@ function FAQ() {
   const r0 = useReveal()
   const items = [
     { q: 'Como funciona o processo de implantação?', a: 'Nossa equipe conduz tudo: integração com o ERP, homologação do WhatsApp Oficial Meta, cadastro da equipe, personalização dos fluxos e treinamento. Em média 5 a 7 dias úteis do primeiro acesso à campanha rodando.' },
-    { q: 'O sistema realmente cria o plano de campanha sozinho?', a: 'Sim. A IA lê automaticamente os relatórios do seu ERP, cruza com dados do Censo Escolar e IBGE e gera um plano completo com metas mensais por série, ações recomendadas e calendário de captação. Você revisa e aplica.' },
+    { q: 'O sistema realmente cria o plano de campanha sozinho?', a: 'Sim. A IA cruza três fontes: o histórico de conversão da sua própria escola, dado real de mercado do Censo Escolar/IBGE da sua cidade, e os leads que você já tem no funil — pra não repetir meta em cima de quem já está em conversa. Você ainda ajusta o nível de ambição (conservador, realista ou agressivo) antes de aplicar.' },
     { q: 'Preciso de conhecimento técnico para usar?', a: 'Não. A plataforma foi desenvolvida para gestores e equipes de atendimento de escolas. O onboarding é guiado e o suporte em português está sempre disponível.' },
-    { q: 'Como funciona a integração com o WhatsApp?', a: 'Usamos a API Oficial do Meta WhatsApp Business. O processo de homologação leva de 2 a 5 dias úteis e nossa equipe realiza tudo por você. Sem risco de bloqueio.' },
+    { q: 'Como funciona a integração com o WhatsApp?', a: 'Usamos a API Oficial do Meta WhatsApp Business. Você conecta o número comercial da escola direto pelo painel, pelo fluxo oficial de homologação da Meta, sem enviar token nem depender de TI. Sem risco de bloqueio.' },
     { q: 'A plataforma funciona com qualquer ERP escolar?', a: 'Sim. A IA processa relatórios em PDF, XLS e CSV de qualquer ERP: SIGA, Totvs, Escolare, Sistec e outros sistemas nacionais.' },
-    { q: 'Como funcionam os relatórios mensais?', a: 'Todo mês o sistema gera automaticamente um relatório completo da campanha — desvios, conversões, performance por canal e análise de tendências. Você recebe e discute com o consultor dedicado na reunião mensal.' },
+    { q: 'Como funcionam os relatórios mensais?', a: 'Todo mês o sistema gera automaticamente um diagnóstico completo da campanha — Health Score, desvios, conversão por família, análise de tendências e um resumo executivo em texto pronto pra reunião. Você discute com o consultor dedicado na reunião mensal.' },
+    { q: 'A plataforma atende redes com mais de uma unidade?', a: 'Sim. Uma rede pode compartilhar um único número de WhatsApp entre as unidades, com o bot direcionando automaticamente a conversa pra escola certa, e visibilidade centralizada para a gestão.' },
   ]
   return (
     <section className="section-pad" style={{ background: '#F4F7F5' }}>

@@ -11,7 +11,7 @@ function IconInstagram({ size = 18 }: { size?: number }) {
 }
 
 const PRODUTO = ['CRM de Leads', 'WhatsApp Oficial', 'Pipeline', 'IA de Campanha', 'Relatórios']
-const EMPRESA = [{ label: 'Quem Somos', href: '/sobre' }, { label: 'Blog', href: '/blog' }, { label: 'Parceiros', href: '/parceiros' }]
+const EMPRESA = [{ label: 'Quem Somos', href: '/sobre' }, { label: 'Blog', href: '/blog' }, { label: 'Parceiros', href: '/parceiros' }, { label: 'Parceria Oficial Meta', href: '/parceria-meta' }]
 const LEGAL = [{ label: 'Privacidade', href: '/privacidade' }, { label: 'Termos de uso', href: '/termos' }]
 
 export default function Footer() {

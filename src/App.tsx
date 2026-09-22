@@ -19,6 +19,7 @@ import Privacidade        from './pages/Privacidade'
 import Termos             from './pages/Termos'
 import SobreNos           from './pages/SobreNos'
 import Parceiros          from './pages/Parceiros'
+import ParceriaMeta       from './pages/ParceriaMeta'
 import Blog, { BlogPost } from './pages/Blog'
 
 // ── School user ───────────────────────────────────────────────────────────
@@ -244,6 +245,7 @@ function AppContent() {
         <Route path="/termos"         element={<Termos />} />
         <Route path="/sobre"          element={<SobreNos />} />
         <Route path="/parceiros"      element={<Parceiros />} />
+        <Route path="/parceria-meta"  element={<ParceriaMeta />} />
         <Route path="/blog"           element={<Blog />} />
         <Route path="/blog/:slug"     element={<BlogPost />} />
         <Route path="/login"          element={<LoginForm />} />
