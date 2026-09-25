@@ -797,6 +797,19 @@ function normalizeCaptureText(raw: string): string {
 
 type CaptureResult = { matched: boolean; skipBot: boolean }
 
+// Canal do gatilho → leads.source do lead criado automaticamente. Valores
+// precisam existir em sourceOptions (src/components/leads/leadFormShared.ts)
+// pra aparecerem certo no Kanban e em "leads por origem" do GestorHome.
+const CAPTURE_CHANNEL_LEAD_SOURCE: Record<string, string> = {
+  meta_ads:   'Instagram',
+  instagram:  'Instagram',
+  facebook:   'Facebook',
+  google_ads: 'Google',
+  site:       'Site',
+  tiktok:     'Outros',
+  outro:      'Outros',
+}
+
 // Pool = atendentes diretos + membros dos grupos (whatsapp_groups) do
 // gatilho, sem repetição, na ordem de cadastro. Round-robin a partir de
 // capture_triggers.rr_index, pulando quem não está disponível NESTA escola:
@@ -876,7 +889,7 @@ async function applyCaptureTrigger(p: {
 
   const { data: triggers, error: trgErr } = await supabase
     .from('capture_triggers')
-    .select('id, name, trigger_text, meta_ad_ids, auto_reply, skip_bot_flow, tag_name, rr_index')
+    .select('id, name, channel, trigger_text, meta_ad_ids, auto_reply, skip_bot_flow, tag_name, rr_index')
     .eq('institution_id', p.institutionId)
     .eq('is_active', true)
     .is('archived_at', null)
@@ -922,9 +935,9 @@ async function applyCaptureTrigger(p: {
   // Mesmo formato de telefone gravado por upsertContact.
   const contactPhone = normalizeBrazilianInput(p.remoteJid)
   const [{ data: conv }, { data: contact }, { data: existingTag }] = await Promise.all([
-    supabase.from('whatsapp_conversations').select('id, tags')
+    supabase.from('whatsapp_conversations').select('id, tags, lead_id, contact_name')
       .eq('institution_id', p.institutionId).eq('remote_jid', p.remoteJid).maybeSingle(),
-    supabase.from('whatsapp_contacts').select('id, tags')
+    supabase.from('whatsapp_contacts').select('id, tags, lead_id, type, name')
       .eq('institution_id', p.institutionId).eq('phone', contactPhone).maybeSingle(),
     supabase.from('whatsapp_tags').select('id')
       .eq('institution_id', p.institutionId).eq('name', tagName).maybeSingle(),
@@ -964,6 +977,7 @@ async function applyCaptureTrigger(p: {
 
   let botSkipped = false
   let assignee: { id: string; full_name: string | null } | null = null
+  let createdLeadId: string | null = null
   if (p.applyActions) {
     if (trigger.skip_bot_flow) {
       botSkipped = true
@@ -982,6 +996,48 @@ async function applyCaptureTrigger(p: {
     } else {
       convUpdate.capture_bot_skipped = false
     }
+
+    // Lead automático em todo match de início de atendimento (com ou sem
+    // "pular robô" — comparação justa entre campanhas no dashboard). Sem
+    // isso a conversa só vira lead se o atendente lembrar de criar na mão,
+    // e a métrica de conversão nunca conta. autoLinkLead já rodou antes:
+    // lead_id nulo aqui = não existe lead com esse telefone. Contato
+    // marcado como cliente (família de aluno atual) não vira lead novo.
+    const existingLeadId = (conv as any)?.lead_id || (contact as any)?.lead_id || null
+    if (existingLeadId) {
+      if (!(conv as any)?.lead_id) convUpdate.lead_id = existingLeadId
+    } else if ((contact as any)?.type !== 'client') {
+      const responsibleName =
+        ((contact as any)?.name && (contact as any).name !== contactPhone ? (contact as any).name : null) ||
+        (conv as any)?.contact_name || contactPhone
+      const { data: newLead, error: leadErr } = await supabase.from('leads')
+        .insert({
+          institution_id:   p.institutionId,
+          phone:            contactPhone,
+          responsible_name: responsibleName,
+          student_name:     '',
+          grade_interest:   '',
+          source:           CAPTURE_CHANNEL_LEAD_SOURCE[trigger.channel] || 'Outros',
+          status:           'new',
+          assigned_to:      assignee?.id ?? null,
+          notes:            `Veio da campanha: ${trigger.name} (Captação Inteligente)`,
+        })
+        .select('id')
+        .single()
+      if (leadErr) {
+        console.error('❌ [capture] erro ao criar lead:', leadErr.message)
+      } else if (newLead?.id) {
+        createdLeadId      = newLead.id
+        convUpdate.lead_id = newLead.id
+        if (contact) {
+          const { error: ctLeadErr } = await supabase.from('whatsapp_contacts')
+            .update({ lead_id: newLead.id, type: 'lead' })
+            .eq('id', (contact as any).id)
+          if (ctLeadErr) console.error('❌ [capture] erro ao vincular lead ao contato:', ctLeadErr.message)
+        }
+        console.log('[capture] lead criado:', newLead.id, '| origem:', trigger.name)
+      }
+    }
   }
 
   const { error: convErr } = await supabase.from('whatsapp_conversations')
@@ -998,10 +1054,10 @@ async function applyCaptureTrigger(p: {
     institution_id: p.institutionId,
     remote_jid:     p.remoteJid,
     event_type:     'capture_trigger',
-    description:    botSkipped
+    description:    (botSkipped
       ? `Captação Inteligente: veio de "${trigger.name}" — robô não ativado, ${assignee ? `atribuído para ${assignee.full_name || 'atendente'}` : 'enviado para a fila geral'}`
-      : `Captação Inteligente: veio de "${trigger.name}"`,
-    metadata:       { trigger_id: trigger.id, match_type: matchType, bot_skipped: botSkipped, source_id: sourceId || null },
+      : `Captação Inteligente: veio de "${trigger.name}"`) + (createdLeadId ? ' — lead criado automaticamente' : ''),
+    metadata:       { trigger_id: trigger.id, match_type: matchType, bot_skipped: botSkipped, source_id: sourceId || null, created_lead_id: createdLeadId },
   })
 
   const { error: hitErr } = await supabase.from('capture_trigger_hits').insert({

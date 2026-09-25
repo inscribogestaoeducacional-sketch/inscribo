@@ -567,7 +567,7 @@ export default function CaptacaoInteligente() {
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: '#f8fafc' }}>
-                        {['Gatilho', 'Acionamentos', 'Conversas', 'Contatos', 'Leads', 'Matrículas', 'Contato → Lead', 'Lead → Matrícula', '1ª resposta'].map(col => (
+                        {['Gatilho', 'Acionamentos', 'Conversas', 'Contatos', 'Leads', 'Matrículas', 'Contato → Matrícula', 'Lead → Matrícula', '1ª resposta'].map(col => (
                           <th key={col} style={{ padding: '10px 16px', fontSize: 11, fontWeight: 600, color: '#94a3b8', textAlign: col === 'Gatilho' ? 'left' : 'right', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{col}</th>
                         ))}
                       </tr>
@@ -591,7 +591,10 @@ export default function CaptacaoInteligente() {
                             <td style={num}>{fmt(r.first_touch_contacts)}</td>
                             <td style={num}>{fmt(r.first_touch_leads)}</td>
                             <td style={{ ...num, fontWeight: 700, color: '#00A896' }}>{fmt(r.first_touch_enrollments)}</td>
-                            <td style={num}>{pct(r.first_touch_leads, r.first_touch_contacts)}</td>
+                            {/* Contato → Matrícula (não Contato → Lead): o webhook cria lead
+                                automaticamente em todo match, então contato → lead fica
+                                perto de 100% e não diferencia campanha nenhuma. */}
+                            <td style={num}>{pct(r.first_touch_enrollments, r.first_touch_contacts)}</td>
                             <td style={num}>{pct(r.first_touch_enrollments, r.first_touch_leads)}</td>
                             <td style={num} title={r.responded_entries ? `Média de ${r.responded_entries} atendimento(s) respondido(s)` : 'Nenhum atendimento respondido ainda'}>
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
