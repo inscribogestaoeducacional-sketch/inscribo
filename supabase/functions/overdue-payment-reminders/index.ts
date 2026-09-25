@@ -90,6 +90,10 @@ serve(async (req) => {
       .from('payments')
       .select('id, institution_id, amount, due_date, asaas_charge_url, institutions(id, name, email)')
       .eq('status', 'overdue')
+      // Cobrança de campanha de Transmissão não é inadimplência: sem pagamento
+      // a campanha só não sai — nada de lembrete de "mensalidade em atraso".
+      // (.or com is.null: .neq sozinho descartaria payment_type nulo.)
+      .or('payment_type.is.null,payment_type.neq.broadcast')
 
     if (fetchErr) throw new Error(fetchErr.message)
 

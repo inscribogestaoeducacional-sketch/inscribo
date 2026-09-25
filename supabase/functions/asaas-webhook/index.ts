@@ -98,18 +98,22 @@ serve(async (req) => {
       // pelo cron overdue-payment-reminders nunca se resolvem sozinhos —
       // ficavam acumulando mesmo com o pagamento já confirmado via link.
       // Best-effort: não deve derrubar a confirmação do pagamento.
-      try {
-        await sb.from('system_notifications')
-          .update({ read_at: new Date().toISOString() })
-          .eq('institution_id', institutionId).eq('type', 'overdue_reminder').is('read_at', null)
-      } catch (e) {
-        console.error('[asaas-webhook] erro ao limpar notificações de atraso:', String(e))
-      }
-
-      // 2. Busca o pagamento para saber o tipo
+      // 2. Busca o pagamento para saber o tipo (antes da limpeza: campanha de
+      // Transmissão paga não quita mensalidade atrasada, então não limpa os
+      // alertas "Mensalidade em atraso").
       const { data: pmt } = paymentId
         ? await sb.from('payments').select('*').eq('id', paymentId).single()
         : await sb.from('payments').select('*').eq('asaas_payment_id', payment.id).single()
+
+      if (pmt?.payment_type !== 'broadcast') {
+        try {
+          await sb.from('system_notifications')
+            .update({ read_at: new Date().toISOString() })
+            .eq('institution_id', institutionId).eq('type', 'overdue_reminder').is('read_at', null)
+        } catch (e) {
+          console.error('[asaas-webhook] erro ao limpar notificações de atraso:', String(e))
+        }
+      }
 
       // 2b. Nota Fiscal — cria a linha de controle em payment_invoices assim
       // que o pagamento é confirmado, se ainda não existir uma pra esse
@@ -122,7 +126,12 @@ serve(async (req) => {
         await createPendingInvoice(sb, pmt.id, institutionId, pmt.amount)
       }
 
-      if (pmt?.payment_type === 'implementation') {
+      if (pmt?.payment_type === 'broadcast') {
+        // 3c. Campanha de Transmissão paga → libera sozinha (sem aprovação
+        // manual): broadcast_try_release confere template aprovado + pago e
+        // move pra 'sending' ou 'scheduled'. Idempotente (evento repetido).
+        await releaseBroadcastCampaign(sb, pmt.broadcast_campaign_id, event)
+      } else if (pmt?.payment_type === 'implementation') {
         // 3a. Implantação paga → ativa a instituição e gera mensalidades
         await sb.from('institutions')
           .update({ plan_status: 'active' })
@@ -208,15 +217,12 @@ serve(async (req) => {
 
     // ── PAYMENT_OVERDUE ───────────────────────────────────────────────────────
     if (event === 'PAYMENT_OVERDUE') {
-      if (paymentId) {
-        await sb.from('payments')
-          .update({ status: 'overdue' })
-          .eq('id', paymentId)
-      } else {
-        await sb.from('payments')
-          .update({ status: 'overdue' })
-          .eq('asaas_payment_id', payment.id)
-      }
+      const overdueQuery = sb.from('payments').update({ status: 'overdue' })
+      const { data: overdueRows } = await (paymentId
+        ? overdueQuery.eq('id', paymentId)
+        : overdueQuery.eq('asaas_payment_id', payment.id)
+      ).select('payment_type')
+      const overdueType = overdueRows?.[0]?.payment_type
 
       // Conta quantos dias de atraso
       const diasAtraso = payment.daysOverdue || 1
@@ -226,8 +232,11 @@ serve(async (req) => {
         .eq('id', institutionId)
         .single()
 
-      // Suspende se >30 dias de atraso
-      if (diasAtraso >= 30 && inst?.plan_status === 'active') {
+      // Suspende se >30 dias de atraso. Cobrança de campanha de Transmissão
+      // não suspende a escola: sem pagamento a campanha só não sai.
+      if (overdueType === 'broadcast') {
+        console.log('[asaas-webhook] cobrança de campanha em atraso — campanha segue aguardando pagamento, escola não é suspensa:', payment.id)
+      } else if (diasAtraso >= 30 && inst?.plan_status === 'active') {
         await sb.from('institutions')
           .update({ plan_status: 'suspended' })
           .eq('id', institutionId)
@@ -259,10 +268,29 @@ serve(async (req) => {
 
     // ── PAYMENT_DELETED / PAYMENT_RESTORED ───────────────────────────────────
     if (event === 'PAYMENT_DELETED') {
-      if (paymentId) {
-        await sb.from('payments').update({ status: 'cancelled' }).eq('id', paymentId)
-      } else {
-        await sb.from('payments').update({ status: 'cancelled' }).eq('asaas_payment_id', payment.id)
+      const delQuery = sb.from('payments').update({ status: 'cancelled' })
+      const { data: delRows } = await (paymentId
+        ? delQuery.eq('id', paymentId)
+        : delQuery.eq('asaas_payment_id', payment.id)
+      ).select('payment_type, broadcast_campaign_id')
+      if (delRows?.[0]?.payment_type === 'broadcast') {
+        await releaseBroadcastCampaign(sb, delRows[0].broadcast_campaign_id, event)
+      }
+    }
+
+    // ── PAYMENT_REFUNDED / CHARGEBACK ────────────────────────────────────────
+    // Não eram tratados: o pagamento ficava 'paid' pra sempre. Agora vira
+    // 'refunded' (qualquer tipo — é o status real). Campanha de Transmissão:
+    // broadcast_try_release pausa se ainda não concluiu (payment_refunded).
+    if (event === 'PAYMENT_REFUNDED' || event === 'PAYMENT_CHARGEBACK_REQUESTED' || event === 'PAYMENT_CHARGEBACK_DISPUTE') {
+      const refQuery = sb.from('payments').update({ status: 'refunded' })
+      const { data: refRows } = await (paymentId
+        ? refQuery.eq('id', paymentId)
+        : refQuery.eq('asaas_payment_id', payment.id)
+      ).select('payment_type, broadcast_campaign_id')
+      console.log(`[asaas-webhook] ${event}:`, payment.id, '| tipo:', refRows?.[0]?.payment_type)
+      if (refRows?.[0]?.payment_type === 'broadcast') {
+        await releaseBroadcastCampaign(sb, refRows[0].broadcast_campaign_id, event)
       }
     }
 
@@ -277,6 +305,24 @@ serve(async (req) => {
     })
   }
 })
+
+// ─── Transmissões: reavalia a campanha ligada à cobrança ─────────────────────
+// broadcast_try_release (20260926020000) decide sozinho: pago + template
+// aprovado → 'sending'/'scheduled'; estornado/cancelado antes de concluir →
+// 'paused'. Best-effort: nunca derruba o processamento do webhook.
+async function releaseBroadcastCampaign(sb: any, campaignId: string | null | undefined, event: string) {
+  if (!campaignId) {
+    console.warn('[asaas-webhook] cobrança de campanha sem broadcast_campaign_id —', event)
+    return
+  }
+  try {
+    const { data: newStatus, error } = await sb.rpc('broadcast_try_release', { p_campaign_id: campaignId })
+    if (error) console.error('[asaas-webhook] broadcast_try_release:', error.message)
+    else console.log(`[asaas-webhook] campanha ${campaignId} após ${event}: ${newStatus}`)
+  } catch (e) {
+    console.error('[asaas-webhook] erro ao reavaliar campanha:', String(e))
+  }
+}
 
 // ─── Nota Fiscal — cria a linha 'pending' em payment_invoices, se ainda não existir ──
 async function createPendingInvoice(sb: any, paymentId: string, institutionId: string, amount: number) {
