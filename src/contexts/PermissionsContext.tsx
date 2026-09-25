@@ -25,7 +25,9 @@ const isPrivilegedRole = (role: string) => role === 'admin' || role === 'manager
 // Módulos que ficam DESLIGADOS pra atendente sem linha em user_permissions
 // (os demais seguem liberados por padrão). captacao: gestão de campanhas é
 // de admin/gestor; o admin libera por atendente em Usuários → Permissões.
-export const DEFAULT_OFF_MODULES = ['captacao']
+// transmissoes: mesmo critério — e o servidor confere a mesma regra em
+// broadcast_user_can_manage() (20260926020000) antes de qualquer escrita.
+export const DEFAULT_OFF_MODULES = ['captacao', 'transmissoes']
 
 export function PermissionsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()

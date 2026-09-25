@@ -17,6 +17,7 @@ const PERM_MODULES = [
   { id: 'visitas',        label: 'Visitas',        icon: '📅', desc: 'Agendamento e controle de visitas' },
   { id: 'whatsapp',       label: 'WhatsApp',       icon: '💬', desc: 'Hub de atendimento e fluxos' },
   { id: 'captacao',       label: 'Captação',       icon: '📣', desc: 'Gatilhos de campanha e dashboard de origem (desligado por padrão)' },
+  { id: 'transmissoes',   label: 'Transmissões',   icon: '📨', desc: 'Campanhas de disparo em massa com template aprovado (desligado por padrão)' },
   { id: 'relatorios',     label: 'Relatórios',     icon: '📊', desc: 'Métricas e relatórios de desempenho' },
   { id: 'transferencias', label: 'Transferências', icon: '↔️', desc: 'Transferência de leads entre atendentes' },
   { id: 'pesquisas',      label: 'Pesquisas',      icon: '⭐', desc: 'Pesquisas de satisfação e resultados' },
