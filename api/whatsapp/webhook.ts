@@ -779,12 +779,18 @@ async function upsertContact(
 // template): resposta automática, pular robô e distribuição round-robin —
 // nunca tira uma conversa de um atendente no meio do atendimento.
 
-// Minúsculas, sem acento, espaços colapsados — usada dos dois lados do match.
+// Minúsculas, sem acento, SEM PONTUAÇÃO, espaços colapsados — usada dos dois
+// lados do match. Pontuação (\p{P}: . , ! ? ; : … aspas, parênteses, hífen)
+// vira espaço: texto humano digitado/copiado não tem pontuação confiável, e o
+// ponto final do texto pré-preenchido chega a ser cortado por quem transforma
+// o link wa.me em link clicável (1º teste ponta a ponta: "…Ágape." chegou
+// como "…Ágape" e não bateu). Emojis são \p{So}, não \p{P} — continuam.
 function normalizeCaptureText(raw: string): string {
   return raw
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
+    .replace(/\p{P}+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -891,6 +897,13 @@ async function applyCaptureTrigger(p: {
   }
 
   if (!trigger) {
+    // Diagnóstico: só quando a escola TEM gatilho ativo (escola sem gatilho
+    // não polui o log). Início do texto normalizado — é o que o match compara.
+    if (triggers?.length) {
+      console.log('[capture] sem match — gatilhos ativos:', triggers.length,
+        '| texto normalizado:', JSON.stringify(normalizedText.slice(0, 80)),
+        '| referral source_id:', sourceId || '-')
+    }
     // Anúncio Meta ainda não cadastrado: guarda o referral na conversa mesmo
     // assim — é assim que a escola descobre o source_id pra cadastrar.
     if (referral) {

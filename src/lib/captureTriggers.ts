@@ -43,11 +43,13 @@ export const CAPTURE_TEXT_MIN = 10
 
 // Espelho de normalizeCaptureText do webhook — api/ não importa de src/lib
 // neste projeto, então a regra existe nos dois lugares; manter iguais.
+// Ignora pontuação (\p{P}) dos dois lados; emojis (\p{So}) continuam.
 export function normalizeCaptureText(raw: string): string {
   return raw
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
+    .replace(/\p{P}+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -58,11 +60,18 @@ export function normalizeCaptureText(raw: string): string {
 // contrário cortariam ou alterariam o texto e quebrariam o match.
 // Não passa por normalizePhone: número da escola pode ser fixo (8 dígitos) e
 // ganharia um 9 indevido. Só tira a formatação e garante o 55.
+//
+// encodeURIComponent deixa . ! ' ( ) * ~ crus — uma URL terminando em "."
+// tem o ponto cortado por quem transforma texto em link clicável (WhatsApp,
+// Notas, bio do Instagram), que trata como pontuação da frase. Codificar
+// esses também garante que o link nunca termine em pontuação solta.
 export function buildWaMeLink(schoolPhone: string, text: string): string | null {
   let digits = (schoolPhone || '').replace(/\D/g, '')
   if (!digits) return null
   if (digits.length === 10 || digits.length === 11) digits = `55${digits}`
-  return `https://wa.me/${digits}?text=${encodeURIComponent(text.trim())}`
+  const encoded = encodeURIComponent(text.trim())
+    .replace(/[.!'()*~]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase())
+  return `https://wa.me/${digits}?text=${encoded}`
 }
 
 // Retorna os outros gatilhos ativos cujo texto contém ou está contido no
