@@ -762,6 +762,142 @@ async function upsertContact(
   }
 }
 
+// ── Roteamento de atendimento (compartilhado) ────────────────────────────────
+// Peças que qualquer origem de atendimento reutiliza — hoje a Captação
+// Inteligente; próxima, a resposta a campanha de Transmissão. Cada origem
+// continua dona do próprio match, das próprias tabelas (config, atendentes,
+// histórico) e de onde guarda o ponteiro do round-robin; aqui fica só o que é
+// igual: etiqueta, pular robô, escolha do atendente e registro de evento.
+
+type RoutingAssignee = { id: string; full_name: string | null }
+
+// Etiqueta no catálogo da escola (whatsapp_tags) + no contato. Sem a linha no
+// catálogo a etiqueta aparece no contato mas não no dropdown/filtro de
+// etiquetas. A conversa recebe a etiqueta no update que o chamador já monta
+// (ver tagsWith), pra não gastar um UPDATE a mais.
+async function applyRoutingTag(p: {
+  institutionId: string
+  tagName:       string
+  tagInCatalog:  boolean
+  contact:       { id: string; tags?: string[] | null } | null
+  logPrefix:     string
+}): Promise<void> {
+  if (!p.tagInCatalog) {
+    const { error: tagErr } = await supabase.from('whatsapp_tags')
+      .insert({ institution_id: p.institutionId, name: p.tagName, color: '#6366f1' })
+    if (tagErr) console.error(`❌ ${p.logPrefix} erro ao criar whatsapp_tags:`, tagErr.message)
+  }
+  if (p.contact) {
+    const contactTags: string[] = p.contact.tags || []
+    if (!contactTags.includes(p.tagName)) {
+      await supabase.from('whatsapp_contacts')
+        .update({ tags: [...contactTags, p.tagName] })
+        .eq('id', p.contact.id)
+    }
+  }
+}
+
+// Fragmento de update da conversa com a etiqueta — vazio se já tem.
+function tagsWith(tags: string[] | null | undefined, tagName: string): { tags?: string[] } {
+  const current = tags || []
+  return current.includes(tagName) ? {} : { tags: [...current, tagName] }
+}
+
+// Campos da conversa quando o robô é pulado. Sem ninguém disponível:
+// 'waiting' sem dono (fila geral), nunca 'open' sem dono — mesmo limbo já
+// corrigido no fluxo.
+function skipBotConversationFields(assignee: RoutingAssignee | null): Record<string, any> {
+  return {
+    bot_active:         false,
+    bot_current_node:   null,
+    bot_variables:      {},
+    assigned_user_id:   assignee?.id ?? null,
+    assigned_user_name: assignee?.full_name ?? null,
+    status:             assignee ? 'open' : 'waiting',
+  }
+}
+
+// Pool = atendentes diretos + membros dos grupos (whatsapp_groups), sem
+// repetição, na ordem recebida. Round-robin a partir de rrIndex, pulando quem
+// não está disponível NESTA escola: vínculo ativo + is_available em
+// user_institutions (não o cache users.is_available, que só reflete a
+// instituição ativa do usuário) e fora do horário de almoço (mesmo critério do
+// nó de transferência do fluxo). saveRrIndex grava o novo ponteiro onde a
+// origem guarda o dela (ex: capture_triggers.rr_index).
+async function pickRoundRobinAssignee(p: {
+  institutionId: string
+  assignees:     { user_id: string | null; group_id: string | null }[]
+  rrIndex:       number | null
+  saveRrIndex:   (idx: number) => Promise<void>
+}): Promise<RoutingAssignee | null> {
+  const rows = p.assignees
+  if (!rows?.length) return null
+
+  const groupIds = rows.map((r: any) => r.group_id).filter(Boolean)
+  let groups: any[] = []
+  if (groupIds.length) {
+    const { data } = await supabase
+      .from('whatsapp_groups')
+      .select('id, member_ids')
+      .in('id', groupIds)
+      .eq('institution_id', p.institutionId)
+    groups = data || []
+  }
+
+  const pool: string[] = []
+  const add = (id: string | null | undefined) => { if (id && !pool.includes(id)) pool.push(id) }
+  for (const r of rows as any[]) {
+    if (r.user_id) add(r.user_id)
+    else for (const m of groups.find(g => g.id === r.group_id)?.member_ids || []) add(m)
+  }
+  if (!pool.length) return null
+
+  const [{ data: links }, { data: members }, { data: flowCfg }] = await Promise.all([
+    supabase.from('user_institutions').select('user_id')
+      .eq('institution_id', p.institutionId).eq('active', true).eq('is_available', true).in('user_id', pool),
+    supabase.from('users').select('id, full_name, active, lunch_start, lunch_end').in('id', pool),
+    supabase.from('whatsapp_flows').select('timezone').eq('institution_id', p.institutionId).maybeSingle(),
+  ])
+  const eligible = new Set((links || []).map((l: any) => l.user_id))
+
+  const tz      = (flowCfg as any)?.timezone || 'America/Sao_Paulo'
+  const nowTz   = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
+  const curMins = nowTz.getHours() * 60 + nowTz.getMinutes()
+  const isOnLunch = (u: { lunch_start?: string | null; lunch_end?: string | null }) => {
+    if (!u.lunch_start || !u.lunch_end) return false
+    const [lsh, lsm] = u.lunch_start.split(':').map(Number)
+    const [leh, lem] = u.lunch_end.split(':').map(Number)
+    return curMins >= lsh * 60 + lsm && curMins <= leh * 60 + lem
+  }
+
+  for (let i = 1; i <= pool.length; i++) {
+    const idx = ((p.rrIndex ?? -1) + i) % pool.length
+    const u   = (members || []).find((m: any) => m.id === pool[idx]) as any
+    if (u && u.active !== false && eligible.has(u.id) && !isOnLunch(u)) {
+      await p.saveRrIndex(idx)
+      return { id: u.id, full_name: u.full_name ?? null }
+    }
+  }
+  return null
+}
+
+// Linha no histórico da conversa (whatsapp_conversation_events).
+async function logConversationEvent(
+  institutionId: string,
+  remoteJid:     string,
+  eventType:     string,
+  description:   string,
+  metadata:      Record<string, unknown>
+): Promise<void> {
+  await supabase.from('whatsapp_conversation_events').insert({
+    institution_id: institutionId,
+    remote_jid:     remoteJid,
+    event_type:     eventType,
+    description,
+    metadata,
+  })
+}
+
 // ── Captação Inteligente ─────────────────────────────────────────────────────
 // Gatilhos de captação (capture_triggers, ver
 // 20260925000000_capture_triggers.sql): identifica de qual anúncio/publicação
@@ -810,69 +946,25 @@ const CAPTURE_CHANNEL_LEAD_SOURCE: Record<string, string> = {
   outro:      'Outros',
 }
 
-// Pool = atendentes diretos + membros dos grupos (whatsapp_groups) do
-// gatilho, sem repetição, na ordem de cadastro. Round-robin a partir de
-// capture_triggers.rr_index, pulando quem não está disponível NESTA escola:
-// vínculo ativo + is_available em user_institutions (não o cache
-// users.is_available, que só reflete a instituição ativa do usuário) e fora
-// do horário de almoço (mesmo critério do nó de transferência do fluxo).
+// Atendentes/grupos do gatilho, na ordem de cadastro; ponteiro do
+// round-robin em capture_triggers.rr_index. Escolha em pickRoundRobinAssignee.
 async function pickCaptureAssignee(
   institutionId: string,
   trigger:       { id: string; rr_index: number | null }
-): Promise<{ id: string; full_name: string | null } | null> {
+): Promise<RoutingAssignee | null> {
   const { data: rows } = await supabase
     .from('capture_trigger_assignees')
     .select('user_id, group_id')
     .eq('trigger_id', trigger.id)
     .order('created_at', { ascending: true })
-  if (!rows?.length) return null
-
-  const groupIds = rows.map((r: any) => r.group_id).filter(Boolean)
-  let groups: any[] = []
-  if (groupIds.length) {
-    const { data } = await supabase
-      .from('whatsapp_groups')
-      .select('id, member_ids')
-      .in('id', groupIds)
-      .eq('institution_id', institutionId)
-    groups = data || []
-  }
-
-  const pool: string[] = []
-  const add = (id: string | null | undefined) => { if (id && !pool.includes(id)) pool.push(id) }
-  for (const r of rows as any[]) {
-    if (r.user_id) add(r.user_id)
-    else for (const m of groups.find(g => g.id === r.group_id)?.member_ids || []) add(m)
-  }
-  if (!pool.length) return null
-
-  const [{ data: links }, { data: members }, { data: flowCfg }] = await Promise.all([
-    supabase.from('user_institutions').select('user_id')
-      .eq('institution_id', institutionId).eq('active', true).eq('is_available', true).in('user_id', pool),
-    supabase.from('users').select('id, full_name, active, lunch_start, lunch_end').in('id', pool),
-    supabase.from('whatsapp_flows').select('timezone').eq('institution_id', institutionId).maybeSingle(),
-  ])
-  const eligible = new Set((links || []).map((l: any) => l.user_id))
-
-  const tz      = (flowCfg as any)?.timezone || 'America/Sao_Paulo'
-  const nowTz   = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
-  const curMins = nowTz.getHours() * 60 + nowTz.getMinutes()
-  const isOnLunch = (u: { lunch_start?: string | null; lunch_end?: string | null }) => {
-    if (!u.lunch_start || !u.lunch_end) return false
-    const [lsh, lsm] = u.lunch_start.split(':').map(Number)
-    const [leh, lem] = u.lunch_end.split(':').map(Number)
-    return curMins >= lsh * 60 + lsm && curMins <= leh * 60 + lem
-  }
-
-  for (let i = 1; i <= pool.length; i++) {
-    const idx = ((trigger.rr_index ?? -1) + i) % pool.length
-    const u   = (members || []).find((m: any) => m.id === pool[idx]) as any
-    if (u && u.active !== false && eligible.has(u.id) && !isOnLunch(u)) {
+  return pickRoundRobinAssignee({
+    institutionId,
+    assignees:   rows || [],
+    rrIndex:     trigger.rr_index,
+    saveRrIndex: async (idx) => {
       await supabase.from('capture_triggers').update({ rr_index: idx }).eq('id', trigger.id)
-      return { id: u.id, full_name: u.full_name ?? null }
-    }
-  }
-  return null
+    },
+  })
 }
 
 async function applyCaptureTrigger(p: {
@@ -943,40 +1035,34 @@ async function applyCaptureTrigger(p: {
       .eq('institution_id', p.institutionId).eq('name', tagName).maybeSingle(),
   ])
 
-  // Etiqueta no catálogo da escola (whatsapp_tags) — sem ela a etiqueta
-  // aparece no contato mas não no dropdown/filtro de etiquetas.
-  if (!existingTag) {
-    const { error: tagErr } = await supabase.from('whatsapp_tags')
-      .insert({ institution_id: p.institutionId, name: tagName, color: '#6366f1' })
-    if (tagErr) console.error('❌ [capture] erro ao criar whatsapp_tags:', tagErr.message)
-  }
+  // Etiqueta no catálogo + no contato (leads não tem coluna tags, então a
+  // etiqueta fica em contato + conversa).
+  await applyRoutingTag({
+    institutionId: p.institutionId,
+    tagName,
+    tagInCatalog:  !!existingTag,
+    contact:       (contact as any) ?? null,
+    logPrefix:     '[capture]',
+  })
 
-  // Contato: etiqueta + primeiro toque (nunca sobrescrito — .is(null) no
-  // WHERE, mesmo padrão de source_keyword_id). leads não tem coluna tags,
-  // então a etiqueta fica em contato + conversa.
+  // Contato: primeiro toque (nunca sobrescrito — .is(null) no WHERE, mesmo
+  // padrão de source_keyword_id).
   if (contact) {
-    const contactTags: string[] = (contact as any).tags || []
-    if (!contactTags.includes(tagName)) {
-      await supabase.from('whatsapp_contacts')
-        .update({ tags: [...contactTags, tagName] })
-        .eq('id', (contact as any).id)
-    }
     await supabase.from('whatsapp_contacts')
       .update({ origin_capture_trigger_id: trigger.id, origin_captured_at: now })
       .eq('id', (contact as any).id)
       .is('origin_capture_trigger_id', null)
   }
 
-  const convTags: string[] = (conv as any)?.tags || []
   const convUpdate: Record<string, any> = {
     capture_trigger_id: trigger.id,
     capture_matched_at: now,
     capture_referral:   referral,
-    ...(convTags.includes(tagName) ? {} : { tags: [...convTags, tagName] }),
+    ...tagsWith((conv as any)?.tags, tagName),
   }
 
   let botSkipped = false
-  let assignee: { id: string; full_name: string | null } | null = null
+  let assignee: RoutingAssignee | null = null
   let createdLeadId: string | null = null
   if (p.applyActions) {
     if (trigger.skip_bot_flow) {
@@ -984,14 +1070,7 @@ async function applyCaptureTrigger(p: {
       assignee   = await pickCaptureAssignee(p.institutionId, trigger)
       Object.assign(convUpdate, {
         capture_bot_skipped: true,
-        bot_active:          false,
-        bot_current_node:    null,
-        bot_variables:       {},
-        assigned_user_id:    assignee?.id ?? null,
-        assigned_user_name:  assignee?.full_name ?? null,
-        // Sem ninguém disponível: 'waiting' sem dono (fila geral), nunca
-        // 'open' sem dono — mesmo limbo já corrigido no fluxo.
-        status:              assignee ? 'open' : 'waiting',
+        ...skipBotConversationFields(assignee),
       })
     } else {
       convUpdate.capture_bot_skipped = false
@@ -1050,15 +1129,15 @@ async function applyCaptureTrigger(p: {
     await sendAutoMessage(p.institutionId, p.remoteJid, trigger.auto_reply)
   }
 
-  await supabase.from('whatsapp_conversation_events').insert({
-    institution_id: p.institutionId,
-    remote_jid:     p.remoteJid,
-    event_type:     'capture_trigger',
-    description:    (botSkipped
+  await logConversationEvent(
+    p.institutionId,
+    p.remoteJid,
+    'capture_trigger',
+    (botSkipped
       ? `Captação Inteligente: veio de "${trigger.name}" — robô não ativado, ${assignee ? `atribuído para ${assignee.full_name || 'atendente'}` : 'enviado para a fila geral'}`
       : `Captação Inteligente: veio de "${trigger.name}"`) + (createdLeadId ? ' — lead criado automaticamente' : ''),
-    metadata:       { trigger_id: trigger.id, match_type: matchType, bot_skipped: botSkipped, source_id: sourceId || null, created_lead_id: createdLeadId },
-  })
+    { trigger_id: trigger.id, match_type: matchType, bot_skipped: botSkipped, source_id: sourceId || null, created_lead_id: createdLeadId },
+  )
 
   const { error: hitErr } = await supabase.from('capture_trigger_hits').insert({
     institution_id:      p.institutionId,
