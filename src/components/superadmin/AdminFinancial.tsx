@@ -153,6 +153,7 @@ function NewChargeModal({ institutions, onClose, onSuccess, showToast }: {
           email:          inst?.email,
           cpfCnpj:        inst?.cnpj?.replace(/\D/g, '') || '',
           value:          Number(form.amount),
+          payment_type:   form.payment_type,
           description:    form.description || `${TYPE_MAP[form.payment_type]} — ${inst?.name}`,
           dueDate:        form.due_date,
           billingType:    form.billingType,

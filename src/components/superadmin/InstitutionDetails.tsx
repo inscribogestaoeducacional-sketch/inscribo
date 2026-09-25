@@ -21,6 +21,13 @@ import {
 const inp = 'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none bg-white transition-all'
 const lbl = 'block text-xs font-semibold text-gray-600 mb-1.5'
 
+// Mesmos valores do select "Tipo" da nova cobrança e do TYPE_MAP de AdminFinancial.tsx
+const CHARGE_TYPE_LABELS: Record<string, string> = {
+  implementation:      'Implantação',
+  monthly:             'Mensalidade',
+  extra_conversations: 'Conversas extras',
+}
+
 function fmtBRL(n: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n || 0)
 }
@@ -710,7 +717,8 @@ export default function InstitutionDetails() {
           institution_id: id, name: institution?.name, email: institution?.email,
           cpfCnpj: institution?.cnpj?.replace(/\D/g, '') || '',
           value: Number(chargeForm.amount),
-          description: chargeForm.description || `${chargeForm.payment_type} — ${institution?.name}`,
+          payment_type: chargeForm.payment_type,
+          description: chargeForm.description || `${CHARGE_TYPE_LABELS[chargeForm.payment_type] || chargeForm.payment_type} — ${institution?.name}`,
           dueDate: chargeForm.due_date, billingType: chargeForm.billingType,
         }
       })

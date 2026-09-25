@@ -320,6 +320,7 @@ function NewSchoolWizard({
               email: form.email.trim().toLowerCase(),
               cpfCnpj: form.cnpj.replace(/\D/g, '') || null,
               value: Number(form.implementationValue),
+              payment_type: 'implementation',
               description: `Taxa de implantação — ${form.name.trim()}`,
               dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             },
