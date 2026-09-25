@@ -1158,6 +1158,242 @@ async function applyCaptureTrigger(p: {
   return { matched: true, skipBot: botSkipped }
 }
 
+// ── Transmissões: resposta de campanha ───────────────────────────────────────
+// Prioridade no webhook: resposta de campanha → Captação → regra de resposta
+// a template → robô. Casamento, nesta ordem (sempre na mesma escola):
+//   1. clique em botão de resposta rápida: payload bc:<recipient_id>:<índice>
+//      (colocado no envio por school-broadcast-send);
+//   2. resposta citando a mensagem: context.id = wamid do destinatário;
+//   3. janela: a última mensagem enviada a esse número é o wamid de um
+//      destinatário, dentro de reply_window_hours da campanha (a maioria
+//      responde sem citar).
+// Sempre: etiqueta da ação, resposta registrada no destinatário, colunas
+// broadcast_* na conversa, histórico. Só em atendimento novo: pular robô +
+// distribuição, OU robô normal (zerando o estado deixado pela regra de
+// resposta a template — sem isso a conversa ficava aberta sem dono).
+// Não cria lead (decisão 4): só liga ao lead que já existir.
+
+type BroadcastReplyResult = {
+  matched:              boolean
+  applyActions:         boolean   // atendimento novo — ações de roteamento aplicadas
+  skipBot:              boolean
+  botSkippedAttendance: boolean   // conversa em andamento cujo atendimento pulou o robô
+}
+
+// Igual a broadcast_phone_key() (20260926010000): celular BR sem o 9º dígito.
+function broadcastPhoneKey(raw: string): string {
+  const d = (raw || '').replace(/\D/g, '')
+  return /^55\d{2}9\d{8}$/.test(d) ? d.slice(0, 4) + d.slice(5) : d
+}
+
+const BROADCAST_RECIPIENT_FIELDS = 'id, campaign_id, institution_id, phone_key, sent_at, first_reply_at, clicked_button_index, lead_id'
+
+async function findBroadcastRecipient(p: {
+  institutionId:    string
+  remoteJid:        string
+  msg:              any
+  msgType:          string
+  quotedMsgId:      string | null
+  lastOutMessageId: string | null
+}): Promise<{ recipient: any; matchType: 'button_payload' | 'context' | 'window_fallback'; buttonIndex: number | null } | null> {
+  if (p.msgType === 'button') {
+    const m = String(p.msg?.button?.payload || '').match(/^bc:([0-9a-f-]{36}):(\d+)$/i)
+    if (m) {
+      const { data } = await supabase.from('broadcast_recipients').select(BROADCAST_RECIPIENT_FIELDS)
+        .eq('id', m[1]).eq('institution_id', p.institutionId).maybeSingle()
+      if (data) return { recipient: data, matchType: 'button_payload', buttonIndex: Number(m[2]) }
+    }
+  }
+
+  if (p.quotedMsgId) {
+    const { data } = await supabase.from('broadcast_recipients').select(BROADCAST_RECIPIENT_FIELDS)
+      .eq('wamid', p.quotedMsgId).eq('institution_id', p.institutionId).maybeSingle()
+    if (data) return { recipient: data, matchType: 'context', buttonIndex: null }
+  }
+
+  if (p.lastOutMessageId) {
+    const { data } = await supabase.from('broadcast_recipients').select(BROADCAST_RECIPIENT_FIELDS)
+      .eq('wamid', p.lastOutMessageId).eq('institution_id', p.institutionId)
+      .eq('phone_key', broadcastPhoneKey(p.remoteJid)).maybeSingle()
+    if (data?.sent_at) {
+      const { data: camp } = await supabase.from('broadcast_campaigns')
+        .select('reply_window_hours').eq('id', (data as any).campaign_id).maybeSingle()
+      const windowMs = ((camp as any)?.reply_window_hours ?? 72) * 3600_000
+      if (Date.now() - new Date((data as any).sent_at).getTime() <= windowMs) {
+        return { recipient: data, matchType: 'window_fallback', buttonIndex: null }
+      }
+    }
+  }
+  return null
+}
+
+async function applyBroadcastReply(p: {
+  institutionId:     string
+  remoteJid:         string
+  msg:               any
+  msgType:           string
+  quotedMsgId:       string | null
+  lastOutMessageId:  string | null
+  isNewConversation: boolean
+}): Promise<BroadcastReplyResult> {
+  const none: BroadcastReplyResult = { matched: false, applyActions: false, skipBot: false, botSkippedAttendance: false }
+  const found = await findBroadcastRecipient(p)
+  if (!found) return none
+  const { recipient, matchType, buttonIndex } = found
+
+  const contactPhone = normalizeBrazilianInput(p.remoteJid)
+  const [{ data: campaign }, { data: actions }, { data: conv }, { data: contact }] = await Promise.all([
+    supabase.from('broadcast_campaigns').select('id, name').eq('id', recipient.campaign_id).maybeSingle(),
+    supabase.from('broadcast_reply_actions').select('id, match_kind, button_index, button_text, tag_name, skip_bot, rr_index')
+      .eq('campaign_id', recipient.campaign_id),
+    supabase.from('whatsapp_conversations').select('id, tags, lead_id, broadcast_bot_skipped')
+      .eq('institution_id', p.institutionId).eq('remote_jid', p.remoteJid).maybeSingle(),
+    supabase.from('whatsapp_contacts').select('id, tags, lead_id')
+      .eq('institution_id', p.institutionId).eq('phone', contactPhone).maybeSingle(),
+  ])
+  const actionList = (actions || []) as any[]
+  const action = (buttonIndex !== null
+      ? actionList.find(a => a.match_kind === 'button' && a.button_index === buttonIndex)
+      : null)
+    ?? actionList.find(a => a.match_kind === 'any_reply')
+    ?? null
+  const campaignName = (campaign as any)?.name || 'campanha'
+  console.log('[broadcast] resposta de campanha:', campaignName, '| tipo:', matchType, '| botão:', buttonIndex, '| novo atendimento:', p.isNewConversation)
+
+  const now = new Date().toISOString()
+  const convUpdate: Record<string, any> = {
+    broadcast_campaign_id:  recipient.campaign_id,
+    broadcast_recipient_id: recipient.id,
+    broadcast_matched_at:   now,
+  }
+
+  const tagName = ((action?.tag_name as string) || '').trim()
+  if (tagName) {
+    const { data: existingTag } = await supabase.from('whatsapp_tags').select('id')
+      .eq('institution_id', p.institutionId).eq('name', tagName).maybeSingle()
+    await applyRoutingTag({
+      institutionId: p.institutionId, tagName, tagInCatalog: !!existingTag,
+      contact: (contact as any) ?? null, logPrefix: '[broadcast]',
+    })
+    Object.assign(convUpdate, tagsWith((conv as any)?.tags, tagName))
+  }
+
+  const applyActions = p.isNewConversation
+  let botSkipped = false
+  let assignee: RoutingAssignee | null = null
+  if (applyActions) {
+    if (action?.skip_bot) {
+      botSkipped = true
+      const { data: rows } = await supabase.from('broadcast_reply_action_assignees')
+        .select('user_id, group_id').eq('action_id', action.id).order('created_at', { ascending: true })
+      assignee = await pickRoundRobinAssignee({
+        institutionId: p.institutionId,
+        assignees:     rows || [],
+        rrIndex:       action.rr_index,
+        saveRrIndex:   async (idx) => {
+          await supabase.from('broadcast_reply_actions').update({ rr_index: idx }).eq('id', action.id)
+        },
+      })
+      Object.assign(convUpdate, { broadcast_bot_skipped: true, ...skipBotConversationFields(assignee) })
+    } else {
+      // Atendimento novo com robô. O bloco de reabertura (última saída =
+      // template) deixou bot_active=false com o atendente antigo — e o guard
+      // do processFlow não roda robô assim. Zera pra ele tratar como novo.
+      Object.assign(convUpdate, {
+        broadcast_bot_skipped: false,
+        bot_active:            false,
+        bot_current_node:      null,
+        bot_variables:         {},
+        assigned_user_id:      null,
+        assigned_user_name:    null,
+        status:                'waiting',
+      })
+    }
+  }
+
+  const { error: convErr } = await supabase.from('whatsapp_conversations')
+    .update(convUpdate).eq('institution_id', p.institutionId).eq('remote_jid', p.remoteJid)
+  if (convErr) console.error('❌ [broadcast] erro ao atualizar conversa:', convErr.message)
+
+  const leadId = (conv as any)?.lead_id || (contact as any)?.lead_id || null
+  const { error: recErr } = await supabase.from('broadcast_recipients')
+    .update({
+      first_reply_at:  recipient.first_reply_at ?? now,
+      conversation_id: (conv as any)?.id ?? null,
+      lead_id:         recipient.lead_id ?? leadId,
+      ...(buttonIndex !== null && recipient.clicked_button_index === null ? { clicked_button_index: buttonIndex } : {}),
+    })
+    .eq('id', recipient.id)
+  if (recErr) console.error('❌ [broadcast] erro ao registrar resposta:', recErr.message)
+
+  const { error: evErr } = await supabase.from('broadcast_reply_events').insert({
+    institution_id:      p.institutionId,
+    campaign_id:         recipient.campaign_id,
+    recipient_id:        recipient.id,
+    action_id:           action?.id ?? null,
+    conversation_id:     (conv as any)?.id ?? null,
+    message_id:          p.msg?.id ?? null,
+    match_type:          matchType,
+    button_index:        buttonIndex,
+    is_new_conversation: applyActions,
+    bot_skipped:         botSkipped,
+    assigned_user_id:    assignee?.id ?? null,
+  })
+  if (evErr) console.error('❌ [broadcast] erro ao gravar broadcast_reply_events:', evErr.message)
+
+  const clicked = buttonIndex !== null ? ` — clicou em "${action?.button_text || `botão ${buttonIndex + 1}`}"` : ''
+  await logConversationEvent(
+    p.institutionId,
+    p.remoteJid,
+    'broadcast_reply',
+    (botSkipped
+      ? `Transmissões: respondeu a "${campaignName}"${clicked} — robô não ativado, ${assignee ? `atribuído para ${assignee.full_name || 'atendente'}` : 'enviado para a fila geral'}`
+      : `Transmissões: respondeu a "${campaignName}"${clicked}`),
+    { campaign_id: recipient.campaign_id, recipient_id: recipient.id, action_id: action?.id ?? null, match_type: matchType, button_index: buttonIndex, bot_skipped: botSkipped },
+  )
+
+  return {
+    matched:              true,
+    applyActions,
+    skipBot:              botSkipped,
+    botSkippedAttendance: !applyActions && (conv as any)?.broadcast_bot_skipped === true,
+  }
+}
+
+// ── Transmissões: opt-out por palavra-chave ──────────────────────────────────
+// Mensagem INTEIRA igual a uma das palavras (sem acento/pontuação/caixa) —
+// "quero sair mais cedo" não dispara. Só em escola com o módulo ligado.
+// Suprime só MARKETING (utilidade, ex. lembrete de visita, continua). A
+// mensagem segue pro atendimento normal depois.
+const BROADCAST_OPT_OUT_WORDS = new Set(['parar', 'sair', 'stop', 'cancelar'])
+
+async function applyBroadcastOptOut(institutionId: string, remoteJid: string, rawText: string): Promise<boolean> {
+  const word = normalizeCaptureText(rawText || '')
+  if (!BROADCAST_OPT_OUT_WORDS.has(word)) return false
+
+  const { data: settings } = await supabase.from('broadcast_settings')
+    .select('enabled').eq('institution_id', institutionId).maybeSingle()
+  if (!(settings as any)?.enabled) return false
+
+  const { error } = await supabase.from('broadcast_suppressions').insert({
+    institution_id: institutionId,
+    phone:          remoteJid.replace(/\D/g, ''),
+    scope:          'marketing',
+    reason:         'opt_out_keyword',
+  })
+  if (error) {
+    if (error.code === '23505') return true   // já estava suprimido — não repete a confirmação
+    console.error('❌ [broadcast] erro ao registrar opt-out:', error.message)
+    return false
+  }
+  console.log('[broadcast] opt-out registrado:', remoteJid, '| palavra:', word)
+  await sendAutoMessage(institutionId, remoteJid,
+    'Pronto! Você não vai mais receber nossas mensagens de campanha por aqui. Se precisar falar com a gente, é só mandar mensagem. 💙')
+  await logConversationEvent(institutionId, remoteJid, 'broadcast_opt_out',
+    'Transmissões: contato pediu pra não receber mais campanhas', { keyword: word })
+  return true
+}
+
 // ── Eventos de template (message_template_status_update / template_category_update) ──
 // Sincroniza aprovação/categoria vinda da Meta sem depender de alguém clicar
 // em "verificar status" (template-definitions.ts check-status) nem abrir a
@@ -2270,7 +2506,7 @@ async function processFlow(
     // um atendente humano já conversando (race condition cliente↔atendente↔bot).
     const { data: guardConvState } = await supabase
       .from('whatsapp_conversations')
-      .select('bot_active, assigned_user_id, bot_variables, status, capture_bot_skipped')
+      .select('bot_active, assigned_user_id, bot_variables, status, capture_bot_skipped, broadcast_bot_skipped')
       .eq('institution_id', institutionId)
       .eq('remote_jid', remoteJid)
       .maybeSingle()
@@ -2286,6 +2522,11 @@ async function processFlow(
     // reatribuir. A flag é limpa pelo webhook no próximo atendimento novo.
     if ((guardConvState as any)?.capture_bot_skipped === true) {
       console.log('[flow] robô pulado pela Captação Inteligente neste atendimento')
+      return
+    }
+    // Mesma regra pra campanha de Transmissão com "pular robô".
+    if ((guardConvState as any)?.broadcast_bot_skipped === true) {
+      console.log('[flow] robô pulado pela campanha de Transmissão neste atendimento')
       return
     }
 
@@ -3692,6 +3933,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const idx = parseInt(interactiveChoiceId.replace('opt_', ''), 10)
             if (!isNaN(idx)) interactiveReply = String(idx + 1)
           }
+        } else if (msgType === 'button') {
+          // Clique em botão de resposta rápida de TEMPLATE (≠ 'interactive',
+          // que é botão de mensagem interativa do robô). Antes ficava
+          // "[button]" no histórico; o texto do botão é o que o contato viu.
+          // Não entra em effectiveText — o robô continua recebendo o mesmo.
+          interactiveTitle = (msg as any).button?.text || ''
         }
         const effectiveText = interactiveReply || text
 
@@ -3834,7 +4081,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // [FIX P3 / P2] Query BEFORE re-open block so we can preserve assignee when needed.
         const { data: lastOut } = await supabase
           .from('whatsapp_messages')
-          .select('message_type')
+          .select('message_type, message_id')   // message_id: casamento de resposta de Transmissão pela janela
           .eq('institution_id', institutionId)
           .eq('remote_jid', remoteJid)
           .eq('from_me', true)
@@ -3974,18 +4221,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await autoLinkLead(institutionId, remoteJid)
         }
 
+        // ── Transmissões: opt-out por palavra-chave ──
+        // Texto digitado ou texto do botão de template ("Parar").
+        try {
+          await applyBroadcastOptOut(institutionId, remoteJid, text || interactiveTitle)
+        } catch (e) {
+          console.error('❌ applyBroadcastOptOut error:', e)
+        }
+
+        // ── Transmissões: resposta de campanha ──
+        // Prioridade sobre a Captação: resposta a campanha não é clique em
+        // anúncio, e a ação configurada é da campanha.
+        let broadcast: BroadcastReplyResult = { matched: false, applyActions: false, skipBot: false, botSkippedAttendance: false }
+        try {
+          broadcast = await applyBroadcastReply({
+            institutionId, remoteJid, msg, msgType, quotedMsgId,
+            lastOutMessageId:  (lastOut as any)?.message_id ?? null,
+            isNewConversation,
+          })
+        } catch (e) {
+          console.error('❌ applyBroadcastReply error:', e)
+        }
+        // Aviso "Robô não ativado" da campanha vale só pro atendimento em que
+        // ela agiu — atendimento novo sem campanha limpa a flag.
+        if (isNewConversation && !broadcast.matched) {
+          await supabase.from('whatsapp_conversations')
+            .update({ broadcast_bot_skipped: false })
+            .eq('institution_id', institutionId)
+            .eq('remote_jid', remoteJid)
+            .eq('broadcast_bot_skipped', true)
+        }
+
         // ── Captação Inteligente ──
         // Depois de gravar mensagem/contato/lead e ANTES do fluxo
         // automatizado — é o que permite pular o processFlow por completo
         // quando o gatilho manda (ramo capture.skipBot abaixo).
         let capture: CaptureResult = { matched: false, skipBot: false }
-        try {
-          capture = await applyCaptureTrigger({
-            institutionId, remoteJid, msg, text,
-            applyActions: isNewConversation && !lastWasTemplate,
-          })
-        } catch (e) {
-          console.error('❌ applyCaptureTrigger error:', e)
+        if (!broadcast.matched) {
+          try {
+            capture = await applyCaptureTrigger({
+              institutionId, remoteJid, msg, text,
+              applyActions: isNewConversation && !lastWasTemplate,
+            })
+          } catch (e) {
+            console.error('❌ applyCaptureTrigger error:', e)
+          }
         }
         // Aviso "Robô não ativado" vale só pro atendimento em que o gatilho
         // agiu — atendimento novo sem gatilho limpa a flag.
@@ -4001,7 +4281,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // [FIX P2 / P3] lastWasTemplate computed before the re-open block above.
         // When the customer responds to a template, keep the conversation waiting for
         // the attendant who sent it — do NOT restart the bot.
-        if (lastWasTemplate) {
+        if (broadcast.matched && broadcast.applyActions) {
+          // Resposta de campanha abrindo atendimento novo: a ação da campanha
+          // manda. Pular robô → já distribuída em applyBroadcastReply; senão
+          // robô normal (estado zerado lá mesmo), como atendimento novo.
+          if (broadcast.skipBot) {
+            console.log('[broadcast] robô pulado pela campanha')
+          } else {
+            await processFlow(institutionId, remoteJid, effectiveText, true, interactiveChoiceId)
+          }
+        } else if (broadcast.matched && broadcast.botSkippedAttendance) {
+          // Nova mensagem num atendimento de campanha que pulou o robô, antes
+          // de um atendente assumir: não cai na regra de resposta a template
+          // (que marcaria 'open' sem dono) nem no robô.
+          console.log('[broadcast] atendimento da campanha segue sem robô, aguardando atendente')
+        } else if (lastWasTemplate) {
           console.log('[flow] última mensagem saída era template — aguardando atendente, robô não ativado')
           // status: 'open' — a conversa continua atribuída ao atendente que mandou o
           // template; 'waiting' é reservado para assigned_user_id IS NULL, senão essa
