@@ -1716,6 +1716,28 @@ async function processCustomFlow(
           ? [{ actionType: node.data.actionType, ...node.data }]
           : []
 
+      // Ações create_lead/upsert_lead: o insert antigo mandava status 'novo'
+      // (leads_status_check só aceita new/contact/scheduled/visit/proposal/
+      // enrolled/lost) e não mandava responsible_name/grade_interest/source
+      // (NOT NULL sem default) — o banco rejeitava TODA criação e o erro não
+      // era checado, então nenhum lead jamais foi criado pelo robô.
+      // Status em português (valores antigos do FlowEditor) são traduzidos.
+      const LEAD_STATUS_FROM_FLOW: Record<string, string> = { novo: 'new', contato: 'contact', matriculado: 'enrolled' }
+      const toLeadStatus = (s?: string) => (s && (LEAD_STATUS_FROM_FLOW[s] || s)) || 'new'
+      const botLeadResponsible = () => variables.nome_responsavel || variables.nome || remoteJid.replace(/@.*/, '')
+      // Vincula o lead à conversa (se ainda sem lead) e ao contato — antes
+      // create_lead não vinculava nada, e o vínculo só acontecia na próxima
+      // mensagem via autoLinkLead.
+      const linkBotLead = async (leadId: string, phone: string) => {
+        await supabase.from('whatsapp_conversations')
+          .update({ lead_id: leadId })
+          .eq('institution_id', institutionId).eq('remote_jid', remoteJid)
+          .is('lead_id', null)
+        await supabase.from('whatsapp_contacts')
+          .update({ lead_id: leadId, type: 'lead' })
+          .eq('institution_id', institutionId).eq('phone', phone)
+      }
+
       for (const action of actions) {
         if (action.actionType === 'create_lead') {
           const phone  = remoteJid.replace(/@.*/, '')
@@ -1723,14 +1745,20 @@ async function processCustomFlow(
           const { data: existing } = await supabase.from('leads').select('id')
             .eq('institution_id', institutionId)
             .or(`phone.eq.${phone},phone.eq.55${noCode},phone.eq.+55${noCode}`)
+            .limit(1)
             .maybeSingle()
           if (!existing) {
-            await supabase.from('leads').insert({
-              institution_id: institutionId,
-              phone: phone,
-              student_name: variables.nome_aluno || variables.nome || '',
-              status: 'novo',
-            })
+            const { data: created, error: createErr } = await supabase.from('leads').insert({
+              institution_id:   institutionId,
+              phone:            phone,
+              responsible_name: botLeadResponsible(),
+              student_name:     variables.nome_aluno || variables.nome || '',
+              grade_interest:   '',
+              source:           'WhatsApp',
+              status:           'new',
+            }).select('id').single()
+            if (createErr) console.error('❌ [flow] create_lead insert error:', createErr.message)
+            else if (created?.id) await linkBotLead(created.id, phone)
           }
         } else if (action.actionType === 'add_tag') {
           const tag = action.tag?.trim()
@@ -1754,35 +1782,33 @@ async function processCustomFlow(
           const { data: existingLead } = await supabase.from('leads').select('id')
             .eq('institution_id', institutionId)
             .or(`phone.eq.${phone},phone.eq.55${noCode},phone.eq.+55${noCode}`)
+            .limit(1)
             .maybeSingle()
           const leadFields: Record<string, any> = {}
           if (action.student_name) leadFields.student_name = interp(action.student_name)
           if (action.email)        leadFields.email        = interp(action.email)
-          if (action.status)       leadFields.status       = action.status
+          if (action.status)       leadFields.status       = toLeadStatus(action.status)
+          let upsertedLeadId: string | null = existingLead?.id ?? null
           if (existingLead) {
             if (Object.keys(leadFields).length) {
-              await supabase.from('leads').update(leadFields).eq('id', existingLead.id)
+              const { error: updErr } = await supabase.from('leads').update(leadFields).eq('id', existingLead.id)
+              if (updErr) console.error('❌ [flow] upsert_lead update error:', updErr.message)
             }
           } else {
-            await supabase.from('leads').insert({
-              institution_id: institutionId,
-              phone:          phone,
-              student_name:   leadFields.student_name || variables.nome_aluno || variables.nome || '',
-              status:         action.status || 'novo',
+            const { data: created, error: createErr } = await supabase.from('leads').insert({
+              institution_id:   institutionId,
+              phone:            phone,
+              responsible_name: botLeadResponsible(),
+              student_name:     leadFields.student_name || variables.nome_aluno || variables.nome || '',
+              grade_interest:   '',
+              source:           'WhatsApp',
+              status:           toLeadStatus(action.status),
               ...(leadFields.email ? { email: leadFields.email } : {}),
-            })
+            }).select('id').single()
+            if (createErr) console.error('❌ [flow] upsert_lead insert error:', createErr.message)
+            upsertedLeadId = created?.id ?? null
           }
-          // Link whatsapp_contacts to the created/found lead
-          const { data: upsertedLead } = await supabase.from('leads').select('id')
-            .eq('institution_id', institutionId)
-            .or(`phone.eq.${phone},phone.eq.55${noCode},phone.eq.+55${noCode}`)
-            .maybeSingle()
-          if (upsertedLead?.id) {
-            await supabase.from('whatsapp_contacts')
-              .update({ lead_id: upsertedLead.id, type: 'lead' })
-              .eq('institution_id', institutionId)
-              .eq('phone', phone)
-          }
+          if (upsertedLeadId) await linkBotLead(upsertedLeadId, phone)
         } else if (action.actionType === 'add_conversation_tag') {
           const tag = (action.tag || '').trim()
           if (tag) {

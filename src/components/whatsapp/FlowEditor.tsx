@@ -697,12 +697,15 @@ function NodeBody({
                     onChange={e => updateAction(i, { email: e.target.value })}
                     onMouseDown={stop} />
                   <select style={{ ...inputSt, marginTop: 6 }}
-                    value={a.status || 'novo'}
+                    value={({ novo: 'new', contato: 'contact', matriculado: 'enrolled' } as Record<string, string>)[a.status] || a.status || 'new'}
                     onChange={e => updateAction(i, { status: e.target.value })}
                     onMouseDown={stop}>
-                    <option value="novo">Novo</option>
-                    <option value="contato">Em contato</option>
-                    <option value="matriculado">Matriculado</option>
+                    {/* Valores = leads_status_check (antes 'novo'/'contato'/
+                        'matriculado', rejeitados pelo banco; o webhook ainda
+                        traduz esses valores antigos). */}
+                    <option value="new">Novo</option>
+                    <option value="contact">Em contato</option>
+                    <option value="enrolled">Matriculado</option>
                   </select>
                 </>
               )}
