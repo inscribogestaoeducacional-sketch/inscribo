@@ -13,6 +13,7 @@ import TransferSurveyPage from './pages/survey/TransferSurveyPage'
 import SatisfactionPage   from './pages/survey/SatisfactionPage'
 import ProposalView       from './pages/ProposalView'
 import RaioXPage          from './pages/RaioXPage'
+import NovidadeCaptacao   from './pages/NovidadeCaptacao'
 import Landing            from './pages/Landing'
 import ResetPassword      from './pages/ResetPassword'
 import Privacidade        from './pages/Privacidade'
@@ -225,6 +226,10 @@ function AppContent() {
   }
   if (pathname.startsWith('/raio-x')) {
     return <Routes><Route path="/raio-x" element={<RaioXPage />} /></Routes>
+  }
+  // Página de novidade: link enviado a clientes (logados) e prospects — abre igual pros dois
+  if (pathname.startsWith('/novidades/captacao-inteligente')) {
+    return <Routes><Route path="/novidades/captacao-inteligente" element={<NovidadeCaptacao />} /></Routes>
   }
 
   if (initializing || !ready) {

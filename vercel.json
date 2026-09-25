@@ -9,6 +9,10 @@
       "destination": "/api/pagar-redirect?codigo=:codigo"
     },
     {
+      "source": "/novidades/captacao-inteligente",
+      "destination": "/novidades/captacao-inteligente.html"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

@@ -136,8 +136,16 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; color: #111827; overflow-x:
 .escolas-logo-card { filter:grayscale(1); opacity:.65; transition:filter .25s, opacity .25s, transform .25s; }
 .escolas-logo-card:hover { filter:grayscale(0); opacity:1; transform:translateY(-2px); }
 
+/* Duas colunas texto + print (Captação Inteligente na landing e em /novidades) */
+.split-cols { display:flex; align-items:center; gap:64px; }
+.split-cols > * { flex:1; min-width:0; }
+.split-cols.rev { flex-direction:row-reverse; }
+.tag-novo { display:inline-flex; align-items:center; gap:7px; border-radius:999px; padding:7px 16px; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; background:#FCE7F3; color:#BE185D; border:1px solid #FBCFE8; font-family:'Plus Jakarta Sans',sans-serif; }
+.tag-novo-d { display:inline-flex; align-items:center; gap:8px; border-radius:999px; padding:8px 18px; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; background:rgba(244,114,182,.14); color:#FBCFE8; border:1px solid rgba(244,114,182,.4); font-family:'Plus Jakarta Sans',sans-serif; text-decoration:none; }
+
 /* Responsive */
 @media (max-width:1100px) {
+  .split-cols, .split-cols.rev { flex-direction:column !important; gap:40px !important; }
   .hero-cols { flex-direction:column !important; }
   .hero-right { display:none !important; }
   .hero-ctas { justify-content:center !important; }
