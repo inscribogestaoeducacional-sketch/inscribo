@@ -5,7 +5,7 @@ import {
   MessageCircle, Search, Plus, Info, Paperclip, Mic, Smile, Send,
   Play, Pause, FileText, Image, Video, ChevronDown, ChevronRight, ChevronLeft,
   CheckCheck, Check, Zap, Settings, User, Users, Download, Calendar,
-  X, MoreVertical, CornerUpLeft, SmilePlus, Edit, Trash2
+  X, MoreVertical, CornerUpLeft, SmilePlus, Edit, Trash2, Megaphone, Bot
 } from 'lucide-react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -16,6 +16,7 @@ import ScheduleVisitModal from '../leads/ScheduleVisitModal'
 import { saveLead, formatSaveLeadError } from '../../lib/leadSave'
 import { getAuthHeaders } from '../../lib/authHeaders'
 import { statusConfig } from '../leads/leadFormShared'
+import { CAPTURE_CHANNELS, type CaptureChannel } from '../../lib/captureTriggers'
 import {
   fetchTemplateMeta, fetchHiddenTemplateNames, variableLabel, templateDisplayName, filterTemplatesForContext,
   type TemplateMeta,
@@ -79,6 +80,10 @@ interface Conversation {
   satisfaction_score?: number | null
   last_customer_message_at?: string
   notes?: string | null
+  // Captação Inteligente (preenchidos pelo webhook, ver applyCaptureTrigger)
+  capture_trigger_id?: string | null
+  capture_bot_skipped?: boolean
+  capture_referral?: Record<string, any> | null
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -217,6 +222,9 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
       bot_active: (convData as any)?.bot_active ?? false,
       satisfaction_score: (convData as any)?.satisfaction_score ?? null,
       notes: (convData as any)?.notes ?? null,
+      capture_trigger_id: (convData as any)?.capture_trigger_id ?? null,
+      capture_bot_skipped: (convData as any)?.capture_bot_skipped ?? false,
+      capture_referral: (convData as any)?.capture_referral ?? null,
       last_customer_message_at: convData?.last_customer_message_at,
       messages: sorted
         .filter((m, idx, self) => idx === self.findIndex(t => (t.message_id && t.message_id === m.message_id) || t.id === m.id))
@@ -271,6 +279,9 @@ function buildConversations(msgs: WhatsappMessage[], convMap?: Map<string, Whats
         satisfaction_score: (conv as any).satisfaction_score ?? null,
         notes: (conv as any).notes ?? null,
         last_customer_message_at: conv.last_customer_message_at,
+        capture_trigger_id: (conv as any).capture_trigger_id ?? null,
+        capture_bot_skipped: (conv as any).capture_bot_skipped ?? false,
+        capture_referral: (conv as any).capture_referral ?? null,
         messages: [],
       })
     }
@@ -905,6 +916,7 @@ function eventDotColor(eventType: string): string {
     case 'transfer':           return 'bg-purple-400'
     case 'status_change':      return 'bg-amber-400'
     case 'contact_identified': return 'bg-teal-400'
+    case 'capture_trigger':    return 'bg-pink-400'
     case 'message_received':   return 'bg-gray-300'
     default:                   return 'bg-gray-300'
   }
@@ -1150,6 +1162,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
   const [addingTag, setAddingTag] = useState(false)
   const [newTag, setNewTag] = useState('')
   const [hubTags, setHubTags] = useState<{ id: string; name: string; color: string }[]>([])
+  // Captação Inteligente — nome/canal por gatilho, pro badge de origem.
+  // Inclui arquivados: a origem de uma conversa antiga continua aparecendo.
+  const [captureTriggerMap, setCaptureTriggerMap] = useState<Record<string, { name: string; channel: CaptureChannel }>>({})
   const [quickReplies, setQuickReplies] = useState<{ id: string; label: string; text: string; shortcut: string | null; user_id: string | null }[]>([])
   const [showQRManager, setShowQRManager] = useState(false)
   const [slashMenuDismissed, setSlashMenuDismissed] = useState(false)
@@ -1737,6 +1752,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         satisfaction_score: visibleConvRow?.satisfaction_score ?? null,
         notes: visibleConvRow?.notes ?? null,
         last_customer_message_at: visibleConvRow?.last_customer_message_at,
+        capture_trigger_id: (visibleConvRow as any)?.capture_trigger_id ?? null,
+        capture_bot_skipped: (visibleConvRow as any)?.capture_bot_skipped ?? false,
+        capture_referral: (visibleConvRow as any)?.capture_referral ?? null,
         messages: [msg],
       }
       return [conv, ...prev]
@@ -1907,6 +1925,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
         satisfaction_score: conv.satisfaction_score ?? (existing as any).satisfaction_score,
         notes: conv.notes ?? existing.notes,
         last_customer_message_at: conv.last_customer_message_at ?? existing.last_customer_message_at,
+        capture_trigger_id: (conv as any).capture_trigger_id ?? existing.capture_trigger_id,
+        capture_bot_skipped: (conv as any).capture_bot_skipped ?? existing.capture_bot_skipped,
+        capture_referral: (conv as any).capture_referral ?? existing.capture_referral,
         // lastMessage/lastTime só vêm do banco se a conversa ainda não tem
         // mensagens carregadas localmente — com mensagens carregadas, o
         // próprio array (mantido via Realtime) já é a fonte mais confiável.
@@ -2029,6 +2050,19 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             if (data) setHubTags(data as { id: string; name: string; color: string }[])
           } catch {}
         })()
+
+        // Load capture_triggers for origin badges (Captação Inteligente)
+        ;(async () => {
+          try {
+            const { data } = await supabase
+              .from('capture_triggers')
+              .select('id, name, channel')
+              .eq('institution_id', effectiveInstitutionId)
+            if (data) setCaptureTriggerMap(Object.fromEntries(
+              (data as { id: string; name: string; channel: CaptureChannel }[]).map(t => [t.id, { name: t.name, channel: t.channel }])
+            ))
+          } catch {}
+        })()
       }
 
       setLoading(false)
@@ -2138,6 +2172,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             bot_active:                'bot_active'                in payload.new ? payload.new.bot_active                : c.bot_active,
             last_customer_message_at:  'last_customer_message_at'  in payload.new ? payload.new.last_customer_message_at  : c.last_customer_message_at,
             notes:                     'notes'                     in payload.new ? payload.new.notes                     : c.notes,
+            capture_trigger_id:        'capture_trigger_id'        in payload.new ? payload.new.capture_trigger_id        : c.capture_trigger_id,
+            capture_bot_skipped:       'capture_bot_skipped'       in payload.new ? payload.new.capture_bot_skipped       : c.capture_bot_skipped,
+            capture_referral:          'capture_referral'          in payload.new ? payload.new.capture_referral          : c.capture_referral,
           }
         }))
       })
@@ -2887,7 +2924,8 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
             </p>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
             {/* Badge de status */}
             <span style={{
               fontSize: 10, fontWeight: 600,
@@ -2895,6 +2933,7 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               background: sc.bg,
               color: sc.text,
               display: 'inline-flex', alignItems: 'center', gap: 4,
+              flexShrink: 0,
             }}>
               <span style={{
                 width: 5, height: 5, borderRadius: '50%', display: 'inline-block',
@@ -2902,6 +2941,24 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
               }} />
               {safeStatusCfg(conv.status).label}
             </span>
+
+            {/* Badge de origem — Captação Inteligente */}
+            {conv.capture_trigger_id && (() => {
+              const trg = captureTriggerMap[conv.capture_trigger_id]
+              return (
+                <span title={`Veio da campanha: ${trg?.name || 'Captação Inteligente'}${conv.capture_bot_skipped ? ' — robô não ativado' : ''}`} style={{
+                  fontSize: 10, fontWeight: 600,
+                  padding: '2px 7px', borderRadius: 999,
+                  background: '#FCE7F3', color: '#DB2777',
+                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                  minWidth: 0, maxWidth: 120,
+                }}>
+                  <Megaphone style={{ width: 9, height: 9, flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{trg?.name || 'Captação'}</span>
+                </span>
+              )
+            })()}
+            </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               {/* Badge "Parada há Xh" para conversas atribuídas a outro atendente sem atividade recente */}
@@ -4693,6 +4750,27 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                         </span>
                       )
                     })()}
+                    {/* Origem — Captação Inteligente */}
+                    {activeConv.capture_trigger_id && (() => {
+                      const trg = captureTriggerMap[activeConv.capture_trigger_id]
+                      const ch  = trg ? CAPTURE_CHANNELS[trg.channel] : null
+                      return (
+                        <span title="Campanha de origem identificada pela Captação Inteligente" style={{ fontSize: 11, padding: '2px 8px', borderRadius: 9999, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#FCE7F3', color: '#DB2777' }}>
+                          <Megaphone style={{ width: 11, height: 11 }} />
+                          {trg?.name || 'Captação Inteligente'}
+                          {ch && <span style={{ fontWeight: 500, opacity: 0.8 }}>· {ch.label}</span>}
+                        </span>
+                      )
+                    })()}
+                    {/* Anúncio Meta sem gatilho cadastrado — mostra o ID pra
+                        escola cadastrar em Captação Inteligente */}
+                    {!activeConv.capture_trigger_id && activeConv.capture_referral?.source_id && (
+                      <span title={`ID do anúncio: ${activeConv.capture_referral.source_id}${activeConv.capture_referral.headline ? ` — "${activeConv.capture_referral.headline}"` : ''}. Cadastre este ID em Captação Inteligente para identificar a campanha.`}
+                        style={{ fontSize: 11, padding: '2px 8px', borderRadius: 9999, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#F1F5F9', color: '#64748B' }}>
+                        <Megaphone style={{ width: 11, height: 11 }} />
+                        Anúncio Meta não cadastrado
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -4718,6 +4796,21 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
                   })}
                 </div>
               </div>
+
+              {/* Captação Inteligente pulou o robô neste atendimento — deixa
+                  explícito pro atendente que o bot não rodou de propósito,
+                  pra não parecer falha. */}
+              {activeConv.capture_bot_skipped && (
+                <div style={{ flexShrink: 0, padding: '8px 16px', background: '#FDF2F8', borderTop: '1px solid #FBCFE8', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Bot style={{ width: 14, height: 14, color: '#DB2777', flexShrink: 0 }} />
+                  <p style={{ margin: 0, fontSize: 12, color: '#9D174D' }}>
+                    <strong>Robô não ativado — Captação Inteligente.</strong>{' '}
+                    Esta conversa veio da campanha {activeConv.capture_trigger_id && captureTriggerMap[activeConv.capture_trigger_id]
+                      ? <>“{captureTriggerMap[activeConv.capture_trigger_id].name}”</>
+                      : 'cadastrada'}, configurada para ir direto ao atendimento humano.
+                  </p>
+                </div>
+              )}
 
               {/* Message search bar */}
               {showMsgSearch && (

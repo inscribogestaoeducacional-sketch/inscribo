@@ -30,6 +30,7 @@ import GestorTransfers   from './pages/gestor/GestorTransfers'
 import GestorUpdates     from './pages/gestor/GestorUpdates'
 import GestorSurveys     from './pages/gestor/GestorSurveys'
 import GestorEmbed       from './pages/gestor/GestorEmbed'
+import CaptacaoInteligente from './pages/gestor/CaptacaoInteligente'
 import LeadKanban        from './components/leads/LeadKanban'
 import VisitCalendar     from './components/calendar/VisitCalendar'
 import WhatsAppHub       from './components/whatsapp/WhatsAppHub'
@@ -347,7 +348,8 @@ function AppContent() {
             <Route path="/contacts"       element={<PermissionRoute module="contatos"><ContactsModule /></PermissionRoute>} />
             <Route path="/visits"         element={<PermissionRoute module="visitas"><VisitCalendar /></PermissionRoute>} />
             <Route path="/whatsapp"       element={<PermissionRoute module="whatsapp"><WhatsAppHub /></PermissionRoute>} />
-            <Route path="/transferencias" element={<PermissionRoute module="transferencias"><GestorTransfers /></PermissionRoute>} />
+            <Route path="/captacao"       element={<RequireRole roles={['admin','manager']}><CaptacaoInteligente /></RequireRole>} />
+            <Route path="/transferencias"element={<PermissionRoute module="transferencias"><GestorTransfers /></PermissionRoute>} />
             <Route path="/updates"        element={<GestorUpdates />} />
             <Route path="/pesquisas"      element={<GestorSurveys />} />
             <Route path="/embed" element={<ProtectedRoute allowedRoles={['admin','manager']}><GestorEmbed /></ProtectedRoute>} />

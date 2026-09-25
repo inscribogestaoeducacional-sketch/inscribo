@@ -246,6 +246,10 @@ export default function ContactsModule() {
   const [filterOrigin, setFilterOrigin] = useState('all')
   const [filterGrade,  setFilterGrade]  = useState('all')
   const [filterTag,    setFilterTag]    = useState('all')
+  // Campanha de origem (Captação Inteligente) — primeiro toque permanente,
+  // whatsapp_contacts.origin_capture_trigger_id. Diferente da etiqueta, não
+  // some se alguém remover a tag do contato.
+  const [filterCampaign, setFilterCampaign] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
   const [sortCol,      setSortCol]      = useState('created_at')
   const [sortDir,      setSortDir]      = useState<'asc' | 'desc'>('desc')
@@ -267,6 +271,7 @@ export default function ContactsModule() {
   const [exportLoading,      setExportLoading]      = useState(false)
   const [exportProgress,     setExportProgress]     = useState(0)
   const [availTagsFilter,    setAvailTagsFilter]    = useState<{ id: string; name: string; color: string }[]>([])
+  const [availCampaigns,     setAvailCampaigns]     = useState<{ id: string; name: string }[]>([])
 
   // ── Import state ─────────────────────────────────────────
   const [showImport,    setShowImport]    = useState(false)
@@ -315,10 +320,10 @@ export default function ContactsModule() {
 
   // Latest filter values for real-time handler (avoids stale closure)
   const filterStateRef = useRef({
-    origin: 'all', search: '', grade: 'all', tag: 'all', status: 'all',
+    origin: 'all', search: '', grade: 'all', tag: 'all', campaign: 'all', status: 'all',
     sortCol: 'created_at', sortDir: 'desc' as 'asc' | 'desc',
   })
-  filterStateRef.current = { origin: filterOrigin, search, grade: filterGrade, tag: filterTag, status: filterStatus, sortCol, sortDir }
+  filterStateRef.current = { origin: filterOrigin, search, grade: filterGrade, tag: filterTag, campaign: filterCampaign, status: filterStatus, sortCol, sortDir }
 
   // ── KPI counts (global, unfiltered) ─────────────────────
   async function refreshKpiCounts() {
@@ -346,6 +351,19 @@ export default function ContactsModule() {
     } catch (e) { /* tags filter is optional */ }
   }
 
+  // ── Load capture_triggers for campaign filter (inclui arquivados — a
+  // origem de contatos antigos continua filtrável) ─────────────────────────
+  async function loadFilterCampaigns() {
+    try {
+      const { data } = await supabase
+        .from('capture_triggers')
+        .select('id, name')
+        .eq('institution_id', institutionId)
+        .order('name')
+      if (mountedRef.current && data) setAvailCampaigns(data as { id: string; name: string }[])
+    } catch (e) { /* campaign filter is optional */ }
+  }
+
   // ── Data loading ─────────────────────────────────────────
   async function load(params: {
     reset?:  boolean
@@ -353,6 +371,7 @@ export default function ContactsModule() {
     origin?: string
     grade?:  string
     tag?:    string
+    campaign?: string
     status?: string
     sc?:     string
     sd?:     'asc' | 'desc'
@@ -364,6 +383,7 @@ export default function ContactsModule() {
       origin    = filterOrigin,
       grade     = filterGrade,
       tag       = filterTag,
+      campaign  = filterCampaign,
       status    = filterStatus,
       sc        = sortCol,
       sd        = sortDir,
@@ -414,6 +434,7 @@ export default function ContactsModule() {
       if (useGrade)             query = query.eq('leads.grade_interest', grade)
       if (useStatus)            query = query.eq('leads.status', status)
       if (useTag)               query = (query as any).filter('tags', 'cs', `{"${tag}"}`)
+      if (campaign !== 'all')   query = query.eq('origin_capture_trigger_id', campaign)
 
       const { data, error, count } = await query
 
@@ -498,6 +519,7 @@ export default function ContactsModule() {
       if (useGrade)                    query = query.eq('leads.grade_interest', filterGrade)
       if (useStatus)                   query = query.eq('leads.status', filterStatus)
       if (useTag)                      query = (query as any).filter('tags', 'cs', `{"${filterTag}"}`)
+      if (filterCampaign !== 'all')    query = query.eq('origin_capture_trigger_id', filterCampaign)
 
       const { data, error } = await query
       if (error) { console.error('selectAllMatchingFilter error:', error); return }
@@ -611,6 +633,7 @@ export default function ContactsModule() {
     load()
     refreshKpiCounts()
     loadFilterTags()
+    loadFilterCampaigns()
 
     const channel = supabase
       .channel(`wc_module_rt_${institutionId}`)
@@ -620,7 +643,7 @@ export default function ContactsModule() {
         (payload) => {
           const fs = filterStateRef.current
           if (payload.eventType === 'INSERT') {
-            const noFilters   = fs.origin === 'all' && fs.search.trim().length < 2 && fs.grade === 'all' && fs.tag === 'all' && fs.status === 'all'
+            const noFilters   = fs.origin === 'all' && fs.search.trim().length < 2 && fs.grade === 'all' && fs.tag === 'all' && fs.campaign === 'all' && fs.status === 'all'
             const defaultSort = fs.sortCol === 'created_at' && fs.sortDir === 'desc'
             if (noFilters && defaultSort) {
               setContacts(prev => [mapContact(payload.new), ...prev])
@@ -648,15 +671,15 @@ export default function ContactsModule() {
   // ── Filter/sort change → immediate reload ─────────────────
   useEffect(() => {
     if (skipFiltersRef.current) { skipFiltersRef.current = false; return }
-    load({ reset: true, search, origin: filterOrigin, grade: filterGrade, tag: filterTag, status: filterStatus, sc: sortCol, sd: sortDir })
+    load({ reset: true, search, origin: filterOrigin, grade: filterGrade, tag: filterTag, campaign: filterCampaign, status: filterStatus, sc: sortCol, sd: sortDir })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterOrigin, filterGrade, filterTag, filterStatus, sortCol, sortDir])
+  }, [filterOrigin, filterGrade, filterTag, filterCampaign, filterStatus, sortCol, sortDir])
 
   // ── Search change → debounced reload ─────────────────────
   useEffect(() => {
     if (skipSearchRef.current) { skipSearchRef.current = false; return }
     const t = setTimeout(() => {
-      load({ reset: true, search, origin: filterOrigin, grade: filterGrade, tag: filterTag, status: filterStatus, sc: sortCol, sd: sortDir })
+      load({ reset: true, search, origin: filterOrigin, grade: filterGrade, tag: filterTag, campaign: filterCampaign, status: filterStatus, sc: sortCol, sd: sortDir })
     }, 350)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -699,7 +722,7 @@ export default function ContactsModule() {
   // ── Handlers ─────────────────────────────────────────────
   function handleLoadMore() {
     if (loadingMore || !hasMore) return
-    load({ reset: false, search, origin: filterOrigin, grade: filterGrade, tag: filterTag, status: filterStatus, sc: sortCol, sd: sortDir, from: offset })
+    load({ reset: false, search, origin: filterOrigin, grade: filterGrade, tag: filterTag, campaign: filterCampaign, status: filterStatus, sc: sortCol, sd: sortDir, from: offset })
   }
 
   function handleSortClick(col: string) {
@@ -709,7 +732,7 @@ export default function ContactsModule() {
 
   function clearFilters() {
     setSearch(''); setFilterOrigin('all'); setFilterGrade('all')
-    setFilterTag('all'); setFilterStatus('all')
+    setFilterTag('all'); setFilterCampaign('all'); setFilterStatus('all')
   }
 
   function handleProfileUpdate(id: string, updates: Record<string, any>) {
@@ -998,7 +1021,7 @@ export default function ContactsModule() {
 
   // ── Derived ──────────────────────────────────────────────
   const grades     = [...new Set(contacts.map(c => c.grade).filter(Boolean))] as string[]
-  const hasFilters = !!(search || filterOrigin !== 'all' || filterGrade !== 'all' || filterTag !== 'all' || filterStatus !== 'all')
+  const hasFilters = !!(search || filterOrigin !== 'all' || filterGrade !== 'all' || filterTag !== 'all' || filterCampaign !== 'all' || filterStatus !== 'all')
   const openImport = () => { setShowImport(true); setImportRows([]); setImportErrors([]); setImportResult(null) }
   const openNewContact = () => {
     setNewContact({ name: '', phone: '', email: '', address: '', linked_student_name: '', student_grade: '', relationship: '' })
@@ -1584,6 +1607,13 @@ export default function ContactsModule() {
               style={{ border: `1.5px solid ${filterTag !== 'all' ? '#00A896' : '#E2E8F0'}`, borderRadius: 10, fontSize: 13, background: filterTag !== 'all' ? '#F0FDFA' : '#fff', padding: '9px 12px', outline: 'none', color: filterTag !== 'all' ? '#00A896' : '#1A2B4A', fontWeight: filterTag !== 'all' ? 600 : 400, flexShrink: 0, width: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               <option value="all">Todas as etiquetas</option>
               {availTagsFilter.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+            </select>
+          )}
+          {availCampaigns.length > 0 && (
+            <select value={filterCampaign} onChange={e => setFilterCampaign(e.target.value)} title="Campanha de origem (Captação Inteligente)"
+              style={{ border: `1.5px solid ${filterCampaign !== 'all' ? '#00A896' : '#E2E8F0'}`, borderRadius: 10, fontSize: 13, background: filterCampaign !== 'all' ? '#F0FDFA' : '#fff', padding: '9px 12px', outline: 'none', color: filterCampaign !== 'all' ? '#00A896' : '#1A2B4A', fontWeight: filterCampaign !== 'all' ? 600 : 400, flexShrink: 0, width: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <option value="all">Todas as campanhas</option>
+              {availCampaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}
           {hasFilters && (
