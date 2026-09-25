@@ -31,6 +31,36 @@ const page = (body, extra = '') => `<!doctype html><html lang="pt-BR"><head><met
 * { box-sizing: border-box; } body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; color: #1A2B4A; }
 ${extra}</style></head><body>${body}</body></html>`
 
+// ── Carrossel de posts: node render.mjs --carrossel ─────────────────────────
+// 5 slides 1080x1350 em 2x (2160x2700) em divulgacao/captacao-inteligente/carrossel/
+if (process.argv.includes('--carrossel')) {
+  const cBundle = join(tmp, 'carrossel.cjs')
+  await build({
+    entryPoints: [join(HERE, 'Carrossel.tsx')], outfile: cBundle, bundle: true, platform: 'node', format: 'cjs',
+    jsx: 'automatic', external: ['react', 'react-dom'], nodePaths: [join(ROOT, 'node_modules')], logLevel: 'warning',
+  })
+  const C = require(cBundle)
+  const pub = pathToFileURL(join(ROOT, 'public')).href
+  // Caminhos absolutos do site (/fonts, /novidades/img, logo) → arquivos de public/
+  const css = C.SHARED_CSS.replace(/url\('\//g, `url('${pub}/`)
+  const outDir = join(ROOT, 'divulgacao/captacao-inteligente/carrossel')
+  mkdirSync(outDir, { recursive: true })
+  const browser = await chromium.launch()
+  const p = await browser.newPage({ viewport: { width: 1080, height: 1350 }, deviceScaleFactor: 2 })
+  for (const [i, Slide] of C.SLIDES.entries()) {
+    const markup = renderToStaticMarkup(React.createElement(Slide)).replace(/src="\//g, `src="${pub}/`)
+    const file = join(tmp, `slide-${i + 1}.html`)
+    writeFileSync(file, page(markup, `${css}\nbody { width:1080px; height:1350px; overflow:hidden; }`))
+    await p.goto(pathToFileURL(file).href, { waitUntil: 'load' })
+    await p.evaluate(() => document.fonts.ready)
+    const path = join(outDir, `captacao-inteligente-${i + 1}.png`)
+    await p.locator('.slide').screenshot({ path })
+    console.log('ok', path)
+  }
+  await browser.close()
+  process.exit(0)
+}
+
 mkdirSync(OUT, { recursive: true })
 const browser = await chromium.launch()
 const ctx = await browser.newContext({ viewport: { width: 1400, height: 1000 }, deviceScaleFactor: 2 })
