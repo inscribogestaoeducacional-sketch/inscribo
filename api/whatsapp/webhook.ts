@@ -1285,6 +1285,85 @@ async function handleTemplateEvent(field: string, wabaId: string, value: any, ac
   }
 }
 
+// ── Transmissões: status de entrega do destinatário ──────────────────────────
+// O envio (supabase/functions/school-broadcast-send) marca 'sent' com o
+// wamid; daqui pra frente é a Meta que avisa entregue/lido/falhou. Status só
+// avança (sent → delivered → read) — o WHERE por status atual garante isso
+// sem ler antes. Falha tardia: mesma classificação do envio, sem nova
+// tentativa (não reenviamos a partir do webhook).
+
+// MESMO mapa de supabase/functions/school-broadcast-send:classifyMetaError —
+// mudar os dois juntos.
+function classifyBroadcastError(code: number | null): { kind: 'suppress'; scope: 'marketing' | 'all' } | { kind: 'retry' } | { kind: 'pause'; reason: string } | { kind: 'fail' } {
+  if (code === 131050) return { kind: 'suppress', scope: 'marketing' }
+  if (code === 131026) return { kind: 'suppress', scope: 'all' }
+  if (code === 131049 || code === 130429) return { kind: 'retry' }
+  if (code === 131042 || code === 131048) return { kind: 'pause', reason: `meta_${code}` }
+  if (code !== null && code >= 132000 && code < 133000) return { kind: 'pause', reason: 'template_error' }
+  return { kind: 'fail' }
+}
+
+async function syncBroadcastRecipientStatus(institutionId: string, status: any): Promise<void> {
+  const wamid = status?.id as string | undefined
+  if (!wamid) return
+  const at = status?.timestamp ? new Date(parseInt(status.timestamp) * 1000).toISOString() : new Date().toISOString()
+
+  if (status.status === 'delivered') {
+    await supabase.from('broadcast_recipients')
+      .update({ status: 'delivered', delivered_at: at })
+      .eq('wamid', wamid).eq('institution_id', institutionId).eq('status', 'sent')
+    return
+  }
+  if (status.status === 'read') {
+    await supabase.from('broadcast_recipients')
+      .update({ status: 'read', read_at: at })
+      .eq('wamid', wamid).eq('institution_id', institutionId).in('status', ['sent', 'delivered'])
+    return
+  }
+  if (status.status !== 'failed') return
+
+  const err  = status.errors?.[0]
+  const code = err?.code != null ? Number(err.code) : null
+  const action = classifyBroadcastError(code)
+  const { data: rows, error: updErr } = await supabase.from('broadcast_recipients')
+    .update({
+      status:        'failed',
+      // Retentável que falhou depois de aceito não é reenviado — conta como
+      // tentativa esgotada (vira crédito como qualquer falha).
+      failure_kind:  action.kind === 'suppress' || action.kind === 'fail' ? 'permanent' : 'temporary_exhausted',
+      error_code:    code,
+      error_message: String(err?.error_data?.details || err?.title || err?.message || 'Falha reportada pela Meta').slice(0, 500),
+      failed_at:     at,
+    })
+    .eq('wamid', wamid).eq('institution_id', institutionId).in('status', ['sending', 'sent', 'delivered'])
+    .select('id, campaign_id, phone')
+  if (updErr) { console.error('❌ [broadcast-status] erro ao marcar falha:', updErr.message); return }
+  const row = (rows as any[] | null)?.[0]
+  if (!row) return   // não é mensagem de campanha
+
+  const { data: campaign } = await supabase.from('broadcast_campaigns')
+    .select('id, status, priced_category').eq('id', row.campaign_id).maybeSingle()
+
+  if (action.kind === 'suppress' && (action.scope === 'all' || (campaign as any)?.priced_category === 'MARKETING')) {
+    const { error: supErr } = await supabase.from('broadcast_suppressions').insert({
+      institution_id: institutionId, phone: row.phone, scope: action.scope,
+      reason: 'meta_permanent_error', meta_error_code: code, source_campaign_id: row.campaign_id,
+    })
+    if (supErr && supErr.code !== '23505') console.error('❌ [broadcast-status] supressão:', supErr.message)
+  }
+  if (action.kind === 'pause') {
+    await supabase.from('broadcast_campaigns')
+      .update({ status: 'paused', paused_reason: action.reason })
+      .eq('id', row.campaign_id).eq('status', 'sending')
+  }
+  // Campanha já concluída: o crédito da recontagem já rodou — credita a
+  // falha tardia agora (idempotente).
+  if ((campaign as any)?.status === 'completed') {
+    const { error: crErr } = await supabase.rpc('broadcast_credit_failures', { p_campaign_id: row.campaign_id })
+    if (crErr) console.error('❌ [broadcast-status] crédito:', crErr.message)
+  }
+}
+
 // ── Eventos de coexistência (Cadastro Incorporado com QR code) ──────────────
 // Tratamento isolado do fluxo messages/statuses acima — nunca chama
 // upsertContact/increment_conversation_unread/processFlow/processCustomFlow,
@@ -3988,6 +4067,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq('message_id', status.id)
 
         if (statusErr) console.error('❌ status update error:', statusErr.message)
+
+        // Transmissões: mesmo evento atualiza o destinatário da campanha
+        // (no-op pra mensagem que não é de campanha — índice único em wamid).
+        try {
+          await syncBroadcastRecipientStatus(institutionId, status)
+        } catch (e) {
+          console.error('❌ [broadcast-status] erro:', e)
+        }
       }
 
     } catch (err) {
