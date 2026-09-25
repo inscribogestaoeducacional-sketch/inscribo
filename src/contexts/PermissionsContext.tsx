@@ -22,6 +22,11 @@ export function usePermissions() {
 
 const isPrivilegedRole = (role: string) => role === 'admin' || role === 'manager'
 
+// Módulos que ficam DESLIGADOS pra atendente sem linha em user_permissions
+// (os demais seguem liberados por padrão). captacao: gestão de campanhas é
+// de admin/gestor; o admin libera por atendente em Usuários → Permissões.
+export const DEFAULT_OFF_MODULES = ['captacao']
+
 export function PermissionsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   const [permissions, setPermissions] = useState<Record<string, boolean>>({})
@@ -66,7 +71,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
   const isModuleEnabled = (module: string): boolean => {
     if (!user || isPrivilegedRole(user.role)) return true
-    if (!(module in permissions)) return true
+    if (!(module in permissions)) return !DEFAULT_OFF_MODULES.includes(module)
     return permissions[module]
   }
 

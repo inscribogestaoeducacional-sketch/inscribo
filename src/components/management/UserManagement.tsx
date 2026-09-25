@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { usePermissions } from '../../contexts/PermissionsContext'
+import { usePermissions, DEFAULT_OFF_MODULES } from '../../contexts/PermissionsContext'
 import { supabase } from '../../lib/supabase'
 import { sendEmail } from '../../lib/email'
 import {
@@ -16,6 +16,7 @@ const PERM_MODULES = [
   { id: 'contatos',       label: 'Contatos',       icon: '📋', desc: 'Base de contatos e histórico' },
   { id: 'visitas',        label: 'Visitas',        icon: '📅', desc: 'Agendamento e controle de visitas' },
   { id: 'whatsapp',       label: 'WhatsApp',       icon: '💬', desc: 'Hub de atendimento e fluxos' },
+  { id: 'captacao',       label: 'Captação',       icon: '📣', desc: 'Gatilhos de campanha e dashboard de origem (desligado por padrão)' },
   { id: 'relatorios',     label: 'Relatórios',     icon: '📊', desc: 'Métricas e relatórios de desempenho' },
   { id: 'transferencias', label: 'Transferências', icon: '↔️', desc: 'Transferência de leads entre atendentes' },
   { id: 'pesquisas',      label: 'Pesquisas',      icon: '⭐', desc: 'Pesquisas de satisfação e resultados' },
@@ -61,7 +62,7 @@ function UserModal({ isOpen, onClose, onSave, editingUser, institutionId }: {
         supabase.from('user_permissions').select('module, enabled').eq('user_id', editingUser.id).eq('institution_id', institutionId ?? '')
           .then(({ data }) => {
             const map: Record<string, boolean> = {}
-            PERM_MODULES.forEach(m => { map[m.id] = true })
+            PERM_MODULES.forEach(m => { map[m.id] = !DEFAULT_OFF_MODULES.includes(m.id) })
             if (data) for (const row of data) map[row.module] = row.enabled
             setPermMap(map)
           })
@@ -72,7 +73,7 @@ function UserModal({ isOpen, onClose, onSave, editingUser, institutionId }: {
     } else {
       setFormData({ full_name: '', email: '', role: 'user', password: '', confirmPassword: '', active: true, can_see_all_conversations: false, can_see_full_history: false })
       const map: Record<string, boolean> = {}
-      PERM_MODULES.forEach(m => { map[m.id] = true })
+      PERM_MODULES.forEach(m => { map[m.id] = !DEFAULT_OFF_MODULES.includes(m.id) })
       setPermMap(map)
     }
     setError('')
@@ -81,7 +82,7 @@ function UserModal({ isOpen, onClose, onSave, editingUser, institutionId }: {
   useEffect(() => {
     if (!editingUser && isConsultor(formData.role)) {
       const map: Record<string, boolean> = {}
-      PERM_MODULES.forEach(m => { map[m.id] = true })
+      PERM_MODULES.forEach(m => { map[m.id] = !DEFAULT_OFF_MODULES.includes(m.id) })
       setPermMap(map)
     } else if (!isConsultor(formData.role)) {
       setPermMap({})
@@ -203,9 +204,9 @@ function UserModal({ isOpen, onClose, onSave, editingUser, institutionId }: {
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: '#E2E8F0' }}>
                   {PERM_MODULES.map(m => {
-                    const enabled = permMap[m.id] ?? true
+                    const enabled = permMap[m.id] ?? !DEFAULT_OFF_MODULES.includes(m.id)
                     return (
-                      <div key={m.id} onClick={() => setPermMap(p => ({ ...p, [m.id]: !(p[m.id] ?? true) }))}
+                      <div key={m.id} onClick={() => setPermMap(p => ({ ...p, [m.id]: !(p[m.id] ?? !DEFAULT_OFF_MODULES.includes(m.id)) }))}
                         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#fff', cursor: 'pointer', gap: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                           <span style={{ fontSize: 16, flexShrink: 0 }}>{m.icon}</span>
@@ -473,7 +474,7 @@ export default function UserManagement() {
           institution_id: user!.institution_id,
           user_id: editingUser.id,
           module: m.id,
-          enabled: permissions[m.id] ?? true,
+          enabled: permissions[m.id] ?? !DEFAULT_OFF_MODULES.includes(m.id),
         }))
         const { error: permErr } = await supabase
           .from('user_permissions')
@@ -527,7 +528,7 @@ export default function UserManagement() {
           institution_id: user!.institution_id,
           user_id: newUserId,
           module: m.id,
-          enabled: permissions[m.id] ?? true,
+          enabled: permissions[m.id] ?? !DEFAULT_OFF_MODULES.includes(m.id),
         }))
         await supabase.from('user_permissions').upsert(rows, { onConflict: 'user_id,institution_id,module' })
       }

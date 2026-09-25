@@ -15,7 +15,7 @@ const NAV_CFG = [
   { path: '/contacts',        label: 'Contatos',        iconBg: '#EFF6FF', iconColor: '#3B82F6', Icon: BookUser,        roles: ['admin','manager','user'], module: 'contatos' },
   { path: '/visits',          label: 'Visitas',         iconBg: '#FEF3C7', iconColor: '#F59E0B', Icon: Calendar,        roles: ['admin','manager','user'], module: 'visitas' },
   { path: '/whatsapp',        label: 'WhatsApp',        iconBg: '#D1FAE5', iconColor: '#10B981', Icon: MessageCircle,   roles: ['admin','manager','user'], module: 'whatsapp' },
-  { path: '/captacao',        label: 'Captação',        iconBg: '#FCE7F3', iconColor: '#DB2777', Icon: Megaphone,       roles: ['admin','manager'], module: 'captacao' },
+  { path: '/captacao',        label: 'Captação',        iconBg: '#FCE7F3', iconColor: '#DB2777', Icon: Megaphone,       roles: ['admin','manager','user'], module: 'captacao' },
   { path: '/reports',         label: 'Relatórios',      iconBg: '#DBEAFE', iconColor: '#3B82F6', Icon: BarChart3,       roles: ['admin','manager'], module: 'relatorios' },
   { path: '/transferencias',  label: 'Transferências',  iconBg: '#FEE2E2', iconColor: '#DC2626', Icon: ArrowRightLeft,  roles: ['admin','manager','user'], module: 'transferencias' },
   { path: '/pesquisas',       label: 'Pesquisas',       iconBg: '#FFF7ED', iconColor: '#F97316', Icon: ClipboardList,   roles: ['admin','manager'], module: 'pesquisas' },

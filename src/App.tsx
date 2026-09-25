@@ -348,7 +348,7 @@ function AppContent() {
             <Route path="/contacts"       element={<PermissionRoute module="contatos"><ContactsModule /></PermissionRoute>} />
             <Route path="/visits"         element={<PermissionRoute module="visitas"><VisitCalendar /></PermissionRoute>} />
             <Route path="/whatsapp"       element={<PermissionRoute module="whatsapp"><WhatsAppHub /></PermissionRoute>} />
-            <Route path="/captacao"       element={<RequireRole roles={['admin','manager']}><CaptacaoInteligente /></RequireRole>} />
+            <Route path="/captacao"       element={<PermissionRoute module="captacao"><CaptacaoInteligente /></PermissionRoute>} />
             <Route path="/transferencias"element={<PermissionRoute module="transferencias"><GestorTransfers /></PermissionRoute>} />
             <Route path="/updates"        element={<GestorUpdates />} />
             <Route path="/pesquisas"      element={<GestorSurveys />} />
