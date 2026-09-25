@@ -90,7 +90,14 @@ interface TemplateDefinition {
   body_text: string
   variable_examples: Record<string, string> | null
   button_config: { type?: string; text?: string; url_base?: string } | null
+  // null = padrão Áion; preenchido = template da própria escola (só pode ir
+  // pro WABA dela — ver scopeInstitutionsToOwner)
+  institution_id?: string | null
+  header_config?: { format?: string; text?: string; sample_handle?: string } | null
+  buttons?: { type?: string; text?: string; url_base?: string }[] | null
 }
+
+type TemplateStatus = 'pending' | 'approved' | 'rejected' | 'paused' | 'disabled'
 
 interface EligibleInstitution {
   institution_id: string
@@ -143,11 +150,24 @@ function slugifyTemplateName(raw: string): string {
     .slice(0, 512)
 }
 
-function mapMetaStatus(raw?: string): 'pending' | 'approved' | 'rejected' {
+// PAUSED/DISABLED eram tratados como pending/rejected — agora têm status
+// próprio (20260926000000): template pausado pela Meta precisa pausar
+// campanha de Transmissão, não parecer "em análise".
+function mapMetaStatus(raw?: string): TemplateStatus {
   const s = (raw || '').toUpperCase()
   if (s === 'APPROVED') return 'approved'
-  if (s === 'REJECTED' || s === 'DISABLED') return 'rejected'
-  return 'pending' // PENDING, IN_APPEAL, PAUSED etc. — tratado como "em análise"
+  if (s === 'REJECTED') return 'rejected'
+  if (s === 'PAUSED') return 'paused'
+  if (s === 'DISABLED') return 'disabled'
+  return 'pending' // PENDING, IN_APPEAL etc. — tratado como "em análise"
+}
+
+// Template de escola só pode ser submetido/registrado no WABA da própria
+// escola — o trigger template_institution_status_owner_guard rejeitaria de
+// qualquer forma, mas filtrar aqui evita derrubar o lote inteiro no upsert.
+function scopeInstitutionsToOwner(def: TemplateDefinition, institutions: EligibleInstitution[]): EligibleInstitution[] {
+  if (!def.institution_id) return institutions
+  return institutions.filter(i => i.institution_id === def.institution_id)
 }
 
 // ── Extrai o texto do componente BODY de uma lista de components no formato
@@ -195,9 +215,36 @@ function buildCreateTemplatePayload(def: TemplateDefinition) {
     }
   }
 
-  const components: Record<string, unknown>[] = [bodyComponent]
+  const components: Record<string, unknown>[] = []
 
-  if (def.button_config?.url_base) {
+  // Cabeçalho opcional. Mídia exige sample_handle (upload prévio pela
+  // Resumable Upload API da Meta) — sem ele a Meta rejeita o componente.
+  const header = def.header_config
+  if (header?.format) {
+    const format = header.format.toUpperCase()
+    if (format === 'TEXT') {
+      if (header.text?.trim()) components.push({ type: 'HEADER', format: 'TEXT', text: header.text.trim() })
+    } else {
+      if (!header.sample_handle) {
+        throw new Error('Cabeçalho de mídia sem arquivo de exemplo enviado pra Meta (sample_handle).')
+      }
+      components.push({ type: 'HEADER', format, example: { header_handle: [header.sample_handle] } })
+    }
+  }
+
+  components.push(bodyComponent)
+
+  // buttons (formato novo, lista) tem prioridade sobre button_config (legado,
+  // só 1 botão URL). Botão URL continua com a variável única no fim da URL.
+  const buttonList = (def.buttons || []).filter(b => b?.type && b?.text)
+  if (buttonList.length > 0) {
+    components.push({
+      type: 'BUTTONS',
+      buttons: buttonList.map(b => (b.type || '').toUpperCase() === 'URL'
+        ? { type: 'URL', text: b.text, url: `${b.url_base}{{1}}`, example: [examples.button || 'exemplo'] }
+        : { type: 'QUICK_REPLY', text: b.text }),
+    })
+  } else if (def.button_config?.url_base) {
     components.push({
       type: 'BUTTONS',
       buttons: [{
@@ -222,7 +269,7 @@ interface SubmitResult {
   institution_name: string
   template_definition_id: string
   template_name: string
-  status: 'pending' | 'approved' | 'rejected'
+  status: TemplateStatus
   meta_template_id: string | null
   error_message: string | null
 }
@@ -236,7 +283,7 @@ interface SubmitResult {
 // compartilhado por N escolas. ──
 async function submitToWaba(
   def: TemplateDefinition, wabaId: string, token: string
-): Promise<{ status: 'pending' | 'approved' | 'rejected'; metaTemplateId: string | null; errorMessage: string | null }> {
+): Promise<{ status: TemplateStatus; metaTemplateId: string | null; errorMessage: string | null; category: string | null }> {
   try {
     // fields= explícito: sem isso a Graph API não garante devolver
     // rejected_reason (só vem quando status=REJECTED) — sem esse campo o
@@ -244,7 +291,7 @@ async function submitToWaba(
     // whatsapp_messages corrigido antes: a Meta manda o motivo, o código
     // não pedia/lia o campo.
     const checkRes = await fetch(
-      `${GRAPH_URL}/${wabaId}/message_templates?name=${encodeURIComponent(def.name)}&fields=id,name,status,rejected_reason`,
+      `${GRAPH_URL}/${wabaId}/message_templates?name=${encodeURIComponent(def.name)}&fields=id,name,status,category,rejected_reason`,
       { headers: { Authorization: `Bearer ${token}` } }
     )
     const checkData = await checkRes.json().catch(() => null)
@@ -255,6 +302,7 @@ async function submitToWaba(
         status,
         metaTemplateId: existing.id || null,
         errorMessage: status === 'rejected' ? (existing.rejected_reason || 'Motivo não informado pela Meta') : null,
+        category: status === 'approved' ? (((existing.category as string) || '').toUpperCase() || null) : null,
       }
     }
 
@@ -273,13 +321,13 @@ async function submitToWaba(
       const err = createData?.error
       const errorMessage = [err?.error_user_msg || err?.message, err?.error_data?.details]
         .filter(Boolean).join(' — ') || 'Erro ao criar template na Meta'
-      return { status: 'rejected', metaTemplateId: null, errorMessage }
+      return { status: 'rejected', metaTemplateId: null, errorMessage, category: null }
     }
 
-    return { status: 'pending', metaTemplateId: createData?.id || null, errorMessage: null }
+    return { status: 'pending', metaTemplateId: createData?.id || null, errorMessage: null, category: null }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
-    return { status: 'rejected', metaTemplateId: null, errorMessage: message }
+    return { status: 'rejected', metaTemplateId: null, errorMessage: message, category: null }
   }
 }
 
@@ -292,7 +340,7 @@ async function submitDefinitionToInstitutions(
   supabase: Supa, def: TemplateDefinition, institutions: EligibleInstitution[], token: string
 ): Promise<SubmitResult[]> {
   const byWaba = new Map<string, EligibleInstitution[]>()
-  for (const inst of institutions) {
+  for (const inst of scopeInstitutionsToOwner(def, institutions)) {
     if (!byWaba.has(inst.waba_id)) byWaba.set(inst.waba_id, [])
     byWaba.get(inst.waba_id)!.push(inst)
   }
@@ -310,6 +358,7 @@ async function submitDefinitionToInstitutions(
       meta_template_id:        outcome.metaTemplateId,
       last_synced_at:          now,
       error_message:           outcome.errorMessage,
+      ...(outcome.category ? { approved_category: outcome.category } : {}),
     }))
     const { error: upsertErr } = await supabase
       .from('template_institution_status')
@@ -338,6 +387,10 @@ async function handleSubmit(req: VercelRequest, res: VercelResponse, supabase: S
   let defsQuery = supabase.from('template_definitions').select('*')
   if (Array.isArray(template_definition_ids) && template_definition_ids.length) {
     defsQuery = defsQuery.in('id', template_definition_ids)
+  } else {
+    // "Submeter todos" = só o catálogo padrão da Áion; template de escola
+    // nunca entra num envio em massa pra todas as escolas.
+    defsQuery = defsQuery.is('institution_id', null)
   }
   const { data: defs, error: defsErr } = await defsQuery
   if (defsErr) return errorResponse(res, 500, `Erro ao buscar templates: ${defsErr.message}`)
@@ -384,15 +437,15 @@ async function handleRegisterExisting(req: VercelRequest, res: VercelResponse, s
     .single()
   if (defErr || !def) return errorResponse(res, 404, 'Template não encontrado')
 
-  const institutions = await getEligibleInstitutions(
+  const institutions = scopeInstitutionsToOwner(def as TemplateDefinition, await getEligibleInstitutions(
     supabase, Array.isArray(institution_ids) && institution_ids.length ? institution_ids : undefined
-  )
+  ))
   if (!institutions.length) return res.status(200).json({ results: [] })
 
   const instIds = institutions.map(i => i.institution_id)
   const { data: existingRows, error: existingErr } = await supabase
     .from('whatsapp_templates')
-    .select('institution_id, template_id, components')
+    .select('institution_id, template_id, components, category')
     .in('institution_id', instIds)
     .eq('name', (def as TemplateDefinition).name)
     .eq('language', (def as TemplateDefinition).language || 'pt_BR')
@@ -400,9 +453,11 @@ async function handleRegisterExisting(req: VercelRequest, res: VercelResponse, s
   if (existingErr) return errorResponse(res, 500, `Erro ao consultar templates já aprovados: ${existingErr.message}`)
 
   const approvedTemplateIdByInst = new Map<string, string | null>()
-  for (const row of (existingRows || []) as { institution_id: string; template_id: string | null; components: unknown }[]) {
+  const approvedCategoryByInst   = new Map<string, string | null>()
+  for (const row of (existingRows || []) as { institution_id: string; template_id: string | null; components: unknown; category: string | null }[]) {
     if (extractBodyText(row.components) === (def as TemplateDefinition).body_text) {
       approvedTemplateIdByInst.set(row.institution_id, row.template_id)
+      approvedCategoryByInst.set(row.institution_id, (row.category || '').toUpperCase() || null)
     }
   }
 
@@ -420,6 +475,7 @@ async function handleRegisterExisting(req: VercelRequest, res: VercelResponse, s
       meta_template_id:        approvedTemplateIdByInst.get(inst.institution_id) || null,
       last_synced_at:          now,
       error_message:           null,
+      approved_category:       approvedCategoryByInst.get(inst.institution_id) || null,
     }))
     const { error: upsertErr } = await supabase
       .from('template_institution_status')
@@ -579,7 +635,7 @@ async function handleCheckStatus(req: VercelRequest, res: VercelResponse, supaba
     // sem pedir o campo, a Graph API não garante devolvê-lo, e o motivo real
     // de rejeição era descartado (ficava sempre null).
     const listRes = await fetch(
-      `${GRAPH_URL}/${wabaId}/message_templates?fields=name,status,id,rejected_reason&limit=250`,
+      `${GRAPH_URL}/${wabaId}/message_templates?fields=name,status,id,category,language,components,rejected_reason&limit=250`,
       { headers: { Authorization: `Bearer ${token}` } }
     )
     const listData = await listRes.json().catch(() => null)
@@ -587,8 +643,28 @@ async function handleCheckStatus(req: VercelRequest, res: VercelResponse, supaba
       console.error('[template-definitions] erro ao listar templates do WABA', wabaId, listData?.error?.message)
       continue
     }
-    const byName = new Map<string, { status: string; id: string; rejectedReason?: string }>()
-    for (const t of listData?.data || []) byName.set(t.name, { status: t.status, id: t.id, rejectedReason: t.rejected_reason })
+    const byName = new Map<string, { status: string; id: string; category?: string; rejectedReason?: string }>()
+    for (const t of listData?.data || []) byName.set(t.name, { status: t.status, id: t.id, category: t.category, rejectedReason: t.rejected_reason })
+
+    // Aproveita a mesma listagem pra pôr em dia o cache whatsapp_templates
+    // das escolas desse WABA (só upsert dos aprovados, nunca apaga) — corrige
+    // caches que ficaram velhos antes do webhook de template existir (ex:
+    // lembrete_visita "não encontrado" em agendamentos).
+    const approvedForCache = (listData?.data || []).filter((t: any) => mapMetaStatus(t.status) === 'approved')
+    if (approvedForCache.length > 0) {
+      const { error: cacheErr } = await supabase
+        .from('whatsapp_templates')
+        .upsert(insts.flatMap(inst => approvedForCache.map((t: any) => ({
+          institution_id: inst.institution_id,
+          name:           t.name,
+          language:       t.language || 'pt_BR',
+          category:       t.category || 'UTILITY',
+          components:     t.components || [],
+          template_id:    t.id,
+          status:         'approved',
+        }))), { onConflict: 'institution_id,name' })
+      if (cacheErr) console.error('[template-definitions] erro ao atualizar cache whatsapp_templates:', cacheErr.message)
+    }
 
     const instIdSet = new Set(insts.map(i => i.institution_id))
     const relevantRows = rows.filter((r: any) => instIdSet.has(r.institution_id))
@@ -601,6 +677,7 @@ async function handleCheckStatus(req: VercelRequest, res: VercelResponse, supaba
         ? {
             status, meta_template_id: found.id, last_synced_at: now,
             error_message: status === 'rejected' ? (found.rejectedReason || 'Motivo não informado pela Meta') : null,
+            ...(status === 'approved' && found.category ? { approved_category: found.category.toUpperCase() } : {}),
           }
         : { status: 'not_submitted' as const, meta_template_id: null, last_synced_at: now, error_message: null }
 

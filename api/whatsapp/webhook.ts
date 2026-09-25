@@ -1079,6 +1079,133 @@ async function applyCaptureTrigger(p: {
   return { matched: true, skipBot: botSkipped }
 }
 
+// ── Eventos de template (message_template_status_update / template_category_update) ──
+// Sincroniza aprovação/categoria vinda da Meta sem depender de alguém clicar
+// em "verificar status" (template-definitions.ts check-status) nem abrir a
+// aba Templates da escola (InstitutionDetails.tsx, único ponto que
+// atualizava o cache whatsapp_templates — era por isso que agendamentos de
+// lembrete_visita falhavam com "Template não encontrado" em escolas cujo
+// cache nunca tinha sido sincronizado). O evento chega por WABA (entry.id),
+// e um WABA pode atender mais de uma escola.
+const TEMPLATE_EVENT_FIELDS = ['message_template_status_update', 'template_category_update']
+
+function mapTemplateEventStatus(event?: string): 'pending' | 'approved' | 'rejected' | 'paused' | 'disabled' | null {
+  const e = (event || '').toUpperCase()
+  if (e === 'APPROVED' || e === 'REINSTATED' || e === 'FLAGGED') return 'approved' // FLAGGED: qualidade baixa, ainda enviável
+  if (e === 'REJECTED') return 'rejected'
+  if (e === 'PAUSED') return 'paused'
+  if (e === 'DISABLED' || e === 'PENDING_DELETION' || e === 'DELETED' || e === 'ARCHIVED') return 'disabled'
+  if (e === 'PENDING' || e === 'IN_APPEAL') return 'pending'
+  return null
+}
+
+async function handleTemplateEvent(field: string, wabaId: string, value: any, accessToken: string): Promise<void> {
+  const metaTemplateId = value?.message_template_id != null ? String(value.message_template_id) : ''
+  const templateName   = (value?.message_template_name as string) || ''
+  const language       = (value?.message_template_language as string) || 'pt_BR'
+  console.log('[template-event]', field, '| waba:', wabaId, '| template:', templateName, metaTemplateId, '| payload:', JSON.stringify(value))
+  if (!wabaId || (!metaTemplateId && !templateName)) return
+
+  const { data: phoneRows, error: phoneErr } = await supabase
+    .from('whatsapp_phone_numbers')
+    .select('institution_id')
+    .eq('waba_id', wabaId)
+    .not('institution_id', 'is', null)
+  if (phoneErr) console.error('❌ [template-event] erro ao buscar escolas do WABA:', phoneErr.message)
+  const institutionIds = [...new Set((phoneRows || []).map((r: any) => r.institution_id as string))]
+  if (!institutionIds.length) {
+    console.log('[template-event] nenhuma escola com esse WABA — ignorado')
+    return
+  }
+
+  // Definições do catálogo com esse nome (Áion ou da própria escola) — pra
+  // achar a linha de status mesmo quando meta_template_id ficou nulo
+  // (templates registrados via register_existing a partir do cache).
+  const { data: defs } = await supabase
+    .from('template_definitions')
+    .select('id, institution_id')
+    .eq('name', templateName)
+    .eq('language', language)
+  const defIds = (defs || []).map((d: any) => d.id as string)
+
+  const now = new Date().toISOString()
+  const statusUpdate: Record<string, unknown> = { last_synced_at: now }
+  if (metaTemplateId) statusUpdate.meta_template_id = metaTemplateId
+
+  let cacheStatus: string | null = null
+  let newCategory: string | null = null
+
+  if (field === 'message_template_status_update') {
+    const status = mapTemplateEventStatus(value?.event)
+    if (!status) {
+      console.log('[template-event] evento sem mapeamento, ignorado:', value?.event)
+      return
+    }
+    statusUpdate.status = status
+    const reason = value?.reason && value.reason !== 'NONE' ? String(value.reason) : null
+    statusUpdate.error_message = status === 'rejected' ? (reason || 'Motivo não informado pela Meta') : null
+    cacheStatus = status
+  } else {
+    newCategory = ((value?.new_category || value?.correct_category || '') as string).toUpperCase() || null
+    if (newCategory) statusUpdate.approved_category = newCategory
+  }
+
+  if (defIds.length) {
+    const { error: updErr } = await supabase
+      .from('template_institution_status')
+      .update(statusUpdate)
+      .in('template_definition_id', defIds)
+      .in('institution_id', institutionIds)
+    if (updErr) console.error('❌ [template-event] erro ao atualizar template_institution_status:', updErr.message)
+  }
+
+  // Cache por escola (whatsapp_templates) — é dele que envio manual,
+  // agendamento (whatsapp-scheduled-send) e pickers leem o template aprovado.
+  // Na aprovação, busca a definição completa na Meta (components/categoria)
+  // e faz upsert; nos demais casos só atualiza status/categoria do que existe.
+  if (cacheStatus === 'approved' && metaTemplateId && accessToken) {
+    try {
+      const res  = await fetch(`${GRAPH_URL}/${metaTemplateId}?fields=name,language,category,components,status`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      const tpl: any = await res.json()
+      if (!res.ok) throw new Error(tpl?.error?.message || `HTTP ${res.status}`)
+      const category = ((tpl.category as string) || '').toUpperCase() || null
+      const { error: cacheErr } = await supabase
+        .from('whatsapp_templates')
+        .upsert(institutionIds.map(institution_id => ({
+          institution_id,
+          name:        tpl.name || templateName,
+          language:    tpl.language || language,
+          category:    category || 'UTILITY',
+          components:  tpl.components || [],
+          template_id: metaTemplateId,
+          status:      'approved',
+        })), { onConflict: 'institution_id,name' })
+      if (cacheErr) console.error('❌ [template-event] erro ao gravar cache whatsapp_templates:', cacheErr.message)
+
+      if (category && defIds.length) {
+        await supabase.from('template_institution_status')
+          .update({ approved_category: category })
+          .in('template_definition_id', defIds)
+          .in('institution_id', institutionIds)
+      }
+    } catch (e) {
+      console.error('❌ [template-event] erro ao buscar template aprovado na Meta:', e instanceof Error ? e.message : String(e))
+    }
+  } else if (cacheStatus || newCategory) {
+    const cacheUpdate: Record<string, unknown> = {}
+    if (cacheStatus) cacheUpdate.status = cacheStatus
+    if (newCategory) cacheUpdate.category = newCategory
+    const { error: cacheErr } = await supabase
+      .from('whatsapp_templates')
+      .update(cacheUpdate)
+      .in('institution_id', institutionIds)
+      .eq('name', templateName)
+    if (cacheErr) console.error('❌ [template-event] erro ao atualizar cache whatsapp_templates:', cacheErr.message)
+  }
+}
+
 // ── Eventos de coexistência (Cadastro Incorporado com QR code) ──────────────
 // Tratamento isolado do fluxo messages/statuses acima — nunca chama
 // upsertContact/increment_conversation_unread/processFlow/processCustomFlow,
@@ -3087,6 +3214,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const field = body?.entry?.[0]?.changes?.[0]?.field
       if (field === 'account_update') {
         console.log('[WEBHOOK] account_update recebido:', JSON.stringify(value))
+        return res.status(200).json({ status: 'ok' })
+      }
+
+      // Eventos de template: vêm por WABA (entry.id), sem phone_number_id —
+      // mesmo motivo de interceptar antes da resolução de institutionId.
+      // Percorre todas as entradas/mudanças (a Meta pode agrupar eventos).
+      if (TEMPLATE_EVENT_FIELDS.includes(field)) {
+        for (const entry of body?.entry || []) {
+          for (const change of entry?.changes || []) {
+            if (!TEMPLATE_EVENT_FIELDS.includes(change?.field)) continue
+            try {
+              await handleTemplateEvent(change.field, String(entry?.id || ''), change?.value, waConfig.accessToken)
+            } catch (e) {
+              console.error('❌ [template-event] erro:', e)
+            }
+          }
+        }
         return res.status(200).json({ status: 'ok' })
       }
 

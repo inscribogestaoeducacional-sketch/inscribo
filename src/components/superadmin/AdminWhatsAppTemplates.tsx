@@ -14,7 +14,7 @@ import { type TemplateContext } from '../../lib/templateVariableLabels'
 import {
   MessageSquare, Plus, X, Search, RefreshCw, Send,
   CheckCircle2, Clock, XCircle, MinusCircle, Link as LinkIcon, Eye, EyeOff, Building2,
-  Users, ChevronUp, ChevronDown,
+  Users, ChevronUp, ChevronDown, PauseCircle, Ban,
 } from 'lucide-react'
 
 interface TemplateDefinition {
@@ -72,7 +72,7 @@ interface EligibleInstitution {
   institution_city: string | null
 }
 
-type StatusValue = 'not_submitted' | 'pending' | 'approved' | 'rejected'
+type StatusValue = 'not_submitted' | 'pending' | 'approved' | 'rejected' | 'paused' | 'disabled'
 
 interface StatusRow {
   template_definition_id: string
@@ -87,6 +87,8 @@ const STATUS_META: Record<StatusValue, { label: string; cls: string; icon: any }
   pending:       { label: 'Em análise',  cls: 'bg-yellow-100 text-yellow-700', icon: Clock },
   approved:      { label: 'Aprovado',    cls: 'bg-green-100 text-green-700', icon: CheckCircle2 },
   rejected:      { label: 'Rejeitado',   cls: 'bg-red-100 text-red-700',     icon: XCircle },
+  paused:        { label: 'Pausado pela Meta',     cls: 'bg-orange-100 text-orange-700', icon: PauseCircle },
+  disabled:      { label: 'Desativado pela Meta',  cls: 'bg-gray-200 text-gray-600',     icon: Ban },
 }
 
 const lbl = 'block text-xs font-semibold text-gray-600 mb-1.5'
@@ -177,7 +179,9 @@ export default function AdminWhatsAppTemplates() {
     setLoading(true)
     try {
       const [defsRes, phonesRes, statusRes] = await Promise.all([
-        supabase.from('template_definitions').select('*').order('created_at', { ascending: false }),
+        // Só o catálogo padrão da Áion — template criado por escola
+        // (institution_id preenchido) é gerido no módulo Transmissões dela.
+        supabase.from('template_definitions').select('*').is('institution_id', null).order('created_at', { ascending: false }),
         // Mesma fonte de verdade usada pelo endpoint server-side e por
         // AdminSchools.tsx/InstitutionDetails.tsx — institutions.
         // whatsapp_business_id nunca é lido em nenhum outro lugar do projeto.
