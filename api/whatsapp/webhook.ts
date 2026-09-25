@@ -762,6 +762,254 @@ async function upsertContact(
   }
 }
 
+// ── Captação Inteligente ─────────────────────────────────────────────────────
+// Gatilhos de captação (capture_triggers, ver
+// 20260925000000_capture_triggers.sql): identifica de qual anúncio/publicação
+// veio a mensagem e enriquece a conversa — nunca substitui o inbox (a mensagem
+// já foi gravada normalmente antes de chegar aqui).
+//
+// Match: referral.source_id de anúncio Meta "Clique para WhatsApp" (quando
+// bate com meta_ad_ids de algum gatilho) tem prioridade; senão "contém" sobre
+// o texto normalizado. Vários gatilhos batendo por texto → vence o texto mais
+// longo (mais específico).
+//
+// Sempre (inclusive conversa já em andamento): log em capture_trigger_hits,
+// etiqueta no contato + conversa, origem na conversa, primeiro toque no
+// contato. Só quando applyActions (atendimento novo e última saída não era
+// template): resposta automática, pular robô e distribuição round-robin —
+// nunca tira uma conversa de um atendente no meio do atendimento.
+
+// Minúsculas, sem acento, espaços colapsados — usada dos dois lados do match.
+function normalizeCaptureText(raw: string): string {
+  return raw
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+type CaptureResult = { matched: boolean; skipBot: boolean }
+
+// Pool = atendentes diretos + membros dos grupos (whatsapp_groups) do
+// gatilho, sem repetição, na ordem de cadastro. Round-robin a partir de
+// capture_triggers.rr_index, pulando quem não está disponível NESTA escola:
+// vínculo ativo + is_available em user_institutions (não o cache
+// users.is_available, que só reflete a instituição ativa do usuário) e fora
+// do horário de almoço (mesmo critério do nó de transferência do fluxo).
+async function pickCaptureAssignee(
+  institutionId: string,
+  trigger:       { id: string; rr_index: number | null }
+): Promise<{ id: string; full_name: string | null } | null> {
+  const { data: rows } = await supabase
+    .from('capture_trigger_assignees')
+    .select('user_id, group_id')
+    .eq('trigger_id', trigger.id)
+    .order('created_at', { ascending: true })
+  if (!rows?.length) return null
+
+  const groupIds = rows.map((r: any) => r.group_id).filter(Boolean)
+  let groups: any[] = []
+  if (groupIds.length) {
+    const { data } = await supabase
+      .from('whatsapp_groups')
+      .select('id, member_ids')
+      .in('id', groupIds)
+      .eq('institution_id', institutionId)
+    groups = data || []
+  }
+
+  const pool: string[] = []
+  const add = (id: string | null | undefined) => { if (id && !pool.includes(id)) pool.push(id) }
+  for (const r of rows as any[]) {
+    if (r.user_id) add(r.user_id)
+    else for (const m of groups.find(g => g.id === r.group_id)?.member_ids || []) add(m)
+  }
+  if (!pool.length) return null
+
+  const [{ data: links }, { data: members }, { data: flowCfg }] = await Promise.all([
+    supabase.from('user_institutions').select('user_id')
+      .eq('institution_id', institutionId).eq('active', true).eq('is_available', true).in('user_id', pool),
+    supabase.from('users').select('id, full_name, active, lunch_start, lunch_end').in('id', pool),
+    supabase.from('whatsapp_flows').select('timezone').eq('institution_id', institutionId).maybeSingle(),
+  ])
+  const eligible = new Set((links || []).map((l: any) => l.user_id))
+
+  const tz      = (flowCfg as any)?.timezone || 'America/Sao_Paulo'
+  const nowTz   = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
+  const curMins = nowTz.getHours() * 60 + nowTz.getMinutes()
+  const isOnLunch = (u: { lunch_start?: string | null; lunch_end?: string | null }) => {
+    if (!u.lunch_start || !u.lunch_end) return false
+    const [lsh, lsm] = u.lunch_start.split(':').map(Number)
+    const [leh, lem] = u.lunch_end.split(':').map(Number)
+    return curMins >= lsh * 60 + lsm && curMins <= leh * 60 + lem
+  }
+
+  for (let i = 1; i <= pool.length; i++) {
+    const idx = ((trigger.rr_index ?? -1) + i) % pool.length
+    const u   = (members || []).find((m: any) => m.id === pool[idx]) as any
+    if (u && u.active !== false && eligible.has(u.id) && !isOnLunch(u)) {
+      await supabase.from('capture_triggers').update({ rr_index: idx }).eq('id', trigger.id)
+      return { id: u.id, full_name: u.full_name ?? null }
+    }
+  }
+  return null
+}
+
+async function applyCaptureTrigger(p: {
+  institutionId: string
+  remoteJid:     string
+  msg:           any
+  text:          string
+  applyActions:  boolean
+}): Promise<CaptureResult> {
+  const none: CaptureResult = { matched: false, skipBot: false }
+  const referral = p.msg?.referral && typeof p.msg.referral === 'object' ? p.msg.referral : null
+  const normalizedText = normalizeCaptureText(p.text || '')
+  if (!referral && !normalizedText) return none
+
+  const { data: triggers, error: trgErr } = await supabase
+    .from('capture_triggers')
+    .select('id, name, trigger_text, meta_ad_ids, auto_reply, skip_bot_flow, tag_name, rr_index')
+    .eq('institution_id', p.institutionId)
+    .eq('is_active', true)
+    .is('archived_at', null)
+  if (trgErr) console.error('❌ [capture] erro ao buscar capture_triggers:', trgErr.message)
+
+  let trigger: any = null
+  let matchType: 'referral' | 'text' = 'text'
+  const sourceId = referral?.source_id ? String(referral.source_id) : ''
+  if (sourceId) {
+    trigger = (triggers || []).find((t: any) => (t.meta_ad_ids || []).includes(sourceId)) || null
+    if (trigger) matchType = 'referral'
+  }
+  if (!trigger && normalizedText) {
+    trigger = (triggers || [])
+      .map((t: any) => ({ t, norm: normalizeCaptureText(t.trigger_text || '') }))
+      .filter(x => x.norm && normalizedText.includes(x.norm))
+      .sort((a, b) => b.norm.length - a.norm.length)[0]?.t || null
+  }
+
+  if (!trigger) {
+    // Anúncio Meta ainda não cadastrado: guarda o referral na conversa mesmo
+    // assim — é assim que a escola descobre o source_id pra cadastrar.
+    if (referral) {
+      await supabase.from('whatsapp_conversations')
+        .update({ capture_referral: referral })
+        .eq('institution_id', p.institutionId)
+        .eq('remote_jid', p.remoteJid)
+    }
+    return none
+  }
+
+  console.log('[capture] match:', trigger.name, '| tipo:', matchType, '| applyActions:', p.applyActions)
+  const now     = new Date().toISOString()
+  const tagName = (trigger.tag_name || '').trim() || trigger.name
+
+  // Mesmo formato de telefone gravado por upsertContact.
+  const contactPhone = normalizeBrazilianInput(p.remoteJid)
+  const [{ data: conv }, { data: contact }, { data: existingTag }] = await Promise.all([
+    supabase.from('whatsapp_conversations').select('id, tags')
+      .eq('institution_id', p.institutionId).eq('remote_jid', p.remoteJid).maybeSingle(),
+    supabase.from('whatsapp_contacts').select('id, tags')
+      .eq('institution_id', p.institutionId).eq('phone', contactPhone).maybeSingle(),
+    supabase.from('whatsapp_tags').select('id')
+      .eq('institution_id', p.institutionId).eq('name', tagName).maybeSingle(),
+  ])
+
+  // Etiqueta no catálogo da escola (whatsapp_tags) — sem ela a etiqueta
+  // aparece no contato mas não no dropdown/filtro de etiquetas.
+  if (!existingTag) {
+    const { error: tagErr } = await supabase.from('whatsapp_tags')
+      .insert({ institution_id: p.institutionId, name: tagName, color: '#6366f1' })
+    if (tagErr) console.error('❌ [capture] erro ao criar whatsapp_tags:', tagErr.message)
+  }
+
+  // Contato: etiqueta + primeiro toque (nunca sobrescrito — .is(null) no
+  // WHERE, mesmo padrão de source_keyword_id). leads não tem coluna tags,
+  // então a etiqueta fica em contato + conversa.
+  if (contact) {
+    const contactTags: string[] = (contact as any).tags || []
+    if (!contactTags.includes(tagName)) {
+      await supabase.from('whatsapp_contacts')
+        .update({ tags: [...contactTags, tagName] })
+        .eq('id', (contact as any).id)
+    }
+    await supabase.from('whatsapp_contacts')
+      .update({ origin_capture_trigger_id: trigger.id, origin_captured_at: now })
+      .eq('id', (contact as any).id)
+      .is('origin_capture_trigger_id', null)
+  }
+
+  const convTags: string[] = (conv as any)?.tags || []
+  const convUpdate: Record<string, any> = {
+    capture_trigger_id: trigger.id,
+    capture_matched_at: now,
+    capture_referral:   referral,
+    ...(convTags.includes(tagName) ? {} : { tags: [...convTags, tagName] }),
+  }
+
+  let botSkipped = false
+  let assignee: { id: string; full_name: string | null } | null = null
+  if (p.applyActions) {
+    if (trigger.skip_bot_flow) {
+      botSkipped = true
+      assignee   = await pickCaptureAssignee(p.institutionId, trigger)
+      Object.assign(convUpdate, {
+        capture_bot_skipped: true,
+        bot_active:          false,
+        bot_current_node:    null,
+        bot_variables:       {},
+        assigned_user_id:    assignee?.id ?? null,
+        assigned_user_name:  assignee?.full_name ?? null,
+        // Sem ninguém disponível: 'waiting' sem dono (fila geral), nunca
+        // 'open' sem dono — mesmo limbo já corrigido no fluxo.
+        status:              assignee ? 'open' : 'waiting',
+      })
+    } else {
+      convUpdate.capture_bot_skipped = false
+    }
+  }
+
+  const { error: convErr } = await supabase.from('whatsapp_conversations')
+    .update(convUpdate)
+    .eq('institution_id', p.institutionId)
+    .eq('remote_jid', p.remoteJid)
+  if (convErr) console.error('❌ [capture] erro ao atualizar conversa:', convErr.message)
+
+  if (p.applyActions && trigger.auto_reply?.trim()) {
+    await sendAutoMessage(p.institutionId, p.remoteJid, trigger.auto_reply)
+  }
+
+  await supabase.from('whatsapp_conversation_events').insert({
+    institution_id: p.institutionId,
+    remote_jid:     p.remoteJid,
+    event_type:     'capture_trigger',
+    description:    botSkipped
+      ? `Captação Inteligente: veio de "${trigger.name}" — robô não ativado, ${assignee ? `atribuído para ${assignee.full_name || 'atendente'}` : 'enviado para a fila geral'}`
+      : `Captação Inteligente: veio de "${trigger.name}"`,
+    metadata:       { trigger_id: trigger.id, match_type: matchType, bot_skipped: botSkipped, source_id: sourceId || null },
+  })
+
+  const { error: hitErr } = await supabase.from('capture_trigger_hits').insert({
+    institution_id:      p.institutionId,
+    trigger_id:          trigger.id,
+    conversation_id:     (conv as any)?.id ?? null,
+    contact_id:          (contact as any)?.id ?? null,
+    remote_jid:          p.remoteJid,
+    message_id:          p.msg?.id ?? null,
+    match_type:          matchType,
+    referral,
+    is_new_conversation: p.applyActions,
+    bot_skipped:         botSkipped,
+    assigned_user_id:    assignee?.id ?? null,
+    matched_at:          now,
+  })
+  if (hitErr) console.error('❌ [capture] erro ao gravar capture_trigger_hits:', hitErr.message)
+
+  return { matched: true, skipBot: botSkipped }
+}
+
 // ── Eventos de coexistência (Cadastro Incorporado com QR code) ──────────────
 // Tratamento isolado do fluxo messages/statuses acima — nunca chama
 // upsertContact/increment_conversation_unread/processFlow/processCustomFlow,
@@ -1642,13 +1890,22 @@ async function processFlow(
     // um atendente humano já conversando (race condition cliente↔atendente↔bot).
     const { data: guardConvState } = await supabase
       .from('whatsapp_conversations')
-      .select('bot_active, assigned_user_id, bot_variables, status')
+      .select('bot_active, assigned_user_id, bot_variables, status, capture_bot_skipped')
       .eq('institution_id', institutionId)
       .eq('remote_jid', remoteJid)
       .maybeSingle()
 
     if (guardConvState?.bot_active === false && guardConvState?.assigned_user_id) {
       console.log('[flow] humano atendendo, robô pausado (guard global)')
+      return
+    }
+
+    // Gatilho de Captação Inteligente pulou o robô neste atendimento — nas
+    // mensagens seguintes (conversa sem dono em 'waiting') o fluxo também não
+    // roda; senão a seção "Menu choice" do fluxo padrão podia responder e
+    // reatribuir. A flag é limpa pelo webhook no próximo atendimento novo.
+    if ((guardConvState as any)?.capture_bot_skipped === true) {
+      console.log('[flow] robô pulado pela Captação Inteligente neste atendimento')
       return
     }
 
@@ -1682,11 +1939,17 @@ async function processFlow(
 
       // bot_active=false + no assignee: only activate for truly first messages
       if (isNewConversation) {
+        // Mensagens do bot não contam como "histórico": a resposta automática
+        // de um gatilho de Captação Inteligente (sem "pular robô") é gravada
+        // antes deste ponto e, contada, impediria o robô de começar. Sem
+        // gatilho não muda nada — mensagem de bot sempre vem depois de uma
+        // mensagem do cliente, que já conta.
         const { count } = await supabase
           .from('whatsapp_messages')
           .select('id', { count: 'exact', head: true })
           .eq('remote_jid', remoteJid)
           .eq('institution_id', institutionId)
+          .or('is_bot_message.is.null,is_bot_message.eq.false')
 
         if ((count ?? 0) <= 1) {
           const { error: botErr } = await supabase.from('whatsapp_conversations').update({
@@ -3314,6 +3577,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await autoLinkLead(institutionId, remoteJid)
         }
 
+        // ── Captação Inteligente ──
+        // Depois de gravar mensagem/contato/lead e ANTES do fluxo
+        // automatizado — é o que permite pular o processFlow por completo
+        // quando o gatilho manda (ramo capture.skipBot abaixo).
+        let capture: CaptureResult = { matched: false, skipBot: false }
+        try {
+          capture = await applyCaptureTrigger({
+            institutionId, remoteJid, msg, text,
+            applyActions: isNewConversation && !lastWasTemplate,
+          })
+        } catch (e) {
+          console.error('❌ applyCaptureTrigger error:', e)
+        }
+        // Aviso "Robô não ativado" vale só pro atendimento em que o gatilho
+        // agiu — atendimento novo sem gatilho limpa a flag.
+        if (isNewConversation && !capture.matched) {
+          await supabase.from('whatsapp_conversations')
+            .update({ capture_bot_skipped: false })
+            .eq('institution_id', institutionId)
+            .eq('remote_jid', remoteJid)
+            .eq('capture_bot_skipped', true)
+        }
+
         // ── Automated flow ──
         // [FIX P2 / P3] lastWasTemplate computed before the re-open block above.
         // When the customer responds to a template, keep the conversation waiting for
@@ -3327,6 +3613,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .update({ bot_active: false, status: 'open' })
             .eq('institution_id', institutionId)
             .eq('remote_jid', remoteJid)
+        } else if (capture.skipBot) {
+          // Gatilho de captação com "pular robô": conversa já foi atribuída
+          // (ou mandada pra fila geral) em applyCaptureTrigger. processFlow
+          // NÃO pode rodar — pra conversa nova sem dono e bot_active=false
+          // ele reativaria o bot.
+          console.log('[capture] robô pulado pelo gatilho de captação')
         } else if (isRecentReopen) {
           // Item A: reabertura silenciosa — não roda processFlow (nem custom
           // bot_flow nem fluxo padrão de menu), só confirma o recebimento.
