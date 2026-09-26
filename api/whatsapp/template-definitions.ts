@@ -3,6 +3,7 @@ import {
   getSupabaseAdmin,
   errorResponse,
   authenticateSuperAdmin,
+  authenticateInstitutionUser,
   GRAPH_URL,
 } from '../_lib/whatsappAuth.js'
 
@@ -56,8 +57,24 @@ import {
 //       das instituições que tinham status gravado pra esse template —
 //       falha individual (já removido manualmente, nunca existiu lá de
 //       verdade, etc.) nunca bloqueia o resto (nem a limpeza local).
+//   { action: 'submit_school_template', template_definition_id: string }
+//     — ÚNICA ação aberta à escola (Transmissões): envia pra aprovação da
+//       Meta um template da PRÓPRIA escola (institution_id preenchido), só
+//       pro WABA dela. Autorização por broadcast_user_can_manage_as (mesma
+//       regra do módulo). A escola cria/edita o rascunho direto pela RLS de
+//       template_definitions (20260926000000).
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return errorResponse(res, 405, 'Method not allowed')
+
+  if (req.body?.action === 'submit_school_template') {
+    try {
+      return await handleSubmitSchoolTemplate(req, res, getSupabaseAdmin())
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[template-definitions] submit_school_template erro:', message)
+      return errorResponse(res, 500, message)
+    }
+  }
 
   const auth = await authenticateSuperAdmin(req)
   if (!auth) return errorResponse(res, 403, 'Apenas Super Admin pode gerenciar templates automáticos')
@@ -81,6 +98,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Supa = any
+
+// ── Template da escola → Meta (Transmissões) ────────────────────────────────
+// Validações da v1 antes de gastar uma submissão na Meta: cabeçalho só de
+// texto (mídia fica pra quando o App ID estiver cadastrado), até 10 botões,
+// no máximo 2 de link, texto de botão até 25 caracteres (limites da Meta).
+async function handleSubmitSchoolTemplate(req: VercelRequest, res: VercelResponse, supabase: Supa) {
+  const auth = await authenticateInstitutionUser(req)
+  if (!auth) return errorResponse(res, 401, 'Não autenticado')
+
+  const { template_definition_id } = req.body || {}
+  if (!template_definition_id) return errorResponse(res, 400, 'template_definition_id é obrigatório')
+
+  const { data: def, error: defErr } = await supabase
+    .from('template_definitions').select('*').eq('id', template_definition_id).maybeSingle()
+  if (defErr || !def || !def.institution_id) return errorResponse(res, 404, 'Template da escola não encontrado')
+
+  const { data: canManage, error: permErr } = await supabase
+    .rpc('broadcast_user_can_manage_as', { p_user_id: auth.userId, p_institution_id: def.institution_id })
+  if (permErr) console.error('[template-definitions] permissão:', permErr.message)
+  if (canManage !== true) return errorResponse(res, 403, 'Sem permissão para gerenciar Transmissões desta escola')
+
+  const problems: string[] = []
+  const header = def.header_config as TemplateDefinition['header_config']
+  if (header?.format && header.format.toUpperCase() !== 'TEXT') problems.push('Cabeçalho com imagem/vídeo/documento ainda não é suportado')
+  if (header?.format && (header.text || '').length > 60) problems.push('Cabeçalho de texto com mais de 60 caracteres')
+  if (!def.body_text?.trim() || def.body_text.length > 1024) problems.push('Corpo vazio ou com mais de 1024 caracteres')
+  const buttons = (Array.isArray(def.buttons) ? def.buttons : []) as { type?: string; text?: string; url_base?: string }[]
+  if (buttons.length > 10) problems.push('Mais de 10 botões')
+  if (buttons.filter(b => (b.type || '').toUpperCase() === 'URL').length > 2) problems.push('Mais de 2 botões de link')
+  for (const b of buttons) {
+    const type = (b.type || '').toUpperCase()
+    if (!['QUICK_REPLY', 'URL'].includes(type)) problems.push(`Tipo de botão inválido: ${b.type}`)
+    if (!b.text?.trim() || b.text.length > 25) problems.push(`Botão "${b.text || ''}" sem texto ou com mais de 25 caracteres`)
+    if (type === 'URL' && !/^https:\/\//.test(b.url_base || '')) problems.push(`Botão de link "${b.text}" sem URL https`)
+  }
+  if (problems.length) return res.status(400).json({ error: 'Template inválido', details: problems })
+
+  const { data: phone } = await supabase.from('whatsapp_phone_numbers')
+    .select('school_group_id').eq('institution_id', def.institution_id).eq('is_active', true).limit(1).maybeSingle()
+  if (phone?.school_group_id) return errorResponse(res, 409, 'Número compartilhado de grupo escolar ainda não é suportado em Transmissões')
+
+  const institutions = await getEligibleInstitutions(supabase, [def.institution_id])
+  if (!institutions.length) return errorResponse(res, 409, 'Escola sem WhatsApp Business (WABA) configurado')
+
+  const token = await getGlobalToken(supabase)
+  // submitDefinitionToInstitutions já restringe ao dono (scopeInstitutionsToOwner).
+  const results = await submitDefinitionToInstitutions(supabase, def as TemplateDefinition, institutions, token)
+  console.log('[template-definitions] template de escola submetido:', def.name, '| escola:', def.institution_id, '| status:', results[0]?.status)
+  return res.status(200).json({ results })
+}
 
 interface TemplateDefinition {
   id: string
@@ -223,7 +290,16 @@ function buildCreateTemplatePayload(def: TemplateDefinition) {
   if (header?.format) {
     const format = header.format.toUpperCase()
     if (format === 'TEXT') {
-      if (header.text?.trim()) components.push({ type: 'HEADER', format: 'TEXT', text: header.text.trim() })
+      const text = header.text?.trim()
+      if (text) {
+        // Cabeçalho de texto aceita 1 variável; a Meta exige o exemplo dela.
+        if (/\{\{1\}\}/.test(text)) {
+          if (!examples.header?.trim()) throw new Error('Falta o exemplo da variável do cabeçalho ({{1}}) no cadastro do template.')
+          components.push({ type: 'HEADER', format: 'TEXT', text, example: { header_text: [examples.header.trim()] } })
+        } else {
+          components.push({ type: 'HEADER', format: 'TEXT', text })
+        }
+      }
     } else {
       if (!header.sample_handle) {
         throw new Error('Cabeçalho de mídia sem arquivo de exemplo enviado pra Meta (sample_handle).')
