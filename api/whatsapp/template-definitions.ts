@@ -119,6 +119,12 @@ async function handleSubmitSchoolTemplate(req: VercelRequest, res: VercelRespons
   if (permErr) console.error('[template-definitions] permissão:', permErr.message)
   if (canManage !== true) return errorResponse(res, 403, 'Sem permissão para gerenciar Transmissões desta escola')
 
+  // Antes do lançamento, escola sem o módulo liberado não manda template pra
+  // Meta nem chamando a API direto (a tela já nem mostra o menu).
+  const { data: settings } = await supabase.from('broadcast_settings')
+    .select('enabled').eq('institution_id', def.institution_id).maybeSingle()
+  if (!settings?.enabled) return errorResponse(res, 403, 'Módulo Transmissões não liberado para esta escola')
+
   const problems: string[] = []
   const header = def.header_config as TemplateDefinition['header_config']
   if (header?.format && header.format.toUpperCase() !== 'TEXT') problems.push('Cabeçalho com imagem/vídeo/documento ainda não é suportado')

@@ -32,6 +32,7 @@ import GestorUpdates     from './pages/gestor/GestorUpdates'
 import GestorSurveys     from './pages/gestor/GestorSurveys'
 import GestorEmbed       from './pages/gestor/GestorEmbed'
 import CaptacaoInteligente from './pages/gestor/CaptacaoInteligente'
+import Transmissoes from './pages/gestor/Transmissoes'
 import LeadKanban        from './components/leads/LeadKanban'
 import VisitCalendar     from './components/calendar/VisitCalendar'
 import WhatsAppHub       from './components/whatsapp/WhatsAppHub'
@@ -354,6 +355,7 @@ function AppContent() {
             <Route path="/visits"         element={<PermissionRoute module="visitas"><VisitCalendar /></PermissionRoute>} />
             <Route path="/whatsapp"       element={<PermissionRoute module="whatsapp"><WhatsAppHub /></PermissionRoute>} />
             <Route path="/captacao"       element={<PermissionRoute module="captacao"><CaptacaoInteligente /></PermissionRoute>} />
+            <Route path="/transmissoes"   element={<PermissionRoute module="transmissoes"><Transmissoes /></PermissionRoute>} />
             <Route path="/transferencias"element={<PermissionRoute module="transferencias"><GestorTransfers /></PermissionRoute>} />
             <Route path="/updates"        element={<GestorUpdates />} />
             <Route path="/pesquisas"      element={<GestorSurveys />} />
