@@ -54,6 +54,7 @@ import InternalChatWidget from './components/chat/InternalChatWidget'
 import AdminHome        from './components/superadmin/AdminHome'
 import AdminSchools     from './components/superadmin/AdminSchools'
 import AdminFinancial   from './components/superadmin/AdminFinancial'
+import AdminBroadcastPricing from './components/superadmin/AdminBroadcastPricing'
 import AdminSettings    from './components/superadmin/AdminSettings'
 import AdminCRM         from './components/superadmin/AdminCRM'
 import AdminConsultants from './components/superadmin/AdminConsultants'
@@ -298,6 +299,7 @@ function AppContent() {
         <Route path="/super-admin/consultants"        element={<AdminConsultants />} />
         <Route path="/super-admin/consultants/:id"    element={<ConsultantDetails />} />
         <Route path="/super-admin/financial"          element={<AdminFinancial />} />
+        <Route path="/super-admin/transmissoes/precos" element={<AdminBroadcastPricing />} />
         <Route path="/super-admin/settings"           element={<AdminSettings />} />
         <Route path="/super-admin/updates"           element={<AdminUpdates />} />
         <Route path="/super-admin/whatsapp"          element={<AdminWhatsApp />} />

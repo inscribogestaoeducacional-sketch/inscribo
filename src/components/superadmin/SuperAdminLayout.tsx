@@ -8,7 +8,7 @@ import {
   Bell, LogOut, UserCog, ChevronDown, X, Menu,
   TrendingUp, AlertCircle, CheckCircle2,
   AlertTriangle, Info, BookOpen, Users, MessageCircle, Inbox, BarChart3, Network,
-  MapPinned, MessageSquare,
+  MapPinned, MessageSquare, Send,
 } from 'lucide-react'
 
 // ─── tipos ────────────────────────────────────────────────────────────────
@@ -67,6 +67,7 @@ const ADMIN_GROUPS: MenuGroup[] = [
     title: 'Financeiro',
     items: [
       { path: '/super-admin/financial',  label: 'Financeiro',    icon: DollarSign  },
+      { path: '/super-admin/transmissoes/precos', label: 'Transmissões', icon: Send },
     ],
   },
 ]
