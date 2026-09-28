@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import SuperAdminLayout from './SuperAdminLayout'
 import { createGoogleMeet, buildEndDatetime } from '../../lib/googleMeet'
 import AttendeesPicker from '../shared/AttendeesPicker'
+import { edgeFunctionErrorMessage } from '../../lib/edgeFunctionError'
 import {
   Building2, Users, DollarSign, FileText, CheckCircle2,
   Clock, AlertTriangle, ExternalLink, Copy, RefreshCw,
@@ -722,7 +723,7 @@ export default function InstitutionDetails() {
           dueDate: chargeForm.due_date, billingType: chargeForm.billingType,
         }
       })
-      if (error) throw error
+      if (error) throw new Error(await edgeFunctionErrorMessage(error, 'Erro ao gerar cobrança.'))
       showToast('Cobrança gerada!')
       setShowNewCharge(false)
       setChargeForm({ amount: '', payment_type: 'monthly', due_date: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0], billingType: 'PIX', description: '' })

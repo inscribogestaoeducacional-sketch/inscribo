@@ -1,6 +1,7 @@
 // src/components/superadmin/AdminFinancial.tsx
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
+import { edgeFunctionErrorMessage } from '../../lib/edgeFunctionError'
 import { useAuth } from '../../contexts/AuthContext'
 import { normalizeBrazilianInput } from '../../lib/phone'
 import { getAuthHeaders } from '../../lib/authHeaders'
@@ -159,7 +160,7 @@ function NewChargeModal({ institutions, onClose, onSuccess, showToast }: {
           billingType:    form.billingType,
         },
       })
-      if (error) throw new Error(error.message)
+      if (error) throw new Error(await edgeFunctionErrorMessage(error, 'Erro ao gerar cobrança.'))
 
       showToast('Cobrança gerada no Asaas!')
       onSuccess()

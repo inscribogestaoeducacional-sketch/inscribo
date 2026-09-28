@@ -33,6 +33,8 @@ const DATE_RE        = /^\d{4}-\d{2}-\d{2}$/
 // paga), mas com folga pra boleto compensar.
 const CAMPAIGN_DUE_DAYS = 3
 
+const fmtBrl = (n: number) => 'R$ ' + n.toFixed(2).replace('.', ',')
+
 function jsonResponse(status: number, body: object) {
   return new Response(JSON.stringify(body), {
     status, headers: { ...CORS, 'Content-Type': 'application/json' },
@@ -183,6 +185,11 @@ async function handleSuperAdminCharge(req: Request, body: any) {
   if (billingType && !BILLING_TYPES.includes(billingType)) return jsonResponse(400, { error: 'billingType inválido' })
 
   const asaas = await getAsaasConfig(sb)
+  // O Asaas recusa cobrança abaixo do mínimo — barra aqui, com mensagem
+  // clara, antes de gravar qualquer coisa (antes virava 500 + cobrança órfã).
+  if (asaas.minChargeBrl !== null && amount < asaas.minChargeBrl) {
+    return jsonResponse(400, { error: `Valor abaixo do mínimo de cobrança do Asaas (${fmtBrl(asaas.minChargeBrl)})` })
+  }
   const { inst, customerId } = await ensureCustomer(sb, asaas, institution_id, { name, email, cpfCnpj })
   if (!inst) return jsonResponse(404, { error: 'Instituição não encontrada' })
 
@@ -200,14 +207,25 @@ async function handleSuperAdminCharge(req: Request, body: any) {
   if (payErr) console.error('[asaas-create-charge] erro ao inserir payment:', payErr)
   const paymentId = paymentRecord?.id
 
-  const { charge, paymentLink } = await createAsaasCharge(asaas, {
-    customerId,
-    billingType:       billingType || 'UNDEFINED',
-    value:             amount,
-    dueDate,
-    description:       desc,
-    externalReference: paymentId ? `${institution_id}:${paymentId}` : institution_id,
-  })
+  let charge, paymentLink
+  try {
+    ;({ charge, paymentLink } = await createAsaasCharge(asaas, {
+      customerId,
+      billingType:       billingType || 'UNDEFINED',
+      value:             amount,
+      dueDate,
+      description:       desc,
+      externalReference: paymentId ? `${institution_id}:${paymentId}` : institution_id,
+    }))
+  } catch (e) {
+    // Asaas recusou: a cobrança nunca existiu lá — desfaz o registro local
+    // (antes ficava "pendente" pra sempre, visível pra escola e pego pelo
+    // cron de mensalidades) e devolve a mensagem real do Asaas.
+    if (paymentId) await sb.from('payments').delete().eq('id', paymentId)
+    const message = e instanceof Error ? e.message : String(e)
+    console.error('[asaas-create-charge] Asaas recusou cobrança manual:', message, '| escola:', institution_id, '| valor:', amount)
+    return jsonResponse(422, { error: `Asaas recusou a cobrança: ${message}` })
+  }
 
   if (paymentId) {
     await sb.from('payments').update({
@@ -349,6 +367,8 @@ async function handleCampaignCharge(req: Request, body: any) {
     await sb.from('broadcast_campaigns').update({ payment_id: campaign.payment_id ?? null })
       .eq('id', campaign.id).eq('payment_id', paymentId)
     await sb.from('payments').delete().eq('id', paymentId)
-    throw e
+    const message = e instanceof Error ? e.message : String(e)
+    console.error('[asaas-create-charge] Asaas recusou cobrança de campanha:', message, '| campanha:', campaign.id)
+    return jsonResponse(422, { error: `Asaas recusou a cobrança: ${message}` })
   }
 }
