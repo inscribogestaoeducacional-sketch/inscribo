@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
+import { platformAdmin } from '../../lib/platformAdmin'
 import { normalizeBrazilianInput } from '../../lib/phone'
 import { useAuth } from '../../contexts/AuthContext'
 import SuperAdminLayout from './SuperAdminLayout'
@@ -2282,17 +2283,9 @@ function BroadcastsTab({ aionPlatformId }: { aionPlatformId: string }) {
   async function loadTemplatesFromGraph(): Promise<GraphTemplate[]> {
     setLoadingTemplates(true)
     try {
-      const { data: waRow } = await supabase.from('platform_whatsapp').select('waba_id').eq('connected', true).maybeSingle()
-      const wabaId = (waRow as any)?.waba_id
-      if (!wabaId) { setTemplates([]); return [] }
-      const { data: tokenRow } = await supabase.from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
-      const token = (tokenRow as any)?.value || ''
-      if (!token) { setTemplates([]); return [] }
-      const res = await fetch(`https://graph.facebook.com/v25.0/${wabaId}/message_templates?limit=50`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const data = await res.json()
-      const approved = ((data.data || []) as any[]).filter(t => t.status?.toUpperCase() === 'APPROVED')
+      // Templates do WABA da Áion, buscados no servidor (platform-admin).
+      const data = await platformAdmin<{ templates: any[] }>('list_templates', { platform: true })
+      const approved = ((data.templates || []) as any[]).filter(t => t.status?.toUpperCase() === 'APPROVED')
       setTemplates(approved)
       fetchTemplateMeta(approved.map(t => t.name)).then(setTemplateMeta)
       return approved

@@ -15,6 +15,7 @@ import NewLeadModal from '../leads/NewLeadModal'
 import ScheduleVisitModal from '../leads/ScheduleVisitModal'
 import { saveLead, formatSaveLeadError } from '../../lib/leadSave'
 import { getAuthHeaders } from '../../lib/authHeaders'
+import { platformAdmin } from '../../lib/platformAdmin'
 import { statusConfig } from '../leads/leadFormShared'
 import { CAPTURE_CHANNELS, type CaptureChannel } from '../../lib/captureTriggers'
 import {
@@ -3536,58 +3537,9 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       const to = activeId.replace(/@s\.whatsapp\.net$/, '').replace(/@.*/, '').replace(/\D/g, '')
       const contactName = activeConv?.name || to
 
-      const { data: phoneData } = await supabase
-        .from('whatsapp_phone_numbers')
-        .select('phone_number_id, waba_id')
-        .eq('institution_id', effectiveInstitutionId)
-        .eq('is_active', true)
-        .maybeSingle()
-
-      const { data: settingsRows } = await supabase
-        .from('platform_settings')
-        .select('key, value')
-        .in('key', ['wa_access_token', 'wa_waba_id'])
-
-      const settingsMap: Record<string, string> = {}
-      settingsRows?.forEach((r: any) => { settingsMap[r.key] = r.value })
-
-      const token = settingsMap['wa_access_token'] || ''
-      if (!phoneData?.phone_number_id || !token) throw new Error('WhatsApp não configurado')
-
-      const wabaId = phoneData.waba_id || settingsMap['wa_waba_id'] || ''
-      if (!wabaId) throw new Error('WABA ID não configurado')
-
-      // Verify template exists and is approved
-      const checkRes = await fetch(
-        `https://graph.facebook.com/v25.0/${wabaId}/message_templates?name=reativar_atendimento&status=APPROVED`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-      const checkData = await checkRes.json()
-      if (!checkData.data?.length) {
-        throw new Error('Template "reativar_atendimento" não aprovado. Aguarde aprovação da Meta.')
-      }
-
-      const sendRes = await fetch(
-        `https://graph.facebook.com/v25.0/${phoneData.phone_number_id}/messages`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            to,
-            type: 'template',
-            template: {
-              name: 'reativar_atendimento',
-              language: { code: 'pt_BR' },
-              components: [{ type: 'body', parameters: [{ type: 'text', text: contactName }] }],
-            },
-          }),
-        }
-      )
-      if (!sendRes.ok) {
-        const err = await sendRes.json()
-        throw new Error((err as any)?.error?.message || 'Erro ao enviar template')
-      }
+      // Confere o template aprovado e envia no servidor (platform-admin) —
+      // o token global da Meta nunca vem pro navegador.
+      await platformAdmin('send_reactivate', { institution_id: effectiveInstitutionId, to, contact_name: contactName })
 
       const optimistic: Message = {
         id: `temp-reactivate-${Date.now()}`,
@@ -4188,42 +4140,10 @@ export default function WhatsAppHub({ institutionId: propInstitutionId, isAionIn
       const to = rJid.replace(/@.*/, '').replace(/\D/g, '')
       const surveyMsg = flowConfig.satisfaction_message || 'Como você avalia nosso atendimento hoje? Seu feedback é muito importante para nós! 😊'
       try {
-        const { data: phoneData } = await supabase
-          .from('whatsapp_phone_numbers')
-          .select('phone_number_id')
-          .eq('institution_id', effectiveInstitutionId)
-          .eq('is_active', true)
-          .maybeSingle()
-
-        const { data: settings } = await supabase
-          .from('platform_settings')
-          .select('key, value')
-          .in('key', ['wa_access_token'])
-
-        const token = settings?.find((s: any) => s.key === 'wa_access_token')?.value
-
-        if (phoneData?.phone_number_id && token) {
-          await fetch(`https://graph.facebook.com/v25.0/${phoneData.phone_number_id}/messages`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              messaging_product: 'whatsapp',
-              to,
-              type: 'interactive',
-              interactive: {
-                type: 'button',
-                body: { text: surveyMsg },
-                action: {
-                  buttons: [
-                    { type: 'reply', reply: { id: 'survey_1', title: '😞 Ruim' } },
-                    { type: 'reply', reply: { id: 'survey_2', title: '😐 Regular' } },
-                    { type: 'reply', reply: { id: 'survey_3', title: '😊 Ótimo' } },
-                  ],
-                },
-              },
-            }),
-          })
-        } else {
+        // Botões interativos saem pelo servidor (platform-admin); sem número/
+        // token configurado ele devolve sent=false e cai no texto simples.
+        const survey = await platformAdmin<{ sent: boolean }>('send_survey', { institution_id: effectiveInstitutionId, to, message: surveyMsg })
+        if (!survey.sent) {
           await fetch('/api/whatsapp/send', {
             method: 'POST',
             headers: await getAuthHeaders(),

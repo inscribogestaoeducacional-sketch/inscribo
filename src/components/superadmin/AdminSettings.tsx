@@ -1,12 +1,13 @@
 // src/components/superadmin/AdminSettings.tsx
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
+import { platformAdmin, type MaskedSecret } from '../../lib/platformAdmin'
 import SuperAdminLayout from './SuperAdminLayout'
 import {
   Settings, Save, Eye, EyeOff, CheckCircle2, AlertTriangle,
   DollarSign, FileText, Mail, MessageCircle, Building2,
   Bell, Shield, ChevronDown, ChevronRight, Copy, ExternalLink,
-  Zap, AlertCircle, Info, RefreshCw, Plus, Trash2, X, Video
+  Zap, AlertCircle, Info, RefreshCw, Plus, Trash2, X, Video, Key
 } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -20,16 +21,26 @@ const inp = 'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:
 const lbl = 'block text-xs font-semibold text-gray-600 mb-1.5'
 const hint = 'text-xs text-gray-400 mt-1'
 
-function SecretInput({ value, onChange, placeholder, id }: { value: string; onChange: (v: string) => void; placeholder?: string; id?: string }) {
+// Segredo nunca vem pro navegador: o campo começa vazio e mostra o valor atual
+// só mascarado (platform-admin settings_get). Vazio ao salvar = mantém o atual.
+function SecretInput({ value, onChange, placeholder, id, current }: { value: string; onChange: (v: string) => void; placeholder?: string; id?: string; current?: MaskedSecret }) {
   const [show, setShow] = useState(false)
   return (
-    <div className="relative">
-      <input id={id} type={show ? 'text' : 'password'} className={inp + ' pr-10 font-mono'} value={value}
-        onChange={e => onChange(e.target.value)} placeholder={placeholder} />
-      <button type="button" onClick={() => setShow(!show)}
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-        {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-      </button>
+    <div>
+      <div className="relative">
+        <input id={id} type={show ? 'text' : 'password'} className={inp + ' pr-10 font-mono'} value={value}
+          onChange={e => onChange(e.target.value)} autoComplete="off"
+          placeholder={current?.set ? 'Deixe em branco pra manter o atual' : placeholder} />
+        <button type="button" onClick={() => setShow(!show)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+          {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+      </div>
+      {current && (
+        <p className="text-xs text-gray-400 mt-1 font-mono">
+          {current.set ? `Atual: ${current.masked} · ${current.length} caracteres` : 'Não configurado'}
+        </p>
+      )}
     </div>
   )
 }
@@ -249,6 +260,8 @@ Data: {{data_hoje}}
 ___________________________        ___________________________
 Contratante                        Contratada — Áion Edu`
 
+// access_token aqui é só o campo de digitação de um token NOVO — o atual
+// nunca vem do servidor (token_set/token_masked mostram que existe).
 interface AionWAConfig {
   id?: string
   phone_number_id: string
@@ -258,10 +271,15 @@ interface AionWAConfig {
   display_name: string
   connected: boolean
   webhook_verified?: boolean
+  token_set?: boolean
+  token_masked?: string
 }
 
 export default function AdminSettings() {
   const [settings, setSettings] = useState<Settings>(DEFAULTS)
+  // Valores como vieram do servidor — salvar manda só o que mudou.
+  const [loaded, setLoaded] = useState<Settings>({})
+  const [secrets, setSecrets] = useState<Record<string, MaskedSecret>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
@@ -305,24 +323,40 @@ export default function AdminSettings() {
   const loadSettings = async () => {
     setLoading(true)
     try {
-      const { data } = await supabase.from('platform_settings').select('key, value')
-      if (data) {
-        const map: Settings = {}
-        data.forEach((r: any) => { map[r.key] = r.value })
-        setSettings(prev => ({ ...prev, ...map }))
-      }
-    } catch {}
+      // Pelo servidor: não-segredos vêm inteiros; segredos só mascarados.
+      const r = await platformAdmin<{ values: Settings; secrets: Record<string, MaskedSecret> }>('settings_get')
+      setSettings(prev => {
+        const next = { ...prev, ...r.values }
+        for (const k of Object.keys(r.secrets)) next[k] = ''
+        return next
+      })
+      setLoaded(r.values)
+      setSecrets(r.secrets)
+    } catch (e: any) {
+      showToast(e?.message || 'Erro ao carregar as configurações.', false)
+    }
     setLoading(false)
   }
 
   const set = (k: string, v: string) => setSettings(s => ({ ...s, [k]: v }))
+  const isSecretKey = (k: string) => /(token|secret|password|api_key|_key$)/i.test(k)
 
   const saveSection = async (keys: string[], sectionId: string) => {
     setSaving(sectionId)
     try {
-      const entries = keys.map(k => ({ key: k, value: settings[k] || '' }))
-      const { error } = await supabase.from('platform_settings').upsert(entries, { onConflict: 'key' })
-      if (error) throw error
+      // Só o que mudou: não-segredo diferente do carregado; segredo só se
+      // alguém digitou um valor novo (vazio = manter o atual).
+      const values: Settings = {}
+      for (const k of keys) {
+        const v = settings[k] ?? ''
+        // Não-segredo ainda sem linha no banco é gravado (com o padrão da tela), como antes.
+        const changed = isSecretKey(k) ? v.trim() !== '' : (!(k in loaded) || v !== loaded[k])
+        if (changed) values[k] = v
+      }
+      if (Object.keys(values).length) {
+        await platformAdmin('settings_set', { values })
+        await loadSettings()
+      }
       setSaved(sectionId)
       setTimeout(() => setSaved(null), 2500)
       showToast('Seção salva com sucesso!')
@@ -350,63 +384,33 @@ export default function AdminSettings() {
     )
   }
 
+  // WhatsApp da Áion pelo servidor (platform-admin): o token atual nunca vem
+  // pro navegador; o campo de token serve só pra digitar um novo.
+  const applyAionWA = (config: any) => {
+    if (config) setAionWA({ ...config, waba_id: config.waba_id || '', access_token: '' })
+  }
+
   const loadAionWA = async () => {
-    const { data } = await supabase.from('platform_whatsapp').select('*').maybeSingle()
-    if (data) setAionWA(data as AionWAConfig)
+    try { applyAionWA((await platformAdmin<{ config: any }>('platform_wa_get')).config) }
+    catch (e: any) { showToast(e?.message || 'Erro ao carregar o WhatsApp da Áion.', false) }
   }
 
   const testAndSaveAionWA = async () => {
-    if (!aionWA.phone_number_id || !aionWA.access_token) {
+    if (!aionWA.phone_number_id || (!aionWA.access_token && !aionWA.token_set)) {
       showToast('Phone Number ID e Access Token são obrigatórios.', false); return
     }
     setAionTesting(true)
     try {
-      // 1. Validar credenciais
-      const res = await fetch(
-        `https://graph.facebook.com/v25.0/${aionWA.phone_number_id}?fields=display_phone_number,verified_name`,
-        { headers: { Authorization: `Bearer ${aionWA.access_token}` } }
-      )
-      const data = await res.json()
-      if (!res.ok || !data.display_phone_number) throw new Error(data.error?.message || 'Credenciais inválidas')
-
-      // 2. Registrar app no WABA (assinatura de webhook)
-      let webhookVerified = false
-      if (aionWA.waba_id) {
-        const subRes = await fetch(
-          `https://graph.facebook.com/v25.0/${aionWA.waba_id}/subscribed_apps`,
-          { method: 'POST', headers: { Authorization: `Bearer ${aionWA.access_token}` } }
-        )
-        const subData = await subRes.json()
-        if (subRes.ok && subData.success) webhookVerified = true
-      }
-
-      // 3. Registrar número no Cloud API (ignorar se já registrado)
-      await fetch(
-        `https://graph.facebook.com/v25.0/${aionWA.phone_number_id}/register`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${aionWA.access_token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messaging_product: 'whatsapp', pin: '000000' }),
-        }
-      ).catch(() => {})
-
-      const updated: AionWAConfig = {
-        ...aionWA,
-        waba_id: aionWA.waba_id,
-        phone_number: data.display_phone_number,
-        display_name: data.verified_name || '',
-        connected: true,
-        webhook_verified: webhookVerified,
-      }
-      if (aionWA.id) {
-        await supabase.from('platform_whatsapp').update(updated).eq('id', aionWA.id)
-      } else {
-        await supabase.from('platform_whatsapp').insert(updated)
-      }
-      setAionWA(updated)
+      // Valida as credenciais, inscreve o app no WABA, registra o número e grava.
+      const r = await platformAdmin<{ config: any; verified_name: string; display_phone_number: string; webhook_verified: boolean }>('platform_wa_connect', {
+        phone_number_id: aionWA.phone_number_id,
+        waba_id: aionWA.waba_id || null,
+        access_token: aionWA.access_token || undefined,
+      })
+      applyAionWA(r.config)
       showToast(
-        `WhatsApp Áion conectado: ${data.verified_name} (${data.display_phone_number})` +
-        (webhookVerified ? ' — Webhook registrado ✓' : '')
+        `WhatsApp Áion conectado: ${r.verified_name} (${r.display_phone_number})` +
+        (r.webhook_verified ? ' — Webhook registrado ✓' : '')
       )
     } catch (e: any) {
       showToast(e.message || 'Erro ao verificar credenciais.', false)
@@ -418,21 +422,12 @@ export default function AdminSettings() {
   const saveAionWA = async () => {
     setAionSaving(true)
     try {
-      if (aionWA.id) {
-        await supabase.from('platform_whatsapp').update({
-          phone_number_id: aionWA.phone_number_id,
-          waba_id: aionWA.waba_id || null,
-          access_token: aionWA.access_token,
-        }).eq('id', aionWA.id)
-      } else {
-        const { data } = await supabase.from('platform_whatsapp').insert({
-          phone_number_id: aionWA.phone_number_id,
-          waba_id: aionWA.waba_id || null,
-          access_token: aionWA.access_token,
-          connected: false,
-        }).select().single()
-        if (data) setAionWA(prev => ({ ...prev, id: data.id }))
-      }
+      const r = await platformAdmin<{ config: any }>('platform_wa_save', {
+        phone_number_id: aionWA.phone_number_id,
+        waba_id: aionWA.waba_id || null,
+        access_token: aionWA.access_token || undefined,
+      })
+      applyAionWA(r.config)
       showToast('Credenciais salvas!')
     } catch (e: any) {
       showToast(e.message || 'Erro ao salvar.', false)
@@ -449,7 +444,7 @@ export default function AdminSettings() {
   }
 
   const webhookUrl = `https://syxxuumxkhhnoqrxporj.supabase.co/functions/v1/asaas-webhook`
-  const googleConnected = !!settings.google_oauth_refresh_token
+  const googleConnected = !!secrets.google_oauth_refresh_token?.set
 
   if (loading) {
     return (
@@ -611,6 +606,7 @@ export default function AdminSettings() {
               value={aionWA.access_token}
               onChange={v => setAionWA(p => ({ ...p, access_token: v }))}
               placeholder="EAAxxxxxxx..."
+              current={aionWA.id ? { set: !!aionWA.token_set, masked: aionWA.token_masked || '', length: 0 } : undefined}
             />
             <p className={hint}>Token de sistema com permissão whatsapp_business_messaging</p>
           </div>
@@ -657,7 +653,7 @@ export default function AdminSettings() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={lbl}>Access Token (permanente)</label>
-              <SecretInput value={settings.wa_access_token} onChange={v => set('wa_access_token', v)} placeholder="EAAxxxxxxx..." />
+              <SecretInput current={secrets.wa_access_token} value={settings.wa_access_token} onChange={v => set('wa_access_token', v)} placeholder="EAAxxxxxxx..." />
               <p className={hint}>Token de sistema com permissão whatsapp_business_messaging</p>
             </div>
             <div>
@@ -669,12 +665,12 @@ export default function AdminSettings() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={lbl}>Verify Token (webhook)</label>
-              <SecretInput value={settings.wa_verify_token} onChange={v => set('wa_verify_token', v)} placeholder="meu_token_verificacao" />
+              <SecretInput current={secrets.wa_verify_token} value={settings.wa_verify_token} onChange={v => set('wa_verify_token', v)} placeholder="meu_token_verificacao" />
               <p className={hint}>Token configurado no painel Meta para verificar o webhook</p>
             </div>
             <div>
               <label className={lbl}>App Secret</label>
-              <SecretInput value={settings.wa_app_secret} onChange={v => set('wa_app_secret', v)} placeholder="abc123..." />
+              <SecretInput current={secrets.wa_app_secret} value={settings.wa_app_secret} onChange={v => set('wa_app_secret', v)} placeholder="abc123..." />
               <p className={hint}>Segredo do App Meta para validar assinatura HMAC do webhook</p>
             </div>
           </div>
@@ -735,7 +731,7 @@ export default function AdminSettings() {
           </div>
           <div>
             <label className={lbl}>Chave API Asaas</label>
-            <SecretInput value={settings.asaas_api_key} onChange={v => set('asaas_api_key', v)} placeholder="$aact_..." id="asaas_key" />
+            <SecretInput current={secrets.asaas_api_key} value={settings.asaas_api_key} onChange={v => set('asaas_api_key', v)} placeholder="$aact_..." id="asaas_key" />
             <p className={hint}>Obtida em <span className="font-medium">asaas.com → Integrações → Chaves API</span></p>
           </div>
           <div>
@@ -758,7 +754,7 @@ export default function AdminSettings() {
         <Section icon={FileText} title="Autentique — Assinatura digital" subtitle="Token de API para envio de contratos" color="indigo">
           <div>
             <label className={lbl}>Token de API Autentique</label>
-            <SecretInput value={settings.autentique_api_token} onChange={v => set('autentique_api_token', v)} placeholder="Token da API Autentique" />
+            <SecretInput current={secrets.autentique_api_token} value={settings.autentique_api_token} onChange={v => set('autentique_api_token', v)} placeholder="Token da API Autentique" />
             <p className={hint}>Obtido em <span className="font-medium">autentique.com.br → Configurações → API</span></p>
           </div>
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2 text-xs text-amber-800">
@@ -774,6 +770,25 @@ export default function AdminSettings() {
           </div>
           <div className="flex justify-end pt-2">
             <SaveBtn keys={['autentique_api_token']} id="autentique" />
+          </div>
+        </Section>
+
+        {/* ── Chaves internas (usadas pelos crons e webhooks) ── */}
+        <Section icon={Key} title="Chaves internas" subtitle="Lidas pelo servidor — só troque seguindo o roteiro de rotação" color="purple">
+          <div className="grid grid-cols-1 gap-4">
+            <div>
+              <label className={lbl}>Supabase service_role_key</label>
+              <SecretInput current={secrets.service_role_key} value={settings.service_role_key || ''} onChange={v => set('service_role_key', v)} placeholder="eyJ... ou sb_secret_..." />
+              <p className={hint}>Usada pelos crons do banco (net.http_post) pra chamar as Edge Functions.</p>
+            </div>
+            <div>
+              <label className={lbl}>Token do webhook do Asaas</label>
+              <SecretInput current={secrets.asaas_webhook_token} value={settings.asaas_webhook_token || ''} onChange={v => set('asaas_webhook_token', v)} placeholder="Token de autenticação do webhook" />
+              <p className={hint}>O mesmo valor configurado em Asaas → Integrações → Webhooks.</p>
+            </div>
+          </div>
+          <div className="flex justify-end pt-2">
+            <SaveBtn keys={['service_role_key', 'asaas_webhook_token']} id="internal_keys" />
           </div>
         </Section>
 

@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { platformAdmin } from '../../lib/platformAdmin'
 import SuperAdminLayout from './SuperAdminLayout'
 import FlowEditor from '../whatsapp/FlowEditor'
 import {
@@ -224,15 +225,13 @@ function SchoolGroupDetail({ id }: { id: string }) {
     if (!waForm.phone_id) { showToast('Phone Number ID é obrigatório.', false); return }
     setSavingWa(true)
     try {
-      const { data: settingsRows } = await supabase
-        .from('platform_settings').select('key, value').in('key', ['wa_access_token', 'wa_waba_id'])
+      // Teste do número na Meta pelo servidor (platform-admin) — o token global
+      // não vem pro navegador. wa_waba_id não é segredo: continua lido direto.
+      const { data: wabaSetting } = await supabase
+        .from('platform_settings').select('key, value').eq('key', 'wa_waba_id')
       const settingsMap: Record<string, string> = {}
-      settingsRows?.forEach((r: any) => { settingsMap[r.key] = r.value })
-      const globalToken = settingsMap['wa_access_token'] || ''
-      if (!globalToken) throw new Error('Token de acesso não encontrado. Vá em Admin → Configurações → WhatsApp e salve o Access Token.')
-      const testRes = await fetch(`https://graph.facebook.com/v25.0/${waForm.phone_id}?fields=display_phone_number,verified_name`, { headers: { Authorization: `Bearer ${globalToken}` } })
-      if (!testRes.ok) { const err = await testRes.json(); throw new Error((err as any)?.error?.message || 'Phone ID inválido ou token sem permissão') }
-      const testData = await testRes.json()
+      wabaSetting?.forEach((r: any) => { settingsMap[r.key] = r.value })
+      const testData: any = await platformAdmin('phone_info', { phone_id: waForm.phone_id })
       const AION_WABA_ID = settingsMap['wa_waba_id'] || ''
       const effectiveWabaId = waForm.waba_id?.trim() || AION_WABA_ID
 

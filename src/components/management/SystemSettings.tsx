@@ -13,6 +13,7 @@ import FlowEditor from '../whatsapp/FlowEditor'
 import EmbeddedSignupButton from '../whatsapp/EmbeddedSignupButton'
 import FinanceTab from '../transmissoes/FinanceTab'
 import { useBroadcastEnabled } from '../../lib/broadcasts'
+import { platformAdmin } from '../../lib/platformAdmin'
 import { useGradeLevels, type GradeLevel } from '../../hooks/useGradeLevels'
 
 const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#00A896] focus:border-[#00A896] outline-none transition-all'
@@ -384,7 +385,6 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
   const [showBot, setShowBot]             = useState(false)
   const [usage, setUsage]                 = useState({ count: 0, limit: 1000 })
   const [phoneRecord, setPhoneRecord]     = useState<any>(null)
-  const [globalToken, setGlobalToken]     = useState('')
   const [testing, setTesting]             = useState(false)
   const [testResult, setTestResult]       = useState<{ ok: boolean; msg: string } | null>(null)
   const [showAgentName, setShowAgentName] = useState(false)
@@ -475,14 +475,6 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
 
   const loadConfig = async () => {
     setLoading(true)
-    try {
-      // Fetch global WA token from platform_settings
-      const { data: tokenRow, error: tokenErr } = await supabase
-        .from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
-      console.log('[SystemSettings] token query →', { value: tokenRow?.value?.slice(0, 10), error: tokenErr?.message })
-      const loadedToken = tokenRow?.value || ''
-      if (waMountedRef.current) setGlobalToken(loadedToken)
-    } catch (e) { console.error('[SystemSettings] token fetch error:', e) }
     try {
       const { data } = await supabase.from('institutions')
         .select('whatsapp_phone_id,whatsapp_phone_number,whatsapp_display_name,whatsapp_connected,show_agent_name_in_messages')
@@ -670,16 +662,15 @@ function WhatsAppTab({ institutionId }: { institutionId: string }) {
 
   const handleTestConnection = async () => {
     const phoneId = metaConfig?.whatsapp_phone_id || phoneRecord?.phone_number_id
-    const token   = globalToken
-    if (!phoneId || !token) { setTestResult({ ok: false, msg: 'Phone ID ou token não configurado.' }); return }
+    if (!phoneId) { setTestResult({ ok: false, msg: 'Phone ID ou token não configurado.' }); return }
     setTesting(true); setTestResult(null)
     try {
-      const res  = await fetch(`https://graph.facebook.com/v25.0/${phoneId}?fields=display_phone_number,verified_name`, { headers: { Authorization: `Bearer ${token}` } })
-      const data = await res.json()
-      if (res.ok) {
+      // Teste roda no servidor (platform-admin): o token global nunca vem pro navegador.
+      const data = await platformAdmin<{ ok: boolean; error?: string; verified_name?: string; display_phone_number?: string }>('test_connection', { institution_id: institutionId })
+      if (data.ok) {
         setTestResult({ ok: true, msg: `✅ Conectado: ${data.verified_name} (${data.display_phone_number})` })
       } else {
-        setTestResult({ ok: false, msg: `❌ ${data.error?.message || 'Token inválido'}` })
+        setTestResult({ ok: false, msg: `❌ ${data.error || 'Token inválido'}` })
       }
     } catch (e) {
       setTestResult({ ok: false, msg: '❌ Erro de rede ao testar conexão.' })

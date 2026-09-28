@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { platformAdmin } from '../../lib/platformAdmin'
 import { toReenrollFraction } from '../../lib/campaignApply'
 import SuperAdminLayout from './SuperAdminLayout'
 import {
@@ -893,52 +894,16 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
     setWaLoading(false)
   }
 
-  const createDefaultTemplates = async (wabaId: string, token: string): Promise<void> => {
-    if (!wabaId || !token) return
-    const { data: wabaRow } = await supabase
-      .from('platform_settings').select('value').eq('key', 'wa_waba_id').maybeSingle()
-    const AION_WABA = wabaRow?.value || ''
-    if (wabaId === AION_WABA) return
-
-    const { data: templates } = await supabase
-      .from('whatsapp_platform_templates')
-      .select('*')
-      .eq('is_default', true)
-
-    for (const tpl of templates || []) {
-      try {
-        const checkRes = await fetch(
-          `https://graph.facebook.com/v25.0/${wabaId}/message_templates?name=${tpl.name}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        )
-        const checkData = await checkRes.json()
-        if (checkData.data?.length > 0) continue
-
-        await fetch(
-          `https://graph.facebook.com/v25.0/${wabaId}/message_templates`,
-          {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: tpl.name,
-              language: tpl.language,
-              category: tpl.category,
-              components: [{
-                type: 'BODY',
-                text: tpl.body_text,
-                example: {
-                  body_text: [tpl.variables.map((_: string, i: number) =>
-                    i === 0 ? 'João' : 'Colégio Exemplo'
-                  )],
-                },
-              }],
-            }),
-          }
-        )
-        console.log(`[templates] criado ${tpl.name} no WABA ${wabaId}`)
-      } catch (e) {
-        console.error(`[templates] erro ao criar ${tpl.name}:`, e)
-      }
+  // Templates padrão no WABA da escola — roda no servidor (platform-admin),
+  // que pula o WABA da Áion e os que já existem lá.
+  const createDefaultTemplates = async (wabaId: string): Promise<void> => {
+    if (!wabaId) return
+    try {
+      const r = await platformAdmin<{ created: string[]; errors: string[] }>('create_default_templates', { waba_id: wabaId })
+      r.created.forEach(n => console.log(`[templates] criado ${n} no WABA ${wabaId}`))
+      r.errors.forEach(e => console.error('[templates] erro ao criar:', e))
+    } catch (e) {
+      console.error('[templates] erro ao criar templates padrão:', e)
     }
   }
 
@@ -949,15 +914,8 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
         .from('whatsapp_phone_numbers').select('waba_id').eq('institution_id', inst.id).maybeSingle()
       const wabaId = waPhoneRow?.waba_id
       if (!wabaId) { setWaTemplates([]); return }
-      const { data: tokenRow } = await supabase
-        .from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
-      const token = tokenRow?.value || ''
-      if (!token) return
-      const res = await fetch(
-        `https://graph.facebook.com/v25.0/${wabaId}/message_templates?limit=50`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-      const data = await res.json()
+      // Busca na Meta pelo servidor (platform-admin) — sem token no navegador.
+      const data = { data: (await platformAdmin<{ templates: any[] }>('list_templates', { waba_id: wabaId })).templates }
       setWaTemplates(data.data || [])
     } catch (e) {
       console.error('[templates] erro ao carregar:', e)
@@ -974,22 +932,16 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
         .from('whatsapp_phone_numbers').select('waba_id').eq('institution_id', inst.id).maybeSingle()
       const wabaId = waPhoneRow?.waba_id
       if (!wabaId) throw new Error('WABA ID não configurado')
-      const { data: tokenRow } = await supabase
-        .from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
-      const token = tokenRow?.value || ''
-      if (!token) throw new Error('Token de acesso não encontrado')
-      const res = await fetch(`https://graph.facebook.com/v25.0/${wabaId}/message_templates`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // Criação na Meta pelo servidor (platform-admin) — erro da Meta volta na exceção.
+      await platformAdmin('create_template', {
+        waba_id: wabaId,
+        template: {
           name: newTemplate.name.toLowerCase().replace(/\s+/g, '_'),
           language: 'pt_BR',
           category: newTemplate.category,
           components: [{ type: 'BODY', text: newTemplate.body }],
-        }),
+        },
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error?.message || 'Erro ao enviar template')
       setShowAddTemplate(false)
       setNewTemplate({ name: '', category: 'UTILITY', body: '' })
       loadWaTemplates()
@@ -1004,21 +956,13 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
     if (!waForm.phone_id) { setWaError('Phone Number ID é obrigatório.'); return }
     setWaVerifying(true); setWaError(''); setWaSaved(false)
     try {
-      // Fetch global access token + WABA ID from platform_settings
-      const { data: settingsRows } = await supabase
-        .from('platform_settings')
-        .select('key, value')
-        .in('key', ['wa_access_token', 'wa_waba_id'])
+      // Teste do número na Meta pelo servidor (platform-admin) — o token global
+      // não vem pro navegador. wa_waba_id não é segredo: continua lido direto.
+      const { data: wabaSetting } = await supabase
+        .from('platform_settings').select('key, value').eq('key', 'wa_waba_id')
       const settingsMap: Record<string, string> = {}
-      settingsRows?.forEach((r: any) => { settingsMap[r.key] = r.value })
-      const globalToken = settingsMap['wa_access_token'] || ''
-      if (!globalToken) throw new Error('Token de acesso não encontrado. Vá em Admin → Configurações → WhatsApp e salve o Access Token.')
-
-      const testRes = await fetch(`https://graph.facebook.com/v25.0/${waForm.phone_id}?fields=display_phone_number,verified_name`, {
-        headers: { Authorization: `Bearer ${globalToken}` },
-      })
-      if (!testRes.ok) { const err = await testRes.json(); throw new Error((err as any)?.error?.message || 'Phone ID inválido ou token sem permissão') }
-      const testData = await testRes.json()
+      wabaSetting?.forEach((r: any) => { settingsMap[r.key] = r.value })
+      const testData: any = await platformAdmin('phone_info', { phone_id: waForm.phone_id })
       const verifiedName  = (testData as any).verified_name || waForm.display_name
       const verifiedPhone = waForm.phone_number || (testData as any).display_phone_number || ''
       await supabase.from('institutions').update({
@@ -1043,11 +987,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
 
       if (wabaToSubscribe && wabaToSubscribe !== AION_WABA_ID) {
         try {
-          const subscribeRes = await fetch(
-            `https://graph.facebook.com/v25.0/${wabaToSubscribe}/subscribed_apps`,
-            { method: 'POST', headers: { Authorization: `Bearer ${globalToken}` } }
-          )
-          const subscribeData = await subscribeRes.json()
+          const subscribeData = await platformAdmin<{ success: boolean; error: string | null }>('subscribe_app', { waba_id: wabaToSubscribe })
           if (subscribeData.success) {
             console.log('[WA] WABA inscrito com sucesso:', wabaToSubscribe)
           } else {
@@ -1059,7 +999,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
       }
 
       // Criar templates padrão no WABA da escola
-      await createDefaultTemplates(effectiveWabaId, globalToken)
+      await createDefaultTemplates(effectiveWabaId)
 
       setWaSaved(true)
       await loadWaConfig()

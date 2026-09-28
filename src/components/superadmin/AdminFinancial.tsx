@@ -1,6 +1,7 @@
 // src/components/superadmin/AdminFinancial.tsx
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
+import { platformAdmin } from '../../lib/platformAdmin'
 import { edgeFunctionErrorMessage } from '../../lib/edgeFunctionError'
 import { useAuth } from '../../contexts/AuthContext'
 import { normalizeBrazilianInput } from '../../lib/phone'
@@ -465,19 +466,12 @@ function SendCollectionWhatsAppModal({ payment, institution, currentUserId, curr
         const wabaId = (waRow as any)?.waba_id
         if (!phoneNumberId || !wabaId) throw new Error('WhatsApp da plataforma Áion não está conectado (platform_whatsapp).')
 
-        const { data: tokenRow } = await supabase.from('platform_settings').select('value').eq('key', 'wa_access_token').maybeSingle()
-        const token = (tokenRow as any)?.value || ''
-        if (!token) throw new Error('Token de acesso da plataforma Áion não configurado.')
-
         // 3. Confirma que o template está aprovado antes de tentar enviar —
         // mesmo padrão de AionInboxHub.tsx (reativar_atendimento), pra dar um
-        // erro claro em vez do genérico da Meta.
-        const checkRes = await fetch(
-          `https://graph.facebook.com/v25.0/${wabaId}/message_templates?name=${template}&status=APPROVED`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        )
-        const checkData = await checkRes.json().catch(() => null)
-        if (!checkRes.ok || !checkData?.data?.length) {
+        // erro claro em vez do genérico da Meta. A consulta à Meta roda no
+        // servidor (platform-admin): o token global nunca vem pro navegador.
+        const { approved } = await platformAdmin<{ approved: boolean }>('check_template', { waba_id: wabaId, name: template })
+        if (!approved) {
           throw new Error('Template ainda não aprovado pela Meta ou nome incorreto.')
         }
 
@@ -1340,7 +1334,8 @@ export default function AdminFinancial() {
     const [instRes, payRes, cfgRes, costRes, entryRes, commRes, consRes, invRes] = await Promise.all([
       supabase.from('institutions').select('id, name, city, plan, plan_status, asaas_customer_id, monthly_value, email, cnpj, phone').order('name'),
       supabase.from('payments').select('*, institutions(name)').order('created_at', { ascending: false }),
-      supabase.from('platform_settings').select('key, value'),
+      // Só as chaves que esta tela usa (nenhum segredo).
+      supabase.from('platform_settings').select('key, value').in('key', ['overdue_warning1_days', 'overdue_warning2_days', 'overdue_warning3_days', 'overdue_suspend_days']),
       supabase.from('platform_costs').select('*').order('name'),
       supabase.from('financial_entries').select('*, institutions(name)').order('entry_date', { ascending: false }),
       supabase.from('consultant_commissions').select('*, institutions(name)').order('created_at', { ascending: false }),
