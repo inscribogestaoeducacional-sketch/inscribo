@@ -1,10 +1,11 @@
 // Assistente de nova campanha (Transmissões): Template → Público → Mensagem e
 // respostas → Revisão. A prévia (audiência, amostra, custo) vem do backend
-// (broadcast-campaigns/preview, mesma função de audiência da criação). Na
-// confirmação: create → price (congela preço e usa crédito) → cobrança no
-// Asaas se sobrar valor. O navegador nunca manda valor — só escolhas.
-import React, { useEffect, useMemo, useState } from 'react'
-import { Users, Upload, Bot, Tag, CheckCircle2, ExternalLink, AlertTriangle, CalendarClock, Send } from 'lucide-react'
+// (broadcast-campaigns/preview e audience_page, mesma função de audiência da
+// criação). Na confirmação: create → price (congela preço e usa crédito) →
+// cobrança no Asaas se sobrar valor. O navegador nunca manda valor nem
+// telefone — só escolhas (filtros, lista importada e ajustes manuais).
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { Users, Upload, Bot, Tag, CheckCircle2, ExternalLink, AlertTriangle, CalendarClock, Send, Search, Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import {
   broadcastAction, chargeCampaign, parseImportCsv, brl, EXCLUDED_REASON, CATEGORY_LABEL, type ImportRow,
@@ -27,6 +28,29 @@ interface Lookups {
 
 const STEPS = ['Template', 'Público', 'Mensagem e respostas', 'Revisão'] as const
 
+const CONTACT_TYPES = [
+  { id: 'client', label: 'Cliente (família)' }, { id: 'lead', label: 'Lead' },
+  { id: 'other', label: 'Outro' }, { id: 'unknown', label: 'Sem classificação' },
+]
+
+// Motivo curto ao lado de quem não pode receber (linha cinza, sem marcar).
+const BLOCKED_SHORT: Record<string, string> = {
+  suppressed: 'opt-out', blacklisted: 'blacklist', invalid_phone: 'número inválido', non_br: 'número estrangeiro',
+}
+
+interface AudienceRowView {
+  contact_id: string | null; phone: string; phone_key: string; name: string | null
+  source: 'filter' | 'import' | 'manual'; excluded_reason: string | null
+  reason: { all?: boolean; tags?: string[]; type?: string; grade?: string; trigger_id?: string; prev?: boolean } | null
+}
+interface AudiencePage {
+  counts: { candidates: number; eligible: number; manual: number; deselected: number; excluded: Record<string, number> }
+  total: number; page: number; page_size: number; over_limit: boolean; max: number
+  rows: AudienceRowView[]
+  outside: { contact_id: string; name: string | null; phone: string }[]
+  estimate: any
+}
+
 export default function CampaignWizard({ institutionId, onClose, onCreated }: {
   institutionId: string; onClose: () => void; onCreated: (campaignId: string) => void
 }) {
@@ -47,6 +71,17 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
   const [importCols, setImportCols] = useState<string[]>([])
   const [importName, setImportName] = useState('')
   const [optIn, setOptIn] = useState(false)
+  // Ajustes manuais: contatos adicionados (id) e desmarcados (phone_key).
+  // Sobrevivem a mudança de filtro; manualSig guarda o filtro da última mexida.
+  const [includeIds, setIncludeIds] = useState<string[]>([])
+  const [excludeKeys, setExcludeKeys] = useState<string[]>([])
+  const [manualSig, setManualSig] = useState('')
+  const [q, setQ] = useState('')
+  const [page, setPage] = useState(0)
+  const [aud, setAud] = useState<AudiencePage | null>(null)
+  const [audLoading, setAudLoading] = useState(false)
+  const [audError, setAudError] = useState<string | null>(null)
+  const audReq = useRef(0)
   const [mapping, setMapping] = useState<Record<string, VarSource>>({})
   const [actions, setActions] = useState<Record<string, ActionForm>>({ any: { ...EMPTY_ACTION } })
   const [name, setName] = useState('')
@@ -121,7 +156,56 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
     return f
   }, [allContacts, tags, types, grades, triggerIds, prevCampaign])
 
-  const hasAudience = Object.keys(filter).length > 0 || importRows.length > 0
+  const manual = useMemo(() => ({ include_contact_ids: includeIds, exclude_phone_keys: excludeKeys }), [includeIds, excludeKeys])
+  const manualCount = includeIds.length + excludeKeys.length
+  const hasAudience = Object.keys(filter).length > 0 || importRows.length > 0 || includeIds.length > 0
+  // Assinatura do que NÃO é ajuste manual — muda quando filtro/lista mudam.
+  const baseSig = useMemo(() => JSON.stringify([filter, importRows.length, importName]), [filter, importRows.length, importName])
+
+  function touchManual() { setManualSig(baseSig) }
+  function toggleRow(r: AudienceRowView) {
+    touchManual()
+    if (r.source === 'manual' && r.contact_id) {
+      // Adicionado à mão: desmarcar = tirar da lista de adicionados.
+      if (!r.excluded_reason) { setIncludeIds(s => s.filter(id => id !== r.contact_id)); return }
+    }
+    if (r.excluded_reason === 'deselected') setExcludeKeys(s => s.filter(k => k !== r.phone_key))
+    else if (!r.excluded_reason) setExcludeKeys(s => [...s, r.phone_key])
+  }
+  function addContact(contactId: string) {
+    touchManual()
+    setIncludeIds(s => s.includes(contactId) ? s : [...s, contactId])
+  }
+  function removeManual(contactId: string) {
+    touchManual()
+    setIncludeIds(s => s.filter(id => id !== contactId))
+  }
+  function undoManual() { setIncludeIds([]); setExcludeKeys([]); setManualSig('') }
+
+  // Busca/filtro novo → volta pra primeira página.
+  useEffect(() => { setPage(0) }, [baseSig, q])
+
+  // Lista ao vivo: recalcula no servidor a cada mudança (debounce), e só a
+  // resposta da última chamada vale.
+  useEffect(() => {
+    if (step !== 1 || !templateId) return
+    if (!hasAudience) { audReq.current++; setAud(null); setAudLoading(false); return }
+    const id = ++audReq.current
+    setAudLoading(true)
+    const t = setTimeout(async () => {
+      try {
+        const r = await broadcastAction<AudiencePage>('audience_page', {
+          institution_id: institutionId, template_definition_id: templateId, filter,
+          import_rows: importRows, manual, q, page,
+        })
+        if (id === audReq.current) { setAud(r); setAudError(null) }
+      } catch (e: any) {
+        if (id === audReq.current) setAudError(e.message)
+      }
+      if (id === audReq.current) setAudLoading(false)
+    }, 400)
+    return () => clearTimeout(t)
+  }, [step, templateId, filter, importRows, manual, q, page, hasAudience, institutionId])
 
   async function runPreview(withMapping: boolean) {
     if (!templateId) return
@@ -129,7 +213,7 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
     try {
       setPreview(await broadcastAction('preview', {
         institution_id: institutionId, template_definition_id: templateId, filter,
-        import_rows: importRows, ...(withMapping ? { variable_mapping: mapping } : {}),
+        import_rows: importRows, manual, ...(withMapping ? { variable_mapping: mapping } : {}),
       }))
     } catch (e: any) { setError({ message: e.message, details: e.details }) }
     setPreviewing(false)
@@ -164,7 +248,7 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
     try {
       const created = await broadcastAction<{ campaign_id: string }>('create', {
         institution_id: institutionId, name: name.trim(), template_definition_id: templateId,
-        variable_mapping: mapping, filter, import_rows: importRows, opt_in_confirmed: optIn,
+        variable_mapping: mapping, filter, import_rows: importRows, manual, opt_in_confirmed: optIn,
         reply_actions: buildActions(), send_mode: sendMode,
         ...(sendMode === 'scheduled' ? { scheduled_at: new Date(scheduledAt).toISOString() } : {}),
       })
@@ -187,8 +271,11 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
   const stepProblem = (() => {
     if (step === 0) return !templateId ? 'Escolha um template aprovado' : null
     if (step === 1) {
-      if (!hasAudience) return 'Escolha pelo menos um filtro ou importe uma lista'
+      if (!hasAudience) return 'Escolha pelo menos um filtro, importe uma lista ou adicione contatos'
       if (importRows.length && !optIn) return 'Confirme a autorização dos contatos da lista importada'
+      if (audLoading || !aud) return 'Carregando a lista…'
+      if (!aud.counts.eligible) return 'Nenhum destinatário marcado'
+      if (aud.over_limit) return `Acima do limite de ${aud.max.toLocaleString('pt-BR')} por campanha`
       return null
     }
     if (step === 2) {
@@ -292,7 +379,7 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
               <strong>Todos os contatos da escola</strong> <span style={{ color: '#94a3b8' }}>(os filtros abaixo restringem)</span>
             </label>
             <Chips label="Etiquetas (tem alguma)" options={lk.tags.map(t => ({ id: t, label: t }))} value={tags} onChange={v => { setTags(v); setPreview(null) }} />
-            <Chips label="Tipo de contato" options={[{ id: 'client', label: 'Cliente (família)' }, { id: 'lead', label: 'Lead' }, { id: 'other', label: 'Outro' }, { id: 'unknown', label: 'Sem classificação' }]} value={types} onChange={v => { setTypes(v); setPreview(null) }} />
+            <Chips label="Tipo de contato" options={CONTACT_TYPES} value={types} onChange={v => { setTypes(v); setPreview(null) }} />
             {lk.grades.length > 0 && <Chips label="Turma" options={lk.grades.map(g => ({ id: g, label: g }))} value={grades} onChange={v => { setGrades(v); setPreview(null) }} />}
             {lk.triggers.length > 0 && <Chips label="Veio da Captação (gatilho)" options={lk.triggers.map(t => ({ id: t.id, label: t.name }))} value={triggerIds} onChange={v => { setTriggerIds(v); setPreview(null) }} />}
             {lk.campaigns.length > 0 && (
@@ -324,10 +411,13 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
                 </label>
               </>}
             </div>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Btn variant="secondary" disabled={!hasAudience} loading={previewing} onClick={() => runPreview(false)}><Users size={14} /> Calcular público</Btn>
-              {preview && <AudienceSummary preview={preview} />}
-            </div>
+            <AudienceList
+              aud={aud} loading={audLoading} error={audError} hasAudience={hasAudience} lk={lk}
+              q={q} onQ={setQ} page={page} onPage={setPage}
+              onToggle={toggleRow} onAdd={addContact} onRemoveManual={removeManual}
+              keptNotice={manualCount > 0 && manualSig !== '' && manualSig !== baseSig ? manualCount : 0}
+              onUndo={undoManual}
+            />
           </div>
         )}
 
@@ -453,6 +543,130 @@ function AudienceSummary({ preview }: { preview: any }) {
       <strong style={{ fontSize: 15 }}>{a.eligible.toLocaleString('pt-BR')}</strong> destinatário(s)
       {excluded.length > 0 && <span style={{ color: '#94a3b8' }}> · fora: {excluded.map(([k, v]) => `${v} ${(EXCLUDED_REASON[k] || k).toLowerCase()}`).join(', ')}</span>}
       {a.over_limit && <div style={{ color: '#DC2626', fontSize: 12 }}>Acima do limite de {a.max.toLocaleString('pt-BR')} por campanha — refine os filtros.</div>}
+    </div>
+  )
+}
+
+function fmtPhone(p: string) {
+  const m = /^55(\d{2})(\d{4,5})(\d{4})$/.exec(p)
+  return m ? `(${m[1]}) ${m[2]}-${m[3]}` : `+${p}`
+}
+
+// Lista da audiência: todo mundo que bate com a seleção, marcado por padrão.
+// Desmarcar tira da campanha; bloqueados (opt-out, blacklist, número
+// inválido) aparecem em cinza, sem poder marcar. A busca filtra a lista e
+// mostra, acima dela, contatos da escola que ainda não estão nela.
+function AudienceList({ aud, loading, error, hasAudience, lk, q, onQ, page, onPage, onToggle, onAdd, onRemoveManual, keptNotice, onUndo }: {
+  aud: AudiencePage | null; loading: boolean; error: string | null; hasAudience: boolean; lk: Lookups
+  q: string; onQ: (v: string) => void; page: number; onPage: (p: number) => void
+  onToggle: (r: AudienceRowView) => void; onAdd: (contactId: string) => void; onRemoveManual: (contactId: string) => void
+  keptNotice: number; onUndo: () => void
+}) {
+  const triggerName = (id: string) => lk.triggers.find(t => t.id === id)?.name || 'gatilho'
+  const typeLabel = (id: string) => CONTACT_TYPES.find(t => t.id === id)?.label || id
+  const why = (r: AudienceRowView) => {
+    if (r.source === 'manual') return 'Adicionado manualmente'
+    if (r.source === 'import') return 'Lista importada'
+    const x = r.reason || {}
+    const parts = [
+      x.all && 'todos os contatos',
+      x.tags?.length && `etiqueta ${x.tags.join(', ')}`,
+      x.type && typeLabel(x.type),
+      x.grade && `turma ${x.grade}`,
+      x.trigger_id && triggerName(x.trigger_id),
+      x.prev && 'campanha anterior',
+    ].filter(Boolean)
+    return `Filtro${parts.length ? `: ${parts.join(' · ')}` : ''}`
+  }
+  const est = aud?.estimate
+  const blocked = aud ? Object.entries(aud.counts.excluded) : []
+  const from = aud ? aud.page * aud.page_size : 0
+
+  return (
+    <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, display: 'grid', gap: 10 }}>
+      {/* contador + custo, ao vivo */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: '#1e293b' }}>
+          <Users size={15} color="#1e2d6b" />
+          {aud ? <>
+            <strong style={{ fontSize: 15 }}>{aud.counts.eligible.toLocaleString('pt-BR')}</strong> destinatário(s)
+            {(aud.counts.deselected > 0 || blocked.length > 0) && (
+              <span style={{ color: '#94a3b8' }}>
+                · fora: {[
+                  ...(aud.counts.deselected ? [`${aud.counts.deselected} desmarcado(s)`] : []),
+                  ...blocked.map(([k, v]) => `${v} ${BLOCKED_SHORT[k] || k}`),
+                ].join(', ')}
+              </span>
+            )}
+          </> : <span style={{ color: '#94a3b8' }}>{hasAudience ? 'Calculando…' : 'Escolha um filtro, importe uma lista ou busque um contato abaixo'}</span>}
+          {loading && <Loader2 size={13} className="animate-spin" color="#94a3b8" />}
+        </div>
+        {est && (est.available
+          ? <span style={{ fontSize: 13, color: '#1e2d6b' }}>Custo estimado: <strong>{brl(est.total_brl)}</strong>{est.credit_applied_brl > 0 && <span style={{ color: '#94a3b8' }}> (crédito usado {brl(est.credit_applied_brl)})</span>}</span>
+          : <span style={{ fontSize: 12, color: '#B45309' }}>{est.reason}</span>)}
+      </div>
+      {aud?.over_limit && <div style={{ color: '#DC2626', fontSize: 12 }}>Acima do limite de {aud.max.toLocaleString('pt-BR')} por campanha — refine a seleção.</div>}
+      {keptNotice > 0 && (
+        <div style={{ fontSize: 12, color: '#92400E', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '8px 10px' }}>
+          {keptNotice} ajuste(s) manual(is) mantido(s) ·{' '}
+          <button type="button" onClick={onUndo} style={{ background: 'none', border: 'none', padding: 0, color: '#B45309', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', fontSize: 12 }}>desfazer</button>
+        </div>
+      )}
+      <ErrorBox message={error} />
+
+      {/* busca: filtra a lista e acha contatos pra adicionar */}
+      <div style={{ position: 'relative' }}>
+        <Search size={14} style={{ position: 'absolute', left: 10, top: 11, color: '#94a3b8' }} />
+        <input style={{ ...inputStyle, paddingLeft: 30 }} placeholder="Buscar ou adicionar contato (nome ou telefone)" value={q} maxLength={100} onChange={e => onQ(e.target.value)} />
+      </div>
+      {q.trim() && aud && aud.outside.length > 0 && (
+        <div style={{ border: '1.5px dashed #CBD5E1', borderRadius: 12, padding: '6px 10px' }}>
+          <div style={{ fontSize: 11, color: '#94a3b8', margin: '4px 0' }}>Contatos da escola fora da lista — marque pra adicionar</div>
+          {aud.outside.map(c => (
+            <label key={c.contact_id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '6px 0', fontSize: 13, color: '#1e293b', cursor: 'pointer' }}>
+              <input type="checkbox" checked={false} onChange={() => onAdd(c.contact_id)} />
+              <span style={{ flex: 1 }}>{c.name || '—'}</span>
+              <span style={{ color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>{fmtPhone(c.phone)}</span>
+            </label>
+          ))}
+        </div>
+      )}
+
+      {aud && (
+        <div style={{ border: '1.5px solid #E2E8F0', borderRadius: 12, overflow: 'hidden' }}>
+          {aud.rows.length === 0 ? (
+            <p style={{ margin: 0, padding: 14, fontSize: 13, color: '#94a3b8' }}>{q.trim() ? 'Ninguém da lista bate com a busca.' : 'Nenhum contato com essa seleção.'}</p>
+          ) : aud.rows.map((r, i) => {
+            const isBlocked = !!r.excluded_reason && r.excluded_reason !== 'deselected'
+            const on = !r.excluded_reason
+            return (
+              <div key={r.phone_key + i} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 12px', fontSize: 13,
+                borderTop: i ? '1px solid #f1f5f9' : 'none', background: isBlocked ? '#F8FAFC' : '#fff', color: isBlocked ? '#94a3b8' : '#1e293b' }}>
+                <input type="checkbox" checked={on} disabled={isBlocked} onChange={() => onToggle(r)} style={{ cursor: isBlocked ? 'not-allowed' : 'pointer' }} />
+                <span style={{ flex: '1 1 160px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: r.excluded_reason === 'deselected' ? 'line-through' : 'none' }}>{r.name || '—'}</span>
+                <span style={{ flex: '0 0 130px', color: isBlocked ? '#94a3b8' : '#64748b', fontVariantNumeric: 'tabular-nums' }}>{fmtPhone(r.phone)}</span>
+                <span style={{ flex: '1 1 200px', minWidth: 0, fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {isBlocked
+                    ? <span style={{ color: '#B45309', fontWeight: 600 }}>{BLOCKED_SHORT[r.excluded_reason!] || r.excluded_reason}</span>
+                    : why(r)}
+                  {isBlocked && r.source === 'manual' && r.contact_id && (
+                    <button type="button" onClick={() => onRemoveManual(r.contact_id!)} style={{ marginLeft: 8, background: 'none', border: 'none', padding: 0, color: '#DC2626', cursor: 'pointer', fontSize: 12 }}>remover</button>
+                  )}
+                </span>
+              </div>
+            )
+          })}
+          {aud.total > aud.page_size && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderTop: '1px solid #f1f5f9', fontSize: 12, color: '#64748b' }}>
+              <span>{(from + 1).toLocaleString('pt-BR')}–{Math.min(from + aud.page_size, aud.total).toLocaleString('pt-BR')} de {aud.total.toLocaleString('pt-BR')}</span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <Btn variant="secondary" disabled={page === 0} onClick={() => onPage(page - 1)}>Anterior</Btn>
+                <Btn variant="secondary" disabled={from + aud.page_size >= aud.total} onClick={() => onPage(page + 1)}>Próxima</Btn>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

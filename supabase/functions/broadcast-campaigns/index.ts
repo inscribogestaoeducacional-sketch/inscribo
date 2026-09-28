@@ -12,12 +12,20 @@ const corsHeaders = {
 // módulo no front: admin/manager, ou permissão 'transmissoes').
 //
 // Ações (POST { action, ... }):
-//   preview  { institution_id, template_definition_id, filter, import_rows?, variable_mapping? }
+//   preview  { institution_id, template_definition_id, filter, import_rows?, manual?, variable_mapping? }
 //            → contagem da audiência (e por que cada um ficou de fora),
 //              amostra da mensagem e estimativa de custo. Não grava nada.
+//   audience_page { institution_id, template_definition_id, filter, import_rows?, manual?, q?, page? }
+//            → a lista (50 por página, busca por nome/telefone) com o motivo
+//              de cada contato, contagens, contatos da escola fora da lista
+//              que batem com a busca, e estimativa de custo. Não grava nada.
 //   create   { institution_id, name, template_definition_id, variable_mapping,
-//              filter, import_rows?, opt_in_confirmed?, reply_actions?,
+//              filter, import_rows?, manual?, opt_in_confirmed?, reply_actions?,
 //              send_mode, scheduled_at? }  → campanha em rascunho + destinatários
+// manual = { include_contact_ids: [uuid], exclude_phone_keys: [text] } — ajustes
+// feitos à mão na lista. O navegador nunca manda telefones: a audiência é
+// sempre recalculada aqui (broadcast_resolve_audience), com dedup e as mesmas
+// exclusões (opt-out, blacklist, número inválido) valendo pra quem entra à mão.
 //   price    { campaign_id } → congela o preço, usa crédito, libera se não
 //              houver o que cobrar (broadcast_price_campaign, atômica no banco)
 //   pause    { campaign_id }   resume { campaign_id }   cancel { campaign_id }
@@ -29,6 +37,8 @@ const SUPABASE_ANON_KEY    = Deno.env.get('SUPABASE_ANON_KEY')!
 
 const MAX_RECIPIENTS    = 20_000
 const MAX_IMPORT_ROWS   = 20_000
+const MAX_MANUAL        = 20_000
+const PAGE_SIZE         = 50
 const RPC_PAGE          = 1_000     // PostgREST devolve no máximo 1000 linhas por chamada
 const INSERT_BATCH      = 500
 const MIN_SCHEDULE_MIN  = 5
@@ -60,12 +70,13 @@ serve(async (req) => {
 
     switch (body?.action) {
       case 'preview': return json(200, await actionPreview(sb, userId, body))
+      case 'audience_page': return json(200, await actionAudiencePage(sb, userId, body))
       case 'create':  return json(200, await actionCreate(sb, userId, body))
       case 'price':   return json(200, await actionPrice(sb, userId, body))
       case 'pause':   return json(200, await actionPause(sb, userId, body))
       case 'resume':  return json(200, await actionResume(sb, userId, body))
       case 'cancel':  return json(200, await actionCancel(sb, userId, body))
-      default: throw new HttpError(400, 'action deve ser preview, create, price, pause, resume ou cancel')
+      default: throw new HttpError(400, 'action deve ser preview, audience_page, create, price, pause, resume ou cancel')
     }
   } catch (err) {
     if (err instanceof HttpError) return json(err.status, { error: err.message, ...(err.details ? { details: err.details } : {}) })
@@ -213,15 +224,20 @@ function buildComponents(tpl: TemplateCtx, mapping: Record<string, VarSource>, r
 
 interface AudienceRow { contact_id: string | null; phone: string; name: string | null; variables: Record<string, unknown>; source: string; excluded_reason: string | null }
 
-async function resolveAudience(sb: Supa, institutionId: string, filter: unknown, importRows: unknown, category: string): Promise<AudienceRow[]> {
+interface ManualAdjust { include_contact_ids: string[]; exclude_phone_keys: string[] }
+
+async function resolveAudience(sb: Supa, institutionId: string, filter: unknown, importRows: unknown, category: string, manual: ManualAdjust): Promise<AudienceRow[]> {
   const rows: AudienceRow[] = []
   for (let from = 0; ; from += RPC_PAGE) {
+    // order: cada página é uma nova execução da função — sem ordem total as
+    // páginas podiam repetir/pular linhas (phone é único depois do dedup).
     const { data, error } = await sb.rpc('broadcast_resolve_audience', {
       p_institution_id: institutionId,
       p_filter:         filter && typeof filter === 'object' ? filter : {},
       p_import:         Array.isArray(importRows) ? importRows : [],
       p_category:       category,
-    }).range(from, from + RPC_PAGE - 1)
+      p_manual:         manual,
+    }).order('phone').range(from, from + RPC_PAGE - 1)
     if (error) throw new Error(`audiência: ${error.message}`)
     rows.push(...((data || []) as AudienceRow[]))
     if (!data || data.length < RPC_PAGE) break
@@ -237,6 +253,19 @@ function summarize(rows: AudienceRow[]) {
     else eligible++
   }
   return { eligible, excluded }
+}
+
+function checkManual(raw: unknown): ManualAdjust {
+  if (raw == null) return { include_contact_ids: [], exclude_phone_keys: [] }
+  if (typeof raw !== 'object' || Array.isArray(raw)) throw new HttpError(400, 'manual deve ser um objeto')
+  const m = raw as Record<string, unknown>
+  const inc = m.include_contact_ids ?? []
+  const exc = m.exclude_phone_keys ?? []
+  if (!Array.isArray(inc) || !Array.isArray(exc)) throw new HttpError(400, 'manual: listas inválidas')
+  if (inc.length > MAX_MANUAL || exc.length > MAX_MANUAL) throw new HttpError(400, `Ajustes manuais acima de ${MAX_MANUAL}`)
+  if (inc.some(x => typeof x !== 'string' || !UUID_RE.test(x))) throw new HttpError(400, 'manual: contato inválido')
+  if (exc.some(x => typeof x !== 'string' || !/^[0-9]{8,15}$/.test(x))) throw new HttpError(400, 'manual: telefone inválido')
+  return { include_contact_ids: [...new Set(inc as string[])], exclude_phone_keys: [...new Set(exc as string[])] }
 }
 
 function checkImport(importRows: unknown) {
@@ -289,8 +318,9 @@ async function actionPreview(sb: Supa, userId: string, body: any) {
   await requireModule(sb, body.institution_id)
   const tpl = await loadTemplate(sb, body.institution_id, body.template_definition_id)
   const importRows = checkImport(body.import_rows)
+  const manual = checkManual(body.manual)
 
-  const rows = await resolveAudience(sb, body.institution_id, body.filter, importRows, tpl.category)
+  const rows = await resolveAudience(sb, body.institution_id, body.filter, importRows, tpl.category, manual)
   const { eligible, excluded } = summarize(rows)
   const mapping = (body.variable_mapping || {}) as Record<string, VarSource>
   const mappingErrors = body.variable_mapping ? validateMapping(tpl, mapping, importRows.length > 0) : []
@@ -312,12 +342,42 @@ async function actionPreview(sb: Supa, userId: string, body: any) {
   }
 }
 
+async function actionAudiencePage(sb: Supa, userId: string, body: any) {
+  await requireManage(sb, userId, body.institution_id)
+  await requireModule(sb, body.institution_id)
+  const tpl = await loadTemplate(sb, body.institution_id, body.template_definition_id)
+  const importRows = checkImport(body.import_rows)
+  const manual = checkManual(body.manual)
+  const q = String(body.q ?? '').trim().slice(0, 100)
+  const page = Math.max(0, Math.min(Number.isInteger(body.page) ? body.page : 0, 10_000))
+
+  const { data, error } = await sb.rpc('broadcast_audience_page', {
+    p_institution_id: body.institution_id,
+    p_filter:         body.filter && typeof body.filter === 'object' ? body.filter : {},
+    p_import:         importRows,
+    p_category:       tpl.category,
+    p_manual:         manual,
+    p_q:              q,
+    p_limit:          PAGE_SIZE,
+    p_offset:         page * PAGE_SIZE,
+  })
+  if (error) throw new Error(`audiência: ${error.message}`)
+  const eligible = Number((data as any)?.counts?.eligible) || 0
+  return {
+    ...(data as Record<string, unknown>),
+    page, page_size: PAGE_SIZE,
+    over_limit: eligible > MAX_RECIPIENTS, max: MAX_RECIPIENTS,
+    estimate: eligible > 0 ? await estimate(sb, body.institution_id, tpl.category, Math.min(eligible, MAX_RECIPIENTS)) : null,
+  }
+}
+
 async function actionCreate(sb: Supa, userId: string, body: any) {
   const institutionId = body.institution_id
   await requireManage(sb, userId, institutionId)
   const settings = await requireModule(sb, institutionId)
   const tpl = await loadTemplate(sb, institutionId, body.template_definition_id)
   const importRows = checkImport(body.import_rows)
+  const manual = checkManual(body.manual)
 
   const name = String(body.name || '').trim()
   if (!name || name.length > 120) throw new HttpError(400, 'Nome da campanha obrigatório (até 120 caracteres)')
@@ -342,8 +402,8 @@ async function actionCreate(sb: Supa, userId: string, body: any) {
 
   const actions = await validateReplyActions(sb, institutionId, tpl, body.reply_actions)
 
-  const rows = (await resolveAudience(sb, institutionId, body.filter, importRows, tpl.category)).filter(r => !r.excluded_reason)
-  if (!rows.length) throw new HttpError(400, 'Nenhum destinatário elegível com esses filtros')
+  const rows = (await resolveAudience(sb, institutionId, body.filter, importRows, tpl.category, manual)).filter(r => !r.excluded_reason)
+  if (!rows.length) throw new HttpError(400, 'Nenhum destinatário elegível com essa seleção')
   if (rows.length > MAX_RECIPIENTS) throw new HttpError(400, `Audiência acima do limite de ${MAX_RECIPIENTS} destinatários — refine os filtros`)
 
   const now = new Date().toISOString()
@@ -355,6 +415,7 @@ async function actionCreate(sb: Supa, userId: string, body: any) {
     template_language:          tpl.def.language || 'pt_BR',
     variable_mapping:           mapping,
     audience_filter:            { ...(body.filter && typeof body.filter === 'object' ? body.filter : {}), imported_rows: importRows.length },
+    audience_manual:            manual,
     has_imported_list:          importRows.length > 0,
     import_opt_in_confirmed_by: importRows.length > 0 ? userId : null,
     import_opt_in_confirmed_at: importRows.length > 0 ? now : null,
@@ -374,7 +435,7 @@ async function actionCreate(sb: Supa, userId: string, body: any) {
         institution_id:      institutionId,
         contact_id:          r.contact_id,
         phone:               r.phone,
-        source:              r.source === 'import' ? 'import' : 'filter',
+        source:              r.source === 'import' || r.source === 'manual' ? r.source : 'filter',
         variables:           r.variables || {},
         template_components: buildComponents(tpl, mapping, r),
       }))

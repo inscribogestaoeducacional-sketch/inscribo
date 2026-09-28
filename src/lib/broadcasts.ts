@@ -95,6 +95,7 @@ export const EXCLUDED_REASON: Record<string, string> = {
   blacklisted:   'Bloqueados na escola',
   non_br:        'Número estrangeiro',
   invalid_phone: 'Número inválido',
+  deselected:    'Desmarcados',
 }
 
 export const FAILURE_KIND: Record<string, string> = {
