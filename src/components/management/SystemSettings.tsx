@@ -4,13 +4,15 @@ import {
   MessageCircle, Wifi, WifiOff, RefreshCw, Settings,
   Bot, Users, X, Plus, Check, AlertCircle, GraduationCap,
   MapPin, FileText, DollarSign, Loader2, CheckCircle, Clock, GitBranch, ShieldOff, Trash2,
-  ChevronUp, ChevronDown, Pencil,
+  ChevronUp, ChevronDown, Pencil, Send,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import SchoolSetupModal from '../onboarding/SchoolSetupModal'
 import FlowEditor from '../whatsapp/FlowEditor'
 import EmbeddedSignupButton from '../whatsapp/EmbeddedSignupButton'
+import FinanceTab from '../transmissoes/FinanceTab'
+import { useBroadcastEnabled } from '../../lib/broadcasts'
 import { useGradeLevels, type GradeLevel } from '../../hooks/useGradeLevels'
 
 const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#00A896] focus:border-[#00A896] outline-none transition-all'
@@ -1822,6 +1824,12 @@ export default function SystemSettings() {
 
   const institutionId = user?.institution_id || ''
 
+  // Aba "Transmissões" só com o módulo liberado pela Áion (mesma regra do menu).
+  const broadcastEnabled = useBroadcastEnabled(institutionId)
+  const visibleTabs = broadcastEnabled
+    ? [...TABS.slice(0, 2), { id: 'transmissoes', label: 'Transmissões', icon: Send }, ...TABS.slice(2)]
+    : TABS
+
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768)
     window.addEventListener('resize', handler)
@@ -1853,7 +1861,7 @@ export default function SystemSettings() {
       {/* Tabs */}
       {isMobile ? (
         <div style={{ overflowX: 'auto', display: 'flex', gap: 8, padding: '12px 16px', background: '#fff', borderBottom: '1px solid #E2E8F0', scrollbarWidth: 'none' }}>
-          {TABS.map(tab => {
+          {visibleTabs.map(tab => {
             const Icon = tab.icon
             const active = activeTab === tab.id
             return (
@@ -1865,7 +1873,7 @@ export default function SystemSettings() {
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 2, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 4, width: 'fit-content' }}>
-          {TABS.map(tab => {
+          {visibleTabs.map(tab => {
             const Icon = tab.icon
             const active = activeTab === tab.id
             return (
@@ -1883,6 +1891,7 @@ export default function SystemSettings() {
         {activeTab === 'identidade' && <IdentidadeTab institutionId={institutionId} onToast={showToast} />}
         {activeTab === 'whatsapp' && <WhatsAppTab institutionId={institutionId} />}
         {activeTab === 'pagamentos' && <PagamentosTab institutionId={institutionId} />}
+        {activeTab === 'transmissoes' && broadcastEnabled && <FinanceTab institutionId={institutionId} />}
         {activeTab === 'escola' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div style={{ background: '#fff', borderRadius: isMobile ? 0 : 16, border: isMobile ? 'none' : '1px solid #E2E8F0', padding: isMobile ? '20px 16px' : 28, maxWidth: isMobile ? '100%' : 500 }}>
