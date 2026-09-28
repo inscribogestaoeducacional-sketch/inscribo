@@ -5,6 +5,7 @@ import {
   authenticateSuperAdmin,
   authenticateInstitutionUser,
   GRAPH_URL,
+  WA_APP_ID,
 } from '../_lib/whatsappAuth.js'
 
 // ── Templates Automáticos (Super Admin) ─────────────────────────────────────
@@ -100,9 +101,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 type Supa = any
 
 // ── Template da escola → Meta (Transmissões) ────────────────────────────────
-// Validações da v1 antes de gastar uma submissão na Meta: cabeçalho só de
-// texto (mídia fica pra quando o App ID estiver cadastrado), até 10 botões,
-// no máximo 2 de link, texto de botão até 25 caracteres (limites da Meta).
+// Validações antes de gastar uma submissão na Meta: cabeçalho de texto,
+// imagem ou vídeo (documento ainda não), até 10 botões, no máximo 2 de link,
+// texto de botão até 25 caracteres (limites da Meta).
 async function handleSubmitSchoolTemplate(req: VercelRequest, res: VercelResponse, supabase: Supa) {
   const auth = await authenticateInstitutionUser(req)
   if (!auth) return errorResponse(res, 401, 'Não autenticado')
@@ -127,8 +128,15 @@ async function handleSubmitSchoolTemplate(req: VercelRequest, res: VercelRespons
 
   const problems: string[] = []
   const header = def.header_config as TemplateDefinition['header_config']
-  if (header?.format && header.format.toUpperCase() !== 'TEXT') problems.push('Cabeçalho com imagem/vídeo/documento ainda não é suportado')
-  if (header?.format && (header.text || '').length > 60) problems.push('Cabeçalho de texto com mais de 60 caracteres')
+  const headerFormat = (header?.format || '').toUpperCase()
+  const mediaRule = MEDIA_RULES[headerFormat]
+  if (headerFormat && headerFormat !== 'TEXT' && !mediaRule) problems.push('Cabeçalho de documento ainda não é suportado')
+  if (headerFormat === 'TEXT' && (header?.text || '').length > 60) problems.push('Cabeçalho de texto com mais de 60 caracteres')
+  // Arquivo tem que estar na pasta da PRÓPRIA escola no bucket.
+  const mediaPath = header?.media?.storage_path || ''
+  if (mediaRule && (!mediaPath.startsWith(`${def.institution_id}/`) || mediaPath.includes('..'))) {
+    problems.push('Cabeçalho de mídia sem arquivo — envie a imagem ou o vídeo de novo')
+  }
   if (!def.body_text?.trim() || def.body_text.length > 1024) problems.push('Corpo vazio ou com mais de 1024 caracteres')
   const buttons = (Array.isArray(def.buttons) ? def.buttons : []) as { type?: string; text?: string; url_base?: string }[]
   if (buttons.length > 10) problems.push('Mais de 10 botões')
@@ -149,10 +157,93 @@ async function handleSubmitSchoolTemplate(req: VercelRequest, res: VercelRespons
   if (!institutions.length) return errorResponse(res, 409, 'Escola sem WhatsApp Business (WABA) configurado')
 
   const token = await getGlobalToken(supabase)
+
+  // Cabeçalho de mídia: revalida o arquivo aqui (não confia no navegador),
+  // sobe o exemplo pra Meta (Resumable Upload API) e grava no template o
+  // sample_handle (criação) e o link público (usado em cada envio).
+  if (mediaRule) {
+    const prepared = await prepareMediaHeader(supabase, def as TemplateDefinition, headerFormat, mediaRule, token)
+    if ('problems' in prepared) return res.status(400).json({ error: 'Arquivo do cabeçalho inválido', details: prepared.problems })
+    const { error: upErr } = await supabase.from('template_definitions')
+      .update({ header_config: prepared.header }).eq('id', def.id)
+    if (upErr) return errorResponse(res, 500, `Não foi possível gravar a mídia do template: ${upErr.message}`)
+    def.header_config = prepared.header
+  }
+
   // submitDefinitionToInstitutions já restringe ao dono (scopeInstitutionsToOwner).
   const results = await submitDefinitionToInstitutions(supabase, def as TemplateDefinition, institutions, token)
   console.log('[template-definitions] template de escola submetido:', def.name, '| escola:', def.institution_id, '| status:', results[0]?.status)
   return res.status(200).json({ results })
+}
+
+// ── Mídia do cabeçalho (Transmissões) ──────────────────────────────────────
+// Limites da Meta (docs Cloud API, conferidos em 2026-09-28): imagem JPEG/PNG
+// até 5 MB; vídeo MP4 (H.264 + AAC) até 16 MB. O tipo vale pelo conteúdo
+// (bytes iniciais), não pela extensão nem pelo que o navegador declarou.
+const MEDIA_BUCKET = 'broadcast-media'
+const MEDIA_RULES: Record<string, { mimes: string[]; maxBytes: number; label: string }> = {
+  IMAGE: { mimes: ['image/jpeg', 'image/png'], maxBytes: 5 * 1024 * 1024,  label: 'imagem JPG ou PNG de até 5 MB' },
+  VIDEO: { mimes: ['video/mp4'],               maxBytes: 16 * 1024 * 1024, label: 'vídeo MP4 de até 16 MB' },
+}
+
+interface HeaderMedia { storage_path: string; public_url?: string; mime_type?: string; size_bytes?: number; file_name?: string }
+
+function sniffMime(b: Uint8Array): string | null {
+  if (b.length >= 3 && b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return 'image/jpeg'
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47) return 'image/png'
+  // MP4/ISO BMFF: caixa "ftyp" nos bytes 4–7.
+  if (b.length >= 12 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return 'video/mp4'
+  return null
+}
+
+async function getAppId(supabase: Supa): Promise<string> {
+  const { data } = await supabase.from('platform_settings').select('value').eq('key', 'wa_app_id').maybeSingle()
+  const appId = (data?.value || WA_APP_ID || '').trim()
+  if (!/^[0-9]+$/.test(appId)) throw new Error('App ID da Meta não configurado (platform_settings.wa_app_id)')
+  return appId
+}
+
+// Resumable Upload API: 1) abre a sessão no app (POST /{app-id}/uploads),
+// 2) manda os bytes (POST /{upload-session}, Authorization: OAuth, file_offset 0)
+// → { h } = header_handle do exemplo. O token precisa ser do mesmo app
+// (o System User do wa_access_token é do app "Aion Edu").
+async function uploadSampleToMeta(appId: string, token: string, bytes: Uint8Array, fileName: string, mime: string): Promise<string> {
+  const qs = new URLSearchParams({ file_name: fileName, file_length: String(bytes.length), file_type: mime, access_token: token })
+  const sRes = await fetch(`${GRAPH_URL}/${appId}/uploads?${qs}`, { method: 'POST' })
+  const sData = await sRes.json().catch(() => null)
+  if (!sRes.ok || !sData?.id) throw new Error(`Meta recusou abrir o upload: ${sData?.error?.error_user_msg || sData?.error?.message || `HTTP ${sRes.status}`}`)
+
+  const uRes = await fetch(`${GRAPH_URL}/${sData.id}`, {
+    method: 'POST',
+    headers: { Authorization: `OAuth ${token}`, file_offset: '0' },
+    body: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+  })
+  const uData = await uRes.json().catch(() => null)
+  if (!uRes.ok || !uData?.h) throw new Error(`Meta recusou o arquivo: ${uData?.error?.error_user_msg || uData?.error?.message || `HTTP ${uRes.status}`}`)
+  return uData.h as string
+}
+
+async function prepareMediaHeader(
+  supabase: Supa, def: TemplateDefinition, format: string, rule: { mimes: string[]; maxBytes: number; label: string }, token: string
+): Promise<{ header: NonNullable<TemplateDefinition['header_config']> } | { problems: string[] }> {
+  const media = def.header_config!.media!
+  const { data: blob, error } = await supabase.storage.from(MEDIA_BUCKET).download(media.storage_path)
+  if (error || !blob) return { problems: ['Arquivo do cabeçalho não encontrado — envie a imagem ou o vídeo de novo'] }
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  const mime = sniffMime(bytes)
+  if (!mime || !rule.mimes.includes(mime)) return { problems: [`O cabeçalho precisa ser ${rule.label} (o arquivo enviado é de outro tipo)`] }
+  if (bytes.length > rule.maxBytes) return { problems: [`Arquivo grande demais: o cabeçalho aceita ${rule.label}`] }
+
+  const ext = mime === 'image/png' ? 'png' : mime === 'video/mp4' ? 'mp4' : 'jpg'
+  const handle = await uploadSampleToMeta(await getAppId(supabase), token, bytes, `cabecalho.${ext}`, mime)
+  const publicUrl = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(media.storage_path).data.publicUrl as string
+  return {
+    header: {
+      format,
+      media: { storage_path: media.storage_path, public_url: publicUrl, mime_type: mime, size_bytes: bytes.length, file_name: media.file_name },
+      sample_handle: handle,
+    },
+  }
 }
 
 interface TemplateDefinition {
@@ -166,7 +257,8 @@ interface TemplateDefinition {
   // null = padrão Áion; preenchido = template da própria escola (só pode ir
   // pro WABA dela — ver scopeInstitutionsToOwner)
   institution_id?: string | null
-  header_config?: { format?: string; text?: string; sample_handle?: string } | null
+  // media: cabeçalho IMAGE/VIDEO de template de escola (bucket broadcast-media)
+  header_config?: { format?: string; text?: string; sample_handle?: string; media?: HeaderMedia } | null
   buttons?: { type?: string; text?: string; url_base?: string }[] | null
 }
 

@@ -17,6 +17,9 @@
       "destination": "/index.html"
     }
   ],
+  "functions": {
+    "api/whatsapp/template-definitions.ts": { "maxDuration": 60 }
+  },
   "headers": [
     {
       "source": "/api/(.*)",

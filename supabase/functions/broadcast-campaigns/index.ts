@@ -110,11 +110,14 @@ async function requireModule(sb: Supa, institutionId: string) {
 
 interface TemplateCtx {
   def: { id: string; name: string; language: string; category: string; body_text: string;
-         header_config: { format?: string; text?: string } | null; buttons: { type?: string; text?: string }[];
+         header_config: { format?: string; text?: string; media?: { public_url?: string } } | null; buttons: { type?: string; text?: string }[];
          institution_id: string | null }
   category: string          // categoria aprovada pela Meta (é ela que define o preço)
   bodyVars: number[]
   headerHasVar: boolean
+  // Cabeçalho de imagem/vídeo: mídia fixa do template (link público no
+  // bucket broadcast-media), mandada em todo envio — a Meta busca o link.
+  headerMedia: { kind: 'image' | 'video'; link: string } | null
   urlButtons: number[]      // índices (na lista de botões) de botões de URL
   quickReplies: number[]    // índices de botões de resposta rápida
 }
@@ -137,8 +140,14 @@ async function loadTemplate(sb: Supa, institutionId: string, defId: string): Pro
     throw new HttpError(409, 'Template ainda não aprovado pela Meta para esta escola')
   }
   const header = d.header_config as TemplateCtx['def']['header_config']
-  if (header?.format && header.format.toUpperCase() !== 'TEXT') {
-    throw new HttpError(409, 'Cabeçalho com imagem/vídeo/documento ainda não é suportado em Transmissões')
+  const headerFormat = (header?.format || '').toUpperCase()
+  let headerMedia: TemplateCtx['headerMedia'] = null
+  if (headerFormat === 'IMAGE' || headerFormat === 'VIDEO') {
+    const link = header?.media?.public_url || ''
+    if (!/^https:\/\//.test(link)) throw new HttpError(409, 'Template com cabeçalho de mídia sem o arquivo publicado — envie o template de novo')
+    headerMedia = { kind: headerFormat === 'IMAGE' ? 'image' : 'video', link }
+  } else if (headerFormat && headerFormat !== 'TEXT') {
+    throw new HttpError(409, 'Cabeçalho de documento ainda não é suportado em Transmissões')
   }
   // button_config (legado, 1 botão URL) entra como lista, do mesmo jeito que
   // o template foi criado na Meta (template-definitions.ts).
@@ -152,7 +161,8 @@ async function loadTemplate(sb: Supa, institutionId: string, defId: string): Pro
     def: { ...d, buttons },
     category:     String((st as any).approved_category || d.category).toUpperCase(),
     bodyVars,
-    headerHasVar: /\{\{1\}\}/.test(header?.text || ''),
+    headerHasVar: headerFormat === 'TEXT' && /\{\{1\}\}/.test(header?.text || ''),
+    headerMedia,
     urlButtons:   buttons.map((b, i) => ((b.type || '').toUpperCase() === 'URL' ? i : -1)).filter(i => i >= 0),
     quickReplies: buttons.map((b, i) => ((b.type || '').toUpperCase() === 'QUICK_REPLY' ? i : -1)).filter(i => i >= 0),
   }
@@ -203,6 +213,9 @@ function buildComponents(tpl: TemplateCtx, mapping: Record<string, VarSource>, r
   const components: any[] = []
   if (tpl.headerHasVar) {
     components.push({ type: 'header', parameters: [{ type: 'text', text: resolveVar(mapping.header_1, rec) }] })
+  } else if (tpl.headerMedia) {
+    const { kind, link } = tpl.headerMedia
+    components.push({ type: 'header', parameters: [{ type: kind, [kind]: { link } }] })
   }
   if (tpl.bodyVars.length) {
     components.push({ type: 'body', parameters: tpl.bodyVars.map(n => ({ type: 'text', text: resolveVar(mapping[String(n)], rec) })) })
@@ -333,7 +346,7 @@ async function actionPreview(sb: Supa, userId: string, body: any) {
   }))
 
   return {
-    template: { name: tpl.def.name, category: tpl.category, body_vars: tpl.bodyVars, header_var: tpl.headerHasVar,
+    template: { name: tpl.def.name, category: tpl.category, body_vars: tpl.bodyVars, header_var: tpl.headerHasVar, header_media: tpl.headerMedia,
                 url_buttons: tpl.urlButtons, quick_replies: tpl.quickReplies.map(i => ({ index: i, text: tpl.def.buttons[i]?.text })) },
     audience: { candidates: rows.length, eligible, excluded, over_limit: eligible > MAX_RECIPIENTS, max: MAX_RECIPIENTS },
     mapping_errors: mappingErrors,

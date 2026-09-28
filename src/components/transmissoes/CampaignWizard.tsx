@@ -425,6 +425,11 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
         {step === 2 && tpl && (
           <div style={{ display: 'grid', gap: 18 }}>
             <div style={{ background: '#F8FAFC', borderRadius: 12, padding: 12, fontSize: 12, color: '#475569', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+              {tpl.header_config?.media?.public_url && (
+                (tpl.header_config.format || '').toUpperCase() === 'VIDEO'
+                  ? <video src={tpl.header_config.media.public_url} controls style={{ display: 'block', maxWidth: 280, maxHeight: 180, borderRadius: 8, marginBottom: 8 }} />
+                  : <img src={tpl.header_config.media.public_url} alt="" style={{ display: 'block', maxWidth: 280, maxHeight: 180, borderRadius: 8, marginBottom: 8, objectFit: 'cover' }} />
+              )}
               {tpl.header_config?.text && <strong style={{ display: 'block', marginBottom: 6 }}>{tpl.header_config.text}</strong>}
               {tpl.body_text}
             </div>

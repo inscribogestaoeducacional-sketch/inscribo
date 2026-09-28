@@ -7,7 +7,7 @@
 // rejeitado vira "duplicar pra corrigir", porque a Meta não aceita reenviar
 // o mesmo nome.
 import React, { useEffect, useMemo, useState } from 'react'
-import { FileText, Plus, Send, Copy, Pencil, RefreshCw, Trash2, MessageSquareReply, Link as LinkIcon } from 'lucide-react'
+import { FileText, Plus, Send, Copy, Pencil, RefreshCw, Trash2, MessageSquareReply, Link as LinkIcon, Image as ImageIcon, Film, Upload, Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { TEMPLATE_STATUS, CATEGORY_LABEL, submitSchoolTemplate, BroadcastError } from '../../lib/broadcasts'
 import { Badge, Btn, ErrorBox, Empty, Modal, cardStyle, hintStyle, inputStyle, labelStyle } from './ui'
@@ -19,7 +19,7 @@ export interface TemplateRow {
   category: string
   language: string
   body_text: string
-  header_config: { format?: string; text?: string } | null
+  header_config: { format?: string; text?: string; media?: HeaderMedia } | null
   buttons: { type: string; text: string; url_base?: string }[]
   variable_examples: Record<string, string> | null
   variable_labels: Record<string, string> | null
@@ -60,6 +60,17 @@ export async function loadTemplates(institutionId: string): Promise<TemplateRow[
     .filter(t => t.institution_id === institutionId || (t.status === 'approved' && t.visible))
 }
 
+// Mídia do cabeçalho: sobe direto do navegador pro bucket broadcast-media
+// (pasta da escola, nome aleatório). O servidor revalida tipo/tamanho pelo
+// conteúdo e sobe o exemplo pra Meta no envio pra aprovação.
+export interface HeaderMedia { storage_path: string; public_url?: string; mime_type?: string; size_bytes?: number; file_name?: string }
+type HeaderType = 'NONE' | 'TEXT' | 'IMAGE' | 'VIDEO'
+// Limites da Meta (Cloud API): imagem JPEG/PNG até 5 MB; vídeo MP4 até 16 MB.
+const MEDIA_LIMITS: Record<'IMAGE' | 'VIDEO', { mimes: string[]; maxBytes: number; accept: string; label: string }> = {
+  IMAGE: { mimes: ['image/jpeg', 'image/png'], maxBytes: 5 * 1024 * 1024,  accept: 'image/jpeg,image/png', label: 'JPG ou PNG, até 5 MB' },
+  VIDEO: { mimes: ['video/mp4'],               maxBytes: 16 * 1024 * 1024, accept: 'video/mp4',           label: 'MP4, até 16 MB' },
+}
+
 const varNumbers = (text: string) => [...new Set([...text.matchAll(/\{\{(\d+)\}\}/g)].map(m => m[1]))].sort((a, b) => Number(a) - Number(b))
 
 interface EditorState {
@@ -67,6 +78,8 @@ interface EditorState {
   displayName: string
   baseName: string
   category: 'MARKETING' | 'UTILITY'
+  headerType: HeaderType
+  media: HeaderMedia | null
   headerText: string
   headerExample: string
   body: string
@@ -77,7 +90,7 @@ interface EditorState {
 }
 
 const EMPTY: EditorState = {
-  id: null, displayName: '', baseName: '', category: 'MARKETING', headerText: '', headerExample: '',
+  id: null, displayName: '', baseName: '', category: 'MARKETING', headerType: 'NONE', media: null, headerText: '', headerExample: '',
   body: '', examples: {}, labels: {}, buttons: [], urlExample: '',
 }
 
@@ -88,6 +101,7 @@ export default function TemplatesPanel({ institutionId, onChanged }: { instituti
   const [saving, setSaving] = useState<'draft' | 'submit' | null>(null)
   const [error, setError] = useState<{ message: string; details?: string[] } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
 
   async function reload() {
     setLoading(true)
@@ -104,7 +118,12 @@ export default function TemplatesPanel({ institutionId, onChanged }: { instituti
     setError(null)
     const btns = (t.buttons || []).map(b => ({ type: (b.type || '').toUpperCase() === 'URL' ? 'URL' as const : 'QUICK_REPLY' as const, text: b.text, url_base: b.url_base }))
     const baseName = t.name.replace(/^esc_[0-9a-f]{6}_/, '')
+    const fmt = (t.header_config?.format || '').toUpperCase()
+    const headerType: HeaderType = fmt === 'IMAGE' || fmt === 'VIDEO' ? fmt : t.header_config?.text ? 'TEXT' : 'NONE'
     setEditor({
+      headerType,
+      // Duplicar reaproveita o mesmo arquivo (não apaga nada do bucket).
+      media: headerType === 'IMAGE' || headerType === 'VIDEO' ? (t.header_config?.media || null) : null,
       id: duplicate ? null : t.id,
       displayName: duplicate ? `${t.display_name || baseName} (v2)` : (t.display_name || ''),
       baseName: duplicate ? `${baseName}_v2` : baseName,
@@ -129,6 +148,8 @@ export default function TemplatesPanel({ institutionId, onChanged }: { instituti
     if (e.body.length > 1024) p.push('Texto com mais de 1024 caracteres')
     if (bodyVars.some((n, i) => Number(n) !== i + 1)) p.push('Use as variáveis em sequência: {{1}}, {{2}}, {{3}}…')
     bodyVars.forEach(n => { if (!e.examples[n]?.trim()) p.push(`Preencha o exemplo da variável {{${n}}} (a Meta exige)`) })
+    if ((e.headerType === 'IMAGE' || e.headerType === 'VIDEO') && !e.media) p.push(`Envie o ${e.headerType === 'IMAGE' ? 'arquivo de imagem' : 'arquivo de vídeo'} do cabeçalho`)
+    if (e.headerType === 'TEXT' && !e.headerText.trim()) p.push('Escreva o texto do cabeçalho (ou escolha "Nenhum")')
     if (e.headerText.length > 60) p.push('Cabeçalho com mais de 60 caracteres')
     if ((e.headerText.match(/\{\{\d+\}\}/g) || []).some(v => v !== '{{1}}')) p.push('O cabeçalho aceita só a variável {{1}}')
     if (/\{\{1\}\}/.test(e.headerText) && !e.headerExample.trim()) p.push('Preencha o exemplo da variável do cabeçalho')
@@ -150,7 +171,7 @@ export default function TemplatesPanel({ institutionId, onChanged }: { instituti
     try {
       const examples: Record<string, string> = {}
       bodyVars.forEach(n => { examples[n] = editor.examples[n].trim() })
-      if (/\{\{1\}\}/.test(editor.headerText)) examples.header = editor.headerExample.trim()
+      if (editor.headerType === 'TEXT' && /\{\{1\}\}/.test(editor.headerText)) examples.header = editor.headerExample.trim()
       if (editor.buttons.some(b => b.type === 'URL')) examples.button = editor.urlExample.trim()
       const labels: Record<string, string> = {}
       bodyVars.forEach(n => { if (editor.labels[n]?.trim()) labels[n] = editor.labels[n].trim() })
@@ -159,7 +180,9 @@ export default function TemplatesPanel({ institutionId, onChanged }: { instituti
         display_name:      editor.displayName.trim(),
         category:          editor.category,
         body_text:         editor.body.trim(),
-        header_config:     editor.headerText.trim() ? { format: 'TEXT', text: editor.headerText.trim() } : null,
+        header_config:     editor.headerType === 'TEXT' && editor.headerText.trim() ? { format: 'TEXT', text: editor.headerText.trim() }
+                         : (editor.headerType === 'IMAGE' || editor.headerType === 'VIDEO') && editor.media ? { format: editor.headerType, media: editor.media }
+                         : null,
         buttons:           editor.buttons.map(b => b.type === 'URL' ? { type: 'URL', text: b.text.trim(), url_base: (b.url_base || '').trim() } : { type: 'QUICK_REPLY', text: b.text.trim() }),
         variable_examples: examples,
         variable_labels:   labels,
@@ -194,6 +217,25 @@ export default function TemplatesPanel({ institutionId, onChanged }: { instituti
     } finally {
       setSaving(null)
     }
+  }
+
+  async function uploadMedia(file: File | undefined) {
+    if (!file || !editor || (editor.headerType !== 'IMAGE' && editor.headerType !== 'VIDEO')) return
+    const lim = MEDIA_LIMITS[editor.headerType]
+    if (!lim.mimes.includes(file.type)) { setError({ message: `Formato não aceito: use ${lim.label}` }); return }
+    if (file.size > lim.maxBytes) { setError({ message: `Arquivo grande demais: ${(file.size / 1024 / 1024).toFixed(1)} MB (${lim.label})` }); return }
+    setUploading(true); setError(null)
+    try {
+      const ext = file.type === 'image/png' ? 'png' : file.type === 'video/mp4' ? 'mp4' : 'jpg'
+      const path = `${institutionId}/${crypto.randomUUID()}.${ext}`
+      const { error: upErr } = await supabase.storage.from('broadcast-media').upload(path, file, { contentType: file.type, upsert: false })
+      if (upErr) throw new BroadcastError(`Não foi possível enviar o arquivo: ${upErr.message}`)
+      const publicUrl = supabase.storage.from('broadcast-media').getPublicUrl(path).data.publicUrl
+      setEditor(s => s && ({ ...s, media: { storage_path: path, public_url: publicUrl, mime_type: file.type, size_bytes: file.size, file_name: file.name.slice(0, 120) } }))
+    } catch (e: any) {
+      setError({ message: e?.message || 'Erro ao enviar o arquivo' })
+    }
+    setUploading(false)
   }
 
   async function removeDraft(t: TemplateRow) {
@@ -292,13 +334,46 @@ export default function TemplatesPanel({ institutionId, onChanged }: { instituti
               )}
               <div>
                 <label style={labelStyle}>Cabeçalho (opcional)</label>
-                <input style={inputStyle} value={editor.headerText} maxLength={60} placeholder="Ex.: Rematrícula {{1}}"
-                  onChange={e => setEditor(s => s && ({ ...s, headerText: e.target.value }))} />
-                {/\{\{1\}\}/.test(editor.headerText) && (
-                  <input style={{ ...inputStyle, marginTop: 8 }} value={editor.headerExample} placeholder="Exemplo da variável do cabeçalho (ex.: 2027)"
-                    onChange={e => setEditor(s => s && ({ ...s, headerExample: e.target.value }))} />
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                  {([['NONE', 'Nenhum'], ['TEXT', 'Texto'], ['IMAGE', 'Imagem'], ['VIDEO', 'Vídeo']] as const).map(([k, l]) => (
+                    <button key={k} type="button"
+                      onClick={() => setEditor(s => s && ({ ...s, headerType: k, media: k === s.headerType ? s.media : null }))}
+                      style={{ padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        border: editor.headerType === k ? '1.5px solid #00A896' : '1.5px solid #E2E8F0',
+                        background: editor.headerType === k ? '#F0FDFA' : '#fff', color: editor.headerType === k ? '#047857' : '#475569' }}>
+                      {k === 'IMAGE' ? <ImageIcon size={12} style={{ marginRight: 4, verticalAlign: -2 }} /> : k === 'VIDEO' ? <Film size={12} style={{ marginRight: 4, verticalAlign: -2 }} /> : null}{l}
+                    </button>
+                  ))}
+                </div>
+                {editor.headerType === 'TEXT' && <>
+                  <input style={inputStyle} value={editor.headerText} maxLength={60} placeholder="Ex.: Rematrícula {{1}}"
+                    onChange={e => setEditor(s => s && ({ ...s, headerText: e.target.value }))} />
+                  {/\{\{1\}\}/.test(editor.headerText) && (
+                    <input style={{ ...inputStyle, marginTop: 8 }} value={editor.headerExample} placeholder="Exemplo da variável do cabeçalho (ex.: 2027)"
+                      onChange={e => setEditor(s => s && ({ ...s, headerExample: e.target.value }))} />
+                  )}
+                </>}
+                {(editor.headerType === 'IMAGE' || editor.headerType === 'VIDEO') && (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {editor.media?.public_url && (
+                      editor.headerType === 'IMAGE'
+                        ? <img src={editor.media.public_url} alt="Prévia do cabeçalho" style={{ maxWidth: 280, maxHeight: 200, borderRadius: 10, border: '1px solid #E2E8F0', objectFit: 'cover' }} />
+                        : <video src={editor.media.public_url} controls style={{ maxWidth: 320, maxHeight: 220, borderRadius: 10, border: '1px solid #E2E8F0' }} />
+                    )}
+                    {!locked && (
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10, border: '1.5px dashed #CBD5E1', cursor: uploading ? 'wait' : 'pointer', fontSize: 13, color: '#1e2d6b', width: 'fit-content' }}>
+                        {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                        {uploading ? 'Enviando…' : editor.media ? `Trocar arquivo (${editor.media.file_name || 'atual'})` : `Escolher ${editor.headerType === 'IMAGE' ? 'imagem' : 'vídeo'}`}
+                        <input type="file" accept={MEDIA_LIMITS[editor.headerType].accept} style={{ display: 'none' }} disabled={uploading}
+                          onChange={e => { uploadMedia(e.target.files?.[0]); e.target.value = '' }} />
+                      </label>
+                    )}
+                    <p style={{ ...hintStyle, margin: 0 }}>
+                      {MEDIA_LIMITS[editor.headerType].label}.{editor.headerType === 'VIDEO' && ' Use vídeo H.264 com áudio AAC (perfil Main ou Baseline) — é o que toca em todos os celulares.'}
+                      {' '}A mesma mídia vai em todas as mensagens deste template.
+                    </p>
+                  </div>
                 )}
-                <p style={hintStyle}>Só texto por enquanto (imagem e vídeo chegam numa próxima versão).</p>
               </div>
               <div>
                 <label style={labelStyle}>Mensagem</label>
@@ -386,7 +461,11 @@ function TemplateTable({ rows, readOnly, onEdit, onDuplicate, onRemove, onSubmit
                   <div style={{ fontSize: 11, color: '#94a3b8' }}>{t.name}</div>
                 </td>
                 <td style={{ padding: '12px 16px', maxWidth: 320 }}>
-                  <div title={t.body_text} style={{ fontSize: 12, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.body_text}</div>
+                  <div title={t.body_text} style={{ fontSize: 12, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {(t.header_config?.format || '').toUpperCase() === 'IMAGE' && <ImageIcon size={12} style={{ marginRight: 4, verticalAlign: -2, color: '#0284C7' }} />}
+                    {(t.header_config?.format || '').toUpperCase() === 'VIDEO' && <Film size={12} style={{ marginRight: 4, verticalAlign: -2, color: '#0284C7' }} />}
+                    {t.body_text}
+                  </div>
                   {t.buttons.length > 0 && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{t.buttons.map(b => b.text).join(' · ')}</div>}
                 </td>
                 <td style={{ padding: '12px 16px' }}><Badge label={CATEGORY_LABEL[cat] || cat} color="#475569" bg="#F1F5F9" /></td>
