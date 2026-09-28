@@ -86,7 +86,15 @@ const TYPE_MAP: Record<string, string> = {
   implementation:      'Implantação',
   monthly:             'Mensalidade',
   extra_conversations: 'Conversas extras',
+  broadcast:           'Transmissão',
 }
+
+// Cobrança de campanha de Transmissões: só o pagamento no Asaas libera a
+// campanha (webhook → broadcast_try_release). Marcar/editar como pago aqui
+// gravaria "pago" SEM liberar — e abriria uma liberação manual que a regra do
+// módulo proíbe. Por isso essas ações somem pra esse tipo.
+const isBroadcastPayment = (p: any) => p?.payment_type === 'broadcast'
+const BROADCAST_AUTO_RELEASE = 'Liberação automática pelo pagamento no Asaas'
 
 const ENTRY_CATEGORY_MAP: Record<string, string> = {
   implantacao_avulsa: 'Implantação avulsa',
@@ -305,12 +313,17 @@ function PaymentDetailModal({ payment, onClose, onAction, onSendTemplate }: {
 
         {/* Ações */}
         <div className="flex flex-col gap-2">
+          {isBroadcastPayment(payment) && ['pending', 'overdue'].includes(payment.status) && (
+            <p className="text-xs text-center text-gray-500 bg-gray-50 border border-gray-200 rounded-xl py-2.5 px-3">{BROADCAST_AUTO_RELEASE}</p>
+          )}
           {payment.status === 'pending' && (
             <>
-              <button onClick={() => act('mark_paid')} disabled={loading}
-                className="flex items-center justify-center gap-2 py-2.5 bg-green-500 text-white rounded-xl font-semibold text-sm hover:bg-green-600 disabled:opacity-60">
-                <CheckCircle2 className="w-4 h-4" /> Marcar como pago manualmente
-              </button>
+              {!isBroadcastPayment(payment) && (
+                <button onClick={() => act('mark_paid')} disabled={loading}
+                  className="flex items-center justify-center gap-2 py-2.5 bg-green-500 text-white rounded-xl font-semibold text-sm hover:bg-green-600 disabled:opacity-60">
+                  <CheckCircle2 className="w-4 h-4" /> Marcar como pago manualmente
+                </button>
+              )}
               {payment.asaas_charge_url && (
                 <button onClick={() => act('resend_email')} disabled={loading}
                   className="flex items-center justify-center gap-2 py-2.5 bg-blue-500 text-white rounded-xl font-semibold text-sm hover:bg-blue-600 disabled:opacity-60">
@@ -335,10 +348,12 @@ function PaymentDetailModal({ payment, onClose, onAction, onSendTemplate }: {
           )}
           {payment.status === 'overdue' && (
             <>
-              <button onClick={() => act('mark_paid')} disabled={loading}
-                className="flex items-center justify-center gap-2 py-2.5 bg-green-500 text-white rounded-xl font-semibold text-sm hover:bg-green-600">
-                <CheckCircle2 className="w-4 h-4" /> Marcar como pago
-              </button>
+              {!isBroadcastPayment(payment) && (
+                <button onClick={() => act('mark_paid')} disabled={loading}
+                  className="flex items-center justify-center gap-2 py-2.5 bg-green-500 text-white rounded-xl font-semibold text-sm hover:bg-green-600">
+                  <CheckCircle2 className="w-4 h-4" /> Marcar como pago
+                </button>
+              )}
               <button onClick={() => act('resend_email')} disabled={loading}
                 className="flex items-center justify-center gap-2 py-2.5 bg-blue-500 text-white rounded-xl font-semibold text-sm">
                 <Send className="w-4 h-4" /> Reenviar cobrança por e-mail
@@ -1212,14 +1227,21 @@ function SchoolPaymentsDrawer({ institution, onClose, onPaymentAction, showToast
                             {p.asaas_payment_id && <> · Asaas: {p.asaas_payment_id}</>}
                           </p>
                         </div>
-                        <div className="flex gap-1 flex-shrink-0">
-                          <button onClick={() => startEdit(p)} disabled={busyId === p.id} className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg disabled:opacity-40">
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => handleDelete(p)} disabled={busyId === p.id} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg disabled:opacity-40">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        {isBroadcastPayment(p) ? (
+                          // Editar deixaria trocar o status pra "pago" à mão, e
+                          // excluir apagaria sem cancelar no Asaas nem mexer
+                          // na campanha — cancelamento é pela campanha.
+                          <span className="text-[11px] text-gray-400 text-right max-w-[140px] leading-tight flex-shrink-0">{BROADCAST_AUTO_RELEASE}</span>
+                        ) : (
+                          <div className="flex gap-1 flex-shrink-0">
+                            <button onClick={() => startEdit(p)} disabled={busyId === p.id} className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg disabled:opacity-40">
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => handleDelete(p)} disabled={busyId === p.id} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg disabled:opacity-40">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-3">
@@ -1468,6 +1490,7 @@ export default function AdminFinancial() {
     const inst = institutions.find(i => i.id === payment.institution_id)
 
     if (action === 'mark_paid') {
+      if (isBroadcastPayment(payment)) { showToast(BROADCAST_AUTO_RELEASE, false); return }
       if (!confirm('Marcar como pago manualmente?')) return
       await supabase.from('payments').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', payment.id)
       // Se for implantação, ativa a escola

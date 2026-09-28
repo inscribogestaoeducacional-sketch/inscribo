@@ -1539,6 +1539,8 @@ function PagamentosTab({ institutionId }: { institutionId: string }) {
     pending:   { label: '⏳ Pendente',  color: '#D97706', bg: '#FFFBEB' },
     overdue:   { label: '🔴 Atrasado',  color: '#DC2626', bg: '#FEF2F2' },
     cancelled: { label: '❌ Cancelado', color: '#9CA3AF', bg: '#F3F4F6' },
+    // Faltava: cobrança estornada no Asaas aparecia com o status cru "refunded".
+    refunded:  { label: '↩️ Estornado', color: '#7C3AED', bg: '#F5F3FF' },
   }
 
   if (loading) return (

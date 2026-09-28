@@ -119,7 +119,13 @@ const PAYMENT_STATUS: Record<string, { l: string; c: string; bg: string }> = {
   pending:   { l: 'Pendente',  c: '#d97706', bg: '#fffbeb' },
   overdue:   { l: 'Atrasado',  c: '#dc2626', bg: '#fef2f2' },
   cancelled: { l: 'Cancelado', c: '#9ca3af', bg: '#f9fafb' },
+  // Sem esta linha, estornado caía no fallback e aparecia como "Pendente".
+  refunded:  { l: 'Estornado', c: '#7c3aed', bg: '#f5f3ff' },
 }
+// Cobrança de campanha de Transmissões: só o pagamento no Asaas libera
+// (webhook → broadcast_try_release). Marcar como pago aqui gravaria "pago"
+// SEM liberar a campanha — e seria liberação manual, que o módulo proíbe.
+const BROADCAST_AUTO_RELEASE = 'Liberação automática pelo pagamento no Asaas'
 const CONTRACT_STATUS: Record<string, { l: string; c: string; bg: string }> = {
   draft:     { l: 'Rascunho',              c: '#6b7280', bg: '#f3f4f6' },
   sent:      { l: 'Aguardando assinatura', c: '#d97706', bg: '#fffbeb' },
@@ -624,6 +630,8 @@ export default function InstitutionDetails() {
   }
 
   const handleMarkPaid = async (paymentId: string, isImpl: boolean) => {
+    // Trava além do botão escondido: cobrança de campanha nunca é marcada à mão.
+    if (payments.find(p => p.id === paymentId)?.payment_type === 'broadcast') { showToast(BROADCAST_AUTO_RELEASE, false); return }
     if (!confirm('Marcar como pago manualmente?')) return
     const { error } = await supabase.from('payments').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', paymentId)
     if (error) { showToast(`Erro ao marcar pagamento: ${error.message}`, false); return }
@@ -2561,7 +2569,12 @@ export default function InstitutionDetails() {
                               const late = p.status === 'overdue' ? daysLate(p.due_date) : 0
                               return (
                                 <tr key={p.id} className="hover:bg-gray-50">
-                                  <td className="px-2 py-2 text-gray-700">{p.description || 'Cobrança'}</td>
+                                  <td className="px-2 py-2 text-gray-700">
+                                    {p.payment_type === 'broadcast' && (
+                                      <span className="mr-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full text-sky-700 bg-sky-100 align-middle">Transmissão</span>
+                                    )}
+                                    {p.description || 'Cobrança'}
+                                  </td>
                                   <td className="px-2 py-2 font-semibold text-gray-900">{fmtBRL(p.amount)}</td>
                                   <td className="px-2 py-2 text-gray-500">
                                     {fmtDate(p.due_date)}
@@ -2582,11 +2595,21 @@ export default function InstitutionDetails() {
                                           <a href={p.asaas_charge_url} target="_blank" rel="noopener noreferrer" className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg"><ExternalLink className="w-3.5 h-3.5" /></a>
                                         </>
                                       )}
-                                      {!p.asaas_charge_url && p.status !== 'paid' && (
-                                        <button onClick={() => handleGenerateLink(p.id)} className="px-2 py-1 text-xs bg-gray-100 border border-gray-200 text-gray-600 rounded-lg font-semibold">🔗 Link</button>
-                                      )}
-                                      {p.status === 'pending' && (
-                                        <button onClick={() => handleMarkPaid(p.id, p.payment_type === 'implementation')} className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg"><CheckCircle2 className="w-3.5 h-3.5" /></button>
+                                      {p.payment_type === 'broadcast' ? (
+                                        // Nem "marcar como pago" nem "🔗 Link" (que gera cobrança de
+                                        // mensalidade): a campanha só sai pelo pagamento no Asaas.
+                                        ['pending', 'overdue'].includes(p.status) && (
+                                          <span className="text-[11px] text-gray-400 self-center whitespace-nowrap">{BROADCAST_AUTO_RELEASE}</span>
+                                        )
+                                      ) : (
+                                        <>
+                                          {!p.asaas_charge_url && p.status !== 'paid' && (
+                                            <button onClick={() => handleGenerateLink(p.id)} className="px-2 py-1 text-xs bg-gray-100 border border-gray-200 text-gray-600 rounded-lg font-semibold">🔗 Link</button>
+                                          )}
+                                          {p.status === 'pending' && (
+                                            <button onClick={() => handleMarkPaid(p.id, p.payment_type === 'implementation')} className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg"><CheckCircle2 className="w-3.5 h-3.5" /></button>
+                                          )}
+                                        </>
                                       )}
                                       {p.status !== 'paid' && p.status !== 'cancelled' && (
                                         <button onClick={() => handleCancelPayment(p.id, p.asaas_payment_id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Ban className="w-3.5 h-3.5" /></button>
