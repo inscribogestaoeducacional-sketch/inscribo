@@ -23,7 +23,10 @@ const RECIPIENT_STATUS: Record<string, string> = {
 const fmtDate = (s: string | null) => s ? new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
 const pct = (n: number, d: number) => d > 0 ? `${Math.round((n / d) * 100)}%` : '—'
 
-export default function CampaignDetail({ campaignId, onClose, onChanged }: { campaignId: string; onClose: () => void; onChanged: () => void }) {
+// readOnly: visão do Super Admin (InstitutionBroadcastTab) — ele lê pela RLS,
+// mas as ações (precificar, pagar, pausar…) são da escola (permissão
+// 'transmissoes'), então os botões nem aparecem.
+export default function CampaignDetail({ campaignId, onClose, onChanged, readOnly = false }: { campaignId: string; onClose: () => void; onChanged: () => void; readOnly?: boolean }) {
   const [c, setC] = useState<Campaign | null>(null)
   const [payment, setPayment] = useState<{ status: string; asaas_charge_url: string | null; amount: number } | null>(null)
   const [buttons, setButtons] = useState<{ index: number; text: string; clicks: number }[]>([])
@@ -83,7 +86,7 @@ export default function CampaignDetail({ campaignId, onClose, onChanged }: { cam
 
   return (
     <Modal wide title={c.name} onClose={onClose}
-      footer={<>
+      footer={readOnly ? <Btn variant="ghost" onClick={() => run('refresh', async () => {})} loading={busy === 'refresh'}><RefreshCw size={14} /> Atualizar</Btn> : <>
         <Btn variant="ghost" onClick={() => run('refresh', async () => {})} loading={busy === 'refresh'}><RefreshCw size={14} /> Atualizar</Btn>
         {c.status === 'draft' && <Btn loading={busy === 'price'} onClick={() => run('price', () => broadcastAction('price', { campaign_id: c.id }))}><Calculator size={14} /> Calcular valor e liberar</Btn>}
         {canPay && (payLink
