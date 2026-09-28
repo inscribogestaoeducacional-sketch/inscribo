@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Send, Plus, History, AlertTriangle, X, Loader2, RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import SuperAdminLayout from './SuperAdminLayout'
 
 type Category = 'MARKETING' | 'UTILITY' | 'AUTHENTICATION'
 const CATEGORIES: { key: Category; label: string; hint: string }[] = [
@@ -37,7 +38,10 @@ const validMoney = (s: string) => /^\d+([.,]\d{1,4})?$/.test(String(s).trim())
 
 export default function AdminBroadcastPricing() {
   const [tab, setTab] = useState<'prices' | 'overview'>('prices')
+  // Toda tela do Super Admin se embrulha no próprio layout (o App.tsx só
+  // aponta a rota) — sem isto o menu lateral some ao abrir a tela.
   return (
+    <SuperAdminLayout>
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
@@ -60,6 +64,7 @@ export default function AdminBroadcastPricing() {
 
       {tab === 'prices' ? <PricesTab /> : <OverviewTab />}
     </div>
+    </SuperAdminLayout>
   )
 }
 
