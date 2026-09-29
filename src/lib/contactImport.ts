@@ -105,6 +105,29 @@ export function extraColumns(sheet: Sheet, mapping: (ContactField | null)[]): { 
   return sheet.headers.map((header, index) => ({ header, index })).filter(c => !mapping[c.index])
 }
 
+// Linhas pra audiência da campanha (Transmissões): telefone, nome e TODAS as
+// outras colunas como variáveis da mensagem — inclusive as reconhecidas como
+// campo (ex.: "Série"), pra dar pra usar {{2}} = turma da planilha. Chave da
+// variável = cabeçalho em minúsculas (mesma convenção do import antigo).
+export function toCampaignRows(sheet: Sheet, mapping: (ContactField | null)[]): {
+  rows: { phone: string; name?: string; variables: Record<string, string> }[]
+  columns: string[]
+} {
+  const phoneIdx = mapping.indexOf('phone')
+  const nameIdx = mapping.indexOf('name')
+  const varCols = sheet.headers
+    .map((h, i) => ({ key: h.toLowerCase().trim(), i }))
+    .filter(c => c.i !== phoneIdx && c.i !== nameIdx && c.key)
+  const rows = sheet.rows
+    .filter(cells => (cells[phoneIdx] || '').replace(/\D/g, ''))
+    .map(cells => {
+      const variables: Record<string, string> = {}
+      for (const c of varCols) if (cells[c.i]?.trim()) variables[c.key] = cells[c.i].trim()
+      return { phone: cells[phoneIdx], name: nameIdx >= 0 ? cells[nameIdx]?.trim() || undefined : undefined, variables }
+    })
+  return { rows, columns: varCols.map(c => c.key) }
+}
+
 export interface ImportOptions {
   columns: Partial<Record<UpdatableField, ColumnMode>>
   tags: TagsMode

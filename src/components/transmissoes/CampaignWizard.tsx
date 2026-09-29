@@ -8,8 +8,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Users, Upload, Bot, Tag, CheckCircle2, ExternalLink, AlertTriangle, CalendarClock, Send, Search, Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import {
-  broadcastAction, chargeCampaign, parseImportCsv, brl, EXCLUDED_REASON, CATEGORY_LABEL, type ImportRow,
+  broadcastAction, chargeCampaign, brl, EXCLUDED_REASON, CATEGORY_LABEL, type ImportRow,
 } from '../../lib/broadcasts'
+import { toCampaignRows, type Sheet, type ContactField, type ImportResult } from '../../lib/contactImport'
+import ContactImportDialog from '../contacts/ContactImportDialog'
 import { loadTemplates, type TemplateRow } from './TemplatesPanel'
 import { Badge, Btn, ErrorBox, Modal, hintStyle, inputStyle, labelStyle, toggleIn } from './ui'
 
@@ -71,6 +73,8 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
   const [importCols, setImportCols] = useState<string[]>([])
   const [importName, setImportName] = useState('')
   const [optIn, setOptIn] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+  const [importSaved, setImportSaved] = useState<ImportResult | null>(null)
   // Ajustes manuais: contatos adicionados (id) e desmarcados (phone_key).
   // Sobrevivem a mudança de filtro; manualSig guarda o filtro da última mexida.
   const [includeIds, setIncludeIds] = useState<string[]>([])
@@ -219,15 +223,17 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
     setPreviewing(false)
   }
 
-  function onFile(file: File | undefined) {
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      const parsed = parseImportCsv(String(reader.result || ''))
-      if (parsed.error) { setError({ message: parsed.error }); return }
-      setImportRows(parsed.rows); setImportCols(parsed.columns); setImportName(file.name); setError(null); setPreview(null)
-    }
-    reader.readAsText(file, 'utf-8')
+  // Lista importada pela tela compartilhada com Contatos (CSV ou Excel). Se
+  // "salvar na base" ficou marcado, os contatos já foram criados/atualizados
+  // lá; a lista entra na audiência como antes, com as demais colunas como
+  // variáveis da mensagem.
+  function onUseSheet(sheet: Sheet, mapping: (ContactField | null)[], saved: ImportResult | null) {
+    const { rows, columns } = toCampaignRows(sheet, mapping)
+    setImportRows(rows); setImportCols(columns); setImportName(sheet.fileName)
+    setImportSaved(saved); setShowImport(false); setError(null); setPreview(null)
+  }
+  function clearImport() {
+    setImportRows([]); setImportCols([]); setImportName(''); setImportSaved(null); setOptIn(false); setPreview(null)
   }
 
   function buildActions() {
@@ -323,7 +329,7 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
     )
   }
 
-  return (
+  return (<>
     <Modal wide title="Nova campanha" onClose={onClose}
       footer={<>
         {step > 0 && <Btn variant="ghost" onClick={() => setStep(s => s - 1)}>Voltar</Btn>}
@@ -397,14 +403,19 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
               </div>
             )}
             <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
-              <label style={labelStyle}>Ou importe uma lista (CSV)</label>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10, border: '1.5px dashed #CBD5E1', cursor: 'pointer', fontSize: 13, color: '#1e2d6b' }}>
-                <Upload size={14} /> {importName || 'Escolher arquivo'}
-                <input type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={e => onFile(e.target.files?.[0])} />
-              </label>
+              <label style={labelStyle}>Ou importe uma lista (planilha)</label>
+              <button type="button" onClick={() => setShowImport(true)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10, border: '1.5px dashed #CBD5E1', background: '#fff', cursor: 'pointer', fontSize: 13, color: '#1e2d6b' }}>
+                <Upload size={14} /> {importName ? `${importName} — trocar` : 'Escolher planilha (CSV ou Excel)'}
+              </button>
               <p style={hintStyle}>Colunas: telefone (obrigatória), nome e outras que quiser usar na mensagem (ex.: turma).</p>
               {importRows.length > 0 && <>
-                <p style={{ fontSize: 12, color: '#475569', margin: '6px 0' }}>{importRows.length} linha(s){importCols.length ? ` · colunas: ${importCols.join(', ')}` : ''} <button type="button" onClick={() => { setImportRows([]); setImportCols([]); setImportName(''); setOptIn(false); setPreview(null) }} style={{ background: 'none', border: 'none', color: '#DC2626', cursor: 'pointer', fontSize: 12 }}>remover</button></p>
+                <p style={{ fontSize: 12, color: '#475569', margin: '6px 0' }}>{importRows.length} linha(s){importCols.length ? ` · colunas: ${importCols.join(', ')}` : ''} <button type="button" onClick={clearImport} style={{ background: 'none', border: 'none', color: '#DC2626', cursor: 'pointer', fontSize: 12 }}>remover</button></p>
+                {importSaved && (
+                  <p style={{ fontSize: 12, color: '#047857', margin: '0 0 6px' }}>
+                    Salvos na base de contatos: {importSaved.created || 0} novo(s), {importSaved.updated_contacts || 0} atualizado(s).
+                  </p>
+                )}
                 <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: '#1e293b', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: 10 }}>
                   <input type="checkbox" checked={optIn} onChange={e => setOptIn(e.target.checked)} style={{ marginTop: 2 }} />
                   Confirmo que as pessoas desta lista autorizaram receber mensagens da escola pelo WhatsApp (exigência da Meta pra campanhas).
@@ -537,7 +548,11 @@ export default function CampaignWizard({ institutionId, onClose, onCreated }: {
         </>}
       </div>
     </Modal>
-  )
+    {showImport && (
+      <ContactImportDialog institutionId={institutionId} source="broadcast"
+        onClose={() => setShowImport(false)} onUse={onUseSheet} />
+    )}
+  </>)
 }
 
 function AudienceSummary({ preview }: { preview: any }) {

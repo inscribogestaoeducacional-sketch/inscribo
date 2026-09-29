@@ -22,12 +22,20 @@ const DEFAULT_MODES: Record<UpdatableField, ColumnMode> = {
 
 const n = (v: number | undefined) => (v || 0).toLocaleString('pt-BR')
 
-export default function ContactImportDialog({ institutionId, source = 'contacts', onClose, onImported }: {
+// Modo campanha (onUse presente): a planilha volta pro assistente pra montar a
+// audiência e as variáveis; "salvar na base" (marcado por padrão) faz o
+// mesmo upsert do módulo de Contatos antes de voltar. Desmarcado, a lista só
+// vale pra campanha e nada é gravado em contatos.
+export default function ContactImportDialog({ institutionId, source = 'contacts', onClose, onImported, onUse }: {
   institutionId: string
   source?: 'contacts' | 'broadcast'
   onClose: () => void
   onImported?: (result: ImportResult) => void
+  onUse?: (sheet: Sheet, mapping: (ContactField | null)[], result: ImportResult | null) => void
 }) {
+  const campaign = !!onUse
+  const [saveToBase, setSaveToBase] = useState(true)
+  const usesBase = !campaign || saveToBase
   const [sheet, setSheet] = useState<Sheet | null>(null)
   const [mapping, setMapping] = useState<(ContactField | null)[]>([])
   const [modes, setModes] = useState<Record<UpdatableField, ColumnMode>>(DEFAULT_MODES)
@@ -47,7 +55,7 @@ export default function ContactImportDialog({ institutionId, source = 'contacts'
   // Prévia ao vivo quando a planilha ou as colunas mudam (o impacto de cada
   // modo vem pronto da função, então trocar a opção não precisa recalcular).
   useEffect(() => {
-    if (!rows.length) { setPreview(null); return }
+    if (!rows.length || !usesBase) { req.current++; setPreview(null); setBusy(b => (b === 'preview' ? null : b)); return }
     const id = ++req.current
     setBusy('preview'); setError(null)
     const t = setTimeout(async () => {
@@ -58,7 +66,7 @@ export default function ContactImportDialog({ institutionId, source = 'contacts'
       if (id === req.current) setBusy(null)
     }, 300)
     return () => clearTimeout(t)
-  }, [rows, institutionId, source])
+  }, [rows, institutionId, source, usesBase])
 
   async function onFile(file: File | undefined) {
     if (!file) return
@@ -104,7 +112,7 @@ export default function ContactImportDialog({ institutionId, source = 'contacts'
       onClick={e => { if (e.target === e.currentTarget && busy !== 'apply') onClose() }}>
       <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 760, maxHeight: '92vh', overflowY: 'auto', padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.navy }}>Importar contatos</h2>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.navy }}>{campaign ? 'Importar lista da campanha' : 'Importar contatos'}</h2>
           <button onClick={onClose} disabled={busy === 'apply'} aria-label="Fechar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.light }}><X size={20} /></button>
         </div>
 
@@ -124,7 +132,10 @@ export default function ContactImportDialog({ institutionId, source = 'contacts'
               {(result.tags_created || 0) > 0 && ` · ${n(result.tags_created)} etiqueta(s) nova(s)`}
             </p>
             {result.invalid > 0 && <p style={{ margin: '6px 0 0', fontSize: 12, color: C.muted }}>{n(result.invalid)} linha(s) com telefone inválido ficaram de fora.</p>}
-            <button onClick={onClose} style={{ marginTop: 16, padding: '9px 24px', background: '#065F46', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Fechar</button>
+            <button onClick={() => (campaign && sheet ? onUse!(sheet, mapping, result) : onClose())}
+              style={{ marginTop: 16, padding: '9px 24px', background: '#065F46', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              {campaign ? 'Continuar na campanha' : 'Fechar'}
+            </button>
           </div>
 
         /* ── 3. Confirmação ── */
@@ -169,9 +180,20 @@ export default function ContactImportDialog({ institutionId, source = 'contacts'
                 <FileText size={15} color="#3B82F6" /> Baixar modelo
               </button>
             </div>
-            <p style={{ margin: '-8px 0 0', fontSize: 12, color: C.light }}>
-              Se o telefone já existir na base (com ou sem o 9, com ou sem 55), o contato é atualizado; se não existir, é criado. Célula vazia nunca apaga o que já está no contato.
-            </p>
+            {campaign && (
+              <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: C.navy, background: C.soft, border: `1px solid ${C.line}`, borderRadius: 10, padding: '10px 12px', cursor: 'pointer' }}>
+                <input type="checkbox" checked={saveToBase} onChange={e => { setSaveToBase(e.target.checked); setConfirm(null) }} style={{ marginTop: 2 }} />
+                <span>
+                  <strong>Também salvar/atualizar esses contatos na base da escola</strong>
+                  <span style={{ display: 'block', fontSize: 12, color: C.muted }}>Desmarcado, a lista vale só para esta campanha.</span>
+                </span>
+              </label>
+            )}
+            {usesBase && (
+              <p style={{ margin: campaign ? 0 : '-8px 0 0', fontSize: 12, color: C.light }}>
+                Se o telefone já existir na base (com ou sem o 9, com ou sem 55), o contato é atualizado; se não existir, é criado. Célula vazia nunca apaga o que já está no contato.
+              </p>
+            )}
 
             {sheet && (
               <div>
@@ -190,11 +212,22 @@ export default function ContactImportDialog({ institutionId, source = 'contacts'
                   ))}
                 </div>
                 {phoneCols !== 1 && <p style={{ margin: '6px 0 0', fontSize: 12, color: '#DC2626' }}>Escolha qual coluna é o telefone.</p>}
-                {phoneCols === 1 && mapping.some(f => !f) && <p style={{ margin: '6px 0 0', fontSize: 12, color: C.light }}>Colunas em "Ignorar" não são gravadas no contato.</p>}
+                {phoneCols === 1 && mapping.some(f => !f) && (
+                  <p style={{ margin: '6px 0 0', fontSize: 12, color: C.light }}>
+                    Colunas em "Ignorar" não são gravadas no contato{campaign ? ' — mas continuam disponíveis como variáveis da mensagem.' : '.'}
+                  </p>
+                )}
               </div>
             )}
 
-            {sheet && phoneCols === 1 && (busy === 'preview' && !preview
+            {/* Campanha sem salvar na base: só devolve a lista, sem prévia no banco. */}
+            {campaign && !saveToBase && sheet && phoneCols === 1 && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button onClick={() => onUse!(sheet, mapping, null)} style={btn('primary')}>Usar na campanha</button>
+              </div>
+            )}
+
+            {usesBase && sheet && phoneCols === 1 && (busy === 'preview' && !preview
               ? <div style={{ height: 90, borderRadius: 10, background: C.soft }} className="animate-pulse" />
               : preview && (
                 <>
@@ -248,7 +281,7 @@ export default function ContactImportDialog({ institutionId, source = 'contacts'
 
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <button onClick={review} disabled={busy !== null || (preview.new_contacts === 0 && preview.existing_contacts === 0)} style={btn('primary')}>
-                      {busy === 'confirm' ? <><Loader2 size={14} className="animate-spin" /> Calculando…</> : 'Revisar e importar'}
+                      {busy === 'confirm' ? <><Loader2 size={14} className="animate-spin" /> Calculando…</> : campaign ? 'Revisar e salvar na base' : 'Revisar e importar'}
                     </button>
                   </div>
                 </>

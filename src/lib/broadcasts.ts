@@ -162,44 +162,8 @@ export async function submitSchoolTemplate(templateDefinitionId: string): Promis
   return body
 }
 
-// ── Lista importada (CSV) ───────────────────────────────────────────────────
-// Primeira linha = cabeçalho. Coluna de telefone reconhecida por nome
-// (telefone/celular/whatsapp/phone/fone); "nome"/"name" vira o nome; as
-// demais viram variáveis ({ turma: "3º A" }) usáveis no template.
+// ── Lista importada ─────────────────────────────────────────────────────────
+// Montada pela tela compartilhada com Contatos (lib/contactImport.ts →
+// toCampaignRows): telefone, nome e as demais colunas como variáveis
+// ({ turma: "3º A" }) usáveis no template.
 export interface ImportRow { phone: string; name?: string; variables: Record<string, string> }
-
-function splitCsvLine(line: string, sep: string): string[] {
-  const out: string[] = []
-  let cur = '', quoted = false
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]
-    if (ch === '"') {
-      if (quoted && line[i + 1] === '"') { cur += '"'; i++ } else quoted = !quoted
-    } else if (ch === sep && !quoted) { out.push(cur); cur = '' }
-    else cur += ch
-  }
-  out.push(cur)
-  return out.map(s => s.trim())
-}
-
-export function parseImportCsv(text: string): { rows: ImportRow[]; columns: string[]; error?: string } {
-  const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim())
-  if (lines.length < 2) return { rows: [], columns: [], error: 'O arquivo precisa ter um cabeçalho e pelo menos uma linha' }
-  const sep = (lines[0].match(/;/g)?.length || 0) > (lines[0].match(/,/g)?.length || 0) ? ';' : ','
-  const header = splitCsvLine(lines[0], sep).map(h => h.toLowerCase())
-  const phoneIdx = header.findIndex(h => /^(telefone|celular|whatsapp|phone|fone|numero|número)/.test(h))
-  if (phoneIdx < 0) return { rows: [], columns: [], error: 'Não achei a coluna de telefone (use "telefone", "celular" ou "whatsapp" no cabeçalho)' }
-  const nameIdx = header.findIndex(h => /^(nome|name|responsavel|responsável)/.test(h))
-  const varCols = header.map((h, i) => ({ h, i })).filter(c => c.i !== phoneIdx && c.i !== nameIdx && c.h)
-
-  const rows: ImportRow[] = []
-  for (const line of lines.slice(1)) {
-    const cells = splitCsvLine(line, sep)
-    const phone = cells[phoneIdx] || ''
-    if (!phone.replace(/\D/g, '')) continue
-    const variables: Record<string, string> = {}
-    for (const c of varCols) if (cells[c.i]) variables[c.h] = cells[c.i]
-    rows.push({ phone, name: nameIdx >= 0 ? cells[nameIdx] || undefined : undefined, variables })
-  }
-  return { rows, columns: varCols.map(c => c.h) }
-}
