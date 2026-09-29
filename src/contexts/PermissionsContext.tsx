@@ -27,7 +27,9 @@ const isPrivilegedRole = (role: string) => role === 'admin' || role === 'manager
 // de admin/gestor; o admin libera por atendente em Usuários → Permissões.
 // transmissoes: mesmo critério — e o servidor confere a mesma regra em
 // broadcast_user_can_manage() (20260926020000) antes de qualquer escrita.
-export const DEFAULT_OFF_MODULES = ['captacao', 'transmissoes']
+// vitrine: idem — o banco confere em vitrine_user_can_manage()
+// (20260929060000) na RLS de vitrine_pages/vitrine_blocks.
+export const DEFAULT_OFF_MODULES = ['captacao', 'transmissoes', 'vitrine']
 
 export function PermissionsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()

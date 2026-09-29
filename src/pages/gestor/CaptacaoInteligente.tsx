@@ -15,8 +15,9 @@ import React, { useState, useEffect, useMemo } from 'react'
 import {
   Megaphone, Plus, Copy, ExternalLink, X, Check, MoreHorizontal, Pencil, Trash2,
   Pause, Play, Bot, Users, AlertTriangle, MessageCircle, UserPlus, GraduationCap,
-  Clock, TrendingUp, Zap, Loader2,
+  Clock, TrendingUp, Zap, Loader2, Store,
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList,
 } from 'recharts'
@@ -213,6 +214,10 @@ export default function CaptacaoInteligente() {
   }
 
   function closeForm() { setShowModal(false); setEditing(null) }
+
+  // Gatilho criado por um bloco da Vitrine: nome/texto/canal/exclusão só pela
+  // Vitrine (o banco recusa — capture_triggers_managed_guard).
+  const managedByVitrine = editing?.managed_by === 'vitrine'
 
   const toggleIn = (list: string[], id: string) => list.includes(id) ? list.filter(x => x !== id) : [...list, id]
 
@@ -491,7 +496,10 @@ export default function CaptacaoInteligente() {
                             items={[
                               { icon: <Pencil size={13} />, label: 'Editar', onClick: () => { setOpenDropdown(null); openEdit(t) } },
                               { icon: t.is_active ? <Pause size={13} /> : <Play size={13} />, label: t.is_active ? 'Pausar' : 'Ativar', onClick: () => { setOpenDropdown(null); handleToggleActive(t) } },
-                              { icon: <Trash2 size={13} />, label: 'Excluir', danger: true, onClick: () => { setOpenDropdown(null); setArchiveTarget(t) } },
+                              // Gatilho da Vitrine: some junto com o bloco (o banco recusa excluir por aqui).
+                              ...(t.managed_by === 'vitrine' ? [] : [
+                                { icon: <Trash2 size={13} />, label: 'Excluir', danger: true, onClick: () => { setOpenDropdown(null); setArchiveTarget(t) } },
+                              ]),
                             ]}
                           />
                         </td>
@@ -617,13 +625,23 @@ export default function CaptacaoInteligente() {
       {showModal && (
         <Modal onClose={closeForm} title={editing ? 'Editar gatilho' : 'Novo gatilho de captação'} wide>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {managedByVitrine && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', background: '#F0FDFA', border: '1px solid #CCFBF1', borderRadius: 10, fontSize: 12, color: '#0F766E', lineHeight: 1.5 }}>
+                <Store size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+                <span>
+                  Este gatilho é de um botão da <Link to="/vitrine" style={{ color: '#0F766E', fontWeight: 700 }}>Vitrine</Link>: nome e texto
+                  acompanham o bloco e só mudam por lá. Aqui dá pra ajustar resposta automática, robô e distribuição.
+                </span>
+              </div>
+            )}
             <div>
               <label style={labelStyle}>Nome da campanha <span style={{ color: '#F43F5E' }}>*</span></label>
-              <input style={inputStyle} placeholder="ex: Matrículas 2027 — Infantil (Instagram)" value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} autoFocus />
+              <input style={{ ...inputStyle, ...(managedByVitrine ? { color: '#64748b', cursor: 'not-allowed' } : {}) }}
+                placeholder="ex: Matrículas 2027 — Infantil (Instagram)" value={form.name} disabled={managedByVitrine}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} autoFocus={!managedByVitrine} />
             </div>
 
-            <div>
+            {!managedByVitrine && <div>
               <label style={labelStyle}>Canal</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {(Object.keys(CAPTURE_CHANNELS) as CaptureChannel[]).filter(c => c !== 'vitrine').map(c => {
@@ -637,12 +655,12 @@ export default function CaptacaoInteligente() {
                   )
                 })}
               </div>
-            </div>
+            </div>}
 
             <div>
               <label style={labelStyle}>Texto da mensagem pré-preenchida <span style={{ color: '#F43F5E' }}>*</span></label>
-              <textarea style={{ ...inputStyle, resize: 'vertical' }} rows={2}
-                placeholder="ex: Olá! Vi o anúncio e quero saber sobre matrícula no Infantil"
+              <textarea style={{ ...inputStyle, resize: 'vertical', ...(managedByVitrine ? { color: '#64748b', cursor: 'not-allowed' } : {}) }} rows={2}
+                placeholder="ex: Olá! Vi o anúncio e quero saber sobre matrícula no Infantil" disabled={managedByVitrine}
                 value={form.triggerText} onChange={e => setForm(f => ({ ...f, triggerText: e.target.value }))} />
               <p style={hintStyle}>
                 A conversa é identificada quando a mensagem do lead <strong>contém</strong> este texto (sem diferenciar maiúsculas nem acentos).

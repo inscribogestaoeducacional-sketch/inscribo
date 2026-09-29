@@ -150,7 +150,7 @@ function paragraphs(text: string): string {
     .map(p => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('')
 }
 
-function renderBlock(b: VitrineBlock): string {
+function renderBlock(b: VitrineBlock, preview = false): string {
   const c = b.config || {}
   switch (b.type) {
     case 'link': {
@@ -185,6 +185,16 @@ function renderBlock(b: VitrineBlock): string {
       if (c.provider === 'youtube' && /^[A-Za-z0-9_-]{11}$/.test(id)) src = `https://www.youtube-nocookie.com/embed/${id}`
       if (c.provider === 'vimeo' && /^[0-9]{6,12}$/.test(id)) src = `https://player.vimeo.com/video/${id}`
       if (!src) return ''
+      // Prévia do editor (iframe em sandbox, sem o player funcionando):
+      // miniatura do YouTube / quadro neutro do Vimeo com ícone de play.
+      if (preview) {
+        const thumb = c.provider === 'youtube'
+          ? `<img src="https://i.ytimg.com/vi/${id}/hqdefault.jpg" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">` : ''
+        return `<section class="video">${c.title ? `<h2>${esc(c.title)}</h2>` : ''}<div class="frame">${thumb}`
+          + `<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">`
+          + `<span style="width:64px;height:44px;border-radius:12px;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center">`
+          + `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="#fff" d="M8 5v14l11-7z"/></svg></span></span></div></section>`
+      }
       return `<section class="video">${c.title ? `<h2>${esc(c.title)}</h2>` : ''}`
         + `<div class="frame"><iframe src="${src}" title="${esc(c.title || 'Vídeo')}" loading="lazy" `
         + `allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></section>`
@@ -324,7 +334,7 @@ export function renderVitrinePage(data: VitrinePublicData, opts: RenderOptions):
   const cover = isHttpUrl(p.cover_url) ? p.cover_url : null
   const logo = isHttpUrl(p.logo_url) ? p.logo_url : null
   const ogImage = cover || logo
-  const blocks = (data.blocks || []).map(renderBlock).filter(Boolean).join('\n')
+  const blocks = (data.blocks || []).map(b => renderBlock(b, !!opts.preview)).filter(Boolean).join('\n')
   const script = !opts.preview && opts.supabaseUrl && opts.anonKey
     ? `<script>${trackingScript(p.id, opts.supabaseUrl, opts.anonKey)}</script>` : ''
   // Preview (iframe no editor): link abre em nova aba igual à página real;
