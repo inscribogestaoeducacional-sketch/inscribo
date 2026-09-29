@@ -40,6 +40,7 @@ export interface RenderOptions {
   supabaseUrl?: string     // registro de eventos (omitido no preview)
   anonKey?: string
   preview?: boolean        // editor: sem script de registro, links sem sair do iframe
+  animatePreview?: boolean // editor: botão "Ver animação" (na prévia a entrada fica desligada)
 }
 
 // ── Utilidades ──────────────────────────────────────────────────────────────
@@ -96,35 +97,97 @@ export function waMeLink(phone: string, text: string): string | null {
   return `https://wa.me/${digits}?text=${encoded}`
 }
 
-const FONTS: Record<string, string> = {
-  'Inter':            'Inter:wght@400;500;600;700',
-  'Poppins':          'Poppins:wght@400;500;600;700',
-  'Montserrat':       'Montserrat:wght@400;500;600;700',
-  'Nunito':           'Nunito:wght@400;600;700;800',
-  'Lora':             'Lora:wght@400;500;600;700',
-  'Playfair Display': 'Playfair+Display:wght@400;600;700',
+// ── Tema ────────────────────────────────────────────────────────────────────
+// Pares prontos de fonte (título + texto) — theme.font_pair (Fase 5). Só
+// Google Fonts e só os pesos usados: no máximo 2 famílias por página.
+// Chaves validadas no banco (20260929090000_vitrine_theme_v2.sql).
+export const FONT_PAIRS: Record<string, { label: string; heading: string; body: string }> = {
+  'inter':                 { label: 'Moderna',       heading: 'Inter',             body: 'Inter' },
+  'jakarta':               { label: 'Contemporânea', heading: 'Plus Jakarta Sans', body: 'Plus Jakarta Sans' },
+  'poppins':               { label: 'Amigável',      heading: 'Poppins',           body: 'Poppins' },
+  'playfair-inter':        { label: 'Elegante',      heading: 'Playfair Display',  body: 'Inter' },
+  'merriweather-dmsans':   { label: 'Tradicional',   heading: 'Merriweather',      body: 'DM Sans' },
+  'fredoka-nunito':        { label: 'Divertida',     heading: 'Fredoka',           body: 'Nunito' },
+  'montserrat-sourcesans': { label: 'Institucional', heading: 'Montserrat',        body: 'Source Sans 3' },
+  'dmserif-dmsans':        { label: 'Sofisticada',   heading: 'DM Serif Display',  body: 'DM Sans' },
 }
+// Fonte única das páginas criadas antes dos pares (theme.font).
+const LEGACY_FONTS = ['Inter', 'Poppins', 'Montserrat', 'Nunito', 'Lora', 'Playfair Display']
+// Peso do título por família (as que não têm 600/700 usam o que existe).
+const HEADING_WEIGHT: Record<string, number> = { 'Merriweather': 700, 'DM Serif Display': 400 }
+
+export function fontsHref(heading: string, body: string): string {
+  const hw = HEADING_WEIGHT[heading] ?? 700
+  const weights = new Map<string, Set<number>>()
+  const add = (fam: string, ws: number[]) => { const s = weights.get(fam) || new Set<number>(); ws.forEach(w => s.add(w)); weights.set(fam, s) }
+  add(heading, [hw])   // título só usa um peso (h1/h2)
+  add(body, body === 'Merriweather' ? [400, 700] : [400, 500, 600])
+  const fams = [...weights].map(([fam, ws]) => `family=${fam.replace(/ /g, '+')}:wght@${[...ws].sort((x, y) => x - y).join(';')}`)
+  return `https://fonts.googleapis.com/css2?${fams.join('&')}&display=swap`
+}
+
+type ButtonStyle = 'filled' | 'outline' | 'soft' | 'glass' | 'shadow' | 'minimal'
 
 interface Theme {
   primary: string; background: string; text: string
-  buttonStyle: 'filled' | 'outline' | 'soft'; radius: number; font: string
+  buttonStyle: ButtonStyle; radius: number
+  heading: string; body: string; headingWeight: number
+  bgType: 'solid' | 'gradient' | 'image'; bgTo: string; bgAngle: number
+  bgImage: string | null; bgOverlay: number; bgOverlayTone: 'dark' | 'light'
+  shadow: 'none' | 'soft' | 'strong'; spacing: 'compact' | 'normal' | 'relaxed'
+  cardStyle: 'flat' | 'bordered' | 'elevated'; logoShape: 'circle' | 'rounded'
+  animation: 'none' | 'subtle' | 'lively'
 }
 
+// Página sem as chaves novas (criada antes da Fase 5) sai igual a antes:
+// fundo sólido, cartão com borda, logo redonda, sem sombra nem animação.
 function readTheme(t: Record<string, unknown> | null): Theme {
   const th = t || {}
   const pick = (k: string, def: string) => (typeof th[k] === 'string' && HEX.test(th[k] as string) ? th[k] as string : def)
-  const bs = th.button_style
+  const oneOf = <T extends string>(k: string, list: readonly T[], def: T): T => (list.includes(th[k] as T) ? th[k] as T : def)
   const radius = Number(th.radius)
-  const font = typeof th.font === 'string' && FONTS[th.font] ? th.font : 'Inter'
+  const pair = typeof th.font_pair === 'string' ? FONT_PAIRS[th.font_pair] : undefined
+  const legacy = typeof th.font === 'string' && LEGACY_FONTS.includes(th.font) ? th.font : 'Inter'
+  const heading = pair ? pair.heading : legacy
+  const body = pair ? pair.body : legacy
+  const angle = Number(th.bg_gradient_angle)
+  const overlay = Number(th.bg_overlay)
+  const background = pick('background', '#FFFFFF')
+  const bgType = oneOf('bg_type', ['solid', 'gradient', 'image'] as const, 'solid')
+  const bgImage = isHttpUrl(th.bg_image_url) ? th.bg_image_url : null
   return {
-    primary:     pick('primary', '#00A896'),
-    background:  pick('background', '#FFFFFF'),
-    text:        pick('text', '#111827'),
-    buttonStyle: bs === 'outline' || bs === 'soft' ? bs : 'filled',
-    radius:      [0, 8, 16, 999].includes(radius) ? radius : 16,
-    font,
+    primary:       pick('primary', '#00A896'),
+    background,
+    text:          pick('text', '#111827'),
+    buttonStyle:   oneOf('button_style', ['filled', 'outline', 'soft', 'glass', 'shadow', 'minimal'] as const, 'filled'),
+    radius:        [0, 8, 16, 999].includes(radius) ? radius : 16,
+    heading, body,
+    headingWeight: HEADING_WEIGHT[heading] ?? 700,
+    // Imagem sem URL cai pro sólido (nunca página sem fundo).
+    bgType:        bgType === 'image' && !bgImage ? 'solid' : bgType,
+    bgTo:          pick('bg_gradient_to', background),
+    bgAngle:       [0, 45, 90, 135, 180].includes(angle) ? angle : 180,
+    bgImage,
+    bgOverlay:     overlay >= 0 && overlay <= 80 && overlay % 10 === 0 ? overlay : 40,
+    bgOverlayTone: oneOf('bg_overlay_tone', ['dark', 'light'] as const, 'dark'),
+    shadow:        oneOf('shadow', ['none', 'soft', 'strong'] as const, 'none'),
+    spacing:       oneOf('spacing', ['compact', 'normal', 'relaxed'] as const, 'normal'),
+    cardStyle:     oneOf('card_style', ['flat', 'bordered', 'elevated'] as const, 'bordered'),
+    logoShape:     oneOf('logo_shape', ['circle', 'rounded'] as const, 'circle'),
+    animation:     oneOf('animation', ['none', 'subtle', 'lively'] as const, 'none'),
   }
 }
+
+// rgba() a partir de #RRGGBB.
+function alpha(hex: string, a: number): string {
+  const [r, g, b] = hexToRgb(hex)
+  return `rgba(${r},${g},${b},${a})`
+}
+
+// URL dentro de url('...') no CSS: já é https validada (e o banco recusa
+// esses caracteres); aspas, parênteses, barra invertida, espaço, ; { } < >
+// viram %XX — nada da URL consegue fechar a string, o url() ou a regra.
+const cssUrl = (u: string) => u.replace(/['"()\\\s;{}<>]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))
 
 // ── Ícones (SVG inline, sem requisição extra) ───────────────────────────────
 
@@ -237,44 +300,97 @@ function renderBlock(b: VitrineBlock, preview = false): string {
 
 // ── Página ──────────────────────────────────────────────────────────────────
 
+const SHADOWS = { none: 'none', soft: '0 2px 10px rgba(0,0,0,.08)', strong: '0 10px 28px rgba(0,0,0,.18)' }
+const GAPS = { compact: 8, normal: 12, relaxed: 18 }
+
 function css(t: Theme): string {
+  const solid = t.bgType === 'solid'
+  const darkText = luminance(t.text) < 0.4
   const onPrimary = onColor(t.primary)
-  const soft = mix(t.primary, t.background, 0.14)
-  const card = mix(t.text, t.background, 0.04)
-  const border = mix(t.text, t.background, 0.12)
-  const muted = mix(t.text, t.background, 0.68)
+  // Cores derivadas: sobre fundo sólido, misturas opacas (como antes); sobre
+  // gradiente/imagem, transparências que funcionam em qualquer ponto do fundo.
+  const surface = solid ? mix(t.text, t.background, 0.04) : (darkText ? 'rgba(255,255,255,.86)' : 'rgba(15,23,42,.55)')
+  const raised = solid ? (darkText ? '#FFFFFF' : mix(t.text, t.background, 0.08)) : surface
+  const border = solid ? mix(t.text, t.background, 0.12) : alpha(t.text, 0.18)
+  const muted = solid ? mix(t.text, t.background, 0.68) : alpha(t.text, 0.8)
+  const soft = solid ? mix(t.primary, t.background, 0.14) : alpha(t.primary, 0.18)
+  // Placa da logo: logo de escola quase sempre é feita pra fundo claro — em
+  // tema escuro (texto claro) a placa é branca, senão a logo some no fundo.
+  // Tema claro sólido mantém a placa na cor do fundo (igual a antes).
+  const logoPlate = !darkText ? '#FFFFFF' : solid ? t.background : raised
+  const logoRing = !darkText ? 'rgba(255,255,255,.25)' : solid ? t.background : 'rgba(255,255,255,.6)'
   const r = t.radius === 999 ? '999px' : `${t.radius}px`
   const rCard = t.radius === 999 ? '24px' : `${Math.max(t.radius, 8)}px`
-  const btn = t.buttonStyle === 'outline'
-    ? `background:transparent;color:${t.text};border:2px solid ${t.primary};`
-    : t.buttonStyle === 'soft'
-      ? `background:${soft};color:${t.text};border:2px solid transparent;`
-      : `background:${t.primary};color:${onPrimary};border:2px solid ${t.primary};`
+  const sh = SHADOWS[t.shadow]
+  const gap = GAPS[t.spacing]
+  const lively = t.animation === 'lively'
+
+  const btn: Record<ButtonStyle, string> = {
+    filled:  `background:${t.primary};color:${onPrimary};border:2px solid ${t.primary};box-shadow:${sh};`,
+    outline: `background:transparent;color:${t.text};border:2px solid ${t.primary};box-shadow:${sh};`,
+    soft:    `background:${soft};color:${t.text};border:2px solid transparent;box-shadow:${sh};`,
+    glass:   `background:${darkText ? 'rgba(255,255,255,.55)' : 'rgba(255,255,255,.14)'};color:${t.text};`
+           + `border:1px solid ${darkText ? 'rgba(255,255,255,.75)' : 'rgba(255,255,255,.3)'};`
+           + `-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:${sh};`,
+    shadow:  `background:${t.primary};color:${onPrimary};border:2px solid ${t.text};box-shadow:4px 4px 0 ${t.text};`,
+    minimal: `background:transparent;color:${t.text};border:0;border-bottom:1px solid ${border};border-radius:0;min-height:52px;padding:10px 4px;`,
+  }
+  // Hover: sem animação só muda a sombra; sutil sobe 1px; chamativa sobe 3px.
+  const lift = t.animation === 'none' ? 0 : lively ? 3 : 1
+  const hover = t.buttonStyle === 'shadow'
+    ? `transform:translate(-2px,-2px);box-shadow:6px 6px 0 ${t.text}`
+    : t.buttonStyle === 'minimal'
+      ? `border-bottom-color:${t.primary}`
+      : `transform:translateY(-${lift}px);box-shadow:${lively ? '0 12px 28px rgba(0,0,0,.18)' : '0 4px 14px rgba(0,0,0,.10)'}`
+
+  const card = t.cardStyle === 'flat'
+    ? `background:${surface};border:1px solid transparent;`
+    : t.cardStyle === 'elevated'
+      ? `background:${raised};border:1px solid transparent;box-shadow:${t.shadow === 'none' ? SHADOWS.soft : sh};`
+      : `background:${surface};border:1px solid ${border};box-shadow:${sh};`
+
+  const bgLayer = t.bgType === 'gradient'
+    ? `linear-gradient(${t.bgAngle}deg,${t.background},${t.bgTo})`
+    : t.bgType === 'image' && t.bgImage
+      ? `linear-gradient(${t.bgOverlayTone === 'dark' ? `rgba(0,0,0,${t.bgOverlay / 100})` : `rgba(255,255,255,${t.bgOverlay / 100})`},`
+        + `${t.bgOverlayTone === 'dark' ? `rgba(0,0,0,${t.bgOverlay / 100})` : `rgba(255,255,255,${t.bgOverlay / 100})`}),`
+        + `url('${cssUrl(t.bgImage)}') center/cover no-repeat ${t.background}`
+      : ''
+
+  // Entrada dos blocos: só opacidade/transform (GPU), sem biblioteca.
+  const enter = lively
+    ? { from: 'translateY(18px) scale(.98)', dur: '.5s', ease: 'cubic-bezier(.2,.7,.2,1)' }
+    : { from: 'translateY(8px)', dur: '.35s', ease: 'ease-out' }
+
   return `
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:${t.background};color:${t.text};font-family:'${t.font}',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+body{margin:0;background:${t.background};color:${t.text};font-family:'${t.body}',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+${bgLayer ? `.bgl{position:fixed;inset:0;z-index:-1;background:${bgLayer}}` : ''}
+h1,h2{font-family:'${t.heading}','${t.body}',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
 .wrap{max-width:560px;margin:0 auto;padding:0 16px 40px}
 .cover{display:block;width:calc(100% + 32px);height:180px;margin:0 -16px;object-fit:cover;background:${soft}}
 @media(min-width:600px){.cover{width:100%;margin:16px 0 0;border-radius:${rCard}}}
 header{text-align:center;padding-top:24px}
 .has-cover header{padding-top:0}
-.logo{width:96px;height:96px;border-radius:50%;object-fit:contain;padding:8px;background:${t.background};border:4px solid ${t.background};box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.logo{width:96px;height:96px;border-radius:${t.logoShape === 'rounded' ? '24px' : '50%'};object-fit:contain;padding:8px;background:${logoPlate};border:4px solid ${logoRing};box-shadow:0 2px 12px rgba(0,0,0,.08)}
 .has-cover .logo{margin-top:-48px}
-h1{font-size:24px;line-height:1.25;margin:12px 0 4px;font-weight:700;text-wrap:balance}
+h1{font-size:${t.heading === 'DM Serif Display' || t.heading === 'Playfair Display' ? 28 : 24}px;line-height:1.25;margin:12px 0 4px;font-weight:${t.headingWeight};text-wrap:balance}
 .bio{margin:0 auto;max-width:44ch;color:${muted};font-size:15px}
-main{display:flex;flex-direction:column;gap:12px;margin-top:24px}
-.btn{display:flex;align-items:center;gap:12px;min-height:56px;padding:10px 14px;border-radius:${r};text-decoration:none;font-weight:600;font-size:16px;${btn}transition:transform .12s ease,box-shadow .12s ease}
-.btn:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.10)}
-.btn:active{transform:translateY(0)}
+main{display:flex;flex-direction:column;gap:${gap}px;margin-top:${gap * 2}px}
+.btn{display:flex;align-items:center;gap:12px;min-height:56px;padding:10px 14px;border-radius:${r};text-decoration:none;font-weight:600;font-size:16px;${btn[t.buttonStyle]}transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease}
+.btn:hover{${hover}}
+.btn:active{transform:${t.buttonStyle === 'shadow' ? `translate(2px,2px);box-shadow:2px 2px 0 ${t.text}` : 'translateY(0)'}}
 .btn:focus-visible,.link-inline:focus-visible{outline:3px solid ${t.primary};outline-offset:3px}
-.btn .lb{flex:1;text-align:center}
+.btn .lb{flex:1;text-align:${t.buttonStyle === 'minimal' ? 'left' : 'center'}}
 .btn .ic{width:28px;height:28px;flex:none;display:flex;align-items:center;justify-content:center}
 .btn .ic svg{width:22px;height:22px}
+${t.buttonStyle === 'minimal' ? `.btn:not(.cta) .ic:last-child::after{content:'→';font-size:18px;color:${t.primary}}` : ''}
 .btn .thumb{width:36px;height:36px;border-radius:${t.radius === 0 ? '0' : '8px'};object-fit:cover}
-.btn.cta{min-height:64px;font-size:17px;background:${t.primary};color:${onPrimary};border-color:${t.primary}}
-.card{background:${card};border:1px solid ${border};border-radius:${rCard};padding:16px 18px}
-.card h2,.video h2{font-size:16px;margin:0 0 8px;display:flex;align-items:center;gap:8px}
+.btn.cta{min-height:64px;font-size:17px;background:${t.primary};color:${onPrimary};border:2px solid ${t.buttonStyle === 'shadow' ? t.text : t.primary};border-radius:${t.buttonStyle === 'minimal' ? rCard : r};padding:10px 14px}
+${t.buttonStyle === 'minimal' ? '.btn.cta .lb{text-align:center}' : ''}
+.card{${card}border-radius:${rCard};padding:16px 18px}
+.card h2,.video h2{font-size:16px;margin:0 0 8px;display:flex;align-items:center;gap:8px;font-weight:${t.headingWeight === 400 ? 400 : 700}}
 .card h2 .ic{display:inline-flex;width:20px;height:20px;color:${t.primary}}
 .card h2 .ic svg{width:20px;height:20px}
 .card p{margin:0 0 8px}.card p:last-child{margin-bottom:0}
@@ -285,10 +401,10 @@ main{display:flex;flex-direction:column;gap:12px;margin-top:24px}
 .gallery.carousel::-webkit-scrollbar{display:none}
 .gallery.carousel figure{flex:0 0 82%;scroll-snap-align:center}
 .gallery figure{margin:0}
-.gallery img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:${rCard};background:${card}}
+.gallery img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:${rCard};background:${surface}}
 .gallery.carousel img{aspect-ratio:4/3}
 .gallery figcaption{font-size:13px;color:${muted};margin-top:4px;text-align:center}
-.frame{position:relative;width:100%;aspect-ratio:16/9;border-radius:${rCard};overflow:hidden;background:${card}}
+.frame{position:relative;width:100%;aspect-ratio:16/9;border-radius:${rCard};overflow:hidden;background:${surface}}
 .frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .map-frame{aspect-ratio:4/3;margin:8px 0 10px}
 .link-inline{color:${t.text};font-weight:600;text-decoration:underline;text-decoration-color:${t.primary};text-underline-offset:3px}
@@ -302,8 +418,29 @@ main{display:flex;flex-direction:column;gap:12px;margin-top:24px}
 .now.open{background:#DCFCE7;color:#166534}.now.closed{background:#FEE2E2;color:#991B1B}
 footer{margin-top:32px;text-align:center;font-size:12px;color:${muted}}
 footer a{color:inherit;text-decoration:none;font-weight:600}
-@media(prefers-reduced-motion:reduce){.btn{transition:none}.btn:hover{transform:none}}
+${t.animation !== 'none' ? `
+html.anim header,html.anim main>*{opacity:0;transform:${enter.from};animation:rvsafe 0s 6s forwards}
+html.anim header.in,html.anim main>.in{opacity:1;transform:none;animation:none;transition:opacity ${enter.dur} ${enter.ease} var(--d,0ms),transform ${enter.dur} ${enter.ease} var(--d,0ms)}
+@keyframes rvsafe{to{opacity:1;transform:none}}
+${lively ? `html.anim main>.btn.cta.in{animation:cta 2.4s ease-out .8s 3}
+@keyframes cta{0%{box-shadow:0 0 0 0 ${alpha(t.primary, 0.45)}}100%{box-shadow:0 0 0 16px ${alpha(t.primary, 0)}}}` : ''}` : ''}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}.btn:hover{transform:none}html.anim header,html.anim main>*{opacity:1;transform:none}}
 `
+}
+
+// Liga a animação antes da primeira pintura (no <head>), só se a pessoa não
+// pediu menos movimento no aparelho. Sem JS, nada fica escondido.
+const ANIM_HEAD = `<script>try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.classList.add('anim')}catch(e){}</script>`
+
+// Revela cabeçalho e blocos quando entram na tela, em cascata. Trava de
+// segurança no CSS (rvsafe): se este script falhar, tudo aparece em 6 s.
+function animScript(stagger: number): string {
+  return `(function(){var h=document.documentElement;if(!h.classList.contains('anim'))return;
+var els=[].slice.call(document.querySelectorAll('header,main>*'));
+function show(e,k){e.style.setProperty('--d',(k*${stagger})+'ms');e.classList.add('in')}
+if(!('IntersectionObserver' in window)){els.forEach(function(e,k){show(e,k)});return}
+var io=new IntersectionObserver(function(es){var k=0;es.forEach(function(x){if(x.isIntersecting){show(x.target,k++);io.unobserve(x.target)}})},{rootMargin:'0px 0px -6% 0px'});
+els.forEach(function(e){io.observe(e)})})();`
 }
 
 // Registro de visualização/clique + "aberto agora" do horário. Roda no
@@ -341,9 +478,13 @@ export function renderVitrinePage(data: VitrinePublicData, opts: RenderOptions):
   const blocks = (data.blocks || []).map(b => renderBlock(b, !!opts.preview)).filter(Boolean).join('\n')
   const script = !opts.preview && opts.supabaseUrl && opts.anonKey
     ? `<script>${trackingScript(p.id, opts.supabaseUrl, opts.anonKey)}</script>` : ''
+  // Animação: página pública sempre; prévia do editor só quando pedida
+  // ("Ver animação") — senão repetiria a cada tecla digitada.
+  const animate = t.animation !== 'none' && (!opts.preview || !!opts.animatePreview)
   // Preview (iframe no editor): link abre em nova aba igual à página real;
   // <base target> garante isso também pro "Como chegar".
   const base = opts.preview ? '<base target="_blank">' : ''
+  const themeColor = t.bgType === 'image' && t.bgOverlayTone === 'dark' ? '#000000' : t.background
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -353,7 +494,7 @@ export function renderVitrinePage(data: VitrinePublicData, opts: RenderOptions):
 <title>${esc(name)}</title>
 <meta name="description" content="${esc(desc)}">
 <link rel="canonical" href="${esc(url)}">
-<meta name="theme-color" content="${t.background}">
+<meta name="theme-color" content="${themeColor}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="${esc(name)}">
 <meta property="og:locale" content="pt_BR">
@@ -367,12 +508,15 @@ ${ogImage ? `<meta property="og:image" content="${esc(ogImage)}">` : ''}
 ${ogImage ? `<meta name="twitter:image" content="${esc(ogImage)}">` : ''}
 ${logo ? `<link rel="icon" href="${esc(logo)}">` : ''}
 ${base}
+${t.bgType === 'image' && t.bgImage ? `<link rel="preload" as="image" href="${esc(t.bgImage)}">` : ''}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${FONTS[t.font]}&amp;display=swap">
+<link rel="stylesheet" href="${esc(fontsHref(t.heading, t.body))}">
 <style>${css(t)}</style>
+${animate ? ANIM_HEAD : ''}
 </head>
 <body class="${cover ? 'has-cover' : ''}">
+${t.bgType !== 'solid' ? '<div class="bgl" aria-hidden="true"></div>' : ''}
 <div class="wrap">
 ${cover ? `<img class="cover" src="${esc(cover)}" alt="">` : ''}
 <header>
@@ -385,6 +529,7 @@ ${blocks}
 </main>
 <footer>Página criada com <a href="${esc(opts.siteUrl)}/?utm_source=vitrine&amp;utm_medium=rodape" target="_blank" rel="noopener">Áion Edu</a></footer>
 </div>
+${animate ? `<script>${animScript(t.animation === 'lively' ? 70 : 40)}</script>` : ''}
 ${script}
 </body>
 </html>`

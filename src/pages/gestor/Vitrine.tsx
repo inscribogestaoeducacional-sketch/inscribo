@@ -19,7 +19,7 @@
 // =============================================================================
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Store, Plus, Check, ExternalLink, Loader2, Eye, EyeOff, X, AlertCircle, AlertTriangle, Smartphone, Copy,
+  Store, Plus, Check, ExternalLink, Loader2, Eye, EyeOff, X, AlertCircle, AlertTriangle, Smartphone, Copy, Play,
 } from 'lucide-react'
 import { arrayMove } from '@dnd-kit/sortable'
 import { useAuth } from '../../contexts/AuthContext'
@@ -338,15 +338,26 @@ export default function Vitrine() {
 
   // ── Prévia (mesmo HTML da página pública, sem script) ──────────────────────
   const [previewHtml, setPreviewHtml] = useState('')
+  // "Ver animação": a prévia normalmente fica sem a entrada animada (senão
+  // repetiria a cada tecla); o botão renderiza uma vez com ela. O comentário
+  // com o contador força o iframe a recarregar mesmo com HTML igual.
+  const [animNonce, setAnimNonce] = useState(0)
+  const animRequested = useRef(false)
   useEffect(() => {
     if (!page) return
     const t = setTimeout(() => {
+      const animatePreview = animRequested.current
+      animRequested.current = false
       const data = buildPreviewData(page, blocks.map(b => ({ id: b.id || b.key, type: b.type, config: b.config, is_visible: b.is_visible })),
         { schoolPhone, institutionName: institution.name })
-      setPreviewHtml(renderVitrinePage(data, { siteUrl: VITRINE_SITE_URL, preview: true }))
-    }, 250)
+      setPreviewHtml(renderVitrinePage(data, { siteUrl: VITRINE_SITE_URL, preview: true, animatePreview })
+        + (animatePreview ? `<!--anim ${animNonce}-->` : ''))
+    }, animRequested.current ? 0 : 250)
     return () => clearTimeout(t)
-  }, [page, blocks, schoolPhone, institution.name])
+  }, [page, blocks, schoolPhone, institution.name, animNonce])
+
+  const playAnimation = () => { animRequested.current = true; setAnimNonce(n => n + 1) }
+  const hasAnimation = !!page && (page.theme as any)?.animation && (page.theme as any).animation !== 'none'
 
   // ── Derivados ───────────────────────────────────────────────────────────────
   const dupMessages = useMemo(() => {
@@ -558,7 +569,15 @@ export default function Vitrine() {
         {/* ── Prévia ──────────────────────────────────────────────────────── */}
         {wide && (
           <aside style={{ position: 'sticky', top: 0, flex: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Prévia no celular</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 26 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Prévia no celular</span>
+              {hasAnimation && (
+                <button type="button" onClick={playAnimation}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999, border: '1px solid #e2e8f0', background: '#fff', fontSize: 12, fontWeight: 600, color: '#0F766E', cursor: 'pointer' }}>
+                  <Play size={12} /> Ver animação
+                </button>
+              )}
+            </div>
             {phoneFrame('min(760px, calc(100vh - 170px))')}
           </aside>
         )}

@@ -22,13 +22,30 @@ export const VITRINE_MAX_BLOCKS = 50
 
 export type BlockType = 'link' | 'whatsapp' | 'text' | 'gallery' | 'video' | 'map' | 'hours' | 'enroll'
 
+export type ButtonStyle = 'filled' | 'outline' | 'soft' | 'glass' | 'shadow' | 'minimal'
+export type BgType = 'solid' | 'gradient' | 'image'
+
+// Chaves validadas no banco (20260929060000 + 20260929090000_vitrine_theme_v2).
 export interface VitrineTheme {
   primary: string
-  background: string
+  background: string          // fundo sólido / cor inicial do gradiente / cor de apoio da imagem
   text: string
-  button_style: 'filled' | 'outline' | 'soft'
+  button_style: ButtonStyle
   radius: 0 | 8 | 16 | 999
-  font: string
+  font?: string               // fonte única das páginas antigas (antes dos pares)
+  font_pair?: string          // chave de FONT_PAIRS
+  bg_type?: BgType
+  bg_gradient_to?: string
+  bg_gradient_angle?: 0 | 45 | 90 | 135 | 180
+  bg_image_url?: string | null
+  bg_overlay?: number         // 0–80, de 10 em 10
+  bg_overlay_tone?: 'dark' | 'light'
+  shadow?: 'none' | 'soft' | 'strong'
+  spacing?: 'compact' | 'normal' | 'relaxed'
+  card_style?: 'flat' | 'bordered' | 'elevated'
+  logo_shape?: 'circle' | 'rounded'
+  animation?: 'none' | 'subtle' | 'lively'
+  template?: string
 }
 
 export interface VitrinePageRow {
@@ -57,15 +74,33 @@ export interface VitrineBlockRow {
   capture_trigger_id: string | null
 }
 
-export const FONTS = ['Inter', 'Poppins', 'Montserrat', 'Nunito', 'Lora', 'Playfair Display'] as const
+// Pares de fonte: definidos no renderizador (uma fonte só da verdade pra
+// página pública e editor).
+export { FONT_PAIRS, fontsHref } from '../../api/_lib/vitrineRender'
 
+// Padrões = aparência da página antes da Fase 5 (o renderizador usa os
+// mesmos quando a chave não existe). font_pair fica sem padrão de propósito:
+// página antiga continua na fonte única dela até a escola escolher um par.
 export const DEFAULT_THEME: VitrineTheme = {
   primary: '#00A896', background: '#FFFFFF', text: '#111827',
-  button_style: 'filled', radius: 16, font: 'Inter',
+  button_style: 'filled', radius: 16,
+  bg_type: 'solid', bg_gradient_angle: 180, bg_overlay: 40, bg_overlay_tone: 'dark',
+  shadow: 'none', spacing: 'normal', card_style: 'bordered', logo_shape: 'circle', animation: 'none',
 }
 
 export function readTheme(t: Partial<VitrineTheme> | null | undefined): VitrineTheme {
-  return { ...DEFAULT_THEME, ...(t || {}) } as VitrineTheme
+  const th = { ...DEFAULT_THEME, ...(t || {}) } as VitrineTheme
+  if (!th.font_pair && !th.font) th.font = 'Inter'
+  return th
+}
+
+// Par de fontes selecionado no editor: font_pair, ou o equivalente exato da
+// fonte única antiga (Inter e Poppins viram os pares de mesmo nome).
+export function currentFontPair(th: VitrineTheme): string | null {
+  if (th.font_pair) return th.font_pair
+  if (th.font === 'Inter') return 'inter'
+  if (th.font === 'Poppins') return 'poppins'
+  return null
 }
 
 // ── Catálogo dos blocos ─────────────────────────────────────────────────────

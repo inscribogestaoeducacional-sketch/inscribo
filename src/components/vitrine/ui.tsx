@@ -103,7 +103,7 @@ export function Segmented<T extends string | number>({ value, options, onChange 
 
 // Seletor de imagem: mostra a atual, envia pro vitrine-media e devolve a URL
 // pública. Quem chama decide o que fazer com a antiga (removeVitrineImage).
-export function ImagePicker({ institutionId, value, onChange, shape = 'rect', height = 96, emptyLabel = 'Enviar imagem', onError }: {
+export function ImagePicker({ institutionId, value, onChange, shape = 'rect', height = 96, emptyLabel = 'Enviar imagem', onError, maxWidth }: {
   institutionId: string
   value: string | null
   onChange: (url: string | null) => void
@@ -111,6 +111,7 @@ export function ImagePicker({ institutionId, value, onChange, shape = 'rect', he
   height?: number
   emptyLabel?: string
   onError: (msg: string) => void
+  maxWidth?: number   // largura máxima depois da redução (padrão: IMAGE_WIDTH.large)
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
@@ -119,7 +120,7 @@ export function ImagePicker({ institutionId, value, onChange, shape = 'rect', he
     if (!file) return
     setBusy(true)
     try {
-      onChange(await uploadVitrineImage(institutionId, file))
+      onChange(await uploadVitrineImage(institutionId, file, maxWidth))
     } catch (e: any) {
       onError(e?.message || 'Não foi possível enviar a imagem.')
     }

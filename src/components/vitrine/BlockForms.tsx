@@ -7,7 +7,7 @@ import React from 'react'
 import { AlertTriangle, ArrowDown, ArrowUp, ImagePlus, Megaphone, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
-  type BlockType, normalizeUrl, parseVideoUrl, uploadVitrineImage, IMAGE_ACCEPT,
+  type BlockType, normalizeUrl, parseVideoUrl, uploadVitrineImage, IMAGE_ACCEPT, IMAGE_WIDTH,
 } from '../../lib/vitrine'
 import { Field, TextInput, TextArea, Toggle, Segmented, ImagePicker, hintStyle } from './ui'
 
@@ -91,7 +91,7 @@ export default function BlockForm({ type, config, onChange, ctx }: Props) {
               onBlur={e => { const v = normalizeUrl(e.target.value); if (v !== config.url) onChange({ url: v }) }} />
           </Field>
           <Field label="Miniatura (opcional)" hint="Aparece à esquerda do texto do botão.">
-            <ImagePicker institutionId={ctx.institutionId} value={config.thumbnail_url || null} height={56}
+            <ImagePicker institutionId={ctx.institutionId} value={config.thumbnail_url || null} height={56} maxWidth={IMAGE_WIDTH.small}
               emptyLabel="Enviar miniatura" onError={ctx.onError}
               onChange={url => onChange({ thumbnail_url: url || undefined })} />
           </Field>
@@ -283,7 +283,7 @@ function GalleryForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange
           )}
           <input ref={inputRef} type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={e => add(e.target.files)} />
         </div>
-        <p style={hintStyle}>JPG, PNG ou WebP, até 5 MB cada.</p>
+        <p style={hintStyle}>JPG, PNG ou WebP. Fotos grandes são reduzidas automaticamente antes de enviar.</p>
       </div>
     </Grid>
   )
