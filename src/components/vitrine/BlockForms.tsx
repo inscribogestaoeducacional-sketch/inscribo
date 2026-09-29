@@ -7,7 +7,8 @@ import React from 'react'
 import { AlertTriangle, ArrowDown, ArrowUp, ImagePlus, Megaphone, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
-  type BlockType, normalizeUrl, parseVideoUrl, uploadVitrineImage, IMAGE_ACCEPT, IMAGE_WIDTH,
+  type BlockType, type LinkStyle, type BannerAspect, normalizeUrl, parseVideoUrl, uploadVitrineImage,
+  IMAGE_ACCEPT, IMAGE_WIDTH, BANNER_ASPECTS, SOCIAL, detectSocial,
 } from '../../lib/vitrine'
 import { Field, TextInput, TextArea, Toggle, Segmented, ImagePicker, hintStyle } from './ui'
 
@@ -80,23 +81,11 @@ export default function BlockForm({ type, config, onChange, ctx }: Props) {
   switch (type) {
     // ── Link ────────────────────────────────────────────────────────────────
     case 'link':
-      return (
-        <Grid>
-          <Field label="Texto do botão" counter={{ value: config.label || '', max: 80 }}>
-            <TextInput value={config.label || ''} maxLength={80} placeholder="Ex.: Nosso Instagram" onChange={e => onChange({ label: e.target.value })} />
-          </Field>
-          <Field label="Link" hint="Endereço completo da página que o botão abre.">
-            <TextInput value={config.url || ''} placeholder="https://instagram.com/suaescola" inputMode="url"
-              onChange={e => onChange({ url: e.target.value })}
-              onBlur={e => { const v = normalizeUrl(e.target.value); if (v !== config.url) onChange({ url: v }) }} />
-          </Field>
-          <Field label="Miniatura (opcional)" hint="Aparece à esquerda do texto do botão.">
-            <ImagePicker institutionId={ctx.institutionId} value={config.thumbnail_url || null} height={56} maxWidth={IMAGE_WIDTH.small}
-              emptyLabel="Enviar miniatura" onError={ctx.onError}
-              onChange={url => onChange({ thumbnail_url: url || undefined })} />
-          </Field>
-        </Grid>
-      )
+      return <LinkForm config={config} onChange={onChange} ctx={ctx} />
+
+    // ── Banner ──────────────────────────────────────────────────────────────
+    case 'banner':
+      return <BannerForm config={config} onChange={onChange} ctx={ctx} />
 
     // ── WhatsApp ────────────────────────────────────────────────────────────
     case 'whatsapp': {
@@ -220,6 +209,132 @@ export default function BlockForm({ type, config, onChange, ctx }: Props) {
     case 'hours':
       return <HoursForm config={config} onChange={onChange} />
   }
+}
+
+function LinkForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange' | 'ctx'>) {
+  const style: LinkStyle = config.style === 'card' || config.style === 'featured' ? config.style : 'button'
+  const net = detectSocial(normalizeUrl(config.url || ''))
+  const netInfo = net ? SOCIAL[net] : null
+
+  // Colou o link de uma rede com o texto vazio (ou com o nome de outra rede
+  // preenchido automaticamente antes): usa o nome da rede.
+  function setUrl(v: string) {
+    const n = detectSocial(normalizeUrl(v))
+    const autoLabels = Object.values(SOCIAL).map(s => s.label)
+    const patch: Record<string, any> = { url: v }
+    if (n && (!config.label || autoLabels.includes(config.label))) patch.label = SOCIAL[n].label
+    onChange(patch)
+  }
+
+  return (
+    <Grid>
+      <Field label="Link" hint="Endereço completo da página que o botão abre.">
+        <TextInput value={config.url || ''} placeholder="https://instagram.com/suaescola" inputMode="url"
+          onChange={e => setUrl(e.target.value)}
+          onBlur={e => { const v = normalizeUrl(e.target.value); if (v !== config.url) onChange({ url: v }) }} />
+      </Field>
+      {netInfo && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 12, color: '#475569', background: '#F8FAFC', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 10px' }}>
+          <span aria-hidden="true" style={{ width: 28, height: 28, borderRadius: '50%', background: netInfo.bg, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}
+            dangerouslySetInnerHTML={{ __html: netInfo.svg.replace('<svg ', '<svg width="15" height="15" ') }} />
+          <span style={{ lineHeight: 1.5 }}>
+            <strong>{netInfo.label} reconhecido.</strong>{' '}
+            {style === 'button'
+              ? 'Com outros links de rede social logo antes ou depois, eles aparecem juntos numa fileira de ícones redondos.'
+              : 'Como cartão, aparece com a cor e o ícone da rede.'}
+          </span>
+        </div>
+      )}
+      <Field label={netInfo && style === 'button' ? 'Nome (aparece ao passar o mouse e pra leitores de tela)' : 'Texto do botão'} counter={{ value: config.label || '', max: 80 }}>
+        <TextInput value={config.label || ''} maxLength={80} placeholder="Ex.: Nosso Instagram" onChange={e => onChange({ label: e.target.value })} />
+      </Field>
+      <Field label="Aparência">
+        <Segmented value={style} onChange={v => onChange({ style: v })}
+          options={[{ value: 'button', label: 'Botão' }, { value: 'card', label: 'Cartão' }, { value: 'featured', label: 'Destaque' }]} />
+      </Field>
+      {style !== 'button' && (
+        <Field label="Descrição (opcional)" counter={{ value: config.description || '', max: 120 }} hint="Uma frase curta embaixo do título do cartão.">
+          <TextInput value={config.description || ''} maxLength={120} placeholder="Ex.: Fotos do dia a dia da escola" onChange={e => onChange({ description: e.target.value || undefined })} />
+        </Field>
+      )}
+      <Field label={style === 'button' ? 'Miniatura (opcional)' : 'Imagem do cartão (opcional)'}
+        hint={style === 'button' ? 'Aparece à esquerda do texto do botão.'
+          : style === 'card' ? 'Quadrada, à esquerda. Sem imagem, aparece o ícone do link.'
+          : 'Grande, em cima do título (proporção 16:9, ex.: 1200 × 675 px).'}>
+        <ImagePicker institutionId={ctx.institutionId} value={config.thumbnail_url || null} height={style === 'featured' ? 110 : 56}
+          maxWidth={style === 'featured' ? IMAGE_WIDTH.large : IMAGE_WIDTH.small}
+          emptyLabel={style === 'button' ? 'Enviar miniatura' : 'Enviar imagem'} onError={ctx.onError}
+          onChange={url => onChange({ thumbnail_url: url || undefined })} />
+      </Field>
+    </Grid>
+  )
+}
+
+function BannerForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange' | 'ctx'>) {
+  const aspect: BannerAspect = config.aspect === '16:9' ? '16:9' : '3:1'
+  const info = BANNER_ASPECTS[aspect]
+  const [natural, setNatural] = React.useState<number | null>(null)
+  React.useEffect(() => setNatural(null), [config.image_url])
+  // Proporção da imagem enviada × a do formato: mais de 15% de diferença
+  // = parte da imagem vai ser cortada (a prévia abaixo mostra o corte).
+  const cropped = natural !== null && Math.abs(natural - info.ratio) / info.ratio > 0.15
+  const inputRef = React.useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = React.useState(false)
+
+  async function pick(file: File | undefined) {
+    if (!file) return
+    setBusy(true)
+    try { onChange({ image_url: await uploadVitrineImage(ctx.institutionId, file) }) }
+    catch (e: any) { ctx.onError(e?.message || 'Não foi possível enviar a imagem.') }
+    setBusy(false)
+    if (inputRef.current) inputRef.current.value = ''
+  }
+
+  return (
+    <Grid>
+      <Field label="Formato">
+        <Segmented value={aspect} onChange={v => onChange({ aspect: v })}
+          options={(Object.keys(BANNER_ASPECTS) as BannerAspect[]).map(k => ({ value: k, label: `${BANNER_ASPECTS[k].label} ${k}` }))} />
+      </Field>
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Imagem</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#0F766E', background: '#F0FDFA', border: '1px solid #CCFBF1', borderRadius: 999, padding: '2px 10px' }}>
+            Tamanho recomendado: {info.size}
+          </span>
+        </div>
+        <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
+          aria-label={config.image_url ? 'Trocar imagem do banner' : 'Enviar imagem do banner'}
+          style={{
+            marginTop: 6, width: '100%', aspectRatio: String(info.ratio), borderRadius: 12, overflow: 'hidden', padding: 0,
+            cursor: busy ? 'wait' : 'pointer', border: config.image_url ? '1px solid #e2e8f0' : '1.5px dashed #CBD5E1',
+            background: config.image_url ? '#f8fafc' : '#FAFAFA', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#64748b', fontSize: 13, fontWeight: 600, gap: 6, position: 'relative',
+          }}>
+          {config.image_url
+            ? <img src={config.image_url} alt="" onLoad={e => setNatural(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            : <><ImagePlus size={18} /> {busy ? 'Enviando…' : `Enviar imagem (${info.size})`}</>}
+          {busy && config.image_url && <span style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Enviando…</span>}
+        </button>
+        <p style={hintStyle}>
+          A prévia acima já mostra o corte na proporção {aspect}. JPG, PNG ou WebP; fotos grandes são reduzidas antes de enviar.
+          {config.image_url && <> <button type="button" onClick={() => onChange({ image_url: '' })} style={{ background: 'none', border: 'none', padding: 0, color: '#dc2626', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>Remover imagem</button></>}
+        </p>
+        {cropped && <Warn>A imagem enviada tem outra proporção: as bordas vão ser cortadas como na prévia acima. Pra aparecer inteira, use {info.size}.</Warn>}
+        <input ref={inputRef} type="file" accept={IMAGE_ACCEPT} hidden onChange={e => pick(e.target.files?.[0])} />
+      </div>
+      <Field label="Descrição da imagem" counter={{ value: config.alt || '', max: 150 }}
+        hint="Pra quem usa leitor de tela. Ex.: “Matrículas 2027 abertas — Educação Infantil ao Ensino Médio”.">
+        <TextInput value={config.alt || ''} maxLength={150} onChange={e => onChange({ alt: e.target.value })} />
+      </Field>
+      <Field label="Link ao tocar no banner (opcional)" hint="Sem link, o banner é só imagem.">
+        <TextInput value={config.link_url || ''} placeholder="https://..." inputMode="url"
+          onChange={e => onChange({ link_url: e.target.value })}
+          onBlur={e => { const v = normalizeUrl(e.target.value); if (v !== config.link_url) onChange({ link_url: v }) }} />
+      </Field>
+    </Grid>
+  )
 }
 
 function GalleryForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange' | 'ctx'>) {

@@ -251,7 +251,9 @@ export default function Vitrine() {
     if (blocks.length >= VITRINE_MAX_BLOCKS) { showToast(`Limite de ${VITRINE_MAX_BLOCKS} blocos por página.`, true); return }
     const cfg = config || defaultConfig(type, { address: institution.address, placeName: institution.name })
     const invalid = validateBlock(type, cfg)
-    const nb: EditorBlock = { key: tempKey(), id: null, type, config: cfg, is_visible: true, capture_trigger_id: null, state: invalid ? 'invalid' : 'dirty', error: null }
+    // Bloco novo em branco não mostra o motivo de estar incompleto (seria
+    // aviso antes de digitar); cópia mostra (ex.: banner duplicado sem imagem).
+    const nb: EditorBlock = { key: tempKey(), id: null, type, config: cfg, is_visible: true, capture_trigger_id: null, state: invalid ? 'invalid' : 'dirty', error: config ? invalid : null }
     const next = [...blocks]
     next.splice(at ?? next.length, 0, nb)
     blocksRef.current = next
@@ -272,6 +274,7 @@ export default function Vitrine() {
     // remover a foto, o arquivo não pode sumir da outra. Duplica sem imagens.
     if (src.type === 'gallery') cfg.images = []
     if (src.type === 'link') delete cfg.thumbnail_url
+    if (src.type === 'banner') cfg.image_url = ''
     addBlock(src.type, i + 1, cfg)
   }
 

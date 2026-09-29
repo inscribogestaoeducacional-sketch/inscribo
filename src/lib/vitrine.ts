@@ -83,6 +83,7 @@ export async function removeVitrineImage(institutionId: string, url: string | nu
 export function blockImageUrls(type: BlockType, c: Record<string, any>): string[] {
   if (type === 'gallery') return (c.images || []).map((i: any) => i?.url).filter(Boolean)
   if (type === 'link' && c.thumbnail_url) return [c.thumbnail_url]
+  if (type === 'banner' && c.image_url) return [c.image_url]
   return []
 }
 

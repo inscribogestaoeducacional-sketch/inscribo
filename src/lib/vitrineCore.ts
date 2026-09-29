@@ -20,7 +20,15 @@ export const VITRINE_SITE_URL = 'https://aionedu.com.br'
 export const VITRINE_BUCKET = 'vitrine-media'
 export const VITRINE_MAX_BLOCKS = 50
 
-export type BlockType = 'link' | 'whatsapp' | 'text' | 'gallery' | 'video' | 'map' | 'hours' | 'enroll'
+export type BlockType = 'link' | 'whatsapp' | 'text' | 'gallery' | 'video' | 'map' | 'hours' | 'enroll' | 'banner'
+export type LinkStyle = 'button' | 'card' | 'featured'
+export type BannerAspect = '3:1' | '16:9'
+
+// Tamanho recomendado de cada formato de banner (mostrado no upload).
+export const BANNER_ASPECTS: Record<BannerAspect, { label: string; size: string; ratio: number }> = {
+  '3:1':  { label: 'Faixa',    size: '1200 × 400 px', ratio: 3 },
+  '16:9': { label: 'Destaque', size: '1200 × 675 px', ratio: 16 / 9 },
+}
 
 export type ButtonStyle = 'filled' | 'outline' | 'soft' | 'glass' | 'shadow' | 'minimal'
 export type BgType = 'solid' | 'gradient' | 'image'
@@ -76,7 +84,7 @@ export interface VitrineBlockRow {
 
 // Pares de fonte: definidos no renderizador (uma fonte só da verdade pra
 // página pública e editor).
-export { FONT_PAIRS, fontsHref } from '../../api/_lib/vitrineRender'
+export { FONT_PAIRS, fontsHref, SOCIAL, detectSocial, type SocialNet } from '../../api/_lib/vitrineRender'
 
 // Padrões = aparência da página antes da Fase 5 (o renderizador usa os
 // mesmos quando a chave não existe). font_pair fica sem padrão de propósito:
@@ -118,9 +126,10 @@ export const BLOCK_TYPES: Record<BlockType, { label: string; description: string
   video:    { label: 'Vídeo',                description: 'Vídeo do YouTube ou do Vimeo',               color: '#DC2626', bg: '#FEE2E2' },
   map:      { label: 'Mapa / Endereço',      description: 'Endereço com mapa e "Como chegar"',          color: '#D97706', bg: '#FEF3C7' },
   hours:    { label: 'Horário de atendimento', description: 'Dias e horários, com "Aberto agora"',      color: '#0284C7', bg: '#E0F2FE' },
+  banner:   { label: 'Banner',               description: 'Imagem em largura total, com link opcional', color: '#EA580C', bg: '#FFEDD5' },
 }
 
-export const BLOCK_ORDER: BlockType[] = ['whatsapp', 'enroll', 'link', 'text', 'gallery', 'video', 'map', 'hours']
+export const BLOCK_ORDER: BlockType[] = ['whatsapp', 'enroll', 'link', 'banner', 'text', 'gallery', 'video', 'map', 'hours']
 
 export function defaultConfig(type: BlockType, ctx: { address?: string | null; placeName?: string | null }): Record<string, any> {
   switch (type) {
@@ -136,6 +145,7 @@ export function defaultConfig(type: BlockType, ctx: { address?: string | null; p
         .concat([{ dow: 6, closed: true } as any, { dow: 0, closed: true } as any]),
       note: '',
     }
+    case 'banner':   return { image_url: '', aspect: '3:1', alt: '', link_url: '' }
   }
 }
 
@@ -148,6 +158,7 @@ export function blockSummary(type: BlockType, c: Record<string, any>): string {
     case 'video':   return c.title || (c.video_id ? `${c.provider === 'vimeo' ? 'Vimeo' : 'YouTube'} · ${c.video_id}` : 'Vídeo')
     case 'map':     return c.address || 'Endereço'
     case 'hours':   return 'Horário de atendimento'
+    case 'banner':  return c.alt || (c.image_url ? `Banner ${c.aspect === '16:9' ? '16:9' : '3:1'}` : 'Banner')
   }
 }
 
@@ -173,6 +184,14 @@ export function validateBlock(type: BlockType, c: Record<string, any>): string |
   switch (type) {
     case 'link':
       if (!isHttpUrl(c.url)) return 'Informe um link válido (ex.: https://instagram.com/suaescola).'
+      if (c.style !== undefined && !['button', 'card', 'featured'].includes(c.style)) return 'Estilo do link inválido.'
+      if (String(c.description || '').length > 120) return 'A descrição pode ter no máximo 120 caracteres.'
+      return null
+    case 'banner':
+      if (!isHttpUrl(c.image_url)) return 'Envie a imagem do banner.'
+      if (c.aspect !== undefined && c.aspect !== '3:1' && c.aspect !== '16:9') return 'Formato do banner inválido.'
+      if (String(c.alt || '').length > 150) return 'A descrição da imagem pode ter no máximo 150 caracteres.'
+      if (c.link_url && !isHttpUrl(c.link_url)) return 'Link do banner inválido: use um endereço começando com https://'
       return null
     case 'whatsapp':
       if (c.phone_source !== undefined && c.phone_source !== 'school' && c.phone_source !== 'custom') return 'Origem do número inválida.'
