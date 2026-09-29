@@ -87,7 +87,7 @@ export const BLOCK_TYPES: Record<BlockType, { label: string; description: string
 
 export const BLOCK_ORDER: BlockType[] = ['whatsapp', 'enroll', 'link', 'text', 'gallery', 'video', 'map', 'hours']
 
-export function defaultConfig(type: BlockType, ctx: { address?: string | null }): Record<string, any> {
+export function defaultConfig(type: BlockType, ctx: { address?: string | null; placeName?: string | null }): Record<string, any> {
   switch (type) {
     case 'link':     return { label: '', url: '' }
     case 'whatsapp': return { label: 'Fale com a escola', message: MSG_INFO, phone_source: 'school', track_capture: true }
@@ -95,7 +95,7 @@ export function defaultConfig(type: BlockType, ctx: { address?: string | null })
     case 'text':     return { title: 'Sobre a escola', body: '' }
     case 'gallery':  return { layout: 'grid', images: [] }
     case 'video':    return { url: '', provider: '', video_id: '', title: '' }
-    case 'map':      return { label: 'Onde estamos', address: ctx.address || '' }
+    case 'map':      return { label: 'Onde estamos', address: ctx.address || '', place_name: ctx.placeName || '' }
     case 'hours':    return {
       days: [1, 2, 3, 4, 5].map(dow => ({ dow, open: '07:00', close: '18:00' }))
         .concat([{ dow: 6, closed: true } as any, { dow: 0, closed: true } as any]),
@@ -175,6 +175,7 @@ export function validateBlock(type: BlockType, c: Record<string, any>): string |
     case 'map': {
       const a = String(c.address || '').trim()
       if (a.length < 5 || a.length > 300) return 'Informe o endereço (de 5 a 300 caracteres).'
+      if (String(c.place_name || '').length > 120) return 'O nome no Google Maps pode ter no máximo 120 caracteres.'
       return null
     }
     case 'hours': {
@@ -243,7 +244,10 @@ export function buildPreviewData(
         ? { label: c.label, mode: 'link', url: c.url }
         : { label: c.label, mode: 'whatsapp', message: c.message, phone } })
     } else {
-      out.push({ id: b.id, type: b.type, config: c })
+      // Mapa sem place_name: a página pública usa o nome da escola (ver
+      // 20260929080000_vitrine_map_place_name.sql) — a prévia faz igual.
+      const cfg = b.type === 'map' && !('place_name' in c) ? { ...c, place_name: ctx.institutionName } : c
+      out.push({ id: b.id, type: b.type, config: cfg })
     }
   }
   return {

@@ -202,7 +202,11 @@ function renderBlock(b: VitrineBlock, preview = false): string {
     case 'map': {
       const addr = String(c.address || '').trim()
       if (!addr) return ''
-      const q = encodeURIComponent(addr)
+      // "Nome da escola, endereço": o Google acha o lugar cadastrado e o pino
+      // cai na escola. Só o endereço cai onde o Google estima o número da rua
+      // (no Ágape, ~110 m ao lado). place_name vazio = só endereço.
+      const place = typeof c.place_name === 'string' ? c.place_name.trim() : ''
+      const q = encodeURIComponent(place ? `${place}, ${addr}` : addr)
       return `<section class="card map"><h2><span class="ic">${ICON.pin}</span>${esc(c.label || 'Onde estamos')}</h2>`
         + `<p>${esc(addr)}</p>`
         + `<div class="frame map-frame"><iframe src="https://www.google.com/maps?q=${q}&amp;output=embed" title="Mapa" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div>`

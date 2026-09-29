@@ -249,7 +249,7 @@ export default function Vitrine() {
 
   function addBlock(type: BlockType, at?: number, config?: Record<string, any>) {
     if (blocks.length >= VITRINE_MAX_BLOCKS) { showToast(`Limite de ${VITRINE_MAX_BLOCKS} blocos por página.`, true); return }
-    const cfg = config || defaultConfig(type, { address: institution.address })
+    const cfg = config || defaultConfig(type, { address: institution.address, placeName: institution.name })
     const invalid = validateBlock(type, cfg)
     const nb: EditorBlock = { key: tempKey(), id: null, type, config: cfg, is_visible: true, capture_trigger_id: null, state: invalid ? 'invalid' : 'dirty', error: null }
     const next = [...blocks]
@@ -528,6 +528,7 @@ export default function Vitrine() {
                     onError: msg => showToast(msg, true),
                     duplicateMessage: (() => { const m = captureMessage(b); return !!m && (dupMessages.get(m) || 0) > 1 })(),
                     hasCaptureTrigger: !!b.capture_trigger_id,
+                    institutionName: institution.name,
                   })}
                 />
               )}

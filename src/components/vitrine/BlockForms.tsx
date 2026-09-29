@@ -18,6 +18,7 @@ export interface BlockFormContext {
   // Outro bloco com a mesma mensagem de WhatsApp (origem ambígua no Captação)
   duplicateMessage: boolean
   hasCaptureTrigger: boolean
+  institutionName: string
 }
 
 interface Props {
@@ -205,8 +206,12 @@ export default function BlockForm({ type, config, onChange, ctx }: Props) {
           <Field label="Título" counter={{ value: config.label || '', max: 80 }}>
             <TextInput value={config.label || ''} maxLength={80} placeholder="Onde estamos" onChange={e => onChange({ label: e.target.value })} />
           </Field>
-          <Field label="Endereço" counter={{ value: config.address || '', max: 300 }} hint="Rua, número, bairro e cidade — é o que o mapa procura.">
+          <Field label="Endereço" counter={{ value: config.address || '', max: 300 }} hint="Rua, número, bairro e cidade. Aparece escrito na página.">
             <TextArea rows={2} value={config.address || ''} maxLength={300} onChange={e => onChange({ address: e.target.value })} />
+          </Field>
+          <Field label="Nome no Google Maps" counter={{ value: config.place_name ?? ctx.institutionName, max: 120 }}
+            hint="Como a escola aparece no Google Maps. Com o nome, o pino cai exatamente na escola; só com o endereço, o Google estima a posição do número e o pino pode ficar alguns metros ao lado. Deixe em branco se a escola não estiver no Google Maps.">
+            <TextInput value={config.place_name ?? ctx.institutionName} maxLength={120} placeholder="Ex.: Colégio Exemplo" onChange={e => onChange({ place_name: e.target.value })} />
           </Field>
         </Grid>
       )
