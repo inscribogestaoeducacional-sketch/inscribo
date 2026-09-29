@@ -13,6 +13,10 @@
       "destination": "/novidades/captacao-inteligente.html"
     },
     {
+      "source": "/:slug((?!(?:api|assets|fonts|novidades|pagar|survey|satisfaction|proposta|raio-x|privacidade|termos|sobre|parceiros|parceria-meta|blog|login|logout|reset-password|unauthorized|super-admin|home|atendente|dashboard|leads|clients|contacts|visits|whatsapp|captacao|transmissoes|transferencias|updates|pesquisas|embed|reports|users|settings|profile|setup|vitrine|admin|app|aion|aionedu|inscribo|www|mail|static|public|docs|status|suporte|ajuda|contato|cadastro|matricula|auth|oauth|callback|webhook|index|404|500)(?:$|/))[a-z0-9][a-z0-9-]{1,38}[a-z0-9])",
+      "destination": "/api/vitrine/render?slug=:slug"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
