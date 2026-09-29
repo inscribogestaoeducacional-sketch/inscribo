@@ -2,7 +2,7 @@
 //
 // A Vitrine mora na raiz (aionedu.com.br/<slug>), então todo primeiro
 // segmento de rota do app precisa estar nas DUAS listas de nomes proibidos:
-//   - vercel.json: exclusão no rewrite /:slug → /api/vitrine/render
+//   - vercel.json: exclusão no rewrite /:slug → /api/public?route=vitrine
 //     (senão a rota do app cai na Vitrine e vira 404);
 //   - vitrine_reserved_slugs (migrations): senão uma escola pode pegar o
 //     slug e a página dela nunca abre (o app responde antes).
@@ -33,12 +33,12 @@ for (const f of readdirSync(join(root, 'public'))) {
 const vercel = JSON.parse(read('vercel.json'))
 for (const r of vercel.rewrites) {
   const m = r.source.match(/^\/([a-z0-9-]+)/)
-  if (m && !r.destination.startsWith('/api/vitrine')) routes.add(m[1])
+  if (m && !r.destination.includes('route=vitrine')) routes.add(m[1])
 }
 routes.add('assets') // saída do build (vite)
 
 // 3. Lista do vercel.json
-const rule = vercel.rewrites.find(r => r.destination.startsWith('/api/vitrine'))
+const rule = vercel.rewrites.find(r => r.destination.includes('route=vitrine'))
 if (!rule) { console.error('Rewrite da Vitrine não encontrado no vercel.json'); process.exit(1) }
 const vercelList = new Set(rule.source.match(/\(\?:([^)]+)\)\(\?:\$\|\/\)/)[1].split('|'))
 

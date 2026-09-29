@@ -1,4 +1,5 @@
-// api/pagar-redirect.ts
+// api/_lib/pagarRedirect.ts (era api/pagar-redirect.ts; servido por
+// api/public.ts?route=pagar — limite de 12 funções do plano Hobby)
 //
 // Endpoint público (sem autenticação) por trás de /pagar/:codigo — ver regra
 // de rewrite em vercel.json. Recebido no clique do botão do template de

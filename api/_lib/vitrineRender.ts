@@ -2,7 +2,7 @@
 //
 // HTML da página pública da Vitrine (aionedu.com.br/<slug>). Módulo puro,
 // sem import nenhum, pra servir aos dois lados:
-//   - api/vitrine/render.ts: página renderizada no servidor (prévia de
+//   - api/_lib/vitrinePage.ts (via api/public.ts): página renderizada no servidor (prévia de
 //     compartilhamento com as meta tags certas, primeira pintura sem JS);
 //   - editor da Vitrine (Fase 3): prévia em <iframe srcdoc> com o mesmo HTML,
 //     sem o script de registro (opção preview).

@@ -1,4 +1,4 @@
-// api/vitrine/render.ts
+// api/_lib/vitrinePage.ts (servido por api/public.ts?route=vitrine)
 //
 // Página pública da Vitrine: aionedu.com.br/<slug> chega aqui pelo rewrite do
 // vercel.json (só slugs no formato válido e fora da lista de rotas do app —
@@ -12,7 +12,7 @@
 // anterior enquanto revalida), então edição no editor aparece em ~1 min.
 // 404 com cache curto, pra página recém-publicada aparecer logo.
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { renderVitrinePage, renderVitrineNotFound, type VitrinePublicData } from '../_lib/vitrineRender.js'
+import { renderVitrinePage, renderVitrineNotFound, type VitrinePublicData } from './vitrineRender.js'
 
 const SITE_URL = 'https://aionedu.com.br'
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/
