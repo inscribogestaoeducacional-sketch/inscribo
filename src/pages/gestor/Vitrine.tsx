@@ -300,6 +300,7 @@ export default function Vitrine() {
     if (src.type === 'gallery') cfg.images = []
     if (src.type === 'link') delete cfg.thumbnail_url
     if (src.type === 'banner') cfg.image_url = ''
+    if ((src.type === 'testimonials' || src.type === 'team') && Array.isArray(cfg.items)) cfg.items.forEach((it: any) => { it.photo_url = '' })
     addBlock(src.type, i + 1, cfg)
   }
 

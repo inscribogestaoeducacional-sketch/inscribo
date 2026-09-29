@@ -4,11 +4,11 @@
 // depois que a alteração foi salva (senão um bloco inválido, que não salva,
 // deixaria a página publicada apontando pra arquivo apagado).
 import React from 'react'
-import { AlertTriangle, ImagePlus, Megaphone } from 'lucide-react'
+import { AlertTriangle, ImagePlus, Megaphone, Star } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
   type BlockType, type LinkStyle, type BannerAspect, normalizeUrl, parseVideoUrl, uploadVitrineImage,
-  IMAGE_ACCEPT, IMAGE_WIDTH, BANNER_ASPECTS, SOCIAL, detectSocial,
+  IMAGE_ACCEPT, IMAGE_WIDTH, BANNER_ASPECTS, SOCIAL, detectSocial, LIST_LIMITS,
 } from '../../lib/vitrine'
 import { Field, TextInput, TextArea, Toggle, Segmented, ImagePicker, hintStyle } from './ui'
 import ItemListEditor from './ItemListEditor'
@@ -212,9 +212,37 @@ export default function BlockForm({ type, config, onChange, ctx }: Props) {
           <Field label="Título (opcional)" counter={{ value: config.title || '', max: 100 }}>
             <TextInput value={config.title || ''} maxLength={100} placeholder="Ex.: Conheça nossa estrutura" onChange={e => onChange({ title: e.target.value })} />
           </Field>
+          <Field label="Descrição (opcional)" counter={{ value: config.description || '', max: 200 }} hint="Uma frase embaixo do vídeo.">
+            <TextInput value={config.description || ''} maxLength={200} placeholder="Ex.: Um tour de 2 minutos pela escola" onChange={e => onChange({ description: e.target.value })} />
+          </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
+            <Field label="Tamanho" hint={config.size === 'featured' ? 'Maior, com sombra; no celular ocupa a largura toda.' : undefined}>
+              <Segmented value={config.size === 'featured' ? 'featured' : 'normal'} onChange={v => onChange({ size: v })}
+                options={[{ value: 'normal', label: 'Normal' }, { value: 'featured', label: 'Destaque' }]} />
+            </Field>
+            <Field label="Formato" hint={config.format === '9:16' ? 'Para Shorts, Reels e vídeos gravados em pé.' : undefined}>
+              <Segmented value={config.format === '9:16' ? '9:16' : '16:9'} onChange={v => onChange({ format: v })}
+                options={[{ value: '16:9', label: 'Deitado 16:9' }, { value: '9:16', label: 'Em pé 9:16' }]} />
+            </Field>
+          </div>
+          {config.provider === 'youtube' && (
+            <p style={{ ...hintStyle, marginTop: -4 }}>Carregamento leve: a página mostra só a capa do vídeo, e o player do YouTube carrega quando a pessoa toca em “play”.</p>
+          )}
         </Grid>
       )
     }
+
+    // ── Perguntas frequentes ───────────────────────────────────────────────
+    case 'faq':
+      return <FaqForm config={config} onChange={onChange} />
+
+    // ── Depoimentos ─────────────────────────────────────────────────────────
+    case 'testimonials':
+      return <TestimonialsForm config={config} onChange={onChange} ctx={ctx} />
+
+    // ── Equipe ──────────────────────────────────────────────────────────────
+    case 'team':
+      return <TeamForm config={config} onChange={onChange} ctx={ctx} />
 
     // ── Mapa ────────────────────────────────────────────────────────────────
     case 'map':
@@ -403,6 +431,154 @@ function GalleryForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange
           } />
         <input ref={inputRef} type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={e => add(e.target.files)} />
         <p style={hintStyle}>Arraste pela alça pra mudar a ordem. JPG, PNG ou WebP; fotos grandes são reduzidas antes de enviar.</p>
+      </div>
+    </Grid>
+  )
+}
+
+function TitleField({ config, onChange, placeholder }: Pick<Props, 'config' | 'onChange'> & { placeholder: string }) {
+  return (
+    <Field label="Título da seção (opcional)" counter={{ value: config.title || '', max: 100 }}>
+      <TextInput value={config.title || ''} maxLength={100} placeholder={placeholder} onChange={e => onChange({ title: e.target.value })} />
+    </Field>
+  )
+}
+
+const listTitle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }
+const twoCols: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }
+const itemBody: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 8 }
+
+// Miniatura da pessoa na lista: foto ou iniciais (igual à página).
+function Face({ url, name }: { url?: string; name?: string }) {
+  const base: React.CSSProperties = { width: 36, height: 36, borderRadius: '50%', flex: 'none', border: '1px solid #e2e8f0' }
+  if (url) return <img src={url} alt="" style={{ ...base, objectFit: 'cover' }} />
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean)
+  const ini = parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : (parts[0] || '?').slice(0, 2)
+  return <span aria-hidden="true" style={{ ...base, background: '#F0FDFA', color: '#0F766E', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{ini.toUpperCase()}</span>
+}
+
+function FaqForm({ config, onChange }: Pick<Props, 'config' | 'onChange'>) {
+  type Q = { q: string; a: string }
+  const items: Q[] = Array.isArray(config.items) ? config.items : []
+  return (
+    <Grid>
+      <TitleField config={config} onChange={onChange} placeholder="Perguntas frequentes" />
+      <div>
+        <span style={listTitle}>Perguntas</span>
+        <ItemListEditor<Q>
+          items={items} onChange={v => onChange({ items: v })} max={LIST_LIMITS.faq} noun="pergunta"
+          itemLabel={(q, i) => q.q?.trim() || `Pergunta ${i + 1} (sem texto)`}
+          newItem={() => ({ q: '', a: '' })}
+          renderItem={(q, update) => (
+            <div style={itemBody}>
+              <Field label="Pergunta" counter={{ value: q.q || '', max: 200 }}>
+                <TextInput value={q.q || ''} maxLength={200} placeholder="Ex.: Vocês têm período integral?" onChange={e => update({ q: e.target.value })} />
+              </Field>
+              <Field label="Resposta" counter={{ value: q.a || '', max: 1000 }}>
+                <TextArea rows={3} value={q.a || ''} maxLength={1000} onChange={e => update({ a: e.target.value })} />
+              </Field>
+            </div>
+          )} />
+        <p style={hintStyle}>Na página, a resposta abre ao tocar na pergunta. O Google também lê essas perguntas, que podem aparecer na busca.</p>
+      </div>
+    </Grid>
+  )
+}
+
+function Stars({ value, onChange }: { value: number | null; onChange: (v: number | null) => void }) {
+  return (
+    <div role="radiogroup" aria-label="Nota" style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+      {[1, 2, 3, 4, 5].map(n => (
+        <button key={n} type="button" role="radio" aria-checked={value === n} aria-label={`${n} de 5`} onClick={() => onChange(n)}
+          style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', display: 'flex' }}>
+          <Star size={20} color="#F59E0B" fill={value && n <= value ? '#F59E0B' : 'none'} />
+        </button>
+      ))}
+      <button type="button" onClick={() => onChange(null)} aria-pressed={value == null}
+        style={{ marginLeft: 8, fontSize: 12, color: value == null ? '#0F766E' : '#64748b', fontWeight: value == null ? 700 : 500, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+        Sem nota
+      </button>
+    </div>
+  )
+}
+
+function TestimonialsForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange' | 'ctx'>) {
+  type Tst = { quote: string; name: string; role?: string; photo_url?: string; rating?: number | null }
+  const items: Tst[] = Array.isArray(config.items) ? config.items : []
+  return (
+    <Grid>
+      <TitleField config={config} onChange={onChange} placeholder="Ex.: O que as famílias dizem" />
+      <div>
+        <span style={listTitle}>Depoimentos</span>
+        <ItemListEditor<Tst>
+          items={items} onChange={v => onChange({ items: v })} max={LIST_LIMITS.testimonials} noun="depoimento"
+          itemLabel={(t, i) => t.name?.trim() || `Depoimento ${i + 1}`}
+          thumb={t => <Face url={t.photo_url} name={t.name} />}
+          newItem={() => ({ quote: '', name: '', role: '', photo_url: '', rating: 5 })}
+          renderItem={(t, update) => (
+            <div style={itemBody}>
+              <Field label="Depoimento" counter={{ value: t.quote || '', max: 400 }}>
+                <TextArea rows={3} value={t.quote || ''} maxLength={400} placeholder="Ex.: Meu filho ama ir pra escola…" onChange={e => update({ quote: e.target.value })} />
+              </Field>
+              <div style={twoCols}>
+                <Field label="Nome" counter={{ value: t.name || '', max: 60 }}>
+                  <TextInput value={t.name || ''} maxLength={60} placeholder="Ex.: Ana Souza" onChange={e => update({ name: e.target.value })} />
+                </Field>
+                <Field label="Quem é (opcional)" counter={{ value: t.role || '', max: 60 }}>
+                  <TextInput value={t.role || ''} maxLength={60} placeholder="Ex.: Mãe do Pedro, 3º ano" onChange={e => update({ role: e.target.value })} />
+                </Field>
+              </div>
+              <Field label="Nota"><Stars value={t.rating ?? null} onChange={v => update({ rating: v })} /></Field>
+              <Field label="Foto (opcional)" hint="Sem foto, aparecem as iniciais do nome.">
+                <ImagePicker institutionId={ctx.institutionId} value={t.photo_url || null} shape="circle" fit="cover" height={72}
+                  maxWidth={IMAGE_WIDTH.small} emptyLabel="Enviar foto" onError={ctx.onError}
+                  onChange={url => update({ photo_url: url || '' })} />
+              </Field>
+            </div>
+          )} />
+        <p style={hintStyle}>Use depoimentos reais, com autorização de quem falou.</p>
+      </div>
+    </Grid>
+  )
+}
+
+function TeamForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange' | 'ctx'>) {
+  type P = { name: string; role?: string; photo_url?: string; bio?: string }
+  const items: P[] = Array.isArray(config.items) ? config.items : []
+  return (
+    <Grid>
+      <TitleField config={config} onChange={onChange} placeholder="Ex.: Nossa equipe" />
+      <Field label="Layout">
+        <Segmented value={config.layout === 'carousel' ? 'carousel' : 'grid'} onChange={v => onChange({ layout: v })}
+          options={[{ value: 'grid', label: 'Grade' }, { value: 'carousel', label: 'Carrossel' }]} />
+      </Field>
+      <div>
+        <span style={listTitle}>Pessoas</span>
+        <ItemListEditor<P>
+          items={items} onChange={v => onChange({ items: v })} max={LIST_LIMITS.team} noun="pessoa"
+          itemLabel={(p, i) => [p.name?.trim(), p.role?.trim()].filter(Boolean).join(' · ') || `Pessoa ${i + 1}`}
+          thumb={p => <Face url={p.photo_url} name={p.name} />}
+          newItem={() => ({ name: '', role: '', photo_url: '', bio: '' })}
+          renderItem={(p, update) => (
+            <div style={itemBody}>
+              <div style={twoCols}>
+                <Field label="Nome" counter={{ value: p.name || '', max: 60 }}>
+                  <TextInput value={p.name || ''} maxLength={60} placeholder="Ex.: Profª Carla Lima" onChange={e => update({ name: e.target.value })} />
+                </Field>
+                <Field label="Cargo (opcional)" counter={{ value: p.role || '', max: 60 }}>
+                  <TextInput value={p.role || ''} maxLength={60} placeholder="Ex.: Coordenadora pedagógica" onChange={e => update({ role: e.target.value })} />
+                </Field>
+              </div>
+              <Field label="Frase curta (opcional)" counter={{ value: p.bio || '', max: 160 }}>
+                <TextInput value={p.bio || ''} maxLength={160} placeholder="Ex.: 15 anos de Educação Infantil" onChange={e => update({ bio: e.target.value })} />
+              </Field>
+              <Field label="Foto (opcional)" hint="De preferência de rosto, com fundo neutro. Sem foto, aparecem as iniciais.">
+                <ImagePicker institutionId={ctx.institutionId} value={p.photo_url || null} shape="circle" fit="cover" height={72}
+                  maxWidth={IMAGE_WIDTH.small} emptyLabel="Enviar foto" onError={ctx.onError}
+                  onChange={url => update({ photo_url: url || '' })} />
+              </Field>
+            </div>
+          )} />
       </div>
     </Grid>
   )

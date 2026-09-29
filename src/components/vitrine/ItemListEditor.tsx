@@ -36,7 +36,9 @@ export default function ItemListEditor<T>({
   const keysRef = useRef<string[]>([])
   if (keysRef.current.length !== items.length) keysRef.current = items.map(() => newKey())
   const keys = keysRef.current
-  const [openKey, setOpenKey] = useState<string | null>(null)
+  // Lista com um item só (ex.: bloco recém-criado com a primeira pergunta
+  // vazia) já abre o formulário dele.
+  const [openKey, setOpenKey] = useState<string | null>(() => (items.length === 1 ? keys[0] : null))
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),

@@ -10,6 +10,7 @@ const GROUPS: { title: string; hint: string; types: BlockType[] }[] = [
   { title: 'Contato e matrícula', hint: 'O que mais gera conversa com as famílias', types: ['whatsapp', 'enroll'] },
   { title: 'Links e destaques',    hint: 'Leve pra site, redes e campanhas',          types: ['link', 'banner'] },
   { title: 'Conteúdo',             hint: 'Mostre a escola',                           types: ['text', 'gallery', 'video'] },
+  { title: 'Confiança',            hint: 'Responda dúvidas e mostre quem faz a escola', types: ['faq', 'testimonials', 'team'] },
   { title: 'Informações',          hint: 'Onde fica e quando atende',                 types: ['map', 'hours'] },
 ]
 
@@ -37,6 +38,18 @@ function Mini({ type }: { type: BlockType }) {
       return <div style={{ ...box, backgroundImage: `linear-gradient(90deg, ${c}22 1px, transparent 1px), linear-gradient(${c}22 1px, transparent 1px)`, backgroundSize: '10px 10px' }}><MapPin size={18} color={c} fill={`${c}55`} /></div>
     case 'hours':
       return <div style={{ ...box, alignItems: 'stretch', padding: '0 10px', gap: 4 }}>{[0, 1, 2].map(i => <div key={i} style={{ display: 'flex', justifyContent: 'space-between' }}>{bar('22px', 4, 0.45)}{bar('18px', 4, i === 0 ? 0.9 : 0.35)}</div>)}</div>
+    case 'faq':
+      return <div style={{ ...box, alignItems: 'stretch', padding: '0 10px', gap: 5 }}>{[0, 1, 2].map(i => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>{bar(i === 0 ? '40px' : '34px', 4, 0.5)}<span style={{ fontSize: 9, fontWeight: 800, lineHeight: 1, color: c }}>+</span></div>)}</div>
+    case 'testimonials':
+      return <div style={{ ...box, flexDirection: 'row', gap: 4, justifyContent: 'flex-start', paddingLeft: 8 }}>{[0, 1].map(i => (
+        <div key={i} style={{ flex: 'none', width: 44, height: 38, borderRadius: 6, background: '#fff', opacity: i ? 0.6 : 1, padding: 5, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={{ fontSize: 7, lineHeight: 1, color: '#F59E0B', letterSpacing: 0.5 }}>★★★★★</span>{bar('30px', 3, 0.35)}{bar('22px', 3, 0.35)}
+        </div>))}</div>
+    case 'team':
+      return <div style={{ ...box, flexDirection: 'row', gap: 6 }}>{[0, 1, 2].map(i => (
+        <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+          <div style={{ width: 16, height: 16, borderRadius: '50%', background: c, opacity: 0.35 + i * 0.2 }} />{bar('14px', 3, 0.5)}
+        </div>))}</div>
   }
 }
 
@@ -58,7 +71,7 @@ export default function BlockGallery({ onPick }: { onPick: (type: BlockType) => 
                   style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 10, borderRadius: 14, border: '1px solid #E2E8F0', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: T }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = meta.color; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,168,150,0.10), 0 2px 4px rgba(0,0,0,0.04)'; e.currentTarget.style.transform = 'translateY(-1px)' }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none' }}>
-                  <Mini type={t} />
+                  <span aria-hidden="true" style={{ display: 'contents' }}><Mini type={t} /></span>
                   <span style={{ minWidth: 0 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#1e293b' }}>
                       <Icon size={14} color={meta.color} /> {meta.label}

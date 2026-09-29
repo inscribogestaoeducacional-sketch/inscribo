@@ -20,9 +20,14 @@ export const VITRINE_SITE_URL = 'https://aionedu.com.br'
 export const VITRINE_BUCKET = 'vitrine-media'
 export const VITRINE_MAX_BLOCKS = 50
 
-export type BlockType = 'link' | 'whatsapp' | 'text' | 'gallery' | 'video' | 'map' | 'hours' | 'enroll' | 'banner'
+export type BlockType = 'link' | 'whatsapp' | 'text' | 'gallery' | 'video' | 'map' | 'hours' | 'enroll' | 'banner' | 'faq' | 'testimonials' | 'team'
 export type LinkStyle = 'button' | 'icon' | 'card' | 'featured'
 export type BannerAspect = '3:1' | '16:9'
+export type VideoSize = 'normal' | 'featured'
+export type VideoFormat = '16:9' | '9:16'
+
+// Limites dos blocos com lista (iguais aos do banco, 20260929130000).
+export const LIST_LIMITS = { faq: 20, testimonials: 12, team: 24 } as const
 
 // Tamanho recomendado de cada formato de banner (mostrado no upload).
 export const BANNER_ASPECTS: Record<BannerAspect, { label: string; size: string; ratio: number }> = {
@@ -134,9 +139,12 @@ export const BLOCK_TYPES: Record<BlockType, { label: string; description: string
   map:      { label: 'Mapa / Endereço',      description: 'Endereço com mapa e "Como chegar"',          color: '#D97706', bg: '#FEF3C7' },
   hours:    { label: 'Horário de atendimento', description: 'Dias e horários, com "Aberto agora"',      color: '#0284C7', bg: '#E0F2FE' },
   banner:   { label: 'Banner',               description: 'Imagem em largura total, com link opcional', color: '#EA580C', bg: '#FFEDD5' },
+  faq:      { label: 'Perguntas frequentes', description: 'Dúvidas dos pais, com resposta ao tocar',    color: '#0D9488', bg: '#CCFBF1' },
+  testimonials: { label: 'Depoimentos',      description: 'O que as famílias dizem, com nota',          color: '#CA8A04', bg: '#FEF9C3' },
+  team:     { label: 'Equipe',               description: 'Direção e professores, com foto e cargo',    color: '#4F46E5', bg: '#E0E7FF' },
 }
 
-export const BLOCK_ORDER: BlockType[] = ['whatsapp', 'enroll', 'link', 'banner', 'text', 'gallery', 'video', 'map', 'hours']
+export const BLOCK_ORDER: BlockType[] = ['whatsapp', 'enroll', 'link', 'banner', 'text', 'gallery', 'video', 'faq', 'testimonials', 'team', 'map', 'hours']
 
 export function defaultConfig(type: BlockType, ctx: { address?: string | null; placeName?: string | null }): Record<string, any> {
   switch (type) {
@@ -145,7 +153,7 @@ export function defaultConfig(type: BlockType, ctx: { address?: string | null; p
     case 'enroll':   return { label: 'Quero matricular', mode: 'whatsapp', message: MSG_ENROLL }
     case 'text':     return { title: 'Sobre a escola', body: '' }
     case 'gallery':  return { layout: 'grid', images: [] }
-    case 'video':    return { url: '', provider: '', video_id: '', title: '' }
+    case 'video':    return { url: '', provider: '', video_id: '', title: '', size: 'normal', format: '16:9', description: '' }
     case 'map':      return { label: 'Onde estamos', address: ctx.address || '', place_name: ctx.placeName || '' }
     case 'hours':    return {
       days: [1, 2, 3, 4, 5].map(dow => ({ dow, open: '07:00', close: '18:00' }))
@@ -153,6 +161,9 @@ export function defaultConfig(type: BlockType, ctx: { address?: string | null; p
       note: '',
     }
     case 'banner':   return { image_url: '', aspect: '3:1', alt: '', link_url: '' }
+    case 'faq':      return { title: 'Perguntas frequentes', items: [{ q: '', a: '' }] }
+    case 'testimonials': return { title: 'O que as famílias dizem', items: [{ quote: '', name: '', role: '', photo_url: '', rating: 5 }] }
+    case 'team':     return { title: 'Nossa equipe', layout: 'grid', items: [{ name: '', role: '', photo_url: '', bio: '' }] }
   }
 }
 
@@ -166,6 +177,9 @@ export function blockSummary(type: BlockType, c: Record<string, any>): string {
     case 'map':     return c.address || 'Endereço'
     case 'hours':   return 'Horário de atendimento'
     case 'banner':  return c.alt || (c.image_url ? `Banner ${c.aspect === '16:9' ? '16:9' : '3:1'}` : 'Banner')
+    case 'faq':     return c.title || 'Perguntas frequentes'
+    case 'testimonials': return c.title || 'Depoimentos'
+    case 'team':    return c.title || 'Equipe'
   }
 }
 
@@ -184,7 +198,22 @@ export function blockDetail(type: BlockType, c: Record<string, any>): string {
     case 'banner':   return [c.aspect === '16:9' ? 'Destaque 16:9' : 'Faixa 3:1', c.link_url ? host(c.link_url) : 'sem link'].join(' · ')
     case 'text':     return clip(c.body) || 'Sem texto'
     case 'gallery':  return `${(c.images || []).length} foto(s) · ${c.layout === 'carousel' ? 'carrossel' : 'grade'}`
-    case 'video':    return c.video_id ? `${c.provider === 'vimeo' ? 'Vimeo' : 'YouTube'} · ${c.video_id}` : 'Sem vídeo'
+    case 'video': {
+      if (!c.video_id) return 'Sem vídeo'
+      return [c.provider === 'vimeo' ? 'Vimeo' : 'YouTube', c.size === 'featured' ? 'destaque' : '', c.format === '9:16' ? 'vertical' : ''].filter(Boolean).join(' · ')
+    }
+    case 'faq': {
+      const n = (c.items || []).length
+      return n === 1 ? '1 pergunta' : `${n} perguntas`
+    }
+    case 'testimonials': {
+      const names = (c.items || []).map((i: any) => String(i?.name || '').trim()).filter(Boolean)
+      return names.length ? clip(names.join(', ')) : 'Sem depoimentos'
+    }
+    case 'team': {
+      const n = (c.items || []).length
+      return `${n} pessoa${n === 1 ? '' : 's'} · ${c.layout === 'carousel' ? 'carrossel' : 'grade'}`
+    }
     case 'map':      return clip(c.address) || 'Sem endereço'
     case 'hours': {
       const open = (Array.isArray(c.days) ? c.days : []).filter((d: any) => !d.closed)
@@ -210,6 +239,10 @@ export function normalizeUrl(raw: string): string {
 }
 
 const HHMM = /^([01][0-9]|2[0-3]):[0-5][0-9]$/
+// Texto obrigatório com tamanho (sem contar espaços nas pontas, como o btrim do banco).
+const between = (v: unknown, min: number, max: number) => { const n = String(v ?? '').trim().length; return n >= min && n <= max }
+// Foto opcional: vazia vale; preenchida tem que ser http(s).
+const badPhoto = (u: unknown) => u != null && u !== '' && !isHttpUrl(u)
 
 export function validateBlock(type: BlockType, c: Record<string, any>): string | null {
   const label = String(c.label || '').trim()
@@ -267,7 +300,38 @@ export function validateBlock(type: BlockType, c: Record<string, any>): string |
         return 'Cole o link de um vídeo do YouTube ou do Vimeo.'
       }
       if (String(c.title || '').length > 100) return 'O título pode ter no máximo 100 caracteres.'
+      if (c.size !== undefined && c.size !== 'normal' && c.size !== 'featured') return 'Tamanho do vídeo inválido.'
+      if (c.format !== undefined && c.format !== '16:9' && c.format !== '9:16') return 'Formato do vídeo inválido.'
+      if (String(c.description || '').length > 200) return 'A descrição pode ter no máximo 200 caracteres.'
       return null
+    case 'faq': {
+      if (String(c.title || '').length > 100) return 'O título pode ter no máximo 100 caracteres.'
+      const items = Array.isArray(c.items) ? c.items : null
+      if (!items || items.length < 1 || items.length > LIST_LIMITS.faq) return 'Adicione de 1 a 20 perguntas.'
+      if (items.some((i: any) => !between(i?.q, 1, 200))) return 'Toda pergunta precisa de texto (até 200 caracteres).'
+      if (items.some((i: any) => !between(i?.a, 1, 1000))) return 'Toda pergunta precisa de resposta (até 1000 caracteres).'
+      return null
+    }
+    case 'testimonials': {
+      if (String(c.title || '').length > 100) return 'O título pode ter no máximo 100 caracteres.'
+      const items = Array.isArray(c.items) ? c.items : null
+      if (!items || items.length < 1 || items.length > LIST_LIMITS.testimonials) return 'Adicione de 1 a 12 depoimentos.'
+      if (items.some((i: any) => !between(i?.quote, 1, 400))) return 'Todo depoimento precisa de texto (até 400 caracteres).'
+      if (items.some((i: any) => !between(i?.name, 1, 60) || String(i?.role || '').length > 60)) return 'Informe o nome (até 60 caracteres) de quem deu o depoimento.'
+      if (items.some((i: any) => badPhoto(i?.photo_url) || (i?.rating != null && !/^[1-5]$/.test(String(i.rating))))) return 'Foto ou nota do depoimento inválida.'
+      return null
+    }
+    case 'team': {
+      if (String(c.title || '').length > 100) return 'O título pode ter no máximo 100 caracteres.'
+      if (c.layout !== undefined && c.layout !== 'grid' && c.layout !== 'carousel') return 'Layout da equipe inválido.'
+      const items = Array.isArray(c.items) ? c.items : null
+      if (!items || items.length < 1 || items.length > LIST_LIMITS.team) return 'Adicione de 1 a 24 pessoas.'
+      if (items.some((i: any) => !between(i?.name, 1, 60) || String(i?.role || '').length > 60 || String(i?.bio || '').length > 160)) {
+        return 'Toda pessoa precisa de nome (até 60); cargo até 60 e frase até 160 caracteres.'
+      }
+      if (items.some((i: any) => badPhoto(i?.photo_url))) return 'Foto da equipe inválida.'
+      return null
+    }
     case 'map': {
       const a = String(c.address || '').trim()
       if (a.length < 5 || a.length > 300) return 'Informe o endereço (de 5 a 300 caracteres).'
