@@ -1,7 +1,7 @@
 // src/components/superadmin/ConsultantDetails.tsx
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { supabase } from '../../lib/supabase'
+import { supabase, INSTITUTION_COLUMNS } from '../../lib/supabase'
 import SuperAdminLayout from './SuperAdminLayout'
 import {
   ArrowLeft, Building2, KanbanSquare, BookOpen, Lightbulb,
@@ -60,7 +60,7 @@ export default function ConsultantDetails() {
     const [cRes, pRes, sRes, iRes, tRes, sugRes] = await Promise.all([
       supabase.from('users').select('*').eq('id', consultantId).single(),
       supabase.from('sales_pipeline').select('*').eq('consultant_id', consultantId).order('updated_at', { ascending: false }),
-      supabase.from('institutions').select('*').eq('consultant_id', consultantId).order('name'),
+      supabase.from('institutions').select(INSTITUTION_COLUMNS).eq('consultant_id', consultantId).order('name'),
       supabase.from('school_implementations').select('*').eq('consultant_id', consultantId).order('created_at', { ascending: false }),
       supabase.from('trainings').select('*, institutions(name)').eq('consultant_id', consultantId).order('scheduled_at', { ascending: false }),
       supabase.from('school_suggestions').select('*').eq('consultant_id', consultantId).order('created_at', { ascending: false }),

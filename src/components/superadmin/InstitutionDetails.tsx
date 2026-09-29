@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabase'
+import { supabase, INSTITUTION_COLUMNS } from '../../lib/supabase'
 import { platformAdmin } from '../../lib/platformAdmin'
 import { applyCampaignCycle, toReenrollFraction } from '../../lib/campaignApply'
 import { useAuth } from '../../contexts/AuthContext'
@@ -444,7 +444,7 @@ export default function InstitutionDetails() {
     if (!quiet) setLoading(true)
     try {
       const [instRes, usersRes, paymentsRes, contractRes, processRes, cycleRes, consultantsRes, waPhoneRes, changeRequestsRes, removedLinksRes] = await Promise.all([
-        supabase.from('institutions').select('*').eq('id', id).single(),
+        supabase.from('institutions').select(INSTITUTION_COLUMNS).eq('id', id).single(),
         supabase.from('users').select('*').eq('institution_id', id).order('created_at', { ascending: false }),
         supabase.from('payments').select('*').eq('institution_id', id).order('created_at', { ascending: false }),
         supabase.from('contracts').select('*').eq('institution_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
