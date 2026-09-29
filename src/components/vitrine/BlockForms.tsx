@@ -4,13 +4,15 @@
 // depois que a alteração foi salva (senão um bloco inválido, que não salva,
 // deixaria a página publicada apontando pra arquivo apagado).
 import React from 'react'
-import { AlertTriangle, ArrowDown, ArrowUp, ImagePlus, Megaphone, Trash2 } from 'lucide-react'
+import { AlertTriangle, ImagePlus, Megaphone } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
   type BlockType, type LinkStyle, type BannerAspect, normalizeUrl, parseVideoUrl, uploadVitrineImage,
   IMAGE_ACCEPT, IMAGE_WIDTH, BANNER_ASPECTS, SOCIAL, detectSocial,
 } from '../../lib/vitrine'
 import { Field, TextInput, TextArea, Toggle, Segmented, ImagePicker, hintStyle } from './ui'
+import ItemListEditor from './ItemListEditor'
+import MediaUploader from './MediaUploader'
 
 export interface BlockFormContext {
   institutionId: string
@@ -312,17 +314,6 @@ function BannerForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange'
   // Proporção da imagem enviada × a do formato: mais de 15% de diferença
   // = parte da imagem vai ser cortada (a prévia abaixo mostra o corte).
   const cropped = natural !== null && Math.abs(natural - info.ratio) / info.ratio > 0.15
-  const inputRef = React.useRef<HTMLInputElement>(null)
-  const [busy, setBusy] = React.useState(false)
-
-  async function pick(file: File | undefined) {
-    if (!file) return
-    setBusy(true)
-    try { onChange({ image_url: await uploadVitrineImage(ctx.institutionId, file) }) }
-    catch (e: any) { ctx.onError(e?.message || 'Não foi possível enviar a imagem.') }
-    setBusy(false)
-    if (inputRef.current) inputRef.current.value = ''
-  }
 
   return (
     <Grid>
@@ -337,26 +328,13 @@ function BannerForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange'
             Tamanho recomendado: {info.size}
           </span>
         </div>
-        <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
-          aria-label={config.image_url ? 'Trocar imagem do banner' : 'Enviar imagem do banner'}
-          style={{
-            marginTop: 6, width: '100%', aspectRatio: String(info.ratio), borderRadius: 12, overflow: 'hidden', padding: 0,
-            cursor: busy ? 'wait' : 'pointer', border: config.image_url ? '1px solid #e2e8f0' : '1.5px dashed #CBD5E1',
-            background: config.image_url ? '#f8fafc' : '#FAFAFA', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#64748b', fontSize: 13, fontWeight: 600, gap: 6, position: 'relative',
-          }}>
-          {config.image_url
-            ? <img src={config.image_url} alt="" onLoad={e => setNatural(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-            : <><ImagePlus size={18} /> {busy ? 'Enviando…' : `Enviar imagem (${info.size})`}</>}
-          {busy && config.image_url && <span style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Enviando…</span>}
-        </button>
-        <p style={hintStyle}>
-          A prévia acima já mostra o corte na proporção {aspect}. JPG, PNG ou WebP; fotos grandes são reduzidas antes de enviar.
-          {config.image_url && <> <button type="button" onClick={() => onChange({ image_url: '' })} style={{ background: 'none', border: 'none', padding: 0, color: '#dc2626', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>Remover imagem</button></>}
-        </p>
+        <div style={{ marginTop: 6 }}>
+          <MediaUploader institutionId={ctx.institutionId} value={config.image_url || null} label="Imagem do banner"
+            aspect={info.ratio} recommended={info.size} onError={ctx.onError} onNaturalRatio={setNatural}
+            onChange={url => onChange({ image_url: url || '' })} />
+        </div>
+        <p style={hintStyle}>A prévia acima já mostra o corte na proporção {aspect}. JPG, PNG ou WebP; fotos grandes são reduzidas antes de enviar.</p>
         {cropped && <Warn>A imagem enviada tem outra proporção: as bordas vão ser cortadas como na prévia acima. Pra aparecer inteira, use {info.size}.</Warn>}
-        <input ref={inputRef} type="file" accept={IMAGE_ACCEPT} hidden onChange={e => pick(e.target.files?.[0])} />
       </div>
       <Field label="Descrição da imagem" counter={{ value: config.alt || '', max: 150 }}
         hint="Pra quem usa leitor de tela. Ex.: “Matrículas 2027 abertas — Educação Infantil ao Ensino Médio”.">
@@ -372,18 +350,22 @@ function BannerForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange'
 }
 
 function GalleryForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange' | 'ctx'>) {
-  const images: { url: string; caption?: string }[] = Array.isArray(config.images) ? config.images : []
+  type Img = { url: string; caption?: string }
+  const images: Img[] = Array.isArray(config.images) ? config.images : []
   const inputRef = React.useRef<HTMLInputElement>(null)
   const [busy, setBusy] = React.useState(false)
-  const set = (imgs: typeof images) => onChange({ images: imgs })
+  const [over, setOver] = React.useState(false)
+  const set = (imgs: Img[]) => onChange({ images: imgs })
 
-  async function add(files: FileList | null) {
-    if (!files?.length) return
+  // Várias de uma vez (clique ou arrastar); o que passar de 12 fica de fora.
+  async function add(files: FileList | File[] | null) {
+    const all = Array.from(files || []).filter(f => f.type.startsWith('image/'))
+    if (!all.length) return
     const room = 12 - images.length
-    const list = Array.from(files).slice(0, room)
-    if (files.length > room) ctx.onError(`A galeria aceita até 12 imagens — ${files.length - room} ficaram de fora.`)
+    const list = all.slice(0, room)
+    if (all.length > room) ctx.onError(`A galeria aceita até 12 imagens — ${all.length - room} ficaram de fora.`)
     setBusy(true)
-    const added: typeof images = []
+    const added: Img[] = []
     for (const f of list) {
       try { added.push({ url: await uploadVitrineImage(ctx.institutionId, f) }) }
       catch (e: any) { ctx.onError(e?.message || 'Não foi possível enviar a imagem.') }
@@ -393,15 +375,6 @@ function GalleryForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange
     if (inputRef.current) inputRef.current.value = ''
   }
 
-  function move(i: number, d: -1 | 1) {
-    const j = i + d
-    if (j < 0 || j >= images.length) return
-    const next = [...images];[next[i], next[j]] = [next[j], next[i]]
-    set(next)
-  }
-
-  const iconBtn: React.CSSProperties = { width: 28, height: 28, borderRadius: 7, border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }
-
   return (
     <Grid>
       <Field label="Layout">
@@ -409,30 +382,27 @@ function GalleryForm({ config, onChange, ctx }: Pick<Props, 'config' | 'onChange
           options={[{ value: 'grid', label: 'Grade' }, { value: 'carousel', label: 'Carrossel' }]} />
       </Field>
       <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Imagens</span>
-          <span style={{ fontSize: 11, color: '#94a3b8' }}>{images.length}/12</span>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
-          {images.map((img, i) => (
-            <div key={img.url + i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <img src={img.url} alt="" style={{ width: 52, height: 52, borderRadius: 8, objectFit: 'cover', flex: 'none', border: '1px solid #e2e8f0' }} />
-              <TextInput value={img.caption || ''} maxLength={150} placeholder="Legenda (opcional)"
-                onChange={e => set(images.map((x, k) => k === i ? { ...x, caption: e.target.value } : x))} />
-              <button type="button" style={iconBtn} title="Subir" aria-label="Subir imagem" onClick={() => move(i, -1)} disabled={i === 0}><ArrowUp size={13} /></button>
-              <button type="button" style={iconBtn} title="Descer" aria-label="Descer imagem" onClick={() => move(i, 1)} disabled={i === images.length - 1}><ArrowDown size={13} /></button>
-              <button type="button" style={{ ...iconBtn, color: '#dc2626' }} title="Remover" aria-label="Remover imagem" onClick={() => set(images.filter((_, k) => k !== i))}><Trash2 size={13} /></button>
-            </div>
-          ))}
-          {images.length < 12 && (
-            <button type="button" disabled={busy} onClick={() => inputRef.current?.click()}
-              style={{ height: 52, borderRadius: 10, border: '1.5px dashed #CBD5E1', background: '#FAFAFA', cursor: busy ? 'wait' : 'pointer', color: '#64748b', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              <ImagePlus size={15} /> {busy ? 'Enviando…' : 'Adicionar imagens'}
-            </button>
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Imagens</span>
+        <ItemListEditor<Img>
+          items={images} onChange={set} max={12} noun="foto" collapsible={false}
+          itemLabel={(img, i) => img.caption || `Foto ${i + 1}`}
+          thumb={img => <img src={img.url} alt="" style={{ width: 52, height: 52, borderRadius: 8, objectFit: 'cover', flex: 'none', border: '1px solid #e2e8f0' }} />}
+          renderItem={(img, update) => (
+            <TextInput value={img.caption || ''} maxLength={150} placeholder="Legenda (opcional)" aria-label="Legenda da foto"
+              onChange={e => update({ caption: e.target.value })} />
           )}
-          <input ref={inputRef} type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={e => add(e.target.files)} />
-        </div>
-        <p style={hintStyle}>JPG, PNG ou WebP. Fotos grandes são reduzidas automaticamente antes de enviar.</p>
+          addSlot={
+            <button type="button" disabled={busy} onClick={() => inputRef.current?.click()}
+              onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
+              onDrop={e => { e.preventDefault(); setOver(false); add(e.dataTransfer.files) }}
+              style={{ marginTop: 8, width: '100%', height: 64, borderRadius: 12, border: over ? '2px dashed #00A896' : '1.5px dashed #CBD5E1',
+                background: over ? '#F0FDFA' : '#FAFAFA', cursor: busy ? 'wait' : 'pointer', color: over ? '#0F766E' : '#64748b', fontSize: 12, fontWeight: 600,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)' }}>
+              <ImagePlus size={15} /> {busy ? 'Enviando…' : over ? 'Solte as fotos aqui' : 'Clique ou arraste fotos (várias de uma vez)'}
+            </button>
+          } />
+        <input ref={inputRef} type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={e => add(e.target.files)} />
+        <p style={hintStyle}>Arraste pela alça pra mudar a ordem. JPG, PNG ou WebP; fotos grandes são reduzidas antes de enviar.</p>
       </div>
     </Grid>
   )

@@ -1,9 +1,8 @@
 // Peças visuais compartilhadas do editor da Vitrine (mesmo vocabulário
 // visual do Captação: inputs #FAFAFA com borda #E2E8F0, rótulo em caixa alta,
 // teal #00A896 como cor de ação).
-import React, { useId, useRef, useState } from 'react'
-import { ImagePlus, Loader2, Trash2 } from 'lucide-react'
-import { IMAGE_ACCEPT, uploadVitrineImage } from '../../lib/vitrine'
+import React, { useId } from 'react'
+import MediaUploader from './MediaUploader'
 
 export const labelStyle: React.CSSProperties = {
   display: 'block', fontSize: 12, fontWeight: 600, color: '#475569',
@@ -101,9 +100,10 @@ export function Segmented<T extends string | number>({ value, options, onChange 
   )
 }
 
-// Seletor de imagem: mostra a atual, envia pro vitrine-media e devolve a URL
-// pública. Quem chama decide o que fazer com a antiga (removeVitrineImage).
-export function ImagePicker({ institutionId, value, onChange, shape = 'rect', height = 96, emptyLabel = 'Enviar imagem', onError, maxWidth }: {
+// Seletor de imagem (logo, capa, miniatura, fundo): mesma interface de
+// antes, agora sobre o MediaUploader (clique ou arraste). Devolve a URL
+// pública; quem chama decide o que fazer com a antiga (removeVitrineImage).
+export function ImagePicker({ institutionId, value, onChange, shape = 'rect', height = 96, emptyLabel = 'Enviar imagem', onError, maxWidth, recommended, fit }: {
   institutionId: string
   value: string | null
   onChange: (url: string | null) => void
@@ -112,46 +112,10 @@ export function ImagePicker({ institutionId, value, onChange, shape = 'rect', he
   emptyLabel?: string
   onError: (msg: string) => void
   maxWidth?: number   // largura máxima depois da redução (padrão: IMAGE_WIDTH.large)
+  recommended?: string
+  fit?: 'cover' | 'contain'
 }) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [busy, setBusy] = useState(false)
-
-  async function pick(file: File | undefined) {
-    if (!file) return
-    setBusy(true)
-    try {
-      onChange(await uploadVitrineImage(institutionId, file, maxWidth))
-    } catch (e: any) {
-      onError(e?.message || 'Não foi possível enviar a imagem.')
-    }
-    setBusy(false)
-    if (inputRef.current) inputRef.current.value = ''
-  }
-
-  const box: React.CSSProperties = shape === 'circle'
-    ? { width: height, height, borderRadius: '50%' }
-    : { width: '100%', height, borderRadius: 12 }
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
-        aria-label={value ? 'Trocar imagem' : emptyLabel}
-        style={{
-          ...box, flex: shape === 'circle' ? 'none' : 1, padding: 0, cursor: busy ? 'wait' : 'pointer', overflow: 'hidden',
-          border: value ? '1px solid #e2e8f0' : '1.5px dashed #CBD5E1', background: value ? '#f8fafc' : '#FAFAFA',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 12, fontWeight: 600, gap: 6,
-        }}>
-        {busy ? <Loader2 size={18} className="animate-spin" />
-          : value ? <img src={value} alt="" style={{ width: '100%', height: '100%', objectFit: shape === 'circle' ? 'contain' : 'cover' }} />
-          : <><ImagePlus size={16} /> {shape === 'circle' ? '' : emptyLabel}</>}
-      </button>
-      {value && !busy && (
-        <button type="button" onClick={() => onChange(null)} title="Remover imagem"
-          style={{ flex: 'none', width: 32, height: 32, borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Trash2 size={14} />
-        </button>
-      )}
-      <input ref={inputRef} type="file" accept={IMAGE_ACCEPT} hidden onChange={e => pick(e.target.files?.[0])} />
-    </div>
-  )
+  return <MediaUploader institutionId={institutionId} value={value} onChange={onChange} onError={onError}
+    label={emptyLabel} maxWidth={maxWidth} shape={shape} height={height} recommended={recommended}
+    fit={fit ?? (shape === 'circle' ? 'contain' : 'cover')} />
 }
