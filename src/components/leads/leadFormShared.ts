@@ -45,7 +45,7 @@ export const statusConfig = {
 }
 
 // 'Concurso de Bolsas' dá sentido ao campo condicional contest_name.
-export const sourceOptions = ['Facebook', 'Instagram', 'Google', 'Site', 'Indicação', 'WhatsApp', 'Concurso de Bolsas', 'Outros']
+export const sourceOptions = ['Facebook', 'Instagram', 'Google', 'Site', 'Indicação', 'WhatsApp', 'Concurso de Bolsas', 'Vitrine', 'Outros']
 
 export const LEAD_TEMPERATURES = [
   { value: 'quente', label: 'Quente', icon: Flame,     color: '#EF4444', bg: '#FEF2F2', border: '#FECACA' },

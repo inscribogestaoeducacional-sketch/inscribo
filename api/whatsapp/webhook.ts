@@ -944,6 +944,7 @@ const CAPTURE_CHANNEL_LEAD_SOURCE: Record<string, string> = {
   site:       'Site',
   tiktok:     'Outros',
   outro:      'Outros',
+  vitrine:    'Vitrine',
 }
 
 // Atendentes/grupos do gatilho, na ordem de cadastro; ponteiro do

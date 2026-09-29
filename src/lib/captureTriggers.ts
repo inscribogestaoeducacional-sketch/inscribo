@@ -8,7 +8,9 @@
 // (api/whatsapp/webhook.ts:applyCaptureTrigger).
 // =============================================================================
 
-export type CaptureChannel = 'meta_ads' | 'google_ads' | 'instagram' | 'facebook' | 'tiktok' | 'site' | 'outro'
+// 'vitrine': só gatilhos criados pelos blocos da Vitrine (managed_by =
+// 'vitrine', ver 20260929060000_vitrine.sql) — não aparece no formulário.
+export type CaptureChannel = 'meta_ads' | 'google_ads' | 'instagram' | 'facebook' | 'tiktok' | 'site' | 'outro' | 'vitrine'
 
 export interface CaptureTrigger {
   id: string
@@ -23,6 +25,7 @@ export interface CaptureTrigger {
   rr_index: number
   is_active: boolean
   archived_at: string | null
+  managed_by?: 'vitrine' | null
   created_at: string
 }
 
@@ -36,6 +39,7 @@ export const CAPTURE_CHANNELS: Record<CaptureChannel, { label: string; color: st
   tiktok:     { label: 'TikTok',              color: '#1A2B4A', bg: '#E2E8F0' },
   site:       { label: 'Site / Landing page', color: '#059669', bg: '#D1FAE5' },
   outro:      { label: 'Outro',               color: '#64748B', bg: '#F1F5F9' },
+  vitrine:    { label: 'Vitrine Áion',        color: '#0D9488', bg: '#CCFBF1' },
 }
 
 // Mesmo mínimo do CHECK da tabela (trigger_text >= 10 caracteres).

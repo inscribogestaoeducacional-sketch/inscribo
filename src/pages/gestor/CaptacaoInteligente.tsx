@@ -626,7 +626,7 @@ export default function CaptacaoInteligente() {
             <div>
               <label style={labelStyle}>Canal</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {(Object.keys(CAPTURE_CHANNELS) as CaptureChannel[]).map(c => {
+                {(Object.keys(CAPTURE_CHANNELS) as CaptureChannel[]).filter(c => c !== 'vitrine').map(c => {
                   const cfg = CAPTURE_CHANNELS[c]
                   const sel = form.channel === c
                   return (
