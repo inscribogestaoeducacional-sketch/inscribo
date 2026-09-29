@@ -222,7 +222,7 @@ function OnboardingFromLeadModal({ lead, consultants, onClose, onSuccess }: {
         monthly_value:        form.isFree ? 0 : Number(form.monthlyValue),
         implementation_value: form.isFree ? 0 : Number(form.implementationValue),
         billing_due_day:      Number(form.billingDueDay),
-      }).select().single()
+      }).select('id').single()
       if (instErr) throw new Error(instErr.message)
 
       // Cria o processo de implantação + semeia as 19 tarefas padrão — mesmo

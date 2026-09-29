@@ -234,7 +234,7 @@ function NewSchoolWizard({
           monthly_value: form.isFree ? 0 : Number(form.monthlyValue),
           implementation_value: form.isFree ? 0 : Number(form.implementationValue),
         })
-        .select().single()
+        .select('id').single()
 
       if (instErr) throw new Error(instErr.message)
 
@@ -863,7 +863,7 @@ function SchoolDetailModal({ inst, consultants, getCycleBadge, onClose, onEdit }
     try {
       const [instRes, waRes] = await Promise.all([
         supabase.from('institutions')
-          .select('whatsapp_phone_id,whatsapp_token,whatsapp_phone_number,whatsapp_display_name,whatsapp_connected')
+          .select('whatsapp_phone_id,whatsapp_phone_number,whatsapp_display_name,whatsapp_connected')
           .eq('id', inst.id).single(),
         supabase.from('whatsapp_phone_numbers')
           .select('*')

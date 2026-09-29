@@ -55,7 +55,7 @@ export default function InitialSetup() {
           primary_color: '#3B82F6',
           secondary_color: '#10B981'
         })
-        .select()
+        .select('id')
         .single()
 
       if (instError) throw instError

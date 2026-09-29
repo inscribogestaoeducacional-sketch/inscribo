@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, INSTITUTION_COLUMNS } from '../lib/supabase'
 import { queryClient } from '../lib/queryClient'
 
 /**
@@ -44,7 +44,7 @@ export function useInstitution(institutionId: string) {
     try {
       const { data } = await supabase
         .from('institutions')
-        .select('*')
+        .select(INSTITUTION_COLUMNS)
         .eq('id', id)
         .single()
 

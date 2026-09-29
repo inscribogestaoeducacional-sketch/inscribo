@@ -224,6 +224,13 @@ export interface Institution {
   updated_at: string
 }
 
+// Colunas de institutions legíveis pelo navegador. whatsapp_token e
+// evolution_key só o servidor lê (privilégio por coluna, ver
+// 20260929050000_institutions_rls_lockdown.sql) — SELECT * dá
+// "permission denied". Coluna nova só entra aqui depois do GRANT.
+// Uma linha só: o supabase-js só infere o tipo do retorno de literal único.
+export const INSTITUTION_COLUMNS = 'id, name, logo_url, primary_color, secondary_color, created_at, updated_at, active, evolution_instance, evolution_url, evolution_connected_at, whatsapp_connected, whatsapp_state, notification_settings, city, state, consultant_id, plan, plan_status, trial_ends_at, asaas_customer_id, cnpj, phone, email, monthly_value, implementation_value, billing_due_day, asaas_subscription_id, whatsapp_phone_id, whatsapp_phone_number, whatsapp_display_name, address, manager_cpf, manager_role, whatsapp_business_id, inep_code, ibge_city_code, nf_issue_timing, school_group_id, show_agent_name_in_messages'
+
 export interface WhatsappMessage {
   id: string
   institution_id: string
@@ -774,7 +781,7 @@ export class DatabaseService {
   static async getInstitution(id: string): Promise<Institution | null> {
     const { data, error } = await supabase
       .from('institutions')
-      .select('*')
+      .select(INSTITUTION_COLUMNS)
       .eq('id', id)
       .single()
 
@@ -950,7 +957,7 @@ export class DatabaseService {
   static async getAllInstitutions(): Promise<Institution[]> {
     const { data, error } = await supabase
       .from('institutions')
-      .select('*')
+      .select(INSTITUTION_COLUMNS)
       .order('created_at', { ascending: false })
 
     if (error) throw error
