@@ -374,6 +374,36 @@ function linkCard(b: VitrineBlock, featured: boolean, loading: 'eager' | 'lazy')
     + `<span class="limg">${img}</span>${body}${featured ? '' : '<span class="larrow" aria-hidden="true">→</span>'}</a>`
 }
 
+// Foto redonda da pessoa (depoimento/equipe); sem foto, as iniciais.
+function avatar(url: unknown, name: string, loading: 'eager' | 'lazy'): string {
+  if (isHttpUrl(url)) return `<img class="av" src="${esc(url)}" alt="" loading="${loading}" decoding="async">`
+  const ini = String(name || '').trim().split(/\s+/).filter(Boolean)
+  const txt = ini.length > 1 ? ini[0][0] + ini[ini.length - 1][0] : (ini[0] || '?').slice(0, 2)
+  return `<span class="av ini" aria-hidden="true">${esc(txt.toUpperCase())}</span>`
+}
+
+// FAQ no formato que o Google lê (FAQPage). Só na página pública; todas as
+// perguntas da página num único bloco de dados.
+function faqJsonLd(blocks: VitrineBlock[]): string {
+  const qs = blocks.filter(b => b.type === 'faq' && Array.isArray(b.config?.items))
+    .flatMap(b => b.config.items).filter((i: any) => i?.q && i?.a)
+  if (!qs.length) return ''
+  const data = {
+    '@context': 'https://schema.org', '@type': 'FAQPage',
+    mainEntity: qs.map((i: any) => ({ '@type': 'Question', name: String(i.q), acceptedAnswer: { '@type': 'Answer', text: String(i.a) } })),
+  }
+  return `<script type="application/ld+json">${jsonForScript(data)}</script>`
+}
+
+// Vídeo leve: no clique, troca a miniatura pelo player do YouTube já tocando.
+// Ctrl/Cmd/botão do meio mantêm o comportamento normal do link. O clique
+// continua contando (o registro escuta na fase de captura, antes daqui).
+const VIDEO_SCRIPT = `document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a[data-yt]');
+if(!a||e.defaultPrevented||e.button!==0||e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;var id=a.getAttribute('data-yt');if(!/^[A-Za-z0-9_-]{11}$/.test(id))return;e.preventDefault();
+var f=document.createElement('iframe');f.src='https://www.youtube-nocookie.com/embed/'+id+'?autoplay=1&playsinline=1&rel=0';f.title=a.getAttribute('aria-label')||'Vídeo';
+f.allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';f.allowFullscreen=true;
+var d=document.createElement('div');d.className='frame';d.appendChild(f);a.parentNode.replaceChild(d,a)});`
+
 // Monta os blocos na ordem; links marcados como "Ícone" em sequência dividem
 // uma fileira (um sozinho vira fileira de um). Cada ícone conta clique no
 // próprio bloco.
@@ -450,23 +480,58 @@ function renderBlock(b: VitrineBlock, preview = false, eager = false): string {
     }
     case 'video': {
       const id = String(c.video_id || '')
-      let src = ''
-      if (c.provider === 'youtube' && /^[A-Za-z0-9_-]{11}$/.test(id)) src = `https://www.youtube-nocookie.com/embed/${id}`
-      if (c.provider === 'vimeo' && /^[0-9]{6,12}$/.test(id)) src = `https://player.vimeo.com/video/${id}`
-      if (!src) return ''
-      // Prévia do editor (iframe em sandbox, sem o player funcionando):
-      // miniatura do YouTube / quadro neutro do Vimeo com ícone de play.
-      if (preview) {
-        const thumb = c.provider === 'youtube'
-          ? `<img src="https://i.ytimg.com/vi/${id}/hqdefault.jpg" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">` : ''
-        return `<section class="video">${c.title ? `<h2>${esc(c.title)}</h2>` : ''}<div class="frame">${thumb}`
-          + `<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">`
-          + `<span style="width:64px;height:44px;border-radius:12px;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center">`
-          + `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="#fff" d="M8 5v14l11-7z"/></svg></span></span></div></section>`
+      const yt = c.provider === 'youtube' && /^[A-Za-z0-9_-]{11}$/.test(id)
+      const vm = c.provider === 'vimeo' && /^[0-9]{6,12}$/.test(id)
+      if (!yt && !vm) return ''
+      const vertical = c.format === '9:16'
+      const cls = ['video', c.size === 'featured' ? 'feat' : '', vertical ? 'vert' : ''].filter(Boolean).join(' ')
+      const head = c.title ? `<h2>${esc(c.title)}</h2>` : ''
+      const foot = c.description ? `<p class="vdesc">${esc(c.description)}</p>` : ''
+      const play = `<span class="play" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24"><path fill="#fff" d="M8 5v14l11-7z"/></svg></span>`
+      // YouTube "leve": só a miniatura (i.ytimg, ~20 KB) + link pro vídeo.
+      // O player (~1 MB de script) só carrega no clique, trocado pelo script
+      // da página (videoScript); sem JS, o link abre o YouTube. hqdefault tem
+      // faixas pretas (4:3): object-fit:cover corta exatamente no vídeo, seja
+      // 16:9 ou vertical.
+      if (yt) {
+        const watch = vertical ? `https://www.youtube.com/shorts/${id}` : `https://www.youtube.com/watch?v=${id}`
+        return `<section class="${cls}">${head}`
+          + `<a class="frame vlite" href="${watch}" data-b="${esc(b.id)}" data-yt="${id}" target="_blank" rel="noopener noreferrer" aria-label="Assistir: ${esc(c.title || 'vídeo')}">`
+          + `<img src="https://i.ytimg.com/vi/${id}/hqdefault.jpg" alt="" loading="${loading}" decoding="async">${play}</a>${foot}</section>`
       }
-      return `<section class="video">${c.title ? `<h2>${esc(c.title)}</h2>` : ''}`
-        + `<div class="frame"><iframe src="${src}" title="${esc(c.title || 'Vídeo')}" loading="lazy" `
-        + `allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></section>`
+      // Vimeo: sem miniatura pública sem API — na prévia, quadro neutro;
+      // na página, o player do Vimeo (leve o bastante, só carrega perto da tela).
+      if (preview) return `<section class="${cls}">${head}<div class="frame">${play}</div>${foot}</section>`
+      return `<section class="${cls}">${head}`
+        + `<div class="frame"><iframe src="https://player.vimeo.com/video/${id}" title="${esc(c.title || 'Vídeo')}" loading="lazy" `
+        + `allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>${foot}</section>`
+    }
+    case 'faq': {
+      const items = (Array.isArray(c.items) ? c.items : []).filter((i: any) => i?.q && i?.a)
+      if (!items.length) return ''
+      return `<section class="card faq"><h2>${esc(c.title || 'Perguntas frequentes')}</h2>`
+        + items.map((i: any) => `<details><summary>${esc(i.q)}</summary><div class="ans">${paragraphs(i.a)}</div></details>`).join('')
+        + '</section>'
+    }
+    case 'testimonials': {
+      const items = (Array.isArray(c.items) ? c.items : []).filter((i: any) => i?.quote && i?.name)
+      if (!items.length) return ''
+      const row = items.map((i: any) => {
+        const n = Number(i.rating)
+        const stars = n >= 1 && n <= 5
+          ? `<span class="stars" role="img" aria-label="Nota ${n} de 5">${'★'.repeat(n)}<span class="off">${'★'.repeat(5 - n)}</span></span>` : ''
+        return `<figure class="tcard">${stars}<blockquote>${esc(i.quote)}</blockquote>`
+          + `<figcaption>${avatar(i.photo_url, i.name, 'lazy')}<span><b>${esc(i.name)}</b>${i.role ? `<small>${esc(i.role)}</small>` : ''}</span></figcaption></figure>`
+      }).join('')
+      return `<section class="tst${items.length === 1 ? ' one' : ''}">${c.title ? `<h2 class="sh">${esc(c.title)}</h2>` : ''}<div class="hrow">${row}</div></section>`
+    }
+    case 'team': {
+      const items = (Array.isArray(c.items) ? c.items : []).filter((i: any) => i?.name)
+      if (!items.length) return ''
+      const carousel = c.layout === 'carousel' && items.length > 1
+      const cards = items.map((i: any) => `<figure class="person">${avatar(i.photo_url, i.name, 'lazy')}`
+        + `<figcaption><b>${esc(i.name)}</b>${i.role ? `<small>${esc(i.role)}</small>` : ''}${i.bio ? `<span class="pbio">${esc(i.bio)}</span>` : ''}</figcaption></figure>`).join('')
+      return `<section class="team">${c.title ? `<h2 class="sh">${esc(c.title)}</h2>` : ''}<div class="${carousel ? 'hrow' : 'tgrid'}">${cards}</div></section>`
     }
     case 'map': {
       const addr = String(c.address || '').trim()
@@ -659,6 +724,48 @@ a.banner:focus-visible{outline:3px solid ${t.primary};outline-offset:3px}
 .frame{position:relative;width:100%;aspect-ratio:16/9;border-radius:${rCard};overflow:hidden;background:${surface}}
 .frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .map-frame{aspect-ratio:4/3;margin:8px 0 10px}
+.video .vdesc{margin:8px 2px 0;font-size:14px;color:${muted}}
+.vlite{display:block;color:inherit}
+.vlite img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.play{position:absolute;left:50%;top:50%;width:64px;height:44px;margin:-22px 0 0 -32px;border-radius:12px;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;transition:background .15s ease,transform .15s ease}
+.vlite:hover .play{background:#FF0000;transform:scale(1.06)}
+.vlite:focus-visible{outline:3px solid ${t.primary};outline-offset:3px}
+.video.vert .frame{aspect-ratio:9/16;max-width:300px;margin:0 auto}
+.video.vert h2,.video.vert .vdesc{text-align:center;justify-content:center}
+.video.feat h2{font-size:20px;line-height:1.25}
+.video.feat .frame{box-shadow:${t.shadow === 'none' ? SHADOWS.soft : SHADOWS.strong}}
+.video.feat .play{width:76px;height:52px;margin:-26px 0 0 -38px}
+.video.feat.vert .frame{max-width:380px}
+@media(max-width:599px){.video.feat:not(.vert) .frame{width:calc(100% + 32px);margin:0 -16px;border-radius:0}}
+.sh{font-size:16px;margin:0 0 8px;font-weight:${t.headingWeight === 400 ? 400 : 700}}
+.faq details{border-top:1px solid ${border}}
+.faq h2+details{border-top:0}
+.faq summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:12px 0;font-weight:600}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:'+';margin-left:auto;flex:none;width:24px;height:24px;border-radius:50%;background:${soft};color:${t.primary};display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1;transition:transform .2s ease}
+.faq details[open] summary::after{transform:rotate(45deg)}
+.faq summary:focus-visible{outline:3px solid ${t.primary};outline-offset:2px;border-radius:4px}
+.faq .ans{padding:0 0 12px;color:${muted};font-size:15px}
+.hrow{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -16px;padding:2px 16px 6px;scrollbar-width:none}
+.hrow::-webkit-scrollbar{display:none}
+.hrow>*{scroll-snap-align:center}
+.tcard{${card}border-radius:${rCard};margin:0;padding:16px 18px;flex:0 0 84%;display:flex;flex-direction:column;gap:10px}
+.tst.one .hrow{overflow:visible}.tst.one .tcard{flex-basis:100%}
+.tcard blockquote{margin:0;font-size:15px;line-height:1.55;flex:1}
+.tcard blockquote::before{content:'“';display:block;font-family:Georgia,serif;font-size:40px;line-height:.6;height:18px;color:${t.primary}}
+.stars{color:#F59E0B;letter-spacing:2px;font-size:15px}.stars .off{color:${border}}
+.tcard figcaption,.person{display:flex;align-items:center;gap:10px}
+.tcard figcaption span{display:flex;flex-direction:column;min-width:0}
+.tcard small,.person small{color:${muted};font-size:13px}
+.av{flex:none;width:44px;height:44px;border-radius:50%;object-fit:cover;background:${soft}}
+.av.ini{display:flex;align-items:center;justify-content:center;color:${t.primary};font-weight:700;font-size:15px}
+.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.person{${card}border-radius:${rCard};margin:0;padding:16px 12px;flex-direction:column;text-align:center;gap:8px}
+.team .hrow .person{flex:0 0 44%}
+.person .av{width:72px;height:72px}.person .av.ini{font-size:22px}
+.person figcaption{display:flex;flex-direction:column;gap:2px;min-width:0}
+.person b{font-size:15px;line-height:1.3}
+.pbio{font-size:13px;line-height:1.4;margin-top:4px}
 .link-inline{color:${t.text};font-weight:600;text-decoration:underline;text-decoration-color:${t.primary};text-underline-offset:3px}
 .hours table{width:100%;border-collapse:collapse;font-size:15px}
 .hours th{text-align:left;font-weight:500;padding:5px 0}
@@ -730,6 +837,8 @@ export function renderVitrinePage(data: VitrinePublicData, opts: RenderOptions):
   const blocks = renderBlocks(data.blocks || [], !!opts.preview)
   const script = !opts.preview && opts.supabaseUrl && opts.anonKey
     ? `<script>${trackingScript(p.id, opts.supabaseUrl, opts.anonKey)}</script>` : ''
+  const videoScript = !opts.preview && blocks.includes('data-yt=') ? `<script>${VIDEO_SCRIPT}</script>` : ''
+  const jsonLd = opts.preview ? '' : faqJsonLd(data.blocks || [])
   // Animação: página pública sempre; prévia do editor só quando pedida
   // ("Ver animação") — senão repetiria a cada tecla digitada.
   const animate = t.animation !== 'none' && (!opts.preview || !!opts.animatePreview)
@@ -766,6 +875,7 @@ ${t.bgType === 'image' && t.bgImage ? `<link rel="preload" as="image" href="${es
 <link rel="stylesheet" href="${esc(fontsHref(t.heading, t.body))}">
 <style>${css(t)}</style>
 ${animate ? ANIM_HEAD : ''}
+${jsonLd}
 </head>
 <body class="${cover ? 'has-cover' : ''}">
 ${t.bgType !== 'solid' ? '<div class="bgl" aria-hidden="true"></div>' : ''}
@@ -783,6 +893,7 @@ ${blocks}
 <footer>Página criada com <a href="${esc(opts.siteUrl)}/?utm_source=vitrine&amp;utm_medium=rodape" target="_blank" rel="noopener">Áion Edu</a></footer>
 </div>
 ${animate ? `<script>${animScript(t.animation === 'lively' ? 70 : 40)}</script>` : ''}
+${videoScript}
 ${script}
 </body>
 </html>`
